@@ -640,3 +640,72 @@ func TestUpdateRootWithLeafFinalStateReadsBelowRefreshTimestamp(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+// TestUpdateStateOnRemoteRetryableErr ensures transaction state is updated and
+// a TransactionRetryWithProtoRefreshError is correctly constructed by
+// UpdateStateOnRemoteRetryableError.
+func TestUpdateStateOnRemoteRetryableErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	testCases := []struct {
+		err         *roachpb.Error
+		epochBumped bool // if we expect the epoch to be bumped
+		newTxn      bool // if we expect a new transaction in the returned error; implies to an ABORT
+	}{
+		{
+			err:         roachpb.NewError(&roachpb.ReadWithinUncertaintyIntervalError{}),
+			epochBumped: true,
+			newTxn:      false,
+		},
+		{
+			err:         roachpb.NewError(&roachpb.TransactionAbortedError{}),
+			epochBumped: false,
+			newTxn:      true,
+		},
+		{
+			err:         roachpb.NewError(&roachpb.TransactionPushError{}),
+			epochBumped: true,
+			newTxn:      false,
+		},
+		{
+			err:         roachpb.NewError(&roachpb.TransactionRetryError{}),
+			epochBumped: true,
+			newTxn:      false,
+		},
+		{
+			err:         roachpb.NewError(&roachpb.WriteTooOldError{}),
+			epochBumped: true,
+			newTxn:      false,
+		},
+	}
+
+	for _, tc := range testCases {
+		txn := db.NewTxn(ctx, "test")
+		pErr := tc.err
+		pErr.SetTxn(txn.Sender().TestingCloneTxn())
+		epochBefore := txn.Epoch()
+		txnIDBefore := txn.ID()
+		err := txn.UpdateStateOnRemoteRetryableErr(ctx, pErr)
+		// Ensure what we got back is a TransactionRetryWithProtoRefreshError.
+		require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+		// Ensure the same thing is stored on the TxnCoordSender as well.
+		retErr := txn.Sender().GetTxnRetryableErr(ctx)
+		require.Equal(t, retErr, err)
+		if tc.epochBumped {
+			require.Greater(t, txn.Epoch(), epochBefore)
+			require.Equal(t, retErr.TxnID, txnIDBefore) // transaction IDs should not have changed on us
+		}
+		if tc.newTxn {
+			require.NotEqual(t, retErr.Transaction.ID, txnIDBefore)
+			require.Equal(t, txn.Sender().TxnStatus(), roachpb.ABORTED)
+		}
+		// Lastly, ensure the TxnCoordSender was not swapped out, even if the
+		// transaction was aborted.
+		require.Equal(t, txn.Sender().TestingCloneTxn().ID, txnIDBefore)
+	}
+}

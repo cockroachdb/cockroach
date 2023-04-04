@@ -257,7 +257,7 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	if err := runPlanInsidePlan(ctx, params, plan, rowResultWriter); err != nil {
 		return err
 	}
-	a.run.rightRowsIterator = newRowContainerIterator(ctx, a.run.rightRows, a.rightTypes)
+	a.run.rightRowsIterator = newRowContainerIterator(ctx, a.run.rightRows)
 	return nil
 }
 
@@ -321,7 +321,8 @@ func runPlanInsidePlan(
 	evalCtx := params.p.ExtendedEvalContextCopy()
 	plannerCopy := *params.p
 	distributePlan := getPlanDistribution(
-		ctx, &plannerCopy, plannerCopy.execCfg.NodeInfo.NodeID, plannerCopy.SessionData().DistSQLMode, plan.main,
+		ctx, plannerCopy.Descriptors().HasUncommittedTypes(),
+		plannerCopy.SessionData().DistSQLMode, plan.main,
 	)
 	distributeType := DistributionType(DistributionTypeNone)
 	if distributePlan.WillDistribute() {

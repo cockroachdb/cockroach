@@ -53,7 +53,7 @@ type planVisitor struct {
 
 // makePlanVisitor creates a planVisitor instance.
 // ctx will be stored in the planVisitor and used when visiting planNode's and
-// expressions..
+// expressions.
 func makePlanVisitor(ctx context.Context, observer planObserver) planVisitor {
 	return planVisitor{observer: observer, ctx: ctx}
 }
