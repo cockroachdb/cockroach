@@ -51,7 +51,8 @@ func Start(
 	handleBoundaryUpdate func(update *keyvispb.UpdateBoundariesRequest),
 ) error {
 
-	tableID, err := startup.RunIdempotentWithRetryEx(ctx, "obs lookup system table",
+	tableID, err := startup.RunIdempotentWithRetryEx(ctx, stopper.ShouldQuiesce(),
+		"obs lookup system table",
 		func(ctx context.Context) (descpb.ID, error) {
 			return sysTableResolver.LookupSystemTableID(
 				ctx, systemschema.SpanStatsTenantBoundariesTable.GetName())

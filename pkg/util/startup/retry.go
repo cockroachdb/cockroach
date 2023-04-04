@@ -113,9 +113,9 @@ func WithoutChecks(ctx context.Context) context.Context {
 // retry should be performed explicitly while using WithoutChecks context
 // to suppress safety mechanisms.
 func RunIdempotentWithRetry(
-	ctx context.Context, opName string, f func(ctx context.Context) error,
+	ctx context.Context, quiesce <-chan struct{}, opName string, f func(ctx context.Context) error,
 ) error {
-	_, err := RunIdempotentWithRetryEx(ctx, opName, func(ctx context.Context) (any, error) {
+	_, err := RunIdempotentWithRetryEx(ctx, quiesce, opName, func(ctx context.Context) (any, error) {
 		return nil, f(ctx)
 	})
 	return err
@@ -124,13 +124,18 @@ func RunIdempotentWithRetry(
 // RunIdempotentWithRetryEx run function returning value with startup retry.
 // See RunIdempotentWithRetry for important details.
 func RunIdempotentWithRetryEx[T any](
-	ctx context.Context, opName string, f func(ctx context.Context) (T, error),
+	ctx context.Context,
+	quiesce <-chan struct{},
+	opName string,
+	f func(ctx context.Context) (T, error),
 ) (T, error) {
 	ctx = context.WithValue(ctx, startupRetryKey{}, "in retry")
 	every := log.Every(5 * time.Second)
 	// Retry failures indefinitely until context is cancelled.
 	var result T
 	var err error
+	retryOpts := startupRetryOpts
+	retryOpts.Closer = quiesce
 	for r := retry.StartWithCtx(ctx, startupRetryOpts); r.Next(); {
 		result, err = f(ctx)
 		if err == nil {
