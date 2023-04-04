@@ -74,7 +74,7 @@ type Payload = {
   value: any;
 };
 
-type TypedPayload<T> = {
+export type TypedPayload<T> = {
   value: T;
 };
 

@@ -10,11 +10,17 @@
 
 import { AnyAction } from "redux";
 import { all, call, takeEvery, takeLatest, put } from "redux-saga/effects";
-import { actions } from "./localStorage.reducer";
+import {
+  actions,
+  LocalStorageKeys,
+  TypedPayload,
+} from "./localStorage.reducer";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as stmtInsightActions } from "src/store/insights/statementInsights";
 import { actions as txnInsightActions } from "src/store/insights/transactionInsights";
 import { actions as txnStatsActions } from "src/store/transactionStats";
+import { PayloadAction } from "@reduxjs/toolkit";
+import { TimeScale } from "src/timeScaleDropdown";
 
 export function* updateLocalStorageItemSaga(action: AnyAction) {
   const { key, value } = action.payload;
@@ -25,18 +31,25 @@ export function* updateLocalStorageItemSaga(action: AnyAction) {
   );
 }
 
-export function* updateTimeScale(action: AnyAction) {
+export function* updateTimeScale(
+  action: PayloadAction<TypedPayload<TimeScale>>,
+) {
   yield all([
     put(sqlStatsActions.invalidated()),
     put(stmtInsightActions.invalidated()),
     put(txnInsightActions.invalidated()),
     put(txnStatsActions.invalidated()),
   ]);
+  yield call(
+    { context: localStorage, fn: localStorage.setItem },
+    LocalStorageKeys.GLOBAL_TIME_SCALE,
+    JSON.stringify(action.payload?.value),
+  );
 }
 
 export function* localStorageSaga() {
   yield all([
     takeEvery(actions.update, updateLocalStorageItemSaga),
-    takeLatest(actions.updateTimeScale, updateLocalStorageItemSaga),
+    takeLatest(actions.updateTimeScale, updateTimeScale),
   ]);
 }
