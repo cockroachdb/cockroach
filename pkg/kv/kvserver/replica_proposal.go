@@ -378,9 +378,11 @@ func (r *Replica) leasePostApplyLocked(
 			// Whenever we first acquire an expiration-based lease for a range that
 			// requires it (i.e. the liveness or meta ranges), notify the lease
 			// renewer worker that we want it to keep proactively renewing the lease
-			// before it expires. We don't eagerly renew other expiration leases,
-			// because a more sophisticated scheduler is needed to handle large
-			// numbers of expiration leases.
+			// before it expires.
+			//
+			// Other expiration leases are only proactively renewed if
+			// kv.expiration_leases_only.enabled is true, but in that case the renewal
+			// is handled by the Raft scheduler during Raft ticks.
 			r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
 			select {
 			case r.store.renewableLeasesSignal <- struct{}{}:

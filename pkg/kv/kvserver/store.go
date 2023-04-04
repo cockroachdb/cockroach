@@ -2135,16 +2135,27 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 //
 // Currently, this is only used for ranges that _require_ expiration-based
 // leases, as determined by Replica.requiresExpirationLeaseRLocked(), i.e. the
-// meta and liveness ranges. For large numbers of expiration-based leases, e.g.
-// with kv.expiration_leases_only.enabled, a more sophisticated scheduler is
-// needed since the linear scan here can't keep up. See:
-// https://github.com/cockroachdb/cockroach/issues/98433
+// meta and liveness ranges.
+//
+// If kv.expiration_leases_only.enabled is true, then this lease renewer is
+// disabled, and lease extensions are instead done by the Raft scheduler during
+// Raft ticks.
+//
+// TODO(erikgrinaker): Remove this and only use the Raft scheduler.
 func (s *Store) startLeaseRenewer(ctx context.Context) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
 	_ = s.stopper.RunAsyncTask(ctx, "lease-renewer", func(ctx context.Context) {
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
+
+		// Wake up the lease renewer when kv.expiration_leases_only.enabled changes.
+		ExpirationLeasesOnly.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
+			select {
+			case s.renewableLeasesSignal <- struct{}{}:
+			default:
+			}
+		})
 
 		// Determine how frequently to attempt to ensure that we have each lease.
 		// The divisor used here is somewhat arbitrary, but needs to be large
@@ -2159,18 +2170,22 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 		}
 		for {
 			var numRenewableLeases int
-			s.renewableLeases.Range(func(k int64, v unsafe.Pointer) bool {
-				numRenewableLeases++
-				repl := (*Replica)(v)
-				annotatedCtx := repl.AnnotateCtx(ctx)
-				if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
-					if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); !ok {
-						log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
+			// If kv.expiration_leases_only.enabled is true then the Raft scheduler
+			// will handle this, so don't attempt to renew them and just go to sleep.
+			if !ExpirationLeasesOnly.Get(&s.ClusterSettings().SV) {
+				s.renewableLeases.Range(func(k int64, v unsafe.Pointer) bool {
+					numRenewableLeases++
+					repl := (*Replica)(v)
+					annotatedCtx := repl.AnnotateCtx(ctx)
+					if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
+						if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); !ok {
+							log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
+						}
+						s.renewableLeases.Delete(k)
 					}
-					s.renewableLeases.Delete(k)
-				}
-				return true
-			})
+					return true
+				})
+			}
 
 			if numRenewableLeases > 0 {
 				timer.Reset(renewalDuration)

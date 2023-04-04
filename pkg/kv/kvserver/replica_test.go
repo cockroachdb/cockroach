@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -9898,6 +9899,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 }
 
 type testQuiescer struct {
+	st              *cluster.Settings
 	desc            roachpb.RangeDescriptor
 	numProposals    int
 	pendingQuota    bool
@@ -9912,6 +9914,10 @@ type testQuiescer struct {
 	// Not used to implement quiescer, but used by tests.
 	livenessMap livenesspb.IsLiveMap
 	paused      map[roachpb.ReplicaID]struct{}
+}
+
+func (q *testQuiescer) ClusterSettings() *cluster.Settings {
+	return q.st
 }
 
 func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
@@ -9956,6 +9962,10 @@ func (q *testQuiescer) StoreID() roachpb.StoreID {
 	return q.storeID
 }
 
+func (q *testQuiescer) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
+	return q.leaseStatus.Lease, q.leaseStatus.Lease
+}
+
 func (q *testQuiescer) mergeInProgressRLocked() bool {
 	return q.mergeInProgress
 }
@@ -9979,6 +9989,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 			// true. The transform function is intended to perform one mutation to
 			// this quiescer so that shouldReplicaQuiesce will return false.
 			q := &testQuiescer{
+				st:      cluster.MakeTestingClusterSettings(),
 				storeID: 1,
 				desc: roachpb.RangeDescriptor{
 					InternalReplicas: []roachpb.ReplicaDescriptor{
@@ -10010,6 +10021,8 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				leaseStatus: kvserverpb.LeaseStatus{
 					State: kvserverpb.LeaseState_VALID,
 					Lease: roachpb.Lease{
+						Sequence: 1,
+						Epoch:    1,
 						Replica: roachpb.ReplicaDescriptor{
 							NodeID:    1,
 							StoreID:   1,
@@ -10198,6 +10211,23 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	test(false, func(q *testQuiescer) *testQuiescer {
 		q.paused = map[roachpb.ReplicaID]struct{}{
 			q.desc.Replicas().AsProto()[0].ReplicaID: {},
+		}
+		return q
+	})
+	// Verify no quiescence with expiration-based leases, but only if
+	// kv.expiration_leases_only.enabled is true.
+	test(false, func(q *testQuiescer) *testQuiescer {
+		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, true)
+		q.leaseStatus.Lease.Epoch = 0
+		q.leaseStatus.Lease.Expiration = &hlc.Timestamp{
+			WallTime: timeutil.Now().Add(time.Minute).Unix(),
+		}
+		return q
+	})
+	test(true, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.Lease.Epoch = 0
+		q.leaseStatus.Lease.Expiration = &hlc.Timestamp{
+			WallTime: timeutil.Now().Add(time.Minute).Unix(),
 		}
 		return q
 	})
