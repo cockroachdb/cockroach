@@ -33,3 +33,7 @@ func (tc *Catalog) CreateView(stmt *tree.CreateView) *View {
 
 	return view
 }
+
+func (*View) addIndex(stmt *tree.IndexTableDef) {
+	// TODO(cucaroach): implement
+}

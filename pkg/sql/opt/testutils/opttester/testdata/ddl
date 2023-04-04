@@ -1,0 +1,78 @@
+exec-ddl
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi')
+----
+
+exec-ddl
+CREATE TABLE t (x INT, g greeting)
+----
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": [
+            "g"
+        ],
+        "created_at": "2023-03-14 14:05:25.635783",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hello"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "howdy"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 3,
+                "num_range": 0,
+                "upper_bound": "hi"
+            }
+        ],
+        "histo_col_type": "greeting",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 6
+    }
+    ]'
+----
+
+exec-ddl
+CREATE MATERIALIZED VIEW v AS SELECT x FROM t
+----
+
+exec-ddl
+CREATE INDEX mat_idx ON v(x)
+----
+
+opt
+SELECT * FROM v WHERE x > 0
+----
+select
+ ├── columns: x:1(int!null)
+ ├── scan t
+ │    └── columns: x:1(int)
+ └── filters
+      └── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+           ├── variable: x:1 [type=int]
+           └── const: 0 [type=int]
+
+# Test that shows that materialized view index is not actually working
+opt
+SELECT * FROM v@mat_idx WHERE x > 0
+----
+select
+ ├── columns: x:1(int!null)
+ ├── scan t
+ │    └── columns: x:1(int)
+ └── filters
+      └── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+           ├── variable: x:1 [type=int]
+           └── const: 0 [type=int]
