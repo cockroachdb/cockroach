@@ -96,6 +96,7 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 		o.VersionStr = flags.sha
 		o.AbsolutePath = filepath.Join(flags.pkgDir, "cockroach"+release.SuffixFromPlatform(platform))
 		o.CockroachSQLAbsolutePath = filepath.Join(flags.pkgDir, "cockroach-sql"+release.SuffixFromPlatform(platform))
+		o.Channel = release.ChannelFromPlatform(platform)
 
 		log.Printf("building %s", pretty.Sprint(o))
 		buildOneCockroach(providers, o, execFn)
@@ -111,7 +112,11 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 
 func buildOneCockroach(providers []release.ObjectPutGetter, o opts, execFn release.ExecFn) {
 	log.Printf("building cockroach %s", pretty.Sprint(o))
-	if err := release.MakeRelease(o.Platform, release.BuildOptions{ExecFn: execFn}, o.PkgDir); err != nil {
+	buildOpts := release.BuildOptions{
+		ExecFn:  execFn,
+		Channel: o.Channel,
+	}
+	if err := release.MakeRelease(o.Platform, buildOpts, o.PkgDir); err != nil {
 		log.Fatal(err)
 	}
 	for _, provider := range providers {
@@ -160,4 +165,5 @@ type opts struct {
 	AbsolutePath             string
 	CockroachSQLAbsolutePath string
 	PkgDir                   string
+	Channel                  string
 }

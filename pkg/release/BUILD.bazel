@@ -12,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/release",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/build",
         "//pkg/build/util",
         "@com_github_cockroachdb_errors//:errors",
         "@com_google_cloud_go_storage//:storage",
