@@ -130,6 +130,7 @@
 /pkg/cli/log*.go             @cockroachdb/obs-inf-prs    @cockroachdb/cli-prs
 /pkg/cli/debug_logconfig.go  @cockroachdb/obs-inf-prs    @cockroachdb/cli-prs
 /pkg/cli/debug_merg_logs*.go @cockroachdb/obs-inf-prs    @cockroachdb/cli-prs
+/pkg/cli/zip*.go             @cockroachdb/obs-inf-prs    @cockroachdb/cli-prs
 
 /pkg/server/                             @cockroachdb/cli-prs
 /pkg/server/addjoin*.go                  @cockroachdb/server-prs @cockroachdb/prodsec
