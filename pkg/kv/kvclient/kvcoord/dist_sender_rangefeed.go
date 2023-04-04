@@ -510,6 +510,9 @@ func handleRangefeedError(ctx context.Context, err error) (rangefeedErrorInfo, e
 	}
 
 	switch {
+	case errors.Is(err, io.EOF):
+		// If we got an EOF, treat it as a signal to restart single range feed.
+		return rangefeedErrorInfo{}, nil
 	case errors.HasType(err, (*kvpb.StoreNotFoundError)(nil)) ||
 		errors.HasType(err, (*kvpb.NodeUnavailableError)(nil)):
 		// These errors are likely to be unique to the replica that
@@ -751,9 +754,6 @@ func (ds *DistSender) singleRangeFeed(
 				return err
 			}); err != nil {
 				log.VErrEventf(ctx, 2, "RPC error: %s", err)
-				if err == io.EOF {
-					return args.Timestamp, nil
-				}
 				if stuckWatcher.stuck() {
 					afterCatchUpScan := catchupRes == nil
 					return args.Timestamp, ds.handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold())
