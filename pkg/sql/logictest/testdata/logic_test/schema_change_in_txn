@@ -683,6 +683,8 @@ subtest rollback_mutations
 statement ok
 INSERT INTO customers (k) VALUES ('z'), ('x')
 
+skip_on_retry
+
 statement ok
 BEGIN
 
