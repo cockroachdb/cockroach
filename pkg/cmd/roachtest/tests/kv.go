@@ -58,6 +58,7 @@ func registerKV(r registry.Registry) {
 		encryption               bool
 		sequential               bool
 		globalMVCCRangeTombstone bool
+		expirationLeases         bool
 		concMultiplier           int
 		ssds                     int
 		raid0                    bool
@@ -118,6 +119,11 @@ func registerKV(r registry.Registry) {
 		if opts.disableLoadSplits {
 			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'"); err != nil {
 				t.Fatalf("failed to disable load based splitting: %v", err)
+			}
+		}
+		if opts.expirationLeases {
+			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.expiration_leases_only.enabled = true"); err != nil {
+				t.Fatalf("failed to enable expiration leases: %v", err)
 			}
 		}
 		if opts.tracing {
@@ -200,6 +206,10 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 32, readPercent: 0, globalMVCCRangeTombstone: true},
 		{nodes: 3, cpus: 32, readPercent: 95, globalMVCCRangeTombstone: true},
 
+		// Configs with expiration-based leases.
+		{nodes: 3, cpus: 8, readPercent: 0, expirationLeases: true},
+		{nodes: 3, cpus: 8, readPercent: 95, expirationLeases: true},
+
 		// Configs with large block sizes.
 		{nodes: 3, cpus: 8, readPercent: 0, blockSize: 1 << 12 /* 4 KB */},
 		{nodes: 3, cpus: 8, readPercent: 95, blockSize: 1 << 12 /* 4 KB */},
@@ -272,6 +282,9 @@ func registerKV(r registry.Registry) {
 		}
 		if opts.globalMVCCRangeTombstone {
 			nameParts = append(nameParts, "mvcc-range-keys=global")
+		}
+		if opts.expirationLeases {
+			nameParts = append(nameParts, "lease=expiration")
 		}
 		if opts.concMultiplier != 0 { // support legacy test name which didn't include this multiplier
 			nameParts = append(nameParts, fmt.Sprintf("conc=%d", opts.concMultiplier))
