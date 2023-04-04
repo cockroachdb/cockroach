@@ -131,7 +131,7 @@ const getDatabaseGrantsQuery: DatabaseDetailsQuery<DatabaseGrantsRow> = {
 };
 
 // Database Tables
-type DatabaseTablesResponse = {
+export type DatabaseTablesResponse = {
   tables: string[];
 };
 

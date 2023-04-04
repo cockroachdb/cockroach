@@ -134,7 +134,7 @@ const selectTables = (state: AdminUIState, props: RouteComponentProps) => {
         ),
       },
     };
-  });
+  }) || [];
 };
 
 

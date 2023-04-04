@@ -32,7 +32,6 @@ import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 import * as protos from "src/js/protos";
 import Long from "long";
-import {SqlApiResponse} from "@cockroachlabs/cluster-ui/src/api";
 
 const { generateStmtDetailsToID, HexStringToInt64String } = util;
 
@@ -610,6 +609,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [databasesReducerObj.actionNamespace]: databasesReducerObj.reducer,
   [databaseDetailsReducerObj.actionNamespace]:
     databaseDetailsReducerObj.reducer,
+  [databaseTablesReducerObj.actionNamespace]:
+  databaseTablesReducerObj.reducer,
   [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
   [indexStatsReducerObj.actionNamespace]: indexStatsReducerObj.reducer,
   [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,
