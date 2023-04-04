@@ -12,6 +12,7 @@ package upgrades_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strconv"
 	"testing"
@@ -64,9 +65,14 @@ func runTestSystemPrivilegesUserIDMigration(t *testing.T, numUsers int) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	// Create test users and add rows for each user to system.privileges.
-	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(txRunner *sqlutils.SQLRunner, i int) {
-		txRunner.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
-		txRunner.Exec(t, fmt.Sprintf("GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser%d", i))
+	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(tx *gosql.Tx, i int) error {
+		if _, err := tx.Exec(fmt.Sprintf("CREATE USER testuser%d", i)); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(fmt.Sprintf("GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser%d", i)); err != nil {
+			return err
+		}
+		return nil
 	})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.privileges", [][]string{{strconv.Itoa(numUsers)}})
 
