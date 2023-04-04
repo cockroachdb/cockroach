@@ -8475,7 +8475,14 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 	do := makeDiskCapacityOptions(&st.SV)
 
-	rangesPerNode := int(math.Floor(capacity * do.ShedAndBlockAllThreshold / rangeSize))
+	// Each range is equally sized (16mb), we want the number of ranges per node,
+	// when their size is added, to be no greater than the full disk rebalance
+	// threshold (0.925%) e.g for below:
+	//   capacity  = 1024mb
+	//   rangeSize = 16mb
+	//   threshold = 0.925
+	//   rangesPerNode =  ⌊1024mb * 0.925 / 16mb⌋ = 59
+	rangesPerNode := int(math.Floor(capacity * do.RebalanceToThreshold / rangeSize))
 	rangesToAdd := rangesPerNode * nodes
 
 	// Initialize testStores.
