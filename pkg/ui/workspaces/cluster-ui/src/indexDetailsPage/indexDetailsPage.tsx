@@ -74,7 +74,7 @@ import {
 import { commonStyles } from "../common";
 import { Loading } from "src";
 import LoadingError from "../sqlActivity/errorComponent";
-import { INTERNAL_APP_NAME_PREFIX } from "../recentExecutions/recentStatementUtils";
+import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 import { filteredStatementsData } from "../sqlActivity/util";
 
 const cx = classNames.bind(styles);
