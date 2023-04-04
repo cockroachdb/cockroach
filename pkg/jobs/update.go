@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -72,6 +73,13 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 	}
 	ctx, sp := tracing.ChildSpan(ctx, "update-job")
 	defer sp.Finish()
+
+	// Disable DistSQL query distribution. This ensures that the job operations do not
+	// require SQL servers to be ready on other nodes.
+	// See: https://github.com/cockroachdb/cockroach/issues/100578
+	prevMode := u.txn.SessionData().DistSQLMode
+	defer func(prevMode sessiondatapb.DistSQLExecMode) { u.txn.SessionData().DistSQLMode = prevMode }(prevMode)
+	u.txn.SessionData().DistSQLMode = sessiondatapb.DistSQLOff
 
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
