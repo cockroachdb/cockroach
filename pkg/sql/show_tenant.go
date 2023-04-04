@@ -166,7 +166,7 @@ func (n *showTenantNode) getTenantValues(
 					values.protectedTimestamp = record.Timestamp
 				}
 			}
-		case mtinfopb.DataStateReady, mtinfopb.DataStateDrop:
+		case mtinfopb.DataStateReady, mtinfopb.DataStateDrop, mtinfopb.DataStateDeleted:
 			values.dataState = values.tenantInfo.DataState.String()
 		default:
 			return nil, errors.Newf("tenant %q state is unknown: %s", tenantInfo.Name, values.tenantInfo.DataState)

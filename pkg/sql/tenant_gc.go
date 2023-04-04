@@ -47,7 +47,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.T
 	err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		if num, err := txn.ExecEx(
 			ctx, "delete-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-			`DELETE FROM system.tenants WHERE id = $1`, info.ID,
+			`UPDATE system.tenants SET data_state = $2 WHERE id = $1`, info.ID, mtinfopb.DataStateDeleted,
 		); err != nil {
 			return errors.Wrapf(err, "deleting tenant %d", info.ID)
 		} else if num != 1 {

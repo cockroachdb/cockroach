@@ -71,6 +71,9 @@ const (
 	// DataStateDrop indicates tenant data is being deleted. Not
 	// available for SQL sessions.
 	DataStateDrop TenantDataState = 2
+	// DataStateDeleted indicates that the tenant has been deleted. Used
+	// to ensure old IDs don't get reused.
+	DataStateDeleted TenantDataState = 3
 )
 
 // String implements fmt.Stringer.
@@ -82,6 +85,8 @@ func (s TenantDataState) String() string {
 		return "ready"
 	case DataStateDrop:
 		return "dropping"
+	case DataStateDeleted:
+		return "deleted"
 	default:
 		return fmt.Sprintf("unimplemented-%d", int(s))
 	}
@@ -92,6 +97,7 @@ var TenantDataStateValues = map[string]TenantDataState{
 	"add":      DataStateAdd,
 	"ready":    DataStateReady,
 	"dropping": DataStateDrop,
+	"deleted":  DataStateDeleted,
 }
 
 // TenantInfo captures both a ProtoInfo and the SQLInfo columns that

@@ -513,11 +513,7 @@ func getAvailableTenantID(
 	// since been dropped and gc'ed.
 	row, err := txn.QueryRowEx(ctx, "next-tenant-id", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride, `
-   SELECT id+1 AS newid
-    FROM (VALUES (1) UNION ALL SELECT id FROM system.tenants) AS u(id)
-   WHERE NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.id=u.id+1)
-     AND ($1 = '' OR NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.name=$1))
-   ORDER BY id LIMIT 1
+   SELECT max(id)+1 AS newid FROM system.tenants
 `, tenantName)
 	if err != nil {
 		return roachpb.TenantID{}, err
