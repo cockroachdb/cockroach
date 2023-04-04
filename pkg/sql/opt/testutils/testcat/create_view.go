@@ -33,3 +33,8 @@ func (tc *Catalog) CreateView(stmt *tree.CreateView) *View {
 
 	return view
 }
+
+func (*View) addIndex(stmt *tree.IndexTableDef) {
+	// TODO(cucaroach): implement
+	panic("view indexes are not supported by the test catalog")
+}
