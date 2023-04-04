@@ -875,16 +875,32 @@ func makeDelete(s *Smither) (tree.Statement, bool) {
 	return stmt, ok
 }
 
-func (s *Smither) makeDelete(refs colRefs) (*tree.Delete, *tableRef, bool) {
-	table, _, tableRef, tableRefs, ok := s.getSchemaTable()
+func (s *Smither) makeDelete(refs colRefs) (*tree.Delete, []*tableRef, bool) {
+	table, _, ref, cols, ok := s.getSchemaTable()
 	if !ok {
 		return nil, nil, false
+	}
+	tRefs := []*tableRef{ref}
+
+	var hasJoinTable bool
+	var using tree.TableExprs
+	// With 50% probably add another table into the USING clause.
+	for s.coin() {
+		t, _, tRef, c, ok := s.getSchemaTable()
+		if !ok {
+			break
+		}
+		hasJoinTable = true
+		using = append(using, t)
+		tRefs = append(tRefs, tRef)
+		cols = append(cols, c...)
 	}
 
 	del := &tree.Delete{
 		Table:     table,
-		Where:     s.makeWhere(tableRefs, false /* hasJoinTable */),
-		OrderBy:   s.makeOrderBy(tableRefs),
+		Where:     s.makeWhere(cols, hasJoinTable),
+		OrderBy:   s.makeOrderBy(cols),
+		Using:     using,
 		Limit:     makeLimit(s),
 		Returning: &tree.NoReturningClause{},
 	}
@@ -892,7 +908,7 @@ func (s *Smither) makeDelete(refs colRefs) (*tree.Delete, *tableRef, bool) {
 		del.OrderBy = nil
 	}
 
-	return del, tableRef, true
+	return del, tRefs, true
 }
 
 func makeDeleteReturning(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -919,38 +935,57 @@ func makeUpdate(s *Smither) (tree.Statement, bool) {
 	return stmt, ok
 }
 
-func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
-	table, _, tableRef, tableRefs, ok := s.getSchemaTable()
+func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, []*tableRef, bool) {
+	table, _, ref, cols, ok := s.getSchemaTable()
 	if !ok {
 		return nil, nil, false
 	}
-	cols := make(map[tree.Name]*tree.ColumnTableDef)
-	for _, c := range tableRef.Columns {
-		cols[c.Name] = c
+	tRefs := []*tableRef{ref}
+	// Each column can be set at most once. Copy colRefs to upRefs - we will
+	// remove elements from it as we use them below.
+	//
+	// Note that we need to make this copy before we append columns from other
+	// tables added into the FROM clause below.
+	upRefs := cols.extend()
+
+	var hasJoinTable bool
+	var from tree.TableExprs
+	// With 50% probably add another table into the FROM clause.
+	for s.coin() {
+		t, _, tRef, c, ok := s.getSchemaTable()
+		if !ok {
+			break
+		}
+		hasJoinTable = true
+		from = append(from, t)
+		tRefs = append(tRefs, tRef)
+		cols = append(cols, c...)
 	}
 
 	update := &tree.Update{
 		Table:     table,
-		Where:     s.makeWhere(tableRefs, false /* hasJoinTable */),
-		OrderBy:   s.makeOrderBy(tableRefs),
+		From:      from,
+		Where:     s.makeWhere(cols, hasJoinTable),
+		OrderBy:   s.makeOrderBy(cols),
 		Limit:     makeLimit(s),
 		Returning: &tree.NoReturningClause{},
 	}
-	// Each row can be set at most once. Copy tableRefs to upRefs and remove
-	// elements from it as we use them.
-	upRefs := tableRefs.extend()
+	colByName := make(map[tree.Name]*tree.ColumnTableDef)
+	for _, c := range ref.Columns {
+		colByName[c.Name] = c
+	}
 	for (len(update.Exprs) < 1 || s.coin()) && len(upRefs) > 0 {
 		n := s.rnd.Intn(len(upRefs))
 		ref := upRefs[n]
 		upRefs = append(upRefs[:n], upRefs[n+1:]...)
-		col := cols[ref.item.ColumnName]
+		col := colByName[ref.item.ColumnName]
 		// Ignore computed and hidden columns.
 		if col == nil || col.Computed.Computed || col.Hidden {
 			continue
 		}
 		var expr tree.TypedExpr
 		for {
-			expr = makeScalar(s, ref.typ, tableRefs)
+			expr = makeScalar(s, ref.typ, cols)
 			// Make sure expr isn't null if that's not allowed.
 			if col.Nullable.Nullability != tree.NotNull || expr != tree.DNull {
 				break
@@ -968,7 +1003,7 @@ func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
 		update.OrderBy = nil
 	}
 
-	return update, tableRef, true
+	return update, tRefs, true
 }
 
 func makeUpdateReturning(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -1157,7 +1192,7 @@ func (s *Smither) makeInsertReturning(refs colRefs) (tree.TableExpr, colRefs, bo
 		return nil, nil, false
 	}
 	var returningRefs colRefs
-	insert.Returning, returningRefs = s.makeReturning(insertRef)
+	insert.Returning, returningRefs = s.makeReturning([]*tableRef{insertRef})
 	return &tree.StatementSource{
 		Statement: insert,
 	}, returningRefs, true
@@ -1315,14 +1350,16 @@ func makeLimit(s *Smither) *tree.Limit {
 	return nil
 }
 
-func (s *Smither) makeReturning(table *tableRef) (*tree.ReturningExprs, colRefs) {
+func (s *Smither) makeReturning(tables []*tableRef) (*tree.ReturningExprs, colRefs) {
 	desiredTypes := s.makeDesiredTypes()
 
-	refs := make(colRefs, len(table.Columns))
-	for i, c := range table.Columns {
-		refs[i] = &colRef{
-			typ:  tree.MustBeStaticallyKnownType(c.Type),
-			item: &tree.ColumnItem{ColumnName: c.Name},
+	var refs colRefs
+	for _, table := range tables {
+		for _, c := range table.Columns {
+			refs = append(refs, &colRef{
+				typ:  tree.MustBeStaticallyKnownType(c.Type),
+				item: &tree.ColumnItem{ColumnName: c.Name},
+			})
 		}
 	}
 
