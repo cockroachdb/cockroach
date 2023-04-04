@@ -1342,6 +1342,7 @@ func (s *fakeKafkaSink) Dial() error {
 				}
 				select {
 				case s.feedCh <- m:
+				case <-kafka.stopWorkerCh:
 				case <-s.tg.done:
 				}
 				return nil
