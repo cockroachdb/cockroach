@@ -917,14 +917,15 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 		if planner.instrumentation.collectBundle && vectorized {
 			flowCtx, cleanup := newFlowCtxForExplainPurposes(ctx, p, planner)
 			defer cleanup()
+			flowCtx.Local = !planner.curPlan.flags.IsDistributed()
 			getExplain := func(verbose bool) []string {
+				gatewaySQLInstanceID := planner.extendedEvalCtx.DistSQLPlanner.gatewaySQLInstanceID
 				// When we're collecting the bundle, we're always recording the
 				// stats.
 				const recordingStats = true
 				explain, err := colflow.ExplainVec(
 					ctx, flowCtx, flows, p.infra.LocalProcessors, opChains,
-					planner.extendedEvalCtx.DistSQLPlanner.gatewaySQLInstanceID,
-					verbose, planner.curPlan.flags.IsDistributed(), recordingStats,
+					gatewaySQLInstanceID, verbose, recordingStats,
 				)
 				if err != nil {
 					// In some edge cases (like when subqueries are present or
