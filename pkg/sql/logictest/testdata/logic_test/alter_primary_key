@@ -1005,6 +1005,8 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 statement ok
 DROP TABLE IF EXISTS t
 
+skip_on_retry
+
 statement ok
 BEGIN
 

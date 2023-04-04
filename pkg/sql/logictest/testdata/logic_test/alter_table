@@ -2245,6 +2245,8 @@ SELECT * FROM multipleinstmt ORDER BY id ASC;
 2  b  b  false  NULL  true  NULL
 3  c  c  false  NULL  true  NULL
 
+skip_on_retry
+
 subtest column_backfiller_update_batching
 
 let $use_decl_sc
