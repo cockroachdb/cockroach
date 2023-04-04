@@ -53,6 +53,17 @@ func TestBackfillJobsInfoTable(t *testing.T) {
 	r := tc.Server(0).JobRegistry().(*jobs.Registry)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	defer tc.Stopper().Stop(ctx)
+	r.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{}
+	jobspb.ForEachType(func(typ jobspb.Type) {
+		// The upgrade creates migration and schemachange jobs, so we do not
+		// need to create more. We should not override resumers for these job types,
+		// otherwise the upgrade will hang.
+		if typ != jobspb.TypeMigration && typ != jobspb.TypeSchemaChange {
+			r.TestingResumerCreationKnobs[typ] = func(r jobs.Resumer) jobs.Resumer {
+				return &fakeResumer{}
+			}
+		}
+	}, false)
 
 	createJob := func(id jobspb.JobID, details jobspb.Details, progress jobspb.ProgressDetails) *jobs.Job {
 		defaultRecord := jobs.Record{
