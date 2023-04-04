@@ -37,7 +37,6 @@ def _impl(ctx):
             action_name = ACTION_NAMES.cpp_link_static_library,
             tools = [tool(path="bin/%{target}-ar")],
         ),
-
     ]
 
     opt_feature = feature(
@@ -106,7 +105,6 @@ def _impl(ctx):
         ],
     )
 
-
     default_compile_flags = feature(
         name = "default_compile_flags",
         enabled = True,
@@ -117,7 +115,9 @@ def _impl(ctx):
                     flag_group(
                         flags = [
                             "-Wall",
-                            "-I%{repo_path}/%{target}/include/c++/6.5.0",
+                            "-Iexternal/%{repo_name}/%{target}/include/c++/6.5.0",
+                            "-no-canonical-prefixes",
+                            "-fno-canonical-system-headers",
                         ],
                     ),
                 ]),
@@ -125,7 +125,7 @@ def _impl(ctx):
         ],
     )
 
-    linker_flags = []
+    linker_flags = ["-fno-use-linker-plugin"]
     if "%{target}" == "x86_64-w64-mingw32":
         linker_flags.append("-static")
     if "-linux-" in "%{target}":
@@ -178,11 +178,11 @@ def _impl(ctx):
         action_configs = action_configs,
         cxx_builtin_include_directories = [
             "%sysroot%/usr/include",
-            "%{repo_path}/%{target}/include/c++/6.5.0",
-            "%{repo_path}/lib/gcc/%{target}/6.5.0/include",
-            "%{repo_path}/lib/gcc/%{target}/6.5.0/include-fixed",
+            "external/%{repo_name}/%{target}/include/c++/6.5.0",
+            "external/%{repo_name}/lib/gcc/%{target}/6.5.0/include",
+            "external/%{repo_name}/lib/gcc/%{target}/6.5.0/include-fixed",
         ],
-        builtin_sysroot = "%{repo_path}/%{target}/sysroot",
+        builtin_sysroot = "external/%{repo_name}/%{target}/sysroot",
     )
 
 cc_toolchain_config = rule(
