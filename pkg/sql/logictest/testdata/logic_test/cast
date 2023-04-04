@@ -1490,3 +1490,59 @@ statement error pq: expected ON UPDATE expression to have type .*, but .* has ty
 CREATE TABLE fail_assn_cast (
   a NUMERIC ON UPDATE '1-2'::INTERVAL
 )
+
+subtest regression_98373
+
+statement ok
+CREATE TABLE IF NOT EXISTS t98373 AS
+        SELECT
+                g::INT2 AS _int2,
+                g::INT4 AS _int4,
+                g::INT8 AS _int8,
+                g::FLOAT8 AS _float8,
+                '2001-01-01'::DATE + g AS _date,
+                '2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp
+        FROM
+                generate_series(1, 5) AS g;
+
+query T
+SELECT
+        regproc(_int2::INT8)::REGPROC AS col865
+FROM
+        t98373@[0]
+----
+array_agg
+array_agg
+array_agg
+array_agg
+array_agg
+
+statement OK
+SET vectorize = off
+
+statement OK
+SET distsql = always
+
+# The query plan should be disallowed from executing in a distributed fashion
+# even with distsql = always.
+query T
+EXPLAIN SELECT
+        regproc(_int2::INT8)::REGPROC AS col865
+FROM
+        t98373@[0]
+----
+distribution: local
+vectorized: false
+·
+• render
+│
+└── • scan
+      missing stats
+      table: t98373@t98373_pkey
+      spans: FULL SCAN
+
+statement OK
+RESET vectorize
+
+statement OK
+RESET distsql
