@@ -103,10 +103,20 @@ var maxNumNonAdminConnections = settings.RegisterIntSetting(
 var maxNumExternalConnections = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"server.max_external_connections_per_gateway",
-	"the maximum number of external SQL connections per gateway allowed at a given time" +
+	"the maximum number of external SQL connections per gateway allowed at a given time " +
 		"(note: this will only limit future connection attempts and will not affect already established connections). "+
 		"Negative values result in unlimited number of connections. The root user is not affected by this limit.",
 	-1,
+	)
+
+// MaxNumExternalConnsReason is used to supplement the error message for connections that denied due to
+// server.max_external_connections_per_gateway.
+var maxNumExternalConnsReason = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"server.max_external_connections_per_gateway_reason",
+	"a reason to provide in the error message for connections that are denied due to " +
+		"server.max_external_connections_per_gateway",
+	"",
 	)
 
 const (
