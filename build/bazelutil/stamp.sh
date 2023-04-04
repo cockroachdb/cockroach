@@ -9,7 +9,7 @@
 # for a development build.
 #  target-triple: defaults to the value of `cc -dumpmachine`
 #  build-channel: defaults to `unknown`, but can be `official-binary`
-#  build-type: defaults to `development`, but can be `release`
+#  build-type: if set to 'release', will produce a release binary.
 
 set -euo pipefail
 
@@ -43,17 +43,19 @@ fi
 # Handle build-type.
 if [ -z "${1+x}" ]
 then
-    BUILD_TYPE="development"
-else
-    BUILD_TYPE="$1"
-    shift 1
-fi
-
-if [ "$BUILD_TYPE" = "release" ]
-then
-    CRASH_REPORT_ENV=$(cat ./pkg/build/version.txt)
-else
+    RELEASE_TAG=""
     CRASH_REPORT_ENV="development"
+else
+    if [ "$1" = "release" ]
+    then
+        RELEASE_TAG=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
+        CRASH_REPORT_ENV="$RELEASE_TAG"
+    elif [ "$1" != "development" ]
+    then
+        echo "unknown build type"
+        exit 1
+    fi
+    shift 1
 fi
 
 BUILD_REV=$(git rev-parse HEAD)
@@ -70,8 +72,8 @@ BUILD_UTCTIME=$(date -u '+%Y/%m/%d %H:%M:%S')
 cat <<EOF
 STABLE_BUILD_CHANNEL ${BUILD_CHANNEL-}
 STABLE_BUILD_TARGET_TRIPLE ${TARGET_TRIPLE-}
-STABLE_BUILD_TYPE ${BUILD_TYPE-}
 STABLE_CRASH_REPORT_ENV ${CRASH_REPORT_ENV-}
 BUILD_REV ${BUILD_REV-}
+BUILD_RELEASE_AS ${BUILD_RELEASE-}
 BUILD_UTCTIME ${BUILD_UTCTIME-}
 EOF

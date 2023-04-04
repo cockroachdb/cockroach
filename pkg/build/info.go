@@ -37,12 +37,12 @@ var (
 	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
 	Distribution = "OSS"
-	typ          string // Type of this build: <empty>, "development", or "release"
+	releaseAs    string // scm desc of this release build, or empty if not a release build.
 	channel      string
 	envChannel   = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
 	//go:embed version.txt
 	cockroachVersion string
-	binaryVersion    = computeBinaryVersion(cockroachVersion, rev)
+	binaryVersion    = computeBinaryVersion(releaseAs, cockroachVersion, rev)
 )
 
 const (
@@ -52,7 +52,7 @@ const (
 
 // IsRelease returns true if the binary was produced by a "release" build.
 func IsRelease() bool {
-	return typ == "release"
+	return releaseAs != ""
 }
 
 // SeemsOfficial reports whether this binary is likely to have come from an
@@ -61,14 +61,15 @@ func SeemsOfficial() bool {
 	return channel == DefaultTelemetryChannel || channel == FIPSTelemetryChannel
 }
 
-func computeBinaryVersion(versionTxt, revision string) string {
+func computeBinaryVersion(releaseAs, versionTxt, revision string) string {
+	if releaseAs != "" {
+		return releaseAs
+	}
+
 	txt := strings.TrimSuffix(versionTxt, "\n")
 	v, err := version.Parse(txt)
 	if err != nil {
 		panic(fmt.Errorf("could not parse version.txt: %w", err))
-	}
-	if IsRelease() {
-		return v.String()
 	}
 	if revision != "" {
 		return fmt.Sprintf("%s-dev-%s", v.String(), revision)
@@ -151,6 +152,10 @@ func GetInfo() Info {
 	ch := channel
 	if ch == "" {
 		ch = "unknown"
+	}
+	typ := "dev"
+	if releaseAs != "" {
+		typ = "release"
 	}
 	return Info{
 		GoVersion:       runtime.Version(),

@@ -19,7 +19,7 @@ go_library(
         "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple": "{STABLE_BUILD_TARGET_TRIPLE}",
         "github.com/cockroachdb/cockroach/pkg/build.channel": "{STABLE_BUILD_CHANNEL}",
         "github.com/cockroachdb/cockroach/pkg/build.rev": "{BUILD_REV}",
-        "github.com/cockroachdb/cockroach/pkg/build.typ": "{STABLE_BUILD_TYPE}",
+        "github.com/cockroachdb/cockroach/pkg/build.releaseAs": "{BUILD_RELEASE_AS}",
         "github.com/cockroachdb/cockroach/pkg/build.utcTime": "{BUILD_UTCTIME}",
     },
     deps = [
