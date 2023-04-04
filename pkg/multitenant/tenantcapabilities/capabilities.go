@@ -11,152 +11,26 @@
 package tenantcapabilities
 
 import (
-	"context"
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stringerutil"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
-// Watcher presents a consistent snapshot of the global tenant capabilities
-// state. It incrementally, and transparently, maintains this state by watching
-// for changes to system.tenants.
-type Watcher interface {
-	Reader
+// ID represents a handle to a tenant capability.
+type ID uint8
 
-	// Start asynchronously begins watching over the global tenant capability
-	// state.
-	Start(ctx context.Context) error
+// SafeValue makes ID a redact.SafeValue.
+func (i ID) SafeValue() {}
+
+// IsValid returns true if the ID is valid.
+func (i ID) IsValid() bool {
+	return i > 0 && i <= MaxCapabilityID
 }
 
-// Reader provides access to the global tenant capability state. The global
-// tenant capability state may be arbitrarily stale.
-type Reader interface {
-	// GetCapabilities returns the tenant capabilities for the specified tenant.
-	GetCapabilities(id roachpb.TenantID) (_ TenantCapabilities, found bool)
-	// GetGlobalCapabilityState returns the capability state for all tenants.
-	GetGlobalCapabilityState() map[roachpb.TenantID]TenantCapabilities
-}
+var _ redact.SafeValue = ID(0)
 
-// Authorizer performs various kinds of capability checks for requests issued
-// by tenants. It does so by consulting the global tenant capability state.
-//
-// In the future, we may want to expand the Authorizer to take into account
-// signals other than just the tenant capability state. For example, request
-// usage pattern over a timespan.
-type Authorizer interface {
-	// HasCapabilityForBatch returns an error if a tenant, referenced by its ID,
-	// is not allowed to execute the supplied batch request given the capabilities
-	// it possesses.
-	HasCapabilityForBatch(context.Context, roachpb.TenantID, *kvpb.BatchRequest) error
-
-	// BindReader is a mechanism by which the caller can bind a Reader[1] to the
-	// Authorizer post-creation. The Authorizer uses the Reader to consult the
-	// global tenant capability state to authorize incoming requests. This
-	// function cannot be used to update the Reader.
-	//
-	//
-	// [1] The canonical implementation of the Authorizer lives on GRPC
-	// interceptors, and as such, must be instantiated before the GRPC Server is
-	// created. However, the GRPC server is created very early on during Server
-	// startup and serves as a dependency for the canonical Reader's
-	// implementation. Binding the Reader late allows us to break this dependency
-	// cycle.
-	BindReader(reader Reader)
-
-	// HasNodeStatusCapability returns an error if a tenant, referenced by its ID,
-	// is not allowed to access cluster-level node metadata and liveness.
-	HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error
-
-	// HasTSDBQueryCapability returns an error if a tenant, referenced by its ID,
-	// is not allowed to query the TSDB for metrics.
-	HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error
-
-	// IsExemptFromRateLimiting returns true of the tenant should
-	// not be subject to rate limiting.
-	IsExemptFromRateLimiting(ctx context.Context, tenID roachpb.TenantID) bool
-}
-
-// Entry ties together a tenantID with its capabilities.
-type Entry struct {
-	TenantID           roachpb.TenantID
-	TenantCapabilities TenantCapabilities
-}
-
-// Update represents an update to the global tenant capability state.
-type Update struct {
-	Entry
-	Deleted bool // whether the entry was deleted or not
-}
-
-func (u Update) String() string {
-	if u.Deleted {
-		return fmt.Sprintf("delete: ten=%v", u.Entry.TenantID)
-	}
-	return fmt.Sprintf("update: %v", u.Entry)
-}
-
-var defaultCaps TenantCapabilities
-
-// DefaultCapabilities returns the default state of capabilities.
-func DefaultCapabilities() TenantCapabilities {
-	return defaultCaps
-}
-
-// RegisterDefaultCapabilities is called from the tenantcapabilitiespb package.
-func RegisterDefaultCapabilities(caps TenantCapabilities) { defaultCaps = caps }
-
-func (u Entry) String() string {
-	return fmt.Sprintf("ten=%v cap=%v", u.TenantID, u.TenantCapabilities)
-}
-
-// CapabilityID represents a handle to a tenant capability.
-type CapabilityID uint8
-
-// Capability is the accessor to a capability's current value.
-type Capability interface {
-	// Get retrieves the current value of the capability.
-	Get() Value
-	// Set modifies the current value of the capability. Note that
-	// calling Set does not persist the result. Persistence needs to be
-	// arranged separately by storing the underlying protobuf; this is
-	// done using a different interface. See the code for ALTER TENANT.
-	Set(interface{})
-}
-
-// Value is a generic interface to the value of capabilities of
-// various underlying Go types. It enables processing capabilities
-// without concern for the specific underlying type, such as in SHOW
-// TENANT WITH CAPABILITIES.
-type Value interface {
-	fmt.Stringer
-	redact.SafeFormatter
-
-	// Unwrap provides access to the underlying Go value. For example,
-	// for Bool capabilities, the result of Unwrap() can be casted to
-	// go's bool type.
-	Unwrap() interface{}
-}
-
-// TenantCapabilities is the interface provided by the capability store,
-// to provide access to capability values.
-type TenantCapabilities interface {
-	// Cap retrieves the accessor for a given capability.
-	Cap(CapabilityID) Capability
-
-	// GetBool is equivalent to For(cap).Get().Unwrap().(bool). It
-	// is provided as an optimization. The caller is responsible for
-	// ensuring that the capID argument designate a capability with type
-	// Bool.
-	GetBool(CapabilityID) bool
-}
-
-//go:generate stringer -type=CapabilityID -linecomment
+//go:generate stringer -type=ID -linecomment
 const (
-	_ CapabilityID = iota
+	_ ID = iota
 
 	// CanAdminRelocateRange describes the ability of a tenant to perform manual
 	// KV relocate range requests. These operations need a capability
@@ -201,51 +75,45 @@ const (
 	// span configs.
 	TenantSpanConfigBounds // span_config_bounds
 
-	MaxCapabilityID CapabilityID = iota - 1
+	MaxCapabilityID ID = iota - 1
+)
+
+// IDs is a slice of all tenant capabilities.
+var IDs = stringerutil.EnumValues(
+	1,
+	MaxCapabilityID,
 )
 
 var stringToCapabilityIDMap = stringerutil.StringToEnumValueMap(
-	_CapabilityID_index[:],
-	_CapabilityID_name,
+	_ID_index[:],
+	_ID_name,
 	1,
-	MaxCapabilityID-1, // TODO: remove -1 when spanConfigBounds are supported.
+	MaxCapabilityID,
 )
 
-// CapabilityIDFromString converts a string to a CapabilityID.
-func CapabilityIDFromString(s string) (CapabilityID, bool) {
-	capabilityID, ok := stringToCapabilityIDMap[s]
-	return capabilityID, ok
+// FromName looks up a capability by name.
+func FromName(s string) (Capability, bool) {
+	if id, ok := stringToCapabilityIDMap[s]; ok {
+		return FromID(id)
+	}
+	return nil, false
 }
 
-// CapabilityIDs is a slice of all tenant capabilities.
-var CapabilityIDs = stringerutil.EnumValues(
-	1,
-	MaxCapabilityID-1, // TODO: remove -1 when spanConfigBounds are supported.
-)
-
-// Type describes the user-facing data type of a specific capability.
-type Type int8
-
-const (
-	// Bool describes the type of boolean capabilities.
-	Bool Type = iota
-)
-
-// CapabilityType returns the type of a given capability.
-func (c CapabilityID) CapabilityType() Type {
-	switch c {
-	case
-		CanAdminRelocateRange,
-		CanAdminScatter,
-		CanAdminSplit,
-		CanAdminUnsplit,
-		CanViewNodeInfo,
-		CanViewTSDBMetrics,
-		ExemptFromRateLimiting:
-
-		return Bool
-
-	default:
-		panic(errors.AssertionFailedf("missing case: %q", c))
+// FromID looks up a capability by ID.
+func FromID(id ID) (Capability, bool) {
+	if id.IsValid() {
+		return capabilities[id], true
 	}
+	return nil, false
+}
+
+var capabilities = [MaxCapabilityID + 1]Capability{
+	CanAdminRelocateRange:  boolCapability(CanAdminRelocateRange),
+	CanAdminScatter:        boolCapability(CanAdminScatter),
+	CanAdminSplit:          boolCapability(CanAdminSplit),
+	CanAdminUnsplit:        boolCapability(CanAdminUnsplit),
+	CanViewNodeInfo:        boolCapability(CanViewNodeInfo),
+	CanViewTSDBMetrics:     boolCapability(CanViewTSDBMetrics),
+	ExemptFromRateLimiting: boolCapability(ExemptFromRateLimiting),
+	TenantSpanConfigBounds: spanConfigBoundsCapability(TenantSpanConfigBounds),
 }

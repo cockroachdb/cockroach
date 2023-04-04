@@ -8,59 +8,58 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package spanconfigbounds
+package spanconfigstore
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 )
 
-// Reader maintains an in-memory view of the global SpanConfigBounds state.
+// BoundsReader maintains an in-memory view of the global SpanConfigBounds state.
 //
 // SpanConfigBounds are stored as tenant capabilities, the state of which is
 // surfaced by the tenantcapabilities.Reader. BoundsReader serves as a narrow,
 // adapter interface for the same.
-type Reader interface {
+type BoundsReader interface {
 	// Bounds returns span config bounds set for a given tenant. If no bounds have
 	// been configured for the given tenant, found returns false.
-	Bounds(tenID roachpb.TenantID) (_ Bounds, found bool)
+	Bounds(tenID roachpb.TenantID) (_ *spanconfigbounds.Bounds, found bool)
 }
 
 type boundsReader struct {
 	capabilitiesReader tenantcapabilities.Reader
 }
 
-// NewReader constructs and returns a new Reader.
-func NewReader(reader tenantcapabilities.Reader) Reader {
+// NewBoundsReader constructs and returns a new BoundsReader.
+func NewBoundsReader(reader tenantcapabilities.Reader) BoundsReader {
 	return &boundsReader{
 		capabilitiesReader: reader,
 	}
 }
 
 // Bounds implements the BoundsReader interface.
-func (r *boundsReader) Bounds(tenID roachpb.TenantID) (_ Bounds, found bool) {
+func (r *boundsReader) Bounds(tenID roachpb.TenantID) (_ *spanconfigbounds.Bounds, found bool) {
 	capabilities, found := r.capabilitiesReader.GetCapabilities(tenID)
 	if !found {
-		return Bounds{}, false
+		return nil, false
 	}
 
-	boundspb := capabilities.Cap(tenantcapabilities.TenantSpanConfigBounds).Get().Unwrap().(*tenantcapabilitiespb.SpanConfigBounds)
-	if boundspb == nil {
-		return Bounds{}, false
-	}
-	return MakeBounds(boundspb), true
+	b := tenantcapabilities.MustGetValueByID(
+		capabilities, tenantcapabilities.TenantSpanConfigBounds,
+	).(tenantcapabilities.SpanConfigBoundValue).Get()
+	return b, b != nil
 }
 
-// NewEmptyReader returns a new Reader which corresponds to an empty span config
+// NewEmptyBoundsReader returns a new Reader which corresponds to an empty span config
 // bounds state. It's only intended for testing.
-func NewEmptyReader() Reader {
+func NewEmptyBoundsReader() BoundsReader {
 	return emptyReader(true)
 }
 
 type emptyReader bool
 
 // Bounds implements the Reader interface.
-func (emptyReader) Bounds(roachpb.TenantID) (Bounds, bool) {
-	return Bounds{}, false
+func (emptyReader) Bounds(roachpb.TenantID) (*spanconfigbounds.Bounds, bool) {
+	return nil, false
 }

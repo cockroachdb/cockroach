@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -387,7 +386,10 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 	}
 	// The reconciler doesn't do any bounds checks or clamping, so it shouldn't
 	// need access to tenant capabilities (and by extension span config bounds).
-	store := spanconfigstore.New(roachpb.SpanConfig{}, f.settings, spanconfigbounds.NewEmptyReader(), f.knobs)
+	store := spanconfigstore.New(
+		roachpb.SpanConfig{}, f.settings,
+		spanconfigstore.NewEmptyBoundsReader(), f.knobs,
+	)
 	{
 		// Fully populate the store with KVAccessor contents.
 		records, err := f.kvAccessor.GetSpanConfigRecords(ctx, targets)

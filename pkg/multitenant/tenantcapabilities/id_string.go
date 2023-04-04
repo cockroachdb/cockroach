@@ -19,14 +19,14 @@ func _() {
 	_ = x[MaxCapabilityID-8]
 }
 
-const _CapabilityID_name = "can_admin_relocate_rangecan_admin_scattercan_admin_splitcan_admin_unsplitcan_view_node_infocan_view_tsdb_metricsexempt_from_rate_limitingspan_config_bounds"
+const _ID_name = "can_admin_relocate_rangecan_admin_scattercan_admin_splitcan_admin_unsplitcan_view_node_infocan_view_tsdb_metricsexempt_from_rate_limitingspan_config_bounds"
 
-var _CapabilityID_index = [...]uint8{0, 24, 41, 56, 73, 91, 112, 137, 155}
+var _ID_index = [...]uint8{0, 24, 41, 56, 73, 91, 112, 137, 155}
 
-func (i CapabilityID) String() string {
+func (i ID) String() string {
 	i -= 1
-	if i >= CapabilityID(len(_CapabilityID_index)-1) {
-		return "CapabilityID(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	if i >= ID(len(_ID_index)-1) {
+		return "ID(" + strconv.FormatInt(int64(i+1), 10) + ")"
 	}
-	return _CapabilityID_name[_CapabilityID_index[i]:_CapabilityID_index[i+1]]
+	return _ID_name[_ID_index[i]:_ID_index[i+1]]
 }

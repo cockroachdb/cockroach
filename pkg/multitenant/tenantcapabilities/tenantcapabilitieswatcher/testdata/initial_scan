@@ -53,3 +53,7 @@ not-found
 get-capabilities ten=15
 ----
 {can_admin_unsplit:true}
+
+upsert ten=15 span_config_bounds={}
+----
+ok

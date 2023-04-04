@@ -92,7 +92,9 @@ func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 		if !found {
 			return errors.Newf("capabilities not yet ready")
 		}
-		if !capabilities.GetBool(tenantcapabilities.ExemptFromRateLimiting) {
+		if !tenantcapabilities.MustGetBoolByID(
+			capabilities, tenantcapabilities.ExemptFromRateLimiting,
+		) {
 			return errors.Newf("capabilities not yet ready")
 		}
 		return nil

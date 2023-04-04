@@ -284,7 +284,7 @@ func ParseConfig(t testing.TB, conf string) roachpb.SpanConfig {
 // BoundsUpdate ..
 type BoundsUpdate struct {
 	TenantID roachpb.TenantID
-	Bounds   spanconfigbounds.Bounds
+	Bounds   *spanconfigbounds.Bounds
 	Deleted  bool
 }
 
@@ -321,7 +321,7 @@ func ParseDeclareBoundsArguments(t *testing.T, input string) (updates []BoundsUp
 			updates = append(updates,
 				BoundsUpdate{
 					TenantID: tenantID,
-					Bounds:   spanconfigbounds.Bounds{},
+					Bounds:   nil,
 					Deleted:  true,
 				},
 			)
@@ -335,7 +335,7 @@ func ParseDeclareBoundsArguments(t *testing.T, input string) (updates []BoundsUp
 
 // parseBounds parses a string that looks like {GC.ttl_start=5, GC.ttl_end=40}
 // into a spanconfigbounds.Bounds struct.
-func parseBounds(t *testing.T, input string) spanconfigbounds.Bounds {
+func parseBounds(t *testing.T, input string) *spanconfigbounds.Bounds {
 	require.True(t, boundsRe.MatchString(input))
 
 	matches := boundsRe.FindStringSubmatch(input)
@@ -344,7 +344,7 @@ func parseBounds(t *testing.T, input string) spanconfigbounds.Bounds {
 	gcTTLEnd, err := strconv.Atoi(matches[2])
 	require.NoError(t, err)
 
-	return spanconfigbounds.MakeBounds(&tenantcapabilitiespb.SpanConfigBounds{
+	return spanconfigbounds.New(&tenantcapabilitiespb.SpanConfigBounds{
 		GCTTLSeconds: &tenantcapabilitiespb.SpanConfigBounds_Int32Range{
 			Start: int32(gcTTLStart),
 			End:   int32(gcTTLEnd),
