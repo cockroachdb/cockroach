@@ -115,6 +115,16 @@ const databaseDetailsReducerObj = new KeyedCachedDataReducer(
   moment.duration(10, "m"),
 );
 
+export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
+
+const databaseTablesReducerObj = new CachedDataReducer(
+  clusterUiApi.getDatabaseTables,
+  "databaseTables",
+  null,
+  moment.duration(10, "m"),
+);
+export const refreshDatabaseTables = databaseTablesReducerObj.refresh;
+
 const hotRangesRequestToID = (req: api.HotRangesRequestMessage) =>
   req.page_token;
 
@@ -123,8 +133,6 @@ export const hotRangesReducerObj = new PaginatedCachedDataReducer(
   "hotRanges",
   hotRangesRequestToID,
 );
-
-export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
 
 export const refreshHotRanges = hotRangesReducerObj.refresh;
 

@@ -85,10 +85,63 @@ const searchLocalTablesSetting = new LocalSetting(
   null,
 );
 
+const selectTables = (state: AdminUIState, props: RouteComponentProps) => {
+  const database = getMatchParamByName(props.match, databaseNameAttr);
+  const dbDetails = state.cachedData.databaseDetails;
+  const tableDetails = state.cachedData.tableDetails;
+  const dbTables = state.cachedData.databaseTables;
+
+  return dbTables.map(table => {
+    const tableId = generateTableID(database, table);
+    const details = tableDetails.cache[tableId];
+    const roles = normalizeRoles(details?.data?.results.grantsResp.grants.map(grant => grant["user"]));
+    const grants = normalizePrivileges([].concat(...details?.data?.results.grantsResp.grants.map(grant => grant["privileges"])));
+    const nodes = details?.data?.results.stats.replicaData.nodeIDs || [];
+    // Query fetches distinct table indexes.
+    const numIndexes = details?.data?.results.schemaDetails.indexes.length;
+    return {
+      name: table,
+      loading: !!details?.inFlight,
+      loaded: !!details?.valid,
+      lastError: details?.lastError,
+      details: {
+        columnCount:
+          details?.data?.results.schemaDetails.columns?.length || 0,
+        indexCount: numIndexes,
+        userCount: roles.length,
+        roles: roles,
+        grants: grants,
+        statsLastUpdated:
+          details?.data?.results.heuristicsDetails
+            .stats_last_created_at || null,
+        hasIndexRecommendations:
+          details?.data?.results.stats.indexStats
+            .has_index_recommendations || false,
+        totalBytes:
+          details?.data?.results.stats.spanStats.total_bytes || 0,
+        liveBytes: details?.data?.results.stats.spanStats.live_bytes || 0,
+        livePercentage:
+          details?.data?.results.stats.spanStats.live_percentage || 0,
+        replicationSizeInBytes:
+          details?.data?.results.stats.spanStats.approximate_disk_bytes ||
+          0,
+        nodes: nodes,
+        rangeCount:
+          details?.data?.results.stats.spanStats.range_count || 0,
+        nodesByRegionString: getNodesByRegionString(
+          nodes,
+          nodeRegionsByIDSelector(state),
+          isTenant,
+        ),
+      },
+    };
+  });
+};
+
+
 export const mapStateToProps = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, databaseNameAttr),
-
   state => state.cachedData.databaseDetails,
   state => state.cachedData.tableDetails,
   state => nodeRegionsByIDSelector(state),
@@ -99,6 +152,7 @@ export const mapStateToProps = createSelector(
   state => filtersLocalTablesSetting.selector(state),
   state => searchLocalTablesSetting.selector(state),
   (_: AdminUIState) => isTenant,
+  (state, props) => selectTables(state, props),
   (
     database,
     databaseDetails,
@@ -111,6 +165,7 @@ export const mapStateToProps = createSelector(
     filtersLocalTables,
     searchLocalTables,
     isTenant,
+    tables,
   ): DatabaseDetailsPageData => {
     return {
       loading: !!databaseDetails[database]?.inFlight,
@@ -129,60 +184,7 @@ export const mapStateToProps = createSelector(
       search: searchLocalTables,
       nodeRegions: nodeRegions,
       isTenant: isTenant,
-      tables: _.map(
-        databaseDetails[database]?.data?.results.tablesResp.tables,
-        table => {
-          const tableId = generateTableID(database, table);
-          const details = tableDetails[tableId];
-
-          const roles = normalizeRoles(
-            _.map(details?.data?.results.grantsResp.grants, "user"),
-          );
-          const grants = normalizePrivileges(
-            _.flatMap(details?.data?.results.grantsResp.grants, "privileges"),
-          );
-          const nodes = details?.data?.results.stats.replicaData.nodeIDs || [];
-          const numIndexes = _.uniq(
-            details?.data?.results.schemaDetails.indexes,
-          ).length;
-          return {
-            name: table,
-            loading: !!details?.inFlight,
-            loaded: !!details?.valid,
-            lastError: details?.lastError,
-            details: {
-              columnCount:
-                details?.data?.results.schemaDetails.columns?.length || 0,
-              indexCount: numIndexes,
-              userCount: roles.length,
-              roles: roles,
-              grants: grants,
-              statsLastUpdated:
-                details?.data?.results.heuristicsDetails
-                  .stats_last_created_at || null,
-              hasIndexRecommendations:
-                details?.data?.results.stats.indexStats
-                  .has_index_recommendations || false,
-              totalBytes:
-                details?.data?.results.stats.spanStats.total_bytes || 0,
-              liveBytes: details?.data?.results.stats.spanStats.live_bytes || 0,
-              livePercentage:
-                details?.data?.results.stats.spanStats.live_percentage || 0,
-              replicationSizeInBytes:
-                details?.data?.results.stats.spanStats.approximate_disk_bytes ||
-                0,
-              nodes: nodes,
-              rangeCount:
-                details?.data?.results.stats.spanStats.range_count || 0,
-              nodesByRegionString: getNodesByRegionString(
-                nodes,
-                nodeRegions,
-                isTenant,
-              ),
-            },
-          };
-        },
-      ),
+      tables,
     };
   },
 );

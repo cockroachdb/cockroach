@@ -188,6 +188,9 @@ function filterBySearchQuery(
   return res;
 }
 
+const tablePageSize = 20;
+const disableTableSortSize = tablePageSize * 2;
+
 export class DatabaseDetailsPage extends React.Component<
   DatabaseDetailsPageProps,
   DatabaseDetailsPageState
@@ -197,7 +200,7 @@ export class DatabaseDetailsPage extends React.Component<
     this.state = {
       pagination: {
         current: 1,
-        pageSize: 20,
+        pageSize: tablePageSize,
       },
       lastDetailsError: null,
     };
@@ -255,10 +258,36 @@ export class DatabaseDetailsPage extends React.Component<
     }
 
     let lastDetailsError: Error;
-    this.props.tables.forEach(table => {
+
+    // load everything by default
+    let filteredTables = this.props.tables;
+
+    // Loading only the first page if there are more than
+    // 40 tables. If there is more than 40 tables sort will be disabled.
+    if (this.props.tables.length > disableTableSortSize) {
+      const startIndex =
+        this.state.pagination.pageSize * (this.state.pagination.current - 1);
+      // Result maybe filtered so get db names from filtered results
+      if (this.props.search && this.props.search.length > 0) {
+        filteredTables = this.filteredDatabaseTables();
+      }
+
+      if (!filteredTables || filteredTables.length === 0) {
+        return;
+      }
+
+      // Only load the first page
+      filteredTables = filteredTables.slice(
+        startIndex,
+        startIndex + this.state.pagination.pageSize,
+      );
+    }
+
+    filteredTables.forEach(table => {
       if (table.lastError !== undefined) {
         lastDetailsError = table.lastError;
       }
+
       if (
         lastDetailsError &&
         this.state.lastDetailsError?.name != lastDetailsError?.name
@@ -266,8 +295,9 @@ export class DatabaseDetailsPage extends React.Component<
         this.setState({ lastDetailsError: lastDetailsError });
       }
 
-      if (!table.loaded && !table.loading && table.lastError === undefined) {
-        return this.props.refreshTableDetails(this.props.name, table.name);
+      if (!table.loaded && !table.loading && !table.lastError) {
+        this.props.refreshTableDetails(this.props.name, table.name);
+        return;
       }
     });
   }
@@ -817,6 +847,7 @@ export class DatabaseDetailsPage extends React.Component<
                 onChangeSortSetting={this.changeSortSetting}
                 pagination={this.state.pagination}
                 loading={this.props.loading}
+                disableSortSizeLimit={disableTableSortSize}
                 renderNoResult={
                   <div
                     className={cx(
