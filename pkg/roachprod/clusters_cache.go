@@ -12,7 +12,6 @@ package roachprod
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"os"
 	"path"
@@ -20,9 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -67,7 +66,7 @@ func InitDirs() error {
 
 // saveCluster creates (or overwrites) the file in config.ClusterDir storing the
 // given metadata.
-func saveCluster(c *cloud.Cluster) error {
+func saveCluster(l *logger.Logger, c *cloud.Cluster) error {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetIndent("", "  ")
@@ -180,10 +179,10 @@ func LoadClusters() error {
 // This function assumes the caller took a lock on a file to ensure that
 // multiple processes don't run through this code at the same time. However, it
 // is allowed for LoadClusters to run in another process at the same time.
-func syncClustersCache(cloud *cloud.Cloud) error {
+func syncClustersCache(l *logger.Logger, cloud *cloud.Cloud) error {
 	// Write all cluster files.
 	for _, c := range cloud.Clusters {
-		if err := saveCluster(c); err != nil {
+		if err := saveCluster(l, c); err != nil {
 			return err
 		}
 	}
@@ -204,7 +203,7 @@ func syncClustersCache(cloud *cloud.Cloud) error {
 			if !shouldIgnoreCluster(c) {
 				filename := clusterFilename(name)
 				if err := os.Remove(filename); err != nil {
-					log.Infof(context.Background(), "failed to remove file %s", filename)
+					l.Printf("failed to remove file %s", filename)
 				}
 			}
 		}
@@ -247,11 +246,12 @@ type localVMStorage struct{}
 var _ local.VMStorage = localVMStorage{}
 
 // SaveCluster is part of the local.VMStorage interface.
-func (localVMStorage) SaveCluster(cluster *cloud.Cluster) error {
-	return saveCluster(cluster)
+func (localVMStorage) SaveCluster(l *logger.Logger, cluster *cloud.Cluster) error {
+	return saveCluster(l, cluster)
 }
 
 // DeleteCluster is part of the local.VMStorage interface.
-func (localVMStorage) DeleteCluster(name string) error {
-	return os.Remove(clusterFilename(name))
+func (localVMStorage) DeleteCluster(l *logger.Logger, name string) error {
+	path := clusterFilename(name)
+	return os.Remove(path)
 }

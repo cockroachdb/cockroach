@@ -274,21 +274,21 @@ func CreateCluster(
 }
 
 // DestroyCluster TODO(peter): document
-func DestroyCluster(c *Cluster) error {
+func DestroyCluster(l *logger.Logger, c *Cluster) error {
 	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
 		// Enable a fast-path for providers that can destroy a cluster in one shot.
 		if x, ok := p.(vm.DeleteCluster); ok {
-			return x.DeleteCluster(c.Name)
+			return x.DeleteCluster(l, c.Name)
 		}
-		return p.Delete(vms)
+		return p.Delete(l, vms)
 	})
 }
 
 // ExtendCluster TODO(peter): document
-func ExtendCluster(c *Cluster, extension time.Duration) error {
+func ExtendCluster(l *logger.Logger, c *Cluster, extension time.Duration) error {
 	// Round new lifetime to nearest second.
 	newLifetime := (c.Lifetime + extension).Round(time.Second)
 	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
-		return p.Extend(vms, newLifetime)
+		return p.Extend(l, vms, newLifetime)
 	})
 }

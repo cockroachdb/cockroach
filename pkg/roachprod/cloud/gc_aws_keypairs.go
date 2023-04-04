@@ -19,7 +19,7 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -177,6 +177,7 @@ func getKeyPairs(EC2Client *ec2.Client) ([]ec2types.KeyPairInfo, error) {
 
 // Tag keypair with IAMUserName and CreatedAt if untagged and return createdAtValue.
 func tagKeyPairIfUntagged(
+	l *logger.Logger,
 	EC2Client *ec2.Client,
 	keyPair ec2types.KeyPairInfo,
 	IAMUserName string,
@@ -188,13 +189,13 @@ func tagKeyPairIfUntagged(
 	if IAMUserNameTag == "" {
 		IAMUserNameKey := "IAMUserName"
 		tags = append(tags, ec2types.Tag{Key: &IAMUserNameKey, Value: &IAMUserName})
-		log.Infof(context.Background(), "Tagging %s with IAMUserName: %s\n", *keyPair.KeyName, IAMUserName)
+		l.Printf("Tagging %s with IAMUserName: %s\n", *keyPair.KeyName, IAMUserName)
 	}
 	createdAtValue := timestamp.Format(time.RFC3339)
 	if createdAtTag == "" {
 		createdAtKey := "CreatedAt"
 		tags = append(tags, ec2types.Tag{Key: &createdAtKey, Value: &createdAtValue})
-		log.Infof(context.Background(), "Tagging %s with CreatedAt: %s\n", *keyPair.KeyName, createdAtValue)
+		l.Printf("Tagging %s with CreatedAt: %s\n", *keyPair.KeyName, createdAtValue)
 	} else {
 		createdAtValue = createdAtTag
 	}
@@ -220,7 +221,7 @@ func deleteKeyPair(EC2Client *ec2.Client, keyPairName string) error {
 
 // GCAWSKeyPairs tags keypairs created by roachprod with IAMUserName and CreatedAt if untagged and
 // deletes keypairs created by previous users/employees (TeamCity keypairs are deleted after 10 days).
-func GCAWSKeyPairs(dryrun bool) error {
+func GCAWSKeyPairs(l *logger.Logger, dryrun bool) error {
 	timestamp := timeutil.Now()
 
 	// Pass empty string as region to use default region (IAM is global).
@@ -250,7 +251,7 @@ func GCAWSKeyPairs(dryrun bool) error {
 		return err
 	}
 	for _, region := range regions {
-		log.Infof(context.Background(), "%s", *region.RegionName)
+		l.Printf("%s", *region.RegionName)
 		EC2Client, err := getEC2Client(*region.RegionName)
 		if err != nil {
 			return err
@@ -266,7 +267,7 @@ func GCAWSKeyPairs(dryrun bool) error {
 				// keypair wasn't created by roachprod
 				continue
 			}
-			createdAt, err := tagKeyPairIfUntagged(EC2Client, keyPair, IAMUserName, timestamp, dryrun)
+			createdAt, err := tagKeyPairIfUntagged(l, EC2Client, keyPair, IAMUserName, timestamp, dryrun)
 			if err != nil {
 				return err
 			}
@@ -279,7 +280,7 @@ func GCAWSKeyPairs(dryrun bool) error {
 				}
 				// 10 days = 240 hours
 				if timestamp.Sub(createdAtTimestamp).Hours() >= 240 {
-					log.Infof(context.Background(), "Deleting %s because it is a teamcity-runner key created at %s.\n",
+					l.Printf("Deleting %s because it is a teamcity-runner key created at %s.\n",
 						*keyPair.KeyName, createdAtTimestamp)
 					if !dryrun {
 						err := deleteKeyPair(EC2Client, *keyPair.KeyName)
@@ -293,7 +294,7 @@ func GCAWSKeyPairs(dryrun bool) error {
 
 			// Delete key if user has console access without MFA".
 			if usersWithConsoleAccess[IAMUserName] && !usersWithMFAEnabled[IAMUserName] {
-				log.Infof(context.Background(), "Deleting %s because %s has console access but MFA disabled.\n", *keyPair.KeyName, IAMUserName)
+				l.Printf("Deleting %s because %s has console access but MFA disabled.\n", *keyPair.KeyName, IAMUserName)
 				if !dryrun {
 					err := deleteKeyPair(EC2Client, *keyPair.KeyName)
 					if err != nil {
@@ -302,7 +303,7 @@ func GCAWSKeyPairs(dryrun bool) error {
 				}
 				// Delete key if user doesn't have an active access key.
 			} else if !usersWithActiveAccessKey[IAMUserName] {
-				log.Infof(context.Background(), "Deleting %s because %s does not have an active access key.\n",
+				l.Printf("Deleting %s because %s does not have an active access key.\n",
 					*keyPair.KeyName, IAMUserName)
 				if !dryrun {
 					err := deleteKeyPair(EC2Client, *keyPair.KeyName)
