@@ -14,6 +14,7 @@ GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 exit_status=0
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
     //pkg/sql/logictest/tests/... \
+    --test_sharding_strategy=disabled \
     --test_arg=--vmodule=*=10 \
     --test_arg=-show-sql \
     --test_env=GO_TEST_WRAP_TESTV=1 \

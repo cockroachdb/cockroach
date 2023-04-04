@@ -28,6 +28,7 @@ exit_status=0
 for config in local multiregion-9node-3region-3azs; do
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
     //pkg/sql/logictest/tests/$config/... \
+    --test_sharding_strategy=disabled \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
@@ -46,6 +47,7 @@ done
 for config in local multiregion-9node-3region-3azs multiregion-9node-3region-3azs-no-los multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-vec-off multiregion-15node-5region-3azs 3node-tenant 3node-tenant-multiregion; do
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
     //pkg/ccl/logictestccl/tests/$config/... \
+    --test_sharding_strategy=disabled \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
@@ -64,6 +66,7 @@ done
 # Generate corpuses from end-to-end-schema changer tests
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
   //pkg/sql/schemachanger:schemachanger_test \
+  --test_sharding_strategy=disabled \
   --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
   --test_filter='^TestGenerateCorpus.*$' \
   --test_env=GO_TEST_WRAP_TESTV=1 \
@@ -82,6 +85,7 @@ $exit_status
 # Generate corpuses from end-to-end-schema changer tests
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
   //pkg/ccl/schemachangerccl:schemachangerccl_test \
+  --test_sharding_strategy=disabled \
   --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
   --test_filter='^TestGenerateCorpus.*$' \
   --test_env=GO_TEST_WRAP_TESTV=1 \
@@ -102,6 +106,7 @@ $exit_status
 # indicates we can replay it on the same version.
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
   //pkg/sql/schemachanger/corpus:corpus_test \
+  --test_sharding_strategy=disabled \
   --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
   --test_filter='^TestValidateCorpuses$' \
   --test_env=GO_TEST_WRAP_TESTV=1 \
@@ -126,6 +131,7 @@ fi
 for config in local-mixed-22.1-22.2; do
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
     //pkg/sql/logictest/tests/$config/... \
+    --test_sharding_strategy=disabled \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed\
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
@@ -145,6 +151,7 @@ done
 # indicates we can replay it on the same version.
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
     //pkg/sql/schemachanger/corpus:corpus_test \
+    --test_sharding_strategy=disabled \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed \
     --test_filter='^TestValidateCorpuses$' \
     --test_env=GO_TEST_WRAP_TESTV=1 \
