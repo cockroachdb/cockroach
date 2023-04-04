@@ -102,6 +102,10 @@ func publishDirectory(localSrcDir, dstDir string) error {
 	errorsFound := false
 	wg.Add(len(files))
 	for index := range files {
+		if files[index].IsDir() {
+			wg.Done()
+			continue
+		}
 		go func(index int) {
 			defer wg.Done()
 			path := files[index]
