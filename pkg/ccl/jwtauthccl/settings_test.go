@@ -11,10 +11,12 @@ package jwtauthccl
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestValidateAndParseJWTAuthIssuers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tests := []struct {
 		name            string
 		setting         string
@@ -57,6 +59,7 @@ func TestValidateAndParseJWTAuthIssuers(t *testing.T) {
 }
 
 func TestValidateAndParseJWTAuthAudience(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tests := []struct {
 		name            string
 		setting         string
@@ -99,6 +102,7 @@ func TestValidateAndParseJWTAuthAudience(t *testing.T) {
 }
 
 func TestValidateAndParseJWTAuthJWKS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tests := []struct {
 		name          string
 		setting       string
