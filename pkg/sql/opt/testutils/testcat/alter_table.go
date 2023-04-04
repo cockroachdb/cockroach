@@ -37,7 +37,7 @@ func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 	for _, cmd := range stmt.Cmds {
 		switch t := cmd.(type) {
 		case *tree.AlterTableInjectStats:
-			injectTableStats(tab, t.Stats)
+			injectTableStats(tab, t.Stats, tc)
 
 		case *tree.AlterTableAddConstraint:
 			switch d := t.ConstraintDef.(type) {
@@ -55,7 +55,7 @@ func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 }
 
 // injectTableStats sets the table statistics as specified by a JSON object.
-func injectTableStats(tt *Table, statsExpr tree.Expr) {
+func injectTableStats(tt *Table, statsExpr tree.Expr, tc *Catalog) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -78,7 +78,7 @@ func injectTableStats(tt *Table, statsExpr tree.Expr) {
 	}
 	tt.Stats = make([]*TableStat, len(stats))
 	for i := range stats {
-		tt.Stats[i] = &TableStat{js: stats[i], tt: tt, evalCtx: &evalCtx}
+		tt.Stats[i] = &TableStat{js: stats[i], tt: tt, evalCtx: &evalCtx, tc: tc}
 	}
 	// Call ColumnOrdinal on all possible columns to assert that
 	// the column names are valid.
