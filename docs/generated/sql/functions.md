@@ -3187,8 +3187,6 @@ active for the current transaction.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.locality_value"></a><code>crdb_internal.locality_value(key: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the value of the specified locality key.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.no_constant_folding"></a><code>crdb_internal.no_constant_folding(input: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.node_executable_version"></a><code>crdb_internal.node_executable_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the version of CockroachDB this node is running.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.node_id"></a><code>crdb_internal.node_id() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the node ID.</p>

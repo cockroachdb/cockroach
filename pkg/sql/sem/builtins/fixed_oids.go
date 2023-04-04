@@ -1295,7 +1295,6 @@ var builtinOidsArray = []string{
 	1314: `crdb_internal.force_log_fatal(msg: string) -> int`,
 	1315: `crdb_internal.force_retry(val: interval) -> int`,
 	1316: `crdb_internal.lease_holder(key: bytes) -> int`,
-	1317: `crdb_internal.no_constant_folding(input: anyelement) -> anyelement`,
 	1318: `crdb_internal.trim_tenant_prefix(key: bytes) -> bytes`,
 	1319: `crdb_internal.trim_tenant_prefix(keys: bytes[]) -> bytes[]`,
 	1320: `crdb_internal.tenant_span(tenant_id: int) -> bytes[]`,
