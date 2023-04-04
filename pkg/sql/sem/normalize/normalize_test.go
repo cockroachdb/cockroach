@@ -156,7 +156,6 @@ func TestNormalizeExpr(t *testing.T) {
 		{`crdb_internal.force_panic('a')`, `crdb_internal.force_panic('a')`},
 		{`crdb_internal.force_log_fatal('a')`, `crdb_internal.force_log_fatal('a')`},
 		{`crdb_internal.force_retry('1 day'::interval)`, `crdb_internal.force_retry('1 day')`},
-		{`crdb_internal.no_constant_folding(123)`, `crdb_internal.no_constant_folding(123)`},
 		{`crdb_internal.set_vmodule('a')`, `crdb_internal.set_vmodule('a')`},
 		{`uuid_v4()`, `uuid_v4()`},
 		{`experimental_uuid_v4()`, `experimental_uuid_v4()`},
