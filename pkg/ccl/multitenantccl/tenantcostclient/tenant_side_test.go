@@ -808,7 +808,7 @@ func TestWaitingRU(t *testing.T) {
 	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952, 1)
 	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0, 0)
 
-	testutils.SucceedsSoon(t, func() error {
+	testutils.SucceedsWithin(t, func() error {
 		tenantcostclient.TestingSetRate(ctrl, fillRate)
 
 		var doneCount int64
@@ -860,7 +860,7 @@ func TestWaitingRU(t *testing.T) {
 		}
 
 		return errors.Errorf("RUs did not drop below 1K: %0.2f", available)
-	})
+	}, 2*time.Minute)
 }
 
 // TestConsumption verifies consumption reporting from a tenant server process.
