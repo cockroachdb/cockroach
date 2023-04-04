@@ -89,7 +89,9 @@ describe("TableDetails sagas", () => {
 
   describe("refreshTableDetailsSaga", () => {
     it("dispatches request TableDetails action", () => {
-      return expectSaga(refreshTableDetailsSaga).put(actions.request(requestAction.payload)).run();
+      return expectSaga(refreshTableDetailsSaga, requestAction)
+        .put(actions.request(requestAction.payload))
+        .run();
     });
   });
 

@@ -74,7 +74,9 @@ describe("DatabaseDetails sagas", () => {
 
   describe("refreshDatabaseDetailsSaga", () => {
     it("dispatches request DatabaseDetails action", () => {
-      return expectSaga(refreshDatabaseDetailsSaga).put(actions.request(requestAction.payload)).run();
+      return expectSaga(refreshDatabaseDetailsSaga, requestAction)
+        .put(actions.request(requestAction.payload))
+        .run();
     });
   });
 

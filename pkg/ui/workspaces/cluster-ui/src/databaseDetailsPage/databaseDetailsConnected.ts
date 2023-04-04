@@ -94,7 +94,7 @@ const selectTables = (state: AppState, props: RouteComponentProps): DatabaseDeta
         ),
       },
     };
-  });
+  }) || [];
 };
 
 export const mapStateToProps = createSelector(
