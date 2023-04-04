@@ -87,13 +87,12 @@ const searchLocalTablesSetting = new LocalSetting(
 
 const selectTables = (state: AdminUIState, props: RouteComponentProps) => {
   const database = getMatchParamByName(props.match, databaseNameAttr);
-  const dbDetails = state.cachedData.databaseDetails;
   const tableDetails = state.cachedData.tableDetails;
   const dbTables = state.cachedData.databaseTables;
 
-  return dbTables.map(table => {
+  return dbTables?.data?.results.tables.map((table: string) => {
     const tableId = generateTableID(database, table);
-    const details = tableDetails.cache[tableId];
+    const details = tableDetails[tableId];
     const roles = normalizeRoles(details?.data?.results.grantsResp.grants.map(grant => grant["user"]));
     const grants = normalizePrivileges([].concat(...details?.data?.results.grantsResp.grants.map(grant => grant["privileges"])));
     const nodes = details?.data?.results.stats.replicaData.nodeIDs || [];
@@ -143,7 +142,6 @@ export const mapStateToProps = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, databaseNameAttr),
   state => state.cachedData.databaseDetails,
-  state => state.cachedData.tableDetails,
   state => nodeRegionsByIDSelector(state),
   state => selectIsMoreThanOneNode(state),
   state => viewModeLocalSetting.selector(state),
@@ -156,7 +154,6 @@ export const mapStateToProps = createSelector(
   (
     database,
     databaseDetails,
-    tableDetails,
     nodeRegions,
     showNodeRegionsColumn,
     viewMode,
