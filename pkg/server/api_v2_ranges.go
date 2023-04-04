@@ -45,6 +45,8 @@ type nodeStatus struct {
 
 	// Metrics contain the last sampled metrics for this node.
 	Metrics map[string]float64 `json:"metrics,omitempty"`
+	// StoreMetrics contain the last sampled store metrics for this node.
+	StoreMetrics map[roachpb.StoreID]map[string]float64 `json:"store_metrics,omitempty"`
 	// TotalSystemMemory is the total amount of available system memory on this
 	// node (or cgroup), in bytes.
 	TotalSystemMemory int64 `json:"total_system_memory,omitempty"`
@@ -116,6 +118,10 @@ func (a *apiV2SystemServer) listNodes(w http.ResponseWriter, r *http.Request) {
 	var resp nodesResponse
 	resp.Next = next
 	for _, n := range nodes.Nodes {
+		storeMetrics := make(map[roachpb.StoreID]map[string]float64)
+		for _, ss := range n.StoreStatuses {
+			storeMetrics[ss.Desc.StoreID] = ss.Metrics
+		}
 		resp.Nodes = append(resp.Nodes, nodeStatus{
 			NodeID:            int32(n.Desc.NodeID),
 			Address:           n.Desc.Address,
@@ -127,6 +133,7 @@ func (a *apiV2SystemServer) listNodes(w http.ResponseWriter, r *http.Request) {
 			ClusterName:       n.Desc.ClusterName,
 			SQLAddress:        n.Desc.SQLAddress,
 			Metrics:           n.Metrics,
+			StoreMetrics:      storeMetrics,
 			TotalSystemMemory: n.TotalSystemMemory,
 			NumCpus:           n.NumCpus,
 			UpdatedAt:         n.UpdatedAt,
