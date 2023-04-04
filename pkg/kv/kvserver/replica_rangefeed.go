@@ -159,12 +159,7 @@ func (r *Replica) RangeFeed(
 	}
 
 	if err := r.ensureClosedTimestampStarted(ctx); err != nil {
-		if err := stream.Send(&kvpb.RangeFeedEvent{Error: &kvpb.RangeFeedError{
-			Error: *err,
-		}}); err != nil {
-			return future.MakeCompletedErrorFuture(err)
-		}
-		return future.MakeCompletedErrorFuture(nil)
+		return future.MakeCompletedErrorFuture(err.GoError())
 	}
 
 	// If the RangeFeed is performing a catch-up scan then it will observe all

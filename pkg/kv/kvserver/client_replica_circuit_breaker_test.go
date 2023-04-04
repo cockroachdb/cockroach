@@ -428,7 +428,11 @@ func waitReplicaRangeFeed(
 	if ctxErr != nil {
 		return ctxErr
 	}
-	return rfErr
+	var event kvpb.RangeFeedEvent
+	event.SetValue(&kvpb.RangeFeedError{
+		Error: *kvpb.NewError(rfErr),
+	})
+	return stream.Send(&event)
 }
 
 // This test verifies that RangeFeed bypasses the circuit breaker. When the
