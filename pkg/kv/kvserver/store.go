@@ -1343,6 +1343,17 @@ func NewStore(
 		s.renewableLeasesSignal = make(chan struct{}, 1)
 	}
 
+	s.consistencyLimiter = quotapool.NewRateLimiter(
+		"ConsistencyQueue",
+		quotapool.Limit(consistencyCheckRate.Get(&cfg.Settings.SV)),
+		consistencyCheckRate.Get(&cfg.Settings.SV)*consistencyCheckRateBurstFactor,
+		quotapool.WithMinimumWait(consistencyCheckRateMinWait))
+
+	consistencyCheckRate.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		rate := consistencyCheckRate.Get(&cfg.Settings.SV)
+		s.consistencyLimiter.UpdateLimit(quotapool.Limit(rate), rate*consistencyCheckRateBurstFactor)
+	})
+
 	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), kvserverbase.BulkIOWriteBurst)
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		s.limiters.BulkIOWriteRate.SetLimit(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)))
@@ -2056,17 +2067,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings, s.rebalanceObjManager)
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
-
-	s.consistencyLimiter = quotapool.NewRateLimiter(
-		"ConsistencyQueue",
-		quotapool.Limit(consistencyCheckRate.Get(&s.ClusterSettings().SV)),
-		consistencyCheckRate.Get(&s.ClusterSettings().SV)*consistencyCheckRateBurstFactor,
-		quotapool.WithMinimumWait(consistencyCheckRateMinWait))
-
-	consistencyCheckRate.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
-		rate := consistencyCheckRate.Get(&s.ClusterSettings().SV)
-		s.consistencyLimiter.UpdateLimit(quotapool.Limit(rate), rate*consistencyCheckRateBurstFactor)
-	})
 
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
