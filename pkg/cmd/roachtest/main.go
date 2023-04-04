@@ -353,6 +353,8 @@ runner itself.
 		fmt.Fprintf(os.Stderr, "unable to lookup current user: %s\n", err)
 		os.Exit(1)
 	}
+	// Disable spinners and other fancy status messages since all IO is non-interactive.
+	config.Quiet = true
 
 	if err := roachprod.InitDirs(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
