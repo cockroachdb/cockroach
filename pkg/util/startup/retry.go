@@ -113,13 +113,15 @@ func WithoutChecks(ctx context.Context) context.Context {
 // retry should be performed explicitly while using WithoutChecks context
 // to suppress safety mechanisms.
 func RunIdempotentWithRetry(
-	ctx context.Context, opName string, f func(ctx context.Context) error,
+	ctx context.Context, quiesce <-chan struct{}, opName string, f func(ctx context.Context) error,
 ) error {
 	ctx = context.WithValue(ctx, startupRetryKey{}, "in retry")
 	every := log.Every(5 * time.Second)
 	// Retry failures indefinitely until context is cancelled.
 	var err error
-	for r := retry.StartWithCtx(ctx, startupRetryOpts); r.Next(); {
+	retryOpts := startupRetryOpts
+	retryOpts.Closer = quiesce
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		err = f(ctx)
 		if err == nil {
 			break
