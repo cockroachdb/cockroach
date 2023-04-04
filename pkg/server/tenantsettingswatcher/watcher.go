@@ -98,7 +98,9 @@ func (w *Watcher) startRangeFeed(
 ) error {
 	// We need to retry unavailable replicas here. This is only meant to be called
 	// at server startup.
-	tableID, err := startup.RunIdempotentWithRetryEx(ctx, "tenant start setting rangefeed",
+	tableID, err := startup.RunIdempotentWithRetryEx(ctx,
+		w.stopper.ShouldQuiesce(),
+		"tenant start setting rangefeed",
 		func(ctx context.Context) (descpb.ID, error) {
 			return sysTableResolver.LookupSystemTableID(ctx, systemschema.TenantSettingsTable.GetName())
 		})
