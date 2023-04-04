@@ -1523,3 +1523,55 @@ func (ief *InternalDB) txn(
 		}
 	}
 }
+
+// SessionDataOverride returns a function that can be used to override some
+// fields in the session data.
+type SessionDataOverride = func(sd *sessiondata.SessionData)
+
+type internalDBWithOverrides struct {
+	baseDB               isql.DB
+	sessionDataOverrides []SessionDataOverride
+}
+
+var _ isql.DB = (*internalDBWithOverrides)(nil)
+
+// NewInternalDBWithSessionDataOverrides creates a new DB that wraps the given DB
+// and customizes the session data.
+func NewInternalDBWithSessionDataOverrides(
+	baseDB isql.DB, sessionDataOverrides ...SessionDataOverride,
+) isql.DB {
+	return &internalDBWithOverrides{
+		baseDB:               baseDB,
+		sessionDataOverrides: sessionDataOverrides,
+	}
+}
+
+func (db *internalDBWithOverrides) KV() *kv.DB {
+	return db.baseDB.KV()
+}
+
+func (db *internalDBWithOverrides) Txn(
+	ctx context.Context, fn func(context.Context, isql.Txn) error, opts ...isql.TxnOption,
+) error {
+	return db.baseDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		for _, o := range db.sessionDataOverrides {
+			o(txn.SessionData())
+		}
+		return fn(ctx, txn)
+	}, opts...)
+}
+
+func (db *internalDBWithOverrides) Executor(opts ...isql.ExecutorOption) isql.Executor {
+	var cfg isql.ExecutorConfig
+	cfg.Init(opts...)
+	sd := cfg.GetSessionData()
+	if sd == nil {
+		// newSessionData is the default value used by InternalExecutor
+		// when no session data is provided otherwise.
+		sd = newSessionData(SessionArgs{})
+	}
+	for _, o := range db.sessionDataOverrides {
+		o(sd)
+	}
+	return db.baseDB.Executor(isql.WithSessionData(sd))
+}
