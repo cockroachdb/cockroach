@@ -480,7 +480,7 @@ func ExpectedDescriptorIDs(
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (descpb.IDs, error) {
-	completedMigrations, err := getCompletedMigrations(ctx, db, codec)
+	completedMigrations, err := getCompletedMigrations(ctx, make(chan struct{}), db, codec)
 	if err != nil {
 		return nil, err
 	}
@@ -512,7 +512,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		defer m.testingKnobs.AfterEnsureMigrations()
 	}
 	// First, check whether there are any migrations that need to be run.
-	completedMigrations, err := getCompletedMigrations(ctx, m.db, m.codec)
+	completedMigrations, err := getCompletedMigrations(ctx, m.stopper.ShouldQuiesce(), m.db, m.codec)
 	if err != nil {
 		return err
 	}
@@ -599,7 +599,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 
 	// Re-get the list of migrations in case any of them were completed between
 	// our initial check and our grabbing of the lease.
-	completedMigrations, err = getCompletedMigrations(ctx, m.db, m.codec)
+	completedMigrations, err = getCompletedMigrations(ctx, m.stopper.ShouldQuiesce(), m.db, m.codec)
 	if err != nil {
 		return err
 	}
@@ -630,7 +630,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		if log.V(1) {
 			log.Infof(ctx, "running migration %q", migration.name)
 		}
-		if err := startup.RunIdempotentWithRetry(ctx, migration.name,
+		if err := startup.RunIdempotentWithRetry(ctx, m.stopper.ShouldQuiesce(), migration.name,
 			func(ctx context.Context) error {
 				return migration.workFn(ctx, r)
 			}); err != nil {
@@ -638,7 +638,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		}
 
 		log.VEventf(ctx, 1, "persisting record of completing migration %s", migration.name)
-		if err := startup.RunIdempotentWithRetry(ctx,
+		if err := startup.RunIdempotentWithRetry(ctx, m.stopper.ShouldQuiesce(),
 			"persist completed migration record",
 			func(ctx context.Context) error { return m.db.Put(ctx, key, startTime) }); err != nil {
 			return errors.Wrapf(err, "failed to persist record of completing migration %q",
@@ -674,14 +674,16 @@ func (m *Manager) shouldRunMigration(
 // this in other places are unlikely, but care must be taken in case some fixes
 // are backported.
 func getCompletedMigrations(
-	ctx context.Context, db DB, codec keys.SQLCodec,
+	ctx context.Context, quiesce <-chan struct{}, db DB, codec keys.SQLCodec,
 ) (map[string]struct{}, error) {
 	if log.V(1) {
 		log.Info(ctx, "trying to get the list of completed migrations")
 	}
 	prefix := codec.MigrationKeyPrefix()
 	var keyvals []kv.KeyValue
-	err := startup.RunIdempotentWithRetry(ctx,"get completed migrations",
+	err := startup.RunIdempotentWithRetry(ctx,
+		quiesce,
+		"get completed migrations",
 		func(ctx context.Context) (err error) {
 			keyvals, err = db.Scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
 			return err

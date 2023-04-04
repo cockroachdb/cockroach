@@ -143,6 +143,7 @@ func (w *Watcher) startRangeFeed(
 	// at server startup.
 	var tableID descpb.ID
 	err := startup.RunIdempotentWithRetry(ctx,
+		w.stopper.ShouldQuiesce(),
 		"tenant start setting rangefeed",
 		func(ctx context.Context) (err error) {
 			tableID, err = sysTableResolver.LookupSystemTableID(ctx,
