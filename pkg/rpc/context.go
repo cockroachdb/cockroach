@@ -2298,8 +2298,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 			// Run the heartbeat; this will block until the connection breaks for
 			// whatever reason. We don't actually have to do anything with the error,
 			// so we ignore it.
-			err := rpcCtx.runHeartbeat(ctx, conn, target)
-			log.Infof(ctx, "connection heartbeat loop ended with err: %v", err)
+			_ = rpcCtx.runHeartbeat(ctx, conn, target)
 			maybeFatal(ctx, rpcCtx.m.Remove(k, conn))
 
 			// Context gets canceled on server shutdown, and if that's likely why
