@@ -57,14 +57,14 @@ func rejectIfSystemTenant(tenID uint64, op string) error {
 func GetAllNonDropTenantIDs(
 	ctx context.Context, txn isql.Txn, settings *cluster.Settings,
 ) ([]roachpb.TenantID, error) {
-	q := `SELECT id FROM system.tenants WHERE data_state != $1 ORDER BY id`
-	var arg interface{} = mtinfopb.DataStateDrop
+	q := `SELECT id FROM system.tenants WHERE data_state NOT IN ($1,$2) ORDER BY id`
+	args := []interface{}{mtinfopb.DataStateDrop, mtinfopb.DataStateDeleted}
 	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
 		q = `SELECT id FROM system.tenants
 WHERE crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>'deprecatedDataState' != $1 ORDER BY id`
-		arg = "DROP"
+		args = []interface{}{"DROP"}
 	}
-	rows, err := txn.QueryBufferedEx(ctx, "get-tenant-ids", txn.KV(), sessiondata.NodeUserSessionDataOverride, q, arg)
+	rows, err := txn.QueryBufferedEx(ctx, "get-tenant-ids", txn.KV(), sessiondata.NodeUserSessionDataOverride, q, args...)
 	if err != nil {
 		return nil, err
 	}
