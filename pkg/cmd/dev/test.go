@@ -37,6 +37,7 @@ const (
 	stressFlag       = "stress"
 	stressArgsFlag   = "stress-args"
 	raceFlag         = "race"
+	deadlockFlag     = "deadlock"
 	ignoreCacheFlag  = "ignore-cache"
 	rewriteFlag      = "rewrite"
 	streamOutputFlag = "stream-output"
@@ -101,6 +102,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
+	testCmd.Flags().Bool(deadlockFlag, false, "run tests using the deadlock detector")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run (only applicable to certain tests)")
 	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
@@ -137,6 +139,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		filter        = mustGetFlagString(cmd, filterFlag)
 		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
 		race          = mustGetFlagBool(cmd, raceFlag)
+		deadlock      = mustGetFlagBool(cmd, deadlockFlag)
 		rewrite       = mustGetFlagBool(cmd, rewriteFlag)
 		streamOutput  = mustGetFlagBool(cmd, streamOutputFlag)
 		testArgs      = mustGetFlagString(cmd, testArgsFlag)
@@ -200,6 +203,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	}
 
 	var args []string
+	var goTags []string
 	args = append(args, "test")
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
@@ -208,6 +212,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--config=race")
 	} else if stress {
 		disableTestSharding = true
+	}
+	if deadlock {
+		goTags = append(goTags, "deadlock")
 	}
 
 	var testTargets []string
@@ -347,6 +354,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_sharding_strategy=disabled")
 	}
 
+	if len(goTags) > 0 {
+		args = append(args, "--define", "gotags=bazel,gss,"+strings.Join(goTags, ","))
+	}
 	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)
