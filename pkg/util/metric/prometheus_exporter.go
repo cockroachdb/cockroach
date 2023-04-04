@@ -78,7 +78,7 @@ func (pm *PrometheusExporter) findOrCreateFamily(
 // connected to the registry and metrics within) when returning from the the
 // call. It creates new families as needed.
 func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMetrics bool) {
-	labels := registry.getLabels()
+	labels := registry.GetLabels()
 	f := func(name string, v interface{}) {
 		prom, ok := v.(PrometheusExportable)
 		if !ok {
