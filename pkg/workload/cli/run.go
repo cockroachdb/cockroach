@@ -87,6 +87,27 @@ var secure = securityFlags.Bool("secure", false,
 		"For example when using root, certs/client.root.crt certs/client.root.key should exist.")
 var user = securityFlags.String("user", "root", "Specify a user to run the workload as")
 var password = securityFlags.String("password", "", "Optionally specify a password for the user")
+var tenantType = sharedFlags.String("tenant-type", systemTenantType, fmt.Sprintf("Type of tenant to use - supported values: %s", tenantTypes))
+
+const (
+	systemTenantType          = "system"
+	sharedTenantType          = "shared"
+	externalTenantType        = "external"
+	secondaryTenantName       = "secondary-tenant"
+	secondaryTenantQueryParam = "&options=-ccluster%3D" + secondaryTenantName
+)
+
+var tenantTypes = []string{systemTenantType, sharedTenantType, externalTenantType}
+
+func getTenantType() string {
+	t := *tenantType
+	for _, tt := range tenantTypes {
+		if t == tt {
+			return t
+		}
+	}
+	panic(fmt.Sprintf("invalid tenant type: %q", t))
+}
 
 func init() {
 
@@ -217,6 +238,13 @@ func CmdHelper(
 
 			urls = []string{crdbDefaultURL}
 		}
+		if getTenantType() != systemTenantType {
+			for i := range urls {
+				urls[i] += secondaryTenantQueryParam
+			}
+		}
+
+		log.Infof(context.Background(), "using urls %s", urls)
 		dbName, err := workload.SanitizeUrls(gen, dbOverride, urls)
 		if err != nil {
 			return err
@@ -296,6 +324,54 @@ func workerRun(
 
 func runInit(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
+
+	tenantType := getTenantType()
+	if tenantType != systemTenantType {
+		systemTenantURLs := make([]string, 0, len(urls))
+		for _, url := range urls {
+			systemTenantURL := strings.ReplaceAll(url, secondaryTenantQueryParam, ``)
+			systemTenantURLs = append(systemTenantURLs, systemTenantURL)
+		}
+		systemTenantDB, err := gosql.Open(`cockroach`, strings.Join(systemTenantURLs, ` `))
+		if err != nil {
+			return err
+		}
+		_, err = systemTenantDB.ExecContext(ctx, "ALTER TENANT $1 STOP SERVICE", secondaryTenantName)
+		if err != nil {
+			if !strings.Contains(err.Error(), fmt.Sprintf(`tenant "%s" does not exist`, secondaryTenantName)) {
+				return err
+			}
+		}
+		_, err = systemTenantDB.ExecContext(ctx, "DROP TENANT IF EXISTS $1", secondaryTenantName)
+		if err != nil {
+			return err
+		}
+		_, err = systemTenantDB.ExecContext(ctx, "CREATE TENANT $1", secondaryTenantName)
+		if err != nil {
+			return err
+		}
+		_, err = systemTenantDB.ExecContext(ctx, fmt.Sprintf("ALTER TENANT $1 START SERVICE %s", tenantType), secondaryTenantName)
+		if err != nil {
+			return err
+		}
+
+		start := timeutil.Now()
+		for _, url := range urls {
+			db, err := gosql.Open(`cockroach`, url)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			for {
+				_, err := db.ExecContext(ctx, "SELECT 1")
+				if err == nil {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+		log.Infof(ctx, "tenant %q ready after %dms", secondaryTenantName, timeutil.Since(start).Milliseconds())
+	}
 
 	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
