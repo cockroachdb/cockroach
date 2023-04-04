@@ -474,6 +474,11 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 	active.setLastError(reason)
 	active.release()
 
+	if reason == io.EOF {
+		// If we got an EOF, treat it as a signal to restart single range feed.
+		reason = nil
+	}
+
 	errInfo, err := handleRangefeedError(ctx, reason)
 	if err != nil {
 		// If this is an error we cannot recover from, terminate the rangefeed.
