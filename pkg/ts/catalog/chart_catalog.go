@@ -3080,7 +3080,6 @@ var charts = []sectionDescription{
 			{
 				Title: "Size",
 				Metrics: []string{
-					"rocksdb.block.cache.pinned-usage",
 					"rocksdb.block.cache.usage",
 				},
 			},

@@ -898,7 +898,6 @@ export const getNodeStatus = (): INodeStatus => {
           "requests.slow.raft": 0,
           "rocksdb.block.cache.hits": 52720,
           "rocksdb.block.cache.misses": 4276,
-          "rocksdb.block.cache.pinned-usage": 0,
           "rocksdb.block.cache.usage": 2034335,
           "rocksdb.bloom.filter.prefix.checked": 916,
           "rocksdb.bloom.filter.prefix.useful": 839,
