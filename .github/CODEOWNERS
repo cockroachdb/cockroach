@@ -59,6 +59,9 @@
 /pkg/sql/job_exec_context*   @cockroachdb/sql-queries @cockroachdb/jobs-prs
 /pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs
 
+/pkg/sql/importer/           @cockroachdb/sql-queries
+/pkg/ccl/importerccl/        @cockroachdb/sql-queries
+
 /pkg/sql/appstatspb          @cockroachdb/cluster-observability
 /pkg/sql/execstats/          @cockroachdb/cluster-observability
 /pkg/sql/scheduledlogging/   @cockroachdb/cluster-observability
@@ -77,8 +80,6 @@
 /pkg/sql/pgwire/auth.go      @cockroachdb/sql-sessions @cockroachdb/server-prs @cockroachdb/prodsec
 /pkg/sql/sem/builtins/       @cockroachdb/sql-sessions
 /pkg/sql/vtable/             @cockroachdb/sql-sessions
-/pkg/sql/importer/           @cockroachdb/sql-sessions
-/pkg/ccl/importerccl/        @cockroachdb/sql-sessions
 
 /pkg/sql/sessiondata/        @cockroachdb/sql-sessions
 /pkg/sql/tests/rsg_test.go   @cockroachdb/sql-sessions
