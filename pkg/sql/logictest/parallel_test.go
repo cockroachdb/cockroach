@@ -218,6 +218,11 @@ func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 		r0.Exec(t, `UPDATE system.zones SET config = $2 WHERE id = $1`, objID, buf)
 	}
 
+	// Disable the circuit breakers on this cluster because they can lead to
+	// rare test flakes since the machine is likely to be overloaded when
+	// running TestParallel.
+	r0.Exec(t, `SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold = '0s'`)
+
 	if testing.Verbose() || log.V(1) {
 		log.Infof(t.ctx, "Creating database")
 	}
