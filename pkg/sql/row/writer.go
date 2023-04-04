@@ -139,7 +139,13 @@ func prepareInsertOrUpdateBatch(
 			if !ok {
 				continue
 			}
-
+			// Skip any values with a default ID not stored in the primary index,
+			// which can happen if we are adding new columns.
+			if skip, err := helper.skipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx]); err != nil {
+				return nil, err
+			} else if skip {
+				continue
+			}
 			typ := fetchedCols[idx].GetType()
 			marshaled, err := valueside.MarshalLegacy(typ, values[idx])
 			if err != nil {
