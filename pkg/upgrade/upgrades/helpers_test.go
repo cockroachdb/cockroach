@@ -13,8 +13,10 @@ package upgrades
 import (
 	"context"
 	gosql "database/sql"
+	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -24,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -178,22 +179,22 @@ func ExecForCountInTxns(
 	db *gosql.DB,
 	count int,
 	txnSize int,
-	fn func(txRunner *sqlutils.SQLRunner, i int),
+	fn func(tx *gosql.Tx, i int) error,
 ) {
-	tx, err := db.BeginTx(ctx, nil /* opts */)
-	require.NoError(t, err)
-	txRunner := sqlutils.MakeSQLRunner(tx)
-	// Group statements into transactions of txnSize runs to speed up creation.
-	for i := 0; i < count; i++ {
-		if i != 0 && i%txnSize == 0 {
-			err := tx.Commit()
-			require.NoError(t, err)
-			tx, err = db.BeginTx(ctx, nil /* opts */)
-			require.NoError(t, err)
-			txRunner = sqlutils.MakeSQLRunner(tx)
+	numTxns := int(math.Ceil(float64(count) / float64(txnSize)))
+	for txnNum := 0; txnNum < numTxns; txnNum++ {
+		iterEnd := (txnNum + 1) * txnSize
+		if count < iterEnd {
+			iterEnd = count
 		}
-		fn(txRunner, i)
+		err := crdb.ExecuteTx(ctx, db, nil /* opts */, func(tx *gosql.Tx) error {
+			for i := txnNum * txnSize; i < iterEnd; i++ {
+				if err := fn(tx, i); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		require.NoError(t, err)
 	}
-	err = tx.Commit()
-	require.NoError(t, err)
 }

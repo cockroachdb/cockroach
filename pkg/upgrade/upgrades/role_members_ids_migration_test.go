@@ -12,6 +12,7 @@ package upgrades_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -73,22 +74,28 @@ func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
 	})
 
 	// Create test users.
-	expectedNumRoleMembersRows := 1
-	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(txRunner *sqlutils.SQLRunner, i int) {
-		txRunner.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
+	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(tx *gosql.Tx, i int) error {
+		if _, err := tx.Exec(fmt.Sprintf("CREATE USER testuser%d", i)); err != nil {
+			return err
+		}
 		if i == 0 {
-			return
+			if _, err := tx.Exec(fmt.Sprintf("GRANT admin TO testuser%d", i)); err != nil {
+				return err
+			}
+			return nil
 		}
 		// Randomly choose an earlier test user to grant to the current test user.
-		grantStmt := fmt.Sprintf("GRANT testuser%d to testuser%d", rand.Intn(i), i)
+		grantStmt := fmt.Sprintf("GRANT testuser%d TO testuser%d", rand.Intn(i), i)
 		if rand.Intn(2) == 1 {
 			grantStmt += " WITH ADMIN OPTION"
 		}
-		txRunner.Exec(t, grantStmt)
-		expectedNumRoleMembersRows += 1
+		if _, err := tx.Exec(grantStmt); err != nil {
+			return err
+		}
+		return nil
 	})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.role_members", [][]string{
-		{fmt.Sprintf("%d", expectedNumRoleMembersRows)},
+		{fmt.Sprintf("%d", numUsers+1)},
 	})
 
 	// Run migrations.
@@ -104,7 +111,7 @@ func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.role_members AS a JOIN system.users AS b on a.role = b.username AND a.role_id <> b.user_id", [][]string{{"0"}})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.role_members AS a JOIN system.users AS b on a.member = b.username AND a.member_id <> b.user_id", [][]string{{"0"}})
 
-	tdb.CheckQueryResults(t, `SELECT * FROM system.role_members WHERE "role" = 'admin'`, [][]string{
+	tdb.CheckQueryResults(t, `SELECT * FROM system.role_members WHERE "role" = 'admin' AND "member" = 'root'`, [][]string{
 		{"admin", "root", "true", "2", "1"},
 	})
 
