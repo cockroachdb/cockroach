@@ -1011,6 +1011,7 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 	// will only update the key if it exists, to avoid race conditions during
 	// node decommissioning, so we have to error out if we can't create it.
 	if err := startup.RunIdempotentWithRetry(ctx,
+		n.stopper.ShouldQuiesce(),
 		"kv write node status", func(ctx context.Context) error {
 			return n.writeNodeStatus(ctx, 0 /* alertTTL */, false /* mustExist */)
 		}); err != nil {

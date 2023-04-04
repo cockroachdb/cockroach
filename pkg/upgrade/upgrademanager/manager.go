@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -212,7 +213,9 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	latest := permanentUpgrades[len(permanentUpgrades)-1]
 	lastVer := latest.Version()
 	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID)
-	lastUpgradeCompleted, err := startup.RunIdempotentWithRetryEx(ctx, "check if migration completed",
+	lastUpgradeCompleted, err := startup.RunIdempotentWithRetryEx(ctx,
+		m.deps.Stopper.ShouldQuiesce(),
+		"check if migration completed",
 		func(ctx context.Context) (bool, error) {
 			return migrationstable.CheckIfMigrationCompleted(
 				ctx, lastVer, nil /* txn */, m.ie,
@@ -256,7 +259,7 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 		//
 		// TODO(andrei): Get rid of this once compatibility with 22.2 is not necessary.
 		startupMigrationAlreadyRan, err := checkOldStartupMigrationRan(
-			ctx, u.V22_2StartupMigrationName(), m.deps.DB.KV(), m.codec)
+			ctx, m.deps.Stopper, u.V22_2StartupMigrationName(), m.deps.DB.KV(), m.codec)
 		if err != nil {
 			return err
 		}
@@ -267,9 +270,11 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 				u.Version())
 			// Mark the upgrade as completed so that we can get rid of this logic when
 			// compatibility with 22.2 is no longer necessary.
-			if err := startup.RunIdempotentWithRetry(ctx, "mark upgrade complete", func(ctx context.Context) (err error) {
-				return migrationstable.MarkMigrationCompletedIdempotent(ctx, m.ie, u.Version())
-			}); err != nil {
+			if err := startup.RunIdempotentWithRetry(ctx,
+				m.deps.Stopper.ShouldQuiesce(),
+				"mark upgrade complete", func(ctx context.Context) (err error) {
+					return migrationstable.MarkMigrationCompletedIdempotent(ctx, m.ie, u.Version())
+				}); err != nil {
 				return err
 			}
 			continue
@@ -287,13 +292,15 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 // old startupmigration with the given name has run. If it did, the
 // corresponding upgrade should not run.
 func checkOldStartupMigrationRan(
-	ctx context.Context, migrationName string, db *kv.DB, codec keys.SQLCodec,
+	ctx context.Context, stopper *stop.Stopper, migrationName string, db *kv.DB, codec keys.SQLCodec,
 ) (bool, error) {
 	if migrationName == "" {
 		return false, nil
 	}
 	migrationKey := append(codec.StartupMigrationKeyPrefix(), roachpb.RKey(migrationName)...)
-	kv, err := startup.RunIdempotentWithRetryEx(ctx, "check old startup migration",
+	kv, err := startup.RunIdempotentWithRetryEx(ctx,
+		stopper.ShouldQuiesce(),
+		"check old startup migration",
 		func(ctx context.Context) (kv kv.KeyValue, err error) {
 			return db.Get(ctx, migrationKey)
 		})
@@ -715,23 +722,29 @@ func (m *Manager) runMigration(
 			alreadyCompleted, alreadyExisting bool
 			id                                jobspb.JobID
 		)
-		if err := startup.RunIdempotentWithRetry(ctx, "upgrade create job", func(ctx context.Context) (err error) {
-			alreadyCompleted, alreadyExisting, id, err = m.getOrCreateMigrationJob(ctx, user, version,
-				mig.Name())
-			return err
-		}); alreadyCompleted || err != nil {
+		if err := startup.RunIdempotentWithRetry(ctx,
+			m.deps.Stopper.ShouldQuiesce(),
+			"upgrade create job", func(ctx context.Context) (err error) {
+				alreadyCompleted, alreadyExisting, id, err = m.getOrCreateMigrationJob(ctx, user, version,
+					mig.Name())
+				return err
+			}); alreadyCompleted || err != nil {
 			return err
 		}
 		if alreadyExisting {
 			log.Infof(ctx, "waiting for %s", mig.Name())
-			return startup.RunIdempotentWithRetry(ctx, "upgrade wait jobs", func(ctx context.Context) error {
-				return m.jr.WaitForJobs(ctx, []jobspb.JobID{id})
-			})
+			return startup.RunIdempotentWithRetry(ctx,
+				m.deps.Stopper.ShouldQuiesce(),
+				"upgrade wait jobs", func(ctx context.Context) error {
+					return m.jr.WaitForJobs(ctx, []jobspb.JobID{id})
+				})
 		} else {
 			log.Infof(ctx, "running %s", mig.Name())
-			return startup.RunIdempotentWithRetry(ctx, "upgrade run jobs", func(ctx context.Context) error {
-				return m.jr.Run(ctx, []jobspb.JobID{id})
-			})
+			return startup.RunIdempotentWithRetry(ctx,
+				m.deps.Stopper.ShouldQuiesce(),
+				"upgrade run jobs", func(ctx context.Context) error {
+					return m.jr.Run(ctx, []jobspb.JobID{id})
+				})
 		}
 	}
 }

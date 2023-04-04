@@ -112,7 +112,9 @@ func (c *serverController) startInitialSecondaryTenantServers(
 	ctx context.Context, ie isql.Executor,
 ) error {
 	// The list of tenants that should have a running server.
-	reqTenants, err := startup.RunIdempotentWithRetryEx(ctx, "get expected running tenants",
+	reqTenants, err := startup.RunIdempotentWithRetryEx(ctx,
+		c.stopper.ShouldQuiesce(),
+		"get expected running tenants",
 		func(ctx context.Context) ([]roachpb.TenantName, error) {
 			return c.getExpectedRunningTenants(ctx, ie)
 		})
