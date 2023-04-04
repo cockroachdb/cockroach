@@ -69,7 +69,6 @@ type schemaChangeTestCase struct {
 // exponential backoff to the system.jobs table, but was retrofitted to prevent
 // regressions.
 func TestMigrationWithFailures(t *testing.T) {
-	skip.WithIssue(t, 98564)
 	const createTableBefore = `
 CREATE TABLE test.test_table (
 	id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
@@ -174,7 +173,6 @@ CREATE TABLE test.test_table (
 // alters a column in a table multiple times with failures at different stages
 // of the migration.
 func TestMigrationWithFailuresMultipleAltersOnSameColumn(t *testing.T) {
-	skip.WithIssue(t, 98991)
 
 	const createTableBefore = `
 CREATE TABLE test.test_table (
@@ -245,9 +243,12 @@ func testMigrationWithFailures(
 
 	skip.UnderRace(t, "very slow")
 
-	// We're going to be migrating from the minimum supported version to the current version.
-	startCV := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
-	endCV := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	// We're going to be migrating from the minimum supported version to the
+	// "next" version. We'll be injecting the migration for the next version.
+	startKey := clusterversion.BinaryMinSupportedVersionKey
+	startCV := clusterversion.ByKey(startKey)
+	endCV := startCV
+	endCV.Internal += 2
 
 	// The tests follows the following procedure.
 	//
@@ -340,6 +341,7 @@ func testMigrationWithFailures(
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
 							BinaryVersionOverride:          startCV,
+							BootstrapVersionKeyOverride:    startKey,
 						},
 						JobsTestingKnobs: jobsKnobs,
 						SQLExecutor: &sql.ExecutorTestingKnobs{
