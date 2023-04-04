@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -60,13 +59,6 @@ func fingerprint(
 	}
 	header := kvpb.Header{
 		Timestamp: evalCtx.Txn.ReadTimestamp(),
-		// We set WaitPolicy to Error, so that the export will return an error
-		// to us instead of a blocking wait if it hits any other txns.
-		//
-		// TODO(adityamaru): We might need to handle WriteIntentErrors
-		// specially in the future so as to allow the fingerprint to complete
-		// in the face of intents.
-		WaitPolicy: lock.WaitPolicy_Error,
 		// TODO(ssd): Setting this disables async sending in
 		// DistSender so it likely substantially impacts
 		// performance.
