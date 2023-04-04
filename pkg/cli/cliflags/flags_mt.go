@@ -29,6 +29,11 @@ var (
 		Description: "Denylist file to limit access to IP addresses and tenant ids.",
 	}
 
+	AllowList = FlagInfo{
+		Name:        "allowlist-file",
+		Description: "Allow file to limit access to tenants based on IP addresses.",
+	}
+
 	ProxyListenAddr = FlagInfo{
 		Name:        "listen-addr",
 		Description: "Listen address for incoming connections.",

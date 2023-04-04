@@ -19,6 +19,7 @@ func init() {
 	{
 		f := mtStartSQLProxyCmd.Flags()
 		cliflagcfg.StringFlag(f, &proxyContext.Denylist, cliflags.DenyList)
+		cliflagcfg.StringFlag(f, &proxyContext.Allowlist, cliflags.AllowList)
 		cliflagcfg.StringFlag(f, &proxyContext.ListenAddr, cliflags.ProxyListenAddr)
 		cliflagcfg.StringFlag(f, &proxyContext.ListenCert, cliflags.ListenCert)
 		cliflagcfg.StringFlag(f, &proxyContext.ListenKey, cliflags.ListenKey)
