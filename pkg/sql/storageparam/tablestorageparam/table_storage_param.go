@@ -14,6 +14,7 @@ package tablestorageparam
 
 import (
 	"context"
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -478,6 +479,46 @@ var tableParams = map[string]tableParam{
 		},
 		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			po.TableDesc.ForecastStats = nil
+			return nil
+		},
+	},
+	`sql_stats_histogram_samples_count`: {
+		onSet: func(
+			ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum,
+		) error {
+			intVal, err := intFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err = settings.NonNegativeIntWithMaximum(math.MaxUint32)(intVal); err != nil {
+				return errors.Wrapf(err, "invalid integer value for %s", key)
+			}
+			uint32Val := uint32(intVal)
+			po.TableDesc.HistogramSamples = &uint32Val
+			return nil
+		},
+		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			po.TableDesc.HistogramSamples = nil
+			return nil
+		},
+	},
+	`sql_stats_histogram_buckets_count`: {
+		onSet: func(
+			ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum,
+		) error {
+			intVal, err := intFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err = settings.NonNegativeIntWithMaximum(math.MaxUint32)(intVal); err != nil {
+				return errors.Wrapf(err, "invalid integer value for %s", key)
+			}
+			uint32Val := uint32(intVal)
+			po.TableDesc.HistogramBuckets = &uint32Val
+			return nil
+		},
+		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			po.TableDesc.HistogramBuckets = nil
 			return nil
 		},
 	},

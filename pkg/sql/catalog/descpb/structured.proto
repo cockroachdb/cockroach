@@ -1170,11 +1170,21 @@ message TableDescriptor {
   // this table, in which case the global setting is used.
   optional bool forecast_stats = 52 [(gogoproto.nullable) = true, (gogoproto.customname) = "ForecastStats"];
 
+  // HistogramSamples indicates the number of rows to sample when building a
+  // histogram for this table. It is null if unset for this table, in which case
+  // the global setting is used.
+  optional uint32 histogram_samples = 56 [(gogoproto.nullable) = true, (gogoproto.customname) = "HistogramSamples"];
+
+  // HistogramBuckets indicates the number of buckets to build when constructing
+  // a histogram for this table. It is null if unset for this table, in which
+  // case the global setting is used.
+  optional uint32 histogram_buckets = 57 [(gogoproto.nullable) = true, (gogoproto.customname) = "HistogramBuckets"];
+
   // ImportStartWallTime contains the start wall time of an in-progress import.
   // This field is non zero if this table is offline during an import.
   optional int64 import_start_wall_time = 54 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportStartWallTime"];
 
-  // Next ID: 56
+  // Next ID: 58
 }
 
 // SurvivalGoal is the survival goal for a database.

@@ -2415,6 +2415,12 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 	if enabled, ok := desc.ForecastStatsEnabled(); ok {
 		appendStorageParam(`sql_stats_forecasts_enabled`, strconv.FormatBool(enabled))
 	}
+	if count, ok := desc.HistogramSamplesCount(); ok {
+		appendStorageParam(`sql_stats_histogram_samples_count`, fmt.Sprintf("%d", count))
+	}
+	if count, ok := desc.HistogramBucketsCount(); ok {
+		appendStorageParam(`sql_stats_histogram_buckets_count`, fmt.Sprintf("%d", count))
+	}
 	return storageParams
 }
 
@@ -2476,6 +2482,22 @@ func (desc *wrapper) ForecastStatsEnabled() (enabled bool, ok bool) {
 		return false, false
 	}
 	return *desc.ForecastStats, true
+}
+
+// HistogramSamplesCount implements the TableDescriptor interface.
+func (desc *wrapper) HistogramSamplesCount() (histogramSamplesCount uint32, ok bool) {
+	if desc.HistogramSamples == nil {
+		return 0, false
+	}
+	return *desc.HistogramSamples, true
+}
+
+// HistogramBucketsCount implements the TableDescriptor interface.
+func (desc *wrapper) HistogramBucketsCount() (histogramBucketsCount uint32, ok bool) {
+	if desc.HistogramBuckets == nil {
+		return 0, false
+	}
+	return *desc.HistogramBuckets, true
 }
 
 // SetTableLocalityRegionalByTable sets the descriptor's locality config to
