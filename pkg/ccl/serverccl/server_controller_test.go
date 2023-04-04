@@ -414,34 +414,51 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 
 	ctx := context.Background()
 
+	t.Logf("starting test cluster")
 	numNodes := 3
 	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DisableDefaultTestTenant: true,
 		}})
-	defer tc.Stopper().Stop(ctx)
+	defer func() {
+		t.Logf("stopping test cluster")
+		tc.Stopper().Stop(ctx)
+	}()
 
+	t.Logf("starting tenant servers")
 	db := tc.ServerConn(0)
 	_, err := db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
 	require.NoError(t, err)
 
 	// Pick a random node, try to run some SQL inside that tenant.
 	rng, _ := randutil.NewTestRand()
-	sqlAddr := tc.Server(int(rng.Int31n(int32(numNodes)))).ServingSQLAddr()
+	serverIdx := int(rng.Int31n(int32(numNodes)))
+	sqlAddr := tc.Server(serverIdx).ServingSQLAddr()
+	t.Logf("attempting to use tenant server on node %d (%s)", serverIdx, sqlAddr)
 	testutils.SucceedsSoon(t, func() error {
 		tenantDB, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello", false, tc.Stopper())
 		if err != nil {
+			t.Logf("error connecting to tenant server (will retry): %v", err)
 			return err
 		}
 		defer tenantDB.Close()
-		if _, err := tenantDB.Exec("CREATE ROLE foo"); err != nil {
+		if err := tenantDB.Ping(); err != nil {
+			t.Logf("connection not ready (will retry): %v", err)
 			return err
 		}
+		if _, err := tenantDB.Exec("CREATE ROLE foo"); err != nil {
+			// This is not retryable -- if the server accepts the
+			// connection, it better be ready.
+			t.Fatal(err)
+		}
 		if _, err := tenantDB.Exec("GRANT ADMIN TO foo"); err != nil {
-			return err
+			// This is not retryable -- if the server accepts the
+			// connection, it better be ready.
+			t.Fatal(err)
 		}
 		return nil
 	})
+	t.Logf("tenant server on node %d (%s) is ready", serverIdx, sqlAddr)
 }
 
 func TestServerStartStop(t *testing.T) {
