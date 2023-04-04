@@ -105,6 +105,16 @@ var maxNumNonRootConnections = settings.RegisterIntSetting(
 	-1,
 	)
 
+// maxNumNonRootConnectionsReason is used to supplement the error message for connections that denied due to
+// server.max_non_root_connections_per_gateway.
+var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"server.max_non_root_connections_per_gateway_reason",
+	"a reason to provide in the error message for connections that are denied due to " +
+		"server.max_external_connections_per_gateway",
+	"",
+	)
+
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
 	// secure server in cleartext.

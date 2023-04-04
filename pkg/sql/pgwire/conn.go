@@ -241,10 +241,13 @@ func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) e
 	// First check maxNumNonRootConnections.
 	maxNonRootConnectionsValue := maxNumNonRootConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
 	if maxNonRootConnectionsValue >= 0 && sqlServer.GetNonRootConnectionCount() >= maxNonRootConnectionsValue {
-		// TODO(alyshan): Add another cluster setting that supplements the error message, so that
-		// clients can know *why* this ReadOnly setting is set and limiting their connections.
+		// Check if there is a reason to use in the error message.
+		msg := "cluster connections are limited"
+		if reason := maxNumNonRootConnectionsReason.Get(&sqlServer.GetExecutorConfig().Settings.SV); reason != "" {
+			msg = reason
+		}
 		return c.sendError(ctx, sqlServer.GetExecutorConfig(), errors.WithHintf(
-			pgerror.New(pgcode.TooManyConnections, "cluster connections are limited"),
+			pgerror.Newf(pgcode.TooManyConnections, "%s", msg),
 			"the maximum number of allowed connections is %d",
 			maxNonRootConnectionsValue,
 		))
