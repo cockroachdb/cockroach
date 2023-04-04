@@ -1214,7 +1214,13 @@ func (n *Node) batchInternal(
 		panic(kvpb.ErrorUnexpectedlySet(n.stores, br))
 	}
 	if timeutil.Since(tStart) > slowRequestHistoricalStackThreshold.Get(&n.storeCfg.Settings.SV) {
-		tracing.SpanFromContext(ctx).MaybeRecordStackHistory(tStart)
+		sp := tracing.SpanFromContext(ctx)
+		capturedStacks := sp.MaybeRecordStackHistory(tStart)
+		for _, stack := range capturedStacks {
+			stack.NodeID = int64(n.Descriptor.NodeID)
+			stack.Op = args.String()
+			sp.RecordStructured(stack)
+		}
 	}
 
 	n.metrics.callComplete(timeutil.Since(tStart), pErr)

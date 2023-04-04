@@ -26,5 +26,13 @@ message CapturedStack {
   int32 shared_lines = 3;
   // Age indicates the duration prior to being recorded that this stack was captured.
   int64 age = 4 [(gogoproto.casttype) = "time.Duration"];
+  // RecordedAt is the timestamp at which the historical stack is recorded.
+  int64 recorded_at = 5;
+  // NodeID is the ID of the node on which the historical stack is collected.
+  int64 node_id = 6 [(gogoproto.customname) = "NodeID"];
+  // Op is the name or summary of the operation whose historical stack is
+  // collected.
+  string op = 7;
+
   // NEXT ID: 5.
 }

@@ -19,13 +19,14 @@ import (
 
 func (c *CapturedStack) String() string {
 	age := c.Age.Seconds()
+	stackPrefix := fmt.Sprintf("Op:%s, NodeID: %d, RecordedAt: %s", c.Op, c.NodeID, timeutil.FromUnixNanos(c.RecordedAt).String())
 	if c.Stack == "" && c.SharedSuffix > 0 {
-		return fmt.Sprintf("stack as of %.1fs ago had not changed from previous stack", age)
+		return fmt.Sprintf("%s\nstack as of %.1fs ago had not changed from previous stack", stackPrefix, age)
 	}
 	if c.SharedLines > 0 {
-		return fmt.Sprintf("stack as of %.1fs ago: %s\n ...+%d lines matching previous stack", age, c.Stack, c.SharedLines)
+		return fmt.Sprintf("%s\nstack as of %.1fs ago: %s\n ...+%d lines matching previous stack", stackPrefix, age, c.Stack, c.SharedLines)
 	}
-	return fmt.Sprintf("stack as of %.1fs ago: %s", age, c.Stack)
+	return fmt.Sprintf("%s\nstack as of %.1fs ago: %s", stackPrefix, age, c.Stack)
 }
 
 var _ AggregatorEvent = &CapturedStack{}
@@ -47,6 +48,9 @@ func (c *CapturedStack) Combine(other AggregatorEvent) {
 	c.Age = otherCapturedStack.Age
 	c.SharedLines = otherCapturedStack.SharedLines
 	c.SharedSuffix = otherCapturedStack.SharedSuffix
+	c.Op = otherCapturedStack.Op
+	c.NodeID = otherCapturedStack.NodeID
+	c.RecordedAt = otherCapturedStack.RecordedAt
 }
 
 func (c *CapturedStack) Tag() string {
