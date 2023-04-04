@@ -1642,7 +1642,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <privilege.TargetObjectType> target_object_type
 
 // User defined function relevant components.
-%type <bool> opt_or_replace opt_return_set opt_no
+%type <bool> opt_or_replace opt_return_table opt_return_set opt_no
 %type <str> param_name func_as
 %type <tree.FuncParams> opt_func_param_with_default_list func_param_with_default_list func_params func_params_list
 %type <tree.FuncParam> func_param_with_default func_param
@@ -4500,7 +4500,8 @@ create_extension_stmt:
 //  } ...
 // %SeeAlso: WEBDOCS/create-function.html
 create_func_stmt:
-  CREATE opt_or_replace FUNCTION func_create_name '(' opt_func_param_with_default_list ')' RETURNS opt_return_set func_return_type
+  CREATE opt_or_replace FUNCTION func_create_name '(' opt_func_param_with_default_list ')'
+  RETURNS opt_return_table opt_return_set func_return_type
   opt_create_func_opt_list opt_routine_body
   {
     name := $4.unresolvedObjectName().ToFunctionName()
@@ -4510,17 +4511,21 @@ create_func_stmt:
       FuncName: name,
       Params: $6.functionParams(),
       ReturnType: tree.FuncReturnType{
-        Type: $10.typeReference(),
-        IsSet: $9.bool(),
+        Type: $11.typeReference(),
+        IsSet: $10.bool(),
       },
-      Options: $11.functionOptions(),
-      RoutineBody: $12.routineBody(),
+      Options: $12.functionOptions(),
+      RoutineBody: $13.routineBody(),
     }
   }
 | CREATE opt_or_replace FUNCTION error // SHOW HELP: CREATE FUNCTION
 
 opt_or_replace:
   OR REPLACE { $$.val = true }
+| /* EMPTY */ { $$.val = false }
+
+opt_return_table:
+  TABLE { return unimplementedWithIssueDetail(sqllex, 100226, "UDF returning TABLE") }
 | /* EMPTY */ { $$.val = false }
 
 opt_return_set:
