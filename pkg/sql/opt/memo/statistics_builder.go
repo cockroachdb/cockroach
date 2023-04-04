@@ -4740,8 +4740,8 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 					dataType,
 					values, /* samples */
 					numRows,
-					int64(numValues),              /* distinctCount */
-					stats.DefaultHistogramBuckets, /* maxBuckets */
+					int64(numValues), /* distinctCount */
+					int(stats.DefaultHistogramBuckets.Get(&sb.evalCtx.Settings.SV)), /* maxBuckets */
 				)
 				// This shouldn't error out, but if it does, let's not punish the user.
 				// Just build stats without the histogram in that case.
