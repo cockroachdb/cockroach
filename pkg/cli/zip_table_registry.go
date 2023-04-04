@@ -378,18 +378,25 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	"crdb_internal.system_jobs": {
 		// `payload` column may contain customer info, such as URI params
 		// containing access keys, encryption salts, etc.
-		nonSensitiveCols: NonSensitiveColumns{
+		customQueryUnredacted: `SELECT *, 
+			to_hex(payload) AS hex_payload, 
+			to_hex(progress) AS hex_progress 
+			FROM crdb_internal.system_jobs`,
+		customQueryRedacted: `SELECT 
 			"id",
 			"status",
 			"created",
+			'redacted' AS "payload",
 			"progress",
 			"created_by_type",
 			"created_by_id",
 			"claim_session_id",
 			"claim_instance_id",
 			"num_runs",
-			"last_run",
-		},
+			"last_run", 
+			'<redacted>' AS "hex_payload", 
+			to_hex(progress) AS "hex_progress"
+			FROM crdb_internal.system_jobs`,
 	},
 	"crdb_internal.kv_node_liveness": {
 		nonSensitiveCols: NonSensitiveColumns{
