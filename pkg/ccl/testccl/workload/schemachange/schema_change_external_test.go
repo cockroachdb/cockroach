@@ -76,7 +76,7 @@ func TestWorkload(t *testing.T) {
 		}
 		printRows(tdb.Query(t, "SELECT id, encode(descriptor, 'hex') FROM system.descriptor"))
 		printRows(tdb.Query(t, "SELECT * FROM system.namespace"))
-		tdb.Exec(t, "BACKUP DATABASE schemachange TO 'nodelocal://0/backup'")
+		tdb.Exec(t, "BACKUP DATABASE schemachange TO 'nodelocal://1/backup'")
 		t.Logf("backup in %s", dir)
 	}()
 

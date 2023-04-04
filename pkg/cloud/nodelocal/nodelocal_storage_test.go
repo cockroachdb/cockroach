@@ -32,7 +32,7 @@ func TestPutLocal(t *testing.T) {
 
 	cloudtestutils.CheckExportStore(
 		t, dest, false, username.RootUserName(), nil /* db */, testSettings)
-	url := "nodelocal://0/listing-test/basepath"
+	url := "nodelocal://1/listing-test/basepath"
 	cloudtestutils.CheckListFiles(
 		t, url, username.RootUserName(), nil /*db */, testSettings,
 	)
