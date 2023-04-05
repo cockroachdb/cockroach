@@ -47,3 +47,5 @@ export const serverToClientErrorMessageMap = new Map([
 ]);
 
 export const NO_SAMPLES_FOUND = "no samples";
+
+export const INTERNAL_APP_NAME_PREFIX = "$ internal";

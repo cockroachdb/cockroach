@@ -38,7 +38,7 @@ import {
   stmtInsightsByTxnExecutionQuery,
   StmtInsightsResponseRow,
 } from "./stmtInsightsApi";
-import { INTERNAL_APP_NAME_PREFIX } from "src/recentExecutions/recentStatementUtils";
+import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 import { getContentionDetailsApi } from "./contentionApi";
 
 export const TXN_QUERY_PREVIEW_MAX = 800;
