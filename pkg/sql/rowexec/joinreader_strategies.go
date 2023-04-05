@@ -68,7 +68,7 @@ type joinReaderStrategy interface {
 	processLookupRows(rows []rowenc.EncDatumRow) (roachpb.Spans, []int, error)
 	// processLookedUpRow processes a looked up row. A joinReaderState is returned
 	// to indicate the next state to transition to. If this next state is
-	// jrPerformingLookup, processLookedUpRow will be called again if the looked
+	// jrFetchingLookupRows, processLookedUpRow will be called again if the looked
 	// up rows have not been exhausted. A transition to jrStateUnknown is
 	// unsupported, but if an error is returned, the joinReader will transition
 	// to draining.
@@ -320,7 +320,7 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 	// nextRowToEmit, the strategy knows that no more lookup rows were processed
 	// and should proceed to emit unmatched rows.
 	s.emitState.processingLookupRow = false
-	return nil, jrPerformingLookup, nil
+	return nil, jrFetchingLookupRows, nil
 }
 
 func (s *joinReaderNoOrderingStrategy) spilled() bool { return false }
@@ -433,7 +433,7 @@ func (s *joinReaderIndexJoinStrategy) nextRowToEmit(
 		return nil, jrReadingInput, nil
 	}
 	s.emitState.processingLookupRow = false
-	return s.emitState.lookedUpRow, jrPerformingLookup, nil
+	return s.emitState.lookedUpRow, jrFetchingLookupRows, nil
 }
 
 func (s *joinReaderIndexJoinStrategy) spilled() bool {
@@ -500,7 +500,7 @@ type joinReaderOrderingStrategy struct {
 	// container). This serves to emit rows in input
 	// order even though lookups are performed out of order.
 	//
-	// The map is populated in the jrPerformingLookup state. For non partial joins
+	// The map is populated in the jrFetchingLookupRows state. For non partial joins
 	// (everything but semi/anti join), the looked up rows are the rows that came
 	// back from the lookup span for each input row, without checking for matches
 	// with respect to the on-condition. For semi/anti join, we store at most one
@@ -509,7 +509,7 @@ type joinReaderOrderingStrategy struct {
 	inputRowIdxToLookedUpRowIndices [][]int
 
 	// lookedUpRows buffers looked-up rows for one batch of input rows (i.e.
-	// during one jrPerformingLookup phase). When we move to state jrReadingInput,
+	// during one jrFetchingLookupRows phase). When we move to state jrReadingInput,
 	// lookedUpRows is reset, to be populated by the next lookup phase. The
 	// looked-up rows are used in state jrEmittingRows to actually perform the
 	// joining between input and looked-up rows.
@@ -740,7 +740,7 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 		return jrEmittingRows, nil
 	}
 
-	return jrPerformingLookup, nil
+	return jrFetchingLookupRows, nil
 }
 
 func (s *joinReaderOrderingStrategy) prepareToEmit(ctx context.Context) {
@@ -796,7 +796,7 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 	if s.emitCursor.notBufferedRow != nil {
 		// Make sure we return to looking up rows after outputting one that matches
 		// the first input row.
-		nextState = jrPerformingLookup
+		nextState = jrFetchingLookupRows
 		defer func() { s.emitCursor.notBufferedRow = nil }()
 	} else {
 		// All lookups have finished, and we are currently iterating through the
