@@ -625,6 +625,7 @@ session_trace                          NULL
 session_variables                      NULL
 statement_statistics                   NULL
 statement_statistics_persisted         NULL
+statement_statistics_persisted_v22_2   NULL
 super_regions                          NULL
 system_jobs                            NULL
 table_columns                          NULL
@@ -635,6 +636,7 @@ tables                                 NULL
 tenant_usage_details                   NULL
 transaction_contention_events          NULL
 transaction_statistics                 NULL
+transaction_statistics_persisted       NULL
 transaction_statistics_persisted       NULL
 zones                                  NULL
 administrable_role_authorizations      NULL
