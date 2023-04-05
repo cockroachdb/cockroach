@@ -219,6 +219,21 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 			return errors.Wrapf(err, "%s %s: %s", cmd.Env, cmd.Args, string(stdoutBytes))
 		}
 
+		if opts.BuildTag != "" {
+			verifiedVersion := false
+			for _, line := range strings.Split(string(stdoutBytes), "\n") {
+				if strings.Contains(line, "Build Tag:") {
+					if strings.Contains(line, opts.BuildTag) {
+						verifiedVersion = true
+					}
+					break
+				}
+			}
+			if !verifiedVersion {
+				return errors.Errorf("binary's version output did not match publication version (%q); was: \n%s", opts.BuildTag, string(stdoutBytes))
+			}
+		}
+
 		cmd = exec.Command("ldd", binaryName)
 		cmd.Dir = pkgDir
 		cmd.Stderr = os.Stderr
