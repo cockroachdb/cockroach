@@ -80,6 +80,9 @@ func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCI
 // out if it finds any conflicts. This includes intents and existing keys with a
 // timestamp at or above the SST key timestamp.
 //
+// The provided start and end boundaries describe the bounds of the sstable with
+// inclusive and exclusive bounds respectively.
+//
 // If disallowShadowingBelow is non-empty, it also errors for any existing live
 // key at the SST key timestamp, but allows shadowing an existing key if its
 // timestamp is above the given timestamp and the values are equal. See comment
@@ -107,7 +110,7 @@ func CheckSSTConflicts(
 	ctx context.Context,
 	sst []byte,
 	reader Reader,
-	start, end MVCCKey,
+	start, end roachpb.Key,
 	leftPeekBound, rightPeekBound roachpb.Key,
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
@@ -148,9 +151,9 @@ func CheckSSTConflicts(
 		// prefix one if there are engine keys in the span.
 		nonPrefixIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:   IterKeyTypePointsAndRanges,
-			UpperBound: end.Key,
+			UpperBound: end,
 		})
-		nonPrefixIter.SeekGE(start)
+		nonPrefixIter.SeekGE(MVCCKey{Key: start})
 		valid, err := nonPrefixIter.Valid()
 		nonPrefixIter.Close()
 		if !valid {
@@ -187,7 +190,7 @@ func CheckSSTConflicts(
 		UpperBound: rightPeekBound,
 		KeyTypes:   IterKeyTypeRangesOnly,
 	})
-	rkIter.SeekGE(start)
+	rkIter.SeekGE(MVCCKey{Key: start})
 
 	var engineHasRangeKeys bool
 	if ok, err := rkIter.Valid(); err != nil {
@@ -232,7 +235,7 @@ func CheckSSTConflicts(
 
 	sstIter, err := NewMemSSTIterator(sst, false, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
-		UpperBound: end.Key,
+		UpperBound: end,
 	})
 	if err != nil {
 		return enginepb.MVCCStats{}, err
@@ -369,7 +372,7 @@ func CheckSSTConflicts(
 		return nil
 	}
 
-	sstIter.SeekGE(start)
+	sstIter.SeekGE(MVCCKey{Key: start})
 	sstOK, sstErr := sstIter.Valid()
 	var extOK bool
 	var extErr error

@@ -90,8 +90,7 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 			for _, usePrefixSeek := range []bool{false, true} {
 				t.Run(fmt.Sprintf("usePrefixSeek=%v", usePrefixSeek), func(t *testing.T) {
 					// Provoke and check WriteIntentErrors.
-					startKey, endKey := MVCCKey{Key: roachpb.Key(start)}, MVCCKey{Key: roachpb.Key(end)}
-					_, err := CheckSSTConflicts(ctx, sstFile.Bytes(), engine, startKey, endKey, startKey.Key, endKey.Key.Next(),
+					_, err := CheckSSTConflicts(ctx, sstFile.Bytes(), engine, roachpb.Key(start), roachpb.Key(end), roachpb.Key(start), roachpb.Key(end).Next(),
 						false /*disallowShadowing*/, hlc.Timestamp{} /*disallowShadowingBelow*/, hlc.Timestamp{} /* sstReqTS */, tc.maxIntents, usePrefixSeek)
 					require.Error(t, err)
 					writeIntentErr := &kvpb.WriteIntentError{}
