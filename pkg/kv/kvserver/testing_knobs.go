@@ -241,7 +241,7 @@ type StoreTestingKnobs struct {
 	// of Raft group ticks.
 	RefreshReasonTicksPeriod int
 	// DisableProcessRaft disables the process raft loop.
-	DisableProcessRaft bool
+	DisableProcessRaft func(roachpb.StoreID) bool
 	// DisableLastProcessedCheck disables checking on replica queue last processed times.
 	DisableLastProcessedCheck bool
 	// ReplicateQueueAcceptsUnsplit allows the replication queue to
