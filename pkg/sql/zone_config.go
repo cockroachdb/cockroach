@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -467,13 +466,12 @@ func resolveSubzone(
 
 func prepareRemovedPartitionZoneConfigs(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn descs.Txn,
 	tableDesc catalog.TableDescriptor,
 	indexID descpb.IndexID,
 	oldPart catalog.Partitioning,
 	newPart catalog.Partitioning,
 	execCfg *ExecutorConfig,
-	descriptors *descs.Collection,
 ) (*zoneConfigUpdate, error) {
 	newNames := map[string]struct{}{}
 	_ = newPart.ForEachPartitionName(func(newName string) error {
@@ -490,7 +488,7 @@ func prepareRemovedPartitionZoneConfigs(
 	if len(removedNames) == 0 {
 		return nil, nil
 	}
-	zoneWithRaw, err := descriptors.GetZoneConfig(ctx, txn, tableDesc.GetID())
+	zoneWithRaw, err := txn.Descriptors().GetZoneConfig(ctx, txn.KV(), tableDesc.GetID())
 	if err != nil {
 		return nil, err
 	}
@@ -507,9 +505,8 @@ func prepareRemovedPartitionZoneConfigs(
 
 func deleteRemovedPartitionZoneConfigs(
 	ctx context.Context,
-	txn isql.Txn,
+	txn descs.Txn,
 	tableDesc catalog.TableDescriptor,
-	descriptors *descs.Collection,
 	indexID descpb.IndexID,
 	oldPart catalog.Partitioning,
 	newPart catalog.Partitioning,
@@ -517,11 +514,11 @@ func deleteRemovedPartitionZoneConfigs(
 	kvTrace bool,
 ) error {
 	update, err := prepareRemovedPartitionZoneConfigs(
-		ctx, txn.KV(), tableDesc, indexID, oldPart, newPart, execCfg, descriptors,
+		ctx, txn, tableDesc, indexID, oldPart, newPart, execCfg,
 	)
 	if update == nil || err != nil {
 		return err
 	}
-	_, err = writeZoneConfigUpdate(ctx, txn.KV(), kvTrace, descriptors, update)
+	_, err = writeZoneConfigUpdate(ctx, txn, kvTrace, update)
 	return err
 }

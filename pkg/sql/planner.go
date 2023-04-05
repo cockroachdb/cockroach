@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -624,6 +625,14 @@ func (p *planner) InternalSQLTxn() descs.Txn {
 		p.internalSQLTxn.init(p.txn, ie)
 	}
 	return &p.internalSQLTxn
+}
+
+func (p *planner) regionsProvider() *regions.Provider {
+	if txn := p.InternalSQLTxn(); txn != nil {
+		_ = txn.Regions() // force initialization
+		return p.internalSQLTxn.extraTxnState.regionsProvider
+	}
+	return nil
 }
 
 func (p *planner) User() username.SQLUsername {

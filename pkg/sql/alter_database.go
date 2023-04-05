@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -214,6 +215,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	if err := params.p.checkRegionIsCurrentlyActive(
 		params.ctx,
 		catpb.RegionName(n.n.Region),
+		n.desc.ID == keys.SystemDatabaseID,
 	); err != nil {
 		return err
 	}
@@ -369,7 +371,6 @@ func (p *planner) AlterDatabaseDropRegion(
 
 	removingPrimaryRegion := false
 	var toDrop []*typedesc.Mutable
-
 	if dbDesc.RegionConfig.PrimaryRegion == catpb.RegionName(n.Region) {
 		removingPrimaryRegion = true
 
@@ -410,7 +411,11 @@ func (p *planner) AlterDatabaseDropRegion(
 			)
 		}
 
-		if allowDrop := allowDropFinalRegion.Get(&p.execCfg.Settings.SV); !allowDrop {
+		isSystemDatabase := dbDesc.ID == keys.SystemDatabaseID
+		if allowDrop := allowDropFinalRegion.Get(&p.execCfg.Settings.SV); !allowDrop ||
+			// The system database, once it's been made multi-region, must not be
+			// allowed to go back.
+			isSystemDatabase {
 			return nil, pgerror.Newf(
 				pgcode.InvalidDatabaseDefinition,
 				"databases in this cluster must have at least 1 region",
@@ -418,9 +423,6 @@ func (p *planner) AlterDatabaseDropRegion(
 				DefaultPrimaryRegionClusterSettingName,
 			)
 		}
-
-		// If this is the system database, we can only drop a rtegion if it is
-		// not a part of any of
 
 		// When the last region is removed from the database, we also clean up
 		// detritus multi-region type descriptor. This includes both the
@@ -446,6 +448,14 @@ func (p *planner) AlterDatabaseDropRegion(
 		}
 	}
 
+	// If this is the system database, we can only drop a region if it is
+	// not a part of any other database.
+	if isSystemDatabase := dbDesc.ID == keys.SystemDatabaseID; isSystemDatabase {
+		if err := p.checkCanDropSystemDatabaseRegion(ctx, n.Region); err != nil {
+			return nil, err
+		}
+	}
+
 	// Ensure survivability goal and number of regions after the drop jive.
 	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.ID, p.Descriptors())
 	if err != nil {
@@ -461,6 +471,85 @@ func (p *planner) AlterDatabaseDropRegion(
 		removingPrimaryRegion,
 		toDrop,
 	}, nil
+}
+
+// checkCanDropSystemDatabaseRegion checks if region is in use in any database
+// other than the system database. If it is, an error is returned.
+func (p *planner) checkCanDropSystemDatabaseRegion(ctx context.Context, region tree.Name) error {
+	dbs, err := p.Descriptors().GetAllDatabases(ctx, p.txn)
+	if err != nil {
+		return err
+	}
+	var typeIDsToFetchSet catalog.DescriptorIDSet
+	if err := dbs.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		db, ok := desc.(catalog.DatabaseDescriptor)
+		if !ok {
+			return errors.WithDetailf(
+				errors.AssertionFailedf(
+					"got unexpected non-database %T while iterating databases",
+					desc,
+				),
+				"unexpected descriptor: %v", desc)
+		}
+		if !db.IsMultiRegion() ||
+			// We expect that this region is part of the system database.
+			db.GetID() == keys.SystemDatabaseID {
+			return nil
+		}
+		typeID, err := db.MultiRegionEnumID()
+		if err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(
+				err, "expected multi-region enum ID for %s (%d)",
+				db.GetName(), db.GetID())
+		}
+		typeIDsToFetchSet.Add(typeID)
+		return nil
+	}); err != nil {
+		return err
+	}
+	typeIDsToFetch := typeIDsToFetchSet.Ordered()
+	dbTypes, err := p.Descriptors().ByID(p.txn).Get().Descs(ctx, typeIDsToFetch)
+	if err != nil {
+		return errors.Wrapf(err, "failed to fetch multi-region enums while attempting to drop"+
+			" system database region %s", &region)
+	}
+
+	enumHasMember := func(haystack catalog.EnumTypeDescriptor, needle string) bool {
+		for i, n := 0, haystack.NumEnumMembers(); i < n; i++ {
+			if haystack.GetMemberLogicalRepresentation(i) == needle {
+				return true
+			}
+		}
+		return false
+	}
+	var usedBy intsets.Fast
+	for i, desc := range dbTypes {
+		typDesc, ok := desc.(catalog.EnumTypeDescriptor)
+		if !ok {
+			return errors.AssertionFailedf(
+				"found non-enum type with ID %d", typeIDsToFetch[i],
+			)
+		}
+		if enumHasMember(typDesc, string(region)) {
+			usedBy.Add(i)
+		}
+	}
+	if !usedBy.Empty() {
+		var databases tree.NameList
+		usedBy.ForEach(func(i int) {
+			databases = append(databases,
+				tree.Name(dbs.LookupDescriptor(dbTypes[i].GetParentID()).GetName()))
+		})
+		sort.Slice(databases, func(i, j int) bool {
+			return databases[i] < databases[j]
+		})
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"cannot drop region %v from the system database while that region is still in use",
+				&region,
+			), "region is in use by databases: %v", &databases)
+	}
+	return nil
 }
 
 // checkPrivilegesForMultiRegionOp ensures the current user has the required
@@ -583,10 +672,9 @@ func removeLocalityConfigFromAllTablesInDB(
 			case *catpb.LocalityConfig_Global_:
 				if err := ApplyZoneConfigForMultiRegionTable(
 					ctx,
-					p.Txn(),
+					p.InternalSQLTxn(),
 					p.ExecCfg(),
 					p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-					p.Descriptors(),
 					multiregion.RegionConfig{}, // pass dummy config as it is not used.
 					tbDesc,
 					applyZoneConfigForMultiRegionTableOptionRemoveGlobalZoneConfig,
@@ -651,9 +739,8 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		if err := discardMultiRegionFieldsForDatabaseZoneConfig(
 			params.ctx,
 			n.desc.ID,
-			params.p.Txn(),
+			params.p.InternalSQLTxn(),
 			params.p.execCfg,
-			params.p.Descriptors(),
 			params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		); err != nil {
 			return err
@@ -815,9 +902,8 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		params.ctx,
 		n.desc.ID,
 		updatedRegionConfig,
-		params.p.Txn(),
+		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -1189,9 +1275,8 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		params.ctx,
 		n.desc.ID,
 		regionConfig,
-		params.p.Txn(),
+		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -1318,9 +1403,8 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		params.ctx,
 		n.desc.ID,
 		regionConfig,
-		params.p.Txn(),
+		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -1860,9 +1944,8 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		params.ctx,
 		n.desc.ID,
 		updatedRegionConfig,
-		params.p.Txn(),
+		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -1966,9 +2049,8 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		params.ctx,
 		n.desc.ID,
 		updatedRegionConfig,
-		params.p.Txn(),
+		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -2199,7 +2281,9 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 			return err
 		}
 
-		if err := validateZoneAttrsAndLocalities(params.ctx, params.p.ExecCfg(), newZone); err != nil {
+		if err := validateZoneAttrsAndLocalities(
+			params.ctx, params.p.InternalSQLTxn().Regions(), params.p.ExecCfg(), newZone,
+		); err != nil {
 			return err
 		}
 
@@ -2243,7 +2327,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 
 	// Validate if the zone config extension is compatible with the database.
 	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(
-		params.ctx, params.ExecCfg(), updatedRegionConfig,
+		params.ctx, params.p.InternalSQLTxn().Regions(), params.ExecCfg(), updatedRegionConfig,
 	)
 	if err != nil {
 		return err
@@ -2262,9 +2346,8 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		params.ctx,
 		n.desc.ID,
 		dbZoneConfig,
-		params.p.Txn(),
+		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
