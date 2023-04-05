@@ -218,8 +218,8 @@ func TestTypeCheck(t *testing.T) {
 		{`'a' @@ 'b'`, `to_tsvector('a':::STRING) @@ plainto_tsquery('b':::STRING)`},
 		{`'a' @@ 'b':::TSQUERY`, `to_tsvector('a':::STRING) @@ '''b''':::TSQUERY`},
 		{`'a':::TSQUERY @@ 'b'`, `'''a''':::TSQUERY @@ to_tsvector('b':::STRING)`},
-		{`'a' @@ 'b':::TSVECTOR`, `'a':::STRING::TSQUERY @@ '''b''':::TSVECTOR`},
-		{`'a':::TSVECTOR @@ 'b'`, `'''a''':::TSVECTOR @@ 'b':::STRING::TSQUERY`},
+		{`'a' @@ 'b':::TSVECTOR`, `'''a''':::TSQUERY @@ '''b''':::TSVECTOR`},
+		{`'a':::TSVECTOR @@ 'b'`, `'''a''':::TSVECTOR @@ '''b''':::TSQUERY`},
 	}
 	ctx := context.Background()
 	for _, d := range testData {
