@@ -6598,7 +6598,19 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	const nodes = 1
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
-	args := base.TestServerArgs{ExternalIODir: baseDir}
+
+	// Disable stats collection on system tables before the cluster is started,
+	// otherwise there is a race condition where stats may be collected before we
+	// can disable them with `SET CLUSTER SETTING`. We disable stats collection on
+	// system tables so that we can collect statistics on the imported tables
+	// within the retry time limit.
+	st := cluster.MakeClusterSettings()
+	stats.AutomaticStatisticsOnSystemTables.Override(context.Background(), &st.SV, false)
+	args := base.TestServerArgs{
+		Settings:          st,
+		DefaultTestTenant: base.TestTenantDisabled,
+		ExternalIODir:     baseDir,
+	}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -6609,20 +6621,18 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported_statements", "nodelocal://1/cockroachdump/dump.sql")
 
 	// Verify that statistics have been created.
-	// Depending on timing, the statistics name may either be __auto__ or
-	// __import__, so we don't check the name in the results.
 	sqlDB.CheckQueryResultsRetry(t,
-		`SELECT column_names, row_count, distinct_count, null_count
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
 	  FROM [SHOW STATISTICS FOR TABLE t]`,
 		[][]string{
-			{"{i}", "2", "2", "0"},
-			{"{t}", "2", "2", "0"},
+			{"__auto__", "{i}", "2", "2", "0"},
+			{"__auto__", "{t}", "2", "2", "0"},
 		})
 	sqlDB.CheckQueryResultsRetry(t,
-		`SELECT column_names, row_count, distinct_count, null_count
+		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
 	  FROM [SHOW STATISTICS FOR TABLE a]`,
 		[][]string{
-			{"{i}", "1", "1", "0"},
+			{"__auto__", "{i}", "1", "1", "0"},
 		})
 }
 
