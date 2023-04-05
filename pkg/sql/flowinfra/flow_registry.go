@@ -439,7 +439,7 @@ func (fr *FlowRegistry) waitForFlow(
 // expectedConnectionTime so that any flows that were registered at the end of
 // the time window have a reasonable amount of time to connect to their
 // consumers, thus unblocking them. All flows that are still running at this
-// point are canceled if cancelStillRunning is true.
+// point are canceled.
 //
 // The FlowRegistry rejects any new flows once it has finished draining.
 //

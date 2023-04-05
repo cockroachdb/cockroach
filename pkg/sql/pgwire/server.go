@@ -589,7 +589,7 @@ func (s *Server) waitConnsDone() (cancelChanMap, chan struct{}, chan struct{}) {
 	connCancelMap := func() cancelChanMap {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		connCancelMap := make(cancelChanMap)
+		connCancelMap := make(cancelChanMap, len(s.mu.connCancelMap))
 		for done, cancel := range s.mu.connCancelMap {
 			connCancelMap[done] = cancel
 		}
