@@ -32,7 +32,7 @@ func TestSystemActivityMigration(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
-		clusterversion.ByKey(clusterversion.V22_2),
+		clusterversion.TestingBinaryMinSupportedVersion,
 		false,
 	)
 
@@ -42,7 +42,7 @@ func TestSystemActivityMigration(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2),
+					BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
 				},
 			},
 		},
