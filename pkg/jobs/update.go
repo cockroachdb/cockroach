@@ -63,7 +63,7 @@ func (j *Job) maybeWithTxn(txn isql.Txn) Updater {
 
 func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn) (retErr error) {
 	if u.txn == nil {
-		return u.j.registry.internalDB.Txn(ctx, func(
+		return u.j.registry.db.Txn(ctx, func(
 			ctx context.Context, txn isql.Txn,
 		) error {
 			u.txn = txn
