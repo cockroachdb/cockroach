@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -43,7 +44,16 @@ type requestedStat struct {
 	inverted            bool
 }
 
-const histogramSamples = 10000
+// histogramSamples is the number of sample rows to be collected for histogram
+// construction. For larger tables, it may be beneficial to increase this number
+// to get a more accurate distribution.
+var histogramSamples = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.stats.histogram_samples.count",
+	"number of rows sampled for histogram construction during table statistics collection",
+	10000,
+	settings.NonNegativeIntWithMaximum(math.MaxUint32),
+).WithPublic()
 
 // maxTimestampAge is the maximum allowed age of a scan timestamp during table
 // stats collection, used when creating statistics AS OF SYSTEM TIME. The
@@ -79,7 +89,11 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 	// since we only support one reqStat at a time.
 	for _, s := range reqStats {
 		if s.histogram {
-			sampler.SampleSize = histogramSamples
+			if count, ok := desc.HistogramSamplesCount(); ok {
+				sampler.SampleSize = count
+			} else {
+				sampler.SampleSize = uint32(histogramSamples.Get(&dsp.st.SV))
+			}
 			// This could be anything >= 2 to produce a histogram, but the max number
 			// of buckets is probably also a reasonable minimum number of samples. (If
 			// there are fewer rows than this in the table, there will be fewer
@@ -469,9 +483,11 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 ) (*PhysicalPlan, error) {
 	reqStats := make([]requestedStat, len(details.ColumnStats))
 	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
+	tableDesc := tabledesc.NewBuilder(&details.Table).BuildImmutableTable()
+	defaultHistogramBuckets := stats.GetDefaultHistogramBuckets(&dsp.st.SV, tableDesc)
 	for i := 0; i < len(reqStats); i++ {
 		histogram := details.ColumnStats[i].HasHistogram && histogramCollectionEnabled
-		var histogramMaxBuckets uint32 = stats.DefaultHistogramBuckets
+		var histogramMaxBuckets = defaultHistogramBuckets
 		if details.ColumnStats[i].HistogramMaxBuckets > 0 {
 			histogramMaxBuckets = details.ColumnStats[i].HistogramMaxBuckets
 		}
@@ -491,7 +507,6 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 		return nil, errors.New("no stats requested")
 	}
 
-	tableDesc := tabledesc.NewBuilder(&details.Table).BuildImmutableTable()
 	if details.UsingExtremes {
 		return dsp.createPartialStatsPlan(ctx, planCtx, tableDesc, reqStats, jobID, details)
 	}
