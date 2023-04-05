@@ -743,14 +743,21 @@ func getFilteredBucket(
 
 	// Calculate the new value for numRange.
 	var numRange float64
-	if isEqualityCondition {
+	switch {
+	case isEqualityCondition:
 		numRange = 0
-	} else if ok && rangeBefore > 0 {
-		// If we were successful in finding the ranges before and after filtering,
-		// calculate the fraction of values that should be assigned to the new
-		// bucket.
+	case ok && rangeBefore > 0:
+		// If we were successful in finding the ranges before and after
+		// filtering, calculate the fraction of values that should be assigned
+		// to the new bucket.
 		numRange = b.NumRange * rangeAfter / rangeBefore
-	} else {
+		if !math.IsNaN(numRange) {
+			break
+		}
+		// If the new value is NaN, fallthrough to the default case to estimate
+		// the numRange.
+		fallthrough
+	default:
 		// In the absence of any information, assume we reduced the size of the
 		// bucket by half.
 		numRange = 0.5 * b.NumRange

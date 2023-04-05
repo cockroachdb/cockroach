@@ -3580,6 +3580,72 @@ project
       │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
       └── filters (true)
 
+# Regression test for #100582. A bucket with an infinite upper bound should not
+# create NaNs in filtered histograms.
+exec-ddl
+CREATE TABLE t100582 (
+  id INT PRIMARY KEY,
+  s STRING NULL,
+  d DECIMAL NULL
+);
+----
+
+exec-ddl
+ALTER TABLE t100582 INJECT STATISTICS '[
+  {
+    "columns": ["d"],
+    "row_count": 3,
+    "distinct_count": 3,
+    "null_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 0,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 1,
+        "num_eq": 0,
+        "num_range": 1,
+        "upper_bound": "Infinity"
+      }
+    ],
+    "histo_col_type": "DECIMAL",
+    "created_at": "2023-04-04 07:47:43.132805",
+    "histo_version": 2
+  }
+]'
+----
+
+# The filtered histogram should not have a numRange of NaN.
+norm
+SELECT s FROM t100582 WHERE d >= 2;
+----
+project
+ ├── columns: s:2(string)
+ ├── immutable
+ ├── stats: [rows=0.75]
+ └── select
+      ├── columns: s:2(string) d:3(decimal!null)
+      ├── immutable
+      ├── stats: [rows=0.75, distinct(3)=0.5, null(3)=0]
+      │   histogram(3)=  0  0  0.5     0
+      │                <--- 2 ----- Infinity
+      ├── scan t100582
+      │    ├── columns: s:2(string) d:3(decimal)
+      │    └── stats: [rows=3, distinct(3)=3, null(3)=0]
+      │        histogram(3)=  0  0  0  1  1     0
+      │                     <--- 0 --- 1 --- Infinity
+      └── filters
+           └── d:3 >= 2 [type=bool, outer=(3), immutable, constraints=(/3: [/2 - ]; tight)]
+
 # Tests for selectivity of disjunctions
 
 exec-ddl
