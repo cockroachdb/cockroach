@@ -32,6 +32,10 @@ function upload_stats {
         # the location.
         remote_artifacts_dir="artifacts"
       fi
+      # In FIPS-mode, keep artifacts separate by using the 'fips' suffix.
+      if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
+        remote_artifacts_dir="${remote_artifacts_dir}-fips"
+      fi
 
       # The stats.json files need some path translation:
       #     ${artifacts}/path/to/test/stats.json
