@@ -1384,23 +1384,22 @@ func TestJobRecordMissingUsername(t *testing.T) {
 		Details:  jobspb.ImportDetails{},
 		Progress: jobspb.ImportProgress{},
 	}
-	idb := r.internalDB
 	{
-		err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			_, err := r.CreateAdoptableJobWithTxn(ctx, invalidRecord, 0, txn)
 			return err
 		})
 		assert.EqualError(t, err, "job record missing username; could not make payload")
 	}
 	{
-		err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			_, err := r.CreateJobWithTxn(ctx, invalidRecord, 0, txn)
 			return err
 		})
 		assert.EqualError(t, err, "job record missing username; could not make payload")
 	}
 	{
-		err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			_, err := r.CreateJobsWithTxn(ctx, txn, []*Record{&invalidRecord})
 			return err
 		})
