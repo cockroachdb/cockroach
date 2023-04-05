@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -145,7 +144,6 @@ func TestReader(t *testing.T) {
 		require.NoError(t, reader.WaitForStarted(ctx))
 
 		// Set up expected test data.
-		region := enum.One
 		instanceIDs := []base.SQLInstanceID{1, 2, 3}
 		rpcAddresses := []string{"addr1", "addr2", "addr3"}
 		sqlAddresses := []string{"addr4", "addr5", "addr6"}
@@ -259,7 +257,7 @@ func TestReader(t *testing.T) {
 
 		// Release an instance and verify only active instances are returned.
 		{
-			err := storage.ReleaseInstanceID(ctx, region, instanceIDs[0])
+			err := storage.ReleaseInstance(ctx, sessionIDs[0], instanceIDs[0])
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -314,7 +312,6 @@ func TestReader(t *testing.T) {
 		reader.Start(ctx, sqlinstance.InstanceInfo{})
 		require.NoError(t, reader.WaitForStarted(ctx))
 		// Create three instances and release one.
-		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{1, 2, 3}
 		rpcAddresses := [...]string{"addr1", "addr2", "addr3"}
 		sqlAddresses := [...]string{"addr4", "addr5", "addr6"}
@@ -367,7 +364,7 @@ func TestReader(t *testing.T) {
 
 		// Verify request for released instance data results in an error.
 		{
-			err := storage.ReleaseInstanceID(ctx, region, instanceIDs[0])
+			err := storage.ReleaseInstance(ctx, sessionIDs[0], instanceIDs[0])
 			if err != nil {
 				t.Fatal(err)
 			}

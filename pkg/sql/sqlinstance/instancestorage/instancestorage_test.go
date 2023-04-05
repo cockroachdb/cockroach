@@ -107,28 +107,56 @@ func TestStorage(t *testing.T) {
 		stopper, storage, slStorage, clock := setup(t)
 		defer stopper.Stop(ctx)
 
-		// Create three instances and release one.
-		region := enum.One
-		instanceIDs := [...]base.SQLInstanceID{1, 2, 3, 4, 5}
-		rpcAddresses := [...]string{"addr1", "addr2", "addr3", "addr4", "addr5"}
-		sqlAddresses := [...]string{"addr6", "addr7", "addr8", "addr9", "addr10"}
-		sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession(), makeSession(), makeSession(), makeSession()}
-		localities := [...]roachpb.Locality{
-			{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
-			{Tiers: []roachpb.Tier{{Key: "region", Value: "region2"}}},
-			{Tiers: []roachpb.Tier{{Key: "region", Value: "region3"}}},
-			{Tiers: []roachpb.Tier{{Key: "region", Value: "region4"}}},
-			{Tiers: []roachpb.Tier{{Key: "region", Value: "region5"}}},
-		}
-		binaryVersions := []roachpb.Version{
-			{Major: 22, Minor: 2}, {Major: 23, Minor: 1}, {Major: 23, Minor: 2}, {Major: 23, Minor: 3}, {Major: 24, Minor: 1},
-		}
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-		for _, index := range []int{0, 1, 2} {
-			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index], binaryVersions[index])
+
+		makeInstance := func(id int) sqlinstance.InstanceInfo {
+			return sqlinstance.InstanceInfo{
+				Region:          enum.One,
+				InstanceID:      base.SQLInstanceID(id),
+				InstanceSQLAddr: fmt.Sprintf("sql-addr-%d", id),
+				InstanceRPCAddr: fmt.Sprintf("rpc-addr-%d", id),
+				SessionID:       makeSession(),
+				Locality:        roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: fmt.Sprintf("region-%d", id)}}},
+				BinaryVersion:   roachpb.Version{Major: 22, Minor: int32(id)},
+			}
+		}
+
+		createInstance := func(t *testing.T, instance sqlinstance.InstanceInfo) {
+			t.Helper()
+
+			alive, err := slStorage.IsAlive(ctx, instance.SessionID)
 			require.NoError(t, err)
-			require.NoError(t, slStorage.Insert(ctx, sessionIDs[index], sessionExpiry))
-			require.Equal(t, instanceIDs[index], instance.InstanceID)
+			if !alive {
+				require.NoError(t, slStorage.Insert(ctx, instance.SessionID, sessionExpiry))
+			}
+
+			created, err := storage.CreateInstance(ctx, instance.SessionID, sessionExpiry, instance.InstanceRPCAddr, instance.InstanceSQLAddr, instance.Locality, instance.BinaryVersion)
+			require.NoError(t, err)
+
+			require.Equal(t, instance, created)
+		}
+
+		equalInstance := func(t *testing.T, expect sqlinstance.InstanceInfo, actual sqlinstance.InstanceInfo) {
+			require.Equal(t, expect.InstanceID, actual.InstanceID)
+			require.Equal(t, actual.SessionID, actual.SessionID)
+			require.Equal(t, actual.InstanceRPCAddr, actual.InstanceRPCAddr)
+			require.Equal(t, actual.InstanceSQLAddr, actual.InstanceSQLAddr)
+			require.Equal(t, actual.Locality, actual.Locality)
+			require.Equal(t, actual.BinaryVersion, actual.BinaryVersion)
+		}
+
+		isAvailable := func(t *testing.T, instance sqlinstance.InstanceInfo, id base.SQLInstanceID) {
+			require.Equal(t, sqlinstance.InstanceInfo{InstanceID: id}, instance)
+		}
+
+		var initialInstances []sqlinstance.InstanceInfo
+		for i := 1; i <= 5; i++ {
+			initialInstances = append(initialInstances, makeInstance(i))
+		}
+
+		// Create three instances and release one.
+		for _, instance := range initialInstances[:3] {
+			createInstance(t, instance)
 		}
 
 		// Verify all instances are returned by GetAllInstancesDataForTest.
@@ -138,29 +166,16 @@ func TestStorage(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, preallocatedCount, len(instances))
 			for _, i := range []int{0, 1, 2} {
-				require.Equal(t, instanceIDs[i], instances[i].InstanceID)
-				require.Equal(t, sessionIDs[i], instances[i].SessionID)
-				require.Equal(t, rpcAddresses[i], instances[i].InstanceRPCAddr)
-				require.Equal(t, sqlAddresses[i], instances[i].InstanceSQLAddr)
-				require.Equal(t, localities[i], instances[i].Locality)
-				require.Equal(t, binaryVersions[i], instances[i].BinaryVersion)
+				equalInstance(t, initialInstances[i], instances[i])
 			}
 			for _, i := range []int{3, 4} {
-				require.Equal(t, base.SQLInstanceID(i+1), instances[i].InstanceID)
-				require.Empty(t, instances[i].SessionID)
-				require.Empty(t, instances[i].InstanceRPCAddr)
-				require.Empty(t, instances[i].InstanceSQLAddr)
-				require.Empty(t, instances[i].Locality)
-				require.Empty(t, instances[i].BinaryVersion)
+				isAvailable(t, instances[i], initialInstances[i].InstanceID)
 			}
 		}
 
 		// Create two more instances.
-		for _, index := range []int{3, 4} {
-			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index], binaryVersions[index])
-			require.NoError(t, err)
-			require.NoError(t, slStorage.Insert(ctx, sessionIDs[index], sessionExpiry))
-			require.Equal(t, instanceIDs[index], instance.InstanceID)
+		for _, instance := range initialInstances[3:] {
+			createInstance(t, instance)
 		}
 
 		// Verify all instances are returned by GetAllInstancesDataForTest.
@@ -170,111 +185,54 @@ func TestStorage(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, preallocatedCount, len(instances))
 			for i := range instances {
-				require.Equal(t, instanceIDs[i], instances[i].InstanceID)
-				require.Equal(t, sessionIDs[i], instances[i].SessionID)
-				require.Equal(t, rpcAddresses[i], instances[i].InstanceRPCAddr)
-				require.Equal(t, sqlAddresses[i], instances[i].InstanceSQLAddr)
-				require.Equal(t, localities[i], instances[i].Locality)
-				require.Equal(t, binaryVersions[i], instances[i].BinaryVersion)
+				equalInstance(t, initialInstances[i], instances[i])
 			}
 		}
 
-		// Release an instance and verify all instances are returned.
+		// Release an instance and verify the instance is available.
 		{
-			require.NoError(t, storage.ReleaseInstanceID(ctx, region, instanceIDs[0]))
+			toRelease := initialInstances[0]
+
+			// Call ReleaseInstance twice to ensure it is idempotent.
+			require.NoError(t, storage.ReleaseInstance(ctx, toRelease.SessionID, toRelease.InstanceID))
+			require.NoError(t, storage.ReleaseInstance(ctx, toRelease.SessionID, toRelease.InstanceID))
+
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
 			require.NoError(t, err)
-			require.Equal(t, preallocatedCount-1, len(instances))
+			require.Equal(t, preallocatedCount, len(instances))
 			sortInstances(instances)
-			for i := 0; i < len(instances)-1; i++ {
-				require.Equal(t, instanceIDs[i+1], instances[i].InstanceID)
-				require.Equal(t, sessionIDs[i+1], instances[i].SessionID)
-				require.Equal(t, rpcAddresses[i+1], instances[i].InstanceRPCAddr)
-				require.Equal(t, sqlAddresses[i+1], instances[i].InstanceSQLAddr)
-				require.Equal(t, localities[i+1], instances[i].Locality)
+
+			for i, instance := range instances {
+				if i == 0 {
+					isAvailable(t, instance, toRelease.InstanceID)
+				} else {
+					equalInstance(t, initialInstances[i], instance)
+				}
 			}
+
+			// Re-allocate the instance.
+			createInstance(t, initialInstances[0])
 		}
 
 		// Verify instance ID associated with an expired session gets reused.
-		sessionID6 := makeSession()
-		rpcAddr6 := "rpcAddr6"
-		sqlAddr6 := "sqlAddr6"
-		locality6 := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region6"}}}
-		binaryVersion6 := roachpb.Version{Major: 24, Minor: 3}
+		newInstance5 := makeInstance(1337)
+		newInstance5.InstanceID = initialInstances[4].InstanceID
 		{
-			require.NoError(t, slStorage.Delete(ctx, sessionIDs[4]))
-			require.NoError(t, slStorage.Insert(ctx, sessionID6, sessionExpiry))
-			instance, err := storage.CreateInstance(ctx, sessionID6, sessionExpiry, rpcAddr6, sqlAddr6, locality6, binaryVersion6)
-			require.NoError(t, err)
-			require.Equal(t, instanceIDs[4], instance.InstanceID)
-			instances, err := storage.GetAllInstancesDataForTest(ctx)
-			sortInstances(instances)
-			require.NoError(t, err)
-			require.Equal(t, preallocatedCount-1, len(instances))
-			var foundIDs []base.SQLInstanceID
-			for index, instance := range instances {
-				foundIDs = append(foundIDs, instance.InstanceID)
-				if index == 3 {
-					require.Equal(t, sessionID6, instance.SessionID)
-					require.Equal(t, rpcAddr6, instance.InstanceRPCAddr)
-					require.Equal(t, sqlAddr6, instance.InstanceSQLAddr)
-					require.Equal(t, locality6, instance.Locality)
-					require.Equal(t, binaryVersion6, instance.BinaryVersion)
-					continue
-				}
-				require.Equal(t, sessionIDs[index+1], instance.SessionID)
-				require.Equal(t, rpcAddresses[index+1], instance.InstanceRPCAddr)
-				require.Equal(t, sqlAddresses[index+1], instance.InstanceSQLAddr)
-				require.Equal(t, localities[index+1], instance.Locality)
-				require.Equal(t, binaryVersions[index+1], instance.BinaryVersion)
-			}
-			require.Equal(t, []base.SQLInstanceID{2, 3, 4, 5}, foundIDs)
-		}
+			require.NoError(t, slStorage.Delete(ctx, initialInstances[4].SessionID))
 
-		// Verify released instance ID gets reused.
-		{
-			newSessionID := makeSession()
-			newRPCAddr := "rpcAddr7"
-			newSQLAddr := "sqlAddr7"
-			newBinaryVersion := roachpb.Version{Major: 29, Minor: 4}
-			newLocality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region7"}}}
-			instance, err := storage.CreateInstance(ctx, newSessionID, sessionExpiry, newRPCAddr, newSQLAddr, newLocality, newBinaryVersion)
-			require.NoError(t, err)
-			require.Equal(t, instanceIDs[0], instance.InstanceID)
+			createInstance(t, newInstance5)
+
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
-			sortInstances(instances)
 			require.NoError(t, err)
-			require.Equal(t, preallocatedCount+4, len(instances))
-			for index := 0; index < len(instanceIDs); index++ {
-				require.Equal(t, instanceIDs[index], instances[index].InstanceID)
-				switch index {
-				case 0:
-					require.Equal(t, newSessionID, instances[index].SessionID)
-					require.Equal(t, newRPCAddr, instances[index].InstanceRPCAddr)
-					require.Equal(t, newSQLAddr, instances[index].InstanceSQLAddr)
-					require.Equal(t, newLocality, instances[index].Locality)
-					require.Equal(t, newBinaryVersion, instances[index].BinaryVersion)
-				case 4:
-					require.Equal(t, sessionID6, instances[index].SessionID)
-					require.Equal(t, rpcAddr6, instances[index].InstanceRPCAddr)
-					require.Equal(t, sqlAddr6, instances[index].InstanceSQLAddr)
-					require.Equal(t, locality6, instances[index].Locality)
-					require.Equal(t, binaryVersion6, instances[index].BinaryVersion)
-				default:
-					require.Equal(t, sessionIDs[index], instances[index].SessionID)
-					require.Equal(t, rpcAddresses[index], instances[index].InstanceRPCAddr)
-					require.Equal(t, sqlAddresses[index], instances[index].InstanceSQLAddr)
-					require.Equal(t, localities[index], instances[index].Locality)
-					require.Equal(t, binaryVersions[index], instances[index].BinaryVersion)
+			sortInstances(instances)
+
+			require.Equal(t, len(initialInstances), len(instances))
+			for index, instance := range instances {
+				expect := initialInstances[index]
+				if index == 4 {
+					expect = newInstance5
 				}
-			}
-			for index := len(instanceIDs); index < len(instances); index++ {
-				require.Equal(t, base.SQLInstanceID(index+1), instances[index].InstanceID)
-				require.Empty(t, instances[index].SessionID)
-				require.Empty(t, instances[index].InstanceRPCAddr)
-				require.Empty(t, instances[index].InstanceSQLAddr)
-				require.Empty(t, instances[index].Locality)
-				require.Empty(t, instances[index].BinaryVersion)
+				equalInstance(t, expect, instance)
 			}
 		}
 	})
@@ -487,7 +445,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			if i == -1 {
 				return
 			}
-			require.NoError(t, storage.ReleaseInstanceID(ctx, region, i))
+			require.NoError(t, storage.ReleaseInstance(ctx, sessionID, i))
 			state.freeInstances[i] = struct{}{}
 			delete(state.liveInstances, i)
 		}
@@ -516,11 +474,14 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			state.RLock()
 			defer state.RUnlock()
 			instanceInfo, err := storage.GetInstanceDataForTest(ctx, region, i)
+			require.NoError(t, err)
 			if _, free := state.freeInstances[i]; free {
-				require.Error(t, err)
-				require.ErrorIs(t, err, sqlinstance.NonExistentInstanceError)
+				require.Empty(t, instanceInfo.InstanceRPCAddr)
+				require.Empty(t, instanceInfo.InstanceSQLAddr)
+				require.Empty(t, instanceInfo.SessionID)
+				require.Empty(t, instanceInfo.Locality)
+				require.Empty(t, instanceInfo.BinaryVersion)
 			} else {
-				require.NoError(t, err)
 				require.Equal(t, rpcAddr, instanceInfo.InstanceRPCAddr)
 				require.Equal(t, sqlAddr, instanceInfo.InstanceSQLAddr)
 				require.Equal(t, sessionID, instanceInfo.SessionID)
