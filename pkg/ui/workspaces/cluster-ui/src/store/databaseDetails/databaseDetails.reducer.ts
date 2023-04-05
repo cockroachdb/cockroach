@@ -8,9 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import {DatabaseDetailsResponse, ErrorWithKey, SqlApiResponse, SqlExecutionErrorMessage} from "../../api";
+import {
+  DatabaseDetailsResponse,
+  ErrorWithKey,
+  SqlApiResponse,
+} from "../../api";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import {DOMAIN_NAME, noopReducer} from "../utils";
+import { DOMAIN_NAME } from "../utils";
 
 type DatabaseDetailsWithKey = {
   databaseDetailsResponse: SqlApiResponse<DatabaseDetailsResponse>;
@@ -26,21 +30,17 @@ export type DatabaseDetailsState = {
 };
 
 export type KeyedDatabaseDetailsState = {
-  cache: {
-    [dbName: string]: DatabaseDetailsState;
-  };
+  [dbName: string]: DatabaseDetailsState;
 };
 
-const initialState: KeyedDatabaseDetailsState = {
-  cache: {},
-};
+const initialState: KeyedDatabaseDetailsState = {};
 
 const databaseDetailsReducer = createSlice({
   name: `${DOMAIN_NAME}/databaseDetails`,
   initialState,
   reducers: {
     received: (state, action: PayloadAction<DatabaseDetailsWithKey>) => {
-      state.cache[action.payload.key] = {
+      state[action.payload.key] = {
         valid: true,
         inFlight: false,
         data: action.payload.databaseDetailsResponse,
@@ -48,12 +48,12 @@ const databaseDetailsReducer = createSlice({
       };
     },
     failed: (state, action: PayloadAction<ErrorWithKey>) => {
-      state.cache[action.payload.key] = {
+      state[action.payload.key] = {
         valid: false,
         inFlight: false,
         data: null,
         lastError: action.payload.err,
-      }
+      };
     },
     refresh: (_, _action: PayloadAction<string>) => {},
     request: (_, _action: PayloadAction<string>) => {},

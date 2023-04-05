@@ -21,9 +21,10 @@ import {
   api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
 
+import * as fakeApi from "src/util/fakeApi";
+
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
-import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 import { makeTimestamp } from "src/views/databases/utils";
 import moment from "moment";

@@ -9,8 +9,11 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import {DOMAIN_NAME} from "../utils";
-import {SettingsRequestMessage, SettingsResponseMessage} from "../../api/clusterSettingsApi";
+import { DOMAIN_NAME } from "../utils";
+import {
+  SettingsRequestMessage,
+  SettingsResponseMessage,
+} from "../../api/clusterSettingsApi";
 
 export type ClusterSettingsState = {
   data: SettingsResponseMessage;
@@ -33,10 +36,10 @@ const clusterSettingsReducer = createSlice({
   initialState,
   reducers: {
     received: (state, action: PayloadAction<SettingsResponseMessage>) => {
-        state.valid = true;
-        state.inFlight = false;
-        state.data = action.payload;
-        state.lastError = null;
+      state.valid = true;
+      state.inFlight = false;
+      state.data = action.payload;
+      state.lastError = null;
     },
     failed: (state, action: PayloadAction<Error>) => {
       state.valid = false;

@@ -19,8 +19,9 @@ import {
   api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
 
-import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import * as fakeApi from "src/util/fakeApi";
+
+import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { mapDispatchToProps, mapStateToProps } from "./redux";
 
 class TestDriver {

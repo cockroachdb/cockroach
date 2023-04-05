@@ -33,7 +33,8 @@ import {
   defaultJobTypeSetting,
   defaultJobStatusSetting,
   defaultDatabaseDetailsTableSortSetting,
-  defaultDatabaseDetailsGrantSortSetting, defaultDatabaseDetailsViewMode
+  defaultDatabaseDetailsGrantSortSetting,
+  defaultDatabaseDetailsViewMode,
 } from "./defaults";
 
 type SortSetting = {

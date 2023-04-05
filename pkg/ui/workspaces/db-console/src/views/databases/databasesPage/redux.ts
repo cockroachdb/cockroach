@@ -12,13 +12,10 @@ import { createSelector } from "reselect";
 import { LocalSetting } from "src/redux/localsettings";
 import {
   DatabasesPageData,
-  DatabasesPageDataDatabase,
   defaultFilters,
   Filters,
-  util,
+  selectDatabases,
 } from "@cockroachlabs/cluster-ui";
-
-const { combineLoadingErrors, getNodesByRegionString } = util;
 
 import {
   refreshDatabases,
@@ -69,66 +66,30 @@ const searchLocalSetting = new LocalSetting(
   null,
 );
 
-const selectDatabases = createSelector(
-  (state: AdminUIState) => state.cachedData.databases.data,
-  (state: AdminUIState) => state.cachedData.databaseDetails,
-  (state: AdminUIState) => nodeRegionsByIDSelector(state),
-  (_: AdminUIState) => isTenant,
-  (
-    databases,
-    databaseDetails,
+export const mapStateToProps = (state: AdminUIState): DatabasesPageData => {
+  const databasesListResponse = state?.cachedData.databases.data;
+  const dbDetails = state?.cachedData.databaseDetails;
+  const nodeRegions = nodeRegionsByIDSelector(state);
+  return {
+    loading: selectLoading(state),
+    loaded: selectLoaded(state),
+    lastError: selectLastError(state),
+    databases: selectDatabases(
+      databasesListResponse,
+      dbDetails,
+      nodeRegions,
+      isTenant,
+    ),
+    sortSetting: sortSettingLocalSetting.selector(state),
+    filters: filtersLocalSetting.selector(state),
+    search: searchLocalSetting.selector(state),
     nodeRegions,
     isTenant,
-  ): DatabasesPageDataDatabase[] =>
-    (databases?.databases || []).map(database => {
-      const details = databaseDetails[database];
-      const stats = details?.data?.results.stats;
-      const sizeInBytes = stats?.spanStats?.approximate_disk_bytes || 0;
-      const rangeCount = stats?.spanStats.range_count || 0;
-      // TODO(thomas): Eventually, we should populate this will real node IDs.
-      const nodes = stats?.replicaData.replicas || [];
-      const nodesByRegionString = getNodesByRegionString(
-        nodes,
-        nodeRegions,
-        isTenant,
-      );
-      const numIndexRecommendations =
-        stats?.indexStats.num_index_recommendations || 0;
-
-      const combinedErr = combineLoadingErrors(
-        details?.lastError,
-        details?.data?.maxSizeReached,
-        databases?.error?.message,
-      );
-
-      return {
-        loading: !!details?.inFlight,
-        loaded: !!details?.valid,
-        lastError: combinedErr,
-        name: database,
-        sizeInBytes: sizeInBytes,
-        tableCount: details?.data?.results.tablesResp.tables?.length || 0,
-        rangeCount: rangeCount,
-        nodes: nodes,
-        nodesByRegionString,
-        numIndexRecommendations,
-      };
-    }),
-);
-
-export const mapStateToProps = (state: AdminUIState): DatabasesPageData => ({
-  loading: selectLoading(state),
-  loaded: selectLoaded(state),
-  lastError: selectLastError(state),
-  databases: selectDatabases(state),
-  sortSetting: sortSettingLocalSetting.selector(state),
-  filters: filtersLocalSetting.selector(state),
-  search: searchLocalSetting.selector(state),
-  nodeRegions: nodeRegionsByIDSelector(state),
-  isTenant: isTenant,
-  automaticStatsCollectionEnabled: selectAutomaticStatsCollectionEnabled(state),
-  showNodeRegionsColumn: selectIsMoreThanOneNode(state),
-});
+    automaticStatsCollectionEnabled:
+      selectAutomaticStatsCollectionEnabled(state),
+    showNodeRegionsColumn: selectIsMoreThanOneNode(state),
+  };
+};
 
 export const mapDispatchToProps = {
   refreshSettings,

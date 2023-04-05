@@ -22,4 +22,3 @@ export function makeTimestamp(date: string): Timestamp {
     seconds: new Long(new Date(date).getUTCSeconds()),
   });
 }
-

@@ -17,11 +17,22 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { expectSaga } from "redux-saga-test-plan";
-import {DatabaseDetailsResponse, getDatabaseDetails, SqlApiResponse} from "../../api";
+import {
+  DatabaseDetailsResponse,
+  getDatabaseDetails,
+  SqlApiResponse,
+} from "../../api";
 import ZoneConfig = cockroach.config.zonepb.ZoneConfig;
 import ZoneConfigurationLevel = cockroach.server.serverpb.ZoneConfigurationLevel;
-import {refreshDatabaseDetailsSaga, requestDatabaseDetailsSaga} from "./databaseDetails.saga";
-import {actions, KeyedDatabaseDetailsState, reducer} from "./databaseDetails.reducer";
+import {
+  refreshDatabaseDetailsSaga,
+  requestDatabaseDetailsSaga,
+} from "./databaseDetails.saga";
+import {
+  actions,
+  KeyedDatabaseDetailsState,
+  reducer,
+} from "./databaseDetails.reducer";
 
 describe("DatabaseDetails sagas", () => {
   const database = "test_db";
@@ -29,45 +40,45 @@ describe("DatabaseDetails sagas", () => {
     payload: database,
     type: "request",
   };
-  const databaseDetailsResponse: SqlApiResponse<DatabaseDetailsResponse> =
-    {
-      maxSizeReached: false,
-      results: {
-        idResp: { database_id: "mock_id" },
-        grantsResp: { grants: [
-            {
-              user: "test_user",
-              privileges: ["privilege1", "privilege2", "privilege3"]
-            },
-            {
-              user: "another_user",
-              privileges: ["privilege1", "privilege4", "privilege7"]
-            }
-          ]
-        },
-        tablesResp: { tables: ["yet", "another", "table"] },
-        zoneConfigResp: {
-          zone_config: new ZoneConfig({
-            inherited_constraints: true,
-            inherited_lease_preferences: true,
-          }),
-          zone_config_level: ZoneConfigurationLevel.CLUSTER,
-        },
-        stats: {
-          spanStats: {
-            approximate_disk_bytes: 1000,
-            live_bytes: 100,
-            total_bytes: 500,
-            range_count: 20,
+  const databaseDetailsResponse: SqlApiResponse<DatabaseDetailsResponse> = {
+    maxSizeReached: false,
+    results: {
+      idResp: { database_id: "mock_id" },
+      grantsResp: {
+        grants: [
+          {
+            user: "test_user",
+            privileges: ["privilege1", "privilege2", "privilege3"],
           },
-          replicaData: {
-            replicas: [1,2,3],
-            regions: ["this", "is", "a", "region"],
+          {
+            user: "another_user",
+            privileges: ["privilege1", "privilege4", "privilege7"],
           },
-          indexStats: { num_index_recommendations: 4 },
-        },
+        ],
       },
-    };
+      tablesResp: { tables: ["yet", "another", "table"] },
+      zoneConfigResp: {
+        zone_config: new ZoneConfig({
+          inherited_constraints: true,
+          inherited_lease_preferences: true,
+        }),
+        zone_config_level: ZoneConfigurationLevel.CLUSTER,
+      },
+      stats: {
+        spanStats: {
+          approximate_disk_bytes: 1000,
+          live_bytes: 100,
+          total_bytes: 500,
+          range_count: 20,
+        },
+        replicaData: {
+          replicas: [1, 2, 3],
+          regions: ["this", "is", "a", "region"],
+        },
+        indexStats: { num_index_recommendations: 4 },
+      },
+    },
+  };
   const databaseDetailsAPIProvider: (EffectProviders | StaticProvider)[] = [
     [matchers.call.fn(getDatabaseDetails), databaseDetailsResponse],
   ];
@@ -92,13 +103,11 @@ describe("DatabaseDetails sagas", () => {
         )
         .withReducer(reducer)
         .hasFinalState<KeyedDatabaseDetailsState>({
-          cache: {
-            [database]: {
-              data: databaseDetailsResponse,
-              lastError: null,
-              valid: true,
-              inFlight: false,
-            },
+          [database]: {
+            data: databaseDetailsResponse,
+            lastError: null,
+            valid: true,
+            inFlight: false,
           },
         })
         .run();
@@ -116,13 +125,11 @@ describe("DatabaseDetails sagas", () => {
         )
         .withReducer(reducer)
         .hasFinalState<KeyedDatabaseDetailsState>({
-          cache: {
-            [database]: {
-              data: null,
-              lastError: error,
-              valid: false,
-              inFlight: false,
-            },
+          [database]: {
+            data: null,
+            lastError: error,
+            valid: false,
+            inFlight: false,
           },
         })
         .run();

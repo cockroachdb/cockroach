@@ -10,10 +10,9 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "src/api";
-import {ADMIN_API_PREFIX} from "./util";
+import { ADMIN_API_PREFIX } from "./util";
 
-export type SettingsRequestMessage =
-  cockroach.server.serverpb.SettingsRequest;
+export type SettingsRequestMessage = cockroach.server.serverpb.SettingsRequest;
 export type SettingsResponseMessage =
   cockroach.server.serverpb.SettingsResponse;
 

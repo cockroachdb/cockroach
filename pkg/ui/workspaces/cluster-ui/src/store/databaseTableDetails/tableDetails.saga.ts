@@ -11,10 +11,10 @@
 import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { actions } from "./tableDetails.reducer";
-import {ErrorWithKey, getTableDetails, TableDetailsReqParams} from "src/api";
+import { ErrorWithKey, getTableDetails, TableDetailsReqParams } from "src/api";
 import moment from "moment";
-import {PayloadAction} from "@reduxjs/toolkit";
-import {generateTableID} from "../../util";
+import { PayloadAction } from "@reduxjs/toolkit";
+import { generateTableID } from "../../util";
 
 export function* refreshTableDetailsSaga(
   action: PayloadAction<TableDetailsReqParams>,
@@ -23,12 +23,16 @@ export function* refreshTableDetailsSaga(
 }
 
 export function* requestTableDetailsSaga(
-  action: PayloadAction<TableDetailsReqParams>
+  action: PayloadAction<TableDetailsReqParams>,
 ): any {
   const key = generateTableID(action.payload.database, action.payload.table);
   try {
-    const result = yield call(getTableDetails, action.payload,  moment.duration(10, "m"));
-    yield put(actions.received({key, tableDetailsResponse: result}));
+    const result = yield call(
+      getTableDetails,
+      action.payload,
+      moment.duration(10, "m"),
+    );
+    yield put(actions.received({ key, tableDetailsResponse: result }));
   } catch (e) {
     const err: ErrorWithKey = {
       err: e,

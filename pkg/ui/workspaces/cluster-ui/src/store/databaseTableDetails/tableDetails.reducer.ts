@@ -9,14 +9,13 @@
 // licenses/APL.txt.
 
 import {
-  DatabaseDetailsResponse,
   ErrorWithKey,
   SqlApiResponse,
-  SqlExecutionErrorMessage,
-  TableDetailsReqParams, TableDetailsResponse
+  TableDetailsReqParams,
+  TableDetailsResponse,
 } from "../../api";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import {DOMAIN_NAME, noopReducer} from "../utils";
+import { DOMAIN_NAME } from "../utils";
 
 type TableDetailsWithKey = {
   tableDetailsResponse: SqlApiResponse<TableDetailsResponse>;
@@ -32,21 +31,17 @@ export type TableDetailsState = {
 };
 
 export type KeyedTableDetailsState = {
-  cache: {
-    [tableID: string]: TableDetailsState;
-  };
+  [tableID: string]: TableDetailsState;
 };
 
-const initialState: KeyedTableDetailsState = {
-  cache: {},
-};
+const initialState: KeyedTableDetailsState = {};
 
 const tableDetailsReducer = createSlice({
   name: `${DOMAIN_NAME}/tableDetails`,
   initialState,
   reducers: {
     received: (state, action: PayloadAction<TableDetailsWithKey>) => {
-      state.cache[action.payload.key] = {
+      state[action.payload.key] = {
         valid: true,
         inFlight: false,
         data: action.payload.tableDetailsResponse,
@@ -54,12 +49,12 @@ const tableDetailsReducer = createSlice({
       };
     },
     failed: (state, action: PayloadAction<ErrorWithKey>) => {
-      state.cache[action.payload.key] = {
+      state[action.payload.key] = {
         valid: false,
         inFlight: false,
         data: null,
         lastError: action.payload.err,
-      }
+      };
     },
     refresh: (_, _action: PayloadAction<TableDetailsReqParams>) => {},
     request: (_, _action: PayloadAction<TableDetailsReqParams>) => {},

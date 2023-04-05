@@ -8,7 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import {BreadcrumbItem} from "../breadcrumbs";
+import { BreadcrumbItem } from "../breadcrumbs";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+type IndexUsageStatistic =
+  cockroach.server.serverpb.TableIndexStatsResponse.IExtendedCollectedIndexUsageStatistics;
 
 export function combineLoadingErrors(
   detailsErr: Error,
@@ -107,13 +111,17 @@ export function createNodesByRegionMap(
 }
 
 // sortByPrecedence sorts a list of strings via a "precedence" mapping.
-function sortByPrecedence(vals: string[], precedenceMapping: Record<string, number>, removeDuplicates?: boolean): string[] {
+function sortByPrecedence(
+  vals: string[],
+  precedenceMapping: Record<string, number>,
+  removeDuplicates?: boolean,
+): string[] {
   // Sorting function. First compare by precedence.
   // If both items have the same precedence level,
   // sort alphabetically.
   const compareFn = (a: string, b: string) => {
-    const aPrecedence = precedenceMapping.hasOwnProperty(a);
-    const bPrecendence = precedenceMapping.hasOwnProperty(b);
+    const aPrecedence = precedenceMapping[a];
+    const bPrecendence = precedenceMapping[b];
     if (aPrecedence && bPrecendence) {
       return precedenceMapping[a] - precedenceMapping[b];
     }
@@ -124,10 +132,10 @@ function sortByPrecedence(vals: string[], precedenceMapping: Record<string, numb
       return 1;
     }
     return a.localeCompare(b);
-  }
+  };
 
   if (removeDuplicates) {
-    return [... new Set(vals)].sort(compareFn);
+    return [...new Set(vals)].sort(compareFn);
   }
   return [...vals].sort(compareFn);
 }
@@ -184,4 +192,24 @@ export function createManagedServiceBreadcrumbs(
       name: `Index: ${index}`,
     },
   ];
+}
+
+export function buildIndexStatToRecommendationsMap(
+  stats: IndexUsageStatistic[],
+  recs: cockroach.sql.IIndexRecommendation[],
+): Record<string, cockroach.sql.IIndexRecommendation[]> {
+  const recommendationsMap: Record<
+    string,
+    cockroach.sql.IIndexRecommendation[]
+  > = {};
+  stats.forEach(stat => {
+    const recsForStat =
+      recs.filter(rec => rec.index_id === stat?.statistics.key.index_id) || [];
+    if (!recommendationsMap[stat.index_id]) {
+      recommendationsMap[stat.index_id] = recsForStat;
+    } else {
+      recommendationsMap[stat.index_id].push(...recsForStat);
+    }
+  });
+  return recommendationsMap;
 }

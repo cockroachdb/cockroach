@@ -27,3 +27,4 @@ export * from "./proto";
 export * from "./formatNumber";
 export * from "./totalWorkload";
 export * from "./databasePages";
+export * as fakeApi from "./fakeApi";

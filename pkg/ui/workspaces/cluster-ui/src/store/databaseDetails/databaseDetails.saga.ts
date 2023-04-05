@@ -11,22 +11,29 @@
 import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { actions } from "./databaseDetails.reducer";
-import {ErrorWithKey, getDatabaseDetails} from "src/api";
+import { ErrorWithKey, getDatabaseDetails } from "src/api";
 import moment from "moment";
-import {PayloadAction} from "@reduxjs/toolkit";
+import { PayloadAction } from "@reduxjs/toolkit";
 
-export function* refreshDatabaseDetailsSaga(
-  action: PayloadAction<string>,
-) {
+export function* refreshDatabaseDetailsSaga(action: PayloadAction<string>) {
   yield put(actions.request(action.payload));
 }
 
 export function* requestDatabaseDetailsSaga(
-  action: PayloadAction<string>
+  action: PayloadAction<string>,
 ): any {
   try {
-    const result = yield call(getDatabaseDetails, action.payload,  moment.duration(10, "m"));
-    yield put(actions.received({key: action.payload, databaseDetailsResponse: result}));
+    const result = yield call(
+      getDatabaseDetails,
+      action.payload,
+      moment.duration(10, "m"),
+    );
+    yield put(
+      actions.received({
+        key: action.payload,
+        databaseDetailsResponse: result,
+      }),
+    );
   } catch (e) {
     const err: ErrorWithKey = {
       err: e,

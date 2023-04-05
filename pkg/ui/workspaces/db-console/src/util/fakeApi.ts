@@ -65,51 +65,6 @@ export function stubClusterSettings(
   );
 }
 
-export function buildSQLApiEventsResponse(events: clusterUiApi.EventsResponse) {
-  return {
-    num_statements: 1,
-    execution: {
-      txn_results: [
-        {
-          statement: 1,
-          tag: "SELECT",
-          start: "2022-11-14T16:26:45.06819Z",
-          end: "2022-11-14T16:26:45.073657Z",
-          rows_affected: 0,
-          columns: [
-            {
-              name: "timestamp",
-              type: "TIMESTAMP",
-              oid: 1114,
-            },
-            {
-              name: "eventType",
-              type: "STRING",
-              oid: 25,
-            },
-            {
-              name: "reportingID",
-              type: "INT8",
-              oid: 20,
-            },
-            {
-              name: "info",
-              type: "STRING",
-              oid: 25,
-            },
-            {
-              name: "uniqueID",
-              type: "BYTES",
-              oid: 17,
-            },
-          ],
-          rows: events,
-        },
-      ],
-    },
-  };
-}
-
 export function stubNodesUI(
   response: cockroach.server.serverpb.INodesResponseExternal,
 ) {

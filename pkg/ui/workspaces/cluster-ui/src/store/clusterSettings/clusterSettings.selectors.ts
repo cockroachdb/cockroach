@@ -8,12 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import {AppState} from "../reducers";
+import { AppState } from "../reducers";
 
-export const selectAutomaticStatsCollectionEnabled = (state: AppState): boolean => {
+export const selectAutomaticStatsCollectionEnabled = (
+  state: AppState,
+): boolean => {
   const settings = state.adminUI?.clusterSettings.data?.key_values;
   if (!settings) {
     return false;
   }
   return settings["sql.stats.automatic_collection.enabled"].value === "true";
-}
+};

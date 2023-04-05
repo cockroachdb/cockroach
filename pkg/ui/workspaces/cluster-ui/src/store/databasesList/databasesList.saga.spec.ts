@@ -17,20 +17,26 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { expectSaga } from "redux-saga-test-plan";
-import {DatabasesListResponse, getDatabaseDetails, getDatabasesList} from "../../api";
-import {refreshDatabasesListSaga, requestDatabasesListSaga} from "./databasesList.saga";
-import {actions, DatabasesListState, reducer} from "./databasesList.reducers";
+import {
+  DatabasesListResponse,
+  getDatabaseDetails,
+  getDatabasesList,
+} from "../../api";
+import {
+  refreshDatabasesListSaga,
+  requestDatabasesListSaga,
+} from "./databasesList.saga";
+import { actions, DatabasesListState, reducer } from "./databasesList.reducers";
 
 describe("DatabasesList sagas", () => {
-  const databasesListResponse: DatabasesListResponse =
-    {
-      databases: ["one", "of", "many", "databases"],
-      error: {
-        message: "sql execution error message!",
-        code: "10101",
-        severity: "high"
-      }
-    };
+  const databasesListResponse: DatabasesListResponse = {
+    databases: ["one", "of", "many", "databases"],
+    error: {
+      message: "sql execution error message!",
+      code: "10101",
+      severity: "high",
+    },
+  };
   const databasesListAPIProvider: (EffectProviders | StaticProvider)[] = [
     [matchers.call.fn(getDatabasesList), databasesListResponse],
   ];
@@ -45,9 +51,7 @@ describe("DatabasesList sagas", () => {
     it("successfully requests databases", () => {
       return expectSaga(requestDatabasesListSaga)
         .provide(databasesListAPIProvider)
-        .put(
-          actions.received(databasesListResponse),
-        )
+        .put(actions.received(databasesListResponse))
         .withReducer(reducer)
         .hasFinalState<DatabasesListState>({
           data: databasesListResponse,
@@ -62,9 +66,7 @@ describe("DatabasesList sagas", () => {
       const error = new Error("Failed request");
       return expectSaga(requestDatabasesListSaga)
         .provide([[matchers.call.fn(getDatabasesList), throwError(error)]])
-        .put(
-          actions.failed(error),
-        )
+        .put(actions.failed(error))
         .withReducer(reducer)
         .hasFinalState<DatabasesListState>({
           data: null,

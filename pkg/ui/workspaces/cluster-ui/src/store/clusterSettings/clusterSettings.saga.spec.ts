@@ -17,31 +17,41 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { expectSaga } from "redux-saga-test-plan";
-import {actions, ClusterSettingsState, reducer} from "./clusterSettings.reducer";
-import {getClusterSettings, SettingsRequestMessage} from "../../api/clusterSettingsApi";
-import { refreshClusterSettingsSaga, requestClusterSettingsSaga } from "./clusterSettings.saga";
+import {
+  actions,
+  ClusterSettingsState,
+  reducer,
+} from "./clusterSettings.reducer";
+import {
+  getClusterSettings,
+  SettingsRequestMessage,
+} from "../../api/clusterSettingsApi";
+import {
+  refreshClusterSettingsSaga,
+  requestClusterSettingsSaga,
+} from "./clusterSettings.saga";
 
 describe("ClusterSettings sagas", () => {
   const requestAction: PayloadAction<SettingsRequestMessage> = {
     payload: null,
     type: "request",
   };
-  const clusterSettingsResponse = new cockroach.server.serverpb.SettingsResponse(
-    {
+  const clusterSettingsResponse =
+    new cockroach.server.serverpb.SettingsResponse({
       key_values: {
-        "key": {
+        key: {
           value: "value",
           type: "string",
           description: "i am a cluster setting",
           public: false,
         },
-        "key2": {
+        key2: {
           value: "value2",
           type: "string",
           description: "i am a public cluster setting",
           public: true,
         },
-      }
+      },
     });
   const clusterSettingsAPIProvider: (EffectProviders | StaticProvider)[] = [
     [matchers.call.fn(getClusterSettings), clusterSettingsResponse],
@@ -59,9 +69,7 @@ describe("ClusterSettings sagas", () => {
     it("successfully requests cluster settings", () => {
       return expectSaga(requestClusterSettingsSaga, requestAction)
         .provide(clusterSettingsAPIProvider)
-        .put(
-          actions.received(clusterSettingsResponse),
-        )
+        .put(actions.received(clusterSettingsResponse))
         .withReducer(reducer)
         .hasFinalState<ClusterSettingsState>({
           data: clusterSettingsResponse,
@@ -76,9 +84,7 @@ describe("ClusterSettings sagas", () => {
       const error = new Error("Failed request");
       return expectSaga(requestClusterSettingsSaga, requestAction)
         .provide([[matchers.call.fn(getClusterSettings), throwError(error)]])
-        .put(
-          actions.failed(error),
-        )
+        .put(actions.failed(error))
         .withReducer(reducer)
         .hasFinalState<ClusterSettingsState>({
           data: null,

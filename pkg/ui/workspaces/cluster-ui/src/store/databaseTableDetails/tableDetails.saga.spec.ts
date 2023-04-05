@@ -19,11 +19,23 @@ import * as matchers from "redux-saga-test-plan/matchers";
 import { expectSaga } from "redux-saga-test-plan";
 import ZoneConfig = cockroach.config.zonepb.ZoneConfig;
 import ZoneConfigurationLevel = cockroach.server.serverpb.ZoneConfigurationLevel;
-import {TableDetailsResponse, getTableDetails, SqlApiResponse, TableDetailsReqParams} from "../../api";
-import {refreshTableDetailsSaga, requestTableDetailsSaga} from "./tableDetails.saga";
-import {actions, KeyedTableDetailsState, reducer} from "./tableDetails.reducer";
+import {
+  TableDetailsResponse,
+  getTableDetails,
+  SqlApiResponse,
+  TableDetailsReqParams,
+} from "../../api";
+import {
+  refreshTableDetailsSaga,
+  requestTableDetailsSaga,
+} from "./tableDetails.saga";
+import {
+  actions,
+  KeyedTableDetailsState,
+  reducer,
+} from "./tableDetails.reducer";
 import moment from "moment";
-import {generateTableID} from "../../util";
+import { generateTableID } from "../../util";
 
 describe("TableDetails sagas", () => {
   const database = "test_db";
@@ -33,55 +45,55 @@ describe("TableDetails sagas", () => {
     payload: { database, table },
     type: "request",
   };
-  const tableDetailsResponse: SqlApiResponse<TableDetailsResponse> =
-    {
-      maxSizeReached: false,
-      results: {
-        idResp: { table_id: "mock_table_id" },
-        createStmtResp: { create_statement: "CREATE TABLE test_table (num int)" },
-        grantsResp: { grants: [
-            {
-              user: "test_user",
-              privileges: ["privilege1", "privilege2", "privilege3"]
-            },
-            {
-              user: "another_user",
-              privileges: ["privilege1", "privilege4", "privilege7"]
-            }
-          ]
-        },
-        schemaDetails: {
-          columns: ["col1","col2","col3"],
-          indexes: ["idx1","idx2","idx3"]
-        },
-        zoneConfigResp: {
-          configure_zone_statement: "",
-          zone_config: new ZoneConfig({
-            inherited_constraints: true,
-            inherited_lease_preferences: true,
-          }),
-          zone_config_level: ZoneConfigurationLevel.CLUSTER,
-        },
-        heuristicsDetails: { stats_last_created_at: moment() },
-        stats: {
-          spanStats: {
-            approximate_disk_bytes: 400,
-            live_bytes: 30,
-            total_bytes: 40,
-            range_count: 50,
-            live_percentage: 75,
+  const tableDetailsResponse: SqlApiResponse<TableDetailsResponse> = {
+    maxSizeReached: false,
+    results: {
+      idResp: { table_id: "mock_table_id" },
+      createStmtResp: { create_statement: "CREATE TABLE test_table (num int)" },
+      grantsResp: {
+        grants: [
+          {
+            user: "test_user",
+            privileges: ["privilege1", "privilege2", "privilege3"],
           },
-          replicaData: {
-            nodeIDs: [1, 2, 3],
-            nodeCount: 3,
-            replicaCount: 3,
+          {
+            user: "another_user",
+            privileges: ["privilege1", "privilege4", "privilege7"],
           },
-          indexStats: {
-            has_index_recommendations: false,
-          },
+        ],
+      },
+      schemaDetails: {
+        columns: ["col1", "col2", "col3"],
+        indexes: ["idx1", "idx2", "idx3"],
+      },
+      zoneConfigResp: {
+        configure_zone_statement: "",
+        zone_config: new ZoneConfig({
+          inherited_constraints: true,
+          inherited_lease_preferences: true,
+        }),
+        zone_config_level: ZoneConfigurationLevel.CLUSTER,
+      },
+      heuristicsDetails: { stats_last_created_at: moment() },
+      stats: {
+        spanStats: {
+          approximate_disk_bytes: 400,
+          live_bytes: 30,
+          total_bytes: 40,
+          range_count: 50,
+          live_percentage: 75,
         },
-      }
-    };
+        replicaData: {
+          nodeIDs: [1, 2, 3],
+          nodeCount: 3,
+          replicaCount: 3,
+        },
+        indexStats: {
+          has_index_recommendations: false,
+        },
+      },
+    },
+  };
 
   const tableDetailsAPIProvider: (EffectProviders | StaticProvider)[] = [
     [matchers.call.fn(getTableDetails), tableDetailsResponse],
@@ -107,13 +119,11 @@ describe("TableDetails sagas", () => {
         )
         .withReducer(reducer)
         .hasFinalState<KeyedTableDetailsState>({
-          cache: {
-            [key]: {
-              data: tableDetailsResponse,
-              lastError: null,
-              valid: true,
-              inFlight: false,
-            },
+          [key]: {
+            data: tableDetailsResponse,
+            lastError: null,
+            valid: true,
+            inFlight: false,
           },
         })
         .run();
@@ -131,13 +141,11 @@ describe("TableDetails sagas", () => {
         )
         .withReducer(reducer)
         .hasFinalState<KeyedTableDetailsState>({
-          cache: {
-            [key]: {
-              data: null,
-              lastError: error,
-              valid: false,
-              inFlight: false,
-            },
+          [key]: {
+            data: null,
+            lastError: error,
+            valid: false,
+            inFlight: false,
           },
         })
         .run();

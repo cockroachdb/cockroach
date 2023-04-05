@@ -13,7 +13,7 @@ import {
   LARGE_RESULT_SIZE,
   SqlExecutionErrorMessage,
   SqlExecutionRequest,
-  sqlResultsAreEmpty, txnResultIsEmpty,
+  sqlResultsAreEmpty,
 } from "./sqlApi";
 import { withTimeout } from "./util";
 import moment from "moment";
