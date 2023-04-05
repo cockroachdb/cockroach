@@ -358,9 +358,11 @@ func backup(
 	// TODO(adityamaru,rhu713): Once backup/restore switches from writing and
 	// reading backup manifests to `metadata.sst` we can stop writing the slim
 	// manifest.
-	if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, defaultStore, encryption,
-		&kmsEnv, backupManifest); err != nil {
-		return roachpb.RowCount{}, err
+	if backupinfo.WriteMetadataWithExternalSSTsEnabled.Get(&settings.SV) {
+		if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, defaultStore, encryption,
+			&kmsEnv, backupManifest); err != nil {
+			return roachpb.RowCount{}, err
+		}
 	}
 
 	statsTable := getTableStatsForBackup(ctx, statsCache, backupManifest.Descriptors)
