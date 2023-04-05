@@ -1134,7 +1134,12 @@ func startShutdownAsync(
 
 			for ; ; prevRemaining = remaining {
 				var err error
-				remaining, _, err = s.Drain(drainCtx, verbose)
+				func() {
+					var cancel context.CancelFunc
+					drainCtx, cancel = context.WithCancel(drainCtx)
+					defer cancel()
+					remaining, _, err = s.Drain(drainCtx, verbose)
+				}()
 				if err != nil {
 					log.Ops.Errorf(drainCtx, "graceful drain failed: %v", err)
 					break
