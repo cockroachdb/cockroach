@@ -638,6 +638,8 @@ var charts = []sectionDescription{
 					"range.snapshots.applied-non-voter",
 					"range.snapshots.delegate.successes",
 					"range.snapshots.delegate.failures",
+					"range.snapshots.recv-failed",
+					"range.snapshots.recv-unusable",
 				},
 			},
 			{
