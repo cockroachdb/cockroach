@@ -64,6 +64,9 @@ const (
 	// want to hide from customer tenants in CockroachCloud.
 	CanViewNodeInfo // can_view_node_info
 
+	// CanCheckConsistency allows the tenant to check range consistency.
+	CanCheckConsistency // can_check_consistency
+
 	// CanViewTSDBMetrics describes the ability of a tenant to read the
 	// timeseries from the storage cluster. These operations need a
 	// capability because excessive TS queries can overwhelm the storage
@@ -116,6 +119,7 @@ var capabilities = [MaxCapabilityID + 1]Capability{
 	CanAdminScatter:        boolCapability(CanAdminScatter),
 	CanAdminSplit:          boolCapability(CanAdminSplit),
 	CanAdminUnsplit:        boolCapability(CanAdminUnsplit),
+	CanCheckConsistency:    boolCapability(CanCheckConsistency),
 	CanUseNodelocalStorage: boolCapability(CanUseNodelocalStorage),
 	CanViewNodeInfo:        boolCapability(CanViewNodeInfo),
 	CanViewTSDBMetrics:     boolCapability(CanViewTSDBMetrics),
