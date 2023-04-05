@@ -99,7 +99,7 @@ type streamIngestionResumer struct {
 }
 
 func connectToActiveClient(
-	ctx context.Context, ingestionJob *jobs.Job,
+	ctx context.Context, ingestionJob *jobs.Job, db isql.DB,
 ) (streamclient.Client, error) {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	progress := ingestionJob.Progress()
@@ -119,7 +119,7 @@ func connectToActiveClient(
 	// Without a list of addresses from existing progress we use the stream
 	// address from the creation statement
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-	client, err := streamclient.NewStreamClient(ctx, streamAddress, ingestionJob.GetInternalDB())
+	client, err := streamclient.NewStreamClient(ctx, streamAddress, db)
 
 	return client, errors.Wrapf(err, "ingestion job %d failed to connect to stream address or existing topology for planning", ingestionJob.ID())
 }
@@ -250,7 +250,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 			return err
 		}
 	}
-	client, err := connectToActiveClient(ctx, ingestionJob)
+	client, err := connectToActiveClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB)
 	if err != nil {
 		return err
 	}
