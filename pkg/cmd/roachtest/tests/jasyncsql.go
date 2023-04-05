@@ -143,7 +143,7 @@ func registerJasyncSQL(r registry.Registry) {
 		Name:    "jasync",
 		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
-		Tags:    []string{`default`, `orm`},
+		Tags:    registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runJasyncSQL(ctx, t, c)
 		},

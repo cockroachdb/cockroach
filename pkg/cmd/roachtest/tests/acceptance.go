@@ -76,7 +76,6 @@ func registerAcceptance(r registry.Registry) {
 			},
 		},
 	}
-	tags := []string{"default", "quick"}
 	specTemplate := registry.TestSpec{
 		// NB: teamcity-post-failures.py relies on the acceptance tests
 		// being named acceptance/<testname> and will avoid posting a
@@ -86,7 +85,7 @@ func registerAcceptance(r registry.Registry) {
 		// will be posted.
 		Name:    "acceptance",
 		Timeout: 10 * time.Minute,
-		Tags:    tags,
+		Tags:    registry.Tags("default", "quick"),
 	}
 
 	for owner, tests := range testCases {

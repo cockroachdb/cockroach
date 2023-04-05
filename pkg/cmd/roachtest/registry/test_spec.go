@@ -13,6 +13,7 @@ package registry
 import (
 	"context"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -47,7 +48,7 @@ type TestSpec struct {
 	// Tags is a set of tags associated with the test that allow grouping
 	// tests. If no tags are specified, the set ["default"] is automatically
 	// given.
-	Tags []string
+	Tags map[string]struct{}
 	// Cluster provides the specification for the cluster to use for the test.
 	Cluster spec.ClusterSpec
 	// NativeLibs specifies the native libraries required to be present on
@@ -131,17 +132,18 @@ func (t *TestSpec) Match(filter *TestFilter) MatchType {
 	if !filter.Name.MatchString(t.Name) {
 		return FailedFilter
 	}
-	if len(t.Tags) == 0 {
-		if !filter.Tag.MatchString("default") {
-			return FailedTags
-		}
+
+	if len(filter.Tags) == 0 {
 		return Matched
 	}
-	for _, t := range t.Tags {
-		if filter.Tag.MatchString(t) {
+
+	for tag := range filter.Tags {
+		// If the tag is a single CSV e.g. "foo,bar,baz", we match all the tags
+		if matchesAll(t.Tags, strings.Split(tag, ",")) {
 			return Matched
 		}
 	}
+
 	return FailedTags
 }
 
@@ -151,4 +153,29 @@ func (t *TestSpec) Match(filter *TestFilter) MatchType {
 func PromSub(raw string) string {
 	invalidPromRE := regexp.MustCompile("[^a-zA-Z0-9_]")
 	return invalidPromRE.ReplaceAllLiteralString(raw, "_")
+}
+
+func matchesAll(testTags map[string]struct{}, filterTags []string) bool {
+	for _, tag := range filterTags {
+		negate := false
+		if tag[0] == '!' {
+			negate = true
+			tag = tag[1:]
+		}
+		_, tagExists := testTags[tag]
+
+		if negate == tagExists {
+			return false
+		}
+	}
+	return true
+}
+
+// Tags returns a set of strings.
+func Tags(values ...string) map[string]struct{} {
+	set := make(map[string]struct{})
+	for _, s := range values {
+		set[s] = struct{}{}
+	}
+	return set
 }

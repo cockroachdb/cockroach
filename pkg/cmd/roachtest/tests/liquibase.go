@@ -134,7 +134,7 @@ func registerLiquibase(r registry.Registry) {
 		Name:    "liquibase",
 		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
-		Tags:    []string{`default`, `tool`},
+		Tags:    registry.Tags(`default`, `tool`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLiquibase(ctx, t, c)
 		},

@@ -65,7 +65,7 @@ func registerFixtures(r registry.Registry) {
 	spec := registry.TestSpec{
 		Name:    "generate-fixtures",
 		Timeout: 30 * time.Minute,
-		Tags:    []string{"fixtures"},
+		Tags:    registry.Tags("fixtures"),
 		Owner:   registry.OwnerDevInf,
 		Cluster: r.MakeClusterSpec(4),
 		Run:     runFixtures,

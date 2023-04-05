@@ -92,7 +92,7 @@ func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 		// for --max-rate.
 		// TODO(andrei): output something to roachperf and start running them
 		// nightly.
-		Tags:    []string{"manual"},
+		Tags:    registry.Tags("manual"),
 		Owner:   registry.OwnerKV,
 		Cluster: nodes,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

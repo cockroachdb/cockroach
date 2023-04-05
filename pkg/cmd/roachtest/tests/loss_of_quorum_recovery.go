@@ -71,7 +71,7 @@ func registerLOQRecovery(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:                s.testName(""),
 			Owner:               registry.OwnerReplication,
-			Tags:                []string{`default`},
+			Tags:                registry.Tags(`default`),
 			Cluster:             spec,
 			SkipPostValidations: registry.PostValidationInvalidDescriptors,
 			NonReleaseBlocker:   true,
@@ -82,7 +82,7 @@ func registerLOQRecovery(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:                s.testName("half-online"),
 			Owner:               registry.OwnerReplication,
-			Tags:                []string{`default`},
+			Tags:                registry.Tags(`default`),
 			Cluster:             spec,
 			SkipPostValidations: registry.PostValidationInvalidDescriptors,
 			NonReleaseBlocker:   true,

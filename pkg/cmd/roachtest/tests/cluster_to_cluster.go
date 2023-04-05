@@ -307,6 +307,9 @@ type replicationTestSpec struct {
 	// when there are no other roachtest connections to the database.
 	replicationStartHook func(ctx context.Context, sp *replicationTestSpec)
 
+	// tags are used to categorize the test.
+	tags map[string]struct{}
+
 	// fields below are instantiated at runtime
 	setup   *c2cSetup
 	t       test.Test
@@ -651,6 +654,7 @@ func c2cRegisterWrapper(
 		Cluster:         r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, clusterOps...),
 		Timeout:         sp.timeout,
 		Skip:            sp.skip,
+		Tags:            sp.tags,
 		RequiresLicense: true,
 		Run:             run,
 	})
@@ -715,6 +719,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
 			cutover:            5 * time.Minute,
+			tags:               registry.Tags("aws"),
 		},
 		{
 			name:               "c2c/UnitTest",
