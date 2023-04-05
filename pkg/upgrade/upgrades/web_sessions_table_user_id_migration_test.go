@@ -12,6 +12,7 @@ package upgrades_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strconv"
 	"testing"
@@ -63,11 +64,12 @@ func runTestWebSessionsUserIDMigration(t *testing.T, numUsers int) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	// Create test users.
-	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(txRunner *sqlutils.SQLRunner, i int) {
-		txRunner.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
-
+	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(tx *gosql.Tx, i int) error {
+		if _, err := tx.Exec(fmt.Sprintf("CREATE USER testuser%d", i)); err != nil {
+			return err
+		}
 		// Simulate the INSERT that happens in the actual authentication code.
-		txRunner.Exec(t, fmt.Sprintf(`
+		if _, err := tx.Exec(fmt.Sprintf(`
 INSERT INTO system.web_sessions ("hashedSecret", username, "createdAt", "expiresAt", "lastUsedAt")
 VALUES (
 	'\xe77edd369fc3a955a129d2ced69d97717eeee49912e4369a2b687a4d8c36f798',
@@ -76,7 +78,10 @@ VALUES (
 	'2023-02-21 20:56:30.699242',
 	'2023-02-14 20:56:30.699447'
 )
-`, i))
+`, i)); err != nil {
+			return err
+		}
+		return nil
 	})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.web_sessions", [][]string{{strconv.Itoa(numUsers)}})
 

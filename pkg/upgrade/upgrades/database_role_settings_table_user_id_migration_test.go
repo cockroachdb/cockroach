@@ -12,6 +12,7 @@ package upgrades_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strconv"
 	"testing"
@@ -64,9 +65,14 @@ func runTestDatabaseRoleSettingsUserIDMigration(t *testing.T, numUsers int) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	// Create test users and add rows for each user to system.database_role_settings.
-	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(txRunner *sqlutils.SQLRunner, i int) {
-		txRunner.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
-		txRunner.Exec(t, fmt.Sprintf(`ALTER USER testuser%d SET application_name = 'roach sql'`, i))
+	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(tx *gosql.Tx, i int) error {
+		if _, err := tx.Exec(fmt.Sprintf("CREATE USER testuser%d", i)); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(fmt.Sprintf(`ALTER USER testuser%d SET application_name = 'roach sql'`, i)); err != nil {
+			return err
+		}
+		return nil
 	})
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.database_role_settings", [][]string{{strconv.Itoa(numUsers)}})
 

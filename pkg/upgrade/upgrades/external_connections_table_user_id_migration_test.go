@@ -12,6 +12,7 @@ package upgrades_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strconv"
 	"testing"
@@ -60,14 +61,24 @@ func runTestExternalConnectionsUserIDMigration(t *testing.T, numUsers int) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	// Create test users.
-	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(txRunner *sqlutils.SQLRunner, i int) {
-		txRunner.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
-		txRunner.Exec(t, fmt.Sprintf("GRANT SYSTEM EXTERNALCONNECTION TO testuser%d", i))
+	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(tx *gosql.Tx, i int) error {
+		if _, err := tx.Exec(fmt.Sprintf("CREATE USER testuser%d", i)); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(fmt.Sprintf("GRANT SYSTEM EXTERNALCONNECTION TO testuser%d", i)); err != nil {
+			return err
+		}
+		return nil
 	})
-	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(txRunner *sqlutils.SQLRunner, i int) {
+	upgrades.ExecForCountInTxns(ctx, t, db, numUsers, 100 /* txCount */, func(tx *gosql.Tx, i int) error {
+		if _, err := tx.Exec(fmt.Sprintf("SET ROLE TO testuser%d", i)); err != nil {
+			return err
+		}
 		externalConnName := fmt.Sprintf("connection%d", i)
-		txRunner.Exec(t, fmt.Sprintf("SET ROLE TO testuser%d", i))
-		txRunner.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION %[1]s AS 'userfile:///%[1]s'", externalConnName))
+		if _, err := tx.Exec(fmt.Sprintf("CREATE EXTERNAL CONNECTION %[1]s AS 'userfile:///%[1]s'", externalConnName)); err != nil {
+			return err
+		}
+		return nil
 	})
 	tdb.Exec(t, "SET ROLE TO root")
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.external_connections", [][]string{{strconv.Itoa(numUsers)}})
