@@ -213,7 +213,7 @@ func registerPgjdbc(r registry.Registry) {
 		Name:    "pgjdbc",
 		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
-		Tags:    []string{`default`, `driver`},
+		Tags:    registry.Tags(`default`, `driver`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPgjdbc(ctx, t, c)
 		},

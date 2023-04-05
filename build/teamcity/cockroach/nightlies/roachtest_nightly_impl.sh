@@ -36,4 +36,4 @@ build/teamcity-roachtest-invoke.sh \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --slack-token="${SLACK_TOKEN}" \
   $fips_flag \
-  "${TESTS}"
+  "${TESTS}" ${FILTER}
