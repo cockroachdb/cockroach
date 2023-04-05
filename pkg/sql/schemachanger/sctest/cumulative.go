@@ -1684,6 +1684,7 @@ WHERE
 }
 
 func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedClusterFunc) {
+	skip.WithIssue(t, 100732)
 	testVersion := clusterversion.ClusterVersion{
 		Version: clusterversion.ByKey(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates - 1),
 	}
