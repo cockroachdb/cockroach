@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -33,12 +34,26 @@ func TestLeaseRenewer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// stressrace and deadlock make the test too slow, resulting in an inability
+	// to maintain leases and Raft leadership.
+	skip.UnderStressRace(t)
+	skip.UnderDeadlock(t)
+
 	ctx := context.Background()
 
 	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			RaftConfig: base.RaftConfig{
-				RangeLeaseDuration: time.Second,
+				// Speed up lease extensions to speed up the test, but adjust tick-based
+				// timeouts to retain their default wall-time values.
+				RangeLeaseRenewalFraction: 0.95,
+				RaftTickInterval:          100 * time.Millisecond,
+				RaftElectionTimeoutTicks:  30,
+			},
+			Knobs: base.TestingKnobs{
+				Store: &StoreTestingKnobs{
+					LeaseRenewalDurationOverride: 100 * time.Millisecond,
+				},
 			},
 		},
 	})
@@ -116,7 +131,8 @@ func TestLeaseRenewer(t *testing.T) {
 	assertLeaseRenewal(desc.RangeID)
 
 	// Transfer the lease to a different leaseholder, and assert that the lease is
-	// still extended.
+	// still extended. Wait for the split to apply on all nodes first.
+	require.NoError(t, tc.WaitForFullReplication())
 	lease, _ := getNodeReplica(1, desc.RangeID).GetLease()
 	target := tc.Target(lookupNode(lease.Replica.NodeID%3 + 1))
 	require.NoError(t, tc.TransferRangeLease(desc, target))
