@@ -2,25 +2,6 @@
 
 subtest check_consistency
 
-# Sanity-check crdb_internal.check_consistency.
-
-statement error start key must be > "\\x02"
-SELECT crdb_internal.check_consistency(true, '\x02', '\xffff')
-
-statement error end key must be < "\\xff\\xff"
-SELECT crdb_internal.check_consistency(true, '\x0200', '\xffff00')
-
-statement error start key must be less than end key
-SELECT crdb_internal.check_consistency(true, '\x03', '\x03')
-
-statement error start key must be less than end key
-SELECT crdb_internal.check_consistency(true, '\x04', '\x03')
-
-query ITT
-SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM crdb_internal.check_consistency(true, '\x03', '\xffff') WHERE range_id = 1
-----
-1  RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SeparatedIntentCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
-
 # Without explicit keys, scans all ranges (we don't test this too precisely to
 # avoid flaking the test when the range count changes, just want to know that
 # we're touching multiple ranges).
@@ -51,16 +32,11 @@ SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\xff', '')
 ----
 true
 
-# Run a full consistency check across all ranges. 
+# Run a full consistency check across all ranges.
 query B
 SELECT count(*) > 10 FROM crdb_internal.check_consistency(false, '', '')
 ----
 true
-
-# Fill a table with consistency check results. This used to panic.
-# See: https://github.com/cockroachdb/cockroach/issues/88222
-statement ok
-CREATE TABLE conscheckresult AS (SELECT * FROM crdb_internal.check_consistency(false, '', ''));
 
 # Test crdb_internal commands which execute as root, but
 # only checks for permissions afterwards.
@@ -158,7 +134,7 @@ SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_tes
 query T
 SELECT ($t_id)::regclass
 ----
-109
+108
 
 # reset state to default
 user root
