@@ -964,26 +964,25 @@ func (p *Provider) runInstance(
 		vm.TagRoachprod: "Roachprod",
 	}
 
-	var sb strings.Builder
+	var labelPairs []string
+	addLabel := func(key, value string) {
+		labelPairs = append(labelPairs, fmt.Sprintf("{Key=%s,Value=%s}", key, value))
+	}
 
-	sep := ""
 	for key, value := range opts.CustomLabels {
 		_, ok := m[strings.ToLower(key)]
 		if ok {
 			return fmt.Errorf("duplicate label name defined: %s", key)
 		}
-		fmt.Fprintf(&sb, "%s{Key=%s,Value=%s}", sep, key, value)
-		sep = ","
+		addLabel(key, value)
 	}
-	sep = ""
 	for key, value := range m {
 		if n, ok := awsLabelsNameMap[key]; ok {
 			key = n
 		}
-		fmt.Fprintf(&sb, "%s{Key=%s,Value=%s}", sep, key, value)
-		sep = ","
+		addLabel(key, value)
 	}
-	labels := sb.String()
+	labels := strings.Join(labelPairs, ",")
 	vmTagSpecs := fmt.Sprintf("ResourceType=instance,Tags=[%s]", labels)
 	volumeTagSpecs := fmt.Sprintf("ResourceType=volume,Tags=[%s]", labels)
 
