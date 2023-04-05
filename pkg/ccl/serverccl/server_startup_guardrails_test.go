@@ -30,8 +30,16 @@ import (
 func TestServerStartupGuardrails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// We need to conditionally apply the DevOffset for the version
+	// returned by this function to work both on master (where the dev
+	// offset applies) and on release branches (where it doesn't).
 	v := func(major, minor int32) roachpb.Version {
-		return roachpb.Version{Major: clusterversion.DevOffset + major, Minor: minor}
+		binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+		var offset int32
+		if binaryVersion.Major > clusterversion.DevOffset {
+			offset = clusterversion.DevOffset
+		}
+		return roachpb.Version{Major: offset + major, Minor: minor}
 	}
 
 	tests := []struct {
