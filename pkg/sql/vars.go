@@ -2648,6 +2648,23 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(execinfra.UseStreamerEnabled.Get(sv))
 		},
 	},
+
+	// CockroachDB extension.
+	`parallelize_scans`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`parallelize_scans`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("parallelize_scans", s)
+			if err != nil {
+				return err
+			}
+			m.SetParallelizeScans(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().ParallelizeScans), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 // We want test coverage for this on and off so make it metamorphic.

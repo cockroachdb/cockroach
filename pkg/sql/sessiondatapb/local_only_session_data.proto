@@ -369,6 +369,11 @@ message LocalOnlySessionData {
   // DisableDropTenant causes errors when the client
   // attempts to drop tenants or tenant records.
   bool disable_drop_tenant = 99;
+  // ParallelizeScans, when true, indicates that the TableReader DistSQL
+  // processors should parallelize scans across ranges. Note that the
+  // parallelization will still be disabled for queries with LIMITs, and it can
+  // lead to increased likelihood of OOMs.
+  bool parallelize_scans = 100;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
