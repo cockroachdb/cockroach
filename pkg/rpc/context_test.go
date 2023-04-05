@@ -2662,13 +2662,15 @@ func TestOnlyOnceDialer(t *testing.T) {
 
 type trackingListener struct {
 	net.Listener
-	mu          syncutil.Mutex
-	connections []net.Conn
-	closed      bool
+	mu             syncutil.Mutex
+	connections    []net.Conn
+	closed         bool
+	decommissioned atomic.Value
 }
 
 func (d *trackingListener) Accept() (net.Conn, error) {
 	c, err := d.Listener.Accept()
+	d.decommissioned.Store(false)
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -2687,6 +2689,7 @@ func (d *trackingListener) Close() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.closed = true
+	d.decommissioned.Store(true)
 	for _, c := range d.connections {
 		_ = c.Close()
 	}
@@ -2698,7 +2701,11 @@ func (d *trackingListener) Close() error {
 }
 
 func newRegisteredServer(
-	t testing.TB, stopper *stop.Stopper, clusterID uuid.UUID, nodeID roachpb.NodeID,
+	t testing.TB,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	clusterID uuid.UUID,
+	nodeID roachpb.NodeID,
 ) (*Context, string, chan *PingRequest, *trackingListener) {
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 1))
 	// We don't want to stall sending to this channel.
@@ -2727,8 +2734,8 @@ func newRegisteredServer(
 		return err
 	}
 
-	rpcCtx.NodeID.Set(context.Background(), nodeID)
-	rpcCtx.StorageClusterID.Set(context.Background(), clusterID)
+	rpcCtx.NodeID.Set(ctx, nodeID)
+	rpcCtx.StorageClusterID.Set(ctx, clusterID)
 	s := newTestServer(t, rpcCtx)
 
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
@@ -2736,13 +2743,22 @@ func newRegisteredServer(
 	ln, err := net.Listen("tcp", util.TestAddr.String())
 	require.Nil(t, err)
 	tracker := trackingListener{Listener: ln}
-	_ = stopper.RunAsyncTask(context.Background(), "serve", func(context.Context) {
+	tracker.decommissioned.Store(false)
+
+	rpcCtx.OnOutgoingPing = func(ctx context.Context, req *PingRequest) (bool, error) {
+		if tracker.decommissioned.Load().(bool) {
+			return true, errors.Errorf("node is decommissioned")
+		}
+		return false, nil
+	}
+
+	_ = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		closeReason := s.Serve(&tracker)
-		log.Infof(context.Background(), "Closed listener with reason %v", closeReason)
+		log.Infof(ctx, "Closed listener with reason %v", closeReason)
 	})
 
 	addr := ln.Addr().String()
-	log.Infof(context.Background(), "Listening on %s", addr)
+	log.Infof(ctx, "Listening on %s", addr)
 	// This needs to be set once we know our address so that ping requests have
 	// the correct reverse addr in them.
 	rpcCtx.Config.AdvertiseAddr = addr
@@ -2759,8 +2775,8 @@ func TestHeartbeatDialback(t *testing.T) {
 	defer stopper.Stop(ctx)
 	clusterID := uuid.MakeV4()
 
-	ctx1, remoteAddr1, pingChan1, ln1 := newRegisteredServer(t, stopper, clusterID, 1)
-	ctx2, remoteAddr2, pingChan2, ln2 := newRegisteredServer(t, stopper, clusterID, 2)
+	ctx1, remoteAddr1, pingChan1, ln1 := newRegisteredServer(t, context.Background(), stopper, clusterID, 1)
+	ctx2, remoteAddr2, pingChan2, ln2 := newRegisteredServer(t, context.Background(), stopper, clusterID, 2)
 	defer func() { netutil.FatalIfUnexpected(ln1.Close()) }()
 	defer func() { netutil.FatalIfUnexpected(ln2.Close()) }()
 

@@ -333,14 +333,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			!roachpb.IsSystemTenantID(tenantID.ToUint64()) {
 			return nil
 		}
-		if err := rpcContext.VerifyDialback(ctx, req, resp, cfg.Locality); err != nil {
-			return err
-		}
 		// Incoming ping will reject requests with codes.PermissionDenied to
 		// signal remote node that it is not considered valid anymore and
 		// operations should fail immediately.
-		_, err := checkPingFor(ctx, req.OriginNodeID, codes.PermissionDenied)
-		return err
+		if _, err := checkPingFor(ctx, req.OriginNodeID, codes.PermissionDenied); err != nil {
+			return err
+		}
+		// VerifyDialback is called after `checkPingFor` as it doesn't make sense to run
+		// it for unavailable/invalid nodes
+		if err := rpcContext.VerifyDialback(ctx, req, resp, cfg.Locality); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	rpcContext.HeartbeatCB = func() {

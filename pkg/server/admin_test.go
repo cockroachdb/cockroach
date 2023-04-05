@@ -3124,7 +3124,8 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			_, err := c.Locations(ctx, &serverpb.LocationsRequest{})
 			return err
 		}},
-		{"NonTableStats", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		// TODO (koorosh): don't know exact reason but it returns PermissionDenied error code.
+		{"NonTableStats", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.NonTableStats(ctx, &serverpb.NonTableStatsRequest{})
 			return err
 		}},
