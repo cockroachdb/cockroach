@@ -291,18 +291,6 @@ func adjustOpWeightsForCockroachVersion(
 	if err != nil {
 		return err
 	}
-	// First validate if we even support foreign key constraints on the active
-	// version, since we need builtins.
-	fkConstraintsEnabled, err := isFkConstraintsEnabled(ctx, tx)
-	if err != nil {
-		if rbErr := tx.Rollback(ctx); rbErr != nil {
-			err = errors.WithSecondaryError(err, rbErr)
-		}
-		return err
-	}
-	if !fkConstraintsEnabled {
-		opWeights[addForeignKeyConstraint] = 0
-	}
 	return tx.Rollback(ctx)
 }
 
@@ -953,22 +941,13 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	// Only generate invisible indexes when they are supported.
-	invisibleIndexesIsNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.ByKey(clusterversion.TODODelete_V22_2Start))
-	if err != nil {
-		return nil, err
-	}
-
 	def := &tree.CreateIndex{
 		Name:        tree.Name(indexName),
 		Table:       *tableName,
-		Unique:      og.randIntn(4) == 0,                                     // 25% UNIQUE
-		Inverted:    og.randIntn(10) == 0,                                    // 10% INVERTED
-		IfNotExists: og.randIntn(2) == 0,                                     // 50% IF NOT EXISTS
-		NotVisible:  og.randIntn(20) == 0 && !invisibleIndexesIsNotSupported, // 5% NOT VISIBLE
+		Unique:      og.randIntn(4) == 0,  // 25% UNIQUE
+		Inverted:    og.randIntn(10) == 0, // 10% INVERTED
+		IfNotExists: og.randIntn(2) == 0,  // 50% IF NOT EXISTS
+		NotVisible:  og.randIntn(20) == 0, // 5% NOT VISIBLE
 	}
 
 	regionColumn := ""
@@ -2495,18 +2474,6 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	if err != nil {
 		return nil, err
 	}
-	// If we aren't on 22.2 then disable the insert plugin, since 21.X
-	// can have schema instrospection queries fail due to an optimizer bug.
-	skipInserts, err := isClusterVersionLessThan(ctx, tx, clusterversion.ByKey(clusterversion.TODODelete_V22_2Start))
-	if err != nil {
-		return nil, err
-	}
-	// If inserts are to be skipped, we will intentionally, target the insert towards
-	// a non-existent table, so that they become no-ops.
-	if skipInserts {
-		tableExists = false
-		tableName.SchemaName = "InvalidObjectName"
-	}
 	if !tableExists {
 		return makeOpStmtForSingleError(OpStmtDML,
 			fmt.Sprintf(
@@ -2596,13 +2563,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
-		fkConstraintsEnabled, err := isFkConstraintsEnabled(ctx, tx)
-		if err != nil {
-			return nil, err
-		}
-		if fkConstraintsEnabled {
-			fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
-		}
+		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -3698,15 +3659,6 @@ func isClusterVersionLessThan(
 		return false, err
 	}
 	return clusterVersion.LessEq(targetVersion), nil
-}
-
-// isFkConstraintsEnabled detects if server side builtins for validating
-// foreign key constraints are available.
-func isFkConstraintsEnabled(ctx context.Context, tx pgx.Tx) (bool, error) {
-	fkConstraintDisabledVersion, err := isClusterVersionLessThan(ctx,
-		tx,
-		clusterversion.ByKey(clusterversion.TODODelete_V22_2Start))
-	return !fkConstraintDisabledVersion, err
 }
 
 func maybeExpectPotentialDescIDGenerationError(ctx context.Context, tx pgx.Tx) (bool, error) {
