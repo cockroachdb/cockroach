@@ -402,10 +402,10 @@ SELECT 'fat cats ate fat bats' @@ a FROM ab
 ----
 false
 
-statement error pq: syntax error in TSQuery: fat cats chased fat, out of shape rats
+statement error pgcode 22023 unsupported comparison operator: <string> @@ <tsvector>
 SELECT b @@ a::tsvector FROM ab
 
-statement error pq: syntax error in TSQuery: fat cats chased fat, out of shape rats
+statement error pgcode 22023 unsupported comparison operator: <tsvector> @@ <string>
 SELECT a::tsvector @@ b FROM ab
 
 query B
@@ -418,9 +418,20 @@ SELECT 'bats fats' @@ 'fat bat cat'
 ----
 false
 
-statement error pq: syntax error in TSQuery: fat cats chased fat, out of shape rats
+query B
+SELECT 'fat' @@ 'fat rats'::tsvector
+----
+true
+
+# TODO(#75101): The error should be "syntax error in TSQuery".
+statement error pgcode 22023 unsupported comparison operator: <string> @@ <tsvector>
 SELECT 'fat cats chased fat, out of shape rats' @@ 'fat rats'::tsvector
 
-statement error pq: syntax error in TSQuery: fat cats chased fat, out of shape rats
-SELECT 'fat rats'::tsvector @@ 'fat cats chased fat, out of shape rats'
+query B
+SELECT 'fat rats'::tsvector @@ 'fat'
+----
+true
 
+# TODO(#75101): The error should be "syntax error in TSQuery".
+statement error pgcode 22023 unsupported comparison operator: <tsvector> @@ <string>
+SELECT 'fat rats'::tsvector @@ 'fat cats chased fat, out of shape rats'
