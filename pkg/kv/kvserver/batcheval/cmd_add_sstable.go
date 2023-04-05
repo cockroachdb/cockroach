@@ -131,7 +131,7 @@ func EvalAddSSTable(
 	args := cArgs.Args.(*kvpb.AddSSTableRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
-	start, end := storage.MVCCKey{Key: args.Key}, storage.MVCCKey{Key: args.EndKey}
+	start, end := args.Key, args.EndKey
 	sst := args.Data
 	sstToReqTS := args.SSTTimestampToRequestTimestamp
 
@@ -139,7 +139,7 @@ func EvalAddSSTable(
 	var err error
 	ctx, span = tracing.ChildSpan(ctx, "AddSSTable")
 	defer span.Finish()
-	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
+	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start, end)
 
 	if min := addSSTableCapacityRemainingLimit.Get(&cArgs.EvalCtx.ClusterSettings().SV); min > 0 {
 		cap, err := cArgs.EvalCtx.GetEngineCapacity()
@@ -214,7 +214,7 @@ func EvalAddSSTable(
 			// TODO(dt): use a quotapool.
 			conc := int(AddSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
 			log.VEventf(ctx, 2, "rewriting timestamps for SSTable [%s,%s) from %s to %s",
-				start.Key, end.Key, sstToReqTS, h.Timestamp)
+				start, end, sstToReqTS, h.Timestamp)
 			sst, sstReqStatsDelta, err = storage.UpdateSSTTimestamps(
 				ctx, st, sst, sstToReqTS, h.Timestamp, conc, args.MVCCStats)
 			if err != nil {
@@ -243,7 +243,7 @@ func EvalAddSSTable(
 		// as it avoids expensive seeks with index/data block loading in the common
 		// case of no conflicts.
 		usePrefixSeek := false
-		bytes, err := cArgs.EvalCtx.GetApproximateDiskBytes(start.Key, end.Key)
+		bytes, err := cArgs.EvalCtx.GetApproximateDiskBytes(start, end)
 		if err == nil {
 			usePrefixSeek = bytes > prefixSeekCollisionCheckRatio*uint64(len(sst))
 		}
@@ -258,7 +258,7 @@ func EvalAddSSTable(
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 
-		log.VEventf(ctx, 2, "checking conflicts for SSTable [%s,%s)", start.Key, end.Key)
+		log.VEventf(ctx, 2, "checking conflicts for SSTable [%s,%s)", start, end)
 		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
 			args.DisallowShadowing, args.DisallowShadowingBelow, sstTimestamp, maxIntents, usePrefixSeek)
 		statsDelta.Add(sstReqStatsDelta)
@@ -270,8 +270,8 @@ func EvalAddSSTable(
 		// If not checking for MVCC conflicts, at least check for separated intents.
 		// The caller is expected to make sure there are no writers across the span,
 		// and thus no or few intents, so this is cheap in the common case.
-		log.VEventf(ctx, 2, "checking conflicting intents for SSTable [%s,%s)", start.Key, end.Key)
-		intents, err := storage.ScanIntents(ctx, readWriter, start.Key, end.Key, maxIntents, 0)
+		log.VEventf(ctx, 2, "checking conflicting intents for SSTable [%s,%s)", start, end)
+		intents, err := storage.ScanIntents(ctx, readWriter, start, end, maxIntents, 0)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "scanning intents")
 		} else if len(intents) > 0 {
@@ -297,9 +297,9 @@ func EvalAddSSTable(
 	if ok, err := sstIter.Valid(); err != nil {
 		return result.Result{}, err
 	} else if ok {
-		if unsafeKey := sstIter.UnsafeKey(); unsafeKey.Less(start) {
+		if unsafeKey := sstIter.UnsafeKey(); unsafeKey.Less(storage.MVCCKey{Key: start}) {
 			return result.Result{}, errors.Errorf("first key %s not in request range [%s,%s)",
-				unsafeKey.Key, start.Key, end.Key)
+				unsafeKey.Key, start, end)
 		}
 	}
 
@@ -308,19 +308,19 @@ func EvalAddSSTable(
 	if args.MVCCStats != nil {
 		stats = *args.MVCCStats
 	} else {
-		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", start.Key, end.Key)
+		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", start, end)
 		stats, err = storage.ComputeStatsForIter(sstIter, h.Timestamp.WallTime)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
 		}
 	}
 
-	sstIter.SeekGE(end)
+	sstIter.SeekGE(storage.MVCCKey{Key: end})
 	if ok, err := sstIter.Valid(); err != nil {
 		return result.Result{}, err
 	} else if ok {
 		return result.Result{}, errors.Errorf("last key %s not in request range [%s,%s)",
-			sstIter.UnsafeKey(), start.Key, end.Key)
+			sstIter.UnsafeKey(), start, end)
 	}
 
 	// The above MVCCStats represents what is in this new SST.
@@ -390,7 +390,7 @@ func EvalAddSSTable(
 	var mvccHistoryMutation *kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation
 	if sstToReqTS.IsEmpty() {
 		mvccHistoryMutation = &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
-			Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
+			Spans: []roachpb.Span{{Key: start, EndKey: end}},
 		}
 	}
 
@@ -414,7 +414,7 @@ func EvalAddSSTable(
 			},
 		)
 		defer existingIter.Close()
-		existingIter.SeekGE(end)
+		existingIter.SeekGE(storage.MVCCKey{Key: end})
 		if ok, err := existingIter.Valid(); err != nil {
 			return result.Result{}, errors.Wrap(err, "error while searching for non-empty span start")
 		} else if ok {
@@ -522,7 +522,7 @@ func EvalAddSSTable(
 			AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
 				Data:             sst,
 				CRC32:            util.CRC32(sst),
-				Span:             roachpb.Span{Key: start.Key, EndKey: end.Key},
+				Span:             roachpb.Span{Key: start, EndKey: end},
 				AtWriteTimestamp: sstToReqTS.IsSet(),
 			},
 			MVCCHistoryMutation: mvccHistoryMutation,

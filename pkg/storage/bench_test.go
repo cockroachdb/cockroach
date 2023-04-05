@@ -1724,7 +1724,7 @@ func runCheckSSTConflicts(
 	st := cluster.MakeTestingClusterSettings()
 	sstFile := &MemObject{}
 	sstWriter := MakeIngestionSSTWriter(ctx, st, sstFile)
-	var sstStart, sstEnd MVCCKey
+	var sstStart, sstEnd roachpb.Key
 	lastKeyNum := -1
 	lastKeyCounter := 0
 	for i := 0; i < numSstKeys; i++ {
@@ -1739,11 +1739,9 @@ func runCheckSSTConflicts(
 		key := roachpb.Key(encoding.EncodeUvarintAscending(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyNum)), uint64(1+lastKeyCounter)))
 		mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(numVersions + 3)}}
 		if i == 0 {
-			sstStart.Key = append([]byte(nil), mvccKey.Key...)
-			sstStart.Timestamp = mvccKey.Timestamp
+			sstStart = append([]byte(nil), mvccKey.Key...)
 		} else if i == numSstKeys-1 {
-			sstEnd.Key = append([]byte(nil), mvccKey.Key...)
-			sstEnd.Timestamp = mvccKey.Timestamp
+			sstEnd = append([]byte(nil), mvccKey.Key...)
 		}
 		require.NoError(b, sstWriter.PutMVCC(mvccKey, value))
 		lastKeyNum = keyNum
@@ -1752,7 +1750,7 @@ func runCheckSSTConflicts(
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, sstStart.Key, sstEnd.Key.Next(), false, hlc.Timestamp{}, hlc.Timestamp{}, math.MaxInt64, usePrefixSeek)
+		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, sstStart, sstEnd.Next(), false, hlc.Timestamp{}, hlc.Timestamp{}, math.MaxInt64, usePrefixSeek)
 		require.NoError(b, err)
 	}
 }
