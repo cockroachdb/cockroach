@@ -735,11 +735,9 @@ func TestUpdateAbortSpan(t *testing.T) {
 			defer db.Close()
 			batch := db.NewBatch()
 			defer batch.Close()
-			st := makeClusterSettingsUsingEngineIntentsSetting(db)
 			evalCtx := &MockEvalCtx{
-				ClusterSettings: st,
-				Desc:            &desc,
-				AbortSpan:       as,
+				Desc:      &desc,
+				AbortSpan: as,
 			}
 			ms := enginepb.MVCCStats{}
 			if c.before != nil {
