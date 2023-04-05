@@ -110,7 +110,11 @@ func (zc *debugZipContext) collectClusterData(
 			return err
 		})
 
-		nodesStatus, err := zc.status.Nodes(ctx, &serverpb.NodesRequest{})
+		var nodesStatus *serverpb.NodesResponse
+		err = zc.runZipFn(ctx, s, func(ctx context.Context) error {
+			nodesStatus, err = zc.status.Nodes(ctx, &serverpb.NodesRequest{})
+			return err
+		})
 		if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {
 			// running on non system tenant, use data from NodesList()
 			if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", nodesList, err); cErr != nil {

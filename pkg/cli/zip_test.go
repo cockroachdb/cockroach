@@ -256,7 +256,6 @@ create table defaultdb."../system"(x int);
 // need the SSL certs dir to run a CLI test securely.
 func TestUnavailableZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 53306, "flaky test")
 
 	skip.UnderShort(t)
 	// Race builds make the servers so slow that they report spurious
@@ -326,6 +325,16 @@ func TestUnavailableZip(t *testing.T) {
 	// In order to avoid non-determinism here, we erase the output of
 	// the range retrieval.
 	re := regexp.MustCompile(`(?m)^(requesting ranges.*found|writing: debug/nodes/\d+/ranges).*\n`)
+	out = re.ReplaceAllString(out, ``)
+
+	// In order to avoid non-determinism here, we erase the output of
+	// the liveness retrieval.
+	re = regexp.MustCompile(`(?m)^(\[cluster\] requesting liveness: last request failed:).*\n`)
+	out = re.ReplaceAllString(out, ``)
+
+	// In order to avoid non-determinism here, we erase the output of
+	// the settings retrieval.
+	re = regexp.MustCompile(`(?m)^(\[cluster\] requesting data for debug/settings).*\n`)
 	out = re.ReplaceAllString(out, ``)
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "unavailable"),
