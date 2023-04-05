@@ -3,13 +3,14 @@
 # This command is used by bazel as the workspace_status_command
 # to implement build stamping with git information.
 
-# Usage: stamp.sh [target-triple] [build-channel] [build-type]
+# Usage: stamp.sh [target-triple] [build-channel] [build-type] [release-version]
 # All arguments are optional and have appropriate defaults. In this way,
 # stamp.sh with no arguments is appropriate as the `workplace_status_command`
 # for a development build.
 #  target-triple: defaults to the value of `cc -dumpmachine`
 #  build-channel: defaults to `unknown`, but can be `official-binary`
 #  build-type: defaults to `development`, but can be `release`
+#  release-version: defaults to '' in which case binary determines own version.
 
 set -euo pipefail
 
@@ -49,6 +50,16 @@ else
     shift 1
 fi
 
+
+# Handle release version.
+if [ -z "${1+x}" ]
+then
+    BUILD_RELEASE_VERSION=""
+else
+    BUILD_RELEASE_VERSION="$1"
+    shift 1
+fi
+
 if [ "$BUILD_TYPE" = "release" ]
 then
     CRASH_REPORT_ENV=$(cat ./pkg/build/version.txt)
@@ -72,6 +83,7 @@ STABLE_BUILD_CHANNEL ${BUILD_CHANNEL-}
 STABLE_BUILD_TARGET_TRIPLE ${TARGET_TRIPLE-}
 STABLE_BUILD_TYPE ${BUILD_TYPE-}
 STABLE_CRASH_REPORT_ENV ${CRASH_REPORT_ENV-}
+BUILD_RELEASE_VERSION ${BUILD_RELEASE_VERSION-}
 BUILD_REV ${BUILD_REV-}
 BUILD_UTCTIME ${BUILD_UTCTIME-}
 EOF

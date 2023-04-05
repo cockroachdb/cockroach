@@ -42,7 +42,8 @@ var (
 	envChannel   = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
 	//go:embed version.txt
 	cockroachVersion string
-	binaryVersion    = computeBinaryVersion(cockroachVersion, rev)
+	releaseVersion   string
+	binaryVersion    = computeBinaryVersion(releaseVersion, cockroachVersion, rev)
 )
 
 const (
@@ -61,7 +62,10 @@ func SeemsOfficial() bool {
 	return channel == DefaultTelemetryChannel || channel == FIPSTelemetryChannel
 }
 
-func computeBinaryVersion(versionTxt, revision string) string {
+func computeBinaryVersion(releaseVersion, versionTxt, revision string) string {
+	if releaseVersion != "" {
+		return releaseVersion
+	}
 	txt := strings.TrimSuffix(versionTxt, "\n")
 	v, err := version.Parse(txt)
 	if err != nil {

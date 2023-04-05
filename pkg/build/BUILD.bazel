@@ -21,6 +21,7 @@ go_library(
         "github.com/cockroachdb/cockroach/pkg/build.rev": "{BUILD_REV}",
         "github.com/cockroachdb/cockroach/pkg/build.typ": "{STABLE_BUILD_TYPE}",
         "github.com/cockroachdb/cockroach/pkg/build.utcTime": "{BUILD_UTCTIME}",
+        "github.com/cockroachdb/cockroach/pkg/build.releaseVersion": "{BUILD_RELEASE_VERSION}",
     },
     deps = [
         "//pkg/util/envutil",
