@@ -6608,7 +6608,19 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	const nodes = 1
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
-	args := base.TestServerArgs{ExternalIODir: baseDir}
+
+	// Disable stats collection on system tables before the cluster is started,
+	// otherwise there is a race condition where stats may be collected before we
+	// can disable them with `SET CLUSTER SETTING`. We disable stats collection on
+	// system tables so that we can collect statistics on the imported tables
+	// within the retry time limit.
+	st := cluster.MakeClusterSettings()
+	stats.AutomaticStatisticsOnSystemTables.Override(context.Background(), &st.SV, false)
+	args := base.TestServerArgs{
+		Settings:          st,
+		DefaultTestTenant: base.TestTenantDisabled,
+		ExternalIODir:     baseDir,
+	}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
