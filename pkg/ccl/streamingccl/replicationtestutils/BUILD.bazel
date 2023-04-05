@@ -25,6 +25,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
+        "//pkg/util/contextutil",  #KEEP
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
@@ -70,9 +71,9 @@ go_library(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/contextutil",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
-        "//pkg/util/syncutil",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
