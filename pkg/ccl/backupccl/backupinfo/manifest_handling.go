@@ -97,6 +97,16 @@ var WriteMetadataSST = settings.RegisterBoolSetting(
 	util.ConstantWithMetamorphicTestBool("write-metadata-sst", false),
 )
 
+// WriteMetadataWithFilesSST controls if we write a `BACKUP_METADATA` file
+// along with an SST containing the list of `BackupManifest_Files`. This new format
+// of metadata is
+var WriteMetadataWithFilesSST = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"backup.write_metadata_with_files_sst.enabled",
+	"write BACKUP metadata along with a supporting SST file",
+	util.ConstantWithMetamorphicTestBool("backup.write_metadata_with_files_sst.enabled", true),
+)
+
 // IsGZipped detects whether the given bytes represent GZipped data. This check
 // is used rather than a standard implementation such as http.DetectContentType
 // since some zipped data may be mis-identified by that method. We've seen
