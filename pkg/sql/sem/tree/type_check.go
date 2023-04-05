@@ -2345,8 +2345,6 @@ func typeCheckComparisonOp(
 				leftExprs := make(Exprs, 1)
 				leftExprs[0] = typedLeft
 				foldedLeft = &FuncExpr{Func: WrapFunction("to_tsvector"), Exprs: leftExprs, AggType: GeneralAgg}
-			} else if rightFamily == types.TSVectorFamily {
-				foldedLeft = &CastExpr{Expr: typedLeft, Type: types.TSQuery, SyntaxMode: CastShort}
 			}
 		}
 
@@ -2359,8 +2357,6 @@ func typeCheckComparisonOp(
 				rightExprs := make(Exprs, 1)
 				rightExprs[0] = typedRight
 				foldedRight = &FuncExpr{Func: WrapFunction(funcName), Exprs: rightExprs, AggType: GeneralAgg}
-			} else if leftFamily == types.TSVectorFamily {
-				foldedRight = &CastExpr{Expr: typedRight, Type: types.TSQuery, SyntaxMode: CastShort}
 			}
 		}
 	}
