@@ -59,6 +59,13 @@ func Initialize(ctx context.Context, ver roachpb.Version, sv *settings.Values) e
 	return version.initialize(ctx, ver, sv)
 }
 
+// AssertInitialized checks whether Initialize() has been called yet. This
+// is used in test code to assert that an initial cluster version has
+// been set when that matters.
+func AssertInitialized(ctx context.Context, sv *settings.Values) {
+	_ = version.activeVersion(ctx, sv)
+}
+
 // Handle is the interface through which callers access the active cluster
 // version and this binary's version details.
 type Handle interface {
