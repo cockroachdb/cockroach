@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/lib/pq/oid"
 )
 
@@ -376,6 +377,9 @@ type Planner interface {
 	// EnforceHomeRegion returns true if the statement being planned is an ANSI
 	// DML statement and the enforce_home_region session setting is true.
 	EnforceHomeRegion() bool
+
+	// GetRangeDescIterator gets a rangedesc.Iterator for the specified span.
+	GetRangeDescIterator(context.Context, roachpb.Span) (rangedesc.Iterator, error)
 
 	// GetRangeDescByID gets the RangeDescriptor by the specified RangeID.
 	GetRangeDescByID(context.Context, roachpb.RangeID) (roachpb.RangeDescriptor, error)

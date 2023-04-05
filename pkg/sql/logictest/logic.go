@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1544,19 +1545,32 @@ func (t *logicTest) newCluster(
 			}
 		}
 
-		tenantID := serverutils.TestTenantID().ToUint64()
+		tenantID := serverutils.TestTenantID()
 		for name, value := range clusterSettings {
 			query := fmt.Sprintf("ALTER TENANT [$1] SET CLUSTER SETTING %s = $2", name)
-			if _, err := conn.Exec(query, tenantID, value); err != nil {
+			if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		for name, value := range toa.capabilities {
+		capabilities := toa.capabilities
+		for name, value := range capabilities {
 			query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s = $2", name)
-			if _, err := conn.Exec(query, tenantID, value); err != nil {
+			if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
 				t.Fatal(err)
 			}
+		}
+		numCapabilities := len(capabilities)
+		if numCapabilities > 0 {
+			capabilityMap := make(map[tenantcapabilities.ID]string, numCapabilities)
+			for k, v := range capabilities {
+				capability, ok := tenantcapabilities.FromName(k)
+				if !ok {
+					t.Fatalf("cannot get capability from name %q", k)
+				}
+				capabilityMap[capability.ID()] = v
+			}
+			t.cluster.WaitForTenantCapabilities(t.t(), tenantID, capabilityMap)
 		}
 	}
 

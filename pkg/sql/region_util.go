@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -2380,6 +2381,13 @@ func (p *planner) IsANSIDML() bool {
 // EnforceHomeRegion is part of the eval.Planner interface.
 func (p *planner) EnforceHomeRegion() bool {
 	return p.EvalContext().SessionData().EnforceHomeRegion && p.stmt.IsANSIDML()
+}
+
+// GetRangeDescIterator is part of the eval.Planner interface.
+func (p *planner) GetRangeDescIterator(
+	ctx context.Context, span roachpb.Span,
+) (rangedesc.Iterator, error) {
+	return p.ExecCfg().RangeDescIteratorFactory.NewIterator(ctx, span)
 }
 
 // GetRangeDescByID is part of the eval.Planner interface.
