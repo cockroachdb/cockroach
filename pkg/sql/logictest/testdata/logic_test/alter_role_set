@@ -172,16 +172,19 @@ statement ok
 REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 
 # Verify users with MODIFYSQLCLUSTERSETTING can ALTER ROLE SET
+skipif config local-mixed-22.2-23.1
 statement ok
 GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
 
 user testuser
 
+skipif config local-mixed-22.2-23.1
 statement ok
 ALTER ROLE testuser RESET application_name
 
 user root
 
+skipif config local-mixed-22.2-23.1
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
 
