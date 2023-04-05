@@ -301,22 +301,24 @@ func (t *Tracer) runPeriodicSnapshotsLoop(
 	}
 }
 
-// MaybeRecordStackHistory records in the span found in the passed context, if
-// there is one and it is verbose or has a sink, any stacks found for the
-// current goroutine in the currently stored tracer automatic snapshots, since
-// the passed time (generally when this goroutine started processing this
+// MaybeFetchCapturedStackHistory returns any stacks found for the current
+// goroutine in the currently stored tracer automatic snapshots, since the
+// passed time (generally when this goroutine started processing this
 // request/op). See the "trace.snapshot.rate" setting for controlling whether
 // such automatic snapshots are available to be searched and if so at what
-// granularity.
-func (sp *Span) MaybeRecordStackHistory(since time.Time) {
+// granularity. This method only returns captured stacks if the receiver `sp` is
+// non-nil and is recording a trace.
+func (sp *Span) MaybeFetchCapturedStackHistory(since time.Time) []*CapturedStack {
 	if sp == nil || sp.RecordingType() == tracingpb.RecordingOff {
-		return
+		return nil
 	}
 
 	t := sp.Tracer()
 	id := int(goid.Get())
 
 	var prevStack string
+	var capturedStacks []*CapturedStack
+	recordedAt := timeutil.Now()
 
 	t.snapshotsMu.Lock()
 	defer t.snapshotsMu.Unlock()
@@ -327,15 +329,20 @@ func (sp *Span) MaybeRecordStackHistory(since time.Time) {
 		}
 		stack, ok := s.Stacks[id]
 		if ok {
-			sp.RecordStructured(stackDelta(prevStack, stack, timeutil.Since(s.CapturedAt)))
+			if capturedStacks == nil {
+				capturedStacks = make([]*CapturedStack, 0, t.snapshotsMu.autoSnapshots.Len())
+			}
+			capturedStacks = append(capturedStacks, stackDelta(prevStack, stack, timeutil.Since(s.CapturedAt), recordedAt))
 			prevStack = stack
 		}
 	}
+
+	return capturedStacks
 }
 
-func stackDelta(base, change string, age time.Duration) Structured {
+func stackDelta(base, change string, age time.Duration, recordedAt time.Time) *CapturedStack {
 	if base == "" {
-		return &CapturedStack{Stack: change, Age: age}
+		return &CapturedStack{Stack: change, Age: age, RecordedAt: recordedAt.UnixNano()}
 	}
 
 	var i, lines int
@@ -353,5 +360,6 @@ func stackDelta(base, change string, age time.Duration) Structured {
 		SharedSuffix: int32(i),
 		SharedLines:  int32(lines),
 		Age:          age,
+		RecordedAt:   recordedAt.UnixNano(),
 	}
 }

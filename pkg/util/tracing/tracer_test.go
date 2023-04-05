@@ -984,7 +984,7 @@ func blockingCaller(ch chan<- struct{}) {
 	blockingFunc2(ch)
 }
 
-// TestTracerStackHistory tests MaybeRecordStackHistory.
+// TestTracerStackHistory tests MaybeFetchCapturedStackHistory.
 func TestTracerStackHistory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tr := NewTracer()
@@ -1009,7 +1009,12 @@ func TestTracerStackHistory(t *testing.T) {
 		blockingFunc3(ch)
 		blockingCaller(ch)
 
-		sp.MaybeRecordStackHistory(started)
+		capturedStacks := sp.MaybeFetchCapturedStackHistory(started)
+		// Emit the captured stacks as StructuredEvents because that is how slow KV
+		// requests will emit these stacks.
+		for _, c := range capturedStacks {
+			sp.RecordStructured(c)
+		}
 
 		rec := sp.FinishAndGetConfiguredRecording()[0]
 		require.Len(t, rec.StructuredRecords, 3)
@@ -1037,6 +1042,7 @@ func TestTracerStackHistory(t *testing.T) {
 
 func TestStackDelta(t *testing.T) {
 	notUsed := time.Duration(1)
+	capturedAt := timeutil.Now()
 	for _, tc := range []struct {
 		name          string
 		base          string
@@ -1052,6 +1058,7 @@ func TestStackDelta(t *testing.T) {
 				SharedSuffix: 4,
 				SharedLines:  0,
 				Age:          notUsed,
+				RecordedAt:   capturedAt.UnixNano(),
 			},
 		},
 		{
@@ -1063,6 +1070,7 @@ func TestStackDelta(t *testing.T) {
 				SharedSuffix: 3,
 				SharedLines:  0,
 				Age:          notUsed,
+				RecordedAt:   capturedAt.UnixNano(),
 			},
 		},
 		{
@@ -1074,6 +1082,7 @@ func TestStackDelta(t *testing.T) {
 				SharedSuffix: 3,
 				SharedLines:  0,
 				Age:          notUsed,
+				RecordedAt:   capturedAt.UnixNano(),
 			},
 		},
 		{
@@ -1085,6 +1094,7 @@ func TestStackDelta(t *testing.T) {
 				SharedSuffix: 0,
 				SharedLines:  0,
 				Age:          notUsed,
+				RecordedAt:   capturedAt.UnixNano(),
 			},
 		},
 		{
@@ -1096,6 +1106,7 @@ func TestStackDelta(t *testing.T) {
 				SharedSuffix: 0,
 				SharedLines:  0,
 				Age:          notUsed,
+				RecordedAt:   capturedAt.UnixNano(),
 			},
 		},
 		{
@@ -1107,13 +1118,13 @@ func TestStackDelta(t *testing.T) {
 				SharedSuffix: 0,
 				SharedLines:  0,
 				Age:          notUsed,
+				RecordedAt:   capturedAt.UnixNano(),
 			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := stackDelta(tc.base, tc.change, notUsed)
-			stack := s.(*CapturedStack)
-			require.Equal(t, tc.expectedStack, *stack)
+			s := stackDelta(tc.base, tc.change, notUsed, capturedAt)
+			require.Equal(t, tc.expectedStack, *s)
 		})
 	}
 }
