@@ -62,19 +62,16 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		if err := serverCfg.InitSQLServer(ctx); err != nil {
 			return err
 		}
-		// This value is injected in order to have something populated during startup.
-		// In the initial 20.2 release of multi-tenant clusters, no version state was
-		// ever populated in the version cluster setting. A value is populated during
-		// the activation of 21.1. See the documentation attached to the TenantCluster
-		// in upgrade/upgradecluster for more details on the tenant upgrade flow.
-		// Note that the value of 21.1 is populated when a tenant cluster is created
-		// during 21.1 in crdb_internal.create_tenant.
+
+		// We need a value in the version setting prior to the update
+		// coming from the system.settings table. This value must be valid
+		// and compatible with the state of the tenant's keyspace.
 		//
-		// Note that the tenant will read the value in the system.settings table
-		// before accepting SQL connections.
-		//
-		// TODO(knz): Check if this special initialization can be removed.
-		// See: https://github.com/cockroachdb/cockroach/issues/90831
+		// Since we don't know at which binary version the tenant
+		// keyspace was initialized, we must be conservative and
+		// assume it was created a long time ago; and that we may
+		// have to run all known migrations since then. So initialize
+		// the version setting to the minimum supported version.
 		st := serverCfg.BaseConfig.Settings
 		return clusterversion.Initialize(
 			ctx, st.Version.BinaryMinSupportedVersion(), &st.SV,
