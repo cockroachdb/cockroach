@@ -9,10 +9,7 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/bulk",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/util/syncutil",
-        "//pkg/util/tracing",
-    ],
+    deps = ["//pkg/util/tracing"],
 )
 
 go_test(
