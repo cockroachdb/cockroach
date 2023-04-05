@@ -564,6 +564,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
@@ -707,6 +708,7 @@ func TestMutationsAndSettingOverrideChannels(t *testing.T) {
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
+	AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
 	r := Refresher{
 		st:        st,
