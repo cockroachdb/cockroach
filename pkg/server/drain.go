@@ -401,8 +401,16 @@ func (s *drainServer) drainClients(
 	// errors/warnings, if any.
 	log.Infof(ctx, "SQL server drained successfully; SQL queries cannot execute any more")
 
-	// FIXME(Jeff): Add code here to remove the sql_instances row or
-	// something similar.
+	session, err := s.sqlServer.sqlLivenessProvider.Release(ctx)
+	if err != nil {
+		return err
+	}
+
+	instanceID := s.sqlServer.sqlIDContainer.SQLInstanceID()
+	err = s.sqlServer.sqlInstanceStorage.ReleaseInstance(ctx, session, instanceID)
+	if err != nil {
+		return err
+	}
 
 	// Mark the node as fully drained.
 	s.sqlServer.gracefulDrainComplete.Set(true)
