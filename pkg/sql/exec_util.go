@@ -1614,6 +1614,10 @@ type ExecutorTestingKnobs struct {
 
 	// BeforeCopyFromInsert, if set, will be called during a COPY FROM insert statement.
 	BeforeCopyFromInsert func() error
+
+	// ForceSQLLivenessSession will force the use of a sqlliveness session for
+	// transaction deadlines even in the system tenant.
+	ForceSQLLivenessSession bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -2115,6 +2119,7 @@ type SessionDefaults map[string]string
 type SessionArgs struct {
 	User                        username.SQLUsername
 	IsSuperuser                 bool
+	IsSSL                       bool
 	SystemIdentity              username.SQLUsername
 	SessionDefaults             SessionDefaults
 	CustomOptionSessionDefaults SessionDefaults

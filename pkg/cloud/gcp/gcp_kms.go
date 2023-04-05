@@ -116,7 +116,7 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	case cloud.AuthParamImplicit:
 		if env.KMSConfig().DisableImplicitCredentials {
 			return nil, errors.New(
-				"implicit credentials disallowed for gcs due to --external-io-implicit-credentials flag")
+				"implicit credentials disallowed for gcs due to --external-io-disable-implicit-credentials flag")
 		}
 		// If implicit credentials used, no client options needed.
 	default:

@@ -36,7 +36,11 @@ import (
 const (
 	defaultProject = "cockroach-ephemeral"
 	// ProviderName is gce.
-	ProviderName = "gce"
+	ProviderName        = "gce"
+	DefaultImage        = "ubuntu-2004-focal-v20210603"
+	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230302"
+	defaultImageProject = "ubuntu-os-cloud"
+	FIPSImageProject    = "ubuntu-os-pro-cloud"
 )
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
@@ -49,6 +53,9 @@ func DefaultProject() string {
 
 // projects for which a cron GC job exists.
 var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
+
+// Denotes if this provider was successfully initialized.
+var initialized = false
 
 // Init registers the GCE provider into vm.Providers.
 //
@@ -66,6 +73,7 @@ func Init() error {
 			"(https://cloud.google.com/sdk/downloads)")
 		return errors.New("gcloud not found")
 	}
+	initialized = true
 	vm.Providers[ProviderName] = providerInstance
 	return nil
 }
@@ -225,7 +233,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		MachineType:          "n1-standard-4",
 		MinCPUPlatform:       "",
 		Zones:                nil,
-		Image:                "ubuntu-2004-focal-v20210603",
+		Image:                DefaultImage,
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
@@ -290,7 +298,7 @@ type snapshotCreateJson struct {
 }
 
 func (p *Provider) SnapshotVolume(
-	volume vm.Volume, name, description string, labels map[string]string,
+	l *logger.Logger, volume vm.Volume, name, description string, labels map[string]string,
 ) (string, error) {
 	args := []string{
 		"compute",
@@ -320,9 +328,9 @@ func (p *Provider) SnapshotVolume(
 		"add-labels", name,
 		"--labels", s[:len(s)-1],
 	}
-
 	cmd := exec.Command("gcloud", args...)
 	_, err = cmd.CombinedOutput()
+
 	if err != nil {
 		return "", err
 	}
@@ -345,7 +353,9 @@ type describeVolumeCommandResponse struct {
 	Users                  []string          `json:"users"`
 }
 
-func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err error) {
+func (p *Provider) CreateVolume(
+	l *logger.Logger, vco vm.VolumeCreateOpts,
+) (vol vm.Volume, err error) {
 	// TODO(leon): SourceSnapshotID and IOPS, are not handled
 	if vco.SourceSnapshotID != "" || vco.IOPS != 0 {
 		err = errors.New("Creating a volume with SourceSnapshotID or IOPS is not supported at this time.")
@@ -415,6 +425,7 @@ func (p *Provider) CreateVolume(vco vm.VolumeCreateOpts) (vol vm.Volume, err err
 	}
 	cmd := exec.Command("gcloud", args...)
 	_, err = cmd.CombinedOutput()
+
 	if err != nil {
 		return vol, err
 	}
@@ -445,7 +456,7 @@ type attachDiskCmdDisk struct {
 	Type       string `json:"type"`
 }
 
-func (p *Provider) AttachVolumeToVM(volume vm.Volume, vm *vm.VM) (string, error) {
+func (p *Provider) AttachVolumeToVM(l *logger.Logger, volume vm.Volume, vm *vm.VM) (string, error) {
 	// Volume attach
 	args := []string{
 		"compute",
@@ -582,9 +593,10 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
-	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-2004-focal-v20210603",
+	flags.StringVar(&o.Image, ProviderName+"-image", DefaultImage,
 		"Image to use to create the vm, "+
-			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images")
+			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images. "+
+			"Note: this option is ignored if --fips is passed.")
 
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
@@ -629,7 +641,7 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 }
 
 // CleanSSH TODO(peter): document
-func (p *Provider) CleanSSH() error {
+func (p *Provider) CleanSSH(l *logger.Logger) error {
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet", "--remove"}
 		cmd := exec.Command("gcloud", args...)
@@ -643,7 +655,7 @@ func (p *Provider) CleanSSH() error {
 }
 
 // ConfigSSH is part of the vm.Provider interface
-func (p *Provider) ConfigSSH(zones []string) error {
+func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 	// Populate SSH config files with Host entries from each instance in active projects.
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet"}
@@ -688,12 +700,19 @@ func (p *Provider) Create(
 	}
 
 	// Fixed args.
+	image := providerOpts.Image
+	imageProject := defaultImageProject
+	if opts.EnableFIPS {
+		// NB: if FIPS is enabled, it overrides the image passed via CLI (--gce-image)
+		image = FIPSImage
+		imageProject = FIPSImageProject
+	}
 	args := []string{
 		"compute", "instances", "create",
 		"--subnet", "default",
 		"--scopes", "cloud-platform",
-		"--image", providerOpts.Image,
-		"--image-project", "ubuntu-os-cloud",
+		"--image", image,
+		"--image-project", imageProject,
 		"--boot-disk-type", "pd-ssd",
 	}
 
@@ -757,7 +776,7 @@ func (p *Provider) Create(
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks)
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.EnableFIPS)
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
@@ -826,7 +845,7 @@ func min(a, b int) int {
 }
 
 // Delete TODO(peter): document
-func (p *Provider) Delete(vms vm.List) error {
+func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	// Map from project to map of zone to list of machines in that project/zone.
 	projectZoneMap := make(map[string]map[string][]string)
 	for _, v := range vms {
@@ -870,7 +889,7 @@ func (p *Provider) Delete(vms vm.List) error {
 }
 
 // Reset implements the vm.Provider interface.
-func (p *Provider) Reset(vms vm.List) error {
+func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 	// Map from project to map of zone to list of machines in that project/zone.
 	projectZoneMap := make(map[string]map[string][]string)
 	for _, v := range vms {
@@ -913,7 +932,7 @@ func (p *Provider) Reset(vms vm.List) error {
 }
 
 // Extend TODO(peter): document
-func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
+func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
 	// The gcloud command only takes a single instance.  Unlike Delete() above, we have to
 	// perform the iteration here.
 	for _, v := range vms {
@@ -935,7 +954,7 @@ func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 }
 
 // FindActiveAccount TODO(peter): document
-func (p *Provider) FindActiveAccount() (string, error) {
+func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 	args := []string{"auth", "list", "--format", "json", "--filter", "status~ACTIVE"}
 
 	accounts := make([]jsonAuth, 0)
@@ -1026,7 +1045,7 @@ func (p *Provider) Name() string {
 
 // Active is part of the vm.Provider interface.
 func (p *Provider) Active() bool {
-	return true
+	return initialized
 }
 
 // ProjectActive is part of the vm.Provider interface.

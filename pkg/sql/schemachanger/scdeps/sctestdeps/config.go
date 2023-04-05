@@ -130,7 +130,9 @@ func WithBackfiller(backfiller scexec.Backfiller) Option {
 func WithComments(comments map[catalogkeys.CommentKey]string) Option {
 	return optionFunc(func(state *TestState) {
 		for key, cmt := range comments {
-			state.committed.UpsertComment(key, cmt)
+			if err := state.committed.UpsertComment(key, cmt); err != nil {
+				panic(err)
+			}
 		}
 	})
 }

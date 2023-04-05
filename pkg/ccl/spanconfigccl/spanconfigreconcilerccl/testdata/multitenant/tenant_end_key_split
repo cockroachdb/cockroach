@@ -17,8 +17,8 @@ initialize tenant=11
 state offset=59
 ----
 ...
-/Table/6{0-1}                              database system (host)
-/Table/6{1-2}                              database system (host)
+/Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Tenant/11{-\x00}                          database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
 
@@ -36,7 +36,7 @@ reconcile tenant=11
 state offset=60 limit=3
 ----
 ...
-/Table/6{1-2}                              database system (host)
+/Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Tenant/11{-/Table/4}                      database system (tenant)
 /Tenant/11/Table/{4-5}                     database system (tenant)
 ...
@@ -115,8 +115,8 @@ initialize tenant=10
 state offset=59 limit=5
 ----
 ...
-/Table/6{0-1}                              database system (host)
-/Table/6{1-2}                              database system (host)
+/Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Tenant/10{-\x00}                          database system (tenant)
 /Tenant/11{-/Table/4}                      database system (tenant)
 /Tenant/11/Table/{4-5}                     database system (tenant)

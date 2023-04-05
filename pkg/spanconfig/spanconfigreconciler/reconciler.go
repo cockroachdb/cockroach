@@ -384,7 +384,12 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		targets = append(targets,
 			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeAllTenantKeyspaceTargetsSet(f.tenID)))
 	}
-	store := spanconfigstore.New(roachpb.SpanConfig{}, f.settings, f.knobs)
+	// The reconciler doesn't do any bounds checks or clamping, so it shouldn't
+	// need access to tenant capabilities (and by extension span config bounds).
+	store := spanconfigstore.New(
+		roachpb.SpanConfig{}, f.settings,
+		spanconfigstore.NewEmptyBoundsReader(), f.knobs,
+	)
 	{
 		// Fully populate the store with KVAccessor contents.
 		records, err := f.kvAccessor.GetSpanConfigRecords(ctx, targets)

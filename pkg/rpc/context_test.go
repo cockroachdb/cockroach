@@ -1176,7 +1176,9 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		defer mu.Unlock()
 		n := len(mu.conns)
 		for i := n - 1; i >= 0; i-- {
-			if err := mu.conns[i].Close(); err != nil {
+			// This can spuriously return ErrClosed since the listener is closed
+			// before us.
+			if err := mu.conns[i].Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 				return 0, err
 			}
 			mu.conns = mu.conns[:i]
@@ -1272,10 +1274,16 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		return nil
 	})
 
+	// TODO(baptist): Better understand when this happens. It appears we can get
+	// spurious connections to other tests on a stress run. This has been
+	// happening for a while, but only comes out rarely when this package is
+	// stressed. This test is very aggressive since it is calling GRPCDialNode in
+	// a busy loop for 50ms.
+	expected := "doesn't match server cluster ID"
 	// Should stay unhealthy despite reconnection attempts.
 	for then := timeutil.Now(); timeutil.Since(then) < 50*clientCtx.Config.RPCHeartbeatTimeout; {
 		err := clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
-		if !isUnhealthy(err) {
+		if !isUnhealthy(err) && !testutils.IsError(err, expected) {
 			t.Fatal(err)
 		}
 	}

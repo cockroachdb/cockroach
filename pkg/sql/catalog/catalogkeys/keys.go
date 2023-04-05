@@ -74,6 +74,12 @@ var AllCommentTypes = []CommentType{
 	ConstraintCommentType,
 }
 
+// IsValidCommentType checks if a given comment type is in the valid value
+// range.
+func IsValidCommentType(t CommentType) bool {
+	return t >= 0 && t <= MaxCommentTypeValue
+}
+
 func init() {
 	if len(AllCommentTypes) != int(MaxCommentTypeValue+1) {
 		panic("AllCommentTypes should contains all comment types.")

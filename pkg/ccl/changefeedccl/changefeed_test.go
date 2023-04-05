@@ -4692,12 +4692,12 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `this sink is incompatible with option confluent_schema_registry`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', confluent_schema_registry=$2`,
-		`experimental-nodelocal://0/bar`, schemaReg.URL(),
+		`experimental-nodelocal://1/bar`, schemaReg.URL(),
 	)
 	sqlDB.ExpectErr(
 		t, `this sink is incompatible with envelope=key_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='key_only'`,
-		`experimental-nodelocal://0/bar`,
+		`experimental-nodelocal://1/bar`,
 	)
 
 	// WITH key_in_value requires envelope=wrapped
@@ -4877,17 +4877,17 @@ func TestChangefeedErrors(t *testing.T) {
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErr(
-		t, `invalid option value webhook_sink_config, all config values must be non-negative`,
+		t, `invalid sink config, all values must be non-negative`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Flush": {"Messages": -100, "Frequency": "1s"}}'`,
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErr(
-		t, `invalid option value webhook_sink_config, all config values must be non-negative`,
+		t, `invalid sink config, all values must be non-negative`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Flush": {"Messages": 100, "Frequency": "-1s"}}'`,
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErr(
-		t, `invalid option value webhook_sink_config, flush frequency is not set, messages may never be sent`,
+		t, `invalid sink config, Flush.Frequency is not set, messages may never be sent`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Flush": {"Messages": 100}}'`,
 		`webhook-https://fake-host`,
 	)
@@ -4907,17 +4907,17 @@ func TestChangefeedErrors(t *testing.T) {
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErr(
-		t, `max retries must be either a positive int or 'inf' for infinite retries.`,
+		t, `Retry.Max must be either a positive int or 'inf' for infinite retries.`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Retry": {"Max": "not valid"}}'`,
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErr(
-		t, `max retry count must be a positive integer. use 'inf' for infinite retries.`,
+		t, `Retry.Max must be a positive integer. use 'inf' for infinite retries.`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Retry": {"Max": 0}}'`,
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErr(
-		t, `max retry count must be a positive integer. use 'inf' for infinite retries.`,
+		t, `Retry.Max must be a positive integer. use 'inf' for infinite retries.`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Retry": {"Max": -1}}'`,
 		`webhook-https://fake-host`,
 	)

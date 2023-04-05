@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -882,7 +883,7 @@ func tsOrNull(micros int64) (tree.Datum, error) {
 }
 
 const (
-	// systemJobsAndJobInfoBaseQuery consults both the `system.jobs` and
+	// SystemJobsAndJobInfoBaseQuery consults both the `system.jobs` and
 	// `system.job_info` tables to return relevant information about a job.
 	//
 	// NB: Every job on creation writes a row each for its payload and progress to
@@ -892,17 +893,33 @@ const (
 	// Theoretically, a job could have no rows corresponding to its progress and
 	// so we perform a LEFT JOIN to get a NULL value when no progress row is
 	// found.
-	systemJobsAndJobInfoBaseQuery = `
+	SystemJobsAndJobInfoBaseQuery = `
 WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload'),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress')
+	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' ORDER BY written DESC),
+	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' ORDER BY written DESC)
 	SELECT 
+		DISTINCT(id), status, created, payload.value AS payload, progress.value AS progress,
+		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
+	FROM system.jobs AS j
+	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
+	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
+`
+
+	// systemJobsAndJobInfoBaseQueryWithIDPredicate is the same as
+	// systemJobsAndJobInfoBaseQuery but with a predicate on `job_id` in the CTE
+	// queries.
+	systemJobsAndJobInfoBaseQueryWithIDPredicate = `
+WITH
+	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' AND job_id = $1 ORDER BY written DESC LIMIT 1),
+	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' AND job_id = $1 ORDER BY written DESC LIMIT 1)
+	SELECT
 		id, status, created, payload.value AS payload, progress.value AS progress,
 		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
 	FROM system.jobs AS j
 	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
 	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
 `
+
 	// Before clusterversion.V23_1JobInfoTableIsBackfilled, the system.job_info
 	// table has not been fully populated with the payload and progress of jobs in
 	// the cluster.
@@ -941,7 +958,10 @@ func getInternalSystemJobsQueryFromClusterVersion(
 ) string {
 	var baseQuery string
 	if version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
-		baseQuery = systemJobsAndJobInfoBaseQuery
+		baseQuery = SystemJobsAndJobInfoBaseQuery
+		if predicate == jobID {
+			baseQuery = systemJobsAndJobInfoBaseQueryWithIDPredicate
+		}
 	} else if version.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
 		baseQuery = systemJobsBaseQuery
 	} else {
@@ -5741,7 +5761,10 @@ func makeClusterDatabasePrivilegesFromDescriptor(
 	ctx context.Context, p *planner, addRow func(...tree.Datum) error,
 ) func(catalog.DatabaseDescriptor) error {
 	return func(db catalog.DatabaseDescriptor) error {
-		privs := db.GetPrivileges().Show(privilege.Database, true /* showImplicitOwnerPrivs */)
+		privs, err := db.GetPrivileges().Show(privilege.Database, true /* showImplicitOwnerPrivs */)
+		if err != nil {
+			return err
+		}
 		dbNameStr := tree.NewDString(db.GetName())
 		// TODO(knz): This should filter for the current user, see
 		// https://github.com/cockroachdb/cockroach/issues/35572
@@ -6073,7 +6096,10 @@ CREATE TABLE crdb_internal.default_privileges (
 							privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 							for _, userPrivs := range privs.Users {
 								grantee := tree.NewDString(userPrivs.User().Normalized())
-								privList := privilege.ListFromBitField(userPrivs.Privileges, privilegeObjectType)
+								privList, err := privilege.ListFromBitField(userPrivs.Privileges, privilegeObjectType)
+								if err != nil {
+									return err
+								}
 								for _, priv := range privList {
 									if err := addRow(
 										database, // database_name
@@ -7398,6 +7424,10 @@ func populateTxnExecutionInsights(
 	// We should truncate the query if it surpasses some absurd limit.
 	queryMax := 5000
 	for _, insight := range response.Insights {
+		if insight.Transaction == nil {
+			continue
+		}
+
 		var errorCode string
 		var queryBuilder strings.Builder
 		for i := range insight.Statements {
@@ -7574,6 +7604,12 @@ func populateStmtInsights(
 		return err
 	}
 	for _, insight := range response.Insights {
+		// We don't expect the transaction to be null here, but we should provide
+		// this check to ensure we only show valid data.
+		if insight.Transaction == nil {
+			continue
+		}
+
 		for _, s := range insight.Statements {
 
 			causes := tree.NewDArray(types.String)
@@ -7764,7 +7800,7 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 		}
 		type tenantCapabilitiesEntry struct {
 			tenantID           roachpb.TenantID
-			tenantCapabilities tenantcapabilities.TenantCapabilities
+			tenantCapabilities *tenantcapabilitiespb.TenantCapabilities
 		}
 		tenantCapabilitiesMap := tenantCapabilitiesReader.GetGlobalCapabilityState()
 		tenantCapabilitiesEntries := make([]tenantCapabilitiesEntry, 0, len(tenantCapabilitiesMap))
@@ -7779,16 +7815,20 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 		}
 		// Sort by tenant ID.
 		sort.Slice(tenantCapabilitiesEntries, func(i, j int) bool {
-			return tenantCapabilitiesEntries[i].tenantID.ToUint64() < tenantCapabilitiesEntries[j].tenantID.ToUint64()
+			return tenantCapabilitiesEntries[i].tenantID.ToUint64() <
+				tenantCapabilitiesEntries[j].tenantID.ToUint64()
 		})
 		for _, tenantCapabilitiesEntry := range tenantCapabilitiesEntries {
 			tenantID := tree.NewDInt(tree.DInt(tenantCapabilitiesEntry.tenantID.ToUint64()))
-			for _, capabilityID := range tenantcapabilities.CapabilityIDs {
-				capabilityValue := tenantCapabilitiesEntry.tenantCapabilities.Cap(capabilityID).Get().String()
+			for _, capabilityID := range tenantcapabilities.IDs {
+				value := tenantcapabilities.MustGetValueByID(
+					tenantCapabilitiesEntry.tenantCapabilities,
+					capabilityID,
+				)
 				if err := addRow(
 					tenantID,
 					tree.NewDString(capabilityID.String()),
-					tree.NewDString(capabilityValue),
+					tree.NewDString(value.String()),
 				); err != nil {
 					return err
 				}

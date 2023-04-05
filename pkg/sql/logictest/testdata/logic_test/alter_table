@@ -3194,3 +3194,51 @@ subtest alter_non_existent_table_with_if_exists
 
 statement ok
 ALTER TABLE IF EXISTS t_non_existent_99185 ADD FOREIGN KEY (i) REFERENCES t_other_99185 (i);
+
+# This subtest tests behavior when we have add/drop column and add constraint in one stmt.
+subtest 99281
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TABLE t_99281 (i INT PRIMARY KEY, j INT NOT NULL, k INT NOT NULL, FAMILY "primary" (i,j,k));
+INSERT INTO t_99281 VALUES (0,0,0), (1,0,1);
+
+statement error pq: could not create unique constraint ".*"
+ALTER TABLE t_99281 ADD UNIQUE WITHOUT INDEX (j);
+
+statement error pq: could not create unique constraint ".*"
+ALTER TABLE t_99281 ADD COLUMN p INT DEFAULT unique_rowid(), ADD UNIQUE WITHOUT INDEX (j);
+
+# The following statement will cause the stmt to hang using the legacy schema changer.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement error pq: could not create unique constraint ".*"
+ALTER TABLE t_99281 DROP COLUMN k, ADD UNIQUE WITHOUT INDEX (j);
+
+statement error pq: validation of CHECK "i > 0:::INT8" failed on row: i=0, j=0, k=0, p=[0-9]+
+ALTER TABLE t_99281 ADD COLUMN p INT DEFAULT unique_rowid(), ADD CHECK (i > 0);
+
+statement error pq: validation of CHECK "j > 0:::INT8" failed on row: i=[0-1], j=0, k=[0-1], p=[0-9]+
+ALTER TABLE t_99281 ADD COLUMN p INT DEFAULT unique_rowid(), ADD CHECK (i >= 0), ADD CHECK (j > 0);
+
+statement ok
+CREATE TABLE t_99281_other (i INT PRIMARY KEY);
+
+statement error pq: foreign key violation: "t_99281" row j=0, i=[0-1] has no match in "t_99281_other"
+ALTER TABLE t_99281 ADD COLUMN p INT DEFAULT unique_rowid(), ADD FOREIGN KEY (j) REFERENCES t_99281_other;
+
+# The following statement is not supported using the legacy schema changer.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement error pq: foreign key violation: "t_99281" row j=0, i=[0-1] has no match in "t_99281_other"
+ALTER TABLE t_99281 ALTER PRIMARY KEY USING COLUMNS (k), ADD FOREIGN KEY (j) REFERENCES t_99281_other;
+
+query TT
+show create table t_99281
+----
+t_99281  CREATE TABLE public.t_99281 (
+           i INT8 NOT NULL,
+           j INT8 NOT NULL,
+           k INT8 NOT NULL,
+           CONSTRAINT t_99281_pkey PRIMARY KEY (i ASC)
+         )

@@ -25,6 +25,7 @@ go_library(
         "//pkg/server/systemconfigwatcher",
         "//pkg/settings/cluster",
         "//pkg/spanconfig/spanconfigkvsubscriber",
+        "//pkg/spanconfig/spanconfigstore",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/storage",
         "//pkg/util",

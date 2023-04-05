@@ -18,7 +18,7 @@ INSERT INTO tab VALUES (1,1,1), (2,2,2), (3,3,3)
 ----
 
 exec-sql
-BACKUP INTO 'nodelocal://0/test/'
+BACKUP INTO 'nodelocal://1/test/'
 ----
 
 # Start a new cluster with the same IO dir.
@@ -26,7 +26,7 @@ new-cluster name=s2 share-io-dir=s1
 ----
 
 exec-sql cluster=s2
-RESTORE FROM LATEST IN 'nodelocal://0/test/'
+RESTORE FROM LATEST IN 'nodelocal://1/test/'
 ----
 
 query-sql

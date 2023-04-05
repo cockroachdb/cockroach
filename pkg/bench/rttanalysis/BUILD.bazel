@@ -36,6 +36,7 @@ go_test(
     size = "large",
     srcs = [
         "alter_table_bench_test.go",
+        "audit_bench_test.go",
         "bench_test.go",
         "create_alter_role_bench_test.go",
         "discard_bench_test.go",

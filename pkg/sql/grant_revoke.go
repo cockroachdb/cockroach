@@ -84,13 +84,13 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		},
 		changePrivilege: func(
 			privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee username.SQLUsername,
-		) (changed bool) {
+		) (changed bool, retErr error) {
 			// Grant the desired privileges to grantee, and return true
 			// if privileges have actually been changed due to this `GRANT``.
 			granteePrivsBeforeGrant := *(privDesc.FindOrCreateUser(grantee))
 			privDesc.Grant(grantee, privileges, n.WithGrantOption)
 			granteePrivsAfterGrant := *(privDesc.FindOrCreateUser(grantee))
-			return granteePrivsBeforeGrant != granteePrivsAfterGrant
+			return granteePrivsBeforeGrant != granteePrivsAfterGrant, nil
 		},
 	}, nil
 }
@@ -143,19 +143,21 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		},
 		changePrivilege: func(
 			privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee username.SQLUsername,
-		) (changed bool) {
+		) (changed bool, retErr error) {
 			granteePrivs, ok := privDesc.FindUser(grantee)
 			if !ok {
-				return false
+				return false, nil
 			}
 			granteePrivsBeforeGrant := *granteePrivs // Make a copy of the grantee's privileges before revoke.
-			privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor)
+			if err := privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor); err != nil {
+				return false, err
+			}
 			granteePrivs, ok = privDesc.FindUser(grantee)
 			// Revoke results in any privilege changes if
 			//   1. grantee's entry is removed from the privilege descriptor, or
 			//   2. grantee's entry is changed in its content.
 			privsChanges := !ok || granteePrivsBeforeGrant != *granteePrivs
-			return privsChanges
+			return privsChanges, nil
 		},
 	}, nil
 }
@@ -171,7 +173,7 @@ type changePrivilegesNode struct {
 
 type changeDescriptorBackedPrivilegesNode struct {
 	changePrivilegesNode
-	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, username.SQLUsername) (changed bool)
+	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, username.SQLUsername) (changed bool, retErr error)
 }
 
 type changeNonDescriptorBackedPrivilegesNode struct {
@@ -280,7 +282,10 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 
 			privileges := descriptor.GetPrivileges()
 			for _, grantee := range n.grantees {
-				changed := n.changePrivilege(privileges, n.desiredprivs, grantee)
+				changed, err := n.changePrivilege(privileges, n.desiredprivs, grantee)
+				if err != nil {
+					return err
+				}
 				descPrivsChanged = descPrivsChanged || changed
 				if !n.isGrant && grantee == privileges.Owner() {
 					params.p.BufferClientNotice(

@@ -207,7 +207,6 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		if err != nil {
 			return err
 		}
-		addSetter("payload", payloadBytes)
 	}
 
 	var progressBytes []byte
@@ -219,7 +218,16 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		if err != nil {
 			return err
 		}
-		addSetter("progress", progressBytes)
+	}
+
+	if !u.j.registry.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
+		if payloadBytes != nil {
+			addSetter("payload", payloadBytes)
+		}
+
+		if progressBytes != nil {
+			addSetter("progress", progressBytes)
+		}
 	}
 
 	if ju.md.RunStats != nil {
@@ -228,22 +236,24 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		addSetter("num_runs", ju.md.RunStats.NumRuns)
 	}
 
-	updateStmt := fmt.Sprintf(
-		"UPDATE system.jobs SET %s WHERE id = $1",
-		strings.Join(setters, ", "),
-	)
-	n, err := u.txn.ExecEx(
-		ctx, "job-update", u.txn.KV(),
-		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
-		updateStmt, params...,
-	)
-	if err != nil {
-		return err
-	}
-	if n != 1 {
-		return errors.Errorf(
-			"expected exactly one row affected, but %d rows affected by job update", n,
+	if len(setters) != 0 {
+		updateStmt := fmt.Sprintf(
+			"UPDATE system.jobs SET %s WHERE id = $1",
+			strings.Join(setters, ", "),
 		)
+		n, err := u.txn.ExecEx(
+			ctx, "job-update", u.txn.KV(),
+			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			updateStmt, params...,
+		)
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return errors.Errorf(
+				"expected exactly one row affected, but %d rows affected by job update", n,
+			)
+		}
 	}
 
 	// Insert the job payload and details into the system.jobs_info table if the
@@ -379,8 +389,8 @@ func getSelectStmtForJobUpdate(
 	const (
 		selectWithoutSession = `
 WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload'),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress')
+	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' AND job_id = $1 ORDER BY written DESC LIMIT 1),
+	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' AND job_id = $1 ORDER BY written DESC LIMIT 1)
 	SELECT
 		status, payload.value AS payload, progress.value AS progress`
 		selectWithSession = selectWithoutSession + `, claim_session_id`

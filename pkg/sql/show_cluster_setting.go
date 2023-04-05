@@ -94,14 +94,14 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 					}
 
 					localRawVal := []byte(s.Get(&st.SV))
-					if !bytes.Equal(localRawVal, kvRawVal) {
+					if err := checkClusterSettingValuesAreEquivalent(
+						localRawVal, kvRawVal,
+					); err != nil {
 						// NB: errors.Wrapf(nil, ...) returns nil.
 						// nolint:errwrap
-						return errors.Errorf(
-							"value differs between local setting (%v) and KV (%v); try again later (%v after %s)",
-							localRawVal, kvRawVal, ctx.Err(), timeutil.Since(tBegin))
+						return errors.WithHintf(err, "try again later (%v after %v)",
+							ctx.Err(), timeutil.Since(tBegin))
 					}
-
 					res = string(kvRawVal)
 					return nil
 				})
@@ -111,6 +111,43 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 	}
 
 	return res, nil
+}
+
+// checkClusterSettingValuesAreEquivalent returns an error if the cluster
+// setting values are not equivalent. Equivalent cluster setting values
+// are either the byte-for-byte identical, or the local value is the successor
+// to the kv value and the local value is a fence version.
+//
+// The in-memory version gets pushed to the fence but the fence is not persisted,
+// so, while migrations are ongoing, we won't see these values match. In practice
+// this is a problem these days because the migrations take a long time.
+func checkClusterSettingValuesAreEquivalent(localRawVal, kvRawVal []byte) error {
+	if bytes.Equal(localRawVal, kvRawVal) {
+		return nil
+	}
+	type cv = clusterversion.ClusterVersion
+	maybeDecodeVersion := func(data []byte) (cv, any, bool) {
+		if len(data) == 0 {
+			return cv{}, data, false
+		}
+		var v cv
+		if err := protoutil.Unmarshal(data, &v); err != nil {
+			return cv{}, data, false
+		}
+		return v, v, true
+	}
+	decodedLocal, localVal, localOk := maybeDecodeVersion(localRawVal)
+	decodedKV, kvVal, kvOk := maybeDecodeVersion(kvRawVal)
+	if localOk && kvOk && decodedLocal.Internal%2 == 1 /* isFence */ {
+		predecessor := decodedLocal
+		predecessor.Internal--
+		if predecessor.Equal(decodedKV) {
+			return nil
+		}
+	}
+	return errors.Errorf(
+		"value differs between local setting (%v) and KV (%v)",
+		localVal, kvVal)
 }
 
 func (p *planner) ShowClusterSetting(

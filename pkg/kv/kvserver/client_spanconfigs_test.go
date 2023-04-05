@@ -41,6 +41,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	spanConfigStore := spanconfigstore.New(
 		roachpb.TestingDefaultSpanConfig(),
 		cluster.MakeTestingClusterSettings(),
+		spanconfigstore.NewEmptyBoundsReader(),
 		nil,
 	)
 	var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -107,7 +108,12 @@ func TestFallbackSpanConfigOverride(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	st := cluster.MakeTestingClusterSettings()
-	spanConfigStore := spanconfigstore.New(roachpb.TestingDefaultSpanConfig(), st, nil)
+	spanConfigStore := spanconfigstore.New(
+		roachpb.TestingDefaultSpanConfig(),
+		st,
+		spanconfigstore.NewEmptyBoundsReader(),
+		nil,
+	)
 	var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	mockSubscriber := newMockSpanConfigSubscriber(t0, spanConfigStore)
 

@@ -13,7 +13,7 @@ CREATE TABLE scratch (LIKE system.scheduled_jobs);
 ----
 
 exec-sql
-IMPORT INTO scratch CSV DATA ('nodelocal://0/system_scheduled_jobs_22_1/rows/export*-n*.0.csv');
+IMPORT INTO scratch CSV DATA ('nodelocal://1/system_scheduled_jobs_22_1/rows/export*-n*.0.csv');
 ----
 
 query-sql

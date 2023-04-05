@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/blobs"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // ccl init hooks
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostclient"
@@ -40,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -1160,7 +1158,6 @@ func TestConsumptionExternalStorage(t *testing.T) {
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	blobClientFactory := blobs.NewLocalOnlyBlobClientFactory(dir)
 	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Test fails when run within the default tenant. Tracked with #76378.
 		DisableDefaultTestTenant: true,
@@ -1179,9 +1176,6 @@ func TestConsumptionExternalStorage(t *testing.T) {
 		Settings:      st,
 		ExternalIODir: dir,
 		TestingKnobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				BlobClientFactory: blobClientFactory,
-			},
 			TenantTestingKnobs: &sql.TenantTestingKnobs{
 				OverrideTokenBucketProvider: func(kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider {
 					return testProvider
@@ -1247,7 +1241,7 @@ func TestConsumptionExternalStorage(t *testing.T) {
 		nodelocal.LocalRequiresExternalIOAccounting = true
 		defer func() { nodelocal.LocalRequiresExternalIOAccounting = false }()
 		before := testProvider.waitForConsumption(t)
-		r.Exec(t, "BACKUP t INTO 'nodelocal://0/backups/tenant'")
+		r.Exec(t, "BACKUP t INTO 'nodelocal://1/backups/tenant'")
 		c := testProvider.waitForConsumption(t)
 		c.Sub(&before)
 		require.NotEqual(t, uint64(0), c.ExternalIOEgressBytes)
@@ -1258,7 +1252,7 @@ func TestConsumptionExternalStorage(t *testing.T) {
 		nodelocal.LocalRequiresExternalIOAccounting = true
 		defer func() { nodelocal.LocalRequiresExternalIOAccounting = false }()
 		before := testProvider.waitForConsumption(t)
-		hostSQL.Exec(t, "BACKUP t INTO 'nodelocal://0/backups/host'")
+		hostSQL.Exec(t, "BACKUP t INTO 'nodelocal://1/backups/host'")
 		c := testProvider.waitForConsumption(t)
 		c.Sub(&before)
 		require.Equal(t, uint64(0), c.ExternalIOEgressBytes)

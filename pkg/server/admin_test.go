@@ -1727,8 +1727,8 @@ func TestAdminAPIJobs(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlDB.Exec(t,
-			`INSERT INTO system.jobs (id, status, payload, progress, num_runs, last_run, job_type) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			job.id, job.status, payloadBytes, progressBytes, job.numRuns, job.lastRun, payload.Type().String(),
+			`INSERT INTO system.jobs (id, status, num_runs, last_run, job_type) VALUES ($1, $2, $3, $4, $5)`,
+			job.id, job.status, job.numRuns, job.lastRun, payload.Type().String(),
 		)
 		sqlDB.Exec(t,
 			`INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`,
@@ -1918,8 +1918,8 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlDB.Exec(t,
-			`INSERT INTO system.jobs (id, status, payload, progress, num_runs, last_run) VALUES ($1, $2, $3, $4, $5, $6)`,
-			job.id, job.status, payloadBytes, progressBytes, job.numRuns, job.lastRun,
+			`INSERT INTO system.jobs (id, status, num_runs, last_run) VALUES ($1, $2, $3, $4)`,
+			job.id, job.status, job.numRuns, job.lastRun,
 		)
 		sqlDB.Exec(t,
 			`INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`,

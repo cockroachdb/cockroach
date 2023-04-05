@@ -38,6 +38,7 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/serverutils/regionlatency",
+        "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",

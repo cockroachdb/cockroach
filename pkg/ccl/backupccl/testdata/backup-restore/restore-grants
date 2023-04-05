@@ -156,7 +156,7 @@ testdb public testtable_greeting_owner testuser ALL true
 
 # Let's take a backup of this cluster.
 exec-sql
-BACKUP INTO 'nodelocal://0/test/'
+BACKUP INTO 'nodelocal://1/test/'
 ----
 
 # Let's try a cluster restore and expect all of the same privileges that we had
@@ -167,7 +167,7 @@ new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant
 ----
 
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://0/test/';
+RESTORE FROM LATEST IN 'nodelocal://1/test/';
 ----
 
 exec-sql
@@ -433,7 +433,7 @@ DROP DATABASE testdb CASCADE;
 ----
 
 exec-sql
-RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://0/test/';
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/test/';
 ----
 
 exec-sql
@@ -522,7 +522,7 @@ ALTER USER testuser CREATEDB;
 subtest restore-database-as-non-admin
 
 exec-sql user=testuser
-RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://0/test/';
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/test/';
 ----
 NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
 

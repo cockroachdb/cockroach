@@ -152,8 +152,7 @@ func catalogDeepCopy(u nstree.Catalog) (ret nstree.MutableCatalog) {
 		return nil
 	})
 	_ = u.ForEachComment(func(key catalogkeys.CommentKey, cmt string) error {
-		ret.UpsertComment(key, cmt)
-		return nil
+		return ret.UpsertComment(key, cmt)
 	})
 	_ = u.ForEachZoneConfig(func(id catid.DescID, zc catalog.ZoneConfig) error {
 		zc = zc.Clone()

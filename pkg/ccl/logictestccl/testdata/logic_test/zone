@@ -622,8 +622,12 @@ RANGE system                                                                    
 RANGE liveness                                                                     liveness  NULL         NULL                          NULL           NULL
 TABLE system.public.replication_constraint_stats                                   NULL      system       replication_constraint_stats  NULL           NULL
 TABLE system.public.replication_stats                                              NULL      system       replication_stats             NULL           NULL
+TABLE system.public.statement_statistics                                           NULL      system       statement_statistics          NULL           NULL
+TABLE system.public.transaction_statistics                                         NULL      system       transaction_statistics        NULL           NULL
 TABLE system.public.tenant_usage                                                   NULL      system       tenant_usage                  NULL           NULL
 TABLE system.public.span_stats_tenant_boundaries                                   NULL      system       span_stats_tenant_boundaries  NULL           NULL
+TABLE system.public.statement_activity                                             NULL      system       statement_activity            NULL           NULL
+TABLE system.public.transaction_activity                                           NULL      system       transaction_activity          NULL           NULL
 TABLE test.public.t                                                                NULL      test         t                             NULL           NULL
 INDEX test.public.t@secondary                                                      NULL      test         t                             secondary      NULL
 INDEX test.public.t@tertiary                                                       NULL      test         t                             tertiary       NULL

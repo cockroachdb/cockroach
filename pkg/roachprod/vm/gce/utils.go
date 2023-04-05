@@ -41,6 +41,8 @@ var Subdomain = func() string {
 const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a GCE machine for roachprod use.
 
+set -x
+
 if [ -e /mnt/data1/.roachprod-initialized ]; then
   echo "Already initialized, exiting."
   exit 0
@@ -78,6 +80,7 @@ for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-d
     echo "Disk ${d} already mounted, skipping..."
   fi
 done
+
 
 if [ "${#disks[@]}" -eq "0" ]; then
   mountpoint="${mount_prefix}1"
@@ -220,6 +223,10 @@ echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 
 sysctl --system  # reload sysctl settings
 
+{{ if .EnableFIPS }}
+sudo ua enable fips --assume-yes
+{{ end }}
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
@@ -230,18 +237,20 @@ sudo touch /mnt/data1/.roachprod-initialized
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
 func writeStartupScript(
-	extraMountOpts string, fileSystem string, useMultiple bool,
+	extraMountOpts string, fileSystem string, useMultiple bool, enableFIPS bool,
 ) (string, error) {
 	type tmplParams struct {
 		ExtraMountOpts   string
 		UseMultipleDisks bool
 		Zfs              bool
+		EnableFIPS       bool
 	}
 
 	args := tmplParams{
 		ExtraMountOpts:   extraMountOpts,
 		UseMultipleDisks: useMultiple,
 		Zfs:              fileSystem == vm.Zfs,
+		EnableFIPS:       enableFIPS,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")
@@ -268,9 +277,11 @@ func SyncDNS(l *logger.Logger, vms vm.List) error {
 		return err
 	}
 	defer f.Close()
+
+	// Keep imported zone file in dry run mode.
 	defer func() {
 		if err := os.Remove(f.Name()); err != nil {
-			fmt.Fprintf(l.Stderr, "removing %s failed: %v", f.Name(), err)
+			l.Errorf("removing %s failed: %v", f.Name(), err)
 		}
 	}()
 
@@ -278,7 +289,7 @@ func SyncDNS(l *logger.Logger, vms vm.List) error {
 	for _, vm := range vms {
 		entry, err := vm.ZoneEntry()
 		if err != nil {
-			fmt.Fprintf(l.Stderr, "WARN: skipping: %s\n", err)
+			l.Printf("WARN: skipping: %s\n", err)
 			continue
 		}
 		zoneBuilder.WriteString(entry)
@@ -287,7 +298,7 @@ func SyncDNS(l *logger.Logger, vms vm.List) error {
 	f.Close()
 
 	args := []string{"--project", dnsProject, "dns", "record-sets", "import",
-		"-z", dnsZone, "--delete-all-existing", "--zone-file-format", f.Name()}
+		f.Name(), "-z", dnsZone, "--delete-all-existing", "--zone-file-format"}
 	cmd := exec.Command("gcloud", args...)
 	output, err := cmd.CombinedOutput()
 
@@ -297,7 +308,7 @@ func SyncDNS(l *logger.Logger, vms vm.List) error {
 // GetUserAuthorizedKeys retrieves reads a list of user public keys from the
 // gcloud cockroach-ephemeral project and returns them formatted for use in
 // an authorized_keys file.
-func GetUserAuthorizedKeys() (authorizedKeys []byte, err error) {
+func GetUserAuthorizedKeys(l *logger.Logger) (authorizedKeys []byte, err error) {
 	var outBuf bytes.Buffer
 	// The below command will return a stream of user:pubkey as text.
 	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
@@ -305,6 +316,7 @@ func GetUserAuthorizedKeys() (authorizedKeys []byte, err error) {
 		"--format=value(commonInstanceMetadata.ssh-keys)")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = &outBuf
+
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}

@@ -169,12 +169,15 @@ type LocalUnmigratableSessionData struct {
 	// dependencies. Temporary tables are not supported in session migrations.
 	DatabaseIDToTempSchemaID map[uint32]uint32
 
-	///////////////////////////////////////////////////////////////////////////
+	// IsSSL indicates whether the session is using SSL/TLS.
+	IsSSL bool
+
+	// ////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes or needs to persist amongst session //
 	// migrations. If so, they should live in the LocalOnlySessionData or    //
 	// SessionData protobuf in the sessiondatapb package.                    //
-	///////////////////////////////////////////////////////////////////////////
+	// ////////////////////////////////////////////////////////////////////////
 }
 
 // IsTemporarySchemaID returns true if the given ID refers to any of the temp

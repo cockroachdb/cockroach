@@ -630,8 +630,8 @@ var charts = []sectionDescription{
 					"range.snapshots.applied-voter",
 					"range.snapshots.applied-initial",
 					"range.snapshots.applied-non-voter",
-					"range.snapshot.delegate.successes",
-					"range.snapshot.delegate.failures",
+					"range.snapshots.delegate.successes",
+					"range.snapshots.delegate.failures",
 				},
 			},
 			{
@@ -643,6 +643,7 @@ var charts = []sectionDescription{
 					"range.snapshots.recv-in-progress",
 					"range.snapshots.send-total-in-progress",
 					"range.snapshots.recv-total-in-progress",
+					"range.snapshots.delegate.in-progress",
 				},
 			},
 			{
@@ -1563,6 +1564,7 @@ var charts = []sectionDescription{
 					"changefeed.checkpoint_hist_nanos",
 					"changefeed.flush_hist_nanos",
 					"changefeed.sink_batch_hist_nanos",
+					"changefeed.parallel_io_queue_nanos",
 				},
 			},
 			{
@@ -1588,6 +1590,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Sink IO",
+				Metrics: []string{
+					"changefeed.sink_io_inflight",
+				},
+			},
+			{
 				Title: "Batching",
 				Metrics: []string{
 					"changefeed.batch_reduction_count",
@@ -1603,6 +1611,12 @@ var charts = []sectionDescription{
 				Title: "Schema Registry Retries",
 				Metrics: []string{
 					"changefeed.schema_registry.retry_count",
+				},
+			},
+			{
+				Title: "Schema Registry Registrations",
+				Metrics: []string{
+					"changefeed.schema_registry.registrations",
 				},
 			},
 		},
@@ -3228,6 +3242,29 @@ var charts = []sectionDescription{
 			{
 				Title:   "WAL Fsync Latency",
 				Metrics: []string{"storage.wal.fsync.latency"},
+			},
+			{
+				Title: "Iterator Block Loads",
+				Metrics: []string{
+					"storage.iterator.block-load.bytes",
+					"storage.iterator.block-load.cached-bytes",
+				},
+				AxisLabel: "Bytes",
+			},
+			{
+				Title:     "Iterator I/O",
+				Metrics:   []string{"storage.iterator.block-load.read-duration"},
+				AxisLabel: "Duration (nanos)",
+			},
+			{
+				Title: "Iterator Operations",
+				Metrics: []string{
+					"storage.iterator.external.seeks",
+					"storage.iterator.external.steps",
+					"storage.iterator.internal.seeks",
+					"storage.iterator.internal.steps",
+				},
+				AxisLabel: "Ops",
 			},
 		},
 	},

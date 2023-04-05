@@ -33,14 +33,18 @@ type FromFile interface {
 // newAccessControllerFromFile returns a AccessController and a channel that can be used
 // to automatically watch for updates to the controller.
 func newAccessControllerFromFile[T FromFile](
-	ctx context.Context, filename string, pollingInterval time.Duration, errorCount *metric.Gauge,
+	ctx context.Context,
+	filename string,
+	timeSource timeutil.TimeSource,
+	pollingInterval time.Duration,
+	errorCount *metric.Gauge,
 ) (AccessController, chan AccessController, error) {
 	ret, err := readFile[T](ctx, filename)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "error when creating access controller from file %s", filename)
 	}
 
-	return ret, watchForUpdate[T](ctx, filename, pollingInterval, errorCount), nil
+	return ret, watchForUpdate[T](ctx, filename, timeSource, pollingInterval, errorCount), nil
 }
 
 // Deserialize constructs a new T from reader.
@@ -82,14 +86,18 @@ func readFile[T FromFile](ctx context.Context, filename string) (T, error) {
 // WatchForUpdates periodically reloads the access control list file. The daemon is
 // canceled on ctx cancellation.
 func watchForUpdate[T FromFile](
-	ctx context.Context, filename string, pollingInterval time.Duration, errorCount *metric.Gauge,
+	ctx context.Context,
+	filename string,
+	timeSource timeutil.TimeSource,
+	pollingInterval time.Duration,
+	errorCount *metric.Gauge,
 ) chan AccessController {
 	result := make(chan AccessController)
 	go func() {
 		// TODO(ye): use notification via SIGHUP instead.
 		// TODO(ye): use inotify or similar mechanism for watching file updates
 		// instead of polling.
-		t := timeutil.NewTimer()
+		t := timeSource.NewTimer()
 		defer t.Stop()
 		hasError := false
 		for {
@@ -99,8 +107,8 @@ func watchForUpdate[T FromFile](
 				close(result)
 				log.Errorf(ctx, "WatchList daemon stopped: %v", ctx.Err())
 				return
-			case <-t.C:
-				t.Read = true
+			case <-t.Ch():
+				t.MarkRead()
 				list, err := readFile[T](ctx, filename)
 				if err != nil {
 					if !hasError && errorCount != nil {

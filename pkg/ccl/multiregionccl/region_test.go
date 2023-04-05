@@ -904,8 +904,8 @@ func TestRegionAddDropWithConcurrentBackupOps(t *testing.T) {
 	}{
 		{
 			name:      "backup-database",
-			backupOp:  `BACKUP DATABASE db TO 'nodelocal://0/db_backup'`,
-			restoreOp: `RESTORE DATABASE db FROM 'nodelocal://0/db_backup'`,
+			backupOp:  `BACKUP DATABASE db TO 'nodelocal://1/db_backup'`,
+			restoreOp: `RESTORE DATABASE db FROM 'nodelocal://1/db_backup'`,
 		},
 	}
 

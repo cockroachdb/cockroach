@@ -28,18 +28,15 @@ func (f int32Field) SafeFormat(s redact.SafePrinter, verb rune) {
 	s.Print(config.Field(f))
 }
 
-func (f int32Field) FieldBound(b Bounds) ValueBounds {
+func (f int32Field) FieldBound(b *Bounds) ValueBounds {
 	getBound := func() *tenantcapabilitiespb.SpanConfigBounds_Int32Range {
-		if b.b.ConstraintBounds == nil {
-			return nil
-		}
 		switch f {
 		case numReplicas:
-			return b.b.NumReplicas
+			return b.NumReplicas
 		case numVoters:
-			return b.b.NumVoters
+			return b.NumVoters
 		case gcTTLSeconds:
-			return b.b.GCTTLSeconds
+			return b.GCTTLSeconds
 		default:
 			// This is safe because we test that all the fields in the proto have
 			// a corresponding field, and we call this for each of them, and the user

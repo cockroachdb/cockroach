@@ -168,7 +168,7 @@ func MakeAzureKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS,
 	case cloudpb.AzureAuth_IMPLICIT:
 		if env.KMSConfig().DisableImplicitCredentials {
 			return nil, errors.New(
-				"implicit credentials disallowed for azure due to --external-io-implicit-credentials flag")
+				"implicit credentials disallowed for azure due to --external-io-disable-implicit-credentials flag")
 		}
 		// The Default credential supports env vars and managed identity magic.
 		// We rely on the former for testing and the latter in prod.

@@ -1,3 +1,6 @@
+skip issue-num=98020
+----
+
 new-cluster localities=us-east-1,us-east-1,us-east-1,us-central-1,us-central-1,us-central-1,us-west-1,us-west-1,us-west-1,eu-central-1
 ----
 

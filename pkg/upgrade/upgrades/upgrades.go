@@ -111,11 +111,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		systemExternalConnectionsTableMigration,
 	),
-	upgrade.NewTenantUpgrade(
+	upgrade.NewPermanentTenantUpgrade(
 		"add default SQL schema telemetry schedule",
-		toCV(clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs),
-		upgrade.NoPrecondition,
+		toCV(clusterversion.Permanent_V22_2SQLSchemaTelemetryScheduledJobs),
 		ensureSQLSchemaTelemetrySchedule,
+		"add default SQL schema telemetry schedule",
 	),
 	upgrade.NewTenantUpgrade(
 		"wait for all in-flight schema changes",
@@ -303,6 +303,18 @@ var upgrades = []upgradebase.Upgrade{
 		toCV(clusterversion.V23_1AddSystemActivityTables),
 		systemStatisticsActivityTableMigration,
 		"create statement_activity and transaction_activity job",
+	),
+	upgrade.NewPermanentSystemUpgrade(
+		"change TTL for SQL Stats system tables",
+		toCV(clusterversion.V23_1ChangeSQLStatsTTL),
+		sqlStatsTTLChange,
+		"change TTL for SQL Stats system tables",
+	),
+	upgrade.NewTenantUpgrade(
+		"stop writing payload and progress to system.jobs",
+		toCV(clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs),
+		upgrade.NoPrecondition,
+		alterPayloadColumnToNullable,
 	),
 }
 

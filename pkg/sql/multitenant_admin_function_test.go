@@ -225,7 +225,7 @@ type testCase struct {
 }
 
 type capValue struct {
-	cap   tenantcapabilities.CapabilityID
+	cap   tenantcapabilities.ID
 	value string
 }
 
@@ -295,7 +295,7 @@ func (tc testCase) runTest(
 		}
 		capVals = caps
 		if len(capVals) > 0 {
-			expected := map[tenantcapabilities.CapabilityID]string{}
+			expected := map[tenantcapabilities.ID]string{}
 			for _, capVal := range capVals {
 				query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s = %s", capVal.cap.String(), capVal.value)
 				_, err := systemDB.ExecContext(ctx, query, tenantID.ToUint64())
@@ -406,7 +406,7 @@ func (te tenantExpected) validate(
 	})
 }
 
-func bcap(cap tenantcapabilities.CapabilityID, val bool) capValue {
+func bcap(cap tenantcapabilities.ID, val bool) capValue {
 	return capValue{cap: cap, value: fmt.Sprint(val)}
 }
 

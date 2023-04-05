@@ -29,7 +29,7 @@ type Field interface {
 
 	// FieldBound provides access to the corresponding spanConfigBound implied by
 	// a SpanConfigBounds as a value which can be displayed.
-	FieldBound(b Bounds) ValueBounds
+	FieldBound(b *Bounds) ValueBounds
 }
 
 // field is a thin interface used to reduce some ceremony around extracting

@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/isql",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlstats",
         "//pkg/upgrade/upgradebase",
         "//pkg/util/log",
         "//pkg/util/stop",

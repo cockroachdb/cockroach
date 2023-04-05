@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -230,8 +231,9 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		1<<20, /* 1 MB */
 		cfg.DefaultSpanConfig,
 		cfg.Settings,
-		nil,
-		nil,
+		spanconfigstore.NewEmptyBoundsReader(),
+		nil, /* knobs */
+		nil, /* registry */
 	)
 	cfg.SystemConfigProvider = systemconfigwatcher.New(
 		keys.SystemSQLCodec,

@@ -684,6 +684,16 @@ func (ts *testState) HasTSDBQueryCapability(_ context.Context, tenID roachpb.Ten
 	}
 }
 
+func (ts *testState) HasNodelocalStorageCapability(
+	_ context.Context, tenID roachpb.TenantID,
+) error {
+	if ts.capabilities[tenID].CanUseNodelocalStorage {
+		return nil
+	} else {
+		return errors.New("unauthorized")
+	}
+}
+
 func (ts *testState) IsExemptFromRateLimiting(_ context.Context, tenID roachpb.TenantID) bool {
 	return ts.capabilities[tenID].ExemptFromRateLimiting
 }

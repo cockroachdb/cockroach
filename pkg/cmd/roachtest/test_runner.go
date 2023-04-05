@@ -161,7 +161,8 @@ type clustersOpt struct {
 	cpuQuota int
 
 	// Controls whether the cluster is cleaned up at the end of the test.
-	debugMode debugMode
+	debugMode  debugMode
+	enableFIPS bool
 }
 
 type debugMode int
@@ -437,6 +438,7 @@ func defaultClusterAllocator(
 			username:     clustersOpt.user,
 			localCluster: clustersOpt.typ == localCluster,
 			alloc:        alloc,
+			enableFIPS:   clustersOpt.enableFIPS,
 		}
 		return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
 	}

@@ -34,10 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -53,6 +55,14 @@ var (
 		Multiplier:     1.5,
 		MaxRetries:     50,
 	}
+
+	v231 = func() *version.Version {
+		v, err := version.Parse("v23.1.0")
+		if err != nil {
+			panic(fmt.Sprintf("failure parsing version: %v", err))
+		}
+		return v
+	}()
 )
 
 // sanitizeVersionForBackup takes the string representation of a
@@ -60,6 +70,25 @@ var (
 // backup destination.
 func sanitizeVersionForBackup(v string) string {
 	return invalidVersionRE.ReplaceAllString(clusterupgrade.VersionMsg(v), "")
+}
+
+// hasInternalSystemJobs returns true if the cluster is expected to
+// have the `crdb_internal.system_jobs` vtable in the mixed-version
+// context passed. If so, it should be used instead of `system.jobs`
+// when querying job status.
+func hasInternalSystemJobs(tc *mixedversion.Context) bool {
+	lowestVersion := tc.FromVersion // upgrades
+	if tc.FromVersion == clusterupgrade.MainVersion {
+		lowestVersion = tc.ToVersion // downgrades
+	}
+
+	// Add 'v' prefix expected by `version` package.
+	lowestVersion = "v" + lowestVersion
+	sv, err := version.Parse(lowestVersion)
+	if err != nil {
+		panic(fmt.Errorf("internal error: test context version (%s) expected to be parseable: %w", lowestVersion, err))
+	}
+	return sv.AtLeast(v231)
 }
 
 type (
@@ -297,10 +326,17 @@ func (mvb *mixedVersionBackup) waitForJobSuccess(
 	var lastErr error
 	node, db := h.RandomDB(rng, mvb.roachNodes)
 	l.Printf("querying job status through node %d", node)
+
+	jobsQuery := "system.jobs WHERE id = $1"
+	if hasInternalSystemJobs(h.Context()) {
+		jobsQuery = fmt.Sprintf("(%s)", jobutils.InternalSystemJobsBaseQuery)
+	}
 	for r := retry.StartWithCtx(ctx, backupCompletionRetryOptions); r.Next(); {
 		var status string
 		var payloadBytes []byte
-		err := db.QueryRow(`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID).Scan(&status, &payloadBytes)
+		err := db.QueryRow(
+			fmt.Sprintf(`SELECT status, payload FROM %s`, jobsQuery), jobID,
+		).Scan(&status, &payloadBytes)
 		if err != nil {
 			lastErr = fmt.Errorf("error reading (status, payload) for job %d: %w", jobID, err)
 			l.Printf("%v", lastErr)

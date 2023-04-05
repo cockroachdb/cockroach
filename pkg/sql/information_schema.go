@@ -1037,7 +1037,10 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 					typeNameStr := tree.NewDString(typeDesc.GetName())
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
-					privs := typeDesc.GetPrivileges().Show(privilege.Type, true /* showImplicitOwnerPrivs */)
+					privs, err := typeDesc.GetPrivileges().Show(privilege.Type, true /* showImplicitOwnerPrivs */)
+					if err != nil {
+						return err
+					}
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
@@ -1076,7 +1079,10 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, func(sc catalog.SchemaDescriptor) error {
-					privs := sc.GetPrivileges().Show(privilege.Schema, true /* showImplicitOwnerPrivs */)
+					privs, err := sc.GetPrivileges().Show(privilege.Schema, true /* showImplicitOwnerPrivs */)
+					if err != nil {
+						return err
+					}
 					dbNameStr := tree.NewDString(db.GetName())
 					scNameStr := tree.NewDString(sc.GetName())
 					// TODO(knz): This should filter for the current user, see
@@ -1348,7 +1354,11 @@ var informationSchemaUserPrivileges = virtualSchemaTable{
 				dbNameStr := tree.NewDString(dbDesc.GetName())
 				for _, u := range []string{username.RootUser, username.AdminRole} {
 					grantee := tree.NewDString(u)
-					for _, p := range privilege.GetValidPrivilegesForObject(privilege.Table).SortedNames() {
+					validPrivs, err := privilege.GetValidPrivilegesForObject(privilege.Table)
+					if err != nil {
+						return err
+					}
+					for _, p := range validPrivs.SortedNames() {
 						if err := addRow(
 							grantee,            // grantee
 							dbNameStr,          // table_catalog
@@ -1392,7 +1402,11 @@ func populateTablePrivileges(
 			if err != nil {
 				return err
 			}
-			for _, u := range desc.Show(tableType, true /* showImplicitOwnerPrivs */) {
+			showPrivs, err := desc.Show(tableType, true /* showImplicitOwnerPrivs */)
+			if err != nil {
+				return err
+			}
+			for _, u := range showPrivs {
 				granteeNameStr := tree.NewDString(u.User.Normalized())
 				for _, priv := range u.Privileges {
 					// We use this function to check for the grant option so that the

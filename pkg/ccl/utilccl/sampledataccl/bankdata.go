@@ -53,7 +53,7 @@ func toBackup(
 		}
 	}
 
-	if _, err := db.Exec("BACKUP DATABASE data TO $1", "nodelocal://0/"+path); err != nil {
+	if _, err := db.Exec("BACKUP DATABASE data TO $1", "nodelocal://1/"+path); err != nil {
 		return nil, err
 	}
 	return &Backup{BaseDir: filepath.Join(externalIODir, path)}, nil

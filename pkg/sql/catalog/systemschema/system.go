@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -208,7 +207,7 @@ CREATE TABLE system.jobs (
 	id                INT8      DEFAULT unique_rowid(),
 	status            STRING    NOT NULL,
 	created           TIMESTAMP NOT NULL DEFAULT now(),
-	payload           BYTES     NOT NULL,
+	payload           BYTES,
 	progress          BYTES,
 	created_by_type   STRING,
 	created_by_id     INT,
@@ -1642,7 +1641,7 @@ var (
 				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
 				{Name: "status", ID: 2, Type: types.String},
 				{Name: "created", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
-				{Name: "payload", ID: 4, Type: types.Bytes},
+				{Name: "payload", ID: 4, Type: types.Bytes, Nullable: true},
 				{Name: "progress", ID: 5, Type: types.Bytes, Nullable: true},
 				{Name: "created_by_type", ID: 6, Type: types.String, Nullable: true},
 				{Name: "created_by_id", ID: 7, Type: types.Int, Nullable: true},
@@ -3979,14 +3978,3 @@ var (
 
 // SpanConfigurationsTableName represents system.span_configurations.
 var SpanConfigurationsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(catconstants.SpanConfigurationsTableName))
-
-// TestSupportMultiRegion returns true if the cluster should support multi-region
-// optimized system databases.
-//
-// TODO(jeffswenson): remove TestSupportMultiRegion after implementing
-// migrations and version gates to migrate to the new regional by row
-// compatible schemas. The helper exists to allow e2e testing of the in
-// development multi-region system database features.
-func TestSupportMultiRegion() bool {
-	return envutil.EnvOrDefaultBool("COCKROACH_MR_SYSTEM_DATABASE", false)
-}

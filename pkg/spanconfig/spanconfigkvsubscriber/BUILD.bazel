@@ -64,6 +64,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigkvaccessor",
+        "//pkg/spanconfig/spanconfigstore",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/sql/isql",
         "//pkg/testutils",

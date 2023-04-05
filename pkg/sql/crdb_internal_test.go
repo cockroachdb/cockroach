@@ -833,8 +833,8 @@ func TestInternalJobsTableRetryColumns(t *testing.T) {
 			payloadBytes, err := protoutil.Marshal(&payload)
 			assert.NoError(t, err)
 			tdb.Exec(t,
-				"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, $4)",
-				1, jobs.StatusRunning, timeutil.Now(), payloadBytes,
+				"INSERT INTO system.jobs (id, status, created) values ($1, $2, $3)",
+				1, jobs.StatusRunning, timeutil.Now(),
 			)
 			tdb.Exec(t,
 				"INSERT INTO system.job_info (job_id, info_key, value) values ($1, $2, $3)",
@@ -1328,8 +1328,8 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 	assert.NoError(t, err)
 
 	tdb.Exec(t,
-		"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, $4)",
-		1, jobs.StatusRunning, timeutil.Now(), payloadBytes,
+		"INSERT INTO system.jobs (id, status, created) values ($1, $2, $3)",
+		1, jobs.StatusRunning, timeutil.Now(),
 	)
 	tdb.Exec(t,
 		"INSERT INTO system.job_info (job_id, info_key, value) values ($1, $2, $3)",
@@ -1337,8 +1337,9 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 	)
 
 	tdb.Exec(t,
-		"INSERT INTO system.jobs values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
-		2, jobs.StatusRunning, timeutil.Now(), payloadBytes, []byte("progress"), "created by", 2, []byte("claim session id"),
+		`INSERT INTO system.jobs (id, status, created, created_by_type, created_by_id, 
+                         claim_session_id, claim_instance_id, num_runs, last_run, job_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		2, jobs.StatusRunning, timeutil.Now(), "created by", 2, []byte("claim session id"),
 		2, 2, timeutil.Now(), jobspb.TypeImport.String(),
 	)
 	tdb.Exec(t,
@@ -1350,20 +1351,19 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 		2, jobs.GetLegacyProgressKey(), []byte("progress"),
 	)
 
-	res := tdb.QueryStr(t, "SELECT * FROM system.jobs ORDER BY id")
-	tdb.CheckQueryResults(t, `SELECT * FROM crdb_internal.system_jobs ORDER BY id`, res)
+	res := tdb.QueryStr(t, `
+			SELECT id, status, created, created_by_type, created_by_id, claim_session_id,
+      claim_instance_id, num_runs, last_run, job_type
+			FROM system.jobs ORDER BY id`,
+	)
 	tdb.CheckQueryResults(t, `
-			SELECT id, status, created, payload, progress, created_by_type, created_by_id, claim_session_id,
+			SELECT id, status, created, created_by_type, created_by_id, claim_session_id,
              claim_instance_id, num_runs, last_run, job_type
 			FROM crdb_internal.system_jobs ORDER BY id`,
 		res,
 	)
-	tdb.CheckQueryResults(t, `
-			SELECT id, status, created, payload, progress, created_by_type, created_by_id, claim_session_id,
-      claim_instance_id, num_runs, last_run, job_type
-			FROM system.jobs ORDER BY id`,
-		res,
-	)
+
+	// TODO(adityamaru): add checks for payload and progress
 }
 
 // TestInternalSystemJobsTableWorksWithVersionPreV23_1BackfillTypeColumnInJobsTable
@@ -1435,8 +1435,8 @@ func TestCorruptPayloadError(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	tdb.Exec(t,
-		"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, $4)",
-		1, jobs.StatusRunning, timeutil.Now(), []byte("invalid payload"),
+		"INSERT INTO system.jobs (id, status, created) values ($1, $2, $3)",
+		1, jobs.StatusRunning, timeutil.Now(),
 	)
 	tdb.Exec(t,
 		"INSERT INTO system.job_info (job_id, info_key, value) values ($1, $2, $3)",

@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -591,13 +590,9 @@ func TestToHex(t *testing.T) {
 	}
 	// Stores index and type of marshaled messages in the table row.
 	// Negative indices work from the end - this is needed because parsing the
-	// fields is not alway s precise as there can be spaces in the fields but the
+	// fields is not always precise as there can be spaces in the fields but the
 	// hex fields are always in the end of the row and they don't contain spaces.
 	hexFiles := map[string][]hexField{
-		"debug/system.jobs.txt": {
-			{idx: -2, msg: &jobspb.Payload{}},
-			{idx: -1, msg: &jobspb.Progress{}},
-		},
 		"debug/system.descriptor.txt": {
 			{idx: 2, msg: &descpb.Descriptor{}},
 		},

@@ -38,6 +38,10 @@ type TestingKnobs struct {
 	// which the job monitor needs to check whether the schedule needs to be
 	// updated.
 	JobMonitorUpdateCheckInterval time.Duration
+
+	// SkipZoneConfigBootstrap used for backup tests where we want to skip
+	// the Zone Config TTL setup.
+	SkipZoneConfigBootstrap bool
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.

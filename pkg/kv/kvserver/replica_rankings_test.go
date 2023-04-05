@@ -37,52 +37,65 @@ func TestReplicaRankings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	dimensions := []aload.Dimension{aload.Queries, aload.CPU}
 	rr := NewReplicaRankings()
 
 	testCases := []struct {
-		replicasByQPS []float64
+		replicasByLoad []float64
 	}{
-		{replicasByQPS: []float64{}},
-		{replicasByQPS: []float64{0}},
-		{replicasByQPS: []float64{1, 0}},
-		{replicasByQPS: []float64{3, 2, 1, 0}},
-		{replicasByQPS: []float64{3, 3, 2, 2, 1, 1, 0, 0}},
-		{replicasByQPS: []float64{1.1, 1.0, 0.9, -0.9, -1.0, -1.1}},
+		{replicasByLoad: []float64{}},
+		{replicasByLoad: []float64{0}},
+		{replicasByLoad: []float64{1, 0}},
+		{replicasByLoad: []float64{3, 2, 1, 0}},
+		{replicasByLoad: []float64{3, 3, 2, 2, 1, 1, 0, 0}},
+		{replicasByLoad: []float64{1.1, 1.0, 0.9, -0.9, -1.0, -1.1}},
 	}
 
 	for _, tc := range testCases {
-		acc := NewReplicaAccumulator(aload.Queries)
+		for _, dimension := range dimensions {
+			acc := NewReplicaAccumulator(dimensions...)
 
-		// Randomize the order of the inputs each time the test is run.
-		want := make([]float64, len(tc.replicasByQPS))
-		copy(want, tc.replicasByQPS)
-		rand.Shuffle(len(tc.replicasByQPS), func(i, j int) {
-			tc.replicasByQPS[i], tc.replicasByQPS[j] = tc.replicasByQPS[j], tc.replicasByQPS[i]
-		})
+			// Randomize the order of the inputs each time the test is run. Also make
+			// a copy so that we can test on the copy for each dimension without
+			// mutating the underlying test case slice.
+			rLoad := make([]float64, len(tc.replicasByLoad))
+			want := make([]float64, len(tc.replicasByLoad))
+			copy(want, tc.replicasByLoad)
+			copy(rLoad, tc.replicasByLoad)
 
-		for i, replQPS := range tc.replicasByQPS {
-			acc.AddReplica(candidateReplica{
-				Replica: &Replica{RangeID: roachpb.RangeID(i)},
-				usage:   allocator.RangeUsageInfo{QueriesPerSecond: replQPS},
+			rand.Shuffle(len(rLoad), func(i, j int) {
+				rLoad[i], rLoad[j] = rLoad[j], rLoad[i]
 			})
-		}
-		rr.Update(acc)
 
-		// Make sure we can read off all expected replicas in the correct order.
-		repls := rr.TopLoad()
-		if len(repls) != len(want) {
-			t.Errorf("wrong number of replicas in output; got: %v; want: %v", repls, tc.replicasByQPS)
-			continue
-		}
-		for i := range want {
-			if repls[i].RangeUsageInfo().QueriesPerSecond != want[i] {
-				t.Errorf("got %f for %d'th element; want %f (input: %v)", repls[i].RangeUsageInfo().QueriesPerSecond, i, want, tc.replicasByQPS)
-				break
+			for i, replLoad := range rLoad {
+				acc.AddReplica(candidateReplica{
+					Replica: &Replica{RangeID: roachpb.RangeID(i)},
+					usage: allocator.RangeUsageInfo{
+						// We should get the same ordering for both QPS and CPU.
+						QueriesPerSecond:         replLoad,
+						RequestCPUNanosPerSecond: replLoad,
+					},
+				})
 			}
-		}
-		replsCopy := rr.TopLoad()
-		if !reflect.DeepEqual(repls, replsCopy) {
-			t.Errorf("got different replicas on second call to topQPS; first call: %v, second call: %v", repls, replsCopy)
+			rr.Update(acc)
+
+			// Make sure we can read off all expected replicas in the correct order.
+			repls := rr.TopLoad(dimension)
+			if len(repls) != len(want) {
+				t.Errorf("wrong number of replicas in output; got: %v; want: %v", repls, rLoad)
+				continue
+			}
+			for i := range want {
+				if repls[i].RangeUsageInfo().Load().Dim(dimension) != want[i] {
+					t.Errorf("got %f for %d'th element; want %f (input: %v)",
+						repls[i].RangeUsageInfo().Load().Dim(dimension), i, want, rLoad)
+					break
+				}
+			}
+			replsCopy := rr.TopLoad(dimension)
+			if !reflect.DeepEqual(repls, replsCopy) {
+				t.Errorf("got different replicas on second call to topQPS; first call: %v, second call: %v", repls, replsCopy)
+			}
 		}
 	}
 }

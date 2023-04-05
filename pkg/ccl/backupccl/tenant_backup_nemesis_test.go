@@ -95,14 +95,14 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 	importStmt := fmt.Sprintf(`IMPORT INTO "%s" CSV DATA ('workload:///csv/bank/bank?payload-bytes=100&row-end=1&row-start=0&rows=1000&seed=1&version=1.0.0')`, tableName)
 	tenant10DB.ExpectErr(t, "pause", importStmt)
 
-	hostSQLDB.Exec(t, "BACKUP TENANT 10 INTO 'nodelocal://0/tenant-backup'")
+	hostSQLDB.Exec(t, "BACKUP TENANT 10 INTO 'nodelocal://1/tenant-backup'")
 
 	tenant10DB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 	tenant10DB.Exec(t, "CANCEL JOB (SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status = 'paused')")
 	tenant10DB.Exec(t, "SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT')")
 
-	hostSQLDB.Exec(t, "BACKUP TENANT 10 INTO LATEST IN 'nodelocal://0/tenant-backup'")
-	hostSQLDB.Exec(t, "RESTORE TENANT 10 FROM LATEST IN 'nodelocal://0/tenant-backup' WITH tenant_name = 'tenant-11'")
+	hostSQLDB.Exec(t, "BACKUP TENANT 10 INTO LATEST IN 'nodelocal://1/tenant-backup'")
+	hostSQLDB.Exec(t, "RESTORE TENANT 10 FROM LATEST IN 'nodelocal://1/tenant-backup' WITH tenant_name = 'tenant-11'")
 
 	tenant11, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{
 		TenantName:          "tenant-11",
@@ -178,7 +178,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 	_, err = workloadsql.Setup(ctx, tenant10Conn, bankData, l)
 	require.NoError(t, err)
 
-	backupLoc := "nodelocal://0/tenant-backup"
+	backupLoc := "nodelocal://1/tenant-backup"
 
 	backupDone := make(chan struct{})
 	g := ctxgroup.WithContext(ctx)

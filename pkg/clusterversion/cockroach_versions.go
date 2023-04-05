@@ -224,9 +224,11 @@ const (
 	TODODelete_V22_2SystemUsersIDColumnIsBackfilled
 	// TODODelete_V22_2SetSystemUsersUserIDColumnNotNull sets the user_id column in system.users to not null.
 	TODODelete_V22_2SetSystemUsersUserIDColumnNotNull
-	// TODODelete_V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
+	// Permanent_V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
-	TODODelete_V22_2SQLSchemaTelemetryScheduledJobs
+	//
+	// This is a permanent migration which should exist forever.
+	Permanent_V22_2SQLSchemaTelemetryScheduledJobs
 	// TODODelete_V22_2SchemaChangeSupportsCreateFunction adds support of CREATE FUNCTION
 	// statement.
 	TODODelete_V22_2SchemaChangeSupportsCreateFunction
@@ -510,6 +512,14 @@ const (
 	// that are optimized for the console.
 	V23_1AddSystemActivityTables
 
+	// V23_1StopWritingPayloadAndProgressToSystemJobs is the version where the
+	// payload and progress columns are no longer written to system.jobs.
+	V23_1StopWritingPayloadAndProgressToSystemJobs
+
+	// V23_1ChangeSQLStatsTTL is the version where the gc TTL was updated to all
+	// SQL Stats tables.
+	V23_1ChangeSQLStatsTTL
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -640,7 +650,7 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 40},
 	},
 	{
-		Key:     TODODelete_V22_2SQLSchemaTelemetryScheduledJobs,
+		Key:     Permanent_V22_2SQLSchemaTelemetryScheduledJobs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 42},
 	},
 	{
@@ -882,6 +892,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1AddSystemActivityTables,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 94},
+	},
+	{
+		Key:     V23_1StopWritingPayloadAndProgressToSystemJobs,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 96},
+	},
+	{
+		Key:     V23_1ChangeSQLStatsTTL,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 98},
 	},
 
 	// *************************************************

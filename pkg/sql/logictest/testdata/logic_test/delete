@@ -533,3 +533,35 @@ SELECT a FROM pindex@pindex_a_idx WHERE a > 3
 ----
 4.00
 8.00
+
+statement ok
+DELETE FROM pindex USING (VALUES (2.0), (4.0)) v(b) WHERE pindex.a = v.b RETURNING v.b
+
+query F rowsort
+SELECT * FROM pindex;
+----
+1.00
+3.00
+8.00
+
+query F rowsort
+SELECT a FROM pindex@pindex_a_idx WHERE a > 3
+----
+8.00
+
+# Regression test for #99630. Partial index DEL columns should come after
+# passthrough columns in the delete node's column list.
+statement ok
+CREATE TABLE t99630a (a INT, INDEX idx (a) WHERE a > 0);
+CREATE TABLE t99630b (b BOOL);
+INSERT INTO t99630a VALUES (11);
+INSERT INTO t99630b VALUES (false);
+
+query B
+DELETE FROM t99630a USING t99630b RETURNING b
+----
+false
+
+query I
+SELECT a FROM t99630a@idx WHERE a > 0
+----

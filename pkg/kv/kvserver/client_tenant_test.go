@@ -25,7 +25,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // for tenant functionality
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -169,6 +172,15 @@ func TestTenantRateLimiter(t *testing.T) {
 					TimeSource: timeSource,
 				},
 			},
+			KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
+			JobsTestingKnobs: &jobs.TestingKnobs{
+				DisableAdoptions: true,
+			},
+			UpgradeManager: &upgradebase.TestingKnobs{
+				DontUseJobs:                       true,
+				SkipJobMetricsPollingJobBootstrap: true,
+				SkipAutoConfigRunnerJobBootstrap:  true,
+			},
 		},
 	})
 	ctx := context.Background()
@@ -176,6 +188,13 @@ func TestTenantRateLimiter(t *testing.T) {
 	ts, err := s.StartTenant(ctx, base.TestTenantArgs{
 		TenantID: tenantID,
 		TestingKnobs: base.TestingKnobs{
+			JobsTestingKnobs: &jobs.TestingKnobs{
+				DisableAdoptions: true,
+			},
+			// DisableAdoptions needs this.
+			UpgradeManager: &upgradebase.TestingKnobs{
+				DontUseJobs: true,
+			},
 			SpanConfig: &spanconfig.TestingKnobs{
 				// Disable the span reconciler because it performs tenant KV requests
 				// that interfere with our operation counts below.
@@ -217,6 +236,11 @@ func TestTenantRateLimiter(t *testing.T) {
 	// tooManyWrites is a number of writes which definitely exceed the burst
 	// limit.
 	tooManyWrites := int(cfg.Burst/writeCostLower) + 2
+
+	// This test shouldn't take forever. If we're going to fail, better to
+	// do it in minutes than in an hour.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 
 	// Make sure that writes to the system tenant don't block, even if we
 	// definitely exceed the burst rate.

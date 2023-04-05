@@ -24,8 +24,16 @@ fi
 artifacts=$PWD/artifacts/$(date +"%%Y%%m%%d")-${TC_BUILD_ID}
 mkdir -p "$artifacts"
 
+if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
+  tarball_platform="linux-amd64-fips"
+  fips_flag="--fips"
+else
+  tarball_platform="linux-amd64"
+  fips_flag=""
+fi
+
 release_version=$(echo $TC_BUILD_BRANCH | sed -e 's/provisional_[[:digit:]]*_//')
-curl -f -s -S -o- "https://storage.googleapis.com/cockroach-builds-artifacts-prod/cockroach-${release_version}.linux-amd64.tgz" | tar ixfz - --strip-components 1
+curl -f -s -S -o- "https://storage.googleapis.com/cockroach-builds-artifacts-prod/cockroach-${release_version}.${tarball_platform}.tgz" | tar ixfz - --strip-components 1
 chmod +x cockroach
 
 run_bazel <<'EOF'
@@ -55,4 +63,5 @@ timeout -s INT $((7800*60)) bin/roachtest run \
   --workload "$PWD/bin/workload" \
   --artifacts "$artifacts" \
   --parallelism 5 \
+  $fips_flag \
   --teamcity

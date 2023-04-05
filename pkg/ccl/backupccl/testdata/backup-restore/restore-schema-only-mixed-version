@@ -17,7 +17,7 @@ BACKUP Database d INTO 'nodelocal://1/full_database_backup/';
 ----
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, new_db_name='d2';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full_database_backup/' with schema_only, new_db_name='d2';
 ----
 pq: cannot run RESTORE with schema_only until cluster has fully upgraded to 22.2
 
@@ -25,7 +25,7 @@ upgrade-cluster version=Start22_2
 ----
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, new_db_name='d2';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full_database_backup/' with schema_only, new_db_name='d2';
 ----
 
 # There should be no data in the user tables.

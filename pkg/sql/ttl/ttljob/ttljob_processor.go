@@ -326,7 +326,7 @@ func (t *ttlProcessor) runTTLOnSpan(
 				return nil
 			}
 			if err := serverCfg.DB.Txn(
-				ctx, do, isql.SteppingEnabled(), isql.WithPriority(admissionpb.UserLowPri),
+				ctx, do, isql.SteppingEnabled(), isql.WithPriority(admissionpb.TTLLowPri),
 			); err != nil {
 				return spanRowCount, errors.Wrapf(err, "error during row deletion")
 			}
