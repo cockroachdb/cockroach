@@ -1800,6 +1800,123 @@ vectorized: true
   spans: /10/0 /20/0
   parallel
 
+# Now verify that if 'unbounded_parallel_scans' is 'true', then the scans are
+# parallelized even when we don't have a small upper bound.
+
+statement ok
+SET unbounded_parallel_scans = true
+
+# No end key in the span.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE a > 10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, item, price)
+  estimated row count: 333 (missing stats)
+  table: a@a_pkey
+  spans: /11-
+  parallel
+
+# Range queries have unbounded number of results.
+query T
+EXPLAIN (VERBOSE) SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND price < 40
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (item)
+│
+└── • index join
+    │ columns: (item, price)
+    │ estimated row count: 110 (missing stats)
+    │ table: a@a_pkey
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a, price)
+          estimated row count: 110 (missing stats)
+          table: a@p
+          spans: /5.000000000000001-/9.999999999999998/PrefixEnd /20.000000000000004-/39.99999999999999/PrefixEnd
+          parallel
+
+# Only part of the primary key is specified.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM b WHERE a = 10 OR a = 20
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b, c, d)
+  estimated row count: 20 (missing stats)
+  table: b@b_pkey
+  spans: /10-/11 /20-/21
+  parallel
+
+# Still not parallelizable because it has a LIMIT clause.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE a = 10 OR a = 20 LIMIT 1
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, item, price)
+  estimated row count: 1 (missing stats)
+  table: a@a_pkey
+  spans: /10/0 /20/0
+  limit: 1
+
+# NULLs at the span boundaries prevent us from putting a bound on the row count.
+query T
+EXPLAIN (VERBOSE) SELECT c FROM b WHERE c = 10 OR c < 2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (c)
+  estimated row count: 330 (missing stats)
+  table: b@b_c_key
+  spans: /!NULL-/2 /10/0
+  parallel
+
+query T
+EXPLAIN (VERBOSE) SELECT d FROM b WHERE d = 10 OR d < 2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (d)
+  estimated row count: 330 (missing stats)
+  table: b@b_d_key
+  spans: /10/0 /1-/NULL
+  parallel
+
+query T
+EXPLAIN (VERBOSE) SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (d)
+│
+└── • scan
+      columns: (c, d)
+      estimated row count: 1 (missing stats)
+      table: b@b_c_d_key
+      spans: /NULL/1-/NULL/2 /10/10/0
+      parallel
+
+statement ok
+SET unbounded_parallel_scans = false
+
 statement ok
 ALTER TABLE a SPLIT AT VALUES(5)
 
