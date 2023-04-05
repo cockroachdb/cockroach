@@ -46,6 +46,7 @@
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
             "cockroach/pkg/.*_generated\\.go$": "generated code",
+            "cockroach/pkg/cmd/github-pull-request-make/main.go": "invalid direct cast on error object",
             "cockroach/pkg/kv/kvclient/kvcoord/lock_spans_over_budget_error\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/kv/kvpb/batch_generated-gen\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/kv/kvpb/errors\\.go$": "invalid direct cast on error object",

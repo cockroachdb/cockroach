@@ -250,7 +250,11 @@ func main() {
 					if err == nil {
 						break
 					} else {
-						fmt.Printf("bazel query failed; got output %s\n", string(out))
+						var stderr []byte
+						if exitErr, ok := err.(*exec.ExitError); ok {
+							stderr = exitErr.Stderr
+						}
+						fmt.Printf("bazel query over pkg %s failed; got stdout %s, stderr %s\n", name, string(out), string(stderr))
 						if tries == 3 {
 							log.Fatal(err)
 						}
