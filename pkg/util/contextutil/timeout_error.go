@@ -37,7 +37,7 @@ type TimeoutError struct {
 
 var _ error = (*TimeoutError)(nil)
 var _ fmt.Formatter = (*TimeoutError)(nil)
-var _ errors.Formatter = (*TimeoutError)(nil)
+var _ errors.SafeFormatter = (*TimeoutError)(nil)
 
 // We implement net.Error the same way that context.DeadlineExceeded does, so
 // that people looking for net.Error attributes will still find them.
@@ -53,8 +53,8 @@ func (t *TimeoutError) Error() string { return fmt.Sprintf("%v", t) }
 // Format implements fmt.Formatter.
 func (t *TimeoutError) Format(s fmt.State, verb rune) { errors.FormatError(t, s, verb) }
 
-// FormatError implements errors.Formatter.
-func (t *TimeoutError) FormatError(p errors.Printer) error {
+// SafeFormatError implements errors.SafeFormatter.
+func (t *TimeoutError) SafeFormatError(p errors.Printer) (next error) {
 	// NB: With RunWithTimeout(), it is possible for both the caller and the
 	// callee to have set their own context timeout that is smaller than the
 	// timeout set by RunWithTimeout. It is also possible for the operation to run
