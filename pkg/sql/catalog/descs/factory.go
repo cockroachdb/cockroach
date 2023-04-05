@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -46,6 +47,7 @@ func (cf *CollectionFactory) GetClusterSettings() *cluster.Settings {
 type Txn interface {
 	isql.Txn
 	Descriptors() *Collection
+	Regions() RegionProvider
 }
 
 // DB is used to enable running multiple queries with an internal
@@ -158,4 +160,13 @@ func (cf *CollectionFactory) NewCollection(ctx context.Context, options ...Optio
 		temporarySchemaProvider: cfg.dsdp,
 		validationModeProvider:  cfg.dsdp,
 	}
+}
+
+// RegionProvider abstracts the lookup of regions. It is used to implement
+// crdb_internal.regions, which ultimately drives `SHOW REGIONS` and the
+// logic in the commands to manipulate multi-region features.
+type RegionProvider interface {
+	// GetRegions provides access to the set of regions available to the
+	// current tenant.
+	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
 }

@@ -579,10 +579,9 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 	// Update the zone configuration.
 	if err := ApplyZoneConfigForMultiRegionTable(
 		params.ctx,
-		params.p.Txn(),
+		params.p.InternalSQLTxn(),
 		params.p.ExecCfg(),
 		params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		params.p.Descriptors(),
 		regionConfig,
 		n.tableDesc,
 		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
