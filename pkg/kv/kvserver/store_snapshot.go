@@ -105,6 +105,7 @@ type snapshotStrategy interface {
 	// constructs an IncomingSnapshot.
 	Receive(
 		context.Context,
+		*Store,
 		incomingSnapshotStream,
 		kvserverpb.SnapshotRequest_Header,
 		snapshotRecordMetrics,
@@ -367,11 +368,14 @@ func (tag *snapshotTimingTag) Render() []attribute.KeyValue {
 // key space across to the next key span.
 func (kvSS *kvBatchSnapshotStrategy) Receive(
 	ctx context.Context,
+	s *Store,
 	stream incomingSnapshotStream,
 	header kvserverpb.SnapshotRequest_Header,
 	recordBytesReceived snapshotRecordMetrics,
 ) (IncomingSnapshot, error) {
 	assertStrategy(ctx, header, kvserverpb.SnapshotRequest_KV_BATCH)
+	sp := tracing.SpanFromContext(ctx)
+	rec := sp.GetConfiguredRecording()
 
 	// These stopwatches allow us to time the various components of Receive().
 	// - totalTime Stopwatch measures the total time spent within this function.
@@ -410,7 +414,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		}
 		if req.Header != nil {
 			err := errors.New("client error: provided a header mid-stream")
-			return noSnap, sendSnapshotError(stream, err)
+			return noSnap, sendSnapshotError(s, stream, err, rec)
 		}
 
 		if req.KVBatch != nil {
@@ -476,7 +480,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
 			if err != nil {
 				err = errors.Wrap(err, "client error: invalid snapshot")
-				return noSnap, sendSnapshotError(stream, err)
+				return noSnap, sendSnapshotError(s, stream, err, rec)
 			}
 
 			inSnap := IncomingSnapshot{
@@ -951,6 +955,7 @@ func (s *Store) receiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header, stream incomingSnapshotStream,
 ) error {
 	sp := tracing.SpanFromContext(ctx)
+	rec := sp.GetConfiguredRecording()
 
 	// Draining nodes will generally not be rebalanced to (see the filtering that
 	// happens in getStoreListFromIDsLocked()), but in case they are, they should
@@ -966,7 +971,7 @@ func (s *Store) receiveSnapshot(
 			// getStoreListFromIDsLocked(). Is that sound? Don't we want to
 			// upreplicate to draining nodes if there are no other candidates?
 		case kvserverpb.SnapshotRequest_REBALANCE:
-			return sendSnapshotError(stream, errors.New(storeDrainingMsg))
+			return sendSnapshotError(s, stream, errors.New(storeDrainingMsg), rec)
 		default:
 			// If this a new snapshot type that this cockroach version does not know
 			// about, we let it through.
@@ -977,7 +982,7 @@ func (s *Store) receiveSnapshot(
 		if err := fn(header); err != nil {
 			// NB: we intentionally don't mark this error as errMarkSnapshotError so
 			// that we don't end up retrying injected errors in tests.
-			return sendSnapshotError(stream, err)
+			return sendSnapshotError(s, stream, err, rec)
 		}
 	}
 
@@ -1017,7 +1022,7 @@ func (s *Store) receiveSnapshot(
 			return nil
 		}); pErr != nil {
 		log.Infof(ctx, "cannot accept snapshot: %s", pErr)
-		return sendSnapshotError(stream, pErr.GoError())
+		return sendSnapshotError(s, stream, pErr.GoError(), rec)
 	}
 
 	defer func() {
@@ -1039,7 +1044,7 @@ func (s *Store) receiveSnapshot(
 		snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
 		if err != nil {
 			err = errors.Wrap(err, "invalid snapshot")
-			return sendSnapshotError(stream, err)
+			return sendSnapshotError(s, stream, err, rec)
 		}
 
 		ss = &kvBatchSnapshotStrategy{
@@ -1049,9 +1054,10 @@ func (s *Store) receiveSnapshot(
 		}
 		defer ss.Close(ctx)
 	default:
-		return sendSnapshotError(stream,
+		return sendSnapshotError(s, stream,
 			errors.Errorf("%s,r%d: unknown snapshot strategy: %s",
 				s, header.State.Desc.RangeID, header.Strategy),
+			rec,
 		)
 	}
 
@@ -1078,13 +1084,11 @@ func (s *Store) receiveSnapshot(
 	}
 	ctx, rSp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "receive snapshot data")
 	defer rSp.Finish() // Ensure that the tracing span is closed, even if ss.Receive errors
-	inSnap, err := ss.Receive(ctx, stream, *header, recordBytesReceived)
+	inSnap, err := ss.Receive(ctx, s, stream, *header, recordBytesReceived)
 	if err != nil {
 		return err
 	}
 	inSnap.placeholder = placeholder
-
-	rec := sp.GetConfiguredRecording()
 
 	// Use a background context for applying the snapshot, as handleRaftReady is
 	// not prepared to deal with arbitrary context cancellation. Also, we've
@@ -1097,7 +1101,7 @@ func (s *Store) receiveSnapshot(
 		// sender as this being a retriable error, see isSnapshotError().
 		err = errors.Mark(err, errMarkSnapshotError)
 		err = errors.Wrap(err, "failed to apply snapshot")
-		return sendSnapshotErrorWithTrace(stream, err, rec)
+		return sendSnapshotError(s, stream, err, rec)
 	}
 	return stream.Send(&kvserverpb.SnapshotResponse{
 		Status:         kvserverpb.SnapshotResponse_APPLIED,
@@ -1105,13 +1109,10 @@ func (s *Store) receiveSnapshot(
 	})
 }
 
-func sendSnapshotError(stream incomingSnapshotStream, err error) error {
-	return sendSnapshotErrorWithTrace(stream, err, nil /* trace */)
-}
-
-func sendSnapshotErrorWithTrace(
-	stream incomingSnapshotStream, err error, trace tracingpb.Recording,
+func sendSnapshotError(
+	s *Store, stream incomingSnapshotStream, err error, trace tracingpb.Recording,
 ) error {
+	s.metrics.RangeSnapshotRecvFailed.Inc(1)
 	resp := snapRespErr(err)
 	resp.CollectedSpans = trace
 	return stream.Send(resp)
