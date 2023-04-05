@@ -1,3 +1,5 @@
+# LogicTest: default-configs !local-mixed-22.2-23.1
+
 statement ok
 CREATE TYPE t AS (a INT, b INT)
 
