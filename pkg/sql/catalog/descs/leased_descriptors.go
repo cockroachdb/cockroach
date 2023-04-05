@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type leaseManager interface {
+type LeaseManager interface {
 	AcquireByName(
 		ctx context.Context,
 		timestamp hlc.Timestamp,
@@ -62,7 +62,7 @@ func (m maxTimestampBoundDeadlineHolder) UpdateDeadline(
 	return nil
 }
 
-func makeLeasedDescriptors(lm leaseManager) leasedDescriptors {
+func makeLeasedDescriptors(lm LeaseManager) leasedDescriptors {
 	return leasedDescriptors{
 		lm: lm,
 	}
@@ -71,7 +71,7 @@ func makeLeasedDescriptors(lm leaseManager) leasedDescriptors {
 // leasedDescriptors holds references to all the descriptors leased in the
 // transaction, and supports access by name and by ID.
 type leasedDescriptors struct {
-	lm    leaseManager
+	lm    LeaseManager
 	cache nstree.NameMap
 }
 
