@@ -2839,3 +2839,27 @@ INSERT INTO t_98269 VALUES (0);
 
 statement error pgcode 0A000 .* cluster_logical_timestamp\(\): nil txn in cluster context
 ALTER TABLE t_98269 ADD COLUMN j DECIMAL NOT NULL DEFAULT cluster_logical_timestamp();
+
+subtest 99764
+
+statement ok
+CREATE TABLE t_99764 (i INT PRIMARY KEY, j INT, UNIQUE (j, CAST(j AS STRING)), FAMILY "primary" (i, j));
+set sql_safe_updates = false;
+
+# Dropping `j` should also drop the unique index as well as the expression column.
+# Legacy schema change is incapable to do this.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.1-22.2
+statement ok
+ALTER TABLE t_99764 DROP COLUMN j CASCADE;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.1-22.2
+query TT
+show create table t_99764
+----
+t_99764  CREATE TABLE public.t_99764 (
+             i INT8 NOT NULL,
+             CONSTRAINT t_99764_pkey PRIMARY KEY (i ASC)
+         )
+
