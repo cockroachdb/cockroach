@@ -19,7 +19,7 @@ import classNames from "classnames/bind";
 
 import styles from "./rangeSelector.module.scss";
 import { TimeWindow } from "./timeScaleTypes";
-import {TimezoneContext} from "../contexts";
+import {CoordinatedUniversalTime, TimezoneContext} from "../contexts";
 
 const cx = classNames.bind(styles);
 
@@ -226,7 +226,10 @@ const RangeSelect = ({
                         {selected.timeEnd}
                       </span>{" "}
                       <span className={cx("Select-value-label__sufix")}>
-                        ({timezone})
+                        {timezone.toLowerCase() ===
+                        CoordinatedUniversalTime.toLowerCase()
+                          ? "UTC"
+                          : timezone}
                       </span>
                     </>
                   )}

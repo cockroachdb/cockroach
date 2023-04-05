@@ -21,7 +21,7 @@ import { Button } from "src/button";
 import { Text, TextTypes } from "src/text";
 
 import styles from "./dateRangeMenu.module.scss";
-import {TimezoneContext} from "../contexts";
+import {CoordinatedUniversalTime, TimezoneContext} from "../contexts";
 
 const cx = classNames.bind(styles);
 
@@ -109,6 +109,11 @@ export function DateRangeMenu({
     onSubmit(startMoment.utc(), endMoment.utc());
   };
 
+  const timezoneLabel =
+    timezone.toLowerCase() === CoordinatedUniversalTime.toLowerCase()
+      ? "UTC"
+      : timezone;
+
   return (
     <div className={cx("popup-content")}>
       <div className={cx("return-to-preset-options-wrapper")}>
@@ -118,7 +123,7 @@ export function DateRangeMenu({
         </a>
       </div>
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
-        Start ({timezone})
+        Start ({timezoneLabel})
       </Text>
       <DatePicker
         disabledDate={isDisabled}
@@ -137,7 +142,7 @@ export function DateRangeMenu({
       />
       <div className={cx("divider")} />
       <Text className={cx("label")} textType={TextTypes.BodyStrong}>
-        End ({timezone})
+        End ({timezoneLabel})
       </Text>
       <DatePicker
         allowClear={false}
