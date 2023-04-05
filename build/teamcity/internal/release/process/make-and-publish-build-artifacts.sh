@@ -8,7 +8,15 @@ source "$dir/teamcity-bazel-support.sh"  # for run_bazel
 
 tc_start_block "Variable Setup"
 
-build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
+version=$(cat pkg/build/version.txt)
+extra=$(git rev-list ${version}.. --count 2>/dev/null || echo "unknown" )
+
+if [ "${since}" == "0" ];
+then
+  build_name="${version}"
+else
+  build_name="${version}-${extra}-g$(git rev-parse --short HEAD)"
+fi
 
 # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
 release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
