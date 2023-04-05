@@ -2698,7 +2698,7 @@ func (d *trackingListener) Close() error {
 }
 
 func newRegisteredServer(
-	t testing.TB, stopper *stop.Stopper, clusterID uuid.UUID, nodeID roachpb.NodeID,
+	t testing.TB, ctx context.Context, stopper *stop.Stopper, clusterID uuid.UUID, nodeID roachpb.NodeID,
 ) (*Context, string, chan *PingRequest, *trackingListener) {
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 1))
 	// We don't want to stall sending to this channel.
@@ -2727,8 +2727,8 @@ func newRegisteredServer(
 		return err
 	}
 
-	rpcCtx.NodeID.Set(context.Background(), nodeID)
-	rpcCtx.StorageClusterID.Set(context.Background(), clusterID)
+	rpcCtx.NodeID.Set(ctx, nodeID)
+	rpcCtx.StorageClusterID.Set(ctx, clusterID)
 	s := newTestServer(t, rpcCtx)
 
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
@@ -2736,13 +2736,13 @@ func newRegisteredServer(
 	ln, err := net.Listen("tcp", util.TestAddr.String())
 	require.Nil(t, err)
 	tracker := trackingListener{Listener: ln}
-	_ = stopper.RunAsyncTask(context.Background(), "serve", func(context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		closeReason := s.Serve(&tracker)
-		log.Infof(context.Background(), "Closed listener with reason %v", closeReason)
+		log.Infof(ctx, "Closed listener with reason %v", closeReason)
 	})
 
 	addr := ln.Addr().String()
-	log.Infof(context.Background(), "Listening on %s", addr)
+	log.Infof(ctx, "Listening on %s", addr)
 	// This needs to be set once we know our address so that ping requests have
 	// the correct reverse addr in them.
 	rpcCtx.Config.AdvertiseAddr = addr
@@ -2759,8 +2759,8 @@ func TestHeartbeatDialback(t *testing.T) {
 	defer stopper.Stop(ctx)
 	clusterID := uuid.MakeV4()
 
-	ctx1, remoteAddr1, pingChan1, ln1 := newRegisteredServer(t, stopper, clusterID, 1)
-	ctx2, remoteAddr2, pingChan2, ln2 := newRegisteredServer(t, stopper, clusterID, 2)
+	ctx1, remoteAddr1, pingChan1, ln1 := newRegisteredServer(t, context.Background(), stopper, clusterID, 1)
+	ctx2, remoteAddr2, pingChan2, ln2 := newRegisteredServer(t, context.Background(), stopper, clusterID, 2)
 	defer func() { netutil.FatalIfUnexpected(ln1.Close()) }()
 	defer func() { netutil.FatalIfUnexpected(ln2.Close()) }()
 
@@ -2822,6 +2822,7 @@ func TestHeartbeatDialback(t *testing.T) {
 	// Test the reverse connection also closes within ~RPCHeartbeatTimeout.
 	log.Info(ctx, "Closing node 2 listener")
 	_ = ln2.Close()
+	_ = ln1.Close()
 
 	// Wait for a few more pings to go through to make sure it has a chance to
 	// shut down the reverse connection. Normally the connect attempt times out
