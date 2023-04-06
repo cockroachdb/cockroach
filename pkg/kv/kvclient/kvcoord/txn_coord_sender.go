@@ -71,7 +71,7 @@ const (
 	txnFinalized
 )
 
-// A TxnCoordSender is the production implementation of client.TxnSender. It is
+// A TxnCoordSender is the production implementation of kv.TxnSender. It is
 // a Sender which wraps a lower-level Sender (a DistSender) to which it sends
 // commands. It works on behalf of the client to keep a transaction's state
 // (e.g. intents) and to perform periodic heartbeating of the transaction
@@ -410,7 +410,7 @@ func newLeafTxnCoordSender(
 	return tcs
 }
 
-// DisablePipelining is part of the client.TxnSender interface.
+// DisablePipelining is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) DisablePipelining() error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -469,7 +469,7 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 	return nil
 }
 
-// Send is part of the client.TxnSender interface.
+// Send is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) Send(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -998,14 +998,14 @@ func sanityCheckErrWithTxn(
 	return err
 }
 
-// TxnStatus is part of the client.TxnSender interface.
+// TxnStatus is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) TxnStatus() roachpb.TransactionStatus {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.Status
 }
 
-// SetUserPriority is part of the client.TxnSender interface.
+// SetUserPriority is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) SetUserPriority(pri roachpb.UserPriority) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -1017,7 +1017,7 @@ func (tc *TxnCoordSender) SetUserPriority(pri roachpb.UserPriority) error {
 	return nil
 }
 
-// SetDebugName is part of the client.TxnSender interface.
+// SetDebugName is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) SetDebugName(name string) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -1032,28 +1032,28 @@ func (tc *TxnCoordSender) SetDebugName(name string) {
 	tc.mu.txn.Name = name
 }
 
-// String is part of the client.TxnSender interface.
+// String is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) String() string {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.String()
 }
 
-// ReadTimestamp is part of the client.TxnSender interface.
+// ReadTimestamp is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) ReadTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.ReadTimestamp
 }
 
-// ProvisionalCommitTimestamp is part of the client.TxnSender interface.
+// ProvisionalCommitTimestamp is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) ProvisionalCommitTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.WriteTimestamp
 }
 
-// CommitTimestamp is part of the client.TxnSender interface.
+// CommitTimestamp is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -1062,14 +1062,14 @@ func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 	return txn.ReadTimestamp
 }
 
-// CommitTimestampFixed is part of the client.TxnSender interface.
+// CommitTimestampFixed is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) CommitTimestampFixed() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.CommitTimestampFixed
 }
 
-// SetFixedTimestamp is part of the client.TxnSender interface.
+// SetFixedTimestamp is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -1094,14 +1094,14 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 	return nil
 }
 
-// RequiredFrontier is part of the client.TxnSender interface.
+// RequiredFrontier is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) RequiredFrontier() hlc.Timestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.RequiredFrontier()
 }
 
-// ManualRestart is part of the client.TxnSender interface.
+// ManualRestart is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) ManualRestart(
 	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,
 ) {
@@ -1126,7 +1126,7 @@ func (tc *TxnCoordSender) ManualRestart(
 	tc.mu.txnState = txnPending
 }
 
-// IsSerializablePushAndRefreshNotPossible is part of the client.TxnSender interface.
+// IsSerializablePushAndRefreshNotPossible is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -1139,14 +1139,14 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	return isTxnPushed && refreshAttemptNotPossible
 }
 
-// Epoch is part of the client.TxnSender interface.
+// Epoch is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) Epoch() enginepb.TxnEpoch {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.Epoch
 }
 
-// IsLocking is part of the client.TxnSender interface.
+// IsLocking is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) IsLocking() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -1168,7 +1168,7 @@ func (tc *TxnCoordSender) Active() bool {
 	return tc.mu.active
 }
 
-// GetLeafTxnInputState is part of the client.TxnSender interface.
+// GetLeafTxnInputState is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) GetLeafTxnInputState(
 	ctx context.Context,
 ) (*roachpb.LeafTxnInputState, error) {
@@ -1196,7 +1196,7 @@ func (tc *TxnCoordSender) GetLeafTxnInputState(
 	return tis, nil
 }
 
-// GetLeafTxnFinalState is part of the client.TxnSender interface.
+// GetLeafTxnFinalState is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) GetLeafTxnFinalState(
 	ctx context.Context,
 ) (*roachpb.LeafTxnFinalState, error) {
@@ -1230,7 +1230,7 @@ func (tc *TxnCoordSender) GetLeafTxnFinalState(
 	return tfs, nil
 }
 
-// UpdateRootWithLeafFinalState is part of the client.TxnSender interface.
+// UpdateRootWithLeafFinalState is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
 	ctx context.Context, tfs *roachpb.LeafTxnFinalState,
 ) error {
@@ -1274,7 +1274,7 @@ func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
 	return nil
 }
 
-// TestingCloneTxn is part of the client.TxnSender interface.
+// TestingCloneTxn is part of the kv.TxnSender interface.
 // This is for use by tests only. To derive leaf TxnCoordSenders,
 // use GetLeafTxnInitialState instead.
 func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
@@ -1283,7 +1283,7 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 	return tc.mu.txn.Clone()
 }
 
-// PrepareRetryableError is part of the client.TxnSender interface.
+// PrepareRetryableError is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) PrepareRetryableError(
 	ctx context.Context, msg redact.RedactableString,
 ) error {
