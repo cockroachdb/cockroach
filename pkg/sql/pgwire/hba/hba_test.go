@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/rulebasedscanner"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
@@ -35,15 +36,15 @@ func TestParse(t *testing.T) {
 				return out.String()
 
 			case "line":
-				tokens, err := tokenize(td.Input)
+				tokens, err := rulebasedscanner.Tokenize(td.Input)
 				if err != nil {
 					td.Fatalf(t, "%v", err)
 				}
-				if len(tokens.lines) != 1 {
+				if len(tokens.Lines) != 1 {
 					td.Fatalf(t, "line parse only valid with one line of input")
 				}
 				prefix := "" // For debugging, use prefix := pretty.Sprint(tokens.lines[0]) + "\n"
-				entry, err := parseHbaLine(tokens.lines[0])
+				entry, err := parseHbaLine(tokens.Lines[0])
 				if err != nil {
 					return prefix + fmt.Sprintf("error: %v\n", err)
 				}
