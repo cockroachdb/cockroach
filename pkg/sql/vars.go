@@ -2569,6 +2569,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_hoist_uncorrelated_equality_subqueries`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_hoist_uncorrelated_equality_subqueries`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_hoist_uncorrelated_equality_subqueries", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerHoistUncorrelatedEqualitySubqueries(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`enable_create_stats_using_extremes`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_create_stats_using_extremes`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

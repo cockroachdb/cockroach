@@ -121,64 +121,58 @@ vectorized: true
 • root
 │ columns: (a, b, c)
 │
-├── • filter
+├── • project
 │   │ columns: (a, b, c)
-│   │ estimated row count: 333 (missing stats)
-│   │ filter: a = @S2
 │   │
-│   └── • scan
-│         columns: (a, b, c)
-│         estimated row count: 1,000 (missing stats)
-│         table: abc@abc_pkey
-│         spans: FULL SCAN
-│
-├── • subquery
-│   │ id: @S1
-│   │ original sql: (SELECT * FROM abc WHERE c = (a + 3))
-│   │ exec mode: one row
-│   │
-│   └── • render
-│       │ columns: (column16)
-│       │ render column16: true
+│   └── • lookup join (inner)
+│       │ columns: (any_not_null, a, b, c)
+│       │ estimated row count: 1 (missing stats)
+│       │ table: abc@abc_pkey
+│       │ equality: (any_not_null) = (a)
+│       │ equality cols are key
 │       │
-│       └── • limit
-│           │ columns: (a, c)
-│           │ count: 1
+│       └── • group (scalar)
+│           │ columns: (any_not_null)
+│           │ estimated row count: 1 (missing stats)
+│           │ aggregate 0: any_not_null(a)
 │           │
-│           └── • filter
-│               │ columns: (a, c)
-│               │ estimated row count: 330 (missing stats)
-│               │ filter: c = (a + 3)
+│           └── • limit
+│               │ columns: (a)
+│               │ count: 1
 │               │
-│               └── • scan
-│                     columns: (a, c)
-│                     estimated row count: 1,000 (missing stats)
-│                     table: abc@abc_pkey
-│                     spans: FULL SCAN (SOFT LIMIT)
+│               └── • filter
+│                   │ columns: (a)
+│                   │ ordering: -a
+│                   │ estimated row count: 333 (missing stats)
+│                   │ filter: COALESCE(@S1, false)
+│                   │
+│                   └── • revscan
+│                         columns: (a)
+│                         ordering: -a
+│                         estimated row count: 1,000 (missing stats)
+│                         table: abc@abc_pkey
+│                         spans: FULL SCAN (SOFT LIMIT)
 │
 └── • subquery
-    │ id: @S2
-    │ original sql: (SELECT max(a) FROM abc WHERE EXISTS (SELECT * FROM abc WHERE c = (a + 3)))
+    │ id: @S1
+    │ original sql: (SELECT * FROM abc WHERE c = (a + 3))
     │ exec mode: one row
     │
-    └── • group (scalar)
-        │ columns: (any_not_null)
-        │ estimated row count: 1 (missing stats)
-        │ aggregate 0: any_not_null(a)
+    └── • render
+        │ columns: (column16)
+        │ render column16: true
         │
         └── • limit
-            │ columns: (a)
+            │ columns: (a, c)
             │ count: 1
             │
             └── • filter
-                │ columns: (a)
-                │ ordering: -a
-                │ estimated row count: 333 (missing stats)
-                │ filter: COALESCE(@S1, false)
+                │ columns: (a, c)
+                │ estimated row count: 330 (missing stats)
+                │ filter: c = (a + 3)
                 │
-                └── • revscan
-                      columns: (a)
-                      ordering: -a
+                └── • scan
+                      columns: (a, c)
                       estimated row count: 1,000 (missing stats)
                       table: abc@abc_pkey
                       spans: FULL SCAN (SOFT LIMIT)

@@ -1262,30 +1262,32 @@ SELECT k, min_x() FROM a WHERE k = min_x()
 ----
 project
  ├── columns: k:1!null min_x:16
- ├── key: (1)
- ├── fd: (1)-->(16)
- ├── select
- │    ├── columns: k:1!null
- │    ├── key: (1)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,16)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null x:8!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,8), (8)==(1), (1)==(8)
  │    ├── scan a
  │    │    ├── columns: k:1!null
  │    │    └── key: (1)
+ │    ├── limit
+ │    │    ├── columns: x:8!null
+ │    │    ├── internal-ordering: +8
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:8!null
+ │    │    │    ├── key: (8)
+ │    │    │    ├── ordering: +8
+ │    │    │    └── limit hint: 1.00
+ │    │    └── 1
  │    └── filters
- │         └── eq [outer=(1), subquery, constraints=(/1: (/NULL - ])]
- │              ├── k:1
- │              └── subquery
- │                   └── limit
- │                        ├── columns: x:8!null
- │                        ├── internal-ordering: +8
- │                        ├── cardinality: [0 - 1]
- │                        ├── key: ()
- │                        ├── fd: ()-->(8)
- │                        ├── scan xy
- │                        │    ├── columns: x:8!null
- │                        │    ├── key: (8)
- │                        │    ├── ordering: +8
- │                        │    └── limit hint: 1.00
- │                        └── 1
+ │         └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  └── projections
       └── subquery [as=min_x:16, subquery]
            └── limit
