@@ -334,6 +334,11 @@ message LocalOnlySessionData {
   // parallelization will still be disabled for queries with LIMITs, and it can
   // lead to increased likelihood of OOMs.
   bool unbounded_parallel_scans = 101;
+  // OptimizerHoistUncorrelatedEqualitySubqueries, when true, causes the
+  // optimizer to hoist uncorrelated subqueries that are part of an equality
+  // expression with a column reference, which can produce more efficient query
+  // plans.
+  bool optimizer_hoist_uncorrelated_equality_subqueries = 102;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
