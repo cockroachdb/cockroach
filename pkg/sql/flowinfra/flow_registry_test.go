@@ -26,9 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // lookupFlow returns the registered flow with the given ID. If no such flow is
@@ -367,6 +369,7 @@ func TestHandshake(t *testing.T) {
 // subtests for more details.
 func TestFlowRegistryDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	reg := NewFlowRegistry()
@@ -396,7 +399,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		time.Sleep(time.Microsecond)
 		reg.UnregisterFlow(id)
 		<-drainDone
-		reg.Undrain()
+		reg.undrain()
 	})
 
 	// DrainTimeout verifies that Drain returns once the timeout expires.
@@ -404,7 +407,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		registerFlow(t, id)
 		reg.Drain(0 /* flowDrainWait */, 0 /* minFlowDrainWait */, nil /* reporter */)
 		reg.UnregisterFlow(id)
-		reg.Undrain()
+		reg.undrain()
 	})
 
 	// AcceptNewFlow verifies that a FlowRegistry continues accepting flows
@@ -434,7 +437,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		); !testutils.IsError(err, "draining") {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		reg.Undrain()
+		reg.undrain()
 	})
 
 	// MinFlowWait verifies that the FlowRegistry waits a minimum amount of time
@@ -464,7 +467,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		}
 		reg.UnregisterFlow(id)
 		<-drainDone
-		reg.Undrain()
+		reg.undrain()
 
 		// Case in which a running flow finishes before the minimum wait time. We
 		// attempt to register another flow after the completion of the first flow
@@ -504,7 +507,52 @@ func TestFlowRegistryDrain(t *testing.T) {
 		reg.UnregisterFlow(id)
 		<-drainDone
 
-		reg.Undrain()
+		reg.undrain()
+	})
+
+	// StaleFlowEntry verifies that the Drain doesn't get stuck forever due to a
+	// stale flowEntry in the registry that was created by ConnectInboundStream
+	// which failed its initial handshake. If such entry remains in the
+	// registry, then the Drain process will be stuck forever (#100710).
+	t.Run("StaleFlowEntry", func(t *testing.T) {
+		serverStream, _ /* clientStream */, cleanup := createDummyStream(t)
+		defer cleanup()
+
+		// Create a gRPC stream where we inject an error on each Send call.
+		//
+		// We don't need to delay the RPC call.
+		delayCh := make(chan struct{})
+		close(delayCh)
+		injectedErr := errors.New("injected error")
+		serverStream = &delayedErrorServerStream{
+			DistSQL_FlowStreamServer: serverStream,
+			// Make rpcCalledCh a buffered channel so that the RPC is not
+			// blocked.
+			rpcCalledCh: make(chan struct{}, 1),
+			delayCh:     delayCh,
+			err:         injectedErr,
+		}
+
+		// Attempt to connect an inbound stream for which there is no flow in
+		// the registry. In such case we attempt to send a handshake message
+		// which should fail with the injected error.
+		_, _, _, err := reg.ConnectInboundStream(ctx, id, execinfrapb.StreamID(0), serverStream, 0 /* timeout */)
+		if !errors.Is(err, injectedErr) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Now, the crux of the test: attempt to drain the registry and verify
+		// that there were no flows to drain. If we do see some, then it means
+		// that we have a stale flowEntry that will never get cleaned up.
+		var remaining int
+		reporter := func(r int, _ redact.SafeString) {
+			remaining += r
+		}
+		reg.Drain(0 /* flowDrainWait */, 0 /* minFlowDrainWait */, reporter)
+		reg.undrain()
+		if remaining != 0 {
+			t.Fatalf("expected zero flows reported, found %d", remaining)
+		}
 	})
 }
 

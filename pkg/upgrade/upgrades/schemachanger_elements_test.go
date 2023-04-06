@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,7 +36,6 @@ import (
 
 func TestUpgradeSchemaChangerElements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 98062, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -120,6 +118,7 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 				schemaChangeAllowedToComplete chan struct{}
 				waitedForJob                  chan struct{}
 				jobIsPaused                   chan struct{}
+				jobStarted                    chan struct{}
 				readyToQuery                  int64 = 0
 			)
 			scJobID := int64(jobspb.InvalidJobID)
@@ -131,6 +130,9 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 					if p.Stages[stageIdx].Phase == scop.PreCommitPhase {
 						atomic.StoreInt64(&scJobID, int64(p.JobID))
 					} else if p.Stages[stageIdx].Phase > scop.PreCommitPhase {
+						if tc.unpauseJob {
+							jobStarted <- struct{}{}
+						}
 						<-waitedForJob
 						waitedForJob = nil
 						schemaChangeAllowedToComplete <- struct{}{}
@@ -156,19 +158,23 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 			params.Knobs.JobsTestingKnobs = jobKnobs
 			s, sqlDB, _ := serverutils.StartServer(t, params)
 			defer s.Stopper().Stop(ctx)
-			_, err := sqlDB.Exec("CREATE TABLE t (pk INT PRIMARY KEY, b INT)")
+			// Make sure our cluster is up
+			_, err := sqlDB.Exec("SET CLUSTER SETTING version=$1",
+				clusterversion.ByKey(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates-1).String())
+			require.NoError(t, err)
+			_, err = sqlDB.Exec("CREATE TABLE t (pk INT PRIMARY KEY, b INT)")
 			require.NoError(t, err)
 			_, err = sqlDB.Exec("CREATE UNIQUE INDEX ON t (b) WHERE pk > 0")
 			require.NoError(t, err)
 			_, err = sqlDB.Exec("SET CLUSTER SETTING jobs.debug.pausepoints='newschemachanger.before.exec'")
 			require.NoError(t, err)
-
 			ctx := context.Background()
 			g := ctxgroup.WithContext(ctx)
 
 			schemaChangeAllowedToComplete = make(chan struct{})
 			waitedForJob = make(chan struct{})
 			jobIsPaused = make(chan struct{})
+			jobStarted = make(chan struct{})
 			g.GoCtx(func(ctx context.Context) error {
 				err := tc.run(t, sqlDB)
 				jobIsPaused <- struct{}{}
@@ -183,8 +189,14 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 					require.NoError(t, err)
 					_, err = sqlDB.Exec("RESUME JOB $1", jobspb.JobID(atomic.LoadInt64(&scJobID)))
 					require.NoError(t, err)
+					// Wait for the job to start after the unpause,
+					// we will let it get stuck during execution next.
+					// We don't want a race condition with the migration
+					// job that will pause it again.
+					<-jobStarted
 				}
-				_, err = sqlDB.Exec("SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
+				_, err = sqlDB.Exec("SET CLUSTER SETTING version = $1",
+					clusterversion.ByKey(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates).String())
 				return err
 			})
 
