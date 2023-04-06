@@ -126,12 +126,18 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 }
 
 func getDiff(ctx context.Context, sha string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "diff", "--no-ext-diff", sha, "origin/master", "--")
+	cmd := exec.CommandContext(ctx, "git", "merge-base", "origin/master", sha)
+	baseShaBytes, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	baseSha := strings.TrimSpace(string(baseShaBytes))
+	cmd = exec.CommandContext(ctx, "git", "diff", "--no-ext-diff", baseSha, sha, "--")
 	outputBytes, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
-	return string(outputBytes), nil
+	return strings.TrimSpace(string(outputBytes)), nil
 }
 
 func parsePackagesFromEnvironment(input string) (map[string]pkg, error) {
