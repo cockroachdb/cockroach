@@ -15,6 +15,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker",
         "//pkg/roachpb",
         "//pkg/util/admission/admissionpb",

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/inspectz"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -177,8 +178,9 @@ type Server struct {
 	stopper        *stop.Stopper
 	stopTrigger    *stopTrigger
 
-	debug    *debug.Server
-	kvProber *kvprober.Prober
+	debug          *debug.Server
+	kvProber       *kvprober.Prober
+	inspectzServer *inspectz.Server
 
 	replicationReporter *reports.Reporter
 	protectedtsProvider protectedts.Provider
@@ -1077,6 +1079,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		registry.AddMetricStruct(m)
 	}
 
+	inspectzServer := inspectz.NewServer(
+		cfg.BaseConfig.AmbientCtx,
+		node.storeCfg.KVFlowHandles,
+		node.storeCfg.KVFlowController,
+	)
+
 	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
@@ -1091,6 +1099,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			sqlSQLResponseAdmissionQ: gcoords.Regular.GetWorkQueue(admission.SQLSQLResponseWork),
 			spanConfigKVAccessor:     spanConfig.kvAccessorForTenantRecords,
 			kvStoresIterator:         kvserver.MakeStoresIterator(node.stores),
+			inspectzServer:           inspectzServer,
 		},
 		SQLConfig:                &cfg.SQLConfig,
 		BaseConfig:               &cfg.BaseConfig,
@@ -1282,6 +1291,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeGrantCoords:          gcoords.Stores,
 		kvMemoryMonitor:           kvMemoryMonitor,
 		keyVisualizerServer:       keyVisualizerServer,
+		inspectzServer:            inspectzServer,
 	}
 
 	return lateBoundServer, err
@@ -1949,6 +1959,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.runtime,         /* runtimeStatsSampler */
 		gwMux,             /* handleRequestsUnauthenticated */
 		s.debug,           /* handleDebugUnauthenticated */
+		s.inspectzServer,  /* handleInspectzUnauthenticated */
 		newAPIV2Server(ctx, &apiV2ServerOpts{
 			admin:            s.admin,
 			status:           s.status,

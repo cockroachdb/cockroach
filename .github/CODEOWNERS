@@ -246,6 +246,8 @@
 
 /pkg/geo/                    @cockroachdb/spatial
 
+/pkg/inspectz/               @cockroachdb/admission-control
+
 # The KV team generally owns ./pkg/kv/... but not all of it. By convention,
 # inside of the /pkg/kv tree, we list out rules for each subdirectory, i.e. when
 # a new directory is created CODEOWNERS should mandate a new line below. This

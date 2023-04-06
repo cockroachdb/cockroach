@@ -17,6 +17,7 @@ import (
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/cockroachdb/cmux"
+	"github.com/cockroachdb/cockroach/pkg/inspectz"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -94,6 +95,7 @@ func (s *httpServer) setupRoutes(
 	runtimeStatSampler *status.RuntimeStatSampler,
 	handleRequestsUnauthenticated http.Handler,
 	handleDebugUnauthenticated http.Handler,
+	handleInspectzUnauthenticated http.Handler,
 	apiServer http.Handler,
 	flags serverpb.FeatureFlags,
 ) error {
@@ -173,12 +175,17 @@ func (s *httpServer) setupRoutes(
 
 	// Register debugging endpoints.
 	handleDebugAuthenticated := handleDebugUnauthenticated
+	handleInspectzAuthenticated := handleInspectzUnauthenticated
 	if !s.cfg.InsecureWebAccess() {
 		// Mandate both authentication and admin authorization.
 		handleDebugAuthenticated = makeAdminAuthzCheckHandler(adminAuthzCheck, handleDebugAuthenticated)
 		handleDebugAuthenticated = newAuthenticationMux(authnServer, handleDebugAuthenticated)
+
+		handleInspectzAuthenticated = makeAdminAuthzCheckHandler(adminAuthzCheck, handleInspectzAuthenticated)
+		handleInspectzAuthenticated = newAuthenticationMux(authnServer, handleInspectzAuthenticated)
 	}
 	s.mux.Handle(debug.Endpoint, handleDebugAuthenticated)
+	s.mux.Handle(inspectz.URLPrefix, handleInspectzAuthenticated)
 
 	log.Event(ctx, "added http endpoints")
 

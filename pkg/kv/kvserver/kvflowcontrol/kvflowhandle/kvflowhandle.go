@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -272,6 +273,24 @@ func (h *Handle) ResetStreams(ctx context.Context) {
 	for i := range streams {
 		h.connectStreamLocked(ctx, lowerBounds[i], streams[i])
 	}
+}
+
+// Inspect is part of the kvflowcontrol.Handle interface.
+func (h *Handle) Inspect(ctx context.Context) kvflowinspectpb.Handle {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	handle := kvflowinspectpb.Handle{
+		RangeID: h.rangeID,
+	}
+	for _, c := range h.mu.connections {
+		connected := kvflowinspectpb.ConnectedStream{
+			Stream:            h.controller.InspectStream(ctx, c.Stream()),
+			TrackedDeductions: h.mu.perStreamTokenTracker[c.Stream()].Inspect(ctx),
+		}
+		handle.ConnectedStreams = append(handle.ConnectedStreams, connected)
+	}
+	return handle
 }
 
 func (h *Handle) disconnectStreamLocked(ctx context.Context, stream kvflowcontrol.Stream) {

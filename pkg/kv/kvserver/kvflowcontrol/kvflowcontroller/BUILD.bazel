@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
