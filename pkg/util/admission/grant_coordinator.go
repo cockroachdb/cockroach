@@ -61,6 +61,7 @@ type StoreGrantCoordinators struct {
 	// api.
 	numStores             int
 	pebbleMetricsProvider PebbleMetricsProvider
+	onLogEntryAdmitted    OnLogEntryAdmitted
 	closeCh               chan struct{}
 
 	disableTickerForTesting bool
@@ -157,7 +158,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 	// This is IO work, so override the usesTokens value.
 	opts.usesTokens = true
 	// TODO(sumeer): add per-store WorkQueue state for debug.zip and db console.
-	granters := [admissionpb.NumWorkClasses]granterWithStoreWriteDone{
+	granters := [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted{
 		&kvStoreTokenChildGranter{
 			workClass: admissionpb.RegularWorkClass,
 			parent:    kvg,
@@ -168,7 +169,17 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		},
 	}
 
-	storeReq := sgc.makeStoreRequesterFunc(sgc.ambientCtx, storeID, granters, sgc.settings, sgc.workQueueMetrics, opts, nil)
+	storeReq := sgc.makeStoreRequesterFunc(
+		sgc.ambientCtx,
+		storeID,
+		granters,
+		sgc.settings,
+		sgc.workQueueMetrics,
+		opts,
+		nil, /* knobs */
+		sgc.onLogEntryAdmitted,
+		&coord.mu.Mutex,
+	)
 	coord.queues[KVWork] = storeReq
 	requesters := storeReq.getRequesters()
 	kvg.regularRequester = requesters[admissionpb.RegularWorkClass]
@@ -336,8 +347,9 @@ type makeRequesterFunc func(
 	metrics *WorkQueueMetrics, opts workQueueOptions) requester
 
 type makeStoreRequesterFunc func(
-	_ log.AmbientContext, storeID roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
+	_ log.AmbientContext, storeID roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
 	settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
+	onLogEntryAdmitted OnLogEntryAdmitted, coordMu *syncutil.Mutex,
 ) storeRequester
 
 // NewGrantCoordinators constructs GrantCoordinators and WorkQueues for a
@@ -356,13 +368,17 @@ type makeStoreRequesterFunc func(
 // GrantCoordinators since they are not trying to control CPU usage, so we turn
 // off grant chaining in those coordinators.
 func NewGrantCoordinators(
-	ambientCtx log.AmbientContext, st *cluster.Settings, opts Options, registry *metric.Registry,
+	ambientCtx log.AmbientContext,
+	st *cluster.Settings,
+	opts Options,
+	registry *metric.Registry,
+	onLogEntryAdmitted OnLogEntryAdmitted,
 ) GrantCoordinators {
 	metrics := makeGrantCoordinatorMetrics()
 	registry.AddMetricStruct(metrics)
 
 	return GrantCoordinators{
-		Stores:  makeStoresGrantCoordinators(ambientCtx, opts, st, metrics, registry),
+		Stores:  makeStoresGrantCoordinators(ambientCtx, opts, st, metrics, registry, onLogEntryAdmitted),
 		Regular: makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry),
 		Elastic: makeElasticGrantCoordinator(ambientCtx, st, registry),
 	}
@@ -399,6 +415,7 @@ func makeStoresGrantCoordinators(
 	st *cluster.Settings,
 	metrics GrantCoordinatorMetrics,
 	registry *metric.Registry,
+	onLogEntryAdmitted OnLogEntryAdmitted,
 ) *StoreGrantCoordinators {
 	// These metrics are shared across all stores and broken down by priority for
 	// the common priorities.
@@ -417,6 +434,7 @@ func makeStoresGrantCoordinators(
 		makeStoreRequesterFunc:      makeStoreRequester,
 		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
 		workQueueMetrics:            storeWorkQueueMetrics,
+		onLogEntryAdmitted:          onLogEntryAdmitted,
 	}
 	return storeCoordinators
 }

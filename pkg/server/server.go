@@ -270,7 +270,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if opts, ok := cfg.TestingKnobs.AdmissionControl.(*admission.Options); ok {
 		admissionOptions.Override(opts)
 	}
-	gcoords := admission.NewGrantCoordinators(cfg.AmbientCtx, st, admissionOptions, registry)
+	gcoords := admission.NewGrantCoordinators(cfg.AmbientCtx, st, admissionOptions, registry, &admission.NoopOnLogEntryAdmitted{})
 
 	engines, err := cfg.CreateEngines(ctx)
 	if err != nil {
