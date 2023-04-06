@@ -14,6 +14,7 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import { JobsRequest, JobsResponse } from "src/api/jobsApi";
+import { RequestState } from "src/api/types";
 import { Delayed } from "src/delayed";
 import { Dropdown } from "src/dropdown";
 import { Loading } from "src/loading";
@@ -51,12 +52,8 @@ export interface JobsPageStateProps {
   status: string;
   show: string;
   type: number;
-  jobs: JobsResponse;
-  jobsError: Error | null;
-  reqInFlight: boolean;
-  isDataValid: boolean;
+  jobsResponse: RequestState<JobsResponse>;
   columns: string[];
-  lastUpdated: moment.Moment | null;
 }
 
 export interface JobsPageDispatchProps {
@@ -137,9 +134,10 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     clearTimeout(this.refreshDataInterval);
     const now = moment.utc();
     const nextRefresh =
-      !this.props.isDataValid && !this.props.jobsError
+      !this.props.jobsResponse?.valid && !this.props.jobsResponse?.error
         ? now
-        : this.props.lastUpdated?.clone().add(10, "seconds") ?? now;
+        : this.props.jobsResponse.lastUpdated?.clone().add(10, "seconds") ??
+          now;
     const msToNextRefresh = Math.max(0, nextRefresh.diff(now, "millisecond"));
     this.refreshDataInterval = setTimeout(() => {
       const req = reqFromProps(this.props);
@@ -164,7 +162,8 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     }
 
     if (
-      prevProps.lastUpdated !== this.props.lastUpdated ||
+      prevProps.jobsResponse.lastUpdated !==
+        this.props.jobsResponse.lastUpdated ||
       prevProps.show !== this.props.show ||
       prevProps.status !== this.props.status ||
       prevProps.type !== this.props.type
@@ -249,18 +248,20 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
 
   render(): React.ReactElement {
     const {
-      jobs,
-      jobsError,
       sort,
       status,
-      reqInFlight,
-      isDataValid,
       type,
       show,
       columns: columnsToDisplay,
       onColumnsChange,
     } = this.props;
-    const isLoading = reqInFlight && (!isDataValid || !jobs);
+    const jobs = this.props.jobsResponse?.data;
+    const jobsError = this.props.jobsResponse?.error;
+
+    const isLoading =
+      this.props.jobsResponse?.inFlight &&
+      (!this.props.jobsResponse?.valid || !jobs);
+
     const { pagination } = this.state;
     const filteredJobs = jobs?.jobs ?? [];
     const columns = makeJobsColumns();
