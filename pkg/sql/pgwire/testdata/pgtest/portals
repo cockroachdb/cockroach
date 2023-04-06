@@ -21,11 +21,11 @@ Execute
 Sync
 ----
 
-until
+until keepErrMessage
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ErrorResponse","Code":"34000","Message":"unknown portal \"\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Verify that closing a bound portal prevents execution.
@@ -38,14 +38,14 @@ Execute {"Portal": "p"}
 Sync
 ----
 
-until
+until keepErrMessage
 ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
 {"Type":"CloseComplete"}
-{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ErrorResponse","Code":"34000","Message":"unknown portal \"p\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # The spec says that closing a prepared statement also closes its portals,
@@ -337,11 +337,11 @@ Execute
 Sync
 ----
 
-until
+until keepErrMessage
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ErrorResponse","Code":"34000","Message":"unknown portal \"\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -384,12 +384,12 @@ Execute
 Sync
 ----
 
-until
+until keepErrMessage
 ErrorResponse
 ReadyForQuery
 ----
 {"Type":"CloseComplete"}
-{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ErrorResponse","Code":"34000","Message":"unknown portal \"\""}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send
@@ -928,6 +928,16 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
+send crdb_only
+Query {"String": "SET multiple_active_portals_enabled = true"}
+----
+
+until crdb_only ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
 # 'S' for Statement
 # 49 = ASCII '1'
 # ParameterFormatCodes = [0] for text format
@@ -959,7 +969,7 @@ Execute {"Portal": "por"}
 Sync
 ----
 
-until noncrdb_only
+until
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
@@ -971,33 +981,17 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 2"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
-until crdb_only
-ErrorResponse
-ReadyForQuery
-----
-{"Type":"ErrorResponse","Code":"0A000"}
-{"Type":"ReadyForQuery","TxStatus":"E"}
-
-send noncrdb_only
+send
 Execute {"Portal": "pc4"}
 Sync
 ----
 
-until noncrdb_only
+until
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"COMMIT"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-send crdb_only
-Query {"String": "ROLLBACK"}
-----
-
-until crdb_only
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Test that we can use a portal with MaxRows from an implicit transaction.
 send
@@ -1185,7 +1179,7 @@ Execute
 Sync
 ----
 
-until ignore_constraint_name
+until keepErrMessage ignore_constraint_name
 ErrorResponse
 ReadyForQuery
 ----
@@ -1194,7 +1188,7 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
 {"Type":"BindComplete"}
 {"Type":"NoData"}
-{"Type":"ErrorResponse","Code":"23514"}
+{"Type":"ErrorResponse","Code":"23514","Message":"failed to satisfy CHECK constraint (a \u003e 1.0:::FLOAT8)"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -1230,11 +1224,11 @@ Execute {"Portal": "p16"}
 Sync
 ----
 
-until
+until keepErrMessage
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ErrorResponse","Code":"34000","Message":"unknown portal \"p16\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Verify that it's not possible to DECLARE a cursor of the same name as an open
@@ -1265,7 +1259,7 @@ Execute
 Sync
 ----
 
-until
+until keepErrMessage
 ErrorResponse
 ReadyForQuery
 ----
@@ -1275,7 +1269,7 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Type":"ErrorResponse","Code":"42P03"}
+{"Type":"ErrorResponse","Code":"42P03","Message":"cursor \"p\" already exists as portal"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send
@@ -1309,13 +1303,13 @@ Execute {"Portal": "fnord"}
 Sync
 ----
 
-until
+until keepErrMessage
 ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Type":"ErrorResponse","Code":"42P03"}
+{"Type":"ErrorResponse","Code":"42P03","Message":"cursor \"fnord\" already exists as portal"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 # Test the converse case: ensure that a portal cannot be created with the same
@@ -1364,12 +1358,12 @@ Execute {"Portal": "sqlcursor"}
 Sync
 ----
 
-until
+until keepErrMessage
 ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42P03"}
+{"Type":"ErrorResponse","Code":"42P03","Message":"portal \"sqlcursor\" already exists as cursor"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send
