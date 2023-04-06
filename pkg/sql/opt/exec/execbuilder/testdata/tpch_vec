@@ -20848,17 +20848,20 @@ EXPLAIN (VEC) SELECT s_suppkey, s_name, s_address, s_phone, total_revenue FROM s
 ----
 │
 └ Node 1
-  └ *colexecjoin.mergeJoinInnerOp
-    ├ *colfetcher.ColBatchScan
+  └ *rowexec.joinReader
     └ *colexec.sortOp
-      └ *colexecsel.selEQFloat64Float64Op
-        └ *colexecbase.castOpNullAny
-          └ *colexecbase.constNullOp
-            └ *colexec.hashAggregator
-              └ *colexecproj.projMultFloat64Float64Op
-                └ *colexecprojconst.projMinusFloat64ConstFloat64Op
-                  └ *colfetcher.ColIndexJoin
-                    └ *colfetcher.ColBatchScan
+      └ *colexecjoin.hashJoiner
+        ├ *colexec.hashAggregator
+        │ └ *colexecproj.projMultFloat64Float64Op
+        │   └ *colexecprojconst.projMinusFloat64ConstFloat64Op
+        │     └ *colfetcher.ColIndexJoin
+        │       └ *colfetcher.ColBatchScan
+        └ *colexec.orderedAggregator
+          └ *colexec.hashAggregator
+            └ *colexecproj.projMultFloat64Float64Op
+              └ *colexecprojconst.projMinusFloat64ConstFloat64Op
+                └ *colfetcher.ColIndexJoin
+                  └ *colfetcher.ColBatchScan
 
 statement ok
 DROP VIEW revenue0
