@@ -29,8 +29,8 @@ import (
 
 // BuildOptions is a set of options that may be applied to a build.
 type BuildOptions struct {
-	// True iff this is a release build.
-	Release bool
+	// ReleaseType is the type of a release build, or blank for non-release build.
+	ReleaseType string
 	// BuildTag must be set if Release is set, and vice-versea.
 	BuildTag string
 
@@ -132,8 +132,8 @@ func SharedLibraryExtensionFromPlatform(platform Platform) string {
 // MakeWorkload makes the bin/workload binary. It is only ever built in the
 // crosslinux configuration.
 func MakeWorkload(opts BuildOptions, pkgDir string) error {
-	if opts.Release {
-		return errors.Newf("cannot build workload in Release mode")
+	if opts.ReleaseType != "development" {
+		return errors.Newf("cannot build workload in Release mode %q", opts.ReleaseType)
 	}
 	// NB: workload doesn't need anything stamped so we can use `crosslinux`
 	// rather than `crosslinuxbase`.
@@ -163,14 +163,14 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		buildArgs = append(buildArgs, "//c-deps:libgeos")
 	}
 	targetTriple := TargetTripleFromPlatform(platform)
-	if opts.Release {
+	if opts.ReleaseType != "development" {
 		if opts.BuildTag == "" {
-			return errors.Newf("must set BuildTag if Release is set")
+			return errors.Newf("must set BuildTag if ReleaseType is not development")
 		}
-		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s release", targetTriple, opts.Channel))
+		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s %s", targetTriple, opts.Channel, opts.ReleaseType))
 	} else {
 		if opts.BuildTag != "" {
-			return errors.Newf("cannot set BuildTag if Release is not set")
+			return errors.Newf("cannot set BuildTag if ReleaseType is development")
 		}
 		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s", targetTriple, opts.Channel))
 	}

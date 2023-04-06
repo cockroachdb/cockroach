@@ -34,9 +34,9 @@ func main() {
 	var gcsBucket string
 	var outputDirectory string
 	var doProvisional bool
-	var isRelease bool
+	var releaseType string
 	var doBless bool
-	flag.BoolVar(&isRelease, "release", false, "build in release mode instead of bleeding-edge mode")
+	flag.StringVar(&releaseType, "release-type", "development", "type of release")
 	flag.StringVar(&gcsBucket, "gcs-bucket", "", "GCS bucket")
 	flag.StringVar(&outputDirectory, "output-directory", "",
 		"Save local copies of uploaded release archives in this directory")
@@ -84,7 +84,7 @@ func main() {
 	run(providers, runFlags{
 		doProvisional:   doProvisional,
 		doBless:         doBless,
-		isRelease:       isRelease,
+		releaseType:     releaseType,
 		branch:          branch,
 		pkgDir:          pkg,
 		sha:             string(bytes.TrimSpace(shaOut)),
@@ -95,7 +95,7 @@ func main() {
 type runFlags struct {
 	doProvisional   bool
 	doBless         bool
-	isRelease       bool
+	releaseType     string
 	branch          string
 	sha             string
 	pkgDir          string
@@ -105,14 +105,14 @@ type runFlags struct {
 func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
 	// TODO(dan): non-release builds currently aren't broken into the two
 	// phases. Instead, the provisional phase does them both.
-	if !flags.isRelease {
+	if flags.releaseType == "development" {
 		flags.doProvisional = true
 		flags.doBless = false
 	}
 
 	var versionStr string
 	var updateLatest bool
-	if flags.isRelease {
+	if flags.releaseType != "development" {
 		// If the tag starts with "provisional_", then we're building a binary
 		// that we hope will be some final release and the tag will be of the
 		// form `provisional_<yyyymmddhhss>_<semver>`. If all goes well with the
@@ -165,7 +165,7 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 		for _, o := range cockroachBuildOpts {
 			buildCockroach(flags, o, execFn)
 
-			if !flags.isRelease {
+			if flags.releaseType == "development" {
 				for _, provider := range providers {
 					release.PutNonRelease(
 						provider,
@@ -216,7 +216,7 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 		}
 	}
 	if flags.doBless {
-		if !flags.isRelease {
+		if flags.releaseType != "release" {
 			log.Fatal("cannot bless non-release versions")
 		}
 		if updateLatest {
@@ -236,11 +236,11 @@ func buildCockroach(flags runFlags, o opts, execFn release.ExecFn) {
 	}()
 
 	buildOpts := release.BuildOptions{
-		ExecFn:  execFn,
-		Channel: release.ChannelFromPlatform(o.Platform),
+		ExecFn:      execFn,
+		Channel:     release.ChannelFromPlatform(o.Platform),
+		ReleaseType: flags.releaseType,
 	}
-	if flags.isRelease {
-		buildOpts.Release = true
+	if flags.releaseType != "development" {
 		buildOpts.BuildTag = o.VersionStr
 	}
 

@@ -113,8 +113,9 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 func buildOneCockroach(providers []release.ObjectPutGetter, o opts, execFn release.ExecFn) {
 	log.Printf("building cockroach %s", pretty.Sprint(o))
 	buildOpts := release.BuildOptions{
-		ExecFn:  execFn,
-		Channel: o.Channel,
+		ExecFn:      execFn,
+		Channel:     o.Channel,
+		ReleaseType: "development",
 	}
 	if err := release.MakeRelease(o.Platform, buildOpts, o.PkgDir); err != nil {
 		log.Fatal(err)
@@ -139,7 +140,7 @@ func buildOneCockroach(providers []release.ObjectPutGetter, o opts, execFn relea
 
 func buildAndPublishWorkload(providers []release.ObjectPutGetter, o opts, execFn release.ExecFn) {
 	log.Printf("building workload %s", pretty.Sprint(o))
-	if err := release.MakeWorkload(release.BuildOptions{ExecFn: execFn}, o.PkgDir); err != nil {
+	if err := release.MakeWorkload(release.BuildOptions{ExecFn: execFn, ReleaseType: "development"}, o.PkgDir); err != nil {
 		log.Fatal(err)
 	}
 	o.AbsolutePath = filepath.Join(o.PkgDir, "bin", "workload")

@@ -169,7 +169,7 @@ func TestProvisional(t *testing.T) {
 			name: `release`,
 			flags: runFlags{
 				doProvisional: true,
-				isRelease:     true,
+				releaseType:   "release",
 				branch:        `provisional_201901010101_v0.0.1-alpha`,
 			},
 			expectedCmds: []string{
@@ -229,7 +229,7 @@ func TestProvisional(t *testing.T) {
 			name: `edge`,
 			flags: runFlags{
 				doProvisional: true,
-				isRelease:     false,
+				releaseType:   "development",
 				branch:        `master`,
 				sha:           `00SHA00`,
 			},
@@ -348,7 +348,7 @@ func TestProvisional(t *testing.T) {
 
 			var gcs mockStorage
 			gcs.bucket = "edge-binaries-bucket"
-			if test.flags.isRelease {
+			if test.flags.releaseType == "release" {
 				gcs.bucket = "release-binaries-bucket"
 			}
 			var runner mockExecRunner
@@ -376,9 +376,9 @@ func TestBless(t *testing.T) {
 		{
 			name: "testing",
 			flags: runFlags{
-				doBless:   true,
-				isRelease: true,
-				branch:    `provisional_201901010101_v0.0.1-alpha`,
+				doBless:     true,
+				releaseType: "release",
+				branch:      `provisional_201901010101_v0.0.1-alpha`,
 			},
 			expectedGets: nil,
 			expectedPuts: nil,
@@ -386,9 +386,9 @@ func TestBless(t *testing.T) {
 		{
 			name: "stable",
 			flags: runFlags{
-				doBless:   true,
-				isRelease: true,
-				branch:    `provisional_201901010101_v0.0.1`,
+				doBless:     true,
+				releaseType: "release",
+				branch:      `provisional_201901010101_v0.0.1`,
 			},
 			expectedGets: nil,
 			expectedPuts: []string{
