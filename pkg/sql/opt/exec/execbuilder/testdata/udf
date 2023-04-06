@@ -96,6 +96,7 @@ query T kvtrace
 SELECT fetch_a_of_2_strict(1, NULL::INT)
 ----
 
+
 # Regression test for #88259. Arguments to UDFs should be formatted correctly in
 # EXPLAIN output.
 statement ok
