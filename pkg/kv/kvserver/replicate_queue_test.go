@@ -622,6 +622,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes a long time or times out under race")
 	skip.UnderDeadlockWithIssue(t, 94383)
+	skip.UnderMetamorphicWithIssue(t, 99207)
 
 	ctx := context.Background()
 
