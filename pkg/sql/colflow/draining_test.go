@@ -101,7 +101,7 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 
 	// Perform a query that uses the join reader when ordering has to be
 	// maintained. Ensure that it encounters the error that we expect.
-	sqlDB.ExpectErr(t, ".*test-disk.*", "SELECT sum(length(v)) FROM large, small WHERE small.k = large.k GROUP BY large.k;")
+	sqlDB.ExpectErr(t, ".*joinreader-disk.*", "SELECT sum(length(v)) FROM large, small WHERE small.k = large.k GROUP BY large.k;")
 	sqlDB.Exec(t, "SET tracing = off;")
 
 	// Now, the crux of the test - verify that the spans for the join reader on
