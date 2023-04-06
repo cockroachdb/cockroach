@@ -151,9 +151,8 @@ func TestingNewElasticCPUHandle() *ElasticCPUWorkHandle {
 	return newElasticCPUWorkHandle(420 * time.Hour) // use a very high allotment
 }
 
-// TestingNewElasticCPUWithCallback constructs an
-// ElascticCPUWorkHandle with a testing override for the behaviour of
-// OverLimit().
+// TestingNewElasticCPUHandleWithCallback constructs an ElasticCPUWorkHandle
+// with a testing override for the behaviour of OverLimit().
 func TestingNewElasticCPUHandleWithCallback(cb func() (bool, time.Duration)) *ElasticCPUWorkHandle {
 	h := TestingNewElasticCPUHandle()
 	h.testingOverrideOverLimit = cb

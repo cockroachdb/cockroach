@@ -633,6 +633,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 					info.ReplicatedWorkInfo,
 					info.RequestedCount,
 					info.CreateTime,
+					false, /* coordMuLocked */
 				)
 			}
 			return true, nil
@@ -679,6 +680,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			}
 		}
 	}
+
 	// Check for cancellation.
 	startTime := q.timeNow()
 	if ctx.Err() != nil {
@@ -861,6 +863,7 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 			item.replicated,
 			item.requestedCount,
 			item.createTime,
+			true, /* coordMuLocked */
 		)
 
 		q.metrics.incAdmitted(item.priority)
@@ -1672,7 +1675,7 @@ func (m *WorkQueueMetrics) getOrCreate(priority admissionpb.WorkPriority) workQu
 		// necessary to call LoadOrStore here as this could be called concurrently.
 		// It is not called the first Load so that we don't have to unnecessarily
 		// create the metrics.
-		statPrefix := fmt.Sprintf("%v.%v", m.name, admissionpb.WorkPriorityDict[priority])
+		statPrefix := fmt.Sprintf("%v.%v", m.name, priority.String())
 		val, ok = m.byPriority.LoadOrStore(priority, makeWorkQueueMetricsSingle(statPrefix))
 		if !ok {
 			m.registry.AddMetricStruct(val)
@@ -1766,9 +1769,10 @@ type StoreWriteWorkInfo struct {
 type StoreWorkQueue struct {
 	storeID roachpb.StoreID
 	q       [admissionpb.NumWorkClasses]WorkQueue
-	// Only calls storeWriteDone. The rest of the interface is used by
+	// Only calls storeReplicatedWorkAdmittedLocked. The rest of the interface is used by
 	// WorkQueue.
-	granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone
+	granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted
+	coordMu  *syncutil.Mutex
 	mu       struct {
 		syncutil.RWMutex
 		// estimates is used to determine how many tokens are deducted at-admit
@@ -1788,6 +1792,7 @@ type StoreWorkQueue struct {
 	stopCh             chan struct{}
 	timeSource         timeutil.TimeSource
 	settings           *cluster.Settings
+	onLogEntryAdmitted OnLogEntryAdmitted
 
 	knobs *TestingKnobs
 }
@@ -1883,6 +1888,20 @@ type StoreWorkDoneInfo struct {
 	IngestedBytes int64
 }
 
+// storeReplicatedWorkAdmittedInfo provides information about the size of
+// replicated work once it's admitted (which happens asynchronously from the
+// work itself). This lets us use the underlying linear models for L0
+// {writes,ingests} to deduct an appropriate number of tokens from the granter,
+// for the admitted work size.
+//
+// TODO(irfansharif): This post-admission adjustment of tokens is odd -- when
+// the replicated work is being enqueued, we already know its size, so we could
+// have applied the linear models upfront and determine what the right # of
+// tokens to deduct all at once. We're doing it this way because we've written
+// the WorkQueue and granter interactions to be very general, but it can be hard
+// to follow. See review discussions over at #97599.
+type storeReplicatedWorkAdmittedInfo StoreWorkDoneInfo
+
 type onAdmittedReplicatedWork interface {
 	admittedReplicatedWork(
 		tenantID roachpb.TenantID,
@@ -1890,7 +1909,10 @@ type onAdmittedReplicatedWork interface {
 		rwi ReplicatedWorkInfo,
 		requestedTokens int64,
 		createTime int64,
+		coordMuLocked bool,
 	)
+
+	// TODO(irfansharif): This coordMuLocked parameter is gross.
 }
 
 var _ onAdmittedReplicatedWork = &StoreWorkQueue{}
@@ -1903,6 +1925,7 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 	rwi ReplicatedWorkInfo,
 	originalTokens int64,
 	createTime int64, // only used in tests
+	coordMuLocked bool,
 ) {
 	if !rwi.Enabled {
 		panic("unexpected call to admittedReplicatedWork for work that's not a replicated write")
@@ -1911,11 +1934,11 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 		fn(tenantID, pri, rwi, originalTokens, createTime)
 	}
 
-	var storeWorkDoneInfo StoreWorkDoneInfo
+	var replicatedWorkAdmittedInfo storeReplicatedWorkAdmittedInfo
 	if rwi.Ingested {
-		storeWorkDoneInfo.IngestedBytes = originalTokens
+		replicatedWorkAdmittedInfo.IngestedBytes = originalTokens
 	} else {
-		storeWorkDoneInfo.WriteBytes = originalTokens
+		replicatedWorkAdmittedInfo.WriteBytes = originalTokens
 	}
 
 	// We've already used RequestedCount for replicated writes to deduct tokens
@@ -1925,19 +1948,47 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 	// underlying linear models, and we may have under-deducted -- we account
 	// for this below.
 	wc := admissionpb.WorkClassFromPri(pri)
-	additionalTokensNeeded := q.granters[wc].storeWriteDone(originalTokens, storeWorkDoneInfo)
+	if !coordMuLocked {
+		q.coordMu.Lock()
+	}
+	additionalTokensNeeded := q.granters[wc].storeReplicatedWorkAdmittedLocked(originalTokens, replicatedWorkAdmittedInfo)
+	if !coordMuLocked {
+		q.coordMu.Unlock()
+	}
 	q.q[wc].adjustTenantTokens(tenantID, additionalTokensNeeded)
+	// Inform callers of the entry we just admitted.
+	q.onLogEntryAdmitted.AdmittedLogEntry(
+		rwi.Origin,
+		pri,
+		q.storeID,
+		rwi.RangeID,
+		rwi.LogPosition,
+	)
+}
 
-	// TODO(irfansharif): Dispatch flow token returns here. We want to
-	// inform (a) the origin node of writes at (b) a given priority, to
-	// (c) the given range, at (d) the given log position on (e) the
-	// local store. Part of #95563.
-	//
-	_ = rwi.Origin      // (a)
-	_ = pri             // (b)
-	_ = rwi.RangeID     // (c)
-	_ = rwi.LogPosition // (d)
-	_ = q.storeID       // (e)
+// OnLogEntryAdmitted is used to observe the specific entries (identified by
+// rangeID + log position) that were admitted. Since admission control for log
+// entries is asynchronous/non-blocking, this allows callers to do requisite
+// post-admission bookkeeping.
+type OnLogEntryAdmitted interface {
+	AdmittedLogEntry(
+		origin roachpb.NodeID, /* node where the entry originated */
+		pri admissionpb.WorkPriority, /* admission priority of the entry */
+		storeID roachpb.StoreID, /* store on which the entry was admitted */
+		rangeID roachpb.RangeID, /* identifying range for the log entry */
+		pos LogPosition, /* log position of the entry that was admitted*/
+	)
+}
+
+// NoopOnLogEntryAdmitted is a no-op implementation of the OnLogEntryAdmitted
+// interface.
+type NoopOnLogEntryAdmitted struct{}
+
+var _ OnLogEntryAdmitted = &NoopOnLogEntryAdmitted{}
+
+func (n *NoopOnLogEntryAdmitted) AdmittedLogEntry(
+	roachpb.NodeID, admissionpb.WorkPriority, roachpb.StoreID, roachpb.RangeID, LogPosition,
+) {
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has completed.
@@ -2026,11 +2077,13 @@ func (q *StoreWorkQueue) setStoreRequestEstimates(estimates storeRequestEstimate
 func makeStoreWorkQueue(
 	ambientCtx log.AmbientContext,
 	storeID roachpb.StoreID,
-	granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
+	granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
 	settings *cluster.Settings,
 	metrics *WorkQueueMetrics,
 	opts workQueueOptions,
 	knobs *TestingKnobs,
+	onLogEntryAdmitted OnLogEntryAdmitted,
+	coordMu *syncutil.Mutex,
 ) storeRequester {
 	if knobs == nil {
 		knobs = &TestingKnobs{}
@@ -2039,12 +2092,14 @@ func makeStoreWorkQueue(
 		opts.timeSource = timeutil.DefaultTimeSource{}
 	}
 	q := &StoreWorkQueue{
-		storeID:    storeID,
-		granters:   granters,
-		knobs:      knobs,
-		stopCh:     make(chan struct{}),
-		timeSource: opts.timeSource,
-		settings:   settings,
+		coordMu:            coordMu,
+		storeID:            storeID,
+		granters:           granters,
+		knobs:              knobs,
+		stopCh:             make(chan struct{}),
+		timeSource:         opts.timeSource,
+		settings:           settings,
+		onLogEntryAdmitted: onLogEntryAdmitted,
 	}
 
 	opts.usesAsyncAdmit = true
