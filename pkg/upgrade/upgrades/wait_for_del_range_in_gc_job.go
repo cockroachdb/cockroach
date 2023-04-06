@@ -83,7 +83,10 @@ func waitForDelRangeInGCJob(
          elements AS (SELECT * FROM tables UNION ALL SELECT * FROM indexes)
   SELECT id
     FROM elements
-   WHERE COALESCE(progress->>'status' NOT IN ('WAITING_FOR_MVCC_GC', 'CLEARED'), true)
+-- While we are waiting for the GC TTL, the status will be WAITING_FOR_CLEAR because omitempty
+-- set on this field it will not exist in the JSON output. Because tombstone adoption unconditionally
+-- enabled by an earlier version, we should be safe to skip any job that hasn't started GCing yet.
+   WHERE COALESCE(progress->>'status' NOT IN ('WAITING_FOR_MVCC_GC', 'CLEARED'), false)
 GROUP BY id;
 `)
 		if err != nil || len(jobIDs) == 0 {
