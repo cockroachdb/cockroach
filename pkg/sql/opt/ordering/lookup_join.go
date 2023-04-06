@@ -125,21 +125,6 @@ func lookupOrIndexJoinBuildChildReqOrdering(
 	return res
 }
 
-func indexJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
-	// If an index join has a requirement on some input columns, those columns
-	// must be output columns (or equivalent to them). We may still need to remap
-	// using column equivalencies.
-	indexJoin := expr.(*memo.IndexJoinExpr)
-	rel := indexJoin.Relational()
-	input := indexJoin.Input
-	// The index join's FDs may not include all the necessary columns for
-	// remapping, so we add the input's FDs as well. See `buildIndexJoinProps`.
-	var fds props.FuncDepSet
-	fds.CopyFrom(&input.Relational().FuncDeps)
-	fds.AddFrom(&rel.FuncDeps)
-	return remapProvided(input.ProvidedPhysical().Ordering, &fds, rel.OutputCols)
-}
-
 func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	lookupJoin := expr.(*memo.LookupJoinExpr)
 	provided := lookupJoin.Input.ProvidedPhysical().Ordering
@@ -158,41 +143,7 @@ func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) 
 			provided = newProvided
 		}
 	}
-
-	// The lookup join includes an implicit projection (lookupJoin.Cols); some of
-	// the input columns might not be output columns so we may need to remap them.
-	// First check if we need to.
-	needsRemap := false
-	for i := range provided {
-		if !lookupJoin.Cols.Contains(provided[i].ID()) {
-			needsRemap = true
-			break
-		}
-	}
-	if !needsRemap {
-		// Fast path: we don't need to remap any columns.
-		return provided
-	}
-
-	// Because of the implicit projection, the FDs of the LookupJoin don't include
-	// all the columns we care about; we have to recreate the FDs of the join
-	// before the projection. These are the FDs of the input plus the equality
-	// constraints implied by the lookup join.
-	var fds props.FuncDepSet
-	fds.CopyFrom(&lookupJoin.Input.Relational().FuncDeps)
-
-	md := lookupJoin.Memo().Metadata()
-	index := md.Table(lookupJoin.Table).Index(lookupJoin.Index)
-	for i, colID := range lookupJoin.KeyCols {
-		indexColID := lookupJoin.Table.ColumnID(index.Column(i).Ordinal())
-		fds.AddEquivalency(colID, indexColID)
-	}
-	for i := range lookupJoin.LookupExpr {
-		filterProps := lookupJoin.LookupExpr[i].ScalarProps()
-		fds.AddFrom(&filterProps.FuncDeps)
-	}
-
-	return remapProvided(provided, &fds, lookupJoin.Cols)
+	return provided
 }
 
 // Lookup joins can maintain the index ordering on each lookup, in order to

@@ -42,8 +42,6 @@ go_test(
     name = "ordering_test",
     size = "small",
     srcs = [
-        "group_by_test.go",
-        "inverted_join_test.go",
         "lookup_join_test.go",
         "ordering_test.go",
         "project_test.go",
@@ -66,7 +64,7 @@ go_test(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

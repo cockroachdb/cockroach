@@ -155,8 +155,7 @@ func scanBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Or
 		direction := indexCol.Descending != reverse // != is bool XOR
 		provided = append(provided, opt.MakeOrderingColumn(colID, direction))
 	}
-
-	return trimProvided(provided, required, fds)
+	return provided
 }
 
 func init() {

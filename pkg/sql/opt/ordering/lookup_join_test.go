@@ -175,7 +175,9 @@ func TestLookupJoinProvided(t *testing.T) {
 				},
 			)
 			req := props.ParseOrderingChoice(tc.required)
-			res := lookupJoinBuildProvided(lookupJoin, &req).String()
+			res := finalizeProvided(
+				lookupJoinBuildProvided(lookupJoin, &req), &req, lookupJoin.Relational().OutputCols,
+			).String()
 			if res != tc.provided {
 				t.Errorf("expected '%s', got '%s'", tc.provided, res)
 			}

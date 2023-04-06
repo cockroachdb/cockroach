@@ -11,7 +11,6 @@
 package ordering
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
@@ -42,36 +41,4 @@ func invertedJoinBuildChildReqOrdering(
 	// This case indicates that we didn't do a good job pushing down equalities
 	// (see #36219), but it should be handled correctly here nevertheless.
 	return trimColumnGroups(&res, &child.Relational().FuncDeps)
-}
-
-func invertedJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
-	invertedJoin := expr.(*memo.InvertedJoinExpr)
-	childProvided := invertedJoin.Input.ProvidedPhysical().Ordering
-
-	// The inverted join includes an implicit projection (invertedJoin.Cols);
-	// some of the input columns might not be output columns so we may need to
-	// remap them. First check if we need to.
-	needsRemap := false
-	for i := range childProvided {
-		if !invertedJoin.Cols.Contains(childProvided[i].ID()) {
-			needsRemap = true
-			break
-		}
-	}
-	if !needsRemap {
-		// Fast path: we don't need to remap any columns.
-		return childProvided
-	}
-
-	// Because of the implicit projection, the FDs of the InvertedJoin don't
-	// include all the columns we care about; we have to recreate the FDs of
-	// the join before the projection. These are the FDs of the input plus any
-	// equality constraints in the ON condition.
-	var fds props.FuncDepSet
-	fds.CopyFrom(&invertedJoin.Input.Relational().FuncDeps)
-	for i := range invertedJoin.On {
-		fds.AddEquivFrom(&invertedJoin.On[i].ScalarProps().FuncDeps)
-	}
-
-	return remapProvided(childProvided, &fds, invertedJoin.Cols)
 }

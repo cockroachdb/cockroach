@@ -88,13 +88,7 @@ func BuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Orderi
 		return nil
 	}
 	provided := funcMap[expr.Op()].buildProvidedOrdering(expr, required)
-	provided = finalizeProvided(provided, required, expr.Relational().OutputCols)
-
-	if buildutil.CrdbTestBuild {
-		checkProvided(expr, required, provided)
-	}
-
-	return provided
+	return finalizeProvided(provided, required, expr.Relational().OutputCols)
 }
 
 type funcs struct {
@@ -127,47 +121,47 @@ func init() {
 	funcMap[opt.SelectOp] = funcs{
 		canProvideOrdering:    selectCanProvideOrdering,
 		buildChildReqOrdering: selectBuildChildReqOrdering,
-		buildProvidedOrdering: selectBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.ProjectOp] = funcs{
 		canProvideOrdering:    projectCanProvideOrdering,
 		buildChildReqOrdering: projectBuildChildReqOrdering,
-		buildProvidedOrdering: projectBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.UnionOp] = funcs{
 		canProvideOrdering:    setOpCanProvideOrdering,
 		buildChildReqOrdering: setOpBuildChildReqOrdering,
-		buildProvidedOrdering: setOpBuildProvided,
+		buildProvidedOrdering: useRequiredForProvidedOrdering,
 	}
 	funcMap[opt.UnionAllOp] = funcs{
 		canProvideOrdering:    setOpCanProvideOrdering,
 		buildChildReqOrdering: setOpBuildChildReqOrdering,
-		buildProvidedOrdering: setOpBuildProvided,
+		buildProvidedOrdering: useRequiredForProvidedOrdering,
 	}
 	funcMap[opt.IntersectOp] = funcs{
 		canProvideOrdering:    setOpCanProvideOrdering,
 		buildChildReqOrdering: setOpBuildChildReqOrdering,
-		buildProvidedOrdering: setOpBuildProvided,
+		buildProvidedOrdering: useRequiredForProvidedOrdering,
 	}
 	funcMap[opt.IntersectAllOp] = funcs{
 		canProvideOrdering:    setOpCanProvideOrdering,
 		buildChildReqOrdering: setOpBuildChildReqOrdering,
-		buildProvidedOrdering: setOpBuildProvided,
+		buildProvidedOrdering: useRequiredForProvidedOrdering,
 	}
 	funcMap[opt.ExceptOp] = funcs{
 		canProvideOrdering:    setOpCanProvideOrdering,
 		buildChildReqOrdering: setOpBuildChildReqOrdering,
-		buildProvidedOrdering: setOpBuildProvided,
+		buildProvidedOrdering: useRequiredForProvidedOrdering,
 	}
 	funcMap[opt.ExceptAllOp] = funcs{
 		canProvideOrdering:    setOpCanProvideOrdering,
 		buildChildReqOrdering: setOpBuildChildReqOrdering,
-		buildProvidedOrdering: setOpBuildProvided,
+		buildProvidedOrdering: useRequiredForProvidedOrdering,
 	}
 	funcMap[opt.IndexJoinOp] = funcs{
 		canProvideOrdering:    indexJoinCanProvideOrdering,
 		buildChildReqOrdering: lookupOrIndexJoinBuildChildReqOrdering,
-		buildProvidedOrdering: indexJoinBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.LookupJoinOp] = funcs{
 		canProvideOrdering:    lookupJoinCanProvideOrdering,
@@ -177,7 +171,7 @@ func init() {
 	funcMap[opt.InvertedJoinOp] = funcs{
 		canProvideOrdering:    invertedJoinCanProvideOrdering,
 		buildChildReqOrdering: invertedJoinBuildChildReqOrdering,
-		buildProvidedOrdering: invertedJoinBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.OrdinalityOp] = funcs{
 		canProvideOrdering:    ordinalityCanProvideOrdering,
@@ -192,12 +186,12 @@ func init() {
 	funcMap[opt.LimitOp] = funcs{
 		canProvideOrdering:    limitOrOffsetCanProvideOrdering,
 		buildChildReqOrdering: limitOrOffsetBuildChildReqOrdering,
-		buildProvidedOrdering: limitOrOffsetBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.OffsetOp] = funcs{
 		canProvideOrdering:    limitOrOffsetCanProvideOrdering,
 		buildChildReqOrdering: limitOrOffsetBuildChildReqOrdering,
-		buildProvidedOrdering: limitOrOffsetBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.TopKOp] = funcs{
 		canProvideOrdering:    topKCanProvideOrdering,
@@ -214,57 +208,57 @@ func init() {
 	funcMap[opt.GroupByOp] = funcs{
 		canProvideOrdering:    groupByCanProvideOrdering,
 		buildChildReqOrdering: groupByBuildChildReqOrdering,
-		buildProvidedOrdering: groupByBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.DistinctOnOp] = funcs{
 		canProvideOrdering:    distinctOnCanProvideOrdering,
 		buildChildReqOrdering: distinctOnBuildChildReqOrdering,
-		buildProvidedOrdering: distinctOnBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.EnsureDistinctOnOp] = funcs{
 		canProvideOrdering:    distinctOnCanProvideOrdering,
 		buildChildReqOrdering: distinctOnBuildChildReqOrdering,
-		buildProvidedOrdering: distinctOnBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.UpsertDistinctOnOp] = funcs{
 		canProvideOrdering:    distinctOnCanProvideOrdering,
 		buildChildReqOrdering: distinctOnBuildChildReqOrdering,
-		buildProvidedOrdering: distinctOnBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.EnsureUpsertDistinctOnOp] = funcs{
 		canProvideOrdering:    distinctOnCanProvideOrdering,
 		buildChildReqOrdering: distinctOnBuildChildReqOrdering,
-		buildProvidedOrdering: distinctOnBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.SortOp] = funcs{
 		canProvideOrdering:    nil, // should never get called
 		buildChildReqOrdering: sortBuildChildReqOrdering,
-		buildProvidedOrdering: sortBuildProvided,
+		buildProvidedOrdering: useRequiredForProvidedOrdering,
 	}
 	funcMap[opt.DistributeOp] = funcs{
 		canProvideOrdering:    distributeCanProvideOrdering,
 		buildChildReqOrdering: distributeBuildChildReqOrdering,
-		buildProvidedOrdering: distributeBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.InsertOp] = funcs{
 		canProvideOrdering:    mutationCanProvideOrdering,
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
-		buildProvidedOrdering: mutationBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.UpdateOp] = funcs{
 		canProvideOrdering:    mutationCanProvideOrdering,
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
-		buildProvidedOrdering: mutationBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.UpsertOp] = funcs{
 		canProvideOrdering:    mutationCanProvideOrdering,
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
-		buildProvidedOrdering: mutationBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.DeleteOp] = funcs{
 		canProvideOrdering:    mutationCanProvideOrdering,
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
-		buildProvidedOrdering: mutationBuildProvided,
+		buildProvidedOrdering: firstChildProvidedOrdering,
 	}
 	funcMap[opt.ExplainOp] = funcs{
 		canProvideOrdering:    canNeverProvideOrdering,
@@ -332,96 +326,14 @@ func noProvidedOrdering(expr memo.RelExpr, required *props.OrderingChoice) opt.O
 	return nil
 }
 
-// remapProvided remaps columns in a provided ordering (according to the given
-// FDs) so that it only refers to columns in the given outCols set. It also
-// removes any columns that are redundant according to the FDs.
-//
-// Can only be called if the provided ordering can be remapped.
-//
-// Does not modify <provided> in place, but it can return the same slice.
-func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.ColSet) opt.Ordering {
-	if len(provided) == 0 {
-		return nil
-	}
-
-	// result is nil until we determine that we need to make a copy.
-	var result opt.Ordering
-
-	// closure is the set of columns that are functionally determined by the
-	// columns in provided[:i].
-	closure := fds.ComputeClosure(opt.ColSet{})
-	for i := range provided {
-		col := provided[i].ID()
-		if closure.Contains(col) {
-			// At the level of the new operator, this column is redundant.
-			if result == nil {
-				result = make(opt.Ordering, i, len(provided))
-				copy(result, provided)
-			}
-			continue
-		}
-		if outCols.Contains(col) {
-			if result != nil {
-				result = append(result, provided[i])
-			}
-		} else {
-			equivCols := fds.ComputeEquivClosureNoCopy(opt.MakeColSet(col))
-			remappedCol, ok := equivCols.Next(0)
-			if !ok {
-				panic(errors.AssertionFailedf("no output column equivalent to %d", redact.Safe(col)))
-			}
-			// If the column is in the output use that.
-			remappedColFromOutput, ok := equivCols.Intersection(outCols).Next(0)
-			if ok {
-				remappedCol = remappedColFromOutput
-			}
-			if result == nil {
-				result = make(opt.Ordering, i, len(provided))
-				copy(result, provided)
-			}
-			result = append(result, opt.MakeOrderingColumn(
-				remappedCol, provided[i].Descending(),
-			))
-		}
-		closure.Add(col)
-		closure = fds.ComputeClosure(closure)
-	}
-	if result == nil {
-		return provided
-	}
-	return result
+func firstChildProvidedOrdering(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
+	return expr.Child(0).(memo.RelExpr).ProvidedPhysical().Ordering
 }
 
-// trimProvided returns the smallest prefix of <provided> that is sufficient to
-// satisfy <required> (in conjunction with the FDs).
-//
-// This is useful because in a distributed setting execution is configured to
-// maintain the provided ordering when merging results from multiple nodes, and
-// we don't want to make needless comparisons.
-func trimProvided(
-	provided opt.Ordering, required *props.OrderingChoice, fds *props.FuncDepSet,
+func useRequiredForProvidedOrdering(
+	expr memo.RelExpr, required *props.OrderingChoice,
 ) opt.Ordering {
-	if len(provided) == 0 {
-		return nil
-	}
-	// closure is the set of columns that are functionally determined by the
-	// columns in provided[:provIdx].
-	closure := fds.ComputeClosure(opt.ColSet{})
-	provIdx := 0
-	for reqIdx := range required.Columns {
-		c := &required.Columns[reqIdx]
-		// Consume columns from the provided ordering until their closure intersects
-		// the required group.
-		for !closure.Intersects(c.Group) {
-			closure.Add(provided[provIdx].ID())
-			closure = fds.ComputeClosure(closure)
-			provIdx++
-			if provIdx == len(provided) {
-				return provided
-			}
-		}
-	}
-	return provided[:provIdx]
+	return required.ToOrdering()
 }
 
 // finalizeProvided ensures that the provided ordering satisfies the following
@@ -432,11 +344,18 @@ func trimProvided(
 //     columns from the required ordering optional set.
 //  3. The provided ordering only refers to output columns for the operator.
 //
-// This step is necessary because it is possible for child operators to have
+// Step (1) is necessary because it is possible for child operators to have
 // different functional dependency information than their parents as well as
 // different output columns. We have to protect against the case where a parent
 // operator cannot prove that its child's provided ordering satisfies its
-// required ordering.
+// required ordering. The other steps allow the provided-building logic for each
+// operator to ignore concerns of remapping and simplifying a provided ordering.
+//
+// finalizeProvided makes the assumption that the given provided ordering is
+// already known to satisfy the required ordering (even if this can only be
+// proven using extra functional dependencies). finalizeProvided does not
+// attempt to prove that this is the case - that is the responsibility of the
+// logic that builds the original provided ordering.
 func finalizeProvided(
 	provided opt.Ordering, required *props.OrderingChoice, outCols opt.ColSet,
 ) (newProvided opt.Ordering) {
@@ -455,11 +374,15 @@ func finalizeProvided(
 			return provided
 		}
 	}
+	// Build a new provided ordering that satisfies the required properties.
 	newProvided = make(opt.Ordering, len(required.Columns))
 	for i, choice := range required.Columns {
 		group := choice.Group.Intersection(outCols)
 		if group.Intersects(providedCols) {
-			// Prefer using columns from the provided ordering if possible.
+			// Prefer using columns from the provided ordering if possible. It's ok to
+			// use a different column from the OrderingChoice if not because the
+			// provided ordering is already known to satisfy the required ordering,
+			// even if we cannot prove it here.
 			group.IntersectionWith(providedCols)
 		}
 		col, ok := group.Next(0)
@@ -487,36 +410,6 @@ func checkRequired(expr memo.RelExpr, required *props.OrderingChoice) {
 			panic(errors.AssertionFailedf(
 				"ordering column group %s contains non-equivalent columns (op %s)",
 				c.Group, expr.Op(),
-			))
-		}
-	}
-}
-
-// checkProvided runs sanity checks on a provided ordering.
-func checkProvided(expr memo.RelExpr, required *props.OrderingChoice, provided opt.Ordering) {
-	// The provided ordering must refer only to output columns.
-	if outCols := expr.Relational().OutputCols; !provided.ColSet().SubsetOf(outCols) {
-		panic(errors.AssertionFailedf(
-			"provided %s must refer only to output columns %s", provided, outCols,
-		))
-	}
-
-	// TODO(radu): this check would be nice to have, but it is too strict. In some
-	// cases, child expressions created during exploration (like constrained
-	// scans) have FDs that are more restricted than what was known when the
-	// parent expression was constructed. Related to #32320.
-	if false {
-		// The provided ordering must intersect the required ordering, after FDs are
-		// applied.
-		fds := &expr.Relational().FuncDeps
-		r := required.Copy()
-		r.Simplify(fds)
-		var p props.OrderingChoice
-		p.FromOrdering(provided)
-		p.Simplify(fds)
-		if !r.Any() && (p.Any() || !p.Intersects(&r)) {
-			panic(errors.AssertionFailedf(
-				"provided %s does not intersect required %s (FDs: %s)", provided, required, fds,
 			))
 		}
 	}

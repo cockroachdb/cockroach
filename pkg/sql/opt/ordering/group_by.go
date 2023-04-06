@@ -56,17 +56,6 @@ func groupByBuildChildReqOrdering(
 	return result
 }
 
-func groupByBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
-	groupBy := expr.(*memo.GroupByExpr)
-	provided := groupBy.Input.ProvidedPhysical().Ordering
-	inputFDs := &groupBy.Input.Relational().FuncDeps
-
-	// Since the input's provided ordering has to satisfy both <required> and the
-	// GroupBy internal ordering, it may need to be trimmed.
-	provided = trimProvided(provided, required, inputFDs)
-	return remapProvided(provided, inputFDs, groupBy.GroupingCols)
-}
-
 func distinctOnCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	// DistinctOn may require a certain ordering of its input, but can also pass
 	// through a stronger ordering on the grouping columns.
@@ -85,16 +74,6 @@ func distinctOnBuildChildReqOrdering(
 	result := required.Intersection(&parent.Private().(*memo.GroupingPrivate).Ordering)
 	result.Simplify(&parent.Child(0).(memo.RelExpr).Relational().FuncDeps)
 	return result
-}
-
-func distinctOnBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
-	input := expr.Child(0).(memo.RelExpr)
-	provided := input.ProvidedPhysical().Ordering
-	inputFDs := &input.Relational().FuncDeps
-	// Since the input's provided ordering has to satisfy both <required> and the
-	// DistinctOn internal ordering, it may need to be trimmed.
-	provided = trimProvided(provided, required, inputFDs)
-	return remapProvided(provided, inputFDs, expr.Relational().OutputCols)
 }
 
 // StreamingGroupingColOrdering returns an ordering on grouping columns that is

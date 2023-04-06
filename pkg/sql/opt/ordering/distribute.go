@@ -11,7 +11,6 @@
 package ordering
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
@@ -26,9 +25,4 @@ func distributeBuildChildReqOrdering(
 ) props.OrderingChoice {
 	// We can pass through any required ordering to the input.
 	return *required
-}
-
-func distributeBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
-	d := expr.(*memo.DistributeExpr)
-	return d.Input.ProvidedPhysical().Ordering
 }

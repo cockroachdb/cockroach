@@ -63,9 +63,10 @@ calculated bottom-up, in conjunction with the Required ordering at the level of
 each operator.
 
 The Provided ordering is a specific opt.Ordering which describes the ordering
-produced by the operator, and which intersects the Required OrderingChoice (when
-the operator's FDs are taken into account). A best-effort attempt is made to
-keep the Provided ordering as simple as possible, to minimize the comparisons
-that are necessary to maintain it.
+produced by the operator, and which intersects the Required OrderingChoice. No
+additional information should be required to prove that the Provided ordering
+satisfies the Required OrderingChoice (e.g. functional dependencies).
+A best-effort attempt is made to keep the Provided ordering as simple as
+possible, to minimize the comparisons that are necessary to maintain it.
 */
 package ordering

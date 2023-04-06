@@ -11,7 +11,6 @@
 package ordering
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
@@ -41,19 +40,4 @@ func mutationBuildChildReqOrdering(
 		}
 	}
 	return props.OrderingChoice{Optional: optional, Columns: columns}
-}
-
-func mutationBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
-	private := expr.Private().(*memo.MutationPrivate)
-	input := expr.Child(0).(memo.RelExpr)
-	provided := input.ProvidedPhysical().Ordering
-
-	// Construct FD set that includes mapping to/from input columns. This will
-	// be used by remapProvided.
-	var fdset props.FuncDepSet
-	fdset.CopyFrom(&input.Relational().FuncDeps)
-	private.AddEquivTableCols(expr.Memo().Metadata(), &fdset)
-
-	// Ensure that provided ordering only uses projected columns.
-	return remapProvided(provided, &fdset, expr.Relational().OutputCols)
 }

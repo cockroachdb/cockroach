@@ -24,7 +24,7 @@ func topKCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) b
 
 func topKBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	// TopK orders its own input, so the ordering it provides is its own.
-	return trimProvided(expr.(*memo.TopKExpr).Ordering.ToOrdering(), required, &expr.Relational().FuncDeps)
+	return expr.(*memo.TopKExpr).Ordering.ToOrdering()
 }
 
 func topKBuildChildReqOrdering(

@@ -67,23 +67,13 @@ func ordinalityBuildChildReqOrdering(
 func ordinalityBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	r := expr.(*memo.OrdinalityExpr)
 	childProvided := r.Input.ProvidedPhysical().Ordering
-	prefix := ordinalityOrdPrefix(r, required)
-	if prefix == len(required.Columns) {
+	if !required.ColSet().Contains(r.ColID) {
 		// The required ordering doesn't contain the ordinality column, so it only
 		// refers to columns that are in the input.
-		return trimProvided(childProvided, required, &r.Relational().FuncDeps)
+		return childProvided
 	}
-
-	truncated := required.Copy()
-	truncated.Truncate(prefix)
-	// The input's provided ordering satisfies both <truncated> and the RowNumber
-	// internal ordering; it may need to be trimmed.
-	provided := trimProvided(childProvided, &truncated, &r.Relational().FuncDeps)
-	// Add the ordinality column to the provided ordering so that it satisfies
-	// <required>.
-	provided = append(
-		provided[:len(provided):len(provided)], // force reallocation
-		opt.MakeOrderingColumn(r.ColID, false /* descending */),
-	)
-	return provided
+	// Add the ordinality column to the provided ordering to satisfy <required>.
+	provided := make(opt.Ordering, len(childProvided), len(childProvided)+1)
+	copy(provided, childProvided)
+	return append(provided, opt.MakeOrderingColumn(r.ColID, false /* descending */))
 }

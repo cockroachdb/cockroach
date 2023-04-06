@@ -53,15 +53,6 @@ func setOpBuildChildReqOrdering(
 	return childReq
 }
 
-func setOpBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
-	// Don't use the provided ordering from the inputs in case they were trimmed
-	// to remove constant columns. Call remapProvided to remove columns that are
-	// now unnecessary (e.g. because the set op is guaranteed to produce at most
-	// one row).
-	rel := expr.Relational()
-	return remapProvided(required.ToOrdering(), &rel.FuncDeps, rel.OutputCols)
-}
-
 // setOpBuildRequired pads the required ordering if needed to ensure that it
 // includes all output columns of the set operation. This is necessary because
 // the execution engine can only use a streaming (merge join or distinct)

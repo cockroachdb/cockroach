@@ -50,22 +50,34 @@ func TestOrdinalityProvided(t *testing.T) {
 			required: "+1,+10,+5",
 			input:    "+1,+2",
 			fds:      emptyFD,
-			provided: "+1,+10",
+			provided: "+1,+10,+5",
 		},
 		{ // case 4
+			required: "+1,+10 opt(5)",
+			input:    "+1,+2",
+			fds:      emptyFD,
+			provided: "+1,+10",
+		},
+		{ // case 5
 			required: "+(1|2),+(3|10)",
 			input:    "+1,+4,+5",
 			fds:      emptyFD,
 			provided: "+1,+10",
 		},
-		{ // case 5
+		{ // case 6
 			required: "+1",
 			input:    "",
 			fds:      constFD,
-			provided: "",
+			provided: "+1",
 		},
-		{ // case 6
+		{ // case 7
 			required: "-1,+10",
+			input:    "-2",
+			fds:      equivFD,
+			provided: "-1,+10",
+		},
+		{ // case 8
+			required: "-(1|2),+10",
 			input:    "-2",
 			fds:      equivFD,
 			provided: "-2,+10",
@@ -87,7 +99,9 @@ func TestOrdinalityProvided(t *testing.T) {
 			r := f.Memo().MemoizeOrdinality(input, &memo.OrdinalityPrivate{ColID: 10})
 			r.Relational().FuncDeps = tc.fds
 			req := props.ParseOrderingChoice(tc.required)
-			res := ordinalityBuildProvided(r, &req).String()
+			res := finalizeProvided(
+				ordinalityBuildProvided(r, &req), &req, r.Relational().OutputCols,
+			).String()
 			if res != tc.provided {
 				t.Errorf("expected '%s', got '%s'", tc.provided, res)
 			}

@@ -72,7 +72,5 @@ func mergeJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) o
 	case opt.RightJoinOp:
 		provided = m.Right.ProvidedPhysical().Ordering
 	}
-	// The input's ordering satisfies both <required> and the ordering required by
-	// the merge join itself; it may need to be trimmed.
-	return trimProvided(provided, required, &expr.Relational().FuncDeps)
+	return provided
 }

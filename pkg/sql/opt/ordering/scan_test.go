@@ -81,16 +81,16 @@ func TestScan(t *testing.T) {
 				Cols:  opt.MakeColSet(1, 2, 3, 4),
 			},
 			cases: []testCase{
-				{req: "", exp: "fwd", prov: ""},               // case 1
-				{req: "+1", exp: "fwd", prov: "+1"},           // case 2
-				{req: "-1", exp: "rev", prov: "-1"},           // case 3
-				{req: "+2", exp: "no"},                        // case 4
-				{req: "+1,+2", exp: "fwd", prov: "+1,+2"},     // case 5
-				{req: "-1,-2", exp: "rev", prov: "-1,-2"},     // case 6
-				{req: "+1,-2", exp: "no", prov: "+1,-2"},      // case 7
-				{req: "+(1|2)", exp: "fwd", prov: "+1"},       // case 8
-				{req: "+2 opt(1)", exp: "fwd", prov: "+1,+2"}, // case 9
-				{req: "-2 opt(1)", exp: "rev", prov: "-1,-2"}, // case 10
+				{req: "", exp: "fwd", prov: ""},            // case 1
+				{req: "+1", exp: "fwd", prov: "+1"},        // case 2
+				{req: "-1", exp: "rev", prov: "-1"},        // case 3
+				{req: "+2", exp: "no"},                     // case 4
+				{req: "+1,+2", exp: "fwd", prov: "+1,+2"},  // case 5
+				{req: "-1,-2", exp: "rev", prov: "-1,-2"},  // case 6
+				{req: "+1,-2", exp: "no", prov: "+1,-2"},   // case 7
+				{req: "+(1|2)", exp: "fwd", prov: "+1"},    // case 8
+				{req: "+2 opt(1)", exp: "fwd", prov: "+2"}, // case 9
+				{req: "-2 opt(1)", exp: "rev", prov: "-2"}, // case 10
 			},
 		},
 		{ // group 2: secondary index scan.
@@ -100,16 +100,16 @@ func TestScan(t *testing.T) {
 				Cols:  opt.MakeColSet(1, 2, 3, 4),
 			},
 			cases: []testCase{
-				{req: "", exp: "fwd", prov: ""},                          // case 1
-				{req: "-3", exp: "fwd", prov: "-3"},                      // case 2
-				{req: "+3", exp: "rev", prov: "+3"},                      // case 3
-				{req: "-3,+4", exp: "fwd", prov: "-3,+4"},                // case 4
-				{req: "+3,-4", exp: "rev", prov: "+3,-4"},                // case 5
-				{req: "+3,+4", exp: "no"},                                // case 6
-				{req: "-3,+4,+1", exp: "fwd", prov: "-3,+4,+1"},          // case 7
-				{req: "-3,+4,+1,+2", exp: "fwd", prov: "-3,+4,+1,+2"},    // case 8
-				{req: "-3,+2 opt(1,4)", exp: "fwd", prov: "-3,+4,+1,+2"}, // case 9
-				{req: "+3,-2 opt(1,4)", exp: "rev", prov: "+3,-4,-1,-2"}, // case 10
+				{req: "", exp: "fwd", prov: ""},                       // case 1
+				{req: "-3", exp: "fwd", prov: "-3"},                   // case 2
+				{req: "+3", exp: "rev", prov: "+3"},                   // case 3
+				{req: "-3,+4", exp: "fwd", prov: "-3,+4"},             // case 4
+				{req: "+3,-4", exp: "rev", prov: "+3,-4"},             // case 5
+				{req: "+3,+4", exp: "no"},                             // case 6
+				{req: "-3,+4,+1", exp: "fwd", prov: "-3,+4,+1"},       // case 7
+				{req: "-3,+4,+1,+2", exp: "fwd", prov: "-3,+4,+1,+2"}, // case 8
+				{req: "-3,+2 opt(1,4)", exp: "fwd", prov: "-3,+2"},    // case 9
+				{req: "+3,-2 opt(1,4)", exp: "rev", prov: "+3,-2"},    // case 10
 			},
 		},
 		{ // group 3: scan with limit (forces forward scan).
@@ -120,16 +120,16 @@ func TestScan(t *testing.T) {
 				HardLimit: +10,
 			},
 			cases: []testCase{
-				{req: "", exp: "fwd", prov: ""},               // case 1
-				{req: "+1", exp: "fwd", prov: "+1"},           // case 2
-				{req: "-1", exp: "no"},                        // case 3
-				{req: "+2", exp: "no"},                        // case 4
-				{req: "+1,+2", exp: "fwd", prov: "+1,+2"},     // case 5
-				{req: "-1,-2", exp: "no"},                     // case 6
-				{req: "+1,-2", exp: "no"},                     // case 7
-				{req: "+(1|2)", exp: "fwd", prov: "+1"},       // case 8
-				{req: "+2 opt(1)", exp: "fwd", prov: "+1,+2"}, // case 9
-				{req: "-2 opt(1)", exp: "no"},                 // case 10
+				{req: "", exp: "fwd", prov: ""},            // case 1
+				{req: "+1", exp: "fwd", prov: "+1"},        // case 2
+				{req: "-1", exp: "no"},                     // case 3
+				{req: "+2", exp: "no"},                     // case 4
+				{req: "+1,+2", exp: "fwd", prov: "+1,+2"},  // case 5
+				{req: "-1,-2", exp: "no"},                  // case 6
+				{req: "+1,-2", exp: "no"},                  // case 7
+				{req: "+(1|2)", exp: "fwd", prov: "+1"},    // case 8
+				{req: "+2 opt(1)", exp: "fwd", prov: "+2"}, // case 9
+				{req: "-2 opt(1)", exp: "no"},              // case 10
 			},
 		},
 		{ // group 4: scan with reverse limit.
@@ -140,16 +140,16 @@ func TestScan(t *testing.T) {
 				HardLimit: -10,
 			},
 			cases: []testCase{
-				{req: "", exp: "rev", prov: ""},               // case 1
-				{req: "+1", exp: "no"},                        // case 2
-				{req: "-1", exp: "rev", prov: "-1"},           // case 3
-				{req: "+2", exp: "no"},                        // case 4
-				{req: "+1,+2", exp: "no"},                     // case 5
-				{req: "-1,-2", exp: "rev", prov: "-1,-2"},     // case 6
-				{req: "+1,-2", exp: "no"},                     // case 7
-				{req: "+(1|2)", exp: "no"},                    // case 8
-				{req: "+2 opt(1)", exp: "no"},                 // case 9
-				{req: "-2 opt(1)", exp: "rev", prov: "-1,-2"}, // case 10
+				{req: "", exp: "rev", prov: ""},            // case 1
+				{req: "+1", exp: "no"},                     // case 2
+				{req: "-1", exp: "rev", prov: "-1"},        // case 3
+				{req: "+2", exp: "no"},                     // case 4
+				{req: "+1,+2", exp: "no"},                  // case 5
+				{req: "-1,-2", exp: "rev", prov: "-1,-2"},  // case 6
+				{req: "+1,-2", exp: "no"},                  // case 7
+				{req: "+(1|2)", exp: "no"},                 // case 8
+				{req: "+2 opt(1)", exp: "no"},              // case 9
+				{req: "-2 opt(1)", exp: "rev", prov: "-2"}, // case 10
 			},
 		},
 		{ // group 5: scan with constraint.
@@ -160,11 +160,11 @@ func TestScan(t *testing.T) {
 			},
 			c: &c,
 			cases: []testCase{
-				{req: "-3", exp: "fwd", prov: ""},                   // case 1
-				{req: "-3,+4", exp: "fwd", prov: "+4"},              // case 2
-				{req: "-1 opt(3,4)", exp: "rev", prov: "-4,-1"},     // case 3
-				{req: "+1 opt(3)", exp: "no"},                       // case 4
-				{req: "-(1|2) opt(3,4)", exp: "rev", prov: "-4,-1"}, // case 5
+				{req: "-3", exp: "fwd", prov: "-3"},              // case 1
+				{req: "-3,+4", exp: "fwd", prov: "-3,+4"},        // case 2
+				{req: "-1 opt(3,4)", exp: "rev", prov: "-1"},     // case 3
+				{req: "+1 opt(3)", exp: "no"},                    // case 4
+				{req: "-(1|2) opt(3,4)", exp: "rev", prov: "-1"}, // case 5
 			},
 		},
 	}
@@ -189,7 +189,9 @@ func TestScan(t *testing.T) {
 					}
 					if ok {
 						scan := f.ConstructScan(&g.p)
-						prov := scanBuildProvided(scan, &req).String()
+						prov := finalizeProvided(
+							scanBuildProvided(scan, &req), &req, scan.Relational().OutputCols,
+						).String()
 						if prov != tc.prov {
 							t.Errorf("expected provided '%s', got '%s'", tc.prov, prov)
 						}
