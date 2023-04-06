@@ -794,7 +794,7 @@ func getTotalStatementDetails(
 		GROUP BY
 				fingerprint_id
 		LIMIT 1`
-	query := fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics_persisted`, whereClause)
+	query := fmt.Sprintf(queryFormat, table, whereClause)
 
 	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-total", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
@@ -875,7 +875,7 @@ func getStatementDetailsPerAggregatedTs(
 				aggregated_ts
 		ORDER BY aggregated_ts ASC
 		LIMIT $%d`
-	query := fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics_persisted`, whereClause, len(args)+1)
+	query := fmt.Sprintf(queryFormat, table, whereClause, len(args)+1)
 	args = append(args, limit)
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-aggregated-timestamp", nil,
