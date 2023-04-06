@@ -42,7 +42,8 @@ func BuildOptAndHypTableMaps(
 		for _, indexCols := range indexes {
 			indexOrd := hypTable.Table.IndexCount() + len(hypIndexes)
 			lastKeyCol := indexCols[len(indexCols)-1]
-			inverted := !colinfo.ColumnTypeIsIndexable(lastKeyCol.DatumType())
+			inverted := !(colinfo.ColumnTypeIsIndexable(lastKeyCol.DatumType()) &&
+				lastKeyCol.DatumType().Family() != types.JsonFamily)
 			if inverted {
 				invertedCol := hypTable.addInvertedCol(lastKeyCol.Column)
 				indexCols[len(indexCols)-1] = cat.IndexColumn{Column: invertedCol}
