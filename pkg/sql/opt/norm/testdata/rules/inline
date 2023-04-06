@@ -1212,30 +1212,32 @@ SELECT k, min_x() FROM a WHERE k = min_x()
 ----
 project
  ├── columns: k:1!null min_x:16
- ├── key: (1)
- ├── fd: (1)-->(16)
- ├── select
- │    ├── columns: k:1!null
- │    ├── key: (1)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,16)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null x:8!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,8), (8)==(1), (1)==(8)
  │    ├── scan a
  │    │    ├── columns: k:1!null
  │    │    └── key: (1)
+ │    ├── limit
+ │    │    ├── columns: x:8!null
+ │    │    ├── internal-ordering: +8
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:8!null
+ │    │    │    ├── key: (8)
+ │    │    │    ├── ordering: +8
+ │    │    │    └── limit hint: 1.00
+ │    │    └── 1
  │    └── filters
- │         └── eq [outer=(1), subquery, constraints=(/1: (/NULL - ])]
- │              ├── k:1
- │              └── subquery
- │                   └── limit
- │                        ├── columns: x:8!null
- │                        ├── internal-ordering: +8
- │                        ├── cardinality: [0 - 1]
- │                        ├── key: ()
- │                        ├── fd: ()-->(8)
- │                        ├── scan xy
- │                        │    ├── columns: x:8!null
- │                        │    ├── key: (8)
- │                        │    ├── ordering: +8
- │                        │    └── limit hint: 1.00
- │                        └── 1
+ │         └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  └── projections
       └── subquery [as=min_x:16, subquery]
            └── limit
@@ -1261,57 +1263,62 @@ $$
 norm expect=InlineUDF
 SELECT k FROM a WHERE k = min_x_gt(min_x_gt(0))
 ----
-select
+project
  ├── columns: k:1!null
- ├── stable
- ├── key: (1)
- ├── scan a
- │    ├── columns: k:1!null
- │    └── key: (1)
- └── filters
-      └── eq [outer=(1), stable, subquery, udf, constraints=(/1: (/NULL - ])]
-           ├── k:1
-           └── udf: min_x_gt
-                ├── params: i:13
-                ├── args
-                │    └── subquery
-                │         └── limit
-                │              ├── columns: x:9!null
-                │              ├── internal-ordering: +9
-                │              ├── cardinality: [0 - 1]
-                │              ├── key: ()
-                │              ├── fd: ()-->(9)
-                │              ├── select
-                │              │    ├── columns: x:9!null
-                │              │    ├── key: (9)
-                │              │    ├── ordering: +9
-                │              │    ├── limit hint: 1.00
-                │              │    ├── scan xy
-                │              │    │    ├── columns: x:9!null
-                │              │    │    ├── key: (9)
-                │              │    │    ├── ordering: +9
-                │              │    │    └── limit hint: 3.00
-                │              │    └── filters
-                │              │         └── x:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
-                │              └── 1
-                └── body
-                     └── limit
-                          ├── columns: x:14!null
-                          ├── internal-ordering: +14
-                          ├── outer: (13)
-                          ├── cardinality: [0 - 1]
-                          ├── key: ()
-                          ├── fd: ()-->(14)
-                          ├── select
-                          │    ├── columns: x:14!null
-                          │    ├── outer: (13)
-                          │    ├── key: (14)
-                          │    ├── scan xy
-                          │    │    ├── columns: x:14!null
-                          │    │    └── key: (14)
-                          │    └── filters
-                          │         └── x:14 > i:13 [outer=(13,14), constraints=(/13: (/NULL - ]; /14: (/NULL - ])]
-                          └── 1
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── inner-join (hash)
+      ├── columns: k:1!null x:14!null
+      ├── cardinality: [0 - 1]
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── key: ()
+      ├── fd: ()-->(1,14), (14)==(1), (1)==(14)
+      ├── scan a
+      │    ├── columns: k:1!null
+      │    └── key: (1)
+      ├── limit
+      │    ├── columns: x:14!null
+      │    ├── internal-ordering: +14
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(14)
+      │    ├── select
+      │    │    ├── columns: x:14!null
+      │    │    ├── key: (14)
+      │    │    ├── ordering: +14
+      │    │    ├── limit hint: 1.00
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:14!null
+      │    │    │    ├── key: (14)
+      │    │    │    ├── ordering: +14
+      │    │    │    └── limit hint: 3.00
+      │    │    └── filters
+      │    │         └── gt [outer=(14), subquery, constraints=(/14: (/NULL - ])]
+      │    │              ├── x:14
+      │    │              └── subquery
+      │    │                   └── limit
+      │    │                        ├── columns: x:9!null
+      │    │                        ├── internal-ordering: +9
+      │    │                        ├── cardinality: [0 - 1]
+      │    │                        ├── key: ()
+      │    │                        ├── fd: ()-->(9)
+      │    │                        ├── select
+      │    │                        │    ├── columns: x:9!null
+      │    │                        │    ├── key: (9)
+      │    │                        │    ├── ordering: +9
+      │    │                        │    ├── limit hint: 1.00
+      │    │                        │    ├── scan xy
+      │    │                        │    │    ├── columns: x:9!null
+      │    │                        │    │    ├── key: (9)
+      │    │                        │    │    ├── ordering: +9
+      │    │                        │    │    └── limit hint: 3.00
+      │    │                        │    └── filters
+      │    │                        │         └── x:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
+      │    │                        └── 1
+      │    └── 1
+      └── filters
+           └── k:1 = x:14 [outer=(1,14), constraints=(/1: (/NULL - ]; /14: (/NULL - ]), fd=(1)==(14), (14)==(1)]
 
 # UDFs with volatile arguments are not inlined.
 norm expect-not=InlineUDF
