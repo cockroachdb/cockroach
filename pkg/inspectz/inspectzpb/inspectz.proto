@@ -1,0 +1,42 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.inspectz.inspectzpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb";
+
+import "google/api/annotations.proto";
+import "kv/kvserver/kvflowcontrol/kvflowinspectpb/kvflowinspect.proto";
+
+// Inspectz exposes in-memory state of various CRDB components.
+//
+// TODO(irfansharif): Expose endpoints for the admission package, for example
+// what each work queue's occupancy is (with respect to tenants, "held" flow
+// tokens, etc). Also expose queues in the latch/lock manager, including who is
+// waiting and for how long.
+service Inspectz {
+  // KVFlowController exposes in-memory state of the node-level
+  // kvflowcontrol.Controller. It's housed under /inspectz/kvflowcontroller.
+  rpc KVFlowController(kv.kvserver.kvflowcontrol.kvflowinspectpb.ControllerRequest)
+      returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.ControllerResponse) {}
+
+  // KVFlowHandles exposes in-memory state of kvflowcontrol.Handles. It's housed
+  // under /inspectz/kvflowhandles.
+  rpc KVFlowHandles(kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesRequest)
+      returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesResponse) {}
+
+}
+
+// As of 04/23, we're not invoking these RPC interfaces as RPCs. But they're
+// kept as such for semi-opinionated code organization reasons. We want all
+// inspectz APIs and protos inspectable at glance in this one file even if
+// actual type definitions appear elsewhere. It's possible that other
+// subsystems that use /inspectz make use of the RPC interfaces (to fetch
+// remote inspectable state, for example).
