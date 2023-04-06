@@ -57,6 +57,21 @@ func (sh *StoresForFlowControl) Lookup(
 	return handle, found
 }
 
+// Inspect is part of the StoresFlowControlIntegration interface.
+func (sh *StoresForFlowControl) Inspect() []roachpb.RangeID {
+	ls := (*Stores)(sh)
+	var rangeIDs []roachpb.RangeID
+	if err := ls.VisitStores(func(s *Store) error {
+		rangeIDs = append(rangeIDs, makeStoreForFlowControl(s).Inspect()...)
+		return nil
+	}); err != nil {
+		ctx := ls.AnnotateCtx(context.Background())
+		log.Errorf(ctx, "unexpected error: %s", err)
+		return nil
+	}
+	return rangeIDs
+}
+
 // ResetStreams is part of the StoresFlowControlIntegration interface.
 func (sh *StoresForFlowControl) ResetStreams(ctx context.Context) {
 	ls := (*Stores)(sh)
@@ -122,6 +137,17 @@ func (sh *storeForFlowControlImpl) ResetStreams(ctx context.Context) {
 		}
 		return true
 	})
+}
+
+// Inspect is part of the StoresFlowControlIntegration interface.
+func (sh *storeForFlowControlImpl) Inspect() []roachpb.RangeID {
+	s := (*Store)(sh)
+	var rangeIDs []roachpb.RangeID
+	s.VisitReplicas(func(replica *Replica) (wantMore bool) {
+		rangeIDs = append(rangeIDs, replica.RangeID)
+		return true
+	})
+	return rangeIDs
 }
 
 // onRaftTransportDisconnected is part of the StoresFlowControlIntegration
