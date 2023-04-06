@@ -322,11 +322,9 @@ func makeSharedProcessTenantServerConfig(
 		baseCfg.InflightTraceDirName = traceDir
 	}
 
-	// TODO(knz): Define a meaningful storage config for each tenant,
-	// see: https://github.com/cockroachdb/cockroach/issues/84588.
 	useStore := kvServerCfg.SQLConfig.TempStorageConfig.Spec
 	tempStorageCfg := base.TempStorageConfigFromEnv(
-		ctx, st, useStore, "" /* parentDir */, kvServerCfg.SQLConfig.TempStorageConfig.Mon.MaximumBytes())
+		ctx, st, useStore, "" /* parentDir */, kvServerCfg.SQLConfig.TempStorageConfig.Mon.Limit())
 	// TODO(knz): Make tempDir configurable.
 	tempDir := useStore.Path
 	if tempStorageCfg.Path, err = fs.CreateTempDir(tempDir, TempDirPrefix, stopper); err != nil {
