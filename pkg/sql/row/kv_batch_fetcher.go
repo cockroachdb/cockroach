@@ -58,7 +58,7 @@ var defaultKVBatchSize = rowinfra.KeyLimit(util.ConstantWithMetamorphicTestValue
 ))
 
 // sendFunc is the function used to execute a KV batch; normally
-// wraps (*client.Txn).Send.
+// wraps (*kv.Txn).Send.
 type sendFunc func(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error)

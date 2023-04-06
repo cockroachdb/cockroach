@@ -687,7 +687,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// change would forget to add the call).
 	//
 	// TODO(andrei): really the code should be rearchitected to ensure
-	// that all uses of SQL execution initialize the client.Txn using a
+	// that all uses of SQL execution initialize the kv.Txn using a
 	// single/common function. That would be where the stepping mode
 	// gets enabled once for all SQL statements executed "underneath".
 	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)

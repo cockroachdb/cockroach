@@ -182,8 +182,8 @@ func checkAdv(
 	return nil
 }
 
-// expKVTxn is used with checkTxn to check that fields on a client.Txn
-// correspond to expectations. Any field left nil will not be checked.
+// expKVTxn is used with checkTxn to check that fields on a kv.Txn correspond to
+// expectations. Any field left nil will not be checked.
 type expKVTxn struct {
 	debugName    *string
 	userPriority *roachpb.UserPriority
