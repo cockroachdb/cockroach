@@ -134,10 +134,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			if c.IsLocal() {
-				l.Printf("skipping step in bors builds while failures are handled -- #99115")
-				return nil
-			}
 			l.Printf("running schema workload step")
 			runCmd := roachtestutil.NewCommand("./workload run schemachange").Flag("verbose", 1).Flag("max-ops", 10).Flag("concurrency", 2).Arg("{pgurl:1-%d}", len(c.All()))
 			randomNode := h.RandomNode(rng, c.All())

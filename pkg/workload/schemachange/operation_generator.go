@@ -302,9 +302,9 @@ var opDeclarative = []bool{
 	createEnum:              false,
 	createSchema:            false,
 	dropColumn:              true,
-	dropColumnDefault:       true,
+	dropColumnDefault:       false,
 	dropColumnNotNull:       true,
-	dropColumnStored:        true,
+	dropColumnStored:        false,
 	dropConstraint:          true,
 	dropIndex:               true,
 	dropSequence:            true,
@@ -326,6 +326,35 @@ var opDeclarative = []bool{
 	validate:                false,
 }
 
+// This workload will maintain its own list of supported versions for declarative
+// schema changer, since the cluster we are running against can be downlevel.
+// The declarative schema changer builder does have a supported list, but it's not
+// sufficient for that reason.
+var opDeclarativeVersion = []clusterversion.Key{
+	addColumn:               clusterversion.V22_2,
+	addForeignKeyConstraint: clusterversion.V23_1,
+	addUniqueConstraint:     clusterversion.V23_1,
+	createIndex:             clusterversion.V23_1,
+	dropColumn:              clusterversion.V22_2,
+	dropColumnNotNull:       clusterversion.V23_1,
+	dropConstraint:          clusterversion.V23_1,
+	dropIndex:               clusterversion.V23_1,
+	dropSequence:            clusterversion.BinaryMinSupportedVersionKey,
+	dropTable:               clusterversion.BinaryMinSupportedVersionKey,
+	dropView:                clusterversion.BinaryMinSupportedVersionKey,
+	dropSchema:              clusterversion.BinaryMinSupportedVersionKey,
+}
+
+func init() {
+	// Assert that an active version is set for all declarative statements.
+	for op := range opDeclarative {
+		if opDeclarative[op] &&
+			opDeclarativeVersion[op] < clusterversion.BinaryMinSupportedVersionKey {
+			panic(errors.AssertionFailedf("declarative op %v doesn't have an active version", op))
+		}
+	}
+}
+
 // adjustOpWeightsForActiveVersion adjusts the weights for the active cockroach
 // version, allowing us to disable certain operations in mixed version scenarios.
 func adjustOpWeightsForCockroachVersion(
@@ -336,6 +365,28 @@ func adjustOpWeightsForCockroachVersion(
 		return err
 	}
 	return tx.Rollback(ctx)
+}
+
+// getSupportedDeclarativeOp generates declarative operations until,
+// a fully supported one is found. This is required for mixed version testing
+// support, where statements may be partially supproted.
+func (og *operationGenerator) getSupportedDeclarativeOp(
+	ctx context.Context, tx pgx.Tx,
+) (opType, error) {
+	for {
+		op := opType(og.params.declarativeOps.Int())
+		if !clusterversion.TestingBinaryMinSupportedVersion.Equal(
+			clusterversion.ByKey(opDeclarativeVersion[op])) {
+			notSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.ByKey(opDeclarativeVersion[op]))
+			if err != nil {
+				return op, err
+			}
+			if notSupported {
+				continue
+			}
+		}
+		return op, nil
+	}
 }
 
 // randOp attempts to produce a random schema change operation. It returns a
@@ -350,7 +401,10 @@ func (og *operationGenerator) randOp(
 		var op opType
 		// The declarative schema changer has a more limited deck of operations.
 		if useDeclarativeSchemaChanger {
-			op = opType(og.params.declarativeOps.Int())
+			op, err = og.getSupportedDeclarativeOp(ctx, tx)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			op = opType(og.params.ops.Int())
 		}
@@ -3477,6 +3531,15 @@ func (og *operationGenerator) createSchema(ctx context.Context, tx pgx.Tx) (*opS
 	// TODO(jayshrivastava): Support authorization
 	stmt := randgen.MakeSchemaName(ifNotExists, schemaName, tree.MakeRoleSpecWithRoleName(username.RootUserName().Normalized()))
 	opStmt.sql = tree.Serialize(stmt)
+	// Descriptor ID generator may be temporarily unavailable, so
+	// allow uncategorized errors temporarily.
+	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	codesWithConditions{
+		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
+	}.add(opStmt.potentialExecErrors)
 	return opStmt, nil
 }
 
