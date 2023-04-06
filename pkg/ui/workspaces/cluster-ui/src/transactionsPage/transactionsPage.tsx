@@ -415,7 +415,7 @@ export class TransactionsPage extends React.Component<
       this.props.onApplySearchCriteria(
         this.state.timeScale,
         this.state.limit,
-        getSortLabel(this.state.reqSortSetting),
+        getSortLabel(this.state.reqSortSetting, "Transaction"),
       );
     }
     this.refreshData();
@@ -427,13 +427,10 @@ export class TransactionsPage extends React.Component<
   };
 
   hasReqSortOption = (): boolean => {
-    let found = false;
-    Object.values(SqlStatsSortOptions).forEach((option: SqlStatsSortType) => {
-      if (getSortColumn(option) == this.props.sortSetting.columnTitle) {
-        found = true;
-      }
-    });
-    return found;
+    return Object.values(SqlStatsSortOptions).some(
+      (option: SqlStatsSortType) =>
+        getSortColumn(option) == this.props.sortSetting.columnTitle,
+    );
   };
 
   renderTransactions(): React.ReactElement {
@@ -523,7 +520,10 @@ export class TransactionsPage extends React.Component<
     );
 
     const period = timeScaleToString(this.props.timeScale);
-    const sortSettingLabel = getSortLabel(this.props.reqSortSetting);
+    const sortSettingLabel = getSortLabel(
+      this.props.reqSortSetting,
+      "Transaction",
+    );
 
     return (
       <>
