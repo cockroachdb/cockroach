@@ -97,7 +97,6 @@ type Registry struct {
 
 	ac        log.AmbientContext
 	stopper   *stop.Stopper
-	db        isql.DB
 	clock     *hlc.Clock
 	clusterID *base.ClusterIDContainer
 	nodeID    *base.SQLIDContainer
@@ -112,26 +111,15 @@ type Registry struct {
 	adoptionCh  chan adoptionNotice
 	sqlInstance sqlliveness.Instance
 
-	// internalDB provides a way for jobs to create internal executors.
-	// This is rarely needed, and usually job resumers should
-	// use the internal executor from the JobExecCtx. The intended user of this
-	// interface is the schema change job resumer, which needs to set the
-	// tableCollectionModifier on the internal executor to different values in
-	// multiple concurrent queries. This situation is an exception to the internal
-	// executor generally being a stateless wrapper, and makes it impossible to
-	// reuse the same internal executor across all the queries (without
-	// refactoring to get rid of the tableCollectionModifier field, which we
-	// should do eventually).
+	// db is used by the jobs subsystem to manage job records.
 	//
-	// Note that, while this API is not ideal, internal executors are basically
-	// lightweight wrappers requiring no additional teardown. There's not much
-	// cost incurred in creating these.
+	// This isql.DB is instantiated with special parameters that are
+	// tailored to job management. It is not suitable for execution of
+	// SQL queries by job resumers.
 	//
-	// TODO (lucy): We should refactor and get rid of the tableCollectionModifier
-	// field. Modifying the TableCollection is basically a per-query operation
-	// and should be a per-query setting. #34304 is the issue for creating/
-	// improving this API.
-	internalDB isql.DB
+	// Instead resumer functions should reach for the isql.DB that comes
+	// from the SQl executor config.
+	db isql.DB
 
 	// if non-empty, indicates path to file that prevents any job adoptions.
 	preventAdoptionFile     string
@@ -210,7 +198,6 @@ func MakeRegistry(
 	ac log.AmbientContext,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
-	db isql.DB,
 	clusterID *base.ClusterIDContainer,
 	nodeID *base.SQLIDContainer,
 	sqlInstance sqlliveness.Instance,
@@ -226,7 +213,6 @@ func MakeRegistry(
 		ac:                      ac,
 		stopper:                 stopper,
 		clock:                   clock,
-		db:                      db,
 		clusterID:               clusterID,
 		nodeID:                  nodeID,
 		sqlInstance:             sqlInstance,
@@ -258,7 +244,7 @@ func MakeRegistry(
 // executor. We expose this separately from the constructor to avoid a circular
 // dependency.
 func (r *Registry) SetInternalDB(db isql.DB) {
-	r.internalDB = db
+	r.db = db
 }
 
 // MetricsStruct returns the metrics for production monitoring of each job type.

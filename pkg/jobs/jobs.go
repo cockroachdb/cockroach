@@ -722,11 +722,6 @@ func (j *Job) FractionCompleted() float32 {
 	return progress.GetFractionCompleted()
 }
 
-// GetInternalDB returns the internal executor factory.
-func (j *Job) GetInternalDB() isql.DB {
-	return j.registry.internalDB
-}
-
 // MarkIdle marks the job as Idle.  Idleness should not be toggled frequently
 // (no more than ~twice a minute) as the action is logged.
 func (j *Job) MarkIdle(isIdle bool) {
@@ -826,7 +821,7 @@ func (j *Job) loadJobPayloadAndProgress(
 
 func (u Updater) load(ctx context.Context) (retErr error) {
 	if u.txn == nil {
-		return u.j.registry.internalDB.Txn(ctx, func(
+		return u.j.registry.db.Txn(ctx, func(
 			ctx context.Context, txn isql.Txn,
 		) error {
 			u.txn = txn
