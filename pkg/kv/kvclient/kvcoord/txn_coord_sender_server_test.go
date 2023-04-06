@@ -40,7 +40,7 @@ import (
 // transaction status and do an async abort.
 // After the heartbeat loop finds out about the abort, subsequent requests sent
 // through the TxnCoordSender return TransactionAbortedErrors. On those errors,
-// the contract is that the client.Txn creates a new transaction internally and
+// the contract is that the kv.Txn creates a new transaction internally and
 // switches the TxnCoordSender instance. The expectation is that the old
 // transaction has been cleaned up by that point.
 func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {

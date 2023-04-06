@@ -927,7 +927,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		if err == nil {
 			if !txn.IsCommitted() {
 				err = txn.Commit(ctx)
-				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v", err)
+				log.Eventf(ctx, "kv.Txn did AutoCommit. err: %v", err)
 				if err != nil {
 					if !errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
 						// We can't retry, so let the caller know we tried to

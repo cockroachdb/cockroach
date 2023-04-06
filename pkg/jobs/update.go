@@ -362,7 +362,7 @@ func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobU
 //
 // Sample usage:
 //
-//	err := j.Update(ctx, func(_ *client.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+//	err := j.Update(ctx, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 //	  if md.Status != StatusRunning {
 //	    return errors.New("job no longer running")
 //	  }

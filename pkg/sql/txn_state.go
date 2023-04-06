@@ -37,9 +37,9 @@ import (
 // txnState contains state associated with an ongoing SQL txn; it constitutes
 // the ExtendedState of a connExecutor's state machine (defined in conn_fsm.go).
 // It contains fields that are mutated as side-effects of state transitions;
-// notably the KV client.Txn.  All mutations to txnState are performed through
-// calling fsm.Machine.Apply(event); see conn_fsm.go for the definition of the
-// state machine.
+// notably the kv.Txn. All mutations to txnState are performed through calling
+// fsm.Machine.Apply(event); see conn_fsm.go for the definition of the state
+// machine.
 type txnState struct {
 	// Mutable fields accessed from goroutines not synchronized by this txn's
 	// session, such as when a SHOW SESSIONS statement is executed on another
@@ -143,7 +143,7 @@ const (
 )
 
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
-// It creates a new client.Txn and initializes it using the session defaults
+// It creates a new kv.Txn and initializes it using the session defaults
 // and returns the ID of the new transaction.
 //
 // connCtx: The context in which the new transaction is started (usually a

@@ -87,13 +87,13 @@ const (
 // - Attaching lock spans to EndTxn requests, for cleanup.
 // - Handles retriable errors by either bumping the transaction's epoch or, in
 // case of TransactionAbortedErrors, cleaning up the transaction (in this case,
-// the client.Txn is expected to create a new TxnCoordSender instance
-// transparently for the higher-level client).
+// the kv.Txn is expected to create a new TxnCoordSender instance transparently
+// for the higher-level client).
 //
 // Since it is stateful, the TxnCoordSender needs to understand when a
 // transaction is "finished" and the state can be destroyed. As such there's a
-// contract that the client.Txn needs obey. Read-only transactions don't matter
-// - they're stateless. For the others, once an intent write is sent by the
+// contract that the kv.Txn needs obey. Read-only transactions don't matter -
+// they're stateless. For the others, once an intent write is sent by the
 // client, the TxnCoordSender considers the transactions completed in the
 // following situations:
 // - A batch containing an EndTxns (commit or rollback) succeeds.

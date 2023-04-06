@@ -401,7 +401,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Wait for all streams to observe the expected events.
 	expVal2 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val2"), ts2)
 	expVal3 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val3"), ts3)
-	expVal3.InitChecksum([]byte("m")) // client.Txn sets value checksum
+	expVal3.InitChecksum([]byte("m")) // kv.Txn sets value checksum
 	expVal4 := roachpb.Value{Timestamp: ts4}
 	expVal4.SetInt(18)
 	expVal4.InitChecksum(roachpb.Key("b"))
