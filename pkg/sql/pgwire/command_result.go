@@ -202,6 +202,11 @@ func (r *commandResult) Err() error {
 	return r.err
 }
 
+// ErrAllowReleased is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) ErrAllowReleased() error {
+	return r.err
+}
+
 // SetError is part of the sql.RestrictedCommandResult interface.
 //
 // We're not going to write any bytes to the buffer in order to support future
@@ -687,16 +692,6 @@ func (r *limitedCommandResult) Close(ctx context.Context, t sql.TransactionStatu
 		r.commandResult.typ = noCompletionMsg
 	}
 	r.commandResult.Close(ctx, t)
-}
-
-// Err is part of the sql.RestrictedCommandResult interface.
-// Unlike commandResult.Err(), we don't assert the result is not released here.
-// It's because we can reach here when executing the cleanup steps for a pausable
-// portal after Sync is reached in an implicit transaction. In this case,
-// we would have called res.Close because the execution of the previous pgwire
-// command was done and we haven't created a new result.
-func (r *limitedCommandResult) Err() error {
-	return r.err
 }
 
 // Get the column index for job id based on the result header defined in

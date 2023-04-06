@@ -470,7 +470,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			// sorts of errors on the result. Rather than trying to impose discipline
 			// in that jungle, we just overwrite them all here with an error that's
 			// nicer to look at for the client.
-			if resToPushErr != nil && cancelQueryCtx.Err() != nil && resToPushErr.Err() != nil {
+			if resToPushErr != nil && cancelQueryCtx.Err() != nil && resToPushErr.ErrAllowReleased() != nil {
 				// Even in the cases where the error is a retryable error, we want to
 				// intercept the event and payload returned here to ensure that the query
 				// is not retried.
@@ -1503,7 +1503,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						ex.extraTxnState.txnCounter,
 						ppInfo.dispatchToExecutionEngine.rowsAffected,
 						bulkJobId,
-						ppInfo.curRes.Err(),
+						ppInfo.curRes.ErrAllowReleased(),
 						ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 						&ex.extraTxnState.hasAdminRoleCache,
 						ex.server.TelemetryLoggingMetrics,
@@ -1682,7 +1682,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				populateQueryLevelStatsAndRegions(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
 				ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
 					ctx, &curPlanner,
-					int(ex.state.mu.autoRetryCounter), ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.Err(), *ppInfo.dispatchToExecutionEngine.queryStats,
+					int(ex.state.mu.autoRetryCounter), ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(), *ppInfo.dispatchToExecutionEngine.queryStats,
 				)
 			},
 		})
