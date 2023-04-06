@@ -3008,6 +3008,8 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 100789, "flaky test")
+
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
