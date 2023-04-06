@@ -243,6 +243,7 @@ func (ie *InternalExecutor) initConnEx(
 	}
 
 	ex.executorType = executorTypeInternal
+	ex.planner.extendedEvalCtx.ExecType = executorTypeInternal
 	return ex, nil
 
 }
