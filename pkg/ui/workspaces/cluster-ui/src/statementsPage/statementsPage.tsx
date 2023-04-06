@@ -309,7 +309,7 @@ export class StatementsPage extends React.Component<
       this.props.onApplySearchCriteria(
         this.state.timeScale,
         this.state.limit,
-        getSortLabel(this.state.reqSortSetting),
+        getSortLabel(this.state.reqSortSetting, "Statement"),
       );
     }
     this.refreshStatements();
@@ -655,7 +655,10 @@ export class StatementsPage extends React.Component<
     );
 
     const period = timeScaleToString(this.props.timeScale);
-    const sortSettingLabel = getSortLabel(this.props.reqSortSetting);
+    const sortSettingLabel = getSortLabel(
+      this.props.reqSortSetting,
+      "Statement",
+    );
 
     return (
       <>
