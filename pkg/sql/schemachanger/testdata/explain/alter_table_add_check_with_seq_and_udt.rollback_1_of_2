@@ -10,9 +10,11 @@ EXPLAIN (ddl) rollback at post-commit stage 1 of 2;
 Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›));
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward ABSENT
-           │    └── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
-           └── 8 Mutation operations
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+           │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
+           └── 9 Mutation operations
+                ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":107}
                 ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":107}
                 ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
                 ├── UpdateTableBackReferencesInSequences {"BackReferencedTableID":107}

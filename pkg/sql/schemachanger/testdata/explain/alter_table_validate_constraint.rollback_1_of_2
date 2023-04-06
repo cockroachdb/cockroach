@@ -12,11 +12,13 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› V
            ├── 2 elements transitioning toward PUBLIC
            │    ├── ABSENT     → PUBLIC CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
            │    └── ABSENT     → PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
-           ├── 1 element transitioning toward ABSENT
-           │    └── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
-           └── 5 Mutation operations
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+           │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 3}
+           └── 6 Mutation operations
                 ├── AddCheckConstraint {"CheckExpr":"i \u003e 0:::INT8","ConstraintID":2,"TableID":104,"Validity":1}
                 ├── SetConstraintName {"ConstraintID":2,"Name":"check_i","TableID":104}
+                ├── SetConstraintName {"ConstraintID":3,"Name":"crdb_internal_co...","TableID":104}
                 ├── RemoveCheckConstraint {"ConstraintID":3,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

@@ -3112,6 +3112,14 @@ var charts = []sectionDescription{
 				Title:   "Tombstone Count",
 				Metrics: []string{"storage.keys.tombstone.count"},
 			},
+			{
+				Title:   "Pinned Keys Written",
+				Metrics: []string{"storage.compactions.keys.pinned.count"},
+			},
+			{
+				Title:   "Pinned Key Bytes Written",
+				Metrics: []string{"storage.compactions.keys.pinned.bytes"},
+			},
 		},
 	},
 	{

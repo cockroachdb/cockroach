@@ -11,7 +11,7 @@ CREATE TABLE t1 (i INT PRIMARY KEY REFERENCES t2(i));
 stage-exec phase=PostCommitNonRevertiblePhase stage=1
 INSERT INTO t1 VALUES (0);
 ----
-pq: insert on table "t1" violates foreign key constraint "crdb_internal_constraint_2_name_placeholder"
+pq: insert on table "t1" violates foreign key constraint "t1_i_fkey"
 
 stage-query phase=PostCommitNonRevertiblePhase stage=1
 SELECT count(*) FROM t1;
@@ -52,15 +52,8 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.drop_constraint
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType op
 upsert descriptor #104
-  ...
-     inboundFks:
-     - constraintId: 2
-  -    name: t1_i_fkey
-  +    name: crdb_internal_constraint_2_name_placeholder
-       originColumnIds:
-       - 1
   ...
        - 1
        referencedTableId: 104
@@ -82,7 +75,7 @@ upsert descriptor #105
   +      constraintType: FOREIGN_KEY
   +      foreignKey:
   +        constraintId: 2
-  +        name: crdb_internal_constraint_2_name_placeholder
+  +        name: t1_i_fkey
   +        originColumnIds:
   +        - 1
   +        originTableId: 105
@@ -121,7 +114,7 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 5 MutationType ops
+## PreCommitPhase stage 2 of 2 with 4 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -132,13 +125,6 @@ upsert descriptor #104
   +    jobId: "1"
      families:
      - columnIds:
-  ...
-     inboundFks:
-     - constraintId: 2
-  -    name: t1_i_fkey
-  +    name: crdb_internal_constraint_2_name_placeholder
-       originColumnIds:
-       - 1
   ...
        - 1
        referencedTableId: 104
@@ -177,7 +163,7 @@ upsert descriptor #105
   +      constraintType: FOREIGN_KEY
   +      foreignKey:
   +        constraintId: 2
-  +        name: crdb_internal_constraint_2_name_placeholder
+  +        name: t1_i_fkey
   +        originColumnIds:
   +        - 1
   +        originTableId: 105
@@ -221,7 +207,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -237,7 +223,7 @@ upsert descriptor #104
      id: 104
   -  inboundFks:
   -  - constraintId: 2
-  -    name: crdb_internal_constraint_2_name_placeholder
+  -    name: t1_i_fkey
   -    originColumnIds:
   -    - 1
   -    originTableId: 105
@@ -279,7 +265,7 @@ upsert descriptor #105
   -      constraintType: FOREIGN_KEY
   -      foreignKey:
   -        constraintId: 2
-  -        name: crdb_internal_constraint_2_name_placeholder
+  -        name: t1_i_fkey
   -        originColumnIds:
   -        - 1
   -        originTableId: 105

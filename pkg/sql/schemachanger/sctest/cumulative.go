@@ -211,7 +211,6 @@ func (m *stageExecStmtMap) GetInjectionRanges(
 	var start stageKey
 	var end stageKey
 	var result []stageKey
-
 	// First split any ranges that have schema change errors to have their own
 	// entries. i.e. If stages 1 to N will generate schema change errors due to
 	// some statement, we need to have one entry for each one. Additionally, convert
@@ -230,6 +229,10 @@ func (m *stageExecStmtMap) GetInjectionRanges(
 			default:
 				panic("unknown phase type for latest")
 			}
+		}
+		// Skip over anything in the pre-commit phase.
+		if key.phase == scop.PreCommitPhase {
+			continue
 		}
 		if !key.stmt.HasSchemaChangeError() && !key.rollback {
 			forcedSplitEntries = append(forcedSplitEntries, key)
@@ -822,7 +825,7 @@ func Pause(t *testing.T, relPath string, newCluster NewClusterFunc) {
 func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	jobErrorMutex := syncutil.Mutex{}
 	var testDMLInjectionCase func(
-		t *testing.T, setup, stmts []parser.Statement, key stageKey,
+		t *testing.T, setup, stmts []parser.Statement, key stageKey, injectPreCommit bool,
 	)
 	var injectionFunc execInjectionCallback
 	testFunc := func(t *testing.T, _ string, rewrite bool, setup, stmts []parser.Statement, execMap *stageExecStmtMap) {
@@ -837,16 +840,27 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewCluster
 		injectionFunc, _ = execMap.GetInjectionCallback(t, rewrite)
 		injectionRanges := execMap.GetInjectionRanges(postCommit, nonRevertible)
 		defer execMap.AssertMapIsUsed(t)
-		for _, injection := range injectionRanges {
-			if !t.Run(
-				fmt.Sprintf("injection stage %v", injection),
-				func(t *testing.T) { testDMLInjectionCase(t, setup, stmts, injection) },
-			) {
-				return
+		injectPreCommits := []bool{true}
+		if execMap.getExecStmts(makeStageKey(scop.PreCommitPhase,
+			1,
+			false)) != nil {
+			injectPreCommits = []bool{false, true}
+		}
+		// Test both happy and unhappy paths with pre-commit injection, this
+		// maximizes our available coverage. When the pre-commit injects are
+		// removed we still expect queries to behave correctly.
+		for _, injectPreCommit := range injectPreCommits {
+			for _, injection := range injectionRanges {
+				if !t.Run(
+					fmt.Sprintf("injection stage %v", injection),
+					func(t *testing.T) { testDMLInjectionCase(t, setup, stmts, injection, injectPreCommit) },
+				) {
+					return
+				}
 			}
 		}
 	}
-	testDMLInjectionCase = func(t *testing.T, setup, stmts []parser.Statement, injection stageKey) {
+	testDMLInjectionCase = func(t *testing.T, setup, stmts []parser.Statement, injection stageKey, injectPreCommit bool) {
 		var schemaChangeErrorRegex *regexp.Regexp
 		var lastRollbackStageKey *stageKey
 		usedStages := make(map[int]struct{})
@@ -859,7 +873,8 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewCluster
 					p.Stages[stageIdx].Ordinal >= injection.minOrdinal &&
 					p.Stages[stageIdx].Ordinal <= injection.maxOrdinal) ||
 					(p.InRollback || p.CurrentState.InRollback) || /* Rollbacks are always injected */
-					(p.Stages[stageIdx].Phase == scop.PreCommitPhase) {
+					(p.Stages[stageIdx].Phase == scop.PreCommitPhase &&
+						injectPreCommit) {
 					jobErrorMutex.Lock()
 					defer jobErrorMutex.Unlock()
 					key := makeStageKey(s.Phase, s.Ordinal, p.InRollback || p.CurrentState.InRollback)
@@ -1033,18 +1048,29 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 	testBackupRestoreCase := func(
 		t *testing.T, setup, stmts []parser.Statement, ord int,
 	) {
+		// If tables are empty then, backfills should never lead to rollbacks
+		// in restores.
+		hasDMLInSetup := false
+		for _, setupStmt := range setup {
+			hasDMLInSetup = hasDMLInSetup || setupStmt.IsANSIDML()
+		}
 		type stage struct {
 			p        scplan.Plan
 			stageIdx int
 			resume   chan error
 		}
-
+		successExpected := atomic.Bool{}
 		stageChan := make(chan stage)
 		var closedStageChan bool // mark when stageChan is closed in the callback
 		ctx, cancel := context.WithCancel(context.Background())
 		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
-
+				// If this plan contains any backfills, we will not
+				// back up or restore those indexes, so failure can occur
+				if p.Stages[stageIdx].Type() == scop.BackfillType &&
+					hasDMLInSetup {
+					successExpected.Store(false)
+				}
 				// If the plan has no post-commit stages, we'll close the
 				// stageChan eagerly.
 				if p.Stages[len(p.Stages)-1].Phase < scop.PostCommitPhase {
@@ -1103,10 +1129,11 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 			)
 		})
 		type backup struct {
-			name       string
-			isRollback bool
-			url        string
-			s          stage
+			name            string
+			isRollback      bool
+			successExpected bool
+			url             string
+			s               stage
 		}
 		var backups []backup
 		var done bool
@@ -1176,10 +1203,11 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 			tdb.Exec(t, fmt.Sprintf(
 				"BACKUP DATABASE %s INTO '%s'", dbName, backupURL))
 			backups = append(backups, backup{
-				name:       dbName,
-				isRollback: rollbackStage > 0,
-				url:        backupURL,
-				s:          s,
+				name:            dbName,
+				isRollback:      rollbackStage > 0,
+				successExpected: successExpected.Load(),
+				url:             backupURL,
+				s:               s,
 			})
 
 			if s.p.InRollback {
@@ -1324,10 +1352,16 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 					tdb.Exec(t, flavor.restoreQuery)
 					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
 					waitForSchemaChangesToFinish(t, tdb)
+					wasSchemaChangeSuccessful := schemaChangeQueryLatestStatus(t, tdb) == "succeeded"
+					// Validate if the schema change was successful after the restore,
+					// only if no backfill's are required.
+					if !b.isRollback && !wasSchemaChangeSuccessful && b.successExpected {
+						t.Fatalf("schema change failed when successful completion was expected")
+					}
 					afterRestore := tdb.QueryStr(t, fetchDescriptorStateQuery)
 
 					if flavor.name != "restore all tables in database" {
-						if b.isRollback {
+						if b.isRollback || !wasSchemaChangeSuccessful {
 							require.Equal(t, before, afterRestore)
 						} else {
 							require.Equal(t, after, afterRestore)
@@ -1338,7 +1372,7 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 						// dropped through RESTORE due to missing UDFs. We need to remove
 						// those kind of table elements from original AST.
 						var expected [][]string
-						if b.isRollback {
+						if b.isRollback || !wasSchemaChangeSuccessful {
 							expected = before
 						} else {
 							expected = after
@@ -1735,6 +1769,13 @@ func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedCl
 	testBackupRestoreCase := func(
 		t *testing.T, setup, stmts []parser.Statement, ord int,
 	) {
+		// If tables are empty then, backfills should never lead to rollbacks
+		// in restores.
+		hasDMLInSetup := false
+		for _, setupStmt := range setup {
+			hasDMLInSetup = hasDMLInSetup || setupStmt.IsANSIDML()
+		}
+		successExpected := atomic.Bool{}
 		type stage struct {
 			p        scplan.Plan
 			stageIdx int
@@ -1745,6 +1786,11 @@ func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedCl
 		ctx, cancel := context.WithCancel(context.Background())
 		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
+				if p.Stages[stageIdx].Type() == scop.BackfillType && hasDMLInSetup {
+					// Restores for anything with a backfill can potentially,
+					// fail.
+					successExpected.Store(false)
+				}
 				if p.Stages[len(p.Stages)-1].Phase < scop.PostCommitPhase {
 					if stageChan != nil {
 						close(stageChan)
@@ -1799,10 +1845,11 @@ func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedCl
 			)
 		})
 		type backup struct {
-			name       string
-			isRollback bool
-			url        string
-			s          stage
+			name            string
+			isRollback      bool
+			successExpected bool
+			url             string
+			s               stage
 		}
 		var backups []backup
 		var done bool
@@ -1876,10 +1923,11 @@ func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedCl
 			tdb.Exec(t, fmt.Sprintf(
 				"BACKUP DATABASE %s INTO '%s'", dbName, backupURL))
 			backups = append(backups, backup{
-				name:       dbName,
-				isRollback: rollbackStage > 0,
-				url:        backupURL,
-				s:          s,
+				name:            dbName,
+				isRollback:      rollbackStage > 0,
+				url:             backupURL,
+				successExpected: successExpected.Load(),
+				s:               s,
 			})
 
 			if s.p.InRollback {
@@ -1978,8 +2026,14 @@ func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedCl
 					tdb.Exec(t, flavor.restoreQuery)
 					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
 					waitForSchemaChangesToFinish(t, tdb)
+					wasSchemaChangeSuccessful := schemaChangeQueryLatestStatus(t, tdb) == "succeeded"
+					// Validate if the schema change was successful after the restore,
+					// only if no backfill's are required.
+					if !b.isRollback && !wasSchemaChangeSuccessful && b.successExpected {
+						t.Fatalf("schema change failed when successful completion was expected")
+					}
 					afterRestore := tdb.QueryStr(t, fetchDescriptorStateQuery)
-					if b.isRollback {
+					if b.isRollback || !wasSchemaChangeSuccessful {
 						require.Equal(t, before, afterRestore)
 					} else {
 						require.Equal(t, after, afterRestore)

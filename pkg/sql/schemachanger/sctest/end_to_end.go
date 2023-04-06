@@ -444,6 +444,18 @@ func waitForSchemaChangesToFinish(t *testing.T, tdb *sqlutils.SQLRunner) {
 	)
 }
 
+func schemaChangeQueryLatestStatus(t *testing.T, tdb *sqlutils.SQLRunner) string {
+	q := fmt.Sprintf(
+		`SELECT status FROM [SHOW JOBS] WHERE job_type IN ('%s', '%s', '%s') ORDER BY finished DESC LIMIT 1`,
+		jobspb.TypeSchemaChange,
+		jobspb.TypeTypeSchemaChange,
+		jobspb.TypeNewSchemaChange,
+	)
+	result := tdb.QueryStr(t, q)
+	require.Len(t, result, 1)
+	require.Len(t, result[0], 1)
+	return result[0][0]
+}
 func schemaChangeWaitQuery(statusInString string) string {
 	q := fmt.Sprintf(
 		`SELECT status, job_type, description FROM [SHOW JOBS] WHERE job_type IN ('%s', '%s', '%s') AND status NOT IN %s`,

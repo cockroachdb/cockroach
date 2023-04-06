@@ -1,5 +1,6 @@
 /* setup */
 CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+INSERT INTO t(i, j) VALUES (-4, -4), (-2, -2), (-3, -3);
 
 /* test */
 EXPLAIN (ddl) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
