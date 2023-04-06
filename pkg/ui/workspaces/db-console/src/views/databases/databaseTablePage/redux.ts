@@ -49,9 +49,10 @@ export const mapStateToProps = (
   const details = tableDetails[util.generateTableID(database, table)];
   const indexUsageStats = state?.cachedData.indexStats;
   const indexStats = indexUsageStats[util.generateTableID(database, table)];
-  const lastReset = indexStats?.data?.last_reset
-    ? util.TimestampToMoment(indexStats?.data?.last_reset)
-    : null;
+  const lastReset = util.TimestampToMoment(
+    indexStats?.data?.last_reset,
+    util.minDate,
+  );
   const nodeRegions = nodeRegionsByIDSelector(state);
 
   return {
@@ -60,8 +61,8 @@ export const mapStateToProps = (
     details: selectTablePageDataDetails(details, nodeRegions, isTenant),
     showNodeRegionsSection: selectIsMoreThanOneNode(state),
     automaticStatsCollectionEnabled:
-      selectAutomaticStatsCollectionEnabled(state),
-    hasAdminRole: selectHasAdminRole(state),
+      selectAutomaticStatsCollectionEnabled(state) || false,
+    hasAdminRole: selectHasAdminRole(state) || false,
     indexStats: {
       loading: !!indexStats?.inFlight,
       loaded: !!indexStats?.valid,

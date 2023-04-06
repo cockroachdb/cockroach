@@ -9,11 +9,10 @@
 // licenses/APL.txt.
 
 import moment from "moment";
+import { minDate } from "../../util";
 
 export const indexNeverUsedReason =
   "This index has not been used and can be removed for better write performance.";
-
-const minDate = moment.utc("0001-01-01"); // minimum value as per UTC.
 
 type dropIndexRecommendation = {
   recommend: boolean;

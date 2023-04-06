@@ -32,8 +32,8 @@ import { schemaInsightsSaga } from "./schemaInsights";
 import { uiConfigSaga } from "./uiConfig";
 import { statementFingerprintInsightsSaga } from "./insights/statementFingerprintInsights";
 import { txnStatsSaga } from "./transactionStats";
-import {databaseDetailsSaga} from "./databaseDetails";
-import {tableDetailsSaga} from "./databaseTableDetails/tableDetails.saga";
+import { databaseDetailsSaga } from "./databaseDetails";
+import { tableDetailsSaga } from "./databaseTableDetails";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([

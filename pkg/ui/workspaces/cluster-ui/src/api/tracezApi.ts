@@ -11,7 +11,7 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "src/api";
 import Long from "long";
-import {ADMIN_API_PREFIX} from "./util";
+import { ADMIN_API_PREFIX } from "./util";
 export type ListTracingSnapshotsRequest =
   cockroach.server.serverpb.ListTracingSnapshotsRequest;
 export type ListTracingSnapshotsResponse =

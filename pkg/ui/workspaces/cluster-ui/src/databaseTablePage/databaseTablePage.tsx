@@ -41,6 +41,7 @@ import {
 import {
   ascendingAttr,
   columnTitleAttr,
+  minDate,
   syncHistory,
   tabAttr,
   tableStatsClusterSetting,
@@ -277,8 +278,6 @@ export class DatabaseTablePage extends React.Component<
     }
   }
 
-  minDate = moment.utc("0001-01-01"); // minimum value as per UTC
-
   private changeIndexSortSetting(sortSetting: SortSetting) {
     const stateCopy = { ...this.state };
     stateCopy.indexSortSetting = sortSetting;
@@ -305,7 +304,7 @@ export class DatabaseTablePage extends React.Component<
 
   private getLastResetString() {
     const lastReset = this.props.indexStats.lastReset;
-    if (lastReset.isSame(this.minDate)) {
+    if (lastReset.isSame(minDate)) {
       return "Last reset: Never";
     } else {
       return "Last reset: " + lastReset.format(DATE_FORMAT_24_UTC);
@@ -315,7 +314,7 @@ export class DatabaseTablePage extends React.Component<
   private getLastUsedString(indexStat: IndexStat) {
     // This case only occurs when we have no reads, resets, or creation time on
     // the index.
-    if (indexStat.lastUsed.isSame(this.minDate)) {
+    if (indexStat.lastUsed.isSame(minDate)) {
       return "Never";
     }
     return `Last ${indexStat.lastUsedType}: ${indexStat.lastUsed.format(

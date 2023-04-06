@@ -112,10 +112,10 @@ type TimeScaleChangeEvent = {
 };
 
 type ViewModeEvent = {
-  name: "View Mode Clicked",
+  name: "View Mode Clicked";
   page: Page;
   value: string;
-}
+};
 
 type AnalyticsEvent =
   | ApplySearchCriteriaEvent

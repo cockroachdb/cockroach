@@ -38,6 +38,7 @@ import {
   EncodeDatabaseTableIndexUri,
   EncodeDatabaseTableUri,
   EncodeDatabaseUri,
+  minDate,
   performanceTuningRecipes,
   unique,
   unset,
@@ -304,7 +305,6 @@ export class IndexDetailsPage extends React.Component<
   }
 
   private getTimestampString(timestamp: Moment): string {
-    const minDate = moment.utc("0001-01-01"); // minimum value as per UTC
     if (timestamp.isSame(minDate)) {
       return "Never";
     } else {

@@ -189,13 +189,14 @@ describe("Database Table Page", function () {
           rangeCount: 0,
           nodesByRegionString: "",
         },
+        hasAdminRole: false,
         automaticStatsCollectionEnabled: true,
         indexStats: {
           loading: false,
           loaded: false,
+          lastReset: util.minDate,
           lastError: undefined,
           stats: [],
-          lastReset: null,
         },
       },
       false,
@@ -349,14 +350,12 @@ describe("Database Table Page", function () {
         {
           indexName: "index_no_reads_no_resets",
           totalReads: 0,
-          lastUsed: util.TimestampToMoment(
-            makeTimestamp("0001-01-01T00:00:00Z"),
-          ),
+          lastUsed: util.minDate,
           lastUsedType: "created",
           indexRecommendations: [],
         },
       ],
-      lastReset: util.TimestampToMoment(makeTimestamp("0001-01-01T00:00:00Z")),
+      lastReset: util.minDate,
     });
   });
 });

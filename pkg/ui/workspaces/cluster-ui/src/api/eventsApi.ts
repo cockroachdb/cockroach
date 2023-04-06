@@ -93,22 +93,21 @@ export function getNonRedactedEvents(
   timeout?: moment.Duration,
 ): Promise<SqlApiResponse<EventsResponse>> {
   const eventsRequest: SqlExecutionRequest = buildEventsSQLRequest(req);
-  return withTimeout(
-    executeInternalSql<EventRow>(eventsRequest),
-    timeout,
-  ).then(result => {
-    if (sqlResultsAreEmpty(result)) {
+  return withTimeout(executeInternalSql<EventRow>(eventsRequest), timeout).then(
+    result => {
+      if (sqlResultsAreEmpty(result)) {
+        return formatApiResult<EventRow[]>(
+          [],
+          result.error,
+          "retrieving events information",
+        );
+      }
+
       return formatApiResult<EventRow[]>(
-        [],
+        result.execution.txn_results[0].rows,
         result.error,
         "retrieving events information",
       );
-    }
-
-    return formatApiResult<EventRow[]>(
-      result.execution.txn_results[0].rows,
-      result.error,
-      "retrieving events information",
-    );
-  });
+    },
+  );
 }

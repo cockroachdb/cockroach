@@ -72,7 +72,10 @@ import {
   StatementFingerprintInsightsCachedState,
 } from "./insights/statementFingerprintInsights";
 import { reducer as txnStats, TxnStatsState } from "./transactionStats";
-import { reducer as clusterSettings, ClusterSettingsState } from "./clusterSettings";
+import {
+  reducer as clusterSettings,
+  ClusterSettingsState,
+} from "./clusterSettings";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;

@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import {SortSetting} from "../../sortedtable";
-import {ViewMode} from "../../databaseDetailsPage";
+import { SortSetting } from "../../sortedtable";
+import { ViewMode } from "../../databaseDetailsPage";
 
 export const defaultStmtsTxnsSortSetting: SortSetting = {
   ascending: false,

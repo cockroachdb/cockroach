@@ -135,36 +135,35 @@ const tableCombiner = (
   nodeRegions: Record<string, string>,
   isTenant: boolean,
 ): DatabaseDetailsPageDataTable => {
-  const stats = details?.data?.results.stats;
-  const grants = details?.data?.results.grantsResp.grants || [];
+  const results = details?.data?.results;
+  const grants = results?.grantsResp.grants || [];
   const normalizedRoles = normalizeRoles(grants.map(grant => grant["user"]));
   const normalizedPrivileges = normalizePrivileges(
     [].concat(...grants.map(grant => grant["privileges"])),
   );
-  const nodes = details?.data?.results.stats.replicaData.nodeIDs || [];
-  const numIndexes = details?.data?.results.schemaDetails.indexes.length;
+  const nodes = results?.stats.replicaData.nodeIDs || [];
   return {
     name: table,
     loading: !!details?.inFlight,
     loaded: !!details?.valid,
     lastError: details?.lastError,
     details: {
-      columnCount: details?.data?.results.schemaDetails.columns?.length || 0,
-      indexCount: numIndexes,
+      columnCount: results?.schemaDetails.columns?.length || 0,
+      indexCount: results?.schemaDetails.indexes.length || 0,
       userCount: normalizedRoles.length,
       roles: normalizedRoles,
       grants: normalizedPrivileges,
       statsLastUpdated:
-        details?.data?.results.heuristicsDetails.stats_last_created_at || null,
+        results?.heuristicsDetails.stats_last_created_at || null,
       hasIndexRecommendations:
-        details?.data?.results.stats.indexStats.has_index_recommendations ||
-        false,
-      totalBytes: stats?.spanStats.total_bytes || 0,
-      liveBytes: stats?.spanStats.live_bytes || 0,
-      livePercentage: stats?.spanStats.live_percentage || 0,
-      replicationSizeInBytes: stats?.spanStats.approximate_disk_bytes || 0,
+        results?.stats.indexStats.has_index_recommendations || false,
+      totalBytes: results?.stats?.spanStats.total_bytes || 0,
+      liveBytes: results?.stats?.spanStats.live_bytes || 0,
+      livePercentage: results?.stats?.spanStats.live_percentage || 0,
+      replicationSizeInBytes:
+        results?.stats?.spanStats.approximate_disk_bytes || 0,
       nodes: nodes,
-      rangeCount: stats?.spanStats.range_count || 0,
+      rangeCount: results?.stats?.spanStats.range_count || 0,
       nodesByRegionString: getNodesByRegionString(nodes, nodeRegions, isTenant),
     },
   };
@@ -175,30 +174,28 @@ export const selectTablePageDataDetails = (
   nodeRegions: Record<string, string>,
   isTenant: boolean,
 ): DatabaseTablePageDataDetails => {
-  const grants = details?.data?.results.grantsResp.grants || [];
+  const results = details?.data?.results;
+  const grants = results?.grantsResp.grants || [];
   const normalizedGrants =
     grants.map(grant => ({
       user: grant.user,
       privileges: normalizePrivileges(grant.privileges),
     })) || [];
-  const nodes = details?.data?.results.stats.replicaData.nodeIDs || [];
+  const nodes = results?.stats.replicaData.nodeIDs || [];
   return {
     loading: !!details?.inFlight,
     loaded: !!details?.valid,
     lastError: details?.lastError,
-    createStatement:
-      details?.data?.results.createStmtResp.create_statement || "",
-    replicaCount: details?.data?.results.stats.replicaData.replicaCount || 0,
-    indexNames: details?.data?.results.schemaDetails.indexes || [],
+    createStatement: results?.createStmtResp.create_statement || "",
+    replicaCount: results?.stats.replicaData.replicaCount || 0,
+    indexNames: results?.schemaDetails.indexes || [],
     grants: normalizedGrants,
-    statsLastUpdated:
-      details?.data?.results.heuristicsDetails.stats_last_created_at || null,
-    totalBytes: details?.data?.results.stats.spanStats.total_bytes || 0,
-    liveBytes: details?.data?.results.stats.spanStats.live_bytes || 0,
-    livePercentage: details?.data?.results.stats.spanStats.live_percentage || 0,
-    sizeInBytes:
-      details?.data?.results.stats.spanStats.approximate_disk_bytes || 0,
-    rangeCount: details?.data?.results.stats.spanStats.range_count || 0,
+    statsLastUpdated: results?.heuristicsDetails.stats_last_created_at || null,
+    totalBytes: results?.stats.spanStats.total_bytes || 0,
+    liveBytes: results?.stats.spanStats.live_bytes || 0,
+    livePercentage: results?.stats.spanStats.live_percentage || 0,
+    sizeInBytes: results?.stats.spanStats.approximate_disk_bytes || 0,
+    rangeCount: results?.stats.spanStats.range_count || 0,
     nodesByRegionString: getNodesByRegionString(nodes, nodeRegions, isTenant),
   };
 };

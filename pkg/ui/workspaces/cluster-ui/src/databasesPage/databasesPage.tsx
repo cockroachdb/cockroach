@@ -269,11 +269,7 @@ export class DatabasesPage extends React.Component<
       this.props.refreshSettings();
     }
 
-    if (
-      !this.props.loaded &&
-      !this.props.loading &&
-      !this.props.lastError
-    ) {
+    if (!this.props.loaded && !this.props.loading && !this.props.lastError) {
       return this.props.refreshDatabases();
     }
 

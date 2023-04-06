@@ -14,6 +14,7 @@ import {
   databaseNameAttr,
   generateTableID,
   getMatchParamByName,
+  minDate,
   tableNameAttr,
   TimestampToMoment,
 } from "../util";
@@ -45,9 +46,10 @@ export const mapStateToProps = (
   const indexUsageStats = state.adminUI?.indexStats;
   const details = tableDetails[generateTableID(database, table)];
   const indexStatsState = indexUsageStats[generateTableID(database, table)];
-  const lastReset = indexStatsState?.data?.last_reset
-    ? TimestampToMoment(indexStatsState?.data?.last_reset)
-    : null;
+  const lastReset = TimestampToMoment(
+    indexStatsState?.data?.last_reset,
+    minDate,
+  );
   const nodeRegions = nodeRegionsByIDSelector(state);
   const isTenant = selectIsTenant(state);
 

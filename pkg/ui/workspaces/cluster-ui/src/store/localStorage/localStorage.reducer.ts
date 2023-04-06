@@ -177,11 +177,13 @@ const initialState: LocalStorageState = {
     JSON.parse(localStorage.getItem("sortSetting/DatabasesPage")) ||
     defaultDatabasesSortSetting,
   [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT]:
-    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT)) ||
-    defaultDatabaseDetailsTableSortSetting,
+    JSON.parse(
+      localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT),
+    ) || defaultDatabaseDetailsTableSortSetting,
   [LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT]:
-  JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT)) ||
-    defaultDatabaseDetailsGrantSortSetting,
+    JSON.parse(
+      localStorage.getItem(LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT),
+    ) || defaultDatabaseDetailsGrantSortSetting,
   "filters/ActiveStatementsPage":
     JSON.parse(localStorage.getItem("filters/ActiveStatementsPage")) ||
     defaultFiltersActiveExecutions,
@@ -205,7 +207,9 @@ const initialState: LocalStorageState = {
     JSON.parse(localStorage.getItem("filters/SchemaInsightsPage")) ||
     defaultFiltersSchemaInsights,
   [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_FILTERS]:
-    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_FILTERS)) || defaultFilters,
+    JSON.parse(
+      localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_FILTERS),
+    ) || defaultFilters,
   "search/StatementsPage":
     JSON.parse(localStorage.getItem("search/StatementsPage")) || null,
   "search/TransactionsPage":
@@ -213,7 +217,9 @@ const initialState: LocalStorageState = {
   "search/DatabasesPage":
     JSON.parse(localStorage.getItem("search/DatabasesPage")) || null,
   [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SEARCH]:
-    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SEARCH)) || null,
+    JSON.parse(
+      localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SEARCH),
+    ) || null,
   "typeSetting/JobsPage":
     JSON.parse(localStorage.getItem("typeSetting/JobsPage")) ||
     defaultJobTypeSetting,
