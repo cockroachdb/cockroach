@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
@@ -112,14 +113,15 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 							printTrimmedBytes(originalTokens), rwi.RangeID, rwi.Origin, rwi.LogPosition, ingested)
 					},
 				}
+				var mockCoordMu syncutil.Mutex
 				storeWorkQueue = makeStoreWorkQueue(
 					log.MakeTestingAmbientContext(tracing.NewTracer()),
 					roachpb.StoreID(1),
-					[admissionpb.NumWorkClasses]granterWithStoreWriteDone{
+					[admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted{
 						tg[admissionpb.RegularWorkClass],
 						tg[admissionpb.ElasticWorkClass],
 					},
-					st, metrics, opts, knobs,
+					st, metrics, opts, knobs, &NoopOnLogEntryAdmitted{}, &mockCoordMu,
 				).(*StoreWorkQueue)
 				tg[admissionpb.RegularWorkClass].r = storeWorkQueue.getRequesters()[admissionpb.RegularWorkClass]
 				tg[admissionpb.ElasticWorkClass].r = storeWorkQueue.getRequesters()[admissionpb.ElasticWorkClass]
@@ -137,7 +139,7 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 
 				// Parse pri=<string>.
 				d.ScanArgs(t, "pri", &arg)
-				pri, found := reverseWorkPriorityDict[arg]
+				pri, found := admissionpb.TestingReverseWorkPriorityDict[arg]
 				require.True(t, found)
 
 				// Parse size=<bytes>.
@@ -369,15 +371,6 @@ func printWorkQueue(q *WorkQueue) string {
 // create-time=<duration> is relative to this time.
 var tzero = timeutil.Unix(0, 0)
 
-var reverseWorkPriorityDict map[string]admissionpb.WorkPriority
-
-func init() {
-	reverseWorkPriorityDict = make(map[string]admissionpb.WorkPriority)
-	for k, v := range admissionpb.WorkPriorityDict {
-		reverseWorkPriorityDict[v] = k
-	}
-}
-
 type testReplicatedWriteGranter struct {
 	t   *testing.T
 	wc  admissionpb.WorkClass
@@ -387,7 +380,7 @@ type testReplicatedWriteGranter struct {
 	tokens int64
 }
 
-var _ granterWithStoreWriteDone = &testReplicatedWriteGranter{}
+var _ granterWithStoreReplicatedWorkAdmitted = &testReplicatedWriteGranter{}
 
 func newTestReplicatedWriteGranter(
 	t *testing.T, wc admissionpb.WorkClass, buf *builderWithMu,
@@ -441,6 +434,13 @@ func (tg *testReplicatedWriteGranter) grant() {
 
 func (tg *testReplicatedWriteGranter) storeWriteDone(
 	originalTokens int64, doneInfo StoreWorkDoneInfo,
+) (additionalTokens int64) {
+	tg.tokens -= originalTokens
+	return 0
+}
+
+func (tg *testReplicatedWriteGranter) storeReplicatedWorkAdmittedLocked(
+	originalTokens int64, admittedInfo storeReplicatedWorkAdmittedInfo,
 ) (additionalTokens int64) {
 	tg.tokens -= originalTokens
 	return 0

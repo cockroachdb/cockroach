@@ -416,8 +416,8 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	io.copyAuxEtcFromPerWorkEstimator()
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
-	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtAdmittedDone()
-	io.kvGranter.setAdmittedDoneModels(l0WriteLM, l0IngestLM, ingestLM)
+	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtDone()
+	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM)
 	if _, overloaded := io.ioThreshold.Score(); overloaded || io.aux.doLogFlush ||
 		io.elasticDiskBWTokens != unlimitedTokens {
 		log.Infof(ctx, "IO overload: %s", io.adjustTokensResult)
@@ -433,7 +433,7 @@ func (io *ioLoadListener) copyAuxEtcFromPerWorkEstimator() {
 	io.adjustTokensResult.aux.perWorkTokensAux = io.perWorkTokenEstimator.aux
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.adjustTokensResult.requestEstimates = requestEstimates
-	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtAdmittedDone()
+	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtDone()
 	io.adjustTokensResult.l0WriteLM = l0WriteLM
 	io.adjustTokensResult.l0IngestLM = l0IngestLM
 	io.adjustTokensResult.ingestLM = ingestLM
