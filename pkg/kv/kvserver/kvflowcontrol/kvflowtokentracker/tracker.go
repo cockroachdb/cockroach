@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -186,6 +187,21 @@ func (dt *Tracker) Iter(_ context.Context, f func(admissionpb.WorkPriority, kvfl
 // LowerBound returns the log position below which we ignore token deductions.
 func (dt *Tracker) LowerBound() kvflowcontrolpb.RaftLogPosition {
 	return dt.lowerBound
+}
+
+// Inspect returns a snapshot of all tracked token deductions. It's used to
+// power /inspectz-style debugging pages.
+func (dt *Tracker) Inspect(ctx context.Context) []kvflowinspectpb.TrackedDeduction {
+	var deductions []kvflowinspectpb.TrackedDeduction
+	dt.TestingIter(func(pri admissionpb.WorkPriority, tokens kvflowcontrol.Tokens, pos kvflowcontrolpb.RaftLogPosition) bool {
+		deductions = append(deductions, kvflowinspectpb.TrackedDeduction{
+			Priority:        int32(pri),
+			Tokens:          int64(tokens),
+			RaftLogPosition: pos,
+		})
+		return true
+	})
+	return deductions
 }
 
 // TestingIter is a testing-only re-implementation of Iter. It iterates through

@@ -437,7 +437,13 @@ vectorized: true
         │       │               │         table: pg_class@pg_class_oid_idx
         │       │               │
         │       │               └── • filter
+<<<<<<< HEAD
         │       │                   │ filter: (objsubid = 0) AND (classoid = 4294967104)
+||||||| parent of c30dd2d58e1 (inspectz,kvflowinspectpb: add /inspectz pages)
+        │       │                   │ filter: (objsubid = 0) AND (classoid = 4294967106)
+=======
+        │       │                   │ filter: (objsubid = 0) AND (classoid = 4294967103)
+>>>>>>> c30dd2d58e1 (inspectz,kvflowinspectpb: add /inspectz pages)
         │       │                   │
         │       │                   └── • virtual table
         │       │                         table: pg_description@pg_description_objoid_idx
