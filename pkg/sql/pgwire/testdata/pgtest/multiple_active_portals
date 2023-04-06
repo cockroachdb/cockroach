@@ -1078,12 +1078,13 @@ ReadyForQuery
 
 send
 Query {"String": "BEGIN"}
-Parse {"Name": "q1", "Query": "SELECT * FROM generate_series(1,20)"}
+Parse {"Name": "q1", "Query": "SELECT * FROM generate_series(1,5)"}
 Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
 Execute {"Portal": "p1", "MaxRows": 1}
 Parse {"Name": "q2", "Query": "SELECT * FROM generate_series(8,10)"}
 Bind {"DestinationPortal": "p2", "PreparedStatement": "q2"}
 Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p1"}
 Sync
 ----
 
@@ -1101,6 +1102,11 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"8"}]}
 {"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"DataRow","Values":[{"text":"4"}]}
+{"Type":"DataRow","Values":[{"text":"5"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 4"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
 subtest end
