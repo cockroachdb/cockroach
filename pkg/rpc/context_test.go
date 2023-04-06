@@ -2782,7 +2782,9 @@ func TestHeartbeatDialback(t *testing.T) {
 	{
 		conn, err := ctx1.GRPCDialNode(remoteAddr2, 2, DefaultClass).Connect(ctx)
 		defer func() {
-			_ = conn.Close() // nolint:grpcconnclose
+			if conn != nil {
+				_ = conn.Close() // nolint:grpcconnclose
+			}
 		}()
 		require.NoError(t, err)
 		require.NotNil(t, conn)
