@@ -74,7 +74,7 @@ func (r *Registry) maybeDumpTrace(
 	// could have been canceled at this point.
 	dumpCtx, _ := r.makeCtx()
 
-	ieNotBoundToTxn := r.internalDB.Executor()
+	ieNotBoundToTxn := r.db.Executor()
 
 	// If the job has failed, and the dump mode is set to anything
 	// except noDump, then we should dump the trace.
@@ -538,7 +538,7 @@ RETURNING id, status
 `
 
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
-	return r.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Run the claim transaction at low priority to ensure that it does not
 		// contend with foreground reads.
 		if err := txn.KV().SetUserPriority(roachpb.MinUserPriority); err != nil {
