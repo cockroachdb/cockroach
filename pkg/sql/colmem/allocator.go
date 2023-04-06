@@ -125,15 +125,6 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 func NewAllocator(
 	ctx context.Context, unlimitedAcc *mon.BoundAccount, factory coldata.ColumnFactory,
 ) *Allocator {
-	if buildutil.CrdbTestBuild {
-		if unlimitedAcc != nil {
-			if l := unlimitedAcc.Monitor().Limit(); l != noMemLimit {
-				colexecerror.InternalError(errors.AssertionFailedf(
-					"unexpectedly NewAllocator is called with an account with limit of %d bytes", l,
-				))
-			}
-		}
-	}
 	return &Allocator{
 		ctx:     ctx,
 		acc:     unlimitedAcc,

@@ -624,3 +624,28 @@ func BenchmarkTraverseTree(b *testing.B) {
 		}
 	}
 }
+
+func TestLimit(t *testing.T) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	m := NewMonitor("test", MemoryResource, nil, nil, 0, 1000, st)
+
+	m.StartNoReserved(ctx, nil /* pool */)
+	require.Equal(t, int64(0), m.Limit())
+	m.Stop(ctx)
+
+	m.Start(ctx, nil, NewStandaloneBudget(1000))
+	require.Equal(t, int64(1000), m.Limit())
+	m.Stop(ctx)
+
+	m2 := NewMonitor("test", MemoryResource, nil, nil, 0, 1000, st)
+
+	m2.StartNoReserved(ctx, m)
+	require.Equal(t, int64(1000), m2.Limit())
+	m2.Stop(ctx)
+
+	m2.Start(ctx, m, NewStandaloneBudget(123))
+	require.Equal(t, int64(1123), m2.Limit())
+	m2.Stop(ctx)
+}
