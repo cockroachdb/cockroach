@@ -138,17 +138,17 @@ func (m *MockTransactionalSender) IsSerializablePushAndRefreshNotPossible() bool
 	return false
 }
 
-// CreateSavepoint is part of the client.TxnSender interface.
+// CreateSavepoint is part of the kv.TxnSender interface.
 func (m *MockTransactionalSender) CreateSavepoint(context.Context) (SavepointToken, error) {
 	panic("unimplemented")
 }
 
-// RollbackToSavepoint is part of the client.TxnSender interface.
+// RollbackToSavepoint is part of the kv.TxnSender interface.
 func (m *MockTransactionalSender) RollbackToSavepoint(context.Context, SavepointToken) error {
 	panic("unimplemented")
 }
 
-// ReleaseSavepoint is part of the client.TxnSender interface.
+// ReleaseSavepoint is part of the kv.TxnSender interface.
 func (m *MockTransactionalSender) ReleaseSavepoint(context.Context, SavepointToken) error {
 	panic("unimplemented")
 }
@@ -176,10 +176,10 @@ func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
 	panic("unimplemented")
 }
 
-// DisablePipelining is part of the client.TxnSender interface.
+// DisablePipelining is part of the kv.TxnSender interface.
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
 
-// PrepareRetryableError is part of the client.TxnSender interface.
+// PrepareRetryableError is part of the kv.TxnSender interface.
 func (m *MockTransactionalSender) PrepareRetryableError(
 	ctx context.Context, msg redact.RedactableString,
 ) error {
