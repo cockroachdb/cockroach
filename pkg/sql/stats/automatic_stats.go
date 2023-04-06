@@ -573,6 +573,7 @@ WHERE
 	AND (
 			crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor, false)->'table'->>'viewQuery'
 		) IS NULL
+	%s
 	%s`
 
 	explicitlyEnabledTablesPredicate = `AND
@@ -586,6 +587,10 @@ WHERE
 	 OR crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
 		d.descriptor, false)->'table'->'autoStatsSettings' ->> 'enabled' = 'true'
 	)`
+
+	autoStatsOnSystemTablesEnabledPredicate = `AND TRUE`
+
+	autoStatsOnSystemTablesDisabledPredicate = `AND tbl.database_name != 'system'`
 )
 
 func (r *Refresher) getApplicableTables(
@@ -631,29 +636,24 @@ func (r *Refresher) getApplicableTables(
 func (r *Refresher) ensureAllTables(
 	ctx context.Context, settings *settings.Values, initialTableCollectionDelay time.Duration,
 ) {
+	// A table-level setting of sql_stats_automatic_collection_enabled of null,
+	// meaning not set, or true qualifies rows we're interested in.
+	autoStatsPredicate := autoStatsEnabledOrNotSpecifiedPredicate
 	if !AutomaticStatisticsClusterMode.Get(settings) {
-		// Use a historical read so as to disable txn contention resolution.
-		// A table-level setting of sql_stats_automatic_collection_enabled=true is
-		// checked and only those tables are included in this scan.
-		getTablesWithAutoStatsExplicitlyEnabledQuery := fmt.Sprintf(
-			getAllTablesTemplateSQL,
-			initialTableCollectionDelay,
-			keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
-			explicitlyEnabledTablesPredicate,
-		)
-		r.getApplicableTables(ctx, getTablesWithAutoStatsExplicitlyEnabledQuery,
-			"get-tables-with-autostats-explicitly-enabled", false)
-		return
+		autoStatsPredicate = explicitlyEnabledTablesPredicate
+	}
+
+	systemTablesPredicate := autoStatsOnSystemTablesEnabledPredicate
+	if !AutomaticStatisticsOnSystemTables.Get(settings) {
+		systemTablesPredicate = autoStatsOnSystemTablesDisabledPredicate
 	}
 
 	// Use a historical read so as to disable txn contention resolution.
-	// A table-level setting of sql_stats_automatic_collection_enabled of null,
-	// meaning not set, or true qualifies rows we're interested in.
 	getAllTablesQuery := fmt.Sprintf(
 		getAllTablesTemplateSQL,
 		initialTableCollectionDelay,
 		keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
-		autoStatsEnabledOrNotSpecifiedPredicate,
+		autoStatsPredicate, systemTablesPredicate,
 	)
 	r.getApplicableTables(ctx, getAllTablesQuery,
 		"get-tables", false)
@@ -823,17 +823,19 @@ func (r *Refresher) maybeRefreshStats(
 
 func (r *Refresher) refreshStats(ctx context.Context, tableID descpb.ID, asOf time.Duration) error {
 	// Create statistics for all default column sets on the given table.
+	stmt := fmt.Sprintf(
+		"CREATE STATISTICS %s FROM [%d] WITH OPTIONS THROTTLING %g AS OF SYSTEM TIME '-%s'",
+		jobspb.AutoStatsName,
+		tableID,
+		AutomaticStatisticsMaxIdleTime.Get(&r.st.SV),
+		asOf.String(),
+	)
+	log.Infof(ctx, "automatically executing %q", stmt)
 	_ /* rows */, err := r.ex.Exec(
 		ctx,
 		"create-stats",
 		nil, /* txn */
-		fmt.Sprintf(
-			"CREATE STATISTICS %s FROM [%d] WITH OPTIONS THROTTLING %g AS OF SYSTEM TIME '-%s'",
-			jobspb.AutoStatsName,
-			tableID,
-			AutomaticStatisticsMaxIdleTime.Get(&r.st.SV),
-			asOf.String(),
-		),
+		stmt,
 	)
 	return err
 }
