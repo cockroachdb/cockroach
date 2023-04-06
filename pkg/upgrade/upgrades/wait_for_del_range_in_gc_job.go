@@ -83,7 +83,10 @@ func waitForDelRangeInGCJob(
          elements AS (SELECT * FROM tables UNION ALL SELECT * FROM indexes)
   SELECT id
     FROM elements
-   WHERE COALESCE(progress->>'status' NOT IN ('WAITING_FOR_MVCC_GC', 'CLEARED'), true)
+	-- While we are waiting for the GC TTL WAITING_FOR_CLEAR is equivalent to NULL,
+	-- because tombstone adoption unconditionally enabled by an earlier version, we
+  -- should be safe for any job not started.
+   WHERE COALESCE(progress->>'status' NOT IN ('WAITING_FOR_MVCC_GC', 'CLEARED'), false)
 GROUP BY id;
 `)
 		if err != nil || len(jobIDs) == 0 {
