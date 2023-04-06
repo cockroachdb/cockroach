@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 )
 
@@ -58,6 +59,11 @@ func (n Noop) DisconnectStream(ctx context.Context, stream kvflowcontrol.Stream)
 
 // ResetStreams is part of the kvflowcontrol.Handle interface.
 func (n Noop) ResetStreams(ctx context.Context) {}
+
+// Inspect is part of the kvflowcontrol.Handle interface.
+func (n Noop) Inspect(ctx context.Context) kvflowinspectpb.Handle {
+	return kvflowinspectpb.Handle{}
+}
 
 // Close is part of the kvflowcontrol.Handle interface.
 func (n Noop) Close(ctx context.Context) {}

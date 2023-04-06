@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -230,6 +231,36 @@ func (c *Controller) ReturnTokens(
 	c.adjustTokens(ctx, pri, +tokens, stream)
 }
 
+// Inspect is part of the kvflowcontrol.Controller interface.
+func (c *Controller) Inspect(ctx context.Context) []kvflowinspectpb.Stream {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var streams []kvflowinspectpb.Stream
+	for stream, b := range c.mu.buckets {
+		streams = append(streams, kvflowinspectpb.Stream{
+			TenantID:               stream.TenantID,
+			StoreID:                stream.StoreID,
+			AvailableRegularTokens: int64(b.tokens[regular]),
+			AvailableElasticTokens: int64(b.tokens[elastic]),
+		})
+	}
+	return streams
+}
+
+// InspectStream is part of the kvflowcontrol.Controller interface.
+func (c *Controller) InspectStream(
+	_ context.Context, stream kvflowcontrol.Stream,
+) kvflowinspectpb.Stream {
+	tokens := c.getTokensForStream(stream)
+	return kvflowinspectpb.Stream{
+		TenantID:               stream.TenantID,
+		StoreID:                stream.StoreID,
+		AvailableRegularTokens: int64(tokens[regular]),
+		AvailableElasticTokens: int64(tokens[elastic]),
+	}
+}
+
 func (c *Controller) adjustTokens(
 	ctx context.Context,
 	pri admissionpb.WorkPriority,
@@ -373,7 +404,7 @@ func validateTokenRange(b int64) error {
 	return nil
 }
 
-func (c *Controller) testingGetTokensForStream(stream kvflowcontrol.Stream) tokensPerWorkClass {
+func (c *Controller) getTokensForStream(stream kvflowcontrol.Stream) tokensPerWorkClass {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	ret := make(map[admissionpb.WorkClass]kvflowcontrol.Tokens)

@@ -1,0 +1,101 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.kvflowcontrol.kvflowinspectpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb";
+
+import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "kv/kvserver/kvflowcontrol/kvflowcontrolpb/kvflowcontrol.proto";
+
+// ControllerRequest is used to inspect the state of the node-level
+// kvflowcontrol.Controller.
+message ControllerRequest {
+  // TODO(irfansharif): Allow inspection of a specific stream. We already have
+  // the underlying APIs for it.
+}
+
+// ControllerResponse is the response structure for inspecting the node-level
+// kvflowcontrol.Controller, a snapshot of its in-memory state. Data is
+// organized in the following structure:
+//
+// - [stream]
+//   - tenant id
+//   - store id
+//   - available regular tokens
+//   - available elastic tokens
+message ControllerResponse {
+  repeated Stream streams = 1 [(gogoproto.nullable) = false];
+}
+
+// HandlesRequest is used to inspect the state of named kvflowcontrol.Handles,
+// identified by owning replica's range ID.
+message HandlesRequest {
+  repeated int32 range_ids = 1 [
+    (gogoproto.customname) = "RangeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+}
+
+// HandlesResponse is the response structure for inspecting named
+// kvflowcontrol.Handles, a snapshot their in-memory state. If no handles are
+// specified, we'll sift through all available ones. For each handle, data is
+// organized in the following structure:
+//
+// - range id
+// - [connected streams]
+//   - stream:
+//     - tenant id
+//     - store id
+//     - available regular tokens
+//     - available elastic tokens
+//   - [tracked token deductions]
+//     - raft log position
+//     - priority
+//     - tokens
+message HandlesResponse {
+  repeated Handle handles = 1 [(gogoproto.nullable) = false];
+}
+
+// Handle represents the in-memory state of a given kvflowcontrol.Handle.
+message Handle {
+  int32 range_id = 1 [
+    (gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  repeated ConnectedStream connected_streams = 2 [(gogoproto.nullable) = false];
+}
+
+// ConnectedStream represents the in-memory state of a connected stream,
+// typically hanging off a kvflowcontrol.Handle.
+message ConnectedStream {
+  Stream stream = 1 [(gogoproto.nullable) = false];
+  repeated TrackedDeduction tracked_deductions = 2 [(gogoproto.nullable) = false];
+}
+
+// Stream represents a given kvflowcontrol.Stream and the number of tokens
+// available for it (as maintained by the node-level kvflowcontrol.Controller).
+message Stream {
+  roachpb.TenantID tenant_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TenantID"];
+  uint64 store_id = 2 [
+    (gogoproto.customname) = "StoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  int64 available_regular_tokens = 3;
+  int64 available_elastic_tokens = 4;
+}
+
+// TrackedDeductions represents a tracked token deduction, as typically done by
+// a kvflowcontrol.Handle.
+message TrackedDeduction {
+  int32 priority = 1;
+  int64 tokens = 2;
+  kv.kvserver.kvflowcontrol.kvflowcontrolpb.RaftLogPosition raft_log_position = 3 [(gogoproto.nullable) = false];
+}

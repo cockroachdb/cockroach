@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -1089,6 +1090,10 @@ func (t *testFlowTokenHandle) DisconnectStream(ctx context.Context, stream kvflo
 }
 
 func (t *testFlowTokenHandle) ResetStreams(ctx context.Context) {
+}
+
+func (t *testFlowTokenHandle) Inspect(context.Context) kvflowinspectpb.Handle {
+	return kvflowinspectpb.Handle{}
 }
 
 func (t *testFlowTokenHandle) Close(ctx context.Context) {
