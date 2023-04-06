@@ -317,6 +317,11 @@ func (s *drainServer) isDraining() bool {
 func (s *drainServer) drainClients(
 	ctx context.Context, reporter func(int, redact.SafeString),
 ) error {
+	// Setup a cancelable context so that the logOpenConns goroutine exits when
+	// this function returns.
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
 	shouldDelayDraining := !s.isDraining()
 
 	// Set the gRPC mode of the node to "draining" and mark the node as "not ready".
