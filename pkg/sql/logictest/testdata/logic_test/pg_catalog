@@ -2754,7 +2754,7 @@ lock_timeout                                          0                   NULL  
 log_timezone                                          UTC                 NULL      NULL        NULL        string
 max_identifier_length                                 128                 NULL      NULL        NULL        string
 max_index_keys                                        32                  NULL      NULL        NULL        string
-multiple_active_portals_enabled                       off                 NULL      NULL        NULL        string
+multiple_active_portals_enabled                       on                  NULL      NULL        NULL        string
 node_id                                               1                   NULL      NULL        NULL        string
 null_ordered_last                                     off                 NULL      NULL        NULL        string
 on_update_rehome_row_enabled                          on                  NULL      NULL        NULL        string
@@ -2908,7 +2908,7 @@ lock_timeout                                          0                   NULL  
 log_timezone                                          UTC                 NULL  user     NULL      UTC                 UTC
 max_identifier_length                                 128                 NULL  user     NULL      128                 128
 max_index_keys                                        32                  NULL  user     NULL      32                  32
-multiple_active_portals_enabled                       off                 NULL  user     NULL      off                 off
+multiple_active_portals_enabled                       on                  NULL  user     NULL      on                  on
 node_id                                               1                   NULL  user     NULL      1                   1
 null_ordered_last                                     off                 NULL  user     NULL      off                 off
 on_update_rehome_row_enabled                          on                  NULL  user     NULL      on                  on
