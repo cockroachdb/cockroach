@@ -2,59 +2,59 @@ subtest token
 
 token
 ----
-hba.String{} false ""
+rulebasedscanner.String{} false ""
 
 
 token
   # Just a comment.
 ----
-hba.String{} false ""
+rulebasedscanner.String{} false ""
 
 token
 a b
 ----
-hba.String{Value:"a", Quoted:false} false " b"
+rulebasedscanner.String{Value:"a", Quoted:false} false " b"
 
 token
 a,b
 ----
-hba.String{Value:"a", Quoted:false} true "b"
+rulebasedscanner.String{Value:"a", Quoted:false} true "b"
 
 token
 a, b
 ----
-hba.String{Value:"a", Quoted:false} true " b"
+rulebasedscanner.String{Value:"a", Quoted:false} true " b"
 
 
 token
 a  ,b
 ----
-hba.String{Value:"a", Quoted:false} false "  ,b"
+rulebasedscanner.String{Value:"a", Quoted:false} false "  ,b"
 
 token
 abc,def
 ----
-hba.String{Value:"abc", Quoted:false} true "def"
+rulebasedscanner.String{Value:"abc", Quoted:false} true "def"
 
 token
 "abc",def
 ----
-hba.String{Value:"abc", Quoted:true} true "def"
+rulebasedscanner.String{Value:"abc", Quoted:true} true "def"
 
 token
 "abc"def
 ----
-hba.String{Value:"abc", Quoted:true} false "def"
+rulebasedscanner.String{Value:"abc", Quoted:true} false "def"
 
 token
 # abc,def
 ----
-hba.String{} false ""
+rulebasedscanner.String{} false ""
 
 token
 # "abc
 ----
-hba.String{} false ""
+rulebasedscanner.String{} false ""
 
 
 token
@@ -160,12 +160,12 @@ subtest whitespace
 
 file
 ----
-hba.scannedInput{}
+rulebasedscanner.ScannedInput{}
 
 file
 # Just a comment.
 ----
-hba.scannedInput{}
+rulebasedscanner.ScannedInput{}
 
 file
 #
@@ -174,7 +174,7 @@ file
 
 #
 ----
-hba.scannedInput{}
+rulebasedscanner.ScannedInput{}
 
 subtest end
 
@@ -187,18 +187,18 @@ a
 
 #
 ----
-hba.scannedInput{
-    lines: {
+rulebasedscanner.ScannedInput{
+    Lines: {
         {
-            input:  "a",
-            tokens: {
+            Input:  "a",
+            Tokens: {
                 {
                     {Value:"a", Quoted:false},
                 },
             },
         },
     },
-    linenos: {3},
+    Linenos: {3},
 }
 
 file
@@ -208,18 +208,18 @@ file
 
 #
 ----
-hba.scannedInput{
-    lines: {
+rulebasedscanner.ScannedInput{
+    Lines: {
         {
-            input:  "a",
-            tokens: {
+            Input:  "a",
+            Tokens: {
                 {
                     {Value:"a", Quoted:false},
                 },
             },
         },
     },
-    linenos: {3},
+    Linenos: {3},
 }
 
 file
@@ -231,26 +231,26 @@ b # tailing comment + whitespace
 
 #
 ----
-hba.scannedInput{
-    lines: {
+rulebasedscanner.ScannedInput{
+    Lines: {
         {
-            input:  "a",
-            tokens: {
+            Input:  "a",
+            Tokens: {
                 {
                     {Value:"a", Quoted:false},
                 },
             },
         },
         {
-            input:  "b # tailing comment + whitespace",
-            tokens: {
+            Input:  "b # tailing comment + whitespace",
+            Tokens: {
                 {
                     {Value:"b", Quoted:false},
                 },
             },
         },
     },
-    linenos: {3, 5},
+    Linenos: {3, 5},
 }
 
 subtest end
@@ -260,11 +260,11 @@ subtest fields
 file
 a b c
 ----
-hba.scannedInput{
-    lines: {
+rulebasedscanner.ScannedInput{
+    Lines: {
         {
-            input:  "a b c",
-            tokens: {
+            Input:  "a b c",
+            Tokens: {
                 {
                     {Value:"a", Quoted:false},
                 },
@@ -277,18 +277,18 @@ hba.scannedInput{
             },
         },
     },
-    linenos: {1},
+    Linenos: {1},
 }
 
 file
 a b c
 d e
 ----
-hba.scannedInput{
-    lines: {
+rulebasedscanner.ScannedInput{
+    Lines: {
         {
-            input:  "a b c",
-            tokens: {
+            Input:  "a b c",
+            Tokens: {
                 {
                     {Value:"a", Quoted:false},
                 },
@@ -301,8 +301,8 @@ hba.scannedInput{
             },
         },
         {
-            input:  "d e",
-            tokens: {
+            Input:  "d e",
+            Tokens: {
                 {
                     {Value:"d", Quoted:false},
                 },
@@ -312,7 +312,7 @@ hba.scannedInput{
             },
         },
     },
-    linenos: {1, 2},
+    Linenos: {1, 2},
 }
 
 file
@@ -324,11 +324,11 @@ file
 
 #
 ----
-hba.scannedInput{
-    lines: {
+rulebasedscanner.ScannedInput{
+    Lines: {
         {
-            input:  "a  b # c d e",
-            tokens: {
+            Input:  "a  b # c d e",
+            Tokens: {
                 {
                     {Value:"a", Quoted:false},
                 },
@@ -338,8 +338,8 @@ hba.scannedInput{
             },
         },
         {
-            input:  "d  e # b c",
-            tokens: {
+            Input:  "d  e # b c",
+            Tokens: {
                 {
                     {Value:"d", Quoted:false},
                 },
@@ -349,7 +349,7 @@ hba.scannedInput{
             },
         },
     },
-    linenos: {3, 5},
+    Linenos: {3, 5},
 }
 
 

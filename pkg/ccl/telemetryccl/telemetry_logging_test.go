@@ -43,7 +43,7 @@ func TestTelemetryLogRegions(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
 	defer cleanup()
 
 	_, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -163,7 +163,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 
 	ctx := context.Background()
 
-	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
 	defer cleanup()
 
 	st := logtestutils.StubTime{}
