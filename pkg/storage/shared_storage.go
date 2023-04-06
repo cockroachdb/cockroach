@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/objstorage/shared"
 )
 
@@ -121,4 +122,8 @@ func (e *externalStorageWrapper) Delete(basename string) error {
 // Size implements the shared.Storage interface.
 func (e *externalStorageWrapper) Size(basename string) (int64, error) {
 	return e.es.Size(e.ctx, basename)
+}
+
+func (e *externalStorageWrapper) IsNotExistError(err error) bool {
+	return errors.Is(err, cloud.ErrFileDoesNotExist)
 }
