@@ -2340,10 +2340,21 @@ func (ex *connExecutor) execCmd() (retErr error) {
 
 	var advInfo advanceInfo
 
+	// We close all pausable portals when we encounter err payload, otherwise
+	// there will be leftover bytes.
+	shouldClosePausablePortals := func(payload fsm.EventPayload) bool {
+		switch payload.(type) {
+		case eventNonRetriableErrPayload, eventRetriableErrPayload:
+			return true
+		default:
+			return false
+		}
+	}
+
 	// If an event was generated, feed it to the state machine.
 	if ev != nil {
 		var err error
-		if _, ok := payload.(eventNonRetriableErrPayload); ok {
+		if shouldClosePausablePortals(payload) {
 			// We need this as otherwise, there'll be leftover bytes when
 			// txnState.finishSQLTxn() is being called, as the underlying resources of
 			// pausable portals hasn't been cleared yet.
