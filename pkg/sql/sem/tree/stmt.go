@@ -128,7 +128,7 @@ type canModifySchema interface {
 // Now we only allow SELECT, but is it too strict? And how to filter out
 // SELECT with data writes / schema changes?
 func IsAllowedToPause(stmt Statement) bool {
-	if !CanModifySchema(stmt) && !CanWriteData(stmt) {
+	if stmt != nil && !CanModifySchema(stmt) && !CanWriteData(stmt) {
 		switch t := stmt.(type) {
 		case *Select:
 			if t.With != nil {
