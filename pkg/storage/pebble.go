@@ -1731,7 +1731,9 @@ func (p *Pebble) PreIngestDelay(ctx context.Context) {
 
 // ApproximateDiskBytes implements the Engine interface.
 func (p *Pebble) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
-	count, err := p.db.EstimateDiskUsage(from, to)
+	fromEncoded := EngineKey{Key: from}.Encode()
+	toEncoded := EngineKey{Key: to}.Encode()
+	count, err := p.db.EstimateDiskUsage(fromEncoded, toEncoded)
 	if err != nil {
 		return 0, err
 	}
