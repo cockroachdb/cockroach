@@ -36,6 +36,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/settings/rulebasedscanner",
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/colinfo",
