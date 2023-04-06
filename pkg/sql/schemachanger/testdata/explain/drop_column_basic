@@ -2,6 +2,9 @@
 CREATE TABLE t (i INT PRIMARY KEY, j INT, k int);
 COMMENT ON TABLE t IS 't has a comment';
 COMMENT ON COLUMN t.j IS 'j has a comment';
+INSERT INTO t VALUES(-1);
+INSERT INTO t VALUES(-2);
+INSERT INTO t VALUES(-3);
 
 /* test */
 EXPLAIN (ddl) ALTER TABLE t DROP COLUMN j;

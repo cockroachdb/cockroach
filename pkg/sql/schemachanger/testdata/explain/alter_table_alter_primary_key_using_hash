@@ -7,11 +7,12 @@ EXPLAIN (ddl) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH 
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›);
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 18 elements transitioning toward PUBLIC
+ │         ├── 19 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104, ColumnID: 3}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104, Name: crdb_internal_j_shard_3, ColumnID: 3}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
  │         │    ├── ABSENT → WRITE_ONLY    CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
+ │         │    ├── ABSENT → PUBLIC        ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
@@ -32,11 +33,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         │    └── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
- │         └── 21 Mutation operations
+ │         └── 22 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"IsHidden":true,"PgAttributeNum":3,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_j_...","TableID":104}
  │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":104}}
  │              ├── AddCheckConstraint {"CheckExpr":"\"crdb_internal_j...","ConstraintID":2,"FromHashShardedColumn":true,"TableID":104,"Validity":2}
+ │              ├── SetConstraintName {"ConstraintID":2,"Name":"check_crdb_inter...","TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":3,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"Ordinal":1,"TableID":104}
@@ -56,11 +58,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │              └── SetIndexName {"IndexID":4,"Name":"t_i_key","TableID":104}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 18 elements transitioning toward PUBLIC
+ │    │    ├── 19 elements transitioning toward PUBLIC
  │    │    │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 104, ColumnID: 3}
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 104, Name: crdb_internal_j_shard_3, ColumnID: 3}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
  │    │    │    ├── WRITE_ONLY    → ABSENT CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
+ │    │    │    ├── PUBLIC        → ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
  │    │    │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
@@ -84,11 +87,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 18 elements transitioning toward PUBLIC
+ │         ├── 19 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104, ColumnID: 3}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104, Name: crdb_internal_j_shard_3, ColumnID: 3}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
  │         │    ├── ABSENT → WRITE_ONLY    CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
+ │         │    ├── ABSENT → PUBLIC        ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
@@ -109,11 +113,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         │    └── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
- │         └── 27 Mutation operations
+ │         └── 28 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"IsHidden":true,"PgAttributeNum":3,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_j_...","TableID":104}
  │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":104}}
  │              ├── AddCheckConstraint {"CheckExpr":"\"crdb_internal_j...","ConstraintID":2,"FromHashShardedColumn":true,"TableID":104,"Validity":2}
+ │              ├── SetConstraintName {"ConstraintID":2,"Name":"check_crdb_inter...","TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":3,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
  │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":2,"TableID":104}
@@ -208,11 +213,10 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │              └── ValidateConstraint {"ConstraintID":2,"IndexIDForValidation":2,"TableID":104}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
-      │    ├── 7 elements transitioning toward PUBLIC
+      │    ├── 6 elements transitioning toward PUBLIC
       │    │    ├── WRITE_ONLY → PUBLIC                Column:{DescID: 104, ColumnID: 3}
       │    │    ├── VALIDATED  → PUBLIC                ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 2}
       │    │    ├── VALIDATED  → PUBLIC                CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2}
-      │    │    ├── ABSENT     → PUBLIC                ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_3, ConstraintID: 2}
       │    │    ├── VALIDATED  → PUBLIC                PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}
       │    │    ├── ABSENT     → PUBLIC                IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
       │    │    └── VALIDATED  → PUBLIC                SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
@@ -225,11 +229,11 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │    ├── 2 elements transitioning toward ABSENT
       │    │    ├── PUBLIC     → VALIDATED             PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
       │    │    └── PUBLIC     → ABSENT                IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
-      │    └── 18 Mutation operations
+      │    └── 17 Mutation operations
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeValidatedColumnNotNullPublic {"ColumnID":3,"TableID":104}
-      │         ├── SetConstraintName {"ConstraintID":2,"Name":"check_crdb_inter...","TableID":104}
+      │         ├── MakeValidatedCheckConstraintPublic {"ConstraintID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"t_pkey","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"TableID":104}
@@ -238,7 +242,6 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":4,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":5,"TableID":104}
-      │         ├── MakeValidatedCheckConstraintPublic {"ConstraintID":2,"TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":2,"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":104}
       │         ├── RefreshStats {"TableID":104}

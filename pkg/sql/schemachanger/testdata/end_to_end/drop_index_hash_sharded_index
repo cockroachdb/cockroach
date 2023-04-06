@@ -1,6 +1,9 @@
 setup
 CREATE TABLE t (i INT PRIMARY KEY, j INT);
-CREATE INDEX idx ON t(j) USING HASH
+CREATE INDEX idx ON t(j) USING HASH;
+INSERT INTO t VALUES(-1);
+INSERT INTO t VALUES(-2);
+INSERT INTO t VALUES(-3);
 ----
 ...
 +object {100 101 t} -> 104
@@ -13,7 +16,7 @@ INSERT INTO t (i, j) VALUES($stageKey + 1, $stageKey +1);
 # Each insert will be injected twice per stage, so we should always,
 # see a count of 2.
 stage-query phase=PostCommitNonRevertiblePhase stage=:
-SELECT count(*)=$successfulStageCount*2 FROM t;
+SELECT count(*)=($successfulStageCount*2)+3 FROM t;
 ----
 true
 
@@ -34,7 +37,7 @@ write *eventpb.DropIndex to event log:
     tag: DROP INDEX
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 6 MutationType ops
+## StatementPhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #104
   ...
        - 3
@@ -43,8 +46,7 @@ upsert descriptor #104
   +    expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
   +      10, 11, 12, 13, 14, 15)
        fromHashShardedColumn: true
-  -    name: check_crdb_internal_j_shard_16
-  +    name: crdb_internal_constraint_2_name_placeholder
+       name: check_crdb_internal_j_shard_16
   +    validity: Dropping
   +  - columnIds:
   +    - 3
@@ -191,7 +193,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 8 MutationType ops
+## PreCommitPhase stage 2 of 2 with 7 MutationType ops
 upsert descriptor #104
   ...
        - 3
@@ -200,8 +202,7 @@ upsert descriptor #104
   +    expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
   +      10, 11, 12, 13, 14, 15)
        fromHashShardedColumn: true
-  -    name: check_crdb_internal_j_shard_16
-  +    name: crdb_internal_constraint_2_name_placeholder
+       name: check_crdb_internal_j_shard_16
   +    validity: Dropping
   +  - columnIds:
   +    - 3
@@ -367,7 +368,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 11 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -377,7 +378,7 @@ upsert descriptor #104
   -    expr: crdb_internal_column_3_name_placeholder IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
   -      10, 11, 12, 13, 14, 15)
   -    fromHashShardedColumn: true
-  -    name: crdb_internal_constraint_2_name_placeholder
+  -    name: check_crdb_internal_j_shard_16
   -    validity: Dropping
   -  - columnIds:
   -    - 3
