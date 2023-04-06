@@ -103,9 +103,9 @@ const fullLoadTruncate = `{
   }`
 
 func awsdmsVerString(v *version.Version) string {
-	if ciBranch := os.Getenv("TC_BUILD_BRANCH"); ciBranch != "" {
-		ciBranch = strings.ReplaceAll(ciBranch, ".", "-")
-		return fmt.Sprintf("ci-%s", ciBranch)
+	if ciBuildID := os.Getenv("TC_BUILD_ID"); ciBuildID != "" {
+		ciBuildID = strings.ReplaceAll(ciBuildID, ".", "-")
+		return fmt.Sprintf("ci-build-%s", ciBuildID)
 	}
 	ret := fmt.Sprintf("local-%d-%d-%d", v.Major(), v.Minor(), v.Patch())
 	if v.PreRelease() != "" {
