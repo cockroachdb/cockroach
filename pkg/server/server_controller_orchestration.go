@@ -96,9 +96,14 @@ func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
 			select {
 			case <-time.After(watchInterval):
 			case <-c.stopper.ShouldQuiesce():
+				// Expedited server shutdown of outer server.
 				return
 			}
-
+			if c.draining.Get() {
+				// The outer server has started a graceful drain: stop
+				// picking up new servers.
+				return
+			}
 			if err := c.scanTenantsForRunnableServices(ctx, ie); err != nil {
 				log.Warningf(ctx, "cannot update running tenant services: %v", err)
 			}
@@ -179,6 +184,9 @@ func (c *serverController) scanTenantsForRunnableServices(
 func (c *serverController) createServerEntryLocked(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (*serverEntry, error) {
+	if c.draining.Get() {
+		return nil, errors.New("server is draining")
+	}
 	entry, err := c.startControlledServer(ctx, tenantName)
 	if err != nil {
 		return nil, err
@@ -210,40 +218,62 @@ func (c *serverController) startControlledServer(
 	}
 
 	topCtx := ctx
+
 	// Use a different context for the tasks below, because the tenant
 	// stopper will have its own tracer which is incompatible with the
 	// tracer attached to the incoming context.
+	tenantCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	tenantCtx = logtags.AddTag(tenantCtx, "tenant-orchestration", nil)
+	tenantCtx = logtags.AddTag(tenantCtx, "tenant", tenantName)
 
-	tenantCtx := logtags.AddTag(context.Background(), "tenant-orchestration", nil)
+	// ctlStopper is a stopper uniquely responsible for the control
+	// loop. It is separate from the tenantStopper defined below so
+	// that we can retry the server instantiation if it fails.
+	ctlStopper := stop.NewStopper()
 
-	tenantStopper := stop.NewStopper()
+	// useGracefulDrainDuringTenantShutdown defined whether a graceful
+	// drain is requested on the tenant server by orchestration.
+	useGracefulDrainDuringTenantShutdown := make(chan bool, 1)
 
 	// Ensure that if the surrounding server requests shutdown, we
 	// propagate it to the new server.
 	if err := c.stopper.RunAsyncTask(ctx, "propagate-close", func(ctx context.Context) {
 		select {
-		case <-tenantStopper.ShouldQuiesce():
-			// Tenant is terminating on their own; nothing else to do here.
+		case <-stoppedCh:
+			// Server control loop is terminating prematurely before a
+			// request was made to terminate it.
 			log.Infof(ctx, "tenant %q terminating", tenantName)
+
 		case <-c.stopper.ShouldQuiesce():
 			// Surrounding server is stopping; propagate the stop to the
 			// control goroutine below.
+			// Note: we can't do a graceful drain in that case because
+			// the RPC service in the surrounding server may already
+			// be unavailable.
 			log.Infof(ctx, "server terminating; telling tenant %q to terminate", tenantName)
-			tenantStopper.Stop(tenantCtx)
+			useGracefulDrainDuringTenantShutdown <- false
+			ctlStopper.Stop(tenantCtx)
+
 		case <-stopRequestCh:
-			// Someone requested a shutdown.
+			// Someone requested a graceful shutdown.
 			log.Infof(ctx, "received request for tenant %q to terminate", tenantName)
-			tenantStopper.Stop(tenantCtx)
+			useGracefulDrainDuringTenantShutdown <- true
+			ctlStopper.Stop(tenantCtx)
+
 		case <-topCtx.Done():
-			// Someone requested a shutdown.
+			// Someone requested a shutdown - probably a test.
+			// Note: we can't do a graceful drain in that case because
+			// the RPC service in the surrounding server may already
+			// be unavailable.
 			log.Infof(ctx, "startup context cancelled; telling tenant %q to terminate", tenantName)
-			tenantStopper.Stop(tenantCtx)
+			useGracefulDrainDuringTenantShutdown <- false
+			ctlStopper.Stop(tenantCtx)
 		}
 	}); err != nil {
-		// The goroutine above is responsible for stopping the
-		// tenantStopper. If it fails to stop, we stop it here
-		// to avoid leaking the stopper.
-		tenantStopper.Stop(ctx)
+		// The goroutine above is responsible for stopping the ctlStopper.
+		// If it fails to stop, we stop it here to avoid leaking a
+		// stopper.
+		ctlStopper.Stop(ctx)
 		return nil, err
 	}
 
@@ -260,7 +290,7 @@ func (c *serverController) startControlledServer(
 			entry.state.started.Set(false)
 			close(stoppedCh)
 			if !startedOrStoppedChAlreadyClosed {
-				entry.state.startErr = errors.New("server stop before start")
+				entry.state.startErr = errors.New("server stop before successful start")
 				close(startedOrStoppedCh)
 			}
 
@@ -274,26 +304,95 @@ func (c *serverController) startControlledServer(
 		// RunAsyncTask, because this stopper will be assigned its own
 		// different tracer.
 		ctx := tenantCtx
-		// We want a context that gets cancelled when the tenant is
+		// We want a context that gets cancelled when the server is
 		// shutting down, for the possible few cases in
-		// startServerInternal which are not looking at the
-		// tenant.ShouldQuiesce() channel but are sensitive to context
+		// newServerInternal/preStart/acceptClients which are not looking at the
+		// tenantStopper.ShouldQuiesce() channel but are sensitive to context
 		// cancellation.
 		var cancel func()
-		ctx, cancel = tenantStopper.WithCancelOnQuiesce(ctx)
+		ctx, cancel = ctlStopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
 		// Stop retrying startup/initialization if we are being shut
 		// down early.
 		retryOpts := retry.Options{
-			Closer: tenantStopper.ShouldQuiesce(),
+			Closer: ctlStopper.ShouldQuiesce(),
 		}
 
-		var s onDemandServer
+		// tenantStopper is the stopper specific to one tenant server
+		// instance. We define a new tenantStopper on every attempt to
+		// instantiate the tenant server below. It is then linked to
+		// ctlStopper below once the instantiation and start have
+		// succeeded.
+		var tenantStopper *stop.Stopper
+
+		var tenantServer onDemandServer
 		for retry := retry.StartWithCtx(ctx, retryOpts); retry.Next(); {
-			var err error
-			s, err = c.startServerInternal(ctx, entry.nameContainer, tenantStopper)
+			tenantStopper = stop.NewStopper()
+
+			// Link the controller stopper to this tenant stopper.
+			if err := ctlStopper.RunAsyncTask(ctx, "propagate-close-tenant", func(ctx context.Context) {
+				select {
+				case <-tenantStopper.ShouldQuiesce():
+					// Tenant server shutting down on its own.
+					return
+				case <-ctlStopper.ShouldQuiesce():
+					select {
+					case gracefulDrainRequested := <-useGracefulDrainDuringTenantShutdown:
+						if gracefulDrainRequested {
+							// Ensure that the graceful drain for the tenant server aborts
+							// early if the Stopper for the surrounding server is
+							// prematurely shutting down. This is because once the surrounding node
+							// starts quiescing tasks, it won't be able to process KV requests
+							// by the tenant server any more.
+							//
+							// Beware: we use tenantCtx here, not ctx, because the
+							// latter has been linked to ctlStopper.Quiesce already
+							// -- and in this select branch that context has been
+							// canceled already.
+							drainCtx, cancel := c.stopper.WithCancelOnQuiesce(tenantCtx)
+							defer cancel()
+							log.Infof(drainCtx, "starting graceful drain")
+							// Call the drain service on that tenant's server. This may take a
+							// while as it needs to wait for clients to disconnect and SQL
+							// activity to clear up, possibly waiting for various configurable
+							// timeouts.
+							CallDrainServerSide(drainCtx, tenantServer.gracefulDrain)
+						}
+					default:
+					}
+					tenantStopper.Stop(ctx)
+				case <-c.stopper.ShouldQuiesce():
+					// Expedited shutdown of the surrounding KV node.
+					tenantStopper.Stop(ctx)
+				}
+			}); err != nil {
+				tenantStopper.Stop(ctx)
+				return
+			}
+
+			// Try to create the server.
+			s, err := func() (onDemandServer, error) {
+				s, err := c.newServerInternal(ctx, entry.nameContainer, tenantStopper)
+				if err != nil {
+					return nil, errors.Wrap(err, "while creating server")
+				}
+
+				// Note: we make preStart() below derive from ctx, which is
+				// cancelled on shutdown of the outer server. This is necessary
+				// to ensure preStart() properly stops prematurely in that case.
+				startCtx := s.annotateCtx(ctx)
+				startCtx = logtags.AddTag(startCtx, "start-server", nil)
+				log.Infof(startCtx, "starting tenant server")
+				if err := s.preStart(startCtx); err != nil {
+					return nil, errors.Wrap(err, "while starting server")
+				}
+				return s, errors.Wrap(s.acceptClients(startCtx), "while accepting clients")
+			}()
 			if err != nil {
+				// Creation failed. We stop the tenant stopper here, which also
+				// takes care of terminating the async task we've just started above.
+				tenantStopper.Stop(ctx)
 				c.logStartEvent(ctx, roachpb.TenantID{}, 0,
 					entry.nameContainer.Get(), false /* success */, err)
 				log.Warningf(ctx,
@@ -302,9 +401,10 @@ func (c *serverController) startControlledServer(
 				entry.state.startErr = err
 				continue
 			}
+			tenantServer = s
 			break
 		}
-		if s == nil {
+		if tenantServer == nil {
 			// Retry loop exited before the server could start. This
 			// indicates that there was an async request to abandon the
 			// server startup. This is OK; just terminate early. The defer
@@ -313,14 +413,14 @@ func (c *serverController) startControlledServer(
 		}
 
 		// Log the start event and ensure the stop event is logged eventually.
-		tid, iid := s.getTenantID(), s.getInstanceID()
+		tid, iid := tenantServer.getTenantID(), tenantServer.getInstanceID()
 		c.logStartEvent(ctx, tid, iid, tenantName, true /* success */, nil)
 		tenantStopper.AddCloser(stop.CloserFn(func() {
 			c.logStopEvent(ctx, tid, iid, tenantName)
 		}))
 
 		// Indicate the server has started.
-		entry.server = s
+		entry.server = tenantServer
 		startedOrStoppedChAlreadyClosed = true
 		entry.state.started.Set(true)
 		close(startedOrStoppedCh)
@@ -330,7 +430,7 @@ func (c *serverController) startControlledServer(
 		case <-tenantStopper.ShouldQuiesce():
 			log.Infof(ctx, "tenant %q finishing their own control loop", tenantName)
 
-		case shutdownRequest := <-s.shutdownRequested():
+		case shutdownRequest := <-tenantServer.shutdownRequested():
 			log.Infof(ctx, "tenant %q requesting their own shutdown: %v",
 				tenantName, shutdownRequest.ShutdownCause())
 			// Make the async stop goroutine above pick up the task of shutting down.
@@ -406,7 +506,7 @@ func (c *serverController) startAndWaitForRunningServer(
 	}
 }
 
-func (c *serverController) startServerInternal(
+func (c *serverController) newServerInternal(
 	ctx context.Context, nameContainer *roachpb.TenantNameContainer, tenantStopper *stop.Stopper,
 ) (onDemandServer, error) {
 	tenantName := nameContainer.Get()
@@ -424,6 +524,30 @@ func (c *serverController) startServerInternal(
 
 // Close implements the stop.Closer interface.
 func (c *serverController) Close() {
+	entries := c.requestStopAll()
+
+	// Wait for shutdown for all servers.
+	for _, e := range entries {
+		<-e.state.stopped
+	}
+}
+
+func (c *serverController) drain(ctx context.Context) (stillRunning int) {
+	entries := c.requestStopAll()
+	// How many entries are _not_ stopped yet?
+	notStopped := 0
+	for _, e := range entries {
+		select {
+		case <-e.state.stopped:
+		default:
+			log.Infof(ctx, "server for tenant %q still running", e.nameContainer)
+			notStopped++
+		}
+	}
+	return notStopped
+}
+
+func (c *serverController) requestStopAll() []*serverEntry {
 	entries := func() (res []*serverEntry) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -438,11 +562,7 @@ func (c *serverController) Close() {
 	for _, e := range entries {
 		e.state.requestStop()
 	}
-
-	// Wait for shutdown for all servers.
-	for _, e := range entries {
-		<-e.state.stopped
-	}
+	return entries
 }
 
 type nodeEventLogger interface {
