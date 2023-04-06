@@ -246,7 +246,13 @@ type BytesMonitor struct {
 	// when an owner monitor has a larger capacity than wanted but should still
 	// keep track of allocations made through this monitor. Note that child
 	// monitors are affected by this limit.
+	//
+	// limit is computed from configLimit, the parent monitor and the
+	// reserved budget during Start().
 	limit int64
+
+	// configLimit is the limit configured when the monitor is created.
+	configLimit int64
 
 	// poolAllocationSize specifies the allocation unit for requests to the
 	// pool.
@@ -413,6 +419,7 @@ func NewMonitorWithLimit(
 	m := &BytesMonitor{
 		name:                 name,
 		resource:             res,
+		configLimit:          limit,
 		limit:                limit,
 		noteworthyUsageBytes: noteworthy,
 		poolAllocationSize:   increment,
@@ -486,6 +493,8 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 			humanizeutil.IBytes(mm.reserved.used),
 			poolname)
 	}
+
+	var effectiveLimit int64
 	if pool != nil {
 		// If we have a "parent" monitor, then register mm as its child by
 		// making it the head of the doubly-linked list.
@@ -497,7 +506,24 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 		pool.mu.head = mm
 		pool.mu.numChildren++
 		pool.mu.Unlock()
+		effectiveLimit = pool.limit
 	}
+
+	if reserved != nil {
+		// In addition to the limit of the parent monitor, we can also
+		// allocate from our reserved budget.
+		// We do need to take care of overflows though.
+		if effectiveLimit < math.MaxInt64-reserved.used {
+			effectiveLimit += reserved.used
+		} else {
+			effectiveLimit = math.MaxInt64
+		}
+	}
+
+	if effectiveLimit > mm.configLimit {
+		effectiveLimit = mm.configLimit
+	}
+	mm.limit = effectiveLimit
 }
 
 // NewUnlimitedMonitor creates a new monitor and starts the monitor in
