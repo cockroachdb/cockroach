@@ -163,7 +163,13 @@ func (n *TenantSpec) Format(ctx *FmtCtx) {
 // AlterTenantRename represents an ALTER TENANT RENAME statement.
 type AlterTenantRename struct {
 	TenantSpec *TenantSpec
-	NewName    Expr
+
+	// For NewName we only support the name syntax, not the numeric
+	// syntax. So we could make-do with just an Expr here. However, we
+	// like to use TenantSpec as a container for that name because it
+	// takes care of pretty-printing with all the special rules. See the
+	// doc of (*TenantSpec).Format() for details.
+	NewName *TenantSpec
 }
 
 var _ Statement = &AlterTenantRename{}
