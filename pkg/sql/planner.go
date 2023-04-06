@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -67,6 +68,9 @@ type extendedEvalContext struct {
 
 	// SessionID for this connection.
 	SessionID clusterunique.ID
+
+	// Executor type for this connection
+	ExecType executorType
 
 	// VirtualSchemas can be used to access virtual tables.
 	VirtualSchemas VirtualTabler
@@ -603,6 +607,10 @@ func (p *planner) GetOrInitSequenceCache() sessiondatapb.SequenceCache {
 
 func (p *planner) LeaseMgr() *lease.Manager {
 	return p.execCfg.LeaseManager
+}
+
+func (p *planner) AuditConfig() *auditlogging.AuditConfigLock {
+	return p.execCfg.SessionInitCache.AuditConfig
 }
 
 func (p *planner) Txn() *kv.Txn {
