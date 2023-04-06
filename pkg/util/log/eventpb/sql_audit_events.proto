@@ -78,6 +78,17 @@ message AdminQuery {
   CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
+// RoleBasedAuditEvent is an audit event recorded when an executed query belongs to a user whose role
+// membership(s) correspond to any role that is enabled to emit an audit log via the sql.log.user_audit
+// cluster setting.
+message RoleBasedAuditEvent {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The configured audit role that emitted this log.
+  string role = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // Category: SQL Slow Query Log
 // Channel: SQL_PERF
 //

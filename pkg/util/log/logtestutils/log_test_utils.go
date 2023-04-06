@@ -14,20 +14,26 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
-// InstallTelemetryLogFileSink installs a file sink for telemetry logging tests.
-func InstallTelemetryLogFileSink(sc *log.TestLogScope, t *testing.T) func() {
+// InstallLogFileSink installs a file sink for telemetry logging tests.
+func InstallLogFileSink(sc *log.TestLogScope, t *testing.T, channel logpb.Channel) func() {
 	// Enable logging channels.
 	log.TestingResetActive()
 	cfg := logconfig.DefaultConfig()
 	// Make a sink for just the session log.
-	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
-		"telemetry": {
-			Channels: logconfig.SelectChannels(channel.TELEMETRY),
-		}}
+	cfg.Sinks.FileGroups = make(map[string]*logconfig.FileSinkConfig)
+	fileSinkConfig := logconfig.FileSinkConfig{Channels: logconfig.SelectChannels(channel)}
+	switch channel {
+	case logpb.Channel_TELEMETRY:
+		cfg.Sinks.FileGroups["telemetry"] = &fileSinkConfig
+	case logpb.Channel_SENSITIVE_ACCESS:
+		cfg.Sinks.FileGroups["sql-audit"] = &fileSinkConfig
+	default:
+		panic("unrecognized logging channel")
+	}
 	dir := sc.GetDirectory()
 	if err := cfg.Validate(&dir); err != nil {
 		t.Fatal(err)
