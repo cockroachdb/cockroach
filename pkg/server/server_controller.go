@@ -24,11 +24,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/redact"
 )
 
 // onDemandServer represents a server that can be started on demand.
 type onDemandServer interface {
+	// preStart activates background tasks and initializes subsystems
+	// but does not yet accept incoming connections.
+	preStart(context.Context) error
+
+	// acceptClients starts accepting incoming connections.
+	acceptClients(context.Context) error
+
+	// stop stops this server.
 	stop(context.Context)
+
+	// annotateCtx annotates the context with server-specific logging tags.
+	annotateCtx(context.Context) context.Context
 
 	// getHTTPHandlerFn retrieves the function that can serve HTTP
 	// requests for this server.
@@ -54,6 +66,9 @@ type onDemandServer interface {
 
 	// shutdownRequested returns the shutdown request channel.
 	shutdownRequested() <-chan ShutdownRequest
+
+	// gracefulDrain drains the server.
+	gracefulDrain(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
 }
 
 type serverEntry struct {
@@ -101,6 +116,10 @@ type serverController struct {
 	// sendSQLRoutingError is a callback to use to report
 	// a tenant routing error to the incoming client.
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName)
+
+	// draining is set when the surrounding server starts draining, and
+	// prevents further creation of new tenant servers.
+	draining syncutil.AtomicBool
 
 	mu struct {
 		syncutil.Mutex
@@ -183,6 +202,23 @@ type tenantServerWrapper struct {
 
 var _ onDemandServer = (*tenantServerWrapper)(nil)
 
+func (t *tenantServerWrapper) annotateCtx(ctx context.Context) context.Context {
+	return t.server.AnnotateCtx(ctx)
+}
+
+func (t *tenantServerWrapper) preStart(ctx context.Context) error {
+	return t.server.PreStart(ctx)
+}
+
+func (t *tenantServerWrapper) acceptClients(ctx context.Context) error {
+	if err := t.server.AcceptClients(ctx); err != nil {
+		return err
+	}
+	// Show the tenant details in logs.
+	// TODO(knz): Remove this once we can use a single listener.
+	return t.server.reportTenantInfo(ctx)
+}
+
 func (t *tenantServerWrapper) stop(ctx context.Context) {
 	ctx = t.server.AnnotateCtx(ctx)
 	t.stopper.Stop(ctx)
@@ -212,6 +248,13 @@ func (s *tenantServerWrapper) shutdownRequested() <-chan ShutdownRequest {
 	return s.server.sqlServer.ShutdownRequested()
 }
 
+func (s *tenantServerWrapper) gracefulDrain(
+	ctx context.Context, verbose bool,
+) (uint64, redact.RedactableString, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+	return s.server.Drain(ctx, verbose)
+}
+
 // systemServerWrapper implements the onDemandServer interface for Server.
 //
 // (We can imagine a future where the SQL service for the system
@@ -226,6 +269,20 @@ type systemServerWrapper struct {
 }
 
 var _ onDemandServer = (*systemServerWrapper)(nil)
+
+func (s *systemServerWrapper) annotateCtx(ctx context.Context) context.Context {
+	return s.server.AnnotateCtx(ctx)
+}
+
+func (s *systemServerWrapper) preStart(ctx context.Context) error {
+	// No-op: the SQL service for the system tenant is started elsewhere.
+	return nil
+}
+
+func (s *systemServerWrapper) acceptClients(ctx context.Context) error {
+	// No-op: the SQL service for the system tenant is started elsewhere.
+	return nil
+}
 
 func (s *systemServerWrapper) stop(ctx context.Context) {
 	// No-op: the SQL service for the system tenant never shuts down.
@@ -254,4 +311,11 @@ func (s *systemServerWrapper) getInstanceID() base.SQLInstanceID {
 
 func (s *systemServerWrapper) shutdownRequested() <-chan ShutdownRequest {
 	return nil
+}
+
+func (s *systemServerWrapper) gracefulDrain(
+	ctx context.Context, verbose bool,
+) (uint64, redact.RedactableString, error) {
+	// The controller is not responsible for draining the system tenant.
+	return 0, "", nil
 }

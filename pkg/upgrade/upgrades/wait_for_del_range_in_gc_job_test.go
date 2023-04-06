@@ -33,7 +33,7 @@ func TestWaitForDelRangeInGCJob(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var (
-		v0 = clusterversion.ByKey(clusterversion.V23_1_UseDelRangeInGCJob - 1)
+		v0 = clusterversion.TestingBinaryMinSupportedVersion
 		v1 = clusterversion.ByKey(clusterversion.V23_1WaitedForDelRangeInGCJob)
 	)
 
