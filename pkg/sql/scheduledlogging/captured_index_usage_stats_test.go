@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -67,7 +68,7 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
 	defer cleanup()
 
 	firstScheduleLoggingDuration := 1 * time.Second

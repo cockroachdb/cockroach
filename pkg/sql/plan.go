@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -307,9 +308,9 @@ type planTop struct {
 	mem     *memo.Memo
 	catalog optPlanningCatalog
 
-	// auditEvents becomes non-nil if any of the descriptors used by
-	// current statement is causing an auditing event. See exec_log.go.
-	auditEvents []auditEvent
+	// auditEventBuilders becomes non-nil if the current statement
+	// is eligible for auditing (see sql/audit_logging.go)
+	auditEventBuilders []auditlogging.AuditEventBuilder
 
 	// flags is populated during planning and execution.
 	flags planFlags

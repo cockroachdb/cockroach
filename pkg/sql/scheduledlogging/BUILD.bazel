@@ -42,6 +42,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/log/logpb",
         "//pkg/util/log/logtestutils",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
