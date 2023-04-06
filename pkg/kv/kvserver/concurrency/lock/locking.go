@@ -15,6 +15,7 @@ package lock
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -22,15 +23,26 @@ import (
 
 // ExclusiveLocksBlockNonLockingReads dictates locking interactions between
 // non-locking reads and exclusive locks. Configuring this setting to true makes
-// it such that non-locking reads block on exclusive locks if their read
-// timestamp is at or above the timestamp at which the lock is held; however,
-// if this setting is set to false, non-locking reads do not block on exclusive
-// locks, regardless of their relative timestamp.
+// it such that non-locking reads from serializable transactions block on
+// exclusive locks held by serializable transactions if the read's timestamp is
+// at or above the timestamp at which the lock is held. If set to false,
+// non-locking reads do not block on exclusive locks, regardless of isolation
+// level or timestamp.
 //
-// The tradeoff here is between increased concurrency (non-locking reads become
-// non-blocking in the face of Exclusive locks) at the expense of forcing
-// Exclusive lock holders to perform a read refresh, which in turn may force
-// them to restart if the refresh fails.
+// Note that the setting only applies if both the reader and lock holder are
+// running with serializable isolation level. If either of them is running with
+// weaker isolation levels, the setting has no effect. To understand why,
+// consider the tradeoff this setting presents -- the tradeoff here is increased
+// concurrency (non-locking reads become non-blocking in the face of Exclusive
+// locks) at the expense of forcing Exclusive lock holders to perform a read
+// refresh (to prevent write skew), which in turn may force them to restart if
+// the refresh fails.
+//
+// If the lock holder is running at a weaker isolation level (snapshot,
+// read committed), then it is able to tolerate write skew. Thus, there is no
+// tradeoff -- it is always a good idea to allow any non-locking read to
+// proceed. On the other hand, non-locking reads running at weaker isolation
+// levels should never block on exclusive locks.
 var ExclusiveLocksBlockNonLockingReads = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lock.exclusive_locks_block_non_locking_reads.enabled",
@@ -64,7 +76,14 @@ func (m *Mode) Conflicts(sv *settings.Values, o *Mode) bool {
 	case Update:
 		return o.Strength == Update || o.Strength == Exclusive || o.Strength == Intent
 	case Exclusive:
-		if ExclusiveLocksBlockNonLockingReads.Get(sv) {
+		// If the lock is held by a transaction that can tolerate write-skew,
+		// there is no problem with allowing a non-locking reader to proceed and
+		// bump the lock holder's write timestamp -- the lock holder doesn't
+		// intend to refresh its reads. Non-locking reads belonging to transactions
+		// that run at weaker (read committed, snapshot) isolation levels never
+		// block on Exclusive locks.
+		if !m.IsoLevel.ToleratesWriteSkew() && o.IsoLevel != isolation.Serializable &&
+			ExclusiveLocksBlockNonLockingReads.Get(sv) {
 			// Only non-locking reads below the timestamp at which the lock is held
 			// are allowed.
 			return !(o.Strength == None && o.Timestamp.Less(m.Timestamp))
@@ -85,10 +104,11 @@ func (m *Mode) Empty() bool {
 }
 
 // MakeModeNone constructs a Mode with strength None.
-func MakeModeNone(ts hlc.Timestamp) Mode {
+func MakeModeNone(ts hlc.Timestamp, isoLevel isolation.Level) Mode {
 	return Mode{
 		Strength:  None,
 		Timestamp: ts,
+		IsoLevel:  isoLevel,
 	}
 }
 
@@ -107,10 +127,11 @@ func MakeModeUpdate() Mode {
 }
 
 // MakeModeExclusive constructs a Mode with strength Exclusive.
-func MakeModeExclusive(ts hlc.Timestamp) Mode {
+func MakeModeExclusive(ts hlc.Timestamp, isoLevel isolation.Level) Mode {
 	return Mode{
 		Strength:  Exclusive,
 		Timestamp: ts,
+		IsoLevel:  isoLevel,
 	}
 }
 
