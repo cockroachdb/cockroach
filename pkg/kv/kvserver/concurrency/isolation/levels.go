@@ -46,3 +46,7 @@ func (l Level) PerStatementReadSnapshot() bool {
 
 // SafeValue implements the redact.SafeValue interface.
 func (Level) SafeValue() {}
+
+// Levels returns a list of all isolation levels, ordered from strongest to
+// weakest.
+func Levels() []Level { return []Level{Serializable, Snapshot, ReadCommitted} }
