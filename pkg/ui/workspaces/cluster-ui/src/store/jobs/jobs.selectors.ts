@@ -12,11 +12,6 @@ import { createSelector } from "reselect";
 import { localStorageSelector } from "../utils/selectors";
 import { adminUISelector } from "../utils/selectors";
 
-export const selectJobsState = createSelector(
-  adminUISelector,
-  adminUiState => adminUiState.jobs,
-);
-
 export const selectSortSetting = createSelector(
   localStorageSelector,
   localStorage => localStorage["sortSetting/JobsPage"],

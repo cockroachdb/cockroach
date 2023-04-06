@@ -328,16 +328,18 @@ const getJobsPageProps = (
   isLoading = false,
 ): JobsPageProps => ({
   ...staticJobProps,
-  jobs: JobsResponse.create({
-    jobs: jobs,
-    earliest_retained_time: earliestRetainedTime,
-  }),
-  jobsError: error,
-  reqInFlight: isLoading,
-  isDataValid: !isLoading,
+  jobsResponse: {
+    data: JobsResponse.create({
+      jobs: jobs,
+      earliest_retained_time: earliestRetainedTime,
+    }),
+    error,
+    inFlight: isLoading,
+    valid: !isLoading,
+    lastUpdated: moment.utc(),
+  },
   columns: null,
   onColumnsChange: () => {},
-  lastUpdated: moment(),
 });
 
 export const withData: JobsPageProps = getJobsPageProps(allJobsFixture);
