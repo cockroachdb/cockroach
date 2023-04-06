@@ -1032,11 +1032,6 @@ func restorePlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	if restoreStmt.Options.SchemaOnly &&
-		!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2Start) {
-		return nil, nil, nil, false,
-			errors.New("cannot run RESTORE with schema_only until cluster has fully upgraded to 22.2")
-	}
 	if !restoreStmt.Options.SchemaOnly && restoreStmt.Options.VerifyData {
 		return nil, nil, nil, false,
 			errors.New("to set the verify_backup_table_data option, the schema_only option must be set")

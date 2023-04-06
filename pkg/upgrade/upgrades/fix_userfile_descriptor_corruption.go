@@ -14,69 +14,12 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/upgrade"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
-
-// fixInvalidObjectsThatLookLikeBadUserfileConstraint attempts to remove a
-// dangling table descriptor mutation for foreign key constraints on
-// usefile-related upload_payload tables.
-//
-// It only proceeds with the fix if
-//
-//   - the fk mutation it the _only_ mutation on the table,
-//   - the table name, column names, and column type all look like a userfile table, and
-//   - the fk is referencing a table whose name, column names, and column types all look like a userfile table.
-//
-// To fix the table, we remove the mutation as the FK constraint is unnecessary
-// in the current implementation.
-func fixInvalidObjectsThatLookLikeBadUserfileConstraint(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
-) error {
-	return d.DB.DescsTxn(ctx, func(
-		ctx context.Context, txn descs.Txn,
-	) error {
-		query := `SELECT * FROM crdb_internal.invalid_objects`
-		rows, err := txn.QueryIterator(ctx, "find-invalid-descriptors", txn.KV(), query)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = rows.Close() }()
-
-		var hasNext bool
-		for hasNext, err = rows.Next(ctx); hasNext && err == nil; hasNext, err = rows.Next(ctx) {
-			// crdb_internal.invalid_objects has five columns: id, database name, schema name, table name, error.
-			row := rows.Cur()
-			tableID := descpb.ID(tree.MustBeDInt(row[0]))
-			errString := string(tree.MustBeDString(row[4]))
-			if veryLikelyKnownUserfileBreakage(ctx, txn.KV(), txn.Descriptors(), tableID, errString) {
-				log.Infof(ctx, "attempting to fix invalid table descriptor %d assuming it is a userfile-related table", tableID)
-				mutTableDesc, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, tableID)
-				if err != nil {
-					return err
-				}
-				mutTableDesc.Mutations = nil
-				mutTableDesc.MutationJobs = nil
-				if err := txn.Descriptors().WriteDesc(ctx, false, mutTableDesc, txn.KV()); err != nil {
-					return err
-				}
-			}
-		}
-		if err != nil {
-			// TODO(ssd): We always return a nil error here because I'm not sure that this
-			// would be worth failing an upgrade for.
-			log.Warningf(ctx, "could not fix broken userfile: %v", err)
-		}
-		return nil
-	})
-}
 
 // veryLikelyKnownUserfileBreakage returns true if the given descriptor id and
 // error message from crdb_internal.invalid_objects is likely related to a known

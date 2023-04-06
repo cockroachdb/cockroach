@@ -80,7 +80,7 @@ var localityCfgs = map[string]roachpb.Locality{
 }
 
 var clusterVersionKeys = map[string]clusterversion.Key{
-	"Start22_2":           clusterversion.TODODelete_V22_2Start,
+	"23_1_Start":          clusterversion.V23_1Start,
 	"23_1_MVCCTombstones": clusterversion.V23_1_MVCCRangeTombstonesUnconditionallyEnabled,
 }
 
@@ -157,8 +157,8 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	}
 
 	settings := cluster.MakeTestingClusterSettings()
-
 	if cfg.beforeVersion != "" {
+		settings = cluster.MakeClusterSettings()
 		beforeKey, ok := clusterVersionKeys[cfg.beforeVersion]
 		if !ok {
 			t.Fatalf("clusterVersion %s does not exist in data driven global map", cfg.beforeVersion)
@@ -166,12 +166,9 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 		beforeKey--
 		params.ServerArgs.Knobs.Server = &server.TestingKnobs{
 			BinaryVersionOverride:          clusterversion.ByKey(beforeKey),
-			DisableAutomaticVersionUpgrade: make(chan struct{})}
-		settings = cluster.MakeTestingClusterSettingsWithVersions(
-			clusterversion.TestingBinaryVersion,
-			clusterversion.ByKey(beforeKey),
-			false,
-		)
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
+			BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
+		}
 	}
 
 	closedts.TargetDuration.Override(context.Background(), &settings.SV, 10*time.Millisecond)
@@ -278,10 +275,9 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *
 //
 //   - splits: specifies the number of ranges the bank table is split into.
 //
-//   - before-version=<beforeVersion>: creates a mixed version cluster where all
-//     nodes running the test cluster binary think the clusterVersion is one
-//     version before the passed in <beforeVersion> key. See cockroach_versions.go
-//     for possible values.
+//   - before-version=<beforeVersion>: bootstraps the test cluster and upgrades
+//     it to a cluster version that is one version before the passed in
+//     <beforeVersion> key. See cockroach_versions.go for possible values.
 //
 //   - testingKnobCfg: specifies a key to a hardcoded testingKnob configuration
 //
