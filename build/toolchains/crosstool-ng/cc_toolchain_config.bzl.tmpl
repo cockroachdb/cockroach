@@ -119,6 +119,7 @@ def _impl(ctx):
                             "-Iexternal/%{repo_name}/%{target}/include/c++/6.5.0",
                             "-no-canonical-prefixes",
                             "-fno-canonical-system-headers",
+                            "-fno-use-linker-plugin",
                         ],
                     ),
                 ]),
