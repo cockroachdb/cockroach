@@ -1129,6 +1129,7 @@ func (mvb *mixedVersionBackup) computeTableContents(
 			l.Printf("querying table contents for %s through node %d", table, node)
 			var contents tableContents
 			var err error
+			afterLoad := func() error { return nil }
 			if strings.HasPrefix(table, "system.") {
 				node := h.RandomNode(rng, mvb.roachNodes)
 				contents, err = newSystemTableContents(ctx, mvb.cluster, node, db, table, timestamp)
@@ -1137,10 +1138,61 @@ func (mvb *mixedVersionBackup) computeTableContents(
 				}
 			} else {
 				contents = newFingerprintContents(db, table)
+				// tpcc.stock and bank.bank are the tables that typically fail
+				// with "fingerprint mismatch" error
+				exportData := func(prefix, pkey string, columns []string) error {
+					node := h.RandomNode(rng, mvb.roachNodes)
+					rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+					name := fmt.Sprintf(
+						"%s_%s",
+						prefix, randutil.RandString(rng, 10, randutil.PrintableKeyAlphabet),
+					)
+					uri := fmt.Sprintf("gs://cockroachdb-backup-testing/%s?AUTH=implicit", name)
+					columnNames := strings.Join(columns, ", ")
+					query := fmt.Sprintf("SELECT %s FROM %s%s ORDER BY %s", columnNames, table, aostFor(timestamp), pkey)
+					stmt := fmt.Sprintf("EXPORT INTO CSV '%s' WITH compression = 'gzip' FROM %s", uri, query)
+					l.Printf("running export command: %s", stmt)
+					exportCmd := roachtestutil.NewCommand("%s sql", mixedversion.CurrentCockroachPath).
+						Option("insecure").
+						Flag("e", fmt.Sprintf("%q", stmt)).
+						String()
+					return mvb.cluster.RunE(ctx, mvb.cluster.Nodes(node), exportCmd)
+				}
+
+				if table == "tpcc.stock" {
+					afterLoad = func() error {
+						return exportData("tpcc_stock", "s_w_id, s_i_id", []string{
+							"s_i_id",
+							"s_w_id",
+							"s_quantity",
+							"s_dist_01",
+							"s_dist_02",
+							"s_dist_03",
+							"s_dist_04",
+							"s_dist_05",
+							"s_dist_06",
+							"s_dist_07",
+							"s_dist_08",
+							"s_dist_09",
+							"s_dist_10",
+							"s_ytd",
+							"s_order_cnt",
+							"s_remote_cnt",
+							"s_data",
+						})
+					}
+				} else if table == "bank.bank" {
+					afterLoad = func() error {
+						return exportData("bank_bank", "id", []string{"id", "balance", "payload"})
+					}
+				}
 			}
 
 			if err := contents.Load(ctx, l, timestamp, previousTableContents(j)); err != nil {
 				return err
+			}
+			if err := afterLoad(); err != nil {
+				return fmt.Errorf("after load error: %w", err)
 			}
 			result[j] = contents
 			return nil
