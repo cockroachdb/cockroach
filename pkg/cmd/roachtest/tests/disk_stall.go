@@ -206,14 +206,12 @@ func runDiskStalledDetection(
 	}
 
 	// Let the workload continue after the stall.
-	{
-		workloadPauseDur := 10*time.Minute - timeutil.Since(workloadStartAt)
-		t.Status("letting workload continue for ", workloadPauseDur, " with n1 stalled")
-		select {
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		case <-time.After(workloadPauseDur):
-		}
+	workloadAfterDur := 10*time.Minute - timeutil.Since(workloadStartAt)
+	t.Status("letting workload continue for ", workloadAfterDur, " with n1 stalled")
+	select {
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	case <-time.After(workloadAfterDur):
 	}
 
 	{
@@ -224,7 +222,7 @@ func runDiskStalledDetection(
 		cum := response.Results[0].Datapoints
 		totalTxnsPostStall := cum[len(cum)-1].Value - totalTxnsPreStall
 		preStallTPS := totalTxnsPreStall / stallAt.Sub(workloadStartAt).Seconds()
-		postStallTPS := totalTxnsPostStall / now.Sub(stallAt).Seconds()
+		postStallTPS := totalTxnsPostStall / workloadAfterDur.Seconds()
 		t.L().PrintfCtx(ctx, "%.2f total transactions committed after stall\n", totalTxnsPostStall)
 		t.L().PrintfCtx(ctx, "pre-stall tps: %.2f, post-stall tps: %.2f\n", preStallTPS, postStallTPS)
 		if postStallTPS < preStallTPS/2 {
