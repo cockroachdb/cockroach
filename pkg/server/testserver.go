@@ -657,7 +657,8 @@ func (ts *TestServer) Start(ctx context.Context) error {
 // serverutils.StartTenant method.
 type TestTenant struct {
 	*SQLServer
-	Cfg *BaseConfig
+	Cfg    *BaseConfig
+	SQLCfg *SQLConfig
 	*httpTestServer
 	drain *drainServer
 
@@ -920,6 +921,7 @@ func (ts *TestServer) StartSharedProcessTenant(
 	testTenant := &TestTenant{
 		SQLServer:      sqlServer,
 		Cfg:            sqlServer.cfg,
+		SQLCfg:         sqlServerWrapper.sqlCfg,
 		pgPreServer:    sqlServerWrapper.pgPreServer,
 		httpTestServer: hts,
 		drain:          sqlServerWrapper.drainServer,
@@ -1189,6 +1191,7 @@ func (ts *TestServer) StartTenant(
 	return &TestTenant{
 		SQLServer:      sw.sqlServer,
 		Cfg:            &baseCfg,
+		SQLCfg:         &sqlCfg,
 		pgPreServer:    sw.pgPreServer,
 		httpTestServer: hts,
 		drain:          sw.drainServer,
