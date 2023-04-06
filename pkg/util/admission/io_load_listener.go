@@ -417,7 +417,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
 	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtAdmittedDone()
-	io.kvGranter.setAdmittedDoneModels(l0WriteLM, l0IngestLM, ingestLM)
+	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM)
 	if _, overloaded := io.ioThreshold.Score(); overloaded || io.aux.doLogFlush ||
 		io.elasticDiskBWTokens != unlimitedTokens {
 		log.Infof(ctx, "IO overload: %s", io.adjustTokensResult)

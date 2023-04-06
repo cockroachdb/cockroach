@@ -370,7 +370,7 @@ func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() [admissionpb.NumWo
 	return g.diskBandwidthTokensUsed
 }
 
-func (g *testGranterWithIOTokens) setAdmittedDoneModels(
+func (g *testGranterWithIOTokens) setLinearModels(
 	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
 ) {
 	fmt.Fprintf(&g.buf, "setAdmittedDoneModelsLocked: l0-write-lm: ")
@@ -409,7 +409,7 @@ func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() [admissionpb.
 	return [admissionpb.NumWorkClasses]int64{}
 }
 
-func (g *testGranterNonNegativeTokens) setAdmittedDoneModels(
+func (g *testGranterNonNegativeTokens) setLinearModels(
 	l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel, ingestLM tokensLinearModel,
 ) {
 	require.LessOrEqual(g.t, 0.5, l0WriteLM.multiplier)

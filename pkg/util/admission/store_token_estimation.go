@@ -12,6 +12,12 @@ package admission
 
 import "github.com/cockroachdb/pebble"
 
+// TODO(irfansharif): This comment is a bit stale with replication admission
+// control where admission is asynchronous. AC is informed of the write when
+// it's being physically done, so we know its size then. We don't need upfront
+// estimates anymore. The AdmittedWorkDone interface and surrounding types
+// (StoreWorkDoneInfo for ex.) are no longer central.
+//
 // The logic in this file deals with token estimation for a store write in two
 // situations: (a) at admission time, (b) when the admitted work is done. At
 // (a) we have no information provided about the work size (NB: this choice is
