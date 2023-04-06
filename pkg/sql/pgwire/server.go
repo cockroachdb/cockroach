@@ -794,6 +794,7 @@ func (s *Server) ServeConn(
 	connDetails.RemoteAddress = sArgs.RemoteAddr.String()
 	sp := tracing.SpanFromContext(ctx)
 	ctx = logtags.AddTag(ctx, "client", log.SafeOperational(connDetails.RemoteAddress))
+	ctx = logtags.AddTag(ctx, preServeStatus.ConnType.String(), nil)
 	sp.SetTag("conn_type", attribute.StringValue(preServeStatus.ConnType.String()))
 	sp.SetTag("client", attribute.StringValue(connDetails.RemoteAddress))
 

@@ -3408,6 +3408,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		statsProvider:     ex.server.sqlStats,
 		indexUsageStats:   ex.indexUsageStats,
 		statementPreparer: ex,
+		ExecType:          executorTypeExec,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }
@@ -3471,7 +3472,7 @@ func (ex *connExecutor) implicitTxn() bool {
 	return ok && os.ImplicitTxn.Get()
 }
 
-// initPlanner initializes a planner so it can can be used for planning a
+// initPlanner initializes a planner so it can be used for planning a
 // query in the context of this session.
 func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.cancelChecker.Reset(ctx)

@@ -132,6 +132,7 @@ go_library(
         "restore.go",
         "roachmart.go",
         "roachtest.go",
+        "role_based_audit_logging.go",
         "ruby_pg.go",
         "ruby_pg_blocklist.go",
         "rust_postgres.go",
