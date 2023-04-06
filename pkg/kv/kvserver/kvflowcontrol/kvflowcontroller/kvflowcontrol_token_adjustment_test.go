@@ -95,7 +95,7 @@ func TestFlowTokenAdjustment(t *testing.T) {
 					adjustments = append(adjustments, adjustment{
 						pri:   pri,
 						delta: delta,
-						post:  controller.testingGetTokensForStream(stream),
+						post:  controller.getTokensForStream(stream),
 					})
 				}
 				return ""

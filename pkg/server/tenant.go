@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/inspectz"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -715,6 +717,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.runtime,         /* runtimeStatsSampler */
 		gwMux,             /* handleRequestsUnauthenticated */
 		s.debug,           /* handleDebugUnauthenticated */
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
+		}),
 		newAPIV2Server(workersCtx, &apiV2ServerOpts{
 			admin:            s.tenantAdmin,
 			status:           s.tenantStatus,
@@ -1202,6 +1207,7 @@ func makeTenantSQLServerArgs(
 			nodeIDContainer:      deps.instanceIDContainer,
 			spanConfigKVAccessor: tenantConnect,
 			kvStoresIterator:     kvserverbase.UnsupportedStoresIterator{},
+			inspectzServer:       inspectz.Unsupported{},
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
 			spanLimiterFactory: deps.spanLimiterFactory,
