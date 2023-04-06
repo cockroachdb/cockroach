@@ -764,7 +764,7 @@ func (j *Job) loadJobPayloadAndProgress(
 			return nil, nil, errors.Wrapf(err, "failed to get payload for job %d", j.ID())
 		}
 		if !exists {
-			return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job not found in system.job_info")
+			return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job payload not found in system.job_info")
 		}
 		if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
 			return nil, nil, err
@@ -775,7 +775,7 @@ func (j *Job) loadJobPayloadAndProgress(
 			return nil, nil, errors.Wrapf(err, "failed to get progress for job %d", j.ID())
 		}
 		if !exists {
-			return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job not found in system.job_info")
+			return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job progress not found in system.job_info")
 		}
 		if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
 			return nil, nil, &JobNotFoundError{jobID: j.ID()}
