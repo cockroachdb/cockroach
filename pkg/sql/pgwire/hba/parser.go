@@ -15,47 +15,27 @@ import (
 	"net"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/rulebasedscanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
-// scannedInput represents the result of tokenizing the input
-// configuration data.
-//
-// Inspired from pg's source, file src/backend/libpq/hba.c,
-// function tokenize_file.
-//
-// The scanner tokenizes the input and stores the resulting data into
-// three lists: a list of lines, a list of line numbers, and a list of
-// raw line contents.
-type scannedInput struct {
-	// The list of lines is a triple-nested list structure.  Each line is a list of
-	// fields, and each field is a List of tokens.
-	lines   []hbaLine
-	linenos []int
-}
-
-type hbaLine struct {
-	input  string
-	tokens [][]String
-}
-
 // Parse parses the provided HBA configuration.
 func Parse(input string) (*Conf, error) {
-	tokens, err := tokenize(input)
+	tokens, err := rulebasedscanner.Tokenize(input)
 	if err != nil {
 		return nil, err
 	}
 
 	var entries []Entry
-	for i, line := range tokens.lines {
+	for i, line := range tokens.Lines {
 		entry, err := parseHbaLine(line)
 		if err != nil {
 			return nil, errors.Wrapf(
 				pgerror.WithCandidateCode(err, pgcode.ConfigFile),
-				"line %d", tokens.linenos[i])
+				"line %d", tokens.Linenos[i])
 		}
 		entries = append(entries, entry)
 	}
@@ -66,11 +46,11 @@ func Parse(input string) (*Conf, error) {
 // parseHbaLine parses one line of HBA configuration.
 //
 // Inspired from pg's src/backend/libpq/hba.c, parse_hba_line().
-func parseHbaLine(inputLine hbaLine) (entry Entry, err error) {
+func parseHbaLine(inputLine rulebasedscanner.Line) (entry Entry, err error) {
 	fieldIdx := 0
 
-	entry.Input = inputLine.input
-	line := inputLine.tokens
+	entry.Input = inputLine.Input
+	line := inputLine.Tokens
 	// Read the connection type.
 	if len(line[fieldIdx]) > 1 {
 		return entry, errors.WithHint(
@@ -133,7 +113,7 @@ func parseHbaLine(inputLine hbaLine) (entry Entry, err error) {
 					hostname = ""
 				}
 				if hostname != "" {
-					entry.Address = String{Value: addr, Quoted: token.Quoted}
+					entry.Address = rulebasedscanner.String{Value: addr, Quoted: token.Quoted}
 				} else {
 					// First field was an IP address.
 					fieldIdx++
