@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -623,9 +624,9 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 				0: {
 					Knobs: base.TestingKnobs{
 						SQLExecutor: &sql.ExecutorTestingKnobs{
-							DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+							DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 								if strings.Contains(query, "EXPORT") {
-									return func(_ rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata) {
+									return func(_ rowenc.EncDatumRow, _ coldata.Batch, meta *execinfrapb.ProducerMetadata) {
 										if meta != nil && meta.Err != nil {
 											if testutils.IsError(meta.Err, "ReadWithinUncertaintyIntervalError") {
 												close(gotRWUIOnGateway)
