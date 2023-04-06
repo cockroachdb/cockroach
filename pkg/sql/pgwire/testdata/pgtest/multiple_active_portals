@@ -481,6 +481,53 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send crdb_only
+Query {"String": "BEGIN"}
+Parse {"Name": "q1", "Query": "SELECT EXISTS (SELECT 1 FROM crdb_internal.zones WHERE target = 'hello')"}
+Parse {"Name": "q2", "Query": "SELECT EXISTS (SELECT 1 FROM crdb_internal.zones WHERE target = 'hello')"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q2"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Sync
+----
+
+until keepErrMessage
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"f"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send crdb_only
+Query {"String": "COMMIT"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
 Query {"String": "BEGIN; DROP TABLE IF EXISTS t; CREATE TABLE t (x int); INSERT INTO t VALUES (1), (2), (3)"}
 Parse {"Name": "q1", "Query": "UPDATE t SET x = 10 WHERE true RETURNING x;"}
 Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}

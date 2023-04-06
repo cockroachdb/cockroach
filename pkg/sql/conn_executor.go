@@ -2195,6 +2195,12 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				Values: portal.Qargs,
 			}
 
+			// If this is the first-time execution of a portal without a limit set,
+			// it means all rows will be exhausted, so no need to pause this portal.
+			if tcmd.Limit == 0 && portal.pauseInfo != nil && portal.pauseInfo.curRes == nil {
+				portal.pauseInfo = nil
+			}
+
 			stmtRes := ex.clientComm.CreateStatementResult(
 				portal.Stmt.AST,
 				// The client is using the extended protocol, so no row description is
