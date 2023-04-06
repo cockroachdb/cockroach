@@ -56,7 +56,7 @@ else
     CRASH_REPORT_ENV="development"
 fi
 
-BUILD_REV=$(git rev-parse HEAD)
+BUILD_REV=$(git describe --match="" --always --abbrev=40 --dirty)
 BUILD_UTCTIME=$(date -u '+%Y/%m/%d %H:%M:%S')
 
 
