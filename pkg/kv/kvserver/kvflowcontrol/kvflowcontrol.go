@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -129,6 +130,12 @@ type Controller interface {
 	// expected to have been deducted earlier with the same priority provided
 	// here.
 	ReturnTokens(context.Context, admissionpb.WorkPriority, Tokens, Stream)
+	// Inspect returns a snapshot of all underlying streams and their available
+	// {regular,elastic} tokens. It's used to power /inspectz.
+	Inspect(context.Context) []kvflowinspectpb.Stream
+	// InspectStream returns a snapshot of a specific underlying stream and its
+	// available {regular,elastic} tokens. It's used to power /inspectz.
+	InspectStream(context.Context, Stream) kvflowinspectpb.Stream
 
 	// TODO(irfansharif): We might need the ability to "disable" specific
 	// streams/corresponding token buckets when there are failures or
@@ -204,6 +211,9 @@ type Handle interface {
 	// Admit(). It's only used when cluster settings change, settings that
 	// affect all work waiting for flow tokens.
 	ResetStreams(ctx context.Context)
+	// Inspect returns a serialized form of the underlying handle. It's used to
+	// power /inspectz.
+	Inspect(context.Context) kvflowinspectpb.Handle
 	// Close closes the handle and returns all held tokens back to the
 	// underlying controller. Typically used when the replica loses its lease
 	// and/or raft leadership, or ends up getting GC-ed (if it's being
@@ -217,6 +227,7 @@ type Handle interface {
 type Handles interface {
 	Lookup(roachpb.RangeID) (Handle, bool)
 	ResetStreams(ctx context.Context)
+	Inspect() []roachpb.RangeID
 }
 
 // HandleFactory is used to construct new Handles.

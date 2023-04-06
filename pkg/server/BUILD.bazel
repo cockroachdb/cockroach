@@ -100,6 +100,8 @@ go_library(
         "//pkg/docs",
         "//pkg/featureflag",
         "//pkg/gossip",
+        "//pkg/inspectz",
+        "//pkg/inspectz/inspectzpb",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprotectedts",
