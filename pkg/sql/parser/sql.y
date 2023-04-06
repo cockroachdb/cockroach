@@ -6460,7 +6460,7 @@ alter_tenant_rename_stmt:
     /* SKIP DOC */
     $$.val = &tree.AlterTenantRename{
       TenantSpec: $3.tenantSpec(),
-      NewName: $6.expr(),
+      NewName: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
     }
   }
 

@@ -89,6 +89,9 @@ type Cluster struct {
 	CreatedAt time.Time     `json:"created_at"`
 	Lifetime  time.Duration `json:"lifetime"`
 	VMs       vm.List       `json:"vms"`
+	// CostPerHour is an estimate, in dollars, of how much this cluster costs to
+	// run per hour. 0 if the cost estimate is unavailable.
+	CostPerHour float64
 }
 
 // Clouds returns the names of all of the various cloud providers used
@@ -235,6 +238,7 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 			if v.Lifetime < c.Lifetime {
 				c.Lifetime = v.Lifetime
 			}
+			c.CostPerHour += v.CostPerHour
 		}
 	}
 

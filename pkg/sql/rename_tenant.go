@@ -33,7 +33,7 @@ func (p *planner) alterRenameTenant(
 		return nil, err
 	}
 
-	e := n.NewName
+	e := n.NewName.Expr
 	// If the expression is a simple identifier, handle
 	// that specially: we promote that identifier to a SQL string.
 	// This is alike what is done for CREATE USER.

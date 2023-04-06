@@ -199,6 +199,15 @@ ALTER TENANT ('foo') RENAME TO (bar) -- fully parenthesized
 ALTER TENANT '_' RENAME TO bar -- literals removed
 ALTER TENANT 'foo' RENAME TO _ -- identifiers removed
 
+# Regression test for #99853
+parse
+ALTER TENANT 'string' RENAME TO INTERVAL 'string' MINUTE TO SECOND
+----
+ALTER TENANT 'string' RENAME TO ('string'::INTERVAL MINUTE TO SECOND) -- normalized!
+ALTER TENANT ('string') RENAME TO ((('string')::INTERVAL MINUTE TO SECOND)) -- fully parenthesized
+ALTER TENANT '_' RENAME TO ('_'::INTERVAL MINUTE TO SECOND) -- literals removed
+ALTER TENANT 'string' RENAME TO ('string'::INTERVAL MINUTE TO SECOND) -- identifiers removed
+
 # Regression test for #95612
 parse
 ALTER TENANT INTERVAL 'string' MINUTE RESET CLUSTER SETTING ident

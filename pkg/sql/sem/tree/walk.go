@@ -1149,6 +1149,13 @@ func (n *AlterTenantRename) walkStmt(v Visitor) Statement {
 		}
 		ret.TenantSpec = ts
 	}
+	ts, changed = walkTenantSpec(v, n.NewName)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.NewName = ts
+	}
 	return ret
 }
 
