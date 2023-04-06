@@ -1207,7 +1207,7 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper serverccl.
 			"expected a valid txnID, but %+v is found", result)
 		sqlConn.Exec(t, "COMMIT")
 
-		testutils.SucceedsSoon(t, func() error {
+		testutils.SucceedsWithin(t, func() error {
 			resp, err := status.TxnIDResolution(ctx, &serverpb.TxnIDResolutionRequest{
 				CoordinatorID: strconv.Itoa(int(coordinatorNodeID)),
 				TxnIDs:        []uuid.UUID{txnID},
@@ -1220,9 +1220,15 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper serverccl.
 			require.Equal(t, txnID, resp.ResolvedTxnIDs[0].TxnID,
 				"expected to find txn %s on coordinator node %d, but it "+
 					"was not", txnID.String(), coordinatorNodeID)
-			require.NotEqual(t, appstatspb.InvalidTransactionFingerprintID, resp.ResolvedTxnIDs[0].TxnFingerprintID)
+
+			// It's possible that adding the transaction id to the cache and
+			// updating the transaction id with a valid fingerprint are done in
+			// 2 separate batches. This allows retries to wait for a valid fingerprint
+			if appstatspb.InvalidTransactionFingerprintID == resp.ResolvedTxnIDs[0].TxnFingerprintID {
+				return fmt.Errorf("transaction fingerprint id not updated yet. TxnFingerprintID: %d", resp.ResolvedTxnIDs[0].TxnFingerprintID)
+			}
 			return nil
-		})
+		}, 1*time.Minute)
 	}
 
 	t.Run("regular_cluster", func(t *testing.T) {
