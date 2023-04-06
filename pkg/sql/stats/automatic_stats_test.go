@@ -206,33 +206,64 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 	numUserTablesWithStats := 2
 
 	// This now includes 36 system tables as well as the 2 created above.
-	if err := checkAllTablesCount(ctx, systemTablesWithStats+numUserTablesWithStats, r); err != nil {
+	if err := checkAllTablesCount(
+		ctx, true /* systemTables */, systemTablesWithStats+numUserTablesWithStats, r,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkAllTablesCount(
+		ctx, false /* systemTables */, numUserTablesWithStats, r,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkExplicitlyEnabledTablesCount(ctx, 0, r); err != nil {
 		t.Fatal(err)
 	}
+
 	sqlRun.Exec(t,
 		`ALTER TABLE t.a SET (sql_stats_automatic_collection_enabled = true)`)
-	if err := checkAllTablesCount(ctx, systemTablesWithStats+numUserTablesWithStats, r); err != nil {
+	if err := checkAllTablesCount(
+		ctx, true /* systemTables */, systemTablesWithStats+numUserTablesWithStats, r,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkAllTablesCount(
+		ctx, false /* systemTables */, numUserTablesWithStats, r,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkExplicitlyEnabledTablesCount(ctx, 1, r); err != nil {
 		t.Fatal(err)
 	}
+
 	sqlRun.Exec(t,
 		`ALTER TABLE t.b SET (sql_stats_automatic_collection_enabled = false)`)
 	numUserTablesWithStats--
-	if err := checkAllTablesCount(ctx, systemTablesWithStats+numUserTablesWithStats, r); err != nil {
+	if err := checkAllTablesCount(
+		ctx, true /* systemTables */, systemTablesWithStats+numUserTablesWithStats, r,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkAllTablesCount(
+		ctx, false /* systemTables */, numUserTablesWithStats, r,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkExplicitlyEnabledTablesCount(ctx, 1, r); err != nil {
 		t.Fatal(err)
 	}
+
 	sqlRun.Exec(t,
 		`ALTER TABLE t.a SET (sql_stats_automatic_collection_enabled = false)`)
 	numUserTablesWithStats--
-	if err := checkAllTablesCount(ctx, systemTablesWithStats+numUserTablesWithStats, r); err != nil {
+	if err := checkAllTablesCount(
+		ctx, true /* systemTables */, systemTablesWithStats+numUserTablesWithStats, r,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkAllTablesCount(
+		ctx, false /* systemTables */, numUserTablesWithStats, r,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkExplicitlyEnabledTablesCount(ctx, numUserTablesWithStats, r); err != nil {
@@ -240,13 +271,17 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 	}
 }
 
-func checkAllTablesCount(ctx context.Context, expected int, r *Refresher) error {
+func checkAllTablesCount(ctx context.Context, systemTables bool, expected int, r *Refresher) error {
 	const collectionDelay = time.Microsecond
+	systemTablesPredicate := autoStatsOnSystemTablesEnabledPredicate
+	if !systemTables {
+		systemTablesPredicate = autoStatsOnSystemTablesDisabledPredicate
+	}
 	getAllTablesQuery := fmt.Sprintf(
 		getAllTablesTemplateSQL,
 		collectionDelay,
 		keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
-		autoStatsEnabledOrNotSpecifiedPredicate,
+		autoStatsEnabledOrNotSpecifiedPredicate, systemTablesPredicate,
 	)
 	r.getApplicableTables(ctx, getAllTablesQuery,
 		"get-tables", true)
@@ -263,7 +298,7 @@ func checkExplicitlyEnabledTablesCount(ctx context.Context, expected int, r *Ref
 		getAllTablesTemplateSQL,
 		collectionDelay,
 		keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
-		explicitlyEnabledTablesPredicate,
+		explicitlyEnabledTablesPredicate, autoStatsOnSystemTablesEnabledPredicate,
 	)
 	r.getApplicableTables(ctx, getTablesWithAutoStatsExplicitlyEnabledQuery,
 		"get-tables-with-autostats-explicitly-enabled", true)
@@ -529,6 +564,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
@@ -672,6 +708,7 @@ func TestMutationsAndSettingOverrideChannels(t *testing.T) {
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
+	AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
 	r := Refresher{
 		st:        st,
