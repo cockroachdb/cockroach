@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"math"
 	"regexp"
 	"strconv"
@@ -42,7 +43,7 @@ func TestTelemetryLogging(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
 	defer cleanup()
 
 	st := logtestutils.StubTime{}
@@ -604,7 +605,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
 	defer cleanup()
 
 	st := logtestutils.StubTime{}
@@ -713,7 +714,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
 	defer cleanup()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -952,7 +953,7 @@ func TestTelemetryScanCounts(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
 	defer cleanup()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -1222,7 +1223,7 @@ func TestFunctionBodyRedacted(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
 	defer cleanup()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})

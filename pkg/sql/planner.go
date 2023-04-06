@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -67,6 +68,9 @@ type extendedEvalContext struct {
 
 	// SessionID for this connection.
 	SessionID clusterunique.ID
+
+	// Executor type for this connection
+	ExecType executorType
 
 	// VirtualSchemas can be used to access virtual tables.
 	VirtualSchemas VirtualTabler
@@ -603,6 +607,10 @@ func (p *planner) GetOrInitSequenceCache() sessiondatapb.SequenceCache {
 
 func (p *planner) LeaseMgr() *lease.Manager {
 	return p.execCfg.LeaseManager
+}
+
+func (p *planner) AuditConfig() *auditlogging.AuditConfigLock {
+	return p.execCfg.AuditConfig
 }
 
 func (p *planner) Txn() *kv.Txn {

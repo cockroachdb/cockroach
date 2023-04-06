@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -1028,6 +1029,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
 		AutoConfigProvider:         cfg.AutoConfigProvider,
+		AuditConfig: &auditlogging.AuditConfigLock{
+			Config: auditlogging.EmptyAuditConfig(),
+		},
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -1363,6 +1367,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	vmoduleSetting.SetOnChange(&cfg.Settings.SV, fn)
 	fn(ctx)
+
+	auditlogging.UserAuditLogConfig.SetOnChange(
+		&execCfg.Settings.SV, func(ctx context.Context) {
+			auditlogging.UpdateAuditConfigOnChange(ctx, execCfg.AuditConfig, execCfg.Settings)
+		})
 
 	return &SQLServer{
 		ambientCtx:                     cfg.BaseConfig.AmbientCtx,

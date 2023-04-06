@@ -1526,6 +1526,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			case *tree.Import, *tree.Restore, *tree.Backup:
 				bulkJobId = res.GetBulkJobId()
 			}
+			planner.maybeAuditRoleBasedAuditEvent(ctx)
 			planner.maybeLogStatement(
 				ctx,
 				ex.executorType,

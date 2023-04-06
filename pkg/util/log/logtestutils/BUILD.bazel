@@ -12,8 +12,8 @@ go_library(
     deps = [
         "//pkg/sql/execstats",
         "//pkg/util/log",
-        "//pkg/util/log/channel",
         "//pkg/util/log/logconfig",
+        "//pkg/util/log/logpb",
         "//pkg/util/syncutil",
     ],
 )

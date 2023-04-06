@@ -1,0 +1,311 @@
+subtest not_enough_inputs
+
+line
+test_role
+----
+error: end-of-line before statement types specification
+
+subtest end
+
+subtest invalid_role_inputs
+
+# Multi-role input
+line
+test_role,test_role2 DDL
+----
+error: multiple values specified for role
+
+# 'public' reserved role input
+line
+public DDL
+----
+error: cannot use reserved role name: 'public'
+
+# 'none' reserved role input
+line
+none DDL
+----
+error: cannot use reserved role name: 'none'
+
+# 'node' reserved role input
+line
+node DDL
+----
+error: cannot use reserved username: 'node'
+
+# 'pg_' prefix reserved role input
+line
+pg_test_role DDL
+----
+error: cannot use 'pg_' prefix in role name: 'pg_test_role'
+
+# 'crdb_internal_' prefix reserved role input
+line
+crdb_internal_test_role DDL
+----
+error: cannot use 'crdb_internal_' prefix in role name: 'crdb_internal_test_role'
+
+subtest end
+
+subtest inputs_normalized
+
+line
+TeSt_ROLe DdL,dcL,dMl,TCl
+----
+# Original configuration:
+# TeSt_ROLe DdL,dcL,dMl,TCl
+#
+# Interpreted configuration:
+# ROLE    STATEMENT_TYPE
+test_role TypeDDL,TypeDCL,TypeDML,TypeTCL
+
+subtest end
+
+subtest invalid_statement_types
+
+# Single unknown statement type
+line
+test_role not_a_statement_type
+----
+error: unknown statement type: "not_a_statement_type" (valid types include: "DDL", "DML", "DCL", "TCL", "ALL", "NONE")
+
+# Multi statement type including unknown
+line
+test_role DDL,DML,DCL,TCL,fake
+----
+error: unknown statement type: "fake" (valid types include: "DDL", "DML", "DCL", "TCL", "ALL", "NONE")
+
+# Redundant statement types with "ALL"
+line
+test_role DDL,DCL,ALL
+----
+error: redundant statement types with "ALL"
+
+# Redundant statement types with "NONE"
+line
+test_role DDL,DCL,NONE
+----
+error: redundant statement types with "NONE"
+
+subtest end
+
+subtest quoted_columns
+
+line
+"test_role" DDL,DML,DCL,TCL
+----
+# Original configuration:
+# "test_role" DDL,DML,DCL,TCL
+#
+# Interpreted configuration:
+# ROLE    STATEMENT_TYPE
+test_role TypeDDL,TypeDML,TypeDCL,TypeTCL
+
+# Quoting the collection of statement types is not recognized.
+line
+"test_role" "DDL,DML,DCL,TCL"
+----
+error: unknown statement type: "DDL,DML,DCL,TCL" (valid types include: "DDL", "DML", "DCL", "TCL", "ALL", "NONE")
+
+# Individually quoted statement types are recognized.
+line
+test_role "DDL","DML","DCL","TCL"
+----
+# Original configuration:
+# test_role "DDL","DML","DCL","TCL"
+#
+# Interpreted configuration:
+# ROLE    STATEMENT_TYPE
+test_role TypeDDL,TypeDML,TypeDCL,TypeTCL
+
+# Single quoted statement types are not recognized.
+line
+test_role 'DDL',DML,DCL,TCL
+----
+error: unknown statement type: "'DDL'" (valid types include: "DDL", "DML", "DCL", "TCL", "ALL", "NONE")
+
+subtest end
+
+subtest special_statement_types
+
+line
+test_role ALL
+----
+# Original configuration:
+# test_role ALL
+#
+# Interpreted configuration:
+# ROLE    STATEMENT_TYPE
+test_role TypeDDL,TypeDML,TypeDCL,TypeTCL
+
+line
+test_role NONE
+----
+# Original configuration:
+# test_role NONE
+#
+# Interpreted configuration:
+# ROLE    STATEMENT_TYPE
+test_role NONE
+
+subtest end
+
+subtest all_role
+
+line
+all DCL,DML
+----
+# Original configuration:
+# all DCL,DML
+#
+# Interpreted configuration:
+# ROLE STATEMENT_TYPE
+all    TypeDCL,TypeDML
+
+subtest end
+
+subtest multiline_entries
+
+# no duplicate role entries
+multiline
+test_role DCL,DML
+test_role ALL
+----
+error: duplicate role listed: test_role
+
+multiline
+test_role ALL
+anotherRole DML,DCL,DDL
+thirddRole "DML","TCL"
+----
+# String render check:
+# Original configuration:
+# test_role ALL
+# anotherRole DML,DCL,DDL
+# thirddRole "DML","TCL"
+#
+# Interpreted configuration:
+# ROLE      STATEMENT_TYPE
+test_role   TypeDDL,TypeDML,TypeDCL,TypeTCL
+anotherrole TypeDML,TypeDCL,TypeDDL
+thirddrole  TypeDML,TypeTCL
+# Detail:
+&auditlogging.AuditConfig{
+    Settings: {
+        {
+            Input:          "test_role ALL",
+            Role:           username.SQLUsername{u:"test_role"},
+            StatementTypes: {-1},
+        },
+        {
+            Input:          "anotherRole DML,DCL,DDL",
+            Role:           username.SQLUsername{u:"anotherrole"},
+            StatementTypes: {1, 2, 0},
+        },
+        {
+            Input:          "thirddRole \"DML\",\"TCL\"",
+            Role:           username.SQLUsername{u:"thirddrole"},
+            StatementTypes: {1, 3},
+        },
+    },
+    SettingsRoleLookup:     {{u:"anotherrole"}:1, {u:"test_role"}:0, {u:"thirddrole"}:2},
+    AllRoleAuditSettingIdx: -1,
+}
+
+# Test ALL role
+multiline
+test_role ALL
+anotherRole DML,DCL,DDL
+all ALL
+thirddRole "DML","TCL"
+----
+# String render check:
+# Original configuration:
+# test_role ALL
+# anotherRole DML,DCL,DDL
+# all ALL
+# thirddRole "DML","TCL"
+#
+# Interpreted configuration:
+# ROLE      STATEMENT_TYPE
+test_role   TypeDDL,TypeDML,TypeDCL,TypeTCL
+anotherrole TypeDML,TypeDCL,TypeDDL
+all         TypeDDL,TypeDML,TypeDCL,TypeTCL
+thirddrole  TypeDML,TypeTCL
+# Detail:
+&auditlogging.AuditConfig{
+    Settings: {
+        {
+            Input:          "test_role ALL",
+            Role:           username.SQLUsername{u:"test_role"},
+            StatementTypes: {-1},
+        },
+        {
+            Input:          "anotherRole DML,DCL,DDL",
+            Role:           username.SQLUsername{u:"anotherrole"},
+            StatementTypes: {1, 2, 0},
+        },
+        {
+            Input:          "all ALL",
+            Role:           username.SQLUsername{u:"all"},
+            StatementTypes: {-1},
+        },
+        {
+            Input:          "thirddRole \"DML\",\"TCL\"",
+            Role:           username.SQLUsername{u:"thirddrole"},
+            StatementTypes: {1, 3},
+        },
+    },
+    SettingsRoleLookup:     {{u:"all"}:2, {u:"anotherrole"}:1, {u:"test_role"}:0, {u:"thirddrole"}:3},
+    AllRoleAuditSettingIdx: 2,
+}
+
+# Test NONE statement types
+multiline
+test_role NONE
+anotherRole DML,DCL,DDL
+thirddRole "DML","TCL"
+all ALL
+----
+# String render check:
+# Original configuration:
+# test_role NONE
+# anotherRole DML,DCL,DDL
+# thirddRole "DML","TCL"
+# all ALL
+#
+# Interpreted configuration:
+# ROLE      STATEMENT_TYPE
+test_role   NONE
+anotherrole TypeDML,TypeDCL,TypeDDL
+thirddrole  TypeDML,TypeTCL
+all         TypeDDL,TypeDML,TypeDCL,TypeTCL
+# Detail:
+&auditlogging.AuditConfig{
+    Settings: {
+        {
+            Input:          "test_role NONE",
+            Role:           username.SQLUsername{u:"test_role"},
+            StatementTypes: {-2},
+        },
+        {
+            Input:          "anotherRole DML,DCL,DDL",
+            Role:           username.SQLUsername{u:"anotherrole"},
+            StatementTypes: {1, 2, 0},
+        },
+        {
+            Input:          "thirddRole \"DML\",\"TCL\"",
+            Role:           username.SQLUsername{u:"thirddrole"},
+            StatementTypes: {1, 3},
+        },
+        {
+            Input:          "all ALL",
+            Role:           username.SQLUsername{u:"all"},
+            StatementTypes: {-1},
+        },
+    },
+    SettingsRoleLookup:     {{u:"all"}:3, {u:"anotherrole"}:1, {u:"test_role"}:0, {u:"thirddrole"}:2},
+    AllRoleAuditSettingIdx: 3,
+}
+
+subtest end
