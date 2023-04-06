@@ -183,8 +183,9 @@ func (c *Controller) Admit(
 		}
 	}
 
-	// TODO(irfansharif): Use the create time for ordering among waiting
-	// requests. Integrate it with epoch-LIFO.
+	// TODO(irfansharif): Use CreateTime for ordering among waiting
+	// requests, integrate it with epoch-LIFO. See I12 from
+	// kvflowcontrol/doc.go.
 }
 
 // DeductTokens is part of the kvflowcontrol.Controller interface.

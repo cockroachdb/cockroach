@@ -98,13 +98,11 @@ type Handle interface {
 	// work with given priority along connected streams. The deduction is
 	// tracked with respect to the specific raft log position it's expecting it
 	// to end up in, log positions that monotonically increase. Requests are
-	// assumed to have been Admit()-ed first. The returned time.Time parameter
-	// is to be used as the work item's CreateTime when enqueueing in IO
-	// admission queues.
+	// assumed to have been Admit()-ed first.
 	DeductTokensFor(
-		context.Context, admissionpb.WorkPriority, time.Time,
+		context.Context, admissionpb.WorkPriority,
 		kvflowcontrolpb.RaftLogPosition, Tokens,
-	) time.Time
+	)
 	// ReturnTokensUpto returns all previously deducted tokens of a given
 	// priority for all log positions less than or equal to the one specified.
 	// It does for the specific stream. Once returned, subsequent attempts to

@@ -156,6 +156,14 @@ var epochLIFOQueueDelayThresholdToSwitchToLIFO = settings.RegisterDurationSettin
 		return nil
 	}).WithPublic()
 
+var rangeSequencerGCThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"admission.replication_control.range_sequencer_gc_threshold",
+	"the inactive duration for a range sequencer after it's garbage collected",
+	5*time.Minute,
+	settings.NonNegativeDuration,
+)
+
 // WorkInfo provides information that is used to order work within an WorkQueue.
 // The WorkKind is not included as a field since an WorkQueue deals with a
 // single WorkKind.
@@ -1773,9 +1781,13 @@ type StoreWorkQueue struct {
 		// and observed L0 growth (which factors in state machine application).
 		stats storeAdmissionStats
 	}
-	stopCh     chan struct{}
-	timeSource timeutil.TimeSource
-	settings   *cluster.Settings
+	sequencersMu struct {
+		syncutil.Mutex
+		s map[roachpb.RangeID]*sequencer // cleaned up periodically
+	}
+	stopCh             chan struct{}
+	timeSource         timeutil.TimeSource
+	settings           *cluster.Settings
 
 	knobs *TestingKnobs
 }
@@ -1823,6 +1835,9 @@ func (q *StoreWorkQueue) Admit(
 		q.mu.RLock()
 		info.RequestedCount = q.mu.estimates.writeTokens
 		q.mu.RUnlock()
+	}
+	if info.ReplicatedWorkInfo.Enabled {
+		info.CreateTime = q.sequenceReplicatedWork(info.CreateTime, info.ReplicatedWorkInfo)
 	}
 
 	enabled, err := q.q[wc].Admit(ctx, info.WorkInfo)
@@ -2042,5 +2057,43 @@ func makeStoreWorkQueue(
 	q.mu.estimates = storeRequestEstimates{
 		writeTokens: 1,
 	}
+
+	q.sequencersMu.s = make(map[roachpb.RangeID]*sequencer)
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				q.gcSequencers()
+			case <-q.stopCh:
+				return
+			}
+		}
+	}()
 	return q
+}
+
+func (q *StoreWorkQueue) gcSequencers() {
+	q.sequencersMu.Lock()
+	defer q.sequencersMu.Unlock()
+
+	for rangeID, seq := range q.sequencersMu.s {
+		maxCreateTime := timeutil.FromUnixNanos(seq.maxCreateTime)
+		if q.timeSource.Now().Sub(maxCreateTime) > rangeSequencerGCThreshold.Get(&q.settings.SV) {
+			delete(q.sequencersMu.s, rangeID)
+		}
+	}
+}
+
+func (q *StoreWorkQueue) sequenceReplicatedWork(createTime int64, info ReplicatedWorkInfo) int64 {
+	q.sequencersMu.Lock()
+	seq, ok := q.sequencersMu.s[info.RangeID]
+	if !ok {
+		seq = &sequencer{}
+		q.sequencersMu.s[info.RangeID] = seq
+	}
+	q.sequencersMu.Unlock()
+	// We're assuming sequenceReplicatedWork is never invoked concurrently for a
+	// given RangeID.
+	return seq.sequence(createTime)
 }
