@@ -205,17 +205,19 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// We're going to be migrating from startCV to endCV.
-	startCV := roachpb.Version{Major: 41}
-	endCV := roachpb.Version{Major: 42}
+	startCVKey := clusterversion.V22_2
+	startCV := clusterversion.ByKey(startCVKey)
+	endCVKey := startCVKey + 1
+	endCV := clusterversion.ByKey(endCVKey)
 
 	var desc roachpb.RangeDescriptor
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			Settings: cluster.MakeTestingClusterSettingsWithVersions(endCV, startCV, false),
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
+					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 					BinaryVersionOverride:          startCV,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
@@ -301,12 +303,12 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// We're going to be migrating from the current version to imaginary future versions.
-	current := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	// We're going to be migrating from the BinaryMinSupportedVersion to imaginary future versions.
+	current := clusterversion.TestingBinaryMinSupportedVersion
 	versions := []roachpb.Version{current}
-	for i := int32(1); i <= 6; i++ {
+	for i := int32(1); i <= 5; i++ {
 		v := current
-		v.Major += i
+		v.Internal += i * 2
 		versions = append(versions, v)
 	}
 
