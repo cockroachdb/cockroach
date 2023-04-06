@@ -36,6 +36,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -251,7 +252,7 @@ func main() {
 						break
 					} else {
 						var stderr []byte
-						if exitErr, ok := err.(*exec.ExitError); ok {
+						if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
 							stderr = exitErr.Stderr
 						}
 						fmt.Printf("bazel query over pkg %s failed; got stdout %s, stderr %s\n", name, string(out), string(stderr))
