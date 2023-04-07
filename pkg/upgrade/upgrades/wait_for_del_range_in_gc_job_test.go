@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,18 +112,31 @@ SELECT count(*)
 	tdb.Exec(t, "SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
 
 	codec := testServer.ExecutorConfig().(sql.ExecutorConfig).Codec
-	{
-		dbFooStart := codec.TablePrefix(dbFooID)
-		res, err := kvDB.Scan(ctx, dbFooStart, dbFooStart.PrefixEnd(), 1)
-		require.NoError(t, err)
-		require.Len(t, res, 0)
-	}
-	{
-		idxStart := codec.IndexPrefix(fooID, idxID)
-		res, err := kvDB.Scan(ctx, idxStart, idxStart.PrefixEnd(), 1)
-		require.NoError(t, err)
-		require.Len(t, res, 0)
-	}
+	testutils.SucceedsSoon(t,
+		func() error {
+			{
+				dbFooStart := codec.TablePrefix(dbFooID)
+				res, err := kvDB.Scan(ctx, dbFooStart, dbFooStart.PrefixEnd(), 1)
+				if err != nil {
+					return err
+				}
+				if len(res) != 0 {
+					return errors.AssertionFailedf("unexpected number of table keys (got %d)", len(res))
+				}
+			}
+			{
+				idxStart := codec.IndexPrefix(fooID, idxID)
+				res, err := kvDB.Scan(ctx, idxStart, idxStart.PrefixEnd(), 1)
+				require.NoError(t, err)
+				if err != nil {
+					return err
+				}
+				if len(res) != 0 {
+					return errors.AssertionFailedf("unexpected number of index keys (got %d)", len(res))
+				}
+			}
+			return nil
+		})
 
 	// Make sure that there is still MVCC history.
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM foo@idx AS OF SYSTEM TIME "+beforeDrop,
