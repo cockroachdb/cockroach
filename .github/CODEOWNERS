@@ -290,6 +290,7 @@
 /pkg/kv/kvserver/apply/                 @cockroachdb/repl-prs
 /pkg/kv/kvserver/asim/                  @cockroachdb/kv-prs
 /pkg/kv/kvserver/batcheval/             @cockroachdb/kv-prs
+/pkg/kv/kvserver/benignerror/           @cockroachdb/kv-prs
 /pkg/kv/kvserver/closedts/              @cockroachdb/repl-prs
 /pkg/kv/kvserver/concurrency/           @cockroachdb/kv-prs
 /pkg/kv/kvserver/constraint/            @cockroachdb/kv-prs
