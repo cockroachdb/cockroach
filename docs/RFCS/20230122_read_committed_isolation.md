@@ -47,14 +47,26 @@ applications and make migrations to CockroachDB easier.
 
 As alluded to above, the main impetus behind the introduction of Read Committed
 is that the isolation level is expected to **ease application migrations**.
+
 Existing applications that were built for Read Committed (the default isolation
 level in many legacy databases, including PostgreSQL) often struggle to move to
 CockroachDB's Serializable isolation level. Doing so requires the introduction
-of transaction retry logic in the application. While this is merely inconvenient
-for new applications, it is often infeasible for existing applications.
-Implementing Read Committed in CockroachDB will allow these applications to
-migrate to CockroachDB without also migrating to a stronger isolation level at
-the same time.
+of transaction retry logic in the application to handle isolation-related
+"serialization" errors. These errors are a consequence of strong isolation
+guarantees. While adding retry logic is merely inconvenient for new
+applications, it is often infeasible for existing applications. Implementing
+Read Committed in CockroachDB will allow these applications to migrate to
+CockroachDB without also migrating to a stronger isolation level at the same
+time.
+
+For much the same reason, applications also struggle to move to CockroachDB
+because they must now tolerate consistency-related "clock uncertainty" errors.
+While not a direct consequence of strong isolation, these errors cannot commonly
+be handled transparently by CockroachDB because of strong isolation guarantees.
+Read Committed's isolation guarantees are weak enough that CockroachDB can
+commonly handle consistency-related retry errors internally without involvement
+from the application, eliminating the other reason for application-side retry
+logic.
 
 Performance-sensitive applications may also prefer Read Committed over
 Serializable. The isolation guarantees made by Read Committed are weak enough
@@ -312,7 +324,8 @@ and these locks are held for the remainder of the transaction.
 
 Foreign key existence checks are an example of such a system-level consistency
 check. Under the hood, PostgreSQL runs a `SELECT FOR SHARE` query that [looks
-like this](https://github.com/postgres/postgres/blob/75f49221c22286104f032827359783aa5f4e6646/src/backend/utils/adt/ri_triggers.c#L363).
+like this](https://github.com/postgres/postgres/blob/75f49221c22286104f032827359783aa5f4e6646/src/backend/utils/adt/ri_triggers.c#L363)
+(specifically, the query uses `SELECT FOR KEY SHARE`).
 
 ### Serialization Failure Handling
 
@@ -491,13 +504,13 @@ each statement boundary, setting their `GlobalUncertaintyLimit` to `hlc.Now() +
 hlc.MaxOffset()` and clearing all `ObservedTimestamps`.
 
 We propose that Read Committed transactions do not do this. The cost of
-resetting a transaction's uncertainty interval is likely greater than the
-benefit. Doing so increases the chance that individual statements retry due to
-`ReadWithinUncertaintyInterval` errors. In the worst case, each statement will
-need to traverse (through retries) an entire uncertainty interval before
-converging to a "certain" read snapshot. While these retries will be scoped to a
-single statement and [should not escape to the client](#transaction-retries),
-they do still have a latency cost.
+resetting a transaction's uncertainty interval on each statement boundary is
+likely greater than the benefit. Doing so increases the chance that individual
+statements retry due to `ReadWithinUncertaintyInterval` errors. In the worst
+case, each statement will need to traverse (through retries) an entire
+uncertainty interval before converging to a "certain" read snapshot. While these
+retries will be scoped to a single statement and [should not escape to the
+client](#transaction-retries), they do still have a latency cost.
 
 We make this decision because we do not expect that applications rely on strong
 consistency guarantees between the commit of one transaction and the start of an
@@ -873,7 +886,7 @@ section applies to uncertainty errors as well.
 #### Retry Avoidance Through Read Refreshes
 
 While a per-statement retry loop limits the cases where isolation and
-consistency related retry errors escape from the SQL executor to the client, it
+consistency-related retry errors escape from the SQL executor to the client, it
 is better if these errors never emerge from the key-value layer in the first
 place. The avoidance of such retry errors is possible in limited but important
 cases through a familiar mechanism: read refreshes.
@@ -1407,11 +1420,14 @@ replicated locks.
 
 `UNIQUE WITHOUT INDEX` checks cannot easily be implemented correctly under Read
 Committed using only row locking, because they depend on the non-existence of a
-span of rows. Initially we will disallow `UNIQUE WITHOUT INDEX` checks under
-Read Committed. Eventually we will allow `UNIQUE WITHOUT INDEX` checks if the
-check can be built using single-row spans (i.e. if there is an index which only
-has enum columns before the `UNIQUE WITHOUT INDEX` columns). This will require
-taking `SELECT FOR SHARE` locks on non-existent rows.
+span of rows. Initially we will disallow the enforcement of `UNIQUE WITHOUT
+INDEX` checks in transactions run under Read Committed, so these transactions
+will be unable to insert into tables with this form of constraint. Consequently,
+`REGIONAL BY ROW` tables will be inaccessible to Read Committed transactions in
+the initial preview. Eventually we will allow `UNIQUE WITHOUT INDEX` checks if
+the check can be built using single-row spans (i.e. if there is an index which
+only has enum columns before the `UNIQUE WITHOUT INDEX` columns). This will
+require taking `SELECT FOR SHARE` locks on non-existent rows.
 
 `CHECK` constraint checks will have to acquire `SELECT FOR SHARE` locks on any
 unmodified column families if the constraint references multiple column
@@ -1572,13 +1588,20 @@ ERROR:  a snapshot-importing transaction must have isolation level SERIALIZABLE 
 
 Proscribing `AS OF SYSTEM TIME` in Read Committed transactions would cause
 confusion and inconvenience for users of CockroachDB, especially when attempting
-to use follower reads. Instead of banning it, the syntax will be accepted and
-the transaction will be promoted to a read-only, Serializable transaction[^6]
-with the specified fixed read timestamp across all statements, which matches the
-user's intent. Such transactions are not subject to retry errors.
+to use follower reads. Instead of banning it, the syntax will be accepted in
+`BEGIN` and `SET` statements and the transaction will be promoted to a
+read-only, Serializable transaction[^6] with the specified fixed read timestamp
+across all statements, which matches the user's intent. Such transactions are
+not subject to retry errors.
 
 [^6]: read-only, Serializable isolation transactions are equivalent to
     read-only, Snapshot isolation transactions.
+
+As an extension, the syntax can also be accepted on individual `SELECT`
+statements in a Read Committed transaction. This will instruct the transaction
+to run the individual statement at the specified fixed read timestamp. The
+utility of this may be limited, but the behavior matches expectations of Read
+Committed transactions.
 
 ### With Non-Standard SELECT FOR UPDATE Wait Policies
 
@@ -1706,7 +1729,24 @@ twelve post-workload consistency checks.
 
 Finally, existing workloads that run against Read Committed in other DBMS
 systems will be solicited from customers. Where possible, these will be run
-against CockroachDB's implementation of Read Committed to
+against CockroachDB's implementation of Read Committed to validate correctness,
+sufficient completeness of the Read Committed implementation, and expected
+properties like no retry errors and non-blocking reads.
+
+# Performance
+
+TODO(nvanbenschoten): from @bdarnell:
+> I'd like to see a section on performance. There are a number of ways that this
+> proposal affects performance, both good (less wasted work doing retries, no
+> pre-commit span refreshes), and bad (lock replication, savepoint overhead,
+> explicit locks for FK checks). Aside from the correctness concerns, how can we
+> characterize the net expected performance of the two isolation levels?
+>
+> There are also more subtle performance-related risks: Many applications have
+> isolation-related bugs that go undetected because the app simply doesn't get
+> enough traffic to hit the necessary race conditions. If your sub-millisecond
+> operations suddenly start to take longer because foreign key checks now
+> involve multiple RPCs, these latent bugs may be exposed.
 
 # Variation from PostgreSQL
 
@@ -1748,7 +1788,7 @@ well-informed decisions about the performance/correctness trade-off.
 
 # Unresolved questions
 
-## Should we implement Snapshot isolation (REPEATABLE READ) at the same time?
+## Should we implement Snapshot isolation at the same time?
 
 As alluded to in this proposal, the changes needed to implement Snapshot
 isolation are contained within the changes needed to implement Read Committed.
@@ -1761,6 +1801,18 @@ We propose not to expose this isolation level immediately to keep engineering
 efforts focused and to reduce the scope of testing work needed to gain
 confidence in these changes. Still, we note that doing so will be a small lift
 if/when we decide that such an isolation level is needed.
+
+## If we implement Snapshot isolation, should we call it Repeatable Read?
+
+Strictly speaking, the two isolation levels are not the same. Repeatable Read
+(PL-2.99 in Adya) permits Phantom Reads but does not permit Write Skew. Snapshot
+isolation (PL-SI in Adya) does not permit Phantom Reads but does permit Write
+Skew.
+
+However, there is ample precedent for conflating the two with minimal concern.
+Chiefly, PostgreSQL itself implements a form of Snapshot isolation and calls it
+Repeatable Read to remain ANSI SQL compliant. Therefore, if we decide to
+implement Snapshot isolation, we propose that we also call it Repeatable Read.
 
 ## Should Read Committed become the new default isolation level in CockroachDB?
 
