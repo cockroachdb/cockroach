@@ -942,9 +942,6 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.descriptor": {
-		// `descriptor` column can contain customer-supplied default values
-		// for columns, e.g. `column_name STRING DEFAULT 'some value'`
-		nonSensitiveCols: NonSensitiveColumns{"id"},
 		customQueryUnredacted: `SELECT
 				id,
 				descriptor,
@@ -976,26 +973,24 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.jobs": {
-		// `payload` column may contain customer info, such as URI params
+		// NB: `payload` column may contain customer info, such as URI params
 		// containing access keys, encryption salts, etc.
-		nonSensitiveCols: NonSensitiveColumns{
-			"id",
-			"status",
-			"created",
-			"progress",
-			"created_by_type",
-			"created_by_id",
-			"claim_session_id",
-			"claim_instance_id",
-			"num_runs",
-			"last_run",
-		},
 		customQueryUnredacted: `SELECT *, 
 			to_hex(payload) AS hex_payload, 
 			to_hex(progress) AS hex_progress 
 			FROM system.jobs`,
-		customQueryRedacted: `SELECT *,
-			NULL AS hex_payload,
+		customQueryRedacted: `SELECT id,
+			status,
+			created,
+			'<redacted>' as payload,
+			progress,
+			created_by_type,
+			created_by_id,
+			claim_session_id,
+			claim_instance_id,
+			num_runs,
+			last_run,
+			'<redacted>' AS hex_payload,
 			to_hex(progress) AS hex_progress
 			FROM system.jobs`,
 	},

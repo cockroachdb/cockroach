@@ -103,3 +103,34 @@ func TestNoForbiddenSystemTablesInDebugZip(t *testing.T) {
 		assert.Equal(t, fmt.Sprintf("no entry found in table registry for: %s", forbiddenTable), err.Error())
 	}
 }
+
+func TestNoNonSensitiveColsAndCustomRedactedQueries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	errFmtString := `FAILURE: The debug zip TableRegistryConfig for table %q
+contains both a custom redacted query (customQueryRedacted) AND a list of
+non sensitive columns (nonSensitiveCols). customQueryRedacted will ALWAYS
+be used in place of nonSensitiveCols if defined, so please remove the
+nonSensitiveCols. PLEASE be sure that NONE of the columns outside of those
+listed in nonSensitiveCols have leaked into your customQueryRedacted, as 
+this would be a PCI leak. If any columns in your customQueryRedacted were 
+NOT already listed in nonSensitiveCols, you MUST confirm with the compliance 
+team that these columns are acceptable to reveal in an unredacted manner, or
+you must redact them at the SQL level.`
+	for table, regConfig := range zipInternalTablesPerCluster {
+		if regConfig.customQueryRedacted != "" && len(regConfig.nonSensitiveCols) > 0 {
+			t.Fatalf(errFmtString, table)
+		}
+	}
+
+	for table, regConfig := range zipInternalTablesPerNode {
+		if regConfig.customQueryRedacted != "" && len(regConfig.nonSensitiveCols) > 0 {
+			t.Fatalf(errFmtString, table)
+		}
+	}
+
+	for table, regConfig := range zipSystemTables {
+		if regConfig.customQueryRedacted != "" && len(regConfig.nonSensitiveCols) > 0 {
+			t.Fatalf(errFmtString, table)
+		}
+	}
+}
