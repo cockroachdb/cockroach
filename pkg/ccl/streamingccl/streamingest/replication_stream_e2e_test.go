@@ -731,6 +731,57 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	require.Greater(t, len(clientAddresses), 1)
 }
 
+// TestStreamingAutoReplan asserts that if a new node can participate in the
+// replication job, it will be added to the job during dist sql replanning.
+func TestStreamingAutoReplan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStress(t, `Fails in CI likely due to issues tackled in https://github.com/cockroachdb/cockroach/pull/102476`)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.SrcNumNodes = 1
+	args.DestNumNodes = 1
+
+	// Track the number of unique addresses that were connected to
+	clientAddresses := make(map[string]struct{})
+	var addressesMu syncutil.Mutex
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
+			addressesMu.Lock()
+			defer addressesMu.Unlock()
+			clientAddresses[addr] = struct{}{}
+		},
+	}
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*100)
+
+	// Begin the job a single source node.
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+	require.Equal(t, len(clientAddresses), 1)
+
+	// Add 2 source nodes to enable full replication.
+	c.SrcCluster.AddAndStartServer(c.T, replicationtestutils.GetServerArgs(c.Args))
+	c.SrcCluster.AddAndStartServer(c.T, replicationtestutils.GetServerArgs(c.Args))
+	require.NoError(t, c.SrcCluster.WaitForFullReplication())
+
+	replicationtestutils.CreateScatteredTable(t, c, 3)
+
+	cutoverTime := c.DestSysServer.Clock().Now()
+	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
+	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
+
+	// After the node additions, multiple nodes should've been connected to.
+	require.Greater(t, len(clientAddresses), 1)
+}
+
 // TestTenantReplicationProtectedTimestampManagement tests the active protected
 // timestamps management on the destination tenant's keyspan.
 func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
