@@ -707,7 +707,7 @@ message LeafTxnInputState {
   // Current read seqnum. When stepping_mode_enabled is true,
   // this field becomes the sequence number used for reads,
   // regardless of the current seqnum generated for writes. This is
-  // updated via the (client.TxnSender).Step() operation.
+  // updated via the (kv.TxnSender).Step() operation.
   int32 read_seq_num = 10 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
 }

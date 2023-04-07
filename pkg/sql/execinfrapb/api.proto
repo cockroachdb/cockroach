@@ -32,7 +32,7 @@ message SetupFlowRequest {
   optional util.tracing.tracingpb.TraceInfo trace_info = 11;
   optional string job_tag = 13 [(gogoproto.nullable) = false];
 
-  // LeafTxnInputState is the input parameter for the *client.Txn needed for
+  // LeafTxnInputState is the input parameter for the *kv.Txn needed for
   // executing the flow.
   // If nil, the flow will not run in a higher-level transaction
   // (i.e. it is responsible for managing its own transactions, if any). Most

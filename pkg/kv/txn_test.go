@@ -61,14 +61,14 @@ func TestTxnVerboseTrace(t *testing.T) {
 	dump := collectedSpans.String()
 	// dump:
 	//    0.105ms      0.000ms    event:inside txn
-	//    0.275ms      0.171ms    event:client.Txn did AutoCommit. err: <nil>
+	//    0.275ms      0.171ms    event:kv.Txn did AutoCommit. err: <nil>
 	//    0.278ms      0.173ms    event:txn complete
 	found, err := regexp.MatchString(
 		// The (?s) makes "." match \n. This makes the test resilient to other log
 		// lines being interspersed.
 		`(?s)`+
 			`.*event:[^:]*:\d+ inside txn\n`+
-			`.*event:[^:]*:\d+ client\.Txn did AutoCommit\. err: <nil>\n`+
+			`.*event:[^:]*:\d+ kv\.Txn did AutoCommit\. err: <nil>\n`+
 			`.*event:[^:]*:\d+ txn complete.*`,
 		dump)
 	if err != nil {
