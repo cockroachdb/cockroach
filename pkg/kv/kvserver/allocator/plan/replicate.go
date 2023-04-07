@@ -95,7 +95,7 @@ type AllocatorReplica interface {
 	LeaseCheckReplica
 	RangeUsageInfo() allocator.RangeUsageInfo
 	RaftStatus() *raft.Status
-	GetFirstIndex() uint64
+	GetFirstIndex() kvpb.RaftIndex
 	LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 	StoreID() roachpb.StoreID
 	DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
