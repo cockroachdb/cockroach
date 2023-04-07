@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -633,7 +634,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							ReplicaPlannerKnobs: kvserver.ReplicaPlannerTestingKnobs{
+							ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
 								DisableReplicaRebalancing: true,
 							},
 						},
@@ -1048,7 +1049,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 					ScanMaxIdleTime: time.Millisecond,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							ReplicaPlannerKnobs: kvserver.ReplicaPlannerTestingKnobs{
+							ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
 								DisableReplicaRebalancing: true,
 							},
 						},
@@ -1267,7 +1268,7 @@ func TestReplicateQueueMetrics(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					ReplicaPlannerKnobs: kvserver.ReplicaPlannerTestingKnobs{
+					ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
 						DisableReplicaRebalancing: true,
 					},
 				},
