@@ -222,10 +222,7 @@ func waitForTenantPodsActive(
 	}, 10*time.Second)
 }
 
-func CreateTenantStreamingClusters(
-	ctx context.Context, t *testing.T, args TenantStreamingClustersArgs,
-) (*TenantStreamingClusters, func()) {
-
+func CreateServerArgs(args TenantStreamingClustersArgs) base.TestServerArgs {
 	if args.TestingKnobs != nil && args.TestingKnobs.DistSQLRetryPolicy == nil {
 		args.TestingKnobs.DistSQLRetryPolicy = &retry.Options{
 			InitialBackoff: time.Microsecond,
@@ -234,7 +231,7 @@ func CreateTenantStreamingClusters(
 			MaxRetries:     TestingMaxDistSQLRetries,
 		}
 	}
-	serverArgs := base.TestServerArgs{
+	return base.TestServerArgs{
 		// Test fails because it tries to set a cluster setting only accessible
 		// to system tenants. Tracked with #76378.
 		DefaultTestTenant: base.TestTenantDisabled,
@@ -252,6 +249,12 @@ func CreateTenantStreamingClusters(
 			},
 		},
 	}
+}
+
+func CreateTenantStreamingClusters(
+	ctx context.Context, t *testing.T, args TenantStreamingClustersArgs,
+) (*TenantStreamingClusters, func()) {
+	serverArgs := CreateServerArgs(args)
 
 	startTestCluster := func(
 		ctx context.Context,

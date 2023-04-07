@@ -708,6 +708,87 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	require.Greater(t, len(clientAddresses), 1)
 }
 
+// TestStreamingAutoReplan asserts that if a new node can participate in the
+// replication job, it will trigger distSQL replanning.
+func TestStreamingAutoReplan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "c2c multi node unit tests flake under stress race. see #106194")
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.SrcNumNodes = 1
+	args.DestNumNodes = 1
+
+	retryErrorChan := make(chan error)
+	turnOffReplanning := make(chan struct{})
+
+	// Track the number of unique addresses that we're connected to.
+	clientAddresses := make(map[string]struct{})
+	var addressesMu syncutil.Mutex
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
+			addressesMu.Lock()
+			defer addressesMu.Unlock()
+			clientAddresses[addr] = struct{}{}
+		},
+		AfterRetryIteration: func(err error) {
+			if err != nil {
+				retryErrorChan <- err
+				<-turnOffReplanning
+			}
+		},
+	}
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0.1)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
+
+	// Begin the job on a single source node.
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+	require.Equal(t, len(clientAddresses), 1)
+
+	// Add 2 source nodes to enable full replication.
+	c.SrcCluster.AddAndStartServer(c.T, replicationtestutils.CreateServerArgs(c.Args))
+	c.SrcCluster.AddAndStartServer(c.T, replicationtestutils.CreateServerArgs(c.Args))
+	require.NoError(t, c.SrcCluster.WaitForFullReplication())
+
+	replicationtestutils.CreateScatteredTable(t, c, 3)
+	require.NoError(t, c.SrcCluster.WaitForFullReplication())
+
+	// The ingestion job should eventually retry because it detects new nodes to add to the plan.
+	require.Error(t, <-retryErrorChan, sql.ErrPlanChanged)
+
+	// Prevent continuous replanning to reduce test runtime. dsp.PartitionSpans()
+	// on the src cluster may return a different set of src nodes that can
+	// participate in the replication job (especially under stress), so if we
+	// repeatedly replan the job, we will repeatedly restart the job, preventing
+	// job progress.
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Minute*10)
+	close(turnOffReplanning)
+
+	cutoverTime := c.DestSysServer.Clock().Now()
+	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
+
+	// After the node additions, multiple nodes should've been connected to. When
+	// this test is run under stress, however, dsp.PartitionSpans() on the src
+	// cluster does not always return multiple src nodes that can participate in
+	// the replication job, therefore, under stress, do not require that multiple
+	// nodes participate from the src cluster. This potentially occurs because cpu
+	// contention renders a test server "unhealthy". In general, running two
+	// multinode 2 clusters makes everything messy.
+	if !skip.Stress() {
+		require.Greater(t, len(clientAddresses), 1)
+	}
+}
+
 // TestTenantReplicationProtectedTimestampManagement tests the active protected
 // timestamps management on the destination tenant's keyspan.
 func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
