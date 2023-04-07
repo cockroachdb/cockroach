@@ -8778,7 +8778,10 @@ func BenchmarkMVCCGCWithForegroundTraffic(b *testing.B) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(ctx, b, stopper)
+	sc := TestStoreConfig(nil)
+	sc.TestingKnobs.DisableCanAckBeforeApplication = true
+	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
+	tc.StartWithStoreConfig(ctx, b, stopper, sc)
 
 	key := roachpb.Key("test")
 
@@ -8790,7 +8793,7 @@ func BenchmarkMVCCGCWithForegroundTraffic(b *testing.B) {
 		ba.Header = header
 		ba.Add(args)
 		resp, err := tc.Sender().Send(ctx, ba)
-		require.Nil(b, err)
+		require.Nil(b, err, "%+v", err)
 		return resp
 	}
 
