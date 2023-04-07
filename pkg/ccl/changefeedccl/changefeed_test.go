@@ -92,6 +92,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randident"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -8432,4 +8433,44 @@ func TestChangefeedExecLocality(t *testing.T) {
 	test(t, "all", "", []bool{true, true, true, true})
 	test(t, "x", "x=0", []bool{true, true, false, false})
 	test(t, "y", "y=1", []bool{false, true, false, true})
+}
+
+func TestChangefeedTopicNames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		rand, _ := randutil.NewTestRand()
+		cfg := randident.DefaultNameGeneratorConfig()
+		cfg.Noise = true
+		cfg.Finalize()
+		ng := randident.NewNameGenerator(&cfg, rand, "table")
+
+		names, _ := ng.GenerateMultiple(context.Background(), 100, make(map[string]struct{}))
+
+		var escapedNames []string
+		for _, name := range names {
+			escapedNames = append(escapedNames, strings.ReplaceAll(name, `"`, `""`))
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		for _, name := range escapedNames {
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE "%s" (a INT PRIMARY KEY);`, name))
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO "%s" VALUES (1);`, name))
+		}
+
+		var quotedNames []string
+		for _, name := range escapedNames {
+			quotedNames = append(quotedNames, "\""+name+"\"")
+		}
+		createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR %s`, strings.Join(quotedNames, ", "))
+		foo := feed(t, f, createStmt)
+		defer closeFeed(t, foo)
+
+		var expected []string
+		for _, name := range names {
+			expected = append(expected, fmt.Sprintf(`%s: [1]->{"after": {"a": 1}}`, name))
+		}
+		assertPayloads(t, foo, expected)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
 }

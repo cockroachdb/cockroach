@@ -771,7 +771,7 @@ func TestSinkConfigParsing(t *testing.T) {
 
 	t.Run("handles valid types", func(t *testing.T) {
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"Messages": 1234, "Frequency": "3s", "Bytes":30}, "Retry": {"Max": 5, "Backoff": "3h"}}`)
-		batch, retry, err := getSinkConfigFromJson(opts)
+		batch, retry, err := getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.NoError(t, err)
 		require.Equal(t, batch, sinkBatchConfig{
 			Bytes:     30,
@@ -783,7 +783,7 @@ func TestSinkConfigParsing(t *testing.T) {
 
 		// Max accepts both values and specifically the string "inf"
 		opts = changefeedbase.SinkSpecificJSONConfig(`{"Retry": {"Max": "inf"}}`)
-		_, retry, err = getSinkConfigFromJson(opts)
+		_, retry, err = getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.NoError(t, err)
 		require.Equal(t, retry.MaxRetries, 0)
 	})
@@ -792,14 +792,14 @@ func TestSinkConfigParsing(t *testing.T) {
 		defaultRetry := defaultRetryConfig()
 
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"Messages": 1234, "Frequency": "3s"}}`)
-		_, retry, err := getSinkConfigFromJson(opts)
+		_, retry, err := getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.NoError(t, err)
 
 		require.Equal(t, retry.MaxRetries, defaultRetry.MaxRetries)
 		require.Equal(t, retry.InitialBackoff, defaultRetry.InitialBackoff)
 
 		opts = changefeedbase.SinkSpecificJSONConfig(`{"Retry": {"Max": "inf"}}`)
-		_, retry, err = getSinkConfigFromJson(opts)
+		_, retry, err = getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.NoError(t, err)
 		require.Equal(t, retry.MaxRetries, 0)
 		require.Equal(t, retry.InitialBackoff, defaultRetry.InitialBackoff)
@@ -807,43 +807,43 @@ func TestSinkConfigParsing(t *testing.T) {
 
 	t.Run("errors on invalid configuration", func(t *testing.T) {
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"Messages": -1234, "Frequency": "3s"}}`)
-		_, _, err := getSinkConfigFromJson(opts)
+		_, _, err := getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.ErrorContains(t, err, "invalid sink config, all values must be non-negative")
 
 		opts = changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"Messages": 1234, "Frequency": "-3s"}}`)
-		_, _, err = getSinkConfigFromJson(opts)
+		_, _, err = getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.ErrorContains(t, err, "invalid sink config, all values must be non-negative")
 
 		opts = changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"Messages": 10}}`)
-		_, _, err = getSinkConfigFromJson(opts)
+		_, _, err = getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.ErrorContains(t, err, "invalid sink config, Flush.Frequency is not set, messages may never be sent")
 	})
 
 	t.Run("errors on invalid type", func(t *testing.T) {
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"Messages": "1234", "Frequency": "3s", "Bytes":30}}`)
-		_, _, err := getSinkConfigFromJson(opts)
+		_, _, err := getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.ErrorContains(t, err, "Flush.Messages of type int")
 
 		opts = changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"Messages": 1234, "Frequency": "3s", "Bytes":"30"}}`)
-		_, _, err = getSinkConfigFromJson(opts)
+		_, _, err = getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.ErrorContains(t, err, "Flush.Bytes of type int")
 
 		opts = changefeedbase.SinkSpecificJSONConfig(`{"Retry": {"Max": true}}`)
-		_, _, err = getSinkConfigFromJson(opts)
+		_, _, err = getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.ErrorContains(t, err, "Retry.Max must be either a positive int or 'inf'")
 
 		opts = changefeedbase.SinkSpecificJSONConfig(`{"Retry": {"Max": "not-inf"}}`)
-		_, _, err = getSinkConfigFromJson(opts)
+		_, _, err = getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.ErrorContains(t, err, "Retry.Max must be either a positive int or 'inf'")
 	})
 
 	t.Run("errors on malformed json", func(t *testing.T) {
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"Messages": 1234 "Frequency": "3s"}}`)
-		_, _, err := getSinkConfigFromJson(opts)
+		_, _, err := getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.ErrorContains(t, err, "invalid character '\"'")
 
 		opts = changefeedbase.SinkSpecificJSONConfig(`string`)
-		_, _, err = getSinkConfigFromJson(opts)
+		_, _, err = getSinkConfigFromJson(opts, sinkJSONConfig{})
 		require.ErrorContains(t, err, "invalid character 's' looking for beginning of value")
 	})
 }
