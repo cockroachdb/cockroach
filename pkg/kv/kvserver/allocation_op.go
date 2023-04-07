@@ -23,68 +23,55 @@ import (
 //
 // TODO(kvoli): Add AllocationRelocateRangeOp.
 type AllocationOp interface {
-	// trackPlanningMetrics tracks the metrics that have been generated in
-	// creating this operation.
-	trackPlanningMetrics()
-	// applyImpact updates the given storepool to reflect the result of
+	// ApplyImpact updates the given storepool to reflect the result of
 	// applying this operation.
-	applyImpact(storepool storepool.AllocatorStorePool)
-	// lhBeingRemoved returns true when the leaseholder is will be removed if
+	ApplyImpact(storepool storepool.AllocatorStorePool)
+	// LHBeingRemoved returns true when the leaseholder is will be removed if
 	// this operation succeeds, otherwise false.
-	lhBeingRemoved() bool
+	LHBeingRemoved() bool
 }
 
 // AllocationTransferLeaseOp represents an operation to transfer a range lease to another
 // store, from the current one.
 type AllocationTransferLeaseOp struct {
-	target, source     roachpb.StoreID
-	usage              allocator.RangeUsageInfo
+	Target, Source     roachpb.StoreID
+	Usage              allocator.RangeUsageInfo
 	bypassSafetyChecks bool
-	sideEffects        func()
 }
 
 var _ AllocationOp = &AllocationTransferLeaseOp{}
 
-// lhBeingRemoved returns true when the leaseholder is will be removed if this
+// LHBeingRemoved returns true when the leaseholder is will be removed if this
 // operation succeeds, otherwise false. This is always true for lease
 // transfers.
-func (o AllocationTransferLeaseOp) lhBeingRemoved() bool {
+func (o AllocationTransferLeaseOp) LHBeingRemoved() bool {
 	return true
 }
 
-func (o AllocationTransferLeaseOp) applyImpact(storepool storepool.AllocatorStorePool) {
+func (o AllocationTransferLeaseOp) ApplyImpact(storepool storepool.AllocatorStorePool) {
 	// TODO(kvoli): Currently the local storepool is updated directly in the
 	// lease transfer call, rather than in this function. Move the storepool
 	// tracking from rq.TransferLease to this function once #89771 is merged.
 }
 
-// trackPlanningMetrics tracks the metrics that have been generated in creating
-// this operation.
-func (o AllocationTransferLeaseOp) trackPlanningMetrics() {
-	if o.sideEffects != nil {
-		o.sideEffects()
-	}
-}
-
 // AllocationChangeReplicasOp represents an operation to execute a change
 // replicas txn.
 type AllocationChangeReplicasOp struct {
-	usage             allocator.RangeUsageInfo
+	Usage             allocator.RangeUsageInfo
 	lhStore           roachpb.StoreID
-	chgs              kvpb.ReplicationChanges
-	priority          kvserverpb.SnapshotRequest_Priority
-	allocatorPriority float64
-	reason            kvserverpb.RangeLogEventReason
-	details           string
-	sideEffects       func()
+	Chgs              kvpb.ReplicationChanges
+	Priority          kvserverpb.SnapshotRequest_Priority
+	AllocatorPriority float64
+	Reason            kvserverpb.RangeLogEventReason
+	Details           string
 }
 
 var _ AllocationOp = &AllocationChangeReplicasOp{}
 
-// lhBeingRemoved returns true when the voter removals for this change replicas
+// LHBeingRemoved returns true when the voter removals for this change replicas
 // operation includes the leaseholder store.
-func (o AllocationChangeReplicasOp) lhBeingRemoved() bool {
-	for _, chg := range o.chgs.VoterRemovals() {
+func (o AllocationChangeReplicasOp) LHBeingRemoved() bool {
+	for _, chg := range o.Chgs.VoterRemovals() {
 		if chg.StoreID == o.lhStore {
 			return true
 		}
@@ -94,17 +81,9 @@ func (o AllocationChangeReplicasOp) lhBeingRemoved() bool {
 
 // applyEstimatedImpact updates the given storepool to reflect the result
 // of applying this operation.
-func (o AllocationChangeReplicasOp) applyImpact(storepool storepool.AllocatorStorePool) {
-	for _, chg := range o.chgs {
-		storepool.UpdateLocalStoreAfterRebalance(chg.Target.StoreID, o.usage, chg.ChangeType)
-	}
-}
-
-// trackPlanningMetrics tracks the metrics that have been generated in creating
-// this operation.
-func (o AllocationChangeReplicasOp) trackPlanningMetrics() {
-	if o.sideEffects != nil {
-		o.sideEffects()
+func (o AllocationChangeReplicasOp) ApplyImpact(storepool storepool.AllocatorStorePool) {
+	for _, chg := range o.Chgs {
+		storepool.UpdateLocalStoreAfterRebalance(chg.Target.StoreID, o.Usage, chg.ChangeType)
 	}
 }
 
@@ -116,42 +95,13 @@ var _ AllocationOp = &AllocationFinalizeAtomicReplicationOp{}
 
 // TODO(kvoli): This always returns false, however it is possible that the LH
 // may have been removed here.
-func (o AllocationFinalizeAtomicReplicationOp) lhBeingRemoved() bool                               { return false }
-func (o AllocationFinalizeAtomicReplicationOp) applyImpact(storepool storepool.AllocatorStorePool) {}
-func (o AllocationFinalizeAtomicReplicationOp) trackPlanningMetrics()                              {}
+func (o AllocationFinalizeAtomicReplicationOp) LHBeingRemoved() bool                               { return false }
+func (o AllocationFinalizeAtomicReplicationOp) ApplyImpact(storepool storepool.AllocatorStorePool) {}
 
 // AllocationNoop represents no operation.
 type AllocationNoop struct{}
 
 var _ AllocationOp = &AllocationNoop{}
 
-func (o AllocationNoop) lhBeingRemoved() bool                               { return false }
-func (o AllocationNoop) applyImpact(storepool storepool.AllocatorStorePool) {}
-func (o AllocationNoop) trackPlanningMetrics()                              {}
-
-// effectBuilder is a utility struct to track a list of effects, which may be
-// used to construct a single effect function that in turn calls all tracked
-// effects.
-type effectBuilder struct {
-	e []func()
-}
-
-// add appends an effect to be rolled into a single effect when calling f().
-// The return value of this function must be used.
-func (b effectBuilder) add(effect func()) effectBuilder {
-	b.e = append(b.e, effect)
-	return b
-}
-
-func (b effectBuilder) f() func() {
-	// NB: Avoid heap allocations when not necessary.
-	if len(b.e) == 0 {
-		return func() {}
-	}
-
-	return func() {
-		for _, effect := range b.e {
-			effect()
-		}
-	}
-}
+func (o AllocationNoop) LHBeingRemoved() bool                               { return false }
+func (o AllocationNoop) ApplyImpact(storepool storepool.AllocatorStorePool) {}

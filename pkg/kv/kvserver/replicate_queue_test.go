@@ -633,7 +633,9 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							DisableReplicaRebalancing: true,
+							ReplicaPlannerKnobs: kvserver.ReplicaPlannerTestingKnobs{
+								DisableReplicaRebalancing: true,
+							},
 						},
 						SpanConfig: &spanconfig.TestingKnobs{
 							ConfigureScratchRange: true,
@@ -1046,7 +1048,9 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 					ScanMaxIdleTime: time.Millisecond,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							DisableReplicaRebalancing: true,
+							ReplicaPlannerKnobs: kvserver.ReplicaPlannerTestingKnobs{
+								DisableReplicaRebalancing: true,
+							},
 						},
 						SpanConfig: &spanconfig.TestingKnobs{
 							ConfigureScratchRange: true,
@@ -1263,7 +1267,9 @@ func TestReplicateQueueMetrics(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					DisableReplicaRebalancing: true,
+					ReplicaPlannerKnobs: kvserver.ReplicaPlannerTestingKnobs{
+						DisableReplicaRebalancing: true,
+					},
 				},
 			},
 		},
