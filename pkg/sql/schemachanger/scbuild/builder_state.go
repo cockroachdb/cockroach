@@ -69,17 +69,13 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 			// Ignore targets to remove something that doesn't exist yet.
 			return
 		}
-		es := elementState{
+		b.addNewElementState(elementState{
 			element:  e,
 			initial:  scpb.Status_ABSENT,
 			current:  scpb.Status_ABSENT,
 			target:   target,
 			metadata: meta,
-		}
-		if err := b.localMemAcc.Grow(b.ctx, es.byteSize()); err != nil {
-			panic(err)
-		}
-		b.addNewElementState(es)
+		})
 		return
 	}
 	// At this point, we're setting a new target to an existing element.
@@ -150,6 +146,17 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	panic(errors.AssertionFailedf("unsupported incumbent target %s", oldTarget.Status()))
 }
 
+func (b *builderState) upsertElementState(es elementState) {
+	if existing := b.getExistingElementState(es.element); existing != nil {
+		if err := b.localMemAcc.Grow(b.ctx, es.byteSize()-existing.byteSize()); err != nil {
+			panic(err)
+		}
+		*existing = es
+	} else {
+		b.addNewElementState(es)
+	}
+}
+
 func (b *builderState) getExistingElementState(e scpb.Element) *elementState {
 	if e == nil {
 		panic(errors.AssertionFailedf("cannot define target for nil element"))
@@ -172,6 +179,9 @@ func (b *builderState) getExistingElementState(e scpb.Element) *elementState {
 }
 
 func (b *builderState) addNewElementState(es elementState) {
+	if err := b.localMemAcc.Grow(b.ctx, es.byteSize()); err != nil {
+		panic(err)
+	}
 	id := screl.GetDescID(es.element)
 	key := screl.ElementString(es.element)
 	c := b.descCache[id]
@@ -1212,16 +1222,12 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 		return b.readDescriptor(id)
 	}
 	visitorFn := func(status scpb.Status, e scpb.Element) {
-		es := elementState{
+		b.addNewElementState(elementState{
 			element: e,
 			initial: status,
 			current: status,
 			target:  scpb.AsTargetStatus(status),
-		}
-		if err := b.localMemAcc.Grow(b.ctx, es.byteSize()); err != nil {
-			panic(err)
-		}
-		b.addNewElementState(es)
+		})
 	}
 
 	c.backrefs = scdecomp.WalkDescriptor(b.ctx, c.desc, crossRefLookupFn, visitorFn,
