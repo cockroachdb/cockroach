@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -164,7 +165,7 @@ func run(
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
 			for i := range stmts {
-				output, err = scbuild.Build(ctx, deps, output, stmts[i].AST)
+				output, err = scbuild.Build(ctx, deps, output, stmts[i].AST, nil /* memAcc */)
 				require.NoErrorf(t, err, "%s: %s", d.Pos, stmts[i].SQL)
 			}
 		})
@@ -177,7 +178,7 @@ func run(
 			require.NotEmpty(t, stmts)
 
 			for _, stmt := range stmts {
-				_, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, stmt.AST)
+				_, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, stmt.AST, nil /* memAcc */)
 				expected := scerrors.NotImplementedError(nil)
 				require.Errorf(t, err, "%s: expected %T instead of success for", stmt.SQL, expected)
 				require.Truef(t, scerrors.HasNotImplemented(err), "%s: expected %T instead of %v", stmt.SQL, expected, err)
@@ -275,4 +276,23 @@ func walkYaml(root *yaml.Node, f func(node *yaml.Node)) {
 		}
 	}
 	walk(root)
+}
+
+// TestBuildIsMemoryMonitored tests that the build function is properly
+// memory monitored.
+// Such monitoring is important to prevent OOM in the builder as it can
+// take up a lot of memory for certain DDL statement (e.g. dropping a
+// database with tens of thousands of tables in it).
+func TestBuildIsMemoryMonitored(t *testing.T) {
+	params, _ := tests.CreateTestServerParams()
+	params.SQLMemoryPoolSize = 1.049e+7 /* 10MiB */
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, `use defaultdb;`)
+	tdb.Exec(t, `select crdb_internal.generate_test_objects('test',  5000);`)
+	tdb.Exec(t, `use system;`)
+	_, err := db.Exec(`DROP DATABASE defaultdb CASCADE;`)
+	require.Regexp(t, `pq: root: memory budget exceeded: .*`, err.Error())
 }
