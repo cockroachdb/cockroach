@@ -94,12 +94,6 @@ var upgrades = []upgradebase.Upgrade{
 		"create default databases", // v22_2StartupMigrationName
 	),
 	upgrade.NewTenantUpgrade(
-		"ensure preconditions are met before starting upgrading to v22.2",
-		toCV(clusterversion.TODODelete_V22_2Start),
-		preconditionBeforeStartingAnUpgrade,
-		NoTenantUpgradeFunc,
-	),
-	upgrade.NewTenantUpgrade(
 		"update system.statement_diagnostics_requests to support sampling probabilities",
 		toCV(clusterversion.TODODelete_V22_2SampledStmtDiagReqs),
 		upgrade.NoPrecondition,
@@ -122,11 +116,6 @@ var upgrades = []upgradebase.Upgrade{
 		toCV(clusterversion.TODODelete_V22_2NoNonMVCCAddSSTable),
 		upgrade.NoPrecondition,
 		waitForAllSchemaChanges,
-	),
-	upgrade.NewTenantUpgrade("fix corrupt user-file related table descriptors",
-		toCV(clusterversion.TODODelete_V22_2FixUserfileRelatedDescriptorCorruption),
-		upgrade.NoPrecondition,
-		fixInvalidObjectsThatLookLikeBadUserfileConstraint,
 	),
 	upgrade.NewTenantUpgrade("add columns to system.tenants and populate a system tenant entry",
 		toCV(clusterversion.V23_1TenantNamesStateAndServiceMode),
