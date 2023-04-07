@@ -53,7 +53,9 @@ func TestHotRangesStats(t *testing.T) {
 		},
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				DisableReplicaRebalancing: true,
+				ReplicaPlannerKnobs: kvserver.ReplicaPlannerTestingKnobs{
+					DisableReplicaRebalancing: true,
+				},
 			},
 		},
 	})

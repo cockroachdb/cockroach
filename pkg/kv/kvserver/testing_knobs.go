@@ -45,6 +45,7 @@ type StoreTestingKnobs struct {
 	EngineKnobs             []storage.ConfigOption
 	AllocatorKnobs          *allocator.TestingKnobs
 	GossipTestingKnobs      StoreGossipTestingKnobs
+	ReplicaPlannerKnobs     ReplicaPlannerTestingKnobs
 
 	// TestingRequestFilter is called before evaluating each request on a
 	// replica. The filter is run before the request acquires latches, so
@@ -148,9 +149,6 @@ type StoreTestingKnobs struct {
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
 	DisableReplicateQueue bool
-	// DisableReplicaRebalancing disables rebalancing of replicas but otherwise
-	// leaves the replicate queue operational.
-	DisableReplicaRebalancing bool
 	// DisableLoadBasedSplitting turns off LBS so no splits happen because of load.
 	DisableLoadBasedSplitting bool
 	// DisableSplitQueue disables the split queue.

@@ -340,7 +340,9 @@ func startServer(t *testing.T) *TestServer {
 			Store: &kvserver.StoreTestingKnobs{
 				// Now that we allow same node rebalances, disable it in these tests,
 				// as they dont expect replicas to move.
-				DisableReplicaRebalancing: true,
+				ReplicaPlannerKnobs: kvserver.ReplicaPlannerTestingKnobs{
+					DisableReplicaRebalancing: true,
+				},
 			},
 		},
 	})
