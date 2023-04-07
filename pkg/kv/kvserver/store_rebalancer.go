@@ -174,6 +174,12 @@ func NewStoreRebalancer(
 		subscribedToSpanConfigs: func() bool {
 			// The store rebalancer makes use of span configs. Wait until we've
 			// established subscription.
+			if rq.store.cfg.SpanConfigSubscriber == nil {
+				// Testing-only branch. testContext-style tests do not configure a
+				// SpanConfigSubscriber, so they always return false from this function.
+				// This has the effect of disabling the StoreRebalancer.
+				return false
+			}
 			return !rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty()
 		},
 	}
