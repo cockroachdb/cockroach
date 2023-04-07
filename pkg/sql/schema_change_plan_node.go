@@ -51,7 +51,6 @@ func (p *planner) FormatAstAsRedactableString(
 
 // SchemaChange provides the planNode for the new schema changer.
 func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, error) {
-
 	// TODO(ajwerner): Call featureflag.CheckEnabled appropriately.
 	mode := p.extendedEvalCtx.SchemaChangerState.mode
 	// When new schema changer is on we will not support it for explicit
@@ -62,10 +61,11 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 			mode == sessiondatapb.UseNewSchemaChangerUnsafe) && !p.extendedEvalCtx.TxnIsSingleStmt) {
 		return nil, nil
 	}
+
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
 	deps := p.newSchemaChangeBuilderDependencies(scs.stmts)
-	state, err := scbuild.Build(ctx, deps, scs.state, stmt)
+	state, err := scbuild.Build(ctx, deps, scs.state, stmt, &scs.memAcc)
 	if scerrors.HasNotImplemented(err) &&
 		mode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
 		return nil, nil
@@ -235,7 +235,7 @@ type schemaChangePlanNode struct {
 	// plannedState contains the state produced by the builder combining
 	// the nodes that existed preceding the current statement with the output of
 	// the built current statement. There maybe cases like CTE's, where we will
-	// need to re-plan if the lastState that the plannedState do not match, since
+	// need to re-plan if the lastState and the plannedState do not match, since
 	// we are executing DDL statements in an unexpected way.
 	plannedState scpb.CurrentState
 }
@@ -244,17 +244,20 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.ExtendedEvalContext().SchemaChangerState
 
-	// Our current state does not match what was previously planned for, which means
-	// that potentially we are running CTE's with ALTER statements. So, we are going
-	// to re-plan the state to include the current statement since the statement
-	// phase was not executed.
+	// Current schema change state (as tracked in `scs.state` in the planner)
+	// does not match that when we previously planned and created `s` (as tracked
+	// in `s.lastState` and was previously set to `scs.state` in the planner).
+	// This is possible with CTEs with schema changes (e.g. builtin `AddGeometryColumn`
+	// can be in used in both a CTE and the main query), in which case we need to
+	// re-build the plan with an updated incumbent state.
 	if !reflect.DeepEqual(s.lastState.Current, scs.state.Current) {
 		deps := p.newSchemaChangeBuilderDependencies(scs.stmts)
-		state, err := scbuild.Build(params.ctx, deps, scs.state, s.stmt)
+		state, err := scbuild.Build(params.ctx, deps, scs.state, s.stmt, &scs.memAcc)
 		if err != nil {
 			return err
 		}
 		// Update with the re-planned state.
+		scs.memAcc.Shrink(params.ctx, s.plannedState.ByteSize())
 		s.plannedState = state
 	}
 

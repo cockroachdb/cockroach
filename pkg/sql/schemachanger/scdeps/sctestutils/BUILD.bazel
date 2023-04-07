@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/testutils/serverutils",
+        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "@com_github_kylelemons_godebug//diff",
         "@com_github_stretchr_testify//require",

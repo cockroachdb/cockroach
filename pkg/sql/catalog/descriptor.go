@@ -227,8 +227,8 @@ type Descriptor interface {
 	// was changed after running RunPostDeserializationChanges.
 	GetPostDeserializationChanges() PostDeserializationChanges
 
-	// HasConcurrentSchemaChanges returns true if declarative schema
-	// changes are currently in progress.
+	// HasConcurrentSchemaChanges returns true if it has a schema changer
+	// in progress, either legacy or declarative.
 	HasConcurrentSchemaChanges() bool
 
 	// SkipNamespace is true when a descriptor should not have a namespace record.

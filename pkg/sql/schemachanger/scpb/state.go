@@ -13,6 +13,7 @@ package scpb
 import (
 	"sort"
 	"strings"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -43,6 +44,25 @@ type CurrentState struct {
 	// NonCancelable property of the job; if a schema change is no longer
 	// Revertible, the job must be NonCancelable.
 	Revertible bool
+}
+
+// ByteSize returns an estimated memory allocation for a schema change state `s`.
+// We created this function since the protobuf `s.Size()` method is the size of
+// `s` when it's serialized, and often differs greatly from the actual size in
+// memory.
+//
+// TODO (xiang): gogoproto `oneof` directive, as used today for scpb.ElementProto
+// is quite memory-inefficient and is the biggest contribution to the memory diff.
+// Change it to use protobuf native `oneof`.
+func (s CurrentState) ByteSize() (ret int64) {
+	ret += int64(unsafe.Sizeof(Target{})+2*unsafe.Sizeof(Status(0))) * int64(cap(s.TargetState.Targets))
+	for _, s := range s.TargetState.Statements {
+		ret += int64(s.Size())
+	}
+	ret += int64(s.TargetState.Authorization.Size())
+	ret += int64(cap(s.Initial)+cap(s.Current)) * int64(unsafe.Sizeof(Status(0)))
+	ret += int64(unsafe.Sizeof(false))
+	return ret
 }
 
 // WithCurrentStatuses returns a shallow copy of the current state

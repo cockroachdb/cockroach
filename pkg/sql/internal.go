@@ -1383,7 +1383,8 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 	}
 
 	schemaChangerState := &SchemaChangerState{
-		mode: sd.NewSchemaChangerMode,
+		mode:   sd.NewSchemaChangerMode,
+		memAcc: ief.monitor.MakeBoundAccount(),
 	}
 	ie := InternalExecutor{
 		s:          ief.server,
@@ -1402,6 +1403,7 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 	commitTxnFunc := func(ctx context.Context) error {
 		defer func() {
 			ie.extraTxnState.jobs.reset()
+			ie.extraTxnState.schemaChangerState.memAcc.Clear(ctx)
 		}()
 		if err := ie.commitTxn(ctx); err != nil {
 			return err
