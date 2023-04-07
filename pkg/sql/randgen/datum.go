@@ -472,6 +472,10 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 		datum = tree.NewDUuid(tree.DUuid{
 			UUID: uuid.FromUint128(uint128.FromInts(0, uint64(rng.Intn(simpleRange)))),
 		})
+	case types.TSQueryFamily:
+		datum = tree.NewDTSQuery(tsearch.RandomTSQuery(rng))
+	case types.TSVectorFamily:
+		datum = tree.NewDTSVector(tsearch.RandomTSVector(rng))
 	}
 	return datum
 }
