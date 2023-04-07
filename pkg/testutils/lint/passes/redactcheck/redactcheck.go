@@ -116,6 +116,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ReplicaID":         {},
 						"ReplicaType":       {},
 						"StoreID":           {},
+						"StoreIDSlice":      {},
 						"TenantID":          {},
 						"TransactionStatus": {},
 					},
