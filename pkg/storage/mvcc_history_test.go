@@ -71,15 +71,16 @@ var (
 //
 // The input files use the following DSL:
 //
-// run            [ok|trace|stats|error]
+// run             [ok|trace|stats|error]
 //
-// txn_begin      t=<name> [ts=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
-// txn_remove     t=<name>
-// txn_restart    t=<name>
-// txn_update     t=<name> t2=<name>
-// txn_step       t=<name> [n=<int>]
-// txn_advance    t=<name> ts=<int>[,<int>]
-// txn_status     t=<name> status=<txnstatus>
+// txn_begin       t=<name> [ts=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
+// txn_begin_child t=<name> p=<name> [ts=<int>[,<int>]]
+// txn_remove      t=<name>
+// txn_restart     t=<name>
+// txn_update      t=<name> t2=<name>
+// txn_step        t=<name> [n=<int>]
+// txn_advance     t=<name> ts=<int>[,<int>]
+// txn_status      t=<name> status=<txnstatus>
 // txn_ignore_seqs t=<name> seqs=[<int>-<int>[,<int>-<int>...]]
 //
 // resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]] [targetBytes=<int>]
@@ -707,6 +708,7 @@ var commands = map[string]cmd{
 	"txn_status":      {typTxnUpdate, cmdTxnSetStatus},
 	"txn_step":        {typTxnUpdate, cmdTxnStep},
 	"txn_update":      {typTxnUpdate, cmdTxnUpdate},
+	"txn_begin_child": {typTxnUpdate, cmdTxnBeginChild},
 
 	"resolve_intent":       {typDataUpdate, cmdResolveIntent},
 	"resolve_intent_range": {typDataUpdate, cmdResolveIntentRange},
@@ -768,6 +770,20 @@ func cmdTxnAdvance(e *evalCtx) error {
 	txn.WriteTimestamp = ts
 	e.results.txn = txn
 	return nil
+}
+
+func cmdTxnBeginChild(e *evalCtx) error {
+	var txnName string
+	e.scanArg("t", &txnName)
+	parent := e.getTxnWithArg(mandatory, "p")
+	ts := e.getTs(nil)
+	key := roachpb.KeyMin
+	if e.hasArg("k") {
+		key = e.getKey()
+	}
+	txn, err := e.newChildTxn(txnName, ts, key, parent)
+	e.results.txn = txn
+	return err
 }
 
 func cmdTxnBegin(e *evalCtx) error {
@@ -2221,12 +2237,16 @@ func (e *evalCtx) getList(argName string) []string {
 }
 
 func (e *evalCtx) getTxn(opt optArg) *roachpb.Transaction {
+	return e.getTxnWithArg(opt, "t")
+}
+
+func (e *evalCtx) getTxnWithArg(opt optArg, txnNameArg string) *roachpb.Transaction {
 	e.t.Helper()
-	if opt == optional && (e.hasArg("notxn") || !e.hasArg("t")) {
+	if opt == optional && (e.hasArg("notxn") || !e.hasArg(txnNameArg)) {
 		return nil
 	}
 	var txnName string
-	e.scanArg("t", &txnName)
+	e.scanArg(txnNameArg, &txnName)
 	txn, err := e.lookupTxn(txnName)
 	if err != nil {
 		e.Fatalf("%v", err)
@@ -2353,6 +2373,29 @@ func (e *evalCtx) newTxn(
 		ReadTimestamp:          ts,
 		GlobalUncertaintyLimit: globalUncertaintyLimit,
 		Status:                 roachpb.PENDING,
+	}
+	e.txnCounter = e.txnCounter.Add(1)
+	e.txns[txnName] = txn
+	return txn, nil
+}
+
+func (e *evalCtx) newChildTxn(
+	txnName string, ts hlc.Timestamp, key roachpb.Key, parent *roachpb.Transaction,
+) (*roachpb.Transaction, error) {
+	if _, ok := e.txns[txnName]; ok {
+		e.Fatalf("txn %s already open", txnName)
+	}
+	txn := &roachpb.Transaction{
+		TxnMeta: enginepb.TxnMeta{
+			ID:             uuid.FromUint128(e.txnCounter),
+			Key:            []byte(key),
+			WriteTimestamp: ts,
+			Sequence:       0,
+		},
+		Name:          txnName,
+		ReadTimestamp: ts,
+		Status:        roachpb.PENDING,
+		Parent:        parent.Clone(),
 	}
 	e.txnCounter = e.txnCounter.Add(1)
 	e.txns[txnName] = txn

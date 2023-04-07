@@ -61,7 +61,12 @@ time-tick [m=<int>] [s=<int>] [ms=<int>] [ns=<int>]
 new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
 ----
 
- Creates a TxnMeta.
+ Creates a Transaction.
+
+new-child-txn parent=<name> txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
+----
+
+ Creates a child Transaction.
 
 new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+... [skip-locked] [max-lock-wait-queue-length=<int>]
 ----
@@ -184,7 +189,7 @@ func TestLockTableBasic(t *testing.T) {
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "lock_table"), func(t *testing.T, path string) {
 		var lt lockTable
-		var txnsByName map[string]*enginepb.TxnMeta
+		var txnsByName map[string]*roachpb.Transaction
 		var txnCounter uint128.Uint128
 		var requestsByName map[string]Request
 		var guardsByReqName map[string]lockTableGuard
@@ -200,7 +205,7 @@ func TestLockTableBasic(t *testing.T) {
 				ltImpl.enabledSeq = 1
 				ltImpl.minLocks = 0
 				lt = ltImpl
-				txnsByName = make(map[string]*enginepb.TxnMeta)
+				txnsByName = make(map[string]*roachpb.Transaction)
 				txnCounter = uint128.FromInts(0, 0)
 				requestsByName = make(map[string]Request)
 				guardsByReqName = make(map[string]lockTableGuard)
@@ -242,30 +247,65 @@ func TestLockTableBasic(t *testing.T) {
 				if d.HasArg("seq") {
 					d.ScanArgs(t, "seq", &seq)
 				}
-				txnMeta, ok := txnsByName[txnName]
+				txn, ok := txnsByName[txnName]
 				var id uuid.UUID
 				if ok {
-					id = txnMeta.ID
+					id = txn.ID
 				} else {
 					id = nextUUID(&txnCounter)
 				}
-				txnsByName[txnName] = &enginepb.TxnMeta{
-					ID:             id,
-					Epoch:          enginepb.TxnEpoch(epoch),
-					Sequence:       enginepb.TxnSeq(seq),
-					WriteTimestamp: ts,
+				txnsByName[txnName] = &roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{
+						ID:             id,
+						Epoch:          enginepb.TxnEpoch(epoch),
+						Sequence:       enginepb.TxnSeq(seq),
+						WriteTimestamp: ts,
+					},
+					ReadTimestamp: ts,
+				}
+				return ""
+
+			case "new-child-txn":
+				var parentName string
+				d.ScanArgs(t, "parent", &parentName)
+				parent, ok := txnsByName[parentName]
+				if !ok {
+					d.Fatalf(t, "unknown parent transaction %q", parentName)
+				}
+				var txnName string
+				d.ScanArgs(t, "txn", &txnName)
+				ts := scanTimestamp(t, d)
+				var epoch int
+				d.ScanArgs(t, "epoch", &epoch)
+				var seq int
+				if d.HasArg("seq") {
+					d.ScanArgs(t, "seq", &seq)
+				}
+				txn, ok := txnsByName[txnName]
+				var id uuid.UUID
+				if ok {
+					id = txn.ID
+				} else {
+					id = nextUUID(&txnCounter)
+				}
+				txnsByName[txnName] = &roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{
+						ID:             id,
+						Epoch:          enginepb.TxnEpoch(epoch),
+						Sequence:       enginepb.TxnSeq(seq),
+						WriteTimestamp: ts,
+					},
+					ReadTimestamp: ts,
+					Parent:        parent.Clone(),
 				}
 				return ""
 
 			case "txn-finalized":
 				var txnName string
 				d.ScanArgs(t, "txn", &txnName)
-				txnMeta, ok := txnsByName[txnName]
+				txn, ok := txnsByName[txnName]
 				if !ok {
 					return fmt.Sprintf("txn %s not found", txnName)
-				}
-				txn := &roachpb.Transaction{
-					TxnMeta: *txnMeta,
 				}
 				var statusStr string
 				d.ScanArgs(t, "status", &statusStr)
@@ -292,7 +332,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				var txnName string
 				d.ScanArgs(t, "txn", &txnName)
-				txnMeta, ok := txnsByName[txnName]
+				txn, ok := txnsByName[txnName]
 				if !ok && txnName != "none" {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
@@ -313,14 +353,12 @@ func TestLockTableBasic(t *testing.T) {
 					LatchSpans:             spans,
 					LockSpans:              spans,
 				}
-				if txnMeta != nil {
+				if txn != nil {
 					// Update the transaction's timestamp, if necessary. The transaction
 					// may have needed to move its timestamp for any number of reasons.
-					txnMeta.WriteTimestamp = ts
-					req.Txn = &roachpb.Transaction{
-						TxnMeta:       *txnMeta,
-						ReadTimestamp: ts,
-					}
+					txn.WriteTimestamp = ts
+					req.Txn = txn.Clone()
+					req.Txn.ReadTimestamp = ts
 				}
 				requestsByName[reqName] = req
 				return ""
@@ -333,7 +371,10 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				g := guardsByReqName[reqName]
-				g = lt.ScanAndEnqueue(req, g)
+				g, err := lt.ScanAndEnqueue(req, g)
+				if err != nil {
+					return fmt.Sprintf("err: %v", err)
+				}
 				guardsByReqName[reqName] = g
 				return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
 
@@ -378,7 +419,7 @@ func TestLockTableBasic(t *testing.T) {
 			case "release":
 				var txnName string
 				d.ScanArgs(t, "txn", &txnName)
-				txnMeta, ok := txnsByName[txnName]
+				txn, ok := txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
@@ -386,7 +427,7 @@ func TestLockTableBasic(t *testing.T) {
 				d.ScanArgs(t, "span", &s)
 				span := getSpan(t, d, s)
 				// TODO(sbhola): also test ABORTED.
-				intent := &roachpb.LockUpdate{Span: span, Txn: *txnMeta, Status: roachpb.COMMITTED}
+				intent := &roachpb.LockUpdate{Span: span, Txn: txn.TxnMeta, Status: roachpb.COMMITTED}
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
@@ -395,17 +436,23 @@ func TestLockTableBasic(t *testing.T) {
 			case "update":
 				var txnName string
 				d.ScanArgs(t, "txn", &txnName)
-				txnMeta, ok := txnsByName[txnName]
+				txn, ok := txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				ts := scanTimestamp(t, d)
 				var epoch int
 				d.ScanArgs(t, "epoch", &epoch)
-				txnMeta = &enginepb.TxnMeta{ID: txnMeta.ID, Sequence: txnMeta.Sequence}
-				txnMeta.Epoch = enginepb.TxnEpoch(epoch)
-				txnMeta.WriteTimestamp = ts
-				txnsByName[txnName] = txnMeta
+				txn = &roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{
+						ID:             txn.ID,
+						Sequence:       txn.Sequence,
+						WriteTimestamp: ts,
+						Epoch:          enginepb.TxnEpoch(epoch),
+					},
+					ReadTimestamp: ts,
+				}
+				txnsByName[txnName] = txn
 				var s string
 				d.ScanArgs(t, "span", &s)
 				span := getSpan(t, d, s)
@@ -437,7 +484,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				// TODO(sbhola): also test STAGING.
 				intent := &roachpb.LockUpdate{
-					Span: span, Txn: *txnMeta, Status: roachpb.PENDING, IgnoredSeqNums: ignored}
+					Span: span, Txn: txn.TxnMeta, Status: roachpb.PENDING, IgnoredSeqNums: ignored}
 				if err := lt.UpdateLocks(intent); err != nil {
 					return err.Error()
 				}
@@ -454,11 +501,11 @@ func TestLockTableBasic(t *testing.T) {
 				d.ScanArgs(t, "k", &key)
 				var txnName string
 				d.ScanArgs(t, "txn", &txnName)
-				txnMeta, ok := txnsByName[txnName]
+				txn, ok := txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
-				intent := roachpb.MakeIntent(txnMeta, roachpb.Key(key))
+				intent := roachpb.MakeIntent(&txn.TxnMeta, roachpb.Key(key))
 				seq := int(1)
 				if d.HasArg("lease-seq") {
 					d.ScanArgs(t, "lease-seq", &seq)
@@ -544,7 +591,10 @@ func TestLockTableBasic(t *testing.T) {
 				default:
 					str = "old: "
 				}
-				state := g.CurState()
+				state, err := g.CurState()
+				if err != nil {
+					return str + "err=" + err.String()
+				}
 				var typeStr string
 				switch state.kind {
 				case waitForDistinguished:
@@ -770,7 +820,8 @@ func TestLockTableMaxLocks(t *testing.T) {
 			LockSpans:  spans,
 		}
 		reqs = append(reqs, req)
-		ltg := lt.ScanAndEnqueue(req, nil)
+		ltg, err := lt.ScanAndEnqueue(req, nil)
+		require.NoError(t, err)
 		require.Nil(t, ltg.ResolveBeforeScanning())
 		require.False(t, ltg.ShouldWait())
 		guards = append(guards, ltg)
@@ -793,7 +844,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(10), lt.lockCountForTesting())
 	// Two guards do ScanAndEnqueue.
 	for i := 2; i < 4; i++ {
-		guards[i] = lt.ScanAndEnqueue(reqs[i], guards[i])
+		var err error
+		guards[i], err = lt.ScanAndEnqueue(reqs[i], guards[i])
+		require.NoError(t, err)
 		require.True(t, guards[i].ShouldWait())
 	}
 	require.Equal(t, int64(10), lt.lockCountForTesting())
@@ -894,7 +947,8 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 			LatchSpans: spans,
 			LockSpans:  spans,
 		}
-		ltg := lt.ScanAndEnqueue(req, nil)
+		ltg, err := lt.ScanAndEnqueue(req, nil)
+		require.NoError(t, err)
 		require.Nil(t, ltg.ResolveBeforeScanning())
 		require.False(t, ltg.ShouldWait())
 		guards = append(guards, ltg)
@@ -978,7 +1032,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			if err != nil {
 				return err
 			}
-			g = e.lt.ScanAndEnqueue(*item.request, g)
+			g, _ = e.lt.ScanAndEnqueue(*item.request, g)
 			if !g.ShouldWait() {
 				break
 			}
@@ -991,7 +1045,12 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 				case <-ctx.Done():
 					return ctx.Err()
 				}
-				state := g.CurState()
+				state, pErr := g.CurState()
+				if pErr != nil {
+					err = pErr.GoError()
+					e.lt.Dequeue(g)
+					return err
+				}
 				switch state.kind {
 				case doneWaiting:
 					if !lastID.Equal(uuid.UUID{}) && item.request.Txn != nil {
@@ -1124,16 +1183,16 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 	}
 }
 
-func (e *workloadExecutor) acquireLock(txn *enginepb.TxnMeta, k roachpb.Key) error {
-	err := e.lt.AcquireLock(txn, k, lock.Exclusive, lock.Unreplicated)
+func (e *workloadExecutor) acquireLock(txnMeta *enginepb.TxnMeta, k roachpb.Key) error {
+	err := e.lt.AcquireLock(txnMeta, k, lock.Exclusive, lock.Unreplicated)
 	if err != nil {
 		return err
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	tstate, ok := e.transactions[txn.ID]
+	tstate, ok := e.transactions[txnMeta.ID]
 	if !ok {
-		return errors.Errorf("testbug: lock acquiring request with txnID %v has no transaction", txn.ID)
+		return errors.Errorf("testbug: lock acquiring request with txnID %v has no transaction", txnMeta.ID)
 	}
 	tstate.acquiredLocks = append(tstate.acquiredLocks, k)
 	return nil
@@ -1522,7 +1581,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 			doneCh <- err
 			return
 		}
-		g = env.lt.ScanAndEnqueue(item.Request, g)
+		g, _ = env.lt.ScanAndEnqueue(item.Request, g)
 		atomic.AddUint64(env.numScanCalls, 1)
 		if !g.ShouldWait() {
 			break
@@ -1534,7 +1593,11 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		env.lm.Release(lg)
 		for {
 			<-g.NewStateChan()
-			state := g.CurState()
+			state, pErr := g.CurState()
+			if pErr != nil {
+				doneCh <- pErr.GoError()
+				return
+			}
 			if state.kind == doneWaiting {
 				break
 			}

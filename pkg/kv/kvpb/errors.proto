@@ -618,6 +618,16 @@ message RefreshFailedError {
   optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
 }
 
+// AncestorAbortedError indicates that the parent transaction of a child has been
+// aborted while the child is waiting to push another transaction. There is no
+// reason for the child to proceed if the parent is already aborted. We cannot
+// just use a TransactionAbortedError as the TxnCoordSender would translate
+// that into a TransactionRetryWithProtoRefreshError which is not the desired
+// behavior.
+message AncestorAbortedError {
+  optional roachpb.Transaction ancestor_txn = 1 [(gogoproto.nullable) = false];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   reserved 15, 19, 20, 21, 22, 23, 24, 25, 29, 30, 33;
@@ -661,6 +671,7 @@ message ErrorDetail {
     RefreshFailedError refresh_failed_error = 43;
     MVCCHistoryMutationError mvcc_history_mutation = 44
       [(gogoproto.customname) = "MVCCHistoryMutation"];
+    AncestorAbortedError ancestor_aborted = 45;
   }
 }
 

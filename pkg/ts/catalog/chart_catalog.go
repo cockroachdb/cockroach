@@ -435,6 +435,7 @@ var charts = []sectionDescription{
 				Title: "Errors",
 				Metrics: []string{
 					"distsender.rpc.err.ambiguousresulterrtype",
+					"distsender.rpc.err.ancestorabortederrtype",
 					"distsender.rpc.err.batchtimestampbeforegcerrtype",
 					"distsender.rpc.err.communicationerrtype",
 					"distsender.rpc.err.conditionfailederrtype",

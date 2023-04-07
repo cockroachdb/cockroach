@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 )
@@ -304,12 +303,8 @@ func (r *Replica) canDropLatchesBeforeEval(
 	for _, req := range ba.Requests {
 		reqHeader := req.GetInner().Header()
 		start, end := reqHeader.Key, reqHeader.EndKey
-		var txnID uuid.UUID
-		if ba.Txn != nil {
-			txnID = ba.Txn.ID
-		}
 		needsIntentInterleavingForThisRequest, err := storage.ScanConflictingIntentsForDroppingLatchesEarly(
-			ctx, rw, txnID, ba.Header.Timestamp, start, end, &intents, maxIntents,
+			ctx, rw, ba.Txn, ba.Header.Timestamp, start, end, &intents, maxIntents,
 		)
 		if err != nil {
 			return false /* ok */, true /* stillNeedsIntentInterleaving */, kvpb.NewError(

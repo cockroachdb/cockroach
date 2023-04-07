@@ -72,6 +72,7 @@ go_library(
         "//pkg/util/future",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
+        "//pkg/util/interval",
         "//pkg/util/iterutil",
         "//pkg/util/limit",
         "//pkg/util/log",

@@ -41,6 +41,7 @@ func _() {
 	_ = x[MinTimestampBoundUnsatisfiableErrType-42]
 	_ = x[RefreshFailedErrType-43]
 	_ = x[MVCCHistoryMutationErrType-44]
+	_ = x[AncestorAbortedErrType-45]
 	_ = x[CommunicationErrType-22]
 	_ = x[InternalErrType-25]
 }
@@ -51,7 +52,7 @@ const (
 	_ErrorDetailType_name_2 = "CommunicationErrType"
 	_ErrorDetailType_name_3 = "InternalErrTypeAmbiguousResultErrTypeStoreNotFoundErrTypeTransactionRetryWithProtoRefreshErrType"
 	_ErrorDetailType_name_4 = "IntegerOverflowErrTypeUnsupportedRequestErrType"
-	_ErrorDetailType_name_5 = "BatchTimestampBeforeGCErrTypeTxnAlreadyEncounteredErrTypeIntentMissingErrTypeMergeInProgressErrTypeRangeFeedRetryErrTypeIndeterminateCommitErrTypeInvalidLeaseErrTypeOptimisticEvalConflictsErrTypeMinTimestampBoundUnsatisfiableErrTypeRefreshFailedErrTypeMVCCHistoryMutationErrType"
+	_ErrorDetailType_name_5 = "BatchTimestampBeforeGCErrTypeTxnAlreadyEncounteredErrTypeIntentMissingErrTypeMergeInProgressErrTypeRangeFeedRetryErrTypeIndeterminateCommitErrTypeInvalidLeaseErrTypeOptimisticEvalConflictsErrTypeMinTimestampBoundUnsatisfiableErrTypeRefreshFailedErrTypeMVCCHistoryMutationErrTypeAncestorAbortedErrType"
 )
 
 var (
@@ -59,7 +60,7 @@ var (
 	_ErrorDetailType_index_1 = [...]uint8{0, 23, 47, 67}
 	_ErrorDetailType_index_3 = [...]uint8{0, 15, 37, 57, 96}
 	_ErrorDetailType_index_4 = [...]uint8{0, 22, 47}
-	_ErrorDetailType_index_5 = [...]uint16{0, 29, 57, 77, 99, 120, 146, 165, 195, 232, 252, 278}
+	_ErrorDetailType_index_5 = [...]uint16{0, 29, 57, 77, 99, 120, 146, 165, 195, 232, 252, 278, 300}
 )
 
 func (i ErrorDetailType) String() string {
@@ -78,7 +79,7 @@ func (i ErrorDetailType) String() string {
 	case 31 <= i && i <= 32:
 		i -= 31
 		return _ErrorDetailType_name_4[_ErrorDetailType_index_4[i]:_ErrorDetailType_index_4[i+1]]
-	case 34 <= i && i <= 44:
+	case 34 <= i && i <= 45:
 		i -= 34
 		return _ErrorDetailType_name_5[_ErrorDetailType_index_5[i]:_ErrorDetailType_index_5[i+1]]
 	default:
