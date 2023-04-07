@@ -2275,7 +2275,12 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	inputTableName := ""
 	// ScanExprs from global tables will have filled in a provided distribution
 	// of the gateway region by now.
-	queryHomeRegion, queryHasHomeRegion := input.(memo.RelExpr).ProvidedPhysical().Distribution.GetSingleRegion()
+	provided := input.(memo.RelExpr).ProvidedPhysical()
+	var queryHomeRegion string
+	var queryHasHomeRegion bool
+	if provided != nil {
+		queryHomeRegion, queryHasHomeRegion = provided.Distribution.GetSingleRegion()
+	}
 	var inputTableMeta *opt.TableMeta
 	var inputTable cat.Table
 	var inputIndexOrdinal cat.IndexOrdinal
