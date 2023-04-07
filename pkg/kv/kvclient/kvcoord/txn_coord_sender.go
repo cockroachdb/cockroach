@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1005,11 +1006,37 @@ func (tc *TxnCoordSender) TxnStatus() roachpb.TransactionStatus {
 	return tc.mu.txn.Status
 }
 
+// SetIsoLevel is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) SetIsoLevel(isoLevel isolation.Level) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.active && isoLevel != tc.mu.txn.IsoLevel {
+		// TODO(nvanbenschoten): this error is currently returned directly to the
+		// SQL client issuing the SET TRANSACTION ISOLATION LEVEL statement. We
+		// should either wrap this error with a pgcode or catch the condition
+		// earlier and make this an assertion failure.
+		return errors.New("cannot change the isolation level of a running transaction")
+	}
+	tc.mu.txn.IsoLevel = isoLevel
+	return nil
+}
+
+// IsoLevel is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) IsoLevel() isolation.Level {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.IsoLevel
+}
+
 // SetUserPriority is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) SetUserPriority(pri roachpb.UserPriority) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if tc.mu.active && pri != tc.mu.userPriority {
+		// TODO(nvanbenschoten): this error is currently returned directly to the
+		// SQL client issuing the SET TRANSACTION PRIORITY statement. We should
+		// either wrap this error with a pgcode or catch the condition earlier and
+		// make this an assertion failure.
 		return errors.New("cannot change the user priority of a running transaction")
 	}
 	tc.mu.userPriority = pri

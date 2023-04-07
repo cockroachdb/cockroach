@@ -273,6 +273,25 @@ func (txn *Txn) IsOpen() bool {
 	return txn.statusLocked() == roachpb.PENDING
 }
 
+// SetIsoLevel sets the transaction's isolation level. Transactions default to
+// Serializable isolation. The isolation must be set before any operations are
+// performed on the transaction.
+func (txn *Txn) SetIsoLevel(isoLevel isolation.Level) error {
+	if txn.typ != RootTxn {
+		return errors.AssertionFailedf("SetIsoLevel() called on leaf txn")
+	}
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.SetIsoLevel(isoLevel)
+}
+
+// IsoLevel returns the transaction's isolation level.
+func (txn *Txn) IsoLevel() isolation.Level {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.IsoLevel()
+}
+
 // SetUserPriority sets the transaction's user priority. Transactions default to
 // normal user priority. The user priority must be set before any operations are
 // performed on the transaction.
