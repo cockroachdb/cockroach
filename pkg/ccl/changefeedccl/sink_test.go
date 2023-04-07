@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -709,7 +710,11 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 
 	})
 	t.Run("compression options validation", func(t *testing.T) {
+		testCases := make([]string, 0, len(saramaCompressionCodecOptions)*2)
 		for option := range saramaCompressionCodecOptions {
+			testCases = append(testCases, option, strings.ToLower(option))
+		}
+		for _, option := range testCases {
 			opts := changefeedbase.SinkSpecificJSONConfig(fmt.Sprintf(`{"Compression": "%s"}`, option))
 			cfg, err := getSaramaConfig(opts)
 			require.NoError(t, err)
@@ -718,6 +723,25 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 			err = cfg.Apply(saramaCfg)
 			require.NoError(t, err)
 		}
+
+		forEachSupportedCodec := func(fn func(name string, c sarama.CompressionCodec)) {
+			defer func() { _ = recover() }()
+
+			for c := sarama.CompressionCodec(0); c.String() != ""; c++ {
+				fn(c.String(), c)
+			}
+		}
+
+		forEachSupportedCodec(func(option string, c sarama.CompressionCodec) {
+			opts := changefeedbase.SinkSpecificJSONConfig(fmt.Sprintf(`{"Compression": "%s"}`, option))
+			cfg, err := getSaramaConfig(opts)
+			require.NoError(t, err)
+
+			saramaCfg := &sarama.Config{}
+			err = cfg.Apply(saramaCfg)
+			require.NoError(t, err)
+			require.Equal(t, c, saramaCfg.Producer.Compression)
+		})
 
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Compression": "invalid"}`)
 		_, err := getSaramaConfig(opts)
