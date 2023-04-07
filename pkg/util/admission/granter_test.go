@@ -452,3 +452,17 @@ func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble
 		})
 	}
 }
+
+type noopOnLogEntryAdmitted struct{}
+
+func (n *noopOnLogEntryAdmitted) AdmittedLogEntry(
+	context.Context,
+	roachpb.NodeID,
+	admissionpb.WorkPriority,
+	roachpb.StoreID,
+	roachpb.RangeID,
+	LogPosition,
+) {
+}
+
+var _ OnLogEntryAdmitted = &noopOnLogEntryAdmitted{}
