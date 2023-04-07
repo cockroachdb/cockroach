@@ -70,9 +70,9 @@ func makeTS(walltime int64, logical int32) hlc.Timestamp {
 	}
 }
 
-// TestTxnCoordSenderBeginTransaction verifies that a command sent with a
-// not-nil Txn with empty ID gets a new transaction initialized.
-func TestTxnCoordSenderBeginTransaction(t *testing.T) {
+// TestTxnCoordSenderAssignsTxnKey verifies that a transaction is assigned a
+// transaction record key corresponding to the first key it writes.
+func TestTxnCoordSenderAssignsTxnKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
@@ -80,24 +80,16 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	ctx := context.Background()
 
 	txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
-
-	// Put request will create a new transaction.
-	key := roachpb.Key("key")
 	txn.TestingSetPriority(10)
 	txn.SetDebugName("test txn")
-	if err := txn.Put(ctx, key, []byte("value")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, txn.SetIsoLevel(isolation.ReadCommitted))
+	require.NoError(t, txn.Put(ctx, "key", []byte("value")))
+
 	proto := txn.TestingCloneTxn()
-	if proto.Name != "test txn" {
-		t.Errorf("expected txn name to be %q; got %q", "test txn", proto.Name)
-	}
-	if proto.Priority != 10 {
-		t.Errorf("expected txn priority 10; got %d", proto.Priority)
-	}
-	if !bytes.Equal(proto.Key, key) {
-		t.Errorf("expected txn Key to match %q != %q", key, proto.Key)
-	}
+	require.Equal(t, []byte("key"), proto.Key)
+	require.Equal(t, isolation.ReadCommitted, proto.IsoLevel)
+	require.Equal(t, enginepb.TxnPriority(10), proto.Priority)
+	require.Equal(t, "test txn", proto.Name)
 }
 
 // TestTxnCoordSenderKeyRanges verifies that multiple requests to same or
@@ -3058,4 +3050,45 @@ func TestTxnTypeCompatibleWithBatchRequest(t *testing.T) {
 	require.NoError(t, err)
 	err = rootTxn.Put(ctx, roachpb.Key("a"), []byte("b"))
 	require.NoError(t, err)
+}
+
+// TestTxnSetIsoLevel tests setting and getting the isolation level of a
+// transaction. It also tests that isolation levels can only be set before
+// the transaction is active.
+func TestTxnSetIsoLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := createTestDB(t)
+	defer s.Stop()
+	ctx := context.Background()
+	txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+
+	defaultLevel := isolation.Serializable
+	levels := []isolation.Level{isolation.ReadCommitted, isolation.Snapshot, isolation.Serializable}
+
+	// The default isolation level is Serializable.
+	require.Equal(t, defaultLevel, txn.IsoLevel())
+
+	// Can set and get all isolation levels.
+	for _, isoLevel := range levels {
+		require.NoError(t, txn.SetIsoLevel(isoLevel))
+		require.Equal(t, isoLevel, txn.IsoLevel())
+	}
+
+	// Can't set isolation level after the transaction is active.
+	require.NoError(t, txn.Put(ctx, "k", "v"))
+	for _, isoLevel := range levels {
+		prev := txn.IsoLevel()
+		err := txn.SetIsoLevel(isoLevel)
+		if isoLevel == prev {
+			// If the isolation level does not need to change, no error is returned.
+			require.NoError(t, err)
+		} else {
+			// If the isolation level needs to change, an error is returned.
+			require.Error(t, err)
+			require.Regexp(t, "cannot change the isolation level of a running transaction", err)
+		}
+		// The isolation level should not have changed.
+		require.Equal(t, prev, txn.IsoLevel())
+	}
 }
