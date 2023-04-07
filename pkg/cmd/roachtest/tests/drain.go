@@ -337,7 +337,7 @@ func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) 
 		"./cockroach node drain --self --insecure --drain-wait=10s",
 	)
 	t.L().Printf("drain output:\n%s\n%s\n", results.Stdout, results.Stderr)
-	require.Contains(t, results.Stderr, "could not check drain related cluster settings")
+	require.Regexp(t, "(cluster settings require a value of at least|could not check drain related cluster settings)", results.Stderr)
 }
 
 // prepareCluster is to start the server on nodes in the given cluster, and set
