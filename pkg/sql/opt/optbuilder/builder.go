@@ -313,6 +313,12 @@ func (b *Builder) buildStmt(
 		switch stmt := stmt.(type) {
 		case *tree.Select:
 		case tree.SelectStatement:
+		case *tree.Delete:
+			panic(unimplemented.NewWithIssuef(87289, "%s usage inside a function definition", stmt.StatementTag()))
+		case *tree.Insert:
+			panic(unimplemented.NewWithIssuef(87289, "%s usage inside a function definition", stmt.StatementTag()))
+		case *tree.Update:
+			panic(unimplemented.NewWithIssuef(87289, "%s usage inside a function definition", stmt.StatementTag()))
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}
