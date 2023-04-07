@@ -12,6 +12,7 @@ package sqlsmith
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -21,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -71,7 +74,6 @@ func scalarNoContext(fn func(*Smither, *types.T, colRefs) (tree.TypedExpr, bool)
 }
 
 // makeScalar attempts to construct a scalar expression of the requested type.
-// If it was unsuccessful, it will return false.
 func makeScalar(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
 	return makeScalarContext(s, emptyCtx, typ, refs)
 }
@@ -304,18 +306,58 @@ func init() {
 	}
 }
 
-func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (expr tree.TypedExpr, ret bool) {
 	if f := typ.Family(); f != types.BoolFamily && f != types.AnyFamily && f != types.VoidFamily {
 		return nil, false
 	}
-	typ = s.randScalarType()
-	op := compareOps[s.rnd.Intn(len(compareOps))]
-	if _, ok := tree.CmpOps[op].LookupImpl(typ, typ); !ok {
-		return nil, false
+	for i := 0; i < len(compareOps); i++ {
+		op := compareOps[s.rnd.Intn(len(compareOps))]
+		err := tree.CmpOps[op].ForEachCmpOp(func(co *tree.CmpOp) error {
+			// NewTypedComparisonExpr can panic, swallow it and keep going.
+			defer func() {
+				if r := recover(); r != nil {
+					err, ok := r.(error)
+					if ok && errors.IsAssertionFailure(err) &&
+						strings.Contains(err.Error(), "lookup for ComparisonExpr") {
+						return
+					}
+					panic(r)
+				}
+			}()
+			// CollatedTypes don't have locale set and panic so swap them out.
+			lt, rt := co.LeftType, co.RightType
+			if lt.Family() == types.CollatedStringFamily {
+				lt = types.MakeCollatedString(types.String, *randgen.RandCollationLocale(s.rnd))
+			}
+			if rt.Family() == types.CollatedStringFamily {
+				rt = types.MakeCollatedString(types.String, *randgen.RandCollationLocale(s.rnd))
+			}
+			// Try to compare a column to a scalar.
+			var right tree.TypedExpr
+			left, ok := makeColRef(s, lt, refs)
+			if ok {
+				right = makeScalar(s, rt, refs)
+			} else {
+				left = makeScalar(s, rt, refs)
+				right, ok = makeColRef(s, rt, refs)
+				if !ok {
+					// We failed to find a column to compare to a scalar, so just
+					// bail and keep going.
+					return nil
+				}
+			}
+			expr = tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(op), left, right)
+			ret = true
+			return iterutil.StopIteration()
+		})
+		if err != nil {
+			panic(err)
+		}
+		if ret {
+			return expr, ret
+		}
 	}
-	left := makeScalar(s, typ, refs)
-	right := makeScalar(s, typ, refs)
-	return typedParen(tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(op), left, right), typ), true
+	return nil, false
 }
 
 func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
@@ -670,7 +712,13 @@ func makeIn(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	t := s.randScalarType()
 	var rhs tree.TypedExpr
 	if s.coin() {
-		rhs = makeTuple(s, t, refs)
+		// Make min 1 cause we choke on foo IN NULL.
+		rhs = makeTupleMin(s, t, refs, 1)
+		fmt := tree.NewFmtCtx(tree.FmtParsable)
+		rhs.Format(fmt)
+		if fmt.CloseAndGetString() == "NULL" {
+			panic("null")
+		}
 	} else {
 		selectStmt, _, ok := s.makeSelect([]*types.T{t}, refs)
 		if !ok {
@@ -717,11 +765,16 @@ func makeStringComparison(s *Smither, typ *types.T, refs colRefs) (tree.TypedExp
 }
 
 func makeTuple(s *Smither, typ *types.T, refs colRefs) *tree.Tuple {
-	n := s.rnd.Intn(5)
 	// Don't allow empty tuples in simple/postgres mode.
-	if n == 0 && s.simpleDatums {
-		n++
+	min := 0
+	if s.simpleDatums {
+		min = 1
 	}
+	return makeTupleMin(s, typ, refs, min)
+}
+
+func makeTupleMin(s *Smither, typ *types.T, refs colRefs, min int) *tree.Tuple {
+	n := min + s.rnd.Intn(5)
 	exprs := make(tree.Exprs, n)
 	for i := range exprs {
 		if s.d9() == 1 {
