@@ -69,7 +69,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 		// TODO(chengxiong): create `FunctionParamDefaultExpression` element when
 		// default parameter default expression is enabled.
 		if param.DefaultVal != nil {
-			panic(unimplemented.New("CREATE FUNCTION argument", "default value"))
+			panic(unimplemented.NewWithIssue(100962, "default value"))
 		}
 		paramCls, err := funcinfo.ParamClassToProto(param.Class)
 		if err != nil {

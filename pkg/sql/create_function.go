@@ -457,7 +457,7 @@ func makeFunctionParam(
 	}
 
 	if param.DefaultVal != nil {
-		return descpb.FunctionDescriptor_Parameter{}, unimplemented.New("CREATE FUNCTION argument", "default value")
+		return descpb.FunctionDescriptor_Parameter{}, unimplemented.NewWithIssue(100962, "default value")
 	}
 
 	return pbParam, nil
