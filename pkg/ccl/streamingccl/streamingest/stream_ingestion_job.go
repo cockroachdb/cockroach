@@ -307,7 +307,7 @@ func ingestWithRetries(
 		if jobs.IsPermanentJobError(err) || errors.Is(err, context.Canceled) {
 			break
 		}
-		const msgFmt = "stream ingestion waits for retrying after error: %s"
+		const msgFmt = "waiting before retrying error: %s"
 		log.Warningf(ctx, msgFmt, err)
 		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError,
 			fmt.Sprintf(msgFmt, err))
@@ -315,6 +315,9 @@ func ingestWithRetries(
 		if lastReplicatedTime.Less(newReplicatedTime) {
 			r.Reset()
 			lastReplicatedTime = newReplicatedTime
+		}
+		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterRetryIteration != nil {
+			knobs.AfterRetryIteration(err)
 		}
 	}
 	if err != nil {
