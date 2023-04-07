@@ -15,6 +15,14 @@ node=n2 range=r3 pri=normal-pri store=s3 up-to-log-position=5/21
 node=n2 range=r3 pri=high-pri   store=s3 up-to-log-position=5/22
 ----
 
+# Verify that the metrics show 2 pending nodes with 4 pending flow tokens
+# dispatches (nothing gets coalesced).
+metrics
+----
+pending-nodes=2
+[regular] pending=4 coalesced=0 dispatch{local=0 remote=4}
+[elastic] pending=0 coalesced=0 dispatch{local=0 remote=0}
+
 pending-dispatch
 ----
 node=n1
@@ -23,6 +31,14 @@ node=n2
 pending-dispatch-for node=n1
 ----
 range=r1 pri=normal-pri store=s1 up-to-log-position=log-position=4/20
+
+# Verify that there's only 1 pending node left (n1 was cleared) and pending flow
+# tokens dispatch count was reduced by 1.
+metrics
+----
+pending-nodes=1
+[regular] pending=3 coalesced=0 dispatch{local=0 remote=4}
+[elastic] pending=0 coalesced=0 dispatch{local=0 remote=0}
 
 pending-dispatch
 ----
@@ -36,5 +52,12 @@ range=r3 pri=high-pri store=s3 up-to-log-position=log-position=5/22
 
 pending-dispatch
 ----
+
+# Verify no pending nodes or flow tokens dispatches.
+metrics
+----
+pending-nodes=0
+[regular] pending=0 coalesced=0 dispatch{local=0 remote=4}
+[elastic] pending=0 coalesced=0 dispatch{local=0 remote=0}
 
 # vim:ft=sh
