@@ -914,10 +914,9 @@ var rawVersionsSingleton = keyedVersions{
 // frozen. It can be forced to a specific value in two circumstances:
 // 1. forced to `false` on development branches: this is used for
 // upgrade testing purposes and should never be done in real clusters;
-// 2. forced to `false` on release branches: this allows running a
+// 2. forced to `true` on release branches: this allows running a
 // release binary in a dev cluster.
-var developmentBranch = !envutil.EnvOrDefaultBool("COCKROACH_TESTING_FORCE_RELEASE_BRANCH", false) ||
-	envutil.EnvOrDefaultBool("COCKROACH_FORCE_DEV_VERSION", false)
+var developmentBranch = envutil.EnvOrDefaultBool("COCKROACH_FORCE_DEV_VERSION", false)
 
 const (
 	// finalVersion should be set on a release branch to the minted final cluster
