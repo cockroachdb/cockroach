@@ -1,0 +1,28 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "concurrent",
+    srcs = ["executor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/concurrent",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/queue",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "concurrent_test",
+    srcs = ["executor_test.go"],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":concurrent",
+        "//pkg/util/leaktest",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
