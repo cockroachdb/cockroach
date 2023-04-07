@@ -347,7 +347,7 @@ func TestSchemaChanger(t *testing.T) {
 				parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 				require.NoError(t, err)
 				require.Len(t, parsed, 1)
-				cs, err = scbuild.Build(ctx, buildDeps, scpb.CurrentState{}, parsed[0].AST.(*tree.AlterTable))
+				cs, err = scbuild.Build(ctx, buildDeps, scpb.CurrentState{}, parsed[0].AST.(*tree.AlterTable), nil /* memAcc */)
 				require.NoError(t, err)
 
 				{

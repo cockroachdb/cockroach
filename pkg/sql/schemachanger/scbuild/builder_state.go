@@ -69,13 +69,17 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 			// Ignore targets to remove something that doesn't exist yet.
 			return
 		}
-		b.addNewElementState(elementState{
+		es := elementState{
 			element:  e,
 			initial:  scpb.Status_ABSENT,
 			current:  scpb.Status_ABSENT,
 			target:   target,
 			metadata: meta,
-		})
+		}
+		if err := b.localMemAcc.Grow(b.ctx, es.byteSize()); err != nil {
+			panic(err)
+		}
+		b.addNewElementState(es)
 		return
 	}
 	// At this point, we're setting a new target to an existing element.
@@ -151,14 +155,7 @@ func (b *builderState) getExistingElementState(e scpb.Element) *elementState {
 		panic(errors.AssertionFailedf("cannot define target for nil element"))
 	}
 	id := screl.GetDescID(e)
-	if b.newDescriptors.Contains(id) {
-		if _, ok := b.descCache[id]; !ok {
-			b.descCache[id] = b.newCachedDescForNewDesc()
-		}
-	} else {
-		b.ensureDescriptor(id)
-	}
-
+	b.ensureDescriptor(id)
 	c := b.descCache[id]
 
 	key := screl.ElementString(e)
@@ -1186,10 +1183,20 @@ func (b *builderState) resolveBackReferences(c *cachedDesc) {
 	c.backrefsResolved = true
 }
 
+// ensureDescriptor ensures descriptor `id` is "tracked" inside the builder state,
+// as a *cacheDesc.
+// For newly created descriptors, it merely creates a zero-valued *cacheDesc entry;
+// For existing descriptors, it creates and populate the *cacheDesc entry and
+// decompose it into elements (as tracked in b.output).
 func (b *builderState) ensureDescriptor(id catid.DescID) {
 	if _, found := b.descCache[id]; found {
 		return
 	}
+	if b.newDescriptors.Contains(id) {
+		b.descCache[id] = b.newCachedDescForNewDesc()
+		return
+	}
+
 	c := b.newCachedDesc(id)
 	// Collect privileges
 	if !c.hasOwnership {
@@ -1205,12 +1212,16 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 		return b.readDescriptor(id)
 	}
 	visitorFn := func(status scpb.Status, e scpb.Element) {
-		b.addNewElementState(elementState{
+		es := elementState{
 			element: e,
 			initial: status,
 			current: status,
 			target:  scpb.AsTargetStatus(status),
-		})
+		}
+		if err := b.localMemAcc.Grow(b.ctx, es.byteSize()); err != nil {
+			panic(err)
+		}
+		b.addNewElementState(es)
 	}
 
 	c.backrefs = scdecomp.WalkDescriptor(b.ctx, c.desc, crossRefLookupFn, visitorFn,
