@@ -26,6 +26,10 @@ func (c *colRef) typedExpr() tree.TypedExpr {
 	return makeTypedExpr(c.item, c.typ)
 }
 
+func (c *colRef) String() string {
+	return c.typ.String()
+}
+
 type colRefs []*colRef
 
 func (t colRefs) extend(refs ...*colRef) colRefs {

@@ -12,6 +12,7 @@ package sqlsmith
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -21,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -71,7 +74,6 @@ func scalarNoContext(fn func(*Smither, *types.T, colRefs) (tree.TypedExpr, bool)
 }
 
 // makeScalar attempts to construct a scalar expression of the requested type.
-// If it was unsuccessful, it will return false.
 func makeScalar(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
 	return makeScalarContext(s, emptyCtx, typ, refs)
 }
@@ -304,18 +306,52 @@ func init() {
 	}
 }
 
-func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (expr tree.TypedExpr, ret bool) {
 	if f := typ.Family(); f != types.BoolFamily && f != types.AnyFamily && f != types.VoidFamily {
 		return nil, false
 	}
-	typ = s.randScalarType()
-	op := compareOps[s.rnd.Intn(len(compareOps))]
-	if _, ok := tree.CmpOps[op].LookupImpl(typ, typ); !ok {
-		return nil, false
+	for i := 0; i < len(compareOps); i++ {
+		op := compareOps[s.rnd.Intn(len(compareOps))]
+		err := tree.CmpOps[op].ForEachCmpOp(func(co *tree.CmpOp) error {
+			// NewTypedComparisonExpr can panic, swallow it and keep going.
+			defer func() {
+				if r := recover(); r != nil {
+					err, ok := r.(error)
+					if ok && errors.IsAssertionFailure(err) &&
+						strings.Contains(err.Error(), "lookup for ComparisonExpr") {
+						return
+					}
+					panic(r)
+				}
+			}()
+			// Try to compare a column to a scalar.
+			left, ok := makeColRef(s, co.LeftType, refs)
+			if !ok {
+				left = makeScalar(s, co.RightType, refs)
+			}
+			var right tree.TypedExpr
+			if ok {
+				right = makeScalar(s, co.RightType, refs)
+			} else {
+				right, ok = makeColRef(s, co.RightType, refs)
+				if !ok {
+					// We failed to find a column to compare to a scalar, so just
+					// bail and keep going.
+					return nil
+				}
+			}
+			expr = tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(op), left, right)
+			ret = true
+			return iterutil.StopIteration()
+		})
+		if err != nil {
+			panic(err)
+		}
+		if ret {
+			return expr, ret
+		}
 	}
-	left := makeScalar(s, typ, refs)
-	right := makeScalar(s, typ, refs)
-	return typedParen(tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(op), left, right), typ), true
+	return nil, false
 }
 
 func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
