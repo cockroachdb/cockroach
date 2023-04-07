@@ -76,10 +76,6 @@ CREATE TABLE messages_rbt (
     INDEX msg_idx(message)
 ) LOCALITY REGIONAL BY TABLE
 
-# Sleep so that the follow_read_timestamp() used by phase 3 dynamic checking
-# of a query's home region isn't executing before the tables existed.
-sleep 5s
-
 statement ok
 CREATE TABLE messages_rbr (
     account_id INT NOT NULL,
@@ -197,11 +193,92 @@ CREATE TABLE json_arr2_rbt (
   a STRING[]
 ) LOCALITY REGIONAL BY TABLE
 
+# Sleep so that the follower_read_timestamp() used by phase 3 dynamic checking
+# of a query's home region isn't executing before the tables existed.
+sleep 5s
+
 statement ok
 SET enforce_home_region = true
 
 statement ok
 SET enforce_home_region_follower_reads_enabled = true
+
+# A lookup join with a CTE as input should succeed.
+statement ok
+WITH vtab AS (INSERT INTO parent VALUES (6) RETURNING p_id)
+SELECT * FROM vtab
+  INNER LOOKUP JOIN messages_rbt rbt on vtab.p_id = rbt.account_id
+
+# A lookup join with a scalar list of constants as input should succeed.
+retry
+statement ok
+SELECT * FROM (SELECT 1, 'Hello, Dude!') vtab(account_id, message)
+  INNER LOOKUP JOIN messages_rbt rbt on vtab.account_id = rbt.account_id
+
+# A scalar subquery with no home region should fail.
+retry
+statement error pq: Query has no home region\. Try adding a LIMIT clause\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT * FROM (SELECT (SELECT max(account_id) FROM messages_rbr), 'Hello, Dude!') vtab(account_id, message)
+  INNER LOOKUP JOIN messages_rbt rbt on vtab.account_id = rbt.account_id
+
+# A scalar subquery with a home region other than the gateway should fail.
+retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT * FROM (SELECT (SELECT max(account_id) FROM messages_rbr WHERE crdb_region = 'ca-central-1'), 'Hello, Dude!') vtab(account_id, message)
+  INNER LOOKUP JOIN messages_rbt rbt on vtab.account_id = rbt.account_id
+
+# A scalar subquery with a home region should succeed.
+retry
+statement ok
+SELECT * FROM (SELECT (SELECT max(account_id) FROM messages_rbt), 'Hello, Dude!') vtab(account_id, message)
+  INNER LOOKUP JOIN messages_rbt rbt on vtab.account_id = rbt.account_id
+
+statement ok
+CREATE OR REPLACE FUNCTION rbr() RETURNS INT AS 'SELECT max(account_id) FROM messages_rbr' LANGUAGE SQL;
+
+# A UDF with no home region should fail.
+retry
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(multi_region_test_db\.public\.messages_rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT rbr()
+
+# An EXISTS subquery with no home region should fail.
+retry
+statement error pq: Query has no home region\. Try adding a LIMIT clause\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT * FROM (SELECT 1 WHERE EXISTS (SELECT max(account_id) FROM messages_rbr))
+
+# An apply join with no home region should fail.
+retry
+statement error pq: Query has no home region\. Try adding a LIMIT clause\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT * FROM messages_rbt rbt, LATERAL
+  (SELECT count(DISTINCT rbr.account_id + rbt.account_id + 1) AS g
+    FROM messages_rbr rbr WHERE rbr.account_id * rbt.account_id < 10)
+
+# An apply join with no home region should fail.
+retry
+statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT * FROM messages_rbr rbr, LATERAL
+  (SELECT count(DISTINCT rbr.account_id + rbt.account_id + 1) AS g
+    FROM messages_rbt rbt WHERE rbr.account_id * rbt.account_id < 10)
+
+# An array scalar expression with no home region should fail.
+retry
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(multi_region_test_db\.public\.messages_rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT ARRAY[rbr(),rbr()]
+
+# An ALL subquery with no home region should fail.
+retry
+statement error pq: Query has no home region\. Try adding a LIMIT clause\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT 1 WHERE 1 > ALL (SELECT max(account_id) FROM messages_rbr)
+
+# An ANY subquery with no home region should fail.
+retry
+statement error pq: Query has no home region\. Try adding a LIMIT clause\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT 1 WHERE 1 > ANY (SELECT max(account_id) FROM messages_rbr)
+
+# A SOME subquery with no home region should fail.
+retry
+statement error pq: Query has no home region\. Try adding a LIMIT clause\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT 1 WHERE 1 > ANY (SELECT max(account_id) FROM messages_rbr)
 
 ### Regression tests for issue #89875
 
