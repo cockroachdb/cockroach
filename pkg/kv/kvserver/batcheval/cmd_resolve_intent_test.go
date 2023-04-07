@@ -16,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -79,7 +78,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 	}
 	ctx := context.Background()
 	engine := storage.NewDefaultInMemForTesting()
-	st := makeClusterSettingsUsingEngineIntentsSetting(engine)
+	st := cluster.MakeTestingClusterSettings()
 	defer engine.Close()
 	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
 		for _, test := range tests {
@@ -162,7 +161,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 		defer db.Close()
 		batch := db.NewBatch()
 		defer batch.Close()
-		st := makeClusterSettingsUsingEngineIntentsSetting(db)
+		st := cluster.MakeTestingClusterSettings()
 
 		var v roachpb.Value
 		// Write a first value at key.
@@ -301,7 +300,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 		defer db.Close()
 		batch := db.NewBatch()
 		defer batch.Close()
-		st := makeClusterSettingsUsingEngineIntentsSetting(db)
+		st := cluster.MakeTestingClusterSettings()
 
 		for i, testKey := range testKeys {
 			err := storage.MVCCPut(ctx, batch, nil, testKey, ts, hlc.ClockTimestamp{}, values[i], &txn)
@@ -476,9 +475,4 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 			}
 		}
 	})
-}
-
-func makeClusterSettingsUsingEngineIntentsSetting(engine storage.Engine) *cluster.Settings {
-	version := clusterversion.TestingBinaryVersion
-	return cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 }
