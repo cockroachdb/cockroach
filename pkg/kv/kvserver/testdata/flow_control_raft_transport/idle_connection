@@ -1,0 +1,92 @@
+# Walk through what exactly happens when a client marks its outbound raft
+# transport stream as idle. It's helpful to also read the store_data test in
+# this directory.
+
+init
+----
+
+# Set up two nodes, each with one store.
+add node=n1 store=s1
+----
+
+add node=n2 store=s2
+----
+
+# Send a raft message for r1 from n1 to n2 and vice versa, each node holding a
+# replica with id=1,2 respectively. We do this to create the two non-idle
+# client-> server connections between the two nodes, going both ways. It's done
+# on demand.
+send range=r1 from=n1/s1/1 to=n2/s2/2 commit=1
+----
+
+send range=r1 from=n2/s2/2 to=n1/s1/1 commit=1
+----
+
+# Verify that n1's marked n2 as something its connected to (as a client), and
+# vice-versa. This test isn't making use of the
+# set-{initial,additional}-store-ids directives used in the store_data test,
+# which is triggered in deployments and showcases the server's POV. This test
+# is narrowly showing what happens from the client's POV -- so ignore all
+# server POV details.
+connection-tracker from=n1
+----
+connected-stores (server POV): 
+connected-nodes  (client POV): n2
+
+connection-tracker from=n2
+----
+connected-stores (server POV): 
+connected-nodes  (client POV): n1
+
+# Return some flow tokens from n2 back to n1, where these tokens originally
+# would have been deducted.
+dispatch from=n2
+node=n1 store=s1 range=r1 pri=normal-pri up-to-log-position=6/20
+node=n1 store=s1 range=r1 pri=low-pri    up-to-log-position=6/21
+----
+
+# Note that they're pending delivery.
+pending-dispatch from=n2 to=n1
+----
+range=r1 pri=low-pri store=s1 up-to-log-position=log-position=6/21
+range=r1 pri=normal-pri store=s1 up-to-log-position=log-position=6/20
+
+
+# Mark the client-initiated stream from n2->n1 as idle.
+client-mark-idle from=n2 to=n1
+----
+
+# n2's wound down its transport streams and has marked n1 as something it's
+# disconnected from as a client.
+connection-tracker from=n2
+----
+connected-stores (server POV): 
+connected-nodes  (client POV): 
+
+# n1's not done the same since it still is connected to n2 as a client. We
+# don't actually care about n1's perspective in this test.
+connection-tracker from=n1
+----
+connected-stores (server POV): 
+connected-nodes  (client POV): n2
+
+# Note that they're still pending delivery. They'll only get pruned out by the
+# periodic pruning process, which is invoked next.
+pending-dispatch from=n2 to=n1
+----
+range=r1 pri=low-pri store=s1 up-to-log-position=log-position=6/21
+range=r1 pri=normal-pri store=s1 up-to-log-position=log-position=6/20
+
+drop-disconnected-tokens from=n2
+----
+
+# Observe that there's nothing pending dispatch and the metrics indicate as much.
+pending-dispatch from=n2 to=n1
+----
+
+metrics
+----
+node=n1: dispatches-dropped=0
+node=n2: dispatches-dropped=2
+
+# vim:ft=sh

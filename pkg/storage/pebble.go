@@ -859,6 +859,21 @@ func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) error {
 	return nil
 }
 
+// GetStoreID returns to configured store ID.
+func (p *Pebble) GetStoreID() (int32, error) {
+	if p == nil {
+		return 0, errors.AssertionFailedf("GetStoreID requires non-nil Pebble")
+	}
+	if p.storeIDPebbleLog == nil {
+		return 0, errors.AssertionFailedf("GetStoreID requires an initialized store ID container")
+	}
+	storeID := p.storeIDPebbleLog.Get()
+	if storeID == 0 {
+		return 0, errors.AssertionFailedf("GetStoreID must be called after calling SetStoreID")
+	}
+	return storeID, nil
+}
+
 // ResolveEncryptedEnvOptions creates the EncryptionEnv and associated file
 // registry if this store has encryption-at-rest enabled; otherwise returns a
 // nil EncryptionEnv.

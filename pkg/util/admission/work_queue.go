@@ -855,7 +855,16 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	} else {
 		// NB: We don't use grant chains for store tokens, so they don't apply
 		// to replicated writes.
-
+		if log.V(1) {
+			log.Infof(q.ambientCtx, "async-path: len(waiting-work)=%d dequeued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
+				tenant.waitingWorkHeap.Len(),
+				tenant.id, item.priority,
+				item.replicated.RangeID,
+				item.replicated.Origin,
+				item.replicated.LogPosition,
+				item.replicated.Ingested,
+			)
+		}
 		defer releaseWaitingWork(item)
 		q.onAdmittedReplicatedWork.admittedReplicatedWork(
 			roachpb.MustMakeTenantID(tenant.id),
@@ -1968,6 +1977,7 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 	// have a separate goroutine invoke these callbacks (without holding
 	// coord.mu). We could directly invoke here too if not holding the lock.
 	q.onLogEntryAdmitted.AdmittedLogEntry(
+		q.q[wc].ambientCtx,
 		rwi.Origin,
 		pri,
 		q.storeID,
@@ -1982,6 +1992,7 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 // post-admission bookkeeping.
 type OnLogEntryAdmitted interface {
 	AdmittedLogEntry(
+		ctx context.Context,
 		origin roachpb.NodeID, /* node where the entry originated */
 		pri admissionpb.WorkPriority, /* admission priority of the entry */
 		storeID roachpb.StoreID, /* store on which the entry was admitted */
@@ -1997,7 +2008,12 @@ type NoopOnLogEntryAdmitted struct{}
 var _ OnLogEntryAdmitted = &NoopOnLogEntryAdmitted{}
 
 func (n *NoopOnLogEntryAdmitted) AdmittedLogEntry(
-	roachpb.NodeID, admissionpb.WorkPriority, roachpb.StoreID, roachpb.RangeID, LogPosition,
+	context.Context,
+	roachpb.NodeID,
+	admissionpb.WorkPriority,
+	roachpb.StoreID,
+	roachpb.RangeID,
+	LogPosition,
 ) {
 }
 

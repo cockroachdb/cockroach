@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -91,6 +92,40 @@ var ProvisionedBandwidth = settings.RegisterByteSizeSetting(
 	"if set to a non-zero value, this is used as the provisioned bandwidth (in bytes/s), "+
 		"for each store. It can be over-ridden on a per-store basis using the --store flag",
 	0).WithPublic()
+
+// FlowTokenDropInterval determines the frequency at which we check for pending
+// flow token dispatches to nodes we're no longer connected to, in order to drop
+// them.
+var FlowTokenDropInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_token.drop_interval",
+	"the interval at which the raft transport checks for pending flow token dispatches "+
+		"to nodes we're no longer connected to, in order to drop them; set to 0 to disable the mechanism",
+	30*time.Second,
+	settings.NonNegativeDuration,
+)
+
+// FlowTokenDispatchInterval determines the frequency at which we check for
+// pending flow token dispatches from idle connections, in order to deliver
+// them.
+var FlowTokenDispatchInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_token.dispatch_interval",
+	"the interval at which the raft transport checks for pending flow token dispatches "+
+		"from idle connections and delivers them",
+	time.Second,
+	settings.PositiveDuration, settings.NonNegativeDurationWithMaximum(time.Minute),
+)
+
+// ConnectedStoreExpiration controls how long the RaftTransport layers considers
+// a stream connected without it having observed any messages from it.
+var ConnectedStoreExpiration = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.raft_transport.connected_store_expiration",
+	"the interval at which the raft transport prunes its set of connected stores; set to 0 to disable the mechanism",
+	5*time.Minute,
+	settings.NonNegativeDuration,
+)
 
 // Controller provides admission control for the KV layer.
 type Controller interface {
@@ -428,6 +463,20 @@ func (n *controllerImpl) AdmitRaftEntry(
 	if err != nil {
 		log.Errorf(ctx, "unable to decode raft command admission data: %v", err)
 		return
+	}
+
+	if log.V(1) {
+		log.Infof(ctx, "decoded raft admission meta below-raft: pri=%s create-time=%d proposer=n%s receiver=[n?,s%s] tenant=t%d tokens≈%d sideloaded=%t raft-entry=%d/%d",
+			admissionpb.WorkPriority(meta.AdmissionPriority),
+			meta.AdmissionCreateTime,
+			meta.AdmissionOriginNode,
+			storeID,
+			tenantID.ToUint64(),
+			kvflowcontrol.Tokens(len(entry.Data)),
+			typ.IsSideloaded(),
+			entry.Term,
+			entry.Index,
+		)
 	}
 
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))

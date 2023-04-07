@@ -1,0 +1,83 @@
+# Walk through the basics of the data-driven syntax.
+
+init
+----
+
+# Set up two nodes, each with one store.
+add node=n1 store=s1
+----
+
+add node=n2 store=s2
+----
+
+set-initial-store-ids from=n1 stores=s1
+----
+
+set-initial-store-ids from=n2 stores=s2,s3
+----
+
+set-additional-store-ids from=n1 stores=s4
+----
+
+# Send a raft message for r1 from n1 to n2 and vice versa, each node holding a
+# replica with id=1,2 respectively. We do this to create the non-idle
+# connection between the two nodes (it's done on demand). We should transmit
+# (s2,s3) from n2->n1, and (s1,s4) from n1->n2. So effectively n1 should be
+# connected to n2:s2,s3, and n2 to n1:s1,s4.
+send range=r1 from=n1/s1/1 to=n2/s2/2 commit=1
+----
+
+send range=r1 from=n2/s2/2 to=n1/s1/1 commit=1
+----
+
+# Confirm the node+store connectivity, as seen by each node. The server POV is
+# always store-oriented, since the server cares most about what remote stores
+# got disconnected in order to release tokens that are identified partly by
+# store IDs. The raft transport client cares most about what servers it's
+# connected to, identified by node ID, since the client is the one managing the
+# outbox of tokens to return to the server. If it's no longer connected to some
+# server, two things happen:
+# - The server detects this, and releases tokens (as described above).
+# - The client can reclaim some memory in its outbox, where messages destined
+#   for the server just no longer need delivery.
+connection-tracker from=n1
+----
+connected-stores (server POV): s2,s3
+connected-nodes  (client POV): n2
+
+connection-tracker from=n2
+----
+connected-stores (server POV): s1,s4
+connected-nodes  (client POV): n1
+
+# Mark the client-initiated stream from n2->n1 as idle.
+client-mark-idle from=n2 to=n1
+----
+
+# Confirm that n1 detects this on the server side, and marks that it's no
+# longer connected to s2 and s3. It still show's that it's connected to n2 as a
+# client, but this test primarily cares about the empty server POV.
+#
+# The set of connected nodes however is unchanged from n1's perspective, as
+# there's still an n1->n2 link. The connected-nodes tracking is done on the
+# client side.
+connection-tracker from=n1
+----
+connected-stores (server POV): 
+connected-nodes  (client POV): n2
+
+# Confirm that the RaftTransport has informed the flow-control integration
+# layer of this fact.
+disconnect-listener from=n1
+----
+disconnected-from: s2,s3
+
+# Sanity check that n2 marks that it's no longer connected to n1 as a client.
+# Since it acts as the server for the n1->n2 link, it shows that it's connected
+# to n1's stores.
+connection-tracker from=n2
+----
+connected-stores (server POV): s1,s4
+connected-nodes  (client POV): 
+
+# vim:ft=sh
