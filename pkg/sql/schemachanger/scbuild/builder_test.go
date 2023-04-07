@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -40,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -284,15 +287,31 @@ func walkYaml(root *yaml.Node, f func(node *yaml.Node)) {
 // take up a lot of memory for certain DDL statement (e.g. dropping a
 // database with tens of thousands of tables in it).
 func TestBuildIsMemoryMonitored(t *testing.T) {
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	params.SQLMemoryPoolSize = 1.049e+7 /* 10MiB */
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(db)
-
 	tdb.Exec(t, `use defaultdb;`)
 	tdb.Exec(t, `select crdb_internal.generate_test_objects('test',  5000);`)
 	tdb.Exec(t, `use system;`)
-	_, err := db.Exec(`DROP DATABASE defaultdb CASCADE;`)
-	require.Regexp(t, `pq: root: memory budget exceeded: .*`, err.Error())
+
+	monitor := mon.NewMonitor(
+		"test-sc-build-mon",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		cluster.MakeTestingClusterSettings(),
+	)
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(1.049e+7 /* 10MiB */))
+	memAcc := monitor.MakeBoundAccount()
+	sctestutils.WithBuilderDependenciesFromTestServer(s, func(dependencies scbuild.Dependencies) {
+		stmt, err := parser.ParseOne(`DROP DATABASE defaultdb CASCADE`)
+		require.NoError(t, err)
+		_, err = scbuild.Build(ctx, dependencies, scpb.CurrentState{}, stmt.AST, &memAcc)
+		require.Regexp(t, `test-sc-build-mon: memory budget exceeded: .*`, err.Error())
+	})
+
 }

@@ -177,11 +177,15 @@ func ProtoDiff(a, b protoutil.Message, args DiffArgs, rewrites ...func(interface
 }
 
 // MakePlan is a convenient alternative to calling scplan.MakePlan in tests.
-func MakePlan(t *testing.T, state scpb.CurrentState, phase scop.Phase) scplan.Plan {
+func MakePlan(
+	t *testing.T, state scpb.CurrentState, phase scop.Phase, memAcc *mon.BoundAccount,
+) scplan.Plan {
 	plan, err := scplan.MakePlan(context.Background(), state, scplan.Params{
+		Ctx:                        context.Background(),
 		ActiveVersion:              clusterversion.TestingClusterVersion,
 		ExecutionPhase:             phase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
+		MemAcc:                     memAcc,
 	})
 	require.NoError(t, err)
 	return plan

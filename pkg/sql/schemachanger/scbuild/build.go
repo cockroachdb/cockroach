@@ -289,22 +289,13 @@ func newBuilderState(
 		bs.ensureDescriptor(screl.GetDescID(t.Element()))
 	}
 	for i, t := range incumbent.TargetState.Targets {
-		src := elementState{
+		bs.upsertElementState(elementState{
 			element:  t.Element(),
 			initial:  incumbent.Initial[i],
 			current:  incumbent.Current[i],
 			target:   scpb.AsTargetStatus(t.TargetStatus),
 			metadata: t.Metadata,
-		}
-		if err = bs.localMemAcc.Grow(ctx, src.byteSize()); err != nil {
-			panic(err)
-		}
-		if dst := bs.getExistingElementState(src.element); dst != nil {
-			bs.localMemAcc.Shrink(ctx, dst.byteSize())
-			*dst = src
-		} else {
-			bs.addNewElementState(src)
-		}
+		})
 	}
 	return &bs
 }
