@@ -219,10 +219,8 @@ func waitForTenantPodsActive(
 	}, 10*time.Second)
 }
 
-func CreateTenantStreamingClusters(
-	ctx context.Context, t *testing.T, args TenantStreamingClustersArgs,
-) (*TenantStreamingClusters, func()) {
-	serverArgs := base.TestServerArgs{
+func GetServerArgs(args TenantStreamingClustersArgs) base.TestServerArgs {
+	return base.TestServerArgs{
 		// Test fails because it tries to set a cluster setting only accessible
 		// to system tenants. Tracked with #76378.
 		DefaultTestTenant: base.TestTenantDisabled,
@@ -240,6 +238,12 @@ func CreateTenantStreamingClusters(
 			},
 		},
 	}
+}
+
+func CreateTenantStreamingClusters(
+	ctx context.Context, t *testing.T, args TenantStreamingClustersArgs,
+) (*TenantStreamingClusters, func()) {
+	serverArgs := GetServerArgs(args)
 
 	startTestCluster := func(
 		ctx context.Context,

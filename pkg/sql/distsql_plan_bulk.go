@@ -150,7 +150,7 @@ func calculatePlanGrowth(before, after *PhysicalPlan) (int, float64) {
 	return changed, frac
 }
 
-// PlanChangeDecision descrubes a function that decides if a plan has "changed"
+// PlanChangeDecision describes a function that decides if a plan has "changed"
 // within a given context, for example, if enough of its processor placements
 // have changed that it should be replanned.
 type PlanChangeDecision func(ctx context.Context, old, new *PhysicalPlan) bool
@@ -174,13 +174,38 @@ func ReplanOnChangedFraction(thresholdFn func() float64) PlanChangeDecision {
 	}
 }
 
+// PlanDeltaFn describes a function that measures the difference of two physical
+// plans as a scalar.
+type PlanDeltaFn func(*PhysicalPlan, *PhysicalPlan) float64
+
+// ReplanOnCustomFunc returns a PlanChangeDecision that returns true when a new
+// plan is sufficiently different than the previous plan. This occurs if the
+// measureChangeFn returns a scalar higher than the thresholdFn.
+//
+// If the thresholdFn returns 0.0, a new plan is never chosen.
+func ReplanOnCustomFunc(
+	measureChangeFn PlanDeltaFn, thresholdFn func() float64,
+) PlanChangeDecision {
+	return func(ctx context.Context, oldPlan, newPlan *PhysicalPlan) bool {
+		threshold := thresholdFn()
+		if threshold == 0.0 {
+			return false
+		}
+		change := measureChangeFn(oldPlan, newPlan)
+		replan := change > threshold
+		log.VEventf(ctx, 1, "Replanning change: %.2f; threshold: %.2f; choosing new plan %v", change,
+			threshold, replan)
+		return replan
+	}
+}
+
 // ErrPlanChanged is a sentinel marker error for use to signal a plan changed.
 var ErrPlanChanged = errors.New("physical plan has changed")
 
 // PhysicalPlanChangeChecker returns a function which will periodically call the
 // passed function at the requested interval until the returned channel is
 // closed and compare the plan it returns to the passed initial plan, returning
-// and error if it has changed (as defined by CalculatePlanGrowth) by more than
+// an error if it has changed (as defined by CalculatePlanGrowth) by more than
 // the passed threshold. A threshold of 0 disables it.
 func PhysicalPlanChangeChecker(
 	ctx context.Context,
