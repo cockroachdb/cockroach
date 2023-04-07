@@ -994,6 +994,18 @@ var zipSystemTables = DebugZipTableRegistry{
 			to_hex(progress) AS hex_progress
 			FROM system.jobs`,
 	},
+	"system.job_info": {
+		// `value` column may contain customer info, such as URI params
+		// containing access keys, encryption salts, etc.
+		customQueryUnredacted: `SELECT *,
+			to_hex(value) AS hex_value
+			FROM system.job_info`,
+		customQueryRedacted: `SELECT job_id,
+			info_key,
+			written,
+			'redacted' AS value
+			FROM system.job_info`,
+	},
 	"system.lease": {
 		nonSensitiveCols: NonSensitiveColumns{
 			`"descID"`,
