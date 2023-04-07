@@ -13645,7 +13645,7 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 	requeue, err := tc.store.replicateQueue.processOneChange(
 		ctx,
 		tc.repl,
-		func(ctx context.Context, repl *Replica) bool { return false },
+		func(ctx context.Context, repl LeaseCheckReplica) bool { return false },
 		false, /* scatter */
 		true,  /* dryRun */
 	)

@@ -119,7 +119,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	}
 	manual.Advance(replicastats.MinStatsDuration + time.Second)
 
-	rangeUsageInfo := RangeUsageInfoForRepl(&replica)
+	rangeUsageInfo := replica.RangeUsageInfo()
 	stats := replica.LoadStats()
 	QPS := stats.QueriesPerSecond
 	WPS := stats.WriteKeysPerSecond
@@ -254,7 +254,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	}
 	replica.loadStats = load.NewReplicaLoad(store.Clock(), nil)
 
-	rangeUsageInfo := RangeUsageInfoForRepl(replica)
+	rangeUsageInfo := replica.RangeUsageInfo()
 
 	// Update StorePool, which should be a no-op.
 	storeID := roachpb.StoreID(1)
