@@ -54,6 +54,20 @@ func (s StoreIDSlice) Len() int           { return len(s) }
 func (s StoreIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s StoreIDSlice) Less(i, j int) bool { return s[i] < s[j] }
 
+func (s StoreIDSlice) String() string {
+	var sb strings.Builder
+	for i, st := range s {
+		if i > 0 {
+			sb.WriteRune(',')
+		}
+		fmt.Fprintf(&sb, "s%d", st)
+	}
+	return sb.String()
+}
+
+// SafeValue implements the redact.SafeValue interface.
+func (s StoreIDSlice) SafeValue() {}
+
 // String implements the fmt.Stringer interface.
 // It is used to format the ID for use in Gossip keys.
 func (n StoreID) String() string {

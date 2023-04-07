@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -536,8 +537,20 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		/* deterministic */ false,
 	)
 
+	storesForFlowControl := kvserver.MakeStoresForFlowControl(stores)
+	kvflowTokenDispatch := kvflowdispatch.New(registry, storesForFlowControl, nodeIDContainer)
 	raftTransport := kvserver.NewRaftTransport(
-		cfg.AmbientCtx, st, cfg.AmbientCtx.Tracer, nodeDialer, grpcServer.Server, stopper,
+		cfg.AmbientCtx,
+		st,
+		cfg.AmbientCtx.Tracer,
+		nodeDialer,
+		grpcServer.Server,
+		stopper,
+		kvflowTokenDispatch,
+		storesForFlowControl,
+		kvserver.NewRaftTransportConnectedStores(),
+		kvserver.NewRaftTransportConnectedNodes(),
+		nil, /* knobs */
 	)
 	registry.AddMetricStruct(raftTransport.Metrics())
 
@@ -1643,6 +1656,14 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// initState -- and everything after it is actually starting the server,
 	// using the listeners and init state.
 
+	initialStoreIDs, err := state.initialStoreIDs()
+	if err != nil {
+		return err
+	}
+
+	// Inform the raft transport of these initial store IDs.
+	s.raftTransport.SetInitialStoreIDs(initialStoreIDs)
+
 	// Spawn a goroutine that will print a nice message when Gossip connects.
 	// Note that we already know the clusterID, but we don't know that Gossip
 	// has connected. The pertinent case is that of restarting an entire
@@ -1790,6 +1811,14 @@ func (s *Server) PreStart(ctx context.Context) error {
 	//   the hazard described in Node.start, around initializing additional
 	//   stores)
 	s.node.waitForAdditionalStoreInit()
+
+	additionalStoreIDs, err := state.additionalStoreIDs()
+	if err != nil {
+		return err
+	}
+
+	// Inform the raft transport of these additional store IDs.
+	s.raftTransport.SetAdditionalStoreIDs(additionalStoreIDs)
 
 	// Connect the engines to the disk stats map constructor. This needs to
 	// wait until after waitForAdditionalStoreInit returns since it realizes on
@@ -1966,6 +1995,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Start the closed timestamp loop.
 	s.ctSender.Run(workersCtx, state.nodeID)
+
+	// Start dispatching extant flow tokens.
+	if err := s.raftTransport.Start(workersCtx); err != nil {
+		return err
+	}
 
 	// Attempt to upgrade cluster version now that the sql server has been
 	// started. At this point we know that all startupmigrations and permanent
