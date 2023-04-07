@@ -150,7 +150,7 @@ func calculatePlanGrowth(before, after *PhysicalPlan) (int, float64) {
 	return changed, frac
 }
 
-// PlanChangeDecision descrubes a function that decides if a plan has "changed"
+// PlanChangeDecision describes a function that decides if a plan has "changed"
 // within a given context, for example, if enough of its processor placements
 // have changed that it should be replanned.
 type PlanChangeDecision func(ctx context.Context, old, new *PhysicalPlan) bool
@@ -170,6 +170,22 @@ func ReplanOnChangedFraction(thresholdFn func() float64) PlanChangeDecision {
 			log.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, replan %v",
 				changed, growth, threshold, replan)
 		}
+		return replan
+	}
+}
+
+// ReplanOnCustomFunc returns a PlanChangeDecision that returns true when a new
+// plan is sufficiently different than the previous plan. This occurs if the
+// measureChangeFn returns a score higher than the thresholdFn.
+func ReplanOnCustomFunc(
+	measureChangeFn func(before, after *PhysicalPlan) float64, thresholdFn func() float64,
+) PlanChangeDecision {
+	return func(ctx context.Context, oldPlan, newPlan *PhysicalPlan) bool {
+		change := measureChangeFn(oldPlan, newPlan)
+		threshold := thresholdFn()
+		replan := threshold != 0.0 && change > threshold
+		log.VEventf(ctx, 1, "Replanning change: %.2f; threshold: %.2f; choosing new plan %v", change,
+			threshold, replan)
 		return replan
 	}
 }

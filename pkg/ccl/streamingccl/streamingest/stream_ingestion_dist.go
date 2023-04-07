@@ -11,6 +11,7 @@ package streamingest
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -21,15 +22,33 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+)
+
+var replanThreshold = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"stream_replication.replan_flow_threshold",
+	"fraction of nodes in the producer or consumer job that would need to change to refresh the"+
+		" physical execution plan",
+	0.1,
+)
+
+var replanFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"stream_replication.replan_flow_frequency",
+	"frequency at which the consumer job checks to refresh its physical execution plan",
+	10*time.Minute,
+	settings.PositiveDuration,
 )
 
 func startDistIngestion(
@@ -86,7 +105,30 @@ func startDistIngestion(
 	log.Infof(ctx, "starting to run DistSQL flow for stream ingestion job %d",
 		ingestionJob.ID())
 
+	replanOracle := sql.ReplanOnCustomFunc(
+		measurePlanChange,
+		func() float64 {
+			return replanThreshold.Get(execCtx.ExecCfg().SV())
+		},
+	)
+
+	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
+		p,
+		makePlan(
+			execCtx,
+			ingestionJob,
+			details,
+			client,
+			previousHighWater,
+			progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest.Checkpoint,
+			initialScanTimestamp),
+		execCtx,
+		replanOracle,
+		func() time.Duration { return replanFrequency.Get(execCtx.ExecCfg().SV()) },
+	)
+
 	execPlan := func(ctx context.Context) error {
+		defer stopReplanner()
 		ctx = logtags.AddTag(ctx, "stream-ingest-distsql", nil)
 
 		rw := sql.NewRowResultWriter(nil /* rowContainer */)
@@ -114,13 +156,12 @@ func startDistIngestion(
 
 	updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.Replicating,
 		"running the SQL flow for the stream ingestion job")
-
-	// TODO(msbutler): Implement automatic replanning in the spirit of changefeed replanning.
-	return execPlan(ctx)
+	if err = ctxgroup.GoAndWait(ctx, execPlan, replanner); errors.Is(err, sql.ErrPlanChanged) {
+		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
+	}
+	return err
 }
 
-// TODO (msbutler): this function signature was written to use in automatic job replanning via
-// sql.PhysicalPlanChangeChecker(). Actually implement c2c replanning.
 func makePlan(
 	execCtx sql.JobExecContext,
 	ingestionJob *jobs.Job,
@@ -201,6 +242,51 @@ func makePlan(
 		sql.FinalizePlan(ctx, planCtx, p)
 		return p, planCtx, nil
 	}
+}
+
+// measurePlanChange computes the number of node changes (addition or removal)
+// in the source and destination clusters as a fraction of the total number of
+// nodes in both clusters in the previous plan.
+func measurePlanChange(before, after *sql.PhysicalPlan) float64 {
+
+	getNodes := func(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount int) {
+		dst = make(map[string]struct{})
+		src = make(map[string]struct{})
+		count := 0
+		for _, proc := range plan.Processors {
+			if proc.Spec.Core.StreamIngestionData == nil {
+				// Skip other processors in the plan (like the Frontier processor).
+				continue
+			}
+			dst[proc.SQLInstanceID.String()] = struct{}{}
+			count += 1
+			for id := range proc.Spec.Core.StreamIngestionData.PartitionSpecs {
+				src[id] = struct{}{}
+				count += 1
+			}
+		}
+		return src, dst, count
+	}
+
+	countMissingElements := func(set1, set2 map[string]struct{}) int {
+		diff := 0
+		for id := range set1 {
+			if _, ok := set2[id]; !ok {
+				diff++
+			}
+		}
+		return diff
+	}
+
+	oldSrc, oldDst, oldCount := getNodes(before)
+	newSrc, newDst, _ := getNodes(after)
+	diff := 0
+	// To check for both introduced nodes and removed nodes, swap input order.
+	diff += countMissingElements(oldSrc, newSrc)
+	diff += countMissingElements(newSrc, oldSrc)
+	diff += countMissingElements(oldDst, newDst)
+	diff += countMissingElements(newDst, oldDst)
+	return float64(diff) / float64(oldCount)
 }
 
 func constructStreamIngestionPlanSpecs(
