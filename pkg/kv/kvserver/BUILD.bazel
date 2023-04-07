@@ -8,7 +8,6 @@ go_library(
     name = "kvserver",
     srcs = [
         "addressing.go",
-        "allocation_op.go",
         "app_batch.go",
         "consistency_queue.go",
         "debug_print.go",
@@ -120,6 +119,7 @@ go_library(
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/allocator/load",
+        "//pkg/kv/kvserver/allocator/plan",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/apply",
         "//pkg/kv/kvserver/batcheval",
@@ -360,6 +360,7 @@ go_test(
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/allocator/load",
+        "//pkg/kv/kvserver/allocator/plan",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/apply",
         "//pkg/kv/kvserver/batcheval",
