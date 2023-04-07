@@ -51,7 +51,7 @@ parallel and then sends a sequence of puts in parallel:
 		log.Fatal(err)
 	}
 
-	b1 := &client.Batch{}
+	b1 := &kv.Batch{}
 	b1.Scan("a", "c\x00", 1000)
 	b1.Scan("x", "z\x00", 1000)
 
@@ -93,7 +93,7 @@ necessary. An example of using transactions with parallel writes:
 		log.Fatal(err)
 	}
 
-	err := db.Txn(func(ctx context.Context, txn *client.Txn) error {
+	err := db.Txn(func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		for i := 0; i < 100; i++ {
 			key := fmt.Sprintf("testkey-%02d", i)

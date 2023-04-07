@@ -464,7 +464,7 @@ message UnhandledRetryableError {
 //
 // It contains the final form of the Transaction proto that should be used on
 // next attempts. After being produced by the TxnCoordSender, this error is
-// handled first by the client.Txn, which uses the Transaction inside to update
+// handled first by the kv.Txn, which uses the Transaction inside to update
 // its state, and then passed along to SQL in a pErr (through the
 // client.Sender() interface).
 message TransactionRetryWithProtoRefreshError {
@@ -494,7 +494,7 @@ message TransactionRetryWithProtoRefreshError {
 
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
 // transaction that already received an error from a previous request. Once that
-// happens, client.Txn rejects future requests.
+// happens, kv.Txn rejects future requests.
 message TxnAlreadyEncounteredErrorError{
   // prev_error is the message from the error that the txn encountered
   // previously.
