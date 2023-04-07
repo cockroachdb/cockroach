@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -175,8 +176,8 @@ func patchDescriptor(desc catalog.TableDescriptor) catalog.TableDescriptor {
 func makeMigration(s serverutils.TestServerInterface, desc catalog.TableDescriptor) rbrMigration {
 	return rbrMigration{
 		tableName:       desc.GetName(),
-		keyMapper:       makeKeyMapper(s.Codec(), desc, uint32(1)),
-		finalDescriptor: desc,
+		keyMapper:       makeKeyMapper(s.Codec(), desc.TableDesc(), uint32(1)),
+		finalDescriptor: desc.TableDesc(),
 	}
 }
 
@@ -196,7 +197,7 @@ func TestPrefixKeyMapper(t *testing.T) {
 	}
 	desc := tabledesc.NewBuilder(&tableDesc).BuildImmutableTable()
 
-	keyMapper := makeKeyMapper(codec, desc, sourceIndexID)
+	keyMapper := makeKeyMapper(codec, desc.TableDesc(), sourceIndexID)
 
 	sourceKey := codec.IndexPrefix(tableID, sourceIndexID)
 	sourceKey = encoding.EncodeVarintAscending(sourceKey, 1234)
@@ -208,4 +209,15 @@ func TestPrefixKeyMapper(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, destKey.String(), `/Tenant/1337/Table/12/14/"\x80"/1234/0`)
 	require.Equal(t, keyMapper.NewPrefix().String(), `/Tenant/1337/Table/12/14/"\x80"`)
+}
+
+func TestRbrMigrationDescriptors(t *testing.T) {
+	// Note: If you are making a change that breaks this test after the 23.1
+	// release is shipped, it is probably safe to delete this test. You will
+	// need to write an upgrade for the change, since this test will only break
+	// if the bootstrap schema changes.
+	codec := keys.SystemSQLCodec
+	require.Equal(t, sqlLivenessMigration(codec).finalDescriptor, systemschema.SqllivenessTable().TableDesc())
+	require.Equal(t, sqlInstanceMigration(codec).finalDescriptor, systemschema.SQLInstancesTable().TableDesc())
+	require.Equal(t, leaseMigration(codec).finalDescriptor, systemschema.LeaseTable().TableDesc())
 }
