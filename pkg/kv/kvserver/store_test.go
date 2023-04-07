@@ -3157,7 +3157,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	s := tc.store
 
 	cleanupNonEmpty1, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
-		RangeSize: 1,
+		RangeSize: 10,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -3167,6 +3167,8 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}
 	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvQueueLength.Value(),
 		"unexpected snapshot queue length")
+	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvQueueSize.Value(),
+		"unexpected snapshot queue size")
 	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvInProgress.Value(),
 		"unexpected snapshots in progress")
 	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvTotalInProgress.Value(),
@@ -3184,6 +3186,8 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}
 	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvQueueLength.Value(),
 		"unexpected snapshot queue length")
+	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvQueueSize.Value(),
+		"unexpected snapshot queue size")
 	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvInProgress.Value(),
 		"unexpected snapshots in progress")
 	require.Equal(t, int64(2), s.Metrics().RangeSnapshotRecvTotalInProgress.Value(),
@@ -3205,6 +3209,10 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 				t.Errorf("unexpected snapshot queue length; expected: %d, got: %d", 1,
 					s.Metrics().RangeSnapshotRecvQueueLength.Value())
 			}
+			if s.Metrics().RangeSnapshotRecvQueueSize.Value() != int64(10) {
+				t.Errorf("unexplected snapshot queue size; expected: %d, got: %d", 1,
+					s.Metrics().RangeSnapshotRecvQueueSize.Value())
+			}
 			if s.Metrics().RangeSnapshotRecvInProgress.Value() != int64(1) {
 				t.Errorf("unexpected snapshots in progress; expected: %d, got: %d", 1,
 					s.Metrics().RangeSnapshotRecvInProgress.Value())
@@ -3216,7 +3224,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}()
 
 	cleanupNonEmpty3, err := s.reserveReceiveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
-		RangeSize: 1,
+		RangeSize: 10,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -3224,6 +3232,8 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	atomic.StoreInt32(&boom, 1)
 	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvQueueLength.Value(),
 		"unexpected snapshot queue length")
+	require.Equal(t, int64(0), s.Metrics().RangeSnapshotRecvQueueSize.Value(),
+		"unexpected snapshot queue size")
 	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvInProgress.Value(),
 		"unexpected snapshots in progress")
 	require.Equal(t, int64(1), s.Metrics().RangeSnapshotRecvTotalInProgress.Value(),
