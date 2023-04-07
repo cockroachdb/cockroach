@@ -1,0 +1,73 @@
+# Walk through the basics of the data-driven syntax.
+
+init
+----
+
+# Set up two nodes, each with one store.
+add node=n1 store=s1
+----
+
+add node=n2 store=s2
+----
+
+set-initial-store-ids from=n1 stores=s1
+----
+
+set-initial-store-ids from=n2 stores=s2,s3
+----
+
+set-additional-store-ids from=n1 stores=s4
+----
+
+# Send a raft message for r1 from n1 to n2 and vice versa, each node holding a
+# replica with id=1,2 respectively. We do this to create the non-idle connect
+# between the two nodes (it's done on demand). We should transmit (s2,s3) from
+# n2->n1, and (s1,s4) from n1->n2. So effectively n1 should be connected to
+# n2:s2,s3, and n2 to n1:s1,s4.
+send range=r1 from=n1/1/s1 to=n2/2/s2 commit=1
+----
+
+send range=r1 from=n2/2/s2 to=n1/1/s1 commit=1
+----
+
+# Confirm the node+store connectivity, as seen by each node.
+connected-ops from=n1
+----
+connected-stores: s2,s3
+connected-nodes: n2
+
+connected-ops from=n2
+----
+connected-stores: s1,s4
+connected-nodes: n1
+
+# Mark the from n2->n1 as idle.
+mark-idle from=n2 to=n1
+----
+
+# Confirm that n1 detects this on the server side, and marks that it's no
+# longer connected to s2 and s3.
+connected-ops from=n1
+----
+connected-nodes: n2
+
+# Confirm that the RaftTransport also informs the flow-control integration
+# layer of this fact.
+disconnect-listener from=n1
+----
+disconnected-from: s2,s3
+
+# The set of connected nodes however is unchanged from n1's perspective, as
+# there's still an n1->n2 link. The connected-nodes tracking is done on the
+# client side.
+connected-ops from=n1
+----
+connected-nodes: n2
+
+# n2 however marks that it's no longer connected to n1. Since it acts as the
+# server for the n1->n2 link, it shows that it's connected to n1's stores.
+connected-ops from=n2
+----
+connected-stores: s1,s4
+
+# vim:ft=sh
