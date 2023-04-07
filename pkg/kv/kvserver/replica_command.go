@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -3761,7 +3762,7 @@ func RelocateOne(
 
 	var ops []kvpb.ReplicationChange
 	if shouldAdd && shouldRemove {
-		ops, _, err = ReplicationChangesForRebalance(
+		ops, _, err = plan.ReplicationChangesForRebalance(
 			ctx, desc, len(existingVoters), additionTarget, removalTarget, args.targetType,
 		)
 		if err != nil {
@@ -3928,7 +3929,7 @@ func (r *Replica) adminScatter(
 	var allowLeaseTransfer bool
 	var err error
 	requeue := true
-	canTransferLease := func(ctx context.Context, repl LeaseCheckReplica) bool {
+	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica) bool {
 		return allowLeaseTransfer
 	}
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
