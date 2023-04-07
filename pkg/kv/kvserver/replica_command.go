@@ -3761,7 +3761,7 @@ func RelocateOne(
 
 	var ops []kvpb.ReplicationChange
 	if shouldAdd && shouldRemove {
-		ops, _, err = replicationChangesForRebalance(
+		ops, _, err = ReplicationChangesForRebalance(
 			ctx, desc, len(existingVoters), additionTarget, removalTarget, args.targetType,
 		)
 		if err != nil {
@@ -3928,7 +3928,9 @@ func (r *Replica) adminScatter(
 	var allowLeaseTransfer bool
 	var err error
 	requeue := true
-	canTransferLease := func(ctx context.Context, repl *Replica) bool { return allowLeaseTransfer }
+	canTransferLease := func(ctx context.Context, repl LeaseCheckReplica) bool {
+		return allowLeaseTransfer
+	}
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
 			break

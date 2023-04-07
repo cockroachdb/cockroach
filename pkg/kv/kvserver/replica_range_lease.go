@@ -1485,8 +1485,8 @@ func (r *Replica) maybeSwitchLeaseType(ctx context.Context, st kvserverpb.LeaseS
 	return nil
 }
 
-// hasCorrectLeaseType returns true if the lease type is correct for this replica.
-func (r *Replica) hasCorrectLeaseType(lease roachpb.Lease) bool {
+// HasCorrectLeaseType returns true if the lease type is correct for this replica.
+func (r *Replica) HasCorrectLeaseType(lease roachpb.Lease) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.hasCorrectLeaseTypeRLocked(lease)
@@ -1497,11 +1497,11 @@ func (r *Replica) hasCorrectLeaseTypeRLocked(lease roachpb.Lease) bool {
 	return hasExpirationLease == r.shouldUseExpirationLeaseRLocked()
 }
 
-// leaseViolatesPreferences checks if current replica owns the lease and if it
+// LeaseViolatesPreferences checks if current replica owns the lease and if it
 // violates the lease preferences defined in the span config. If there is an
 // error or no preferences defined then it will return false and consider that
 // to be in-conformance.
-func (r *Replica) leaseViolatesPreferences(ctx context.Context) bool {
+func (r *Replica) LeaseViolatesPreferences(ctx context.Context) bool {
 	storeDesc, err := r.store.Descriptor(ctx, true /* useCached */)
 	if err != nil {
 		log.Infof(ctx, "Unable to load the descriptor %v: cannot check if lease violates preference", err)
