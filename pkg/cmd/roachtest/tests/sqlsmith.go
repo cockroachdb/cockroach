@@ -134,13 +134,18 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		}
 
 		const timeout = time.Minute
-		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout.String())
-		t.Status("setting statement_timeout")
-		t.L().Printf("statement timeout:\n%s", setStmtTimeout)
-		if _, err := conn.Exec(setStmtTimeout); err != nil {
-			t.Fatal(err)
+		useStmtTimeout := rng.Float64() < 0.5
+		if useStmtTimeout {
+			setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout.String())
+			t.Status("setting statement_timeout")
+			t.L().Printf("statement timeout:\n%s", setStmtTimeout)
+			if _, err := conn.Exec(setStmtTimeout); err != nil {
+				t.Fatal(err)
+			}
+			logStmt(setStmtTimeout)
+		} else {
+			t.Status("using pgwire cancellation")
 		}
-		logStmt(setStmtTimeout)
 
 		smither, err := sqlsmith.NewSmither(conn, rng, setting.Options...)
 		if err != nil {
@@ -178,7 +183,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
-				go func(context.Context) {
+				go func(ctx context.Context) {
 					// Generate can potentially panic in bad cases, so
 					// to avoid Go routines from dying we are going
 					// catch that here, and only pass the error into
@@ -197,13 +202,12 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 						return
 					}
 
-					// At the moment, CockroachDB doesn't support pgwire query
-					// cancellation which is needed for correct handling of context
-					// cancellation, so instead of using a context with timeout, we opt
-					// in for using CRDB's 'statement_timeout'.
-					// TODO(yuzefovich): once #41335 is implemented, go back to using a
-					// context with timeout.
-					_, err := conn.Exec(stmt)
+					if !useStmtTimeout {
+						var cancel context.CancelFunc
+						ctx, cancel = context.WithTimeout(ctx, timeout)
+						defer cancel()
+					}
+					_, err := conn.ExecContext(ctx, stmt)
 					if err == nil {
 						logStmt(stmt)
 						stmt = "EXPLAIN " + stmt
