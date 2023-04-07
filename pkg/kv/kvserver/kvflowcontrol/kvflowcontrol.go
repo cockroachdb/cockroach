@@ -18,10 +18,77 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 )
+
+// Enabled determines whether we use flow control for replication traffic in KV.
+var Enabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_control.enabled",
+	"determines whether we use flow control for replication traffic in KV",
+	true,
+)
+
+// Mode determines the 'mode' of flow control we use for replication traffic in
+// KV, if enabled.
+var Mode = settings.RegisterEnumSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_control.mode",
+	"determines the 'mode' of flow control we use for replication traffic in KV, if enabled",
+	ApplyToAll.String(),
+	map[int64]string{
+		int64(ApplyToNone):    modeDict[ApplyToNone],
+		int64(ApplyToElastic): modeDict[ApplyToElastic],
+		int64(ApplyToAll):     modeDict[ApplyToAll],
+	},
+)
+
+var modeDict = map[ModeT]string{
+	ApplyToNone:    "apply_to_none",
+	ApplyToElastic: "apply_to_elastic",
+	ApplyToAll:     "apply_to_all",
+}
+
+// ModeT represents the various modes of flow control for replication traffic.
+type ModeT int64
+
+const (
+	// ApplyToNone is used to only make flow token adjustments (visible
+	// through kvadmission.* metrics) without writes waiting for available
+	// tokens. It's used to understand whether clusters would benefit from flow
+	// control. Work is still enqueued in below-raft admission queues, consuming
+	// IO tokens, so leaseholder writes can observe IO token exhaustion. This is
+	// similar to when kvflowcontrol is disabled entirely in that follower
+	// writes bypass admission control but still consume IO tokens. But with
+	// this mode, we would consume tokens in priority order.
+	ApplyToNone ModeT = iota
+	// ApplyToElastic uses flow control for only elastic traffic,
+	// i.e. elastic work will wait for flow tokens to be available. Similar to
+	// the ApplyToNone case, work is virtually enqueued in below-raft
+	// admission queues and dequeued in priority order. The primary difference
+	// is that empty elastic flow token buckets above-raft will block further
+	// elastic traffic from being admitted.
+	ApplyToElastic
+	// ApplyToAll uses flow control for both elastic and regular traffic,
+	// i.e. all work will wait for flow tokens to be available.
+	ApplyToAll
+)
+
+func (m ModeT) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m ModeT) SafeFormat(p redact.SafePrinter, verb rune) {
+	if s, ok := modeDict[m]; ok {
+		p.Print(s)
+		return
+	}
+	p.Print("unknown-mode")
+}
 
 // Stream models the stream over which we replicate data traffic, the
 // transmission for which we regulate using flow control. It's segmented by the
@@ -137,6 +204,10 @@ type Handle interface {
 	// AdmittedRaftLogEntries between what it admitted last and its latest
 	// RaftLogPosition.
 	DisconnectStream(context.Context, Stream)
+	// ResetStreams resets all connected streams, i.e. it disconnects and
+	// re-connects to each one. It effectively unblocks all requests waiting in
+	// Admit().
+	ResetStreams(ctx context.Context)
 	// Close closes the handle and returns all held tokens back to the
 	// underlying controller. Typically used when the replica loses its lease
 	// and/or raft leadership, or ends up getting GC-ed (if it's being
@@ -149,6 +220,12 @@ type Handle interface {
 // they're uniquely identified by their range ID.
 type Handles interface {
 	Lookup(roachpb.RangeID) (Handle, bool)
+	ResetStreams(ctx context.Context)
+}
+
+// HandleFactory is used to construct new Handles.
+type HandleFactory interface {
+	NewHandle(roachpb.RangeID, roachpb.TenantID) Handle
 }
 
 // Dispatch is used (i) to dispatch information about admitted raft log entries
@@ -204,4 +281,26 @@ func (s Stream) SafeFormat(p redact.SafePrinter, verb rune) {
 		tenantSt = "1"
 	}
 	p.Printf("t%s/s%s", tenantSt, s.StoreID.String())
+}
+
+type raftAdmissionMetaKey struct{}
+
+// ContextWithMeta returns a Context wrapping the supplied raft admission meta,
+// if any.
+func ContextWithMeta(ctx context.Context, meta *kvflowcontrolpb.RaftAdmissionMeta) context.Context {
+	if meta != nil {
+		ctx = context.WithValue(ctx, raftAdmissionMetaKey{}, meta)
+	}
+	return ctx
+}
+
+// MetaFromContext returns the raft admission meta embedded in the Context, if
+// any.
+func MetaFromContext(ctx context.Context) *kvflowcontrolpb.RaftAdmissionMeta {
+	val := ctx.Value(raftAdmissionMetaKey{})
+	h, ok := val.(*kvflowcontrolpb.RaftAdmissionMeta)
+	if !ok {
+		return nil
+	}
+	return h
 }

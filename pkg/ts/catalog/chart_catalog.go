@@ -3984,6 +3984,99 @@ var charts = []sectionDescription{
 					"admission.io.overload",
 				},
 			},
+			{
+				Title: "Flow Control Tokens Available",
+				Metrics: []string{
+					"kvadmission.flow_controller.regular_tokens_available",
+					"kvadmission.flow_controller.elastic_tokens_available",
+				},
+			},
+			{
+				Title: "Flow Control Rate",
+				Metrics: []string{
+					"kvadmission.flow_controller.regular_tokens_deducted",
+					"kvadmission.flow_controller.regular_tokens_returned",
+					"kvadmission.flow_controller.regular_tokens_unaccounted",
+					"kvadmission.flow_controller.elastic_tokens_deducted",
+					"kvadmission.flow_controller.elastic_tokens_returned",
+					"kvadmission.flow_controller.elastic_tokens_unaccounted",
+				},
+			},
+			{
+				Title: "Flow Control Admission Counter",
+				Metrics: []string{
+					"kvadmission.flow_controller.regular_requests_admitted",
+					"kvadmission.flow_controller.regular_requests_bypassed",
+					"kvadmission.flow_controller.regular_requests_errored",
+					"kvadmission.flow_controller.elastic_requests_admitted",
+					"kvadmission.flow_controller.elastic_requests_bypassed",
+					"kvadmission.flow_controller.elastic_requests_errored",
+					"kvadmission.flow_handle.regular_requests_admitted",
+					"kvadmission.flow_handle.regular_requests_errored",
+					"kvadmission.flow_handle.elastic_requests_admitted",
+					"kvadmission.flow_handle.elastic_requests_errored",
+				},
+			},
+			{
+				Title: "Flow Control Requests",
+				Metrics: []string{
+					"kvadmission.flow_controller.regular_requests_waiting",
+					"kvadmission.flow_controller.elastic_requests_waiting",
+					"kvadmission.flow_handle.regular_requests_waiting",
+					"kvadmission.flow_handle.elastic_requests_waiting",
+				},
+			},
+			{
+				Title: "Flow Token Wait Durations",
+				Metrics: []string{
+					"kvadmission.flow_controller.regular_wait_duration",
+					"kvadmission.flow_controller.elastic_wait_duration",
+					"kvadmission.flow_handle.regular_wait_duration",
+					"kvadmission.flow_handle.elastic_wait_duration",
+				},
+			},
+			{
+				Title: "Flow Control Streams",
+				Metrics: []string{
+					"kvadmission.flow_controller.regular_stream_count",
+					"kvadmission.flow_controller.regular_blocked_stream_count",
+					"kvadmission.flow_controller.elastic_stream_count",
+					"kvadmission.flow_controller.elastic_blocked_stream_count",
+				},
+			},
+			{
+				Title: "Flow Control Streams Connected/Disconnected",
+				Metrics: []string{
+					"kvadmission.flow_handle.streams_connected",
+					"kvadmission.flow_handle.streams_disconnected",
+				},
+			},
+			{
+				Title: "Flow Token Dispatch",
+				Metrics: []string{
+					"kvadmission.flow_token_dispatch.coalesced_elastic",
+					"kvadmission.flow_token_dispatch.coalesced_regular",
+					"kvadmission.flow_token_dispatch.local_elastic",
+					"kvadmission.flow_token_dispatch.local_regular",
+					"kvadmission.flow_token_dispatch.remote_elastic",
+					"kvadmission.flow_token_dispatch.remote_regular",
+					"raft.transport.flow-token-dispatches-dropped",
+					"raft.transport.flow-token-dispatches-sent",
+				},
+			},
+			{
+				Title: "Flow Token Pending Dispatchs",
+				Metrics: []string{
+					"kvadmission.flow_token_dispatch.pending_elastic",
+					"kvadmission.flow_token_dispatch.pending_regular",
+				},
+			},
+			{
+				Title: "Flow Token Dispatch Pending Nodes",
+				Metrics: []string{
+					"kvadmission.flow_token_dispatch.pending_nodes",
+				},
+			},
 		},
 	},
 	{

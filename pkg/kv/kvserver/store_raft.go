@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -273,6 +274,31 @@ func (s *Store) HandleRaftRequest(
 	// this one doesn't need to directly run through a Stopper task because it
 	// delegates all work through a raftScheduler, whose workers' lifetimes are
 	// already tied to the Store's Stopper.
+
+	for i := range req.AdmittedRaftLogEntries {
+		// Process any flow tokens that were returned over the RaftTransport. Do
+		// it before these requests enter the receive queues, which could drop
+		// them if full and cause token leaks. See I8 from kvflowcontrol/doc.go.
+		admittedEntries := req.AdmittedRaftLogEntries[i]
+		handle, found := makeStoreFlowControlHandles(s).Lookup(admittedEntries.RangeID)
+		if found {
+			handle.ReturnTokensUpto(
+				ctx,
+				admissionpb.WorkPriority(admittedEntries.AdmissionPriority),
+				admittedEntries.UpToRaftLogPosition,
+				kvflowcontrol.Stream{StoreID: admittedEntries.StoreID},
+			)
+		}
+
+		if log.V(1) {
+			log.Infof(ctx, "informed of below-raft admission (r%d s%s pri=%s up-to-%s)",
+				admittedEntries.RangeID, admittedEntries.StoreID,
+				admissionpb.WorkPriority(admittedEntries.AdmissionPriority),
+				admittedEntries.UpToRaftLogPosition,
+			)
+		}
+	}
+
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		if req.RangeID != 0 {
 			log.Fatalf(ctx, "coalesced heartbeats must have rangeID == 0")

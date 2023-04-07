@@ -627,6 +627,15 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 				// by either adding more synchronization, getting rid of this
 				// fast path, or swapping this entry from the top-most one in
 				// the waiting heap (and fixing the heap).
+				if log.V(1) {
+					log.Infof(ctx, "fast-path: admitting t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
+						tenant.id, info.Priority,
+						info.ReplicatedWorkInfo.RangeID,
+						info.ReplicatedWorkInfo.Origin,
+						info.ReplicatedWorkInfo.LogPosition.String(),
+						info.ReplicatedWorkInfo.Ingested,
+					)
+				}
 				q.onAdmittedReplicatedWork.admittedReplicatedWork(
 					roachpb.MustMakeTenantID(tenant.id),
 					info.Priority,
@@ -722,6 +731,17 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 
 	q.metrics.recordStartWait(info.Priority)
 	if info.ReplicatedWorkInfo.Enabled {
+		if log.V(1) {
+			log.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
+				tenant.waitingWorkHeap.Len(),
+				tenant.id, info.Priority,
+				info.ReplicatedWorkInfo.RangeID,
+				info.ReplicatedWorkInfo.Origin,
+				info.ReplicatedWorkInfo.LogPosition,
+				info.ReplicatedWorkInfo.Ingested,
+			)
+		}
+
 		return // return without waiting (admission is asynchronous)
 	}
 
@@ -855,7 +875,16 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	} else {
 		// NB: We don't use grant chains for store tokens, so they don't apply
 		// to replicated writes.
-
+		if log.V(1) {
+			log.Infof(context.Background(), "async-path: len(waiting-work)=%d dequeued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
+				tenant.waitingWorkHeap.Len(),
+				tenant.id, item.priority,
+				item.replicated.RangeID,
+				item.replicated.Origin,
+				item.replicated.LogPosition,
+				item.replicated.Ingested,
+			)
+		}
 		defer releaseWaitingWork(item)
 		q.onAdmittedReplicatedWork.admittedReplicatedWork(
 			roachpb.MustMakeTenantID(tenant.id),
@@ -1978,17 +2007,6 @@ type OnLogEntryAdmitted interface {
 		rangeID roachpb.RangeID, /* identifying range for the log entry */
 		pos LogPosition, /* log position of the entry that was admitted*/
 	)
-}
-
-// NoopOnLogEntryAdmitted is a no-op implementation of the OnLogEntryAdmitted
-// interface.
-type NoopOnLogEntryAdmitted struct{}
-
-var _ OnLogEntryAdmitted = &NoopOnLogEntryAdmitted{}
-
-func (n *NoopOnLogEntryAdmitted) AdmittedLogEntry(
-	roachpb.NodeID, admissionpb.WorkPriority, roachpb.StoreID, roachpb.RangeID, LogPosition,
-) {
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has completed.

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -48,6 +49,18 @@ func (sh *StoresFlowControlHandles) Lookup(
 	return handle, found
 }
 
+// ResetStreams is part of the kvflowcontrol.Handles interface.
+func (sh *StoresFlowControlHandles) ResetStreams(ctx context.Context) {
+	ls := (*Stores)(sh)
+	if err := ls.VisitStores(func(s *Store) error {
+		makeStoreFlowControlHandles(s).ResetStreams(ctx)
+		return nil
+	}); err != nil {
+		ctx = ls.AnnotateCtx(ctx)
+		log.Errorf(ctx, "unexpected error: %s", err)
+	}
+}
+
 // storeFlowControlHandles is a concrete implementation of
 // kvflowcontrol.Handles, backed by a single Store.
 type storeFlowControlHandles Store
@@ -72,5 +85,44 @@ func (sh *storeFlowControlHandles) Lookup(
 
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
-	return nil, false // TODO(irfansharif): Fill this in.
+	return repl.mu.flowControlIntegration.handle()
+}
+
+// ResetStreams is part of the kvflowcontrol.Handles interface.
+func (sh *storeFlowControlHandles) ResetStreams(ctx context.Context) {
+	s := (*Store)(sh)
+	s.VisitReplicas(func(r *Replica) (wantMore bool) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		handle, found := r.mu.flowControlIntegration.handle()
+		if found {
+			handle.ResetStreams(ctx)
+		}
+		return true
+	})
+}
+
+// storeFlowControlHandleFactory is a concrete implementation of
+// kvflowcontrol.HandleFactory.
+type storeFlowControlHandleFactory Store
+
+var _ kvflowcontrol.HandleFactory = &storeFlowControlHandleFactory{}
+
+// makeStoreFlowControlHandleFactory returns a new storeFlowControlHandleFactory
+// instance.
+func makeStoreFlowControlHandleFactory(store *Store) *storeFlowControlHandleFactory {
+	return (*storeFlowControlHandleFactory)(store)
+}
+
+func (shf *storeFlowControlHandleFactory) NewHandle(
+	rangeID roachpb.RangeID, tenantID roachpb.TenantID,
+) kvflowcontrol.Handle {
+	s := (*Store)(shf)
+	return kvflowhandle.New(
+		s.cfg.KVFlowController,
+		s.cfg.KVFlowHandleMetrics,
+		s.cfg.Clock,
+		rangeID,
+		tenantID,
+	)
 }

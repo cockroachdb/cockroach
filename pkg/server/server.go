@@ -43,7 +43,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -270,7 +274,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if opts, ok := cfg.TestingKnobs.AdmissionControl.(*admission.Options); ok {
 		admissionOptions.Override(opts)
 	}
-	gcoords := admission.NewGrantCoordinators(cfg.AmbientCtx, st, admissionOptions, registry, &admission.NoopOnLogEntryAdmitted{})
 
 	engines, err := cfg.CreateEngines(ctx)
 	if err != nil {
@@ -306,7 +309,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	rpcCtxOpts := rpc.ContextOptions{
 		TenantID:         roachpb.SystemTenantID,
 		UseNodeAuth:      true,
-		NodeID:           cfg.IDContainer,
+		NodeID:           nodeIDContainer,
 		StorageClusterID: cfg.ClusterIDContainer,
 		Config:           cfg.Config,
 		Clock:            clock.WallClock(),
@@ -457,17 +460,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
-	cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
-	stopper.AddCloser(stop.CloserFn(func() {
-		goschedstats.UnregisterRunnableCountCallback(cbID)
-	}))
-	stopper.AddCloser(gcoords)
-
 	dbCtx := kv.DefaultDBContext(stopper)
 	dbCtx.NodeID = idContainer
 	dbCtx.Stopper = stopper
 	db := kv.NewDBWithContext(cfg.AmbientCtx, tcsFactory, clock, dbCtx)
-	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
 
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	if knobs := cfg.TestingKnobs.NodeLiveness; knobs != nil {
@@ -537,6 +533,44 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	kvflowHandles := kvserver.MakeStoresFlowControlHandles(stores)
 	kvflowTokenDispatch := kvflowdispatch.New(registry, kvflowHandles, nodeIDContainer)
+	admittedEntryAdaptor := newAdmittedLogEntryAdaptor(kvflowTokenDispatch)
+	gcoords := admission.NewGrantCoordinators(
+		cfg.AmbientCtx,
+		st,
+		admissionOptions,
+		registry,
+		admittedEntryAdaptor,
+	)
+	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
+	cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
+	stopper.AddCloser(stop.CloserFn(func() {
+		goschedstats.UnregisterRunnableCountCallback(cbID)
+	}))
+	stopper.AddCloser(gcoords)
+
+	var admissionControl struct {
+		schedulerLatencyListener admission.SchedulerLatencyListener
+		kvflowController         kvflowcontrol.Controller
+		kvflowHandles            kvflowcontrol.Handles
+		kvAdmissionController    kvadmission.Controller
+		kvFlowHandleMetrics      *kvflowhandle.Metrics
+	}
+	admissionControl.schedulerLatencyListener = gcoords.Elastic.SchedulerLatencyListener
+	admissionControl.kvflowController = kvflowcontroller.New(registry, st, clock)
+	admissionControl.kvflowHandles = kvflowHandles
+	admissionControl.kvAdmissionController = kvadmission.MakeController(
+		nodeIDContainer,
+		gcoords.Regular.GetWorkQueue(admission.KVWork),
+		gcoords.Elastic,
+		gcoords.Stores,
+		admissionControl.kvflowController,
+		admissionControl.kvflowHandles,
+		cfg.Settings,
+	)
+	admissionControl.kvFlowHandleMetrics = kvflowhandle.NewMetrics(registry)
+	kvflowcontrol.Mode.SetOnChange(&st.SV, func(ctx context.Context) {
+		admissionControl.kvflowHandles.ResetStreams(ctx)
+	})
 
 	raftTransport := kvserver.NewRaftTransport(
 		cfg.AmbientCtx,
@@ -776,6 +810,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
 		SnapshotSendLimit:        cfg.SnapshotSendLimit,
 		RangeLogWriter:           rangeLogWriter,
+		KVAdmissionController:    admissionControl.kvAdmissionController,
+		KVFlowController:         admissionControl.kvflowController,
+		KVFlowHandles:            admissionControl.kvflowHandles,
+		KVFlowHandleMetrics:      admissionControl.kvFlowHandleMetrics,
+		SchedulerLatencyListener: admissionControl.schedulerLatencyListener,
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {

@@ -98,7 +98,7 @@ func TestGranterBasic(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
-			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &NoopOnLogEntryAdmitted{})
+			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{})
 			defer coords.Close()
 			coord = coords.Regular
 			return flushAndReset()
@@ -288,7 +288,7 @@ func TestStoreCoordinators(t *testing.T) {
 			return str
 		},
 	}
-	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &NoopOnLogEntryAdmitted{})
+	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{})
 	// There is only 1 KVWork requester at this point in initialization, for the
 	// Regular GrantCoordinator.
 	require.Equal(t, 1, len(requesters))
@@ -452,3 +452,12 @@ func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble
 		})
 	}
 }
+
+type noopOnLogEntryAdmitted struct{}
+
+func (n *noopOnLogEntryAdmitted) AdmittedLogEntry(
+	roachpb.NodeID, admissionpb.WorkPriority, roachpb.StoreID, roachpb.RangeID, LogPosition,
+) {
+}
+
+var _ OnLogEntryAdmitted = &noopOnLogEntryAdmitted{}

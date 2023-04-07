@@ -113,6 +113,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Descriptors(), timeutil.Now())
+			r.mu.flowControlIntegration.onBecameLeader(ctx)
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
 			// We unblock all ongoing and subsequent quota acquisition goroutines
@@ -122,6 +123,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			r.mu.quotaReleaseQueue = nil
 			r.mu.proposalQuota = nil
 			r.mu.lastUpdateTimes = nil
+			r.mu.flowControlIntegration.onBecameFollower(ctx)
 		}
 		return
 	} else if r.mu.proposalQuota == nil {
@@ -154,10 +156,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// Only consider followers that are active. Inactive ones don't decrease
 		// minIndex - i.e. they don't hold up releasing quota.
 		//
-		// The policy for determining who's active is more strict than the one used
-		// for purposes of quiescing. Failure to consider a dead/stuck node as such
-		// for the purposes of releasing quota can have bad consequences (writes
-		// will stall), whereas for quiescing the downside is lower.
+		// The policy for determining who's active is stricter than the one used
+		// for purposes of quiescing. Failure to consider a dead/stuck node as
+		// such for the purposes of releasing quota can have bad consequences
+		// (writes will stall), whereas for quiescing the downside is lower.
 
 		if !r.mu.lastUpdateTimes.isFollowerActiveSince(
 			ctx, rep.ReplicaID, now, r.store.cfg.RangeLeaseDuration,
@@ -252,4 +254,5 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,
 			status.Applied)
 	}
+	r.mu.flowControlIntegration.onProposalQuotaUpdated(ctx)
 }

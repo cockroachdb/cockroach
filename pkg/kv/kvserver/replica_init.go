@@ -162,6 +162,7 @@ func newUninitializedReplica(
 	r.breaker = newReplicaCircuitBreaker(
 		store.cfg.Settings, store.stopper, r.AmbientContext, r, onTrip, onReset,
 	)
+	r.mu.flowControlIntegration = newFlowControlIntegrationImpl(r, makeStoreFlowControlHandleFactory(r.store))
 	return r
 }
 
@@ -396,7 +397,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
-
+	r.mu.flowControlIntegration.onDescChanged(ctx)
 	// Prioritize the NodeLiveness Range in the Raft scheduler above all other
 	// Ranges to ensure that liveness never sees high Raft scheduler latency.
 	if bytes.HasPrefix(desc.StartKey, keys.NodeLivenessPrefix) {

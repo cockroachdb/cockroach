@@ -512,6 +512,10 @@ const (
 	// SQL Stats tables.
 	V23_1ChangeSQLStatsTTL
 
+	// V23_1_UseACRaftEntryEntryEncodings gates the use of raft entry encodings
+	// that (optionally) embed below-raft admission data.
+	V23_1_UseACRaftEntryEntryEncodings
+
 	// **********************************************************
 	// ** If we haven't yet selected a final 23.1 RC candidate **
 	// Step 1a: Add new versions for release-23.1 branch above here.
@@ -903,6 +907,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1ChangeSQLStatsTTL,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 98},
+	},
+	{
+		Key:     V23_1_UseACRaftEntryEntryEncodings,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 100},
 	},
 
 	// **********************************************************
