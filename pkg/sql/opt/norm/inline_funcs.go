@@ -412,6 +412,8 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 //  2. It has a single statement.
 //  3. Its arguments are non-volatile expressions.
 //  4. It is not a set-returning function.
+//  5. Arguments for parameters that are referenced multiple times are not
+//     subqueries.
 //
 // UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
 // we do not need an explicit check for this because immutable UDFs cannot
@@ -428,6 +430,10 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 // strict UDF that is not called when an argument is NULL. This presents a
 // challenge because we cannot wrap a set-returning function in a CASE
 // expression, like we do for strict, non-set-returning functions.
+//
+// TODO(mgartner): We may be able to loosen (5), but we need a way to generate
+// new column IDs for the entire subquery each time it is referenced after the
+// first reference. See #100915.
 func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
 	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 || udfp.SetReturning {
 		return false
@@ -439,7 +445,64 @@ func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPri
 			return false
 		}
 	}
-	return true
+	return !subqueryArgsCannotBeInlined(args, udfp)
+}
+
+// subqueryArgsCannotBeInlined returns true if there is one or more subquery
+// arguments in args that cannot be inlined. A subquery argument is not
+// inlinable if it is reference in the UDF body more than once.
+// subqueryArgsCannotBeInlined can only be called with UDFs that have exactly
+// one statement in their body.
+func subqueryArgsCannotBeInlined(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
+	if len(udfp.Body) != 1 {
+		panic(errors.AssertionFailedf("expected UDF body to have a single statement"))
+	}
+
+	// Before walking the entire expression tree of the statement, do a quick
+	// check to see if any of the arguments are subqueries.
+	hasSubqueryArg := false
+	for i := range args {
+		if _, ok := args[i].(*memo.SubqueryExpr); ok {
+			hasSubqueryArg = true
+			break
+		}
+	}
+	if !hasSubqueryArg {
+		return false
+	}
+
+	// hasNonInlinableSubqueryArg walks the expression tree and keeps track of
+	// the number of references to each parameter. If any parameters are
+	// referenced multiple times and correspond to subquery arguments, it
+	// returns true.
+	paramRefCounts := make([]int, len(args))
+	var hasNonInlinableSubqueryArg func(e opt.Expr) bool
+	hasNonInlinableSubqueryArg = func(e opt.Expr) bool {
+		if t, ok := e.(*memo.VariableExpr); ok {
+			arg, ord, ok := argForParam(args, udfp.Params, t.Col)
+			if !ok {
+				// This is not a UDF parameter reference.
+				return false
+			}
+			// Increment the reference counter for this parameter.
+			paramRefCounts[ord]++
+			if _, ok := arg.(*memo.SubqueryExpr); ok && paramRefCounts[ord] > 1 {
+				// The parameter's corresponding argument is a subquery and the
+				// parameter is referenced multiple times, so the subquery
+				// argument is not inlinable.
+				return true
+			}
+			return false
+		}
+		// Recurse into each child.
+		for i, n := 0, e.ChildCount(); i < n; i++ {
+			if hasNonInlinableSubqueryArg(e.Child(i)) {
+				return true
+			}
+		}
+		return false
+	}
+	return hasNonInlinableSubqueryArg(udfp.Body[0])
 }
 
 // ConvertUDFToSubquery returns a subquery expression that is equivalent to the
@@ -447,24 +510,12 @@ func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPri
 func (c *CustomFuncs) ConvertUDFToSubquery(
 	args memo.ScalarListExpr, udfp *memo.UDFPrivate,
 ) opt.ScalarExpr {
-	// argForParam returns the argument that can be substituted for the given
-	// column, if the column is a parameter of the UDF. It returns ok=false if
-	// the column is not a UDF parameter.
-	argForParam := func(col opt.ColumnID) (e opt.Expr, ok bool) {
-		for i := range udfp.Params {
-			if udfp.Params[i] == col {
-				return args[i], true
-			}
-		}
-		return nil, false
-	}
-
 	// replace substitutes variables that are UDF parameters with the
 	// corresponding argument from the invocation of the UDF.
 	var replace ReplaceFunc
 	replace = func(nd opt.Expr) opt.Expr {
 		if t, ok := nd.(*memo.VariableExpr); ok {
-			if arg, ok := argForParam(t.Col); ok {
+			if arg, _, ok := argForParam(args, udfp.Params, t.Col); ok {
 				return arg
 			}
 		}
@@ -491,4 +542,20 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 		),
 		&memo.SubqueryPrivate{},
 	)
+}
+
+// argForParam returns the argument that can be substituted for the given
+// column, if the column exists params. It also returns its ordinal position
+// within args. It returns ok=false if the column does not exists in params. The
+// given args and params must be the same length, and the i-th argument must
+// correspond to the i-th parameter.
+func argForParam(
+	args memo.ScalarListExpr, params opt.ColList, col opt.ColumnID,
+) (e opt.Expr, ord int, ok bool) {
+	for i := range params {
+		if params[i] == col {
+			return args[i], i, true
+		}
+	}
+	return nil, 0, false
 }
