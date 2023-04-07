@@ -107,6 +107,17 @@ func BlockSize(size int) ConfigOption {
 	}
 }
 
+// TargetFileSize sets the target file size across all levels of the LSM,
+// primarily for testing purposes.
+func TargetFileSize(size int64) ConfigOption {
+	return func(cfg *engineConfig) error {
+		for i := range cfg.Opts.Levels {
+			cfg.Opts.Levels[i].TargetFileSize = size
+		}
+		return nil
+	}
+}
+
 // MaxWriterConcurrency sets the concurrency of the sstable Writers. A concurrency
 // of 0 implies no parallelism in the Writer, and a concurrency of 1 or more implies
 // parallelism in the Writer. Currently, there's no difference between a concurrency
