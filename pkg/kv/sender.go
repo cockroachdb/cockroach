@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -110,6 +111,12 @@ type TxnSender interface {
 	// UpdateRootWithLeafFinalState updates a RootTxn using the final
 	// state of a LeafTxn.
 	UpdateRootWithLeafFinalState(context.Context, *roachpb.LeafTxnFinalState) error
+
+	// SetIsoLevel sets the txn's isolation level.
+	SetIsoLevel(isolation.Level) error
+
+	// IsoLevel returns the txn's isolation level.
+	IsoLevel() isolation.Level
 
 	// SetUserPriority sets the txn's priority.
 	SetUserPriority(roachpb.UserPriority) error
