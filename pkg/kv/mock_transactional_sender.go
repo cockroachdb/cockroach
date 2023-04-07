@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -70,6 +71,17 @@ func (m *MockTransactionalSender) UpdateRootWithLeafFinalState(
 // TxnStatus is part of the TxnSender interface.
 func (m *MockTransactionalSender) TxnStatus() roachpb.TransactionStatus {
 	return m.txn.Status
+}
+
+// SetIsoLevel is part of the TxnSender interface.
+func (m *MockTransactionalSender) SetIsoLevel(isoLevel isolation.Level) error {
+	m.txn.IsoLevel = isoLevel
+	return nil
+}
+
+// IsoLevel is part of the TxnSender interface.
+func (m *MockTransactionalSender) IsoLevel() isolation.Level {
+	return m.txn.IsoLevel
 }
 
 // SetUserPriority is part of the TxnSender interface.
