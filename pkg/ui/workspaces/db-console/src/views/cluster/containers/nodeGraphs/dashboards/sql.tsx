@@ -331,7 +331,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="KV Execution Latency: 99th percentile"
-      isKvGraph={false}
+      isKvGraph={true}
       tooltip={`The 99th percentile of latency between query requests and responses over a
           1 minute period. Values are displayed individually for each node.`}
     >
@@ -350,7 +350,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="KV Execution Latency: 90th percentile"
-      isKvGraph={false}
+      isKvGraph={true}
       tooltip={`The 90th percentile of latency between query requests and responses over a
            1 minute period. Values are displayed individually for each node.`}
     >

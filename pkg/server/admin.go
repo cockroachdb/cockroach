@@ -2973,7 +2973,14 @@ func (s *systemAdminServer) Decommission(
 }
 
 // DataDistribution returns a count of replicas on each node for each table.
-func (s *adminServer) DataDistribution(
+//
+// TODO(kv): Now that we have coalesced ranges, this endpoint no longer reports
+// accurate replica counts. Furthermore, since it doesn't take coalesced ranges
+// into account, this endpoint doesn't work for secondary tenants whose ranges are
+// *always* coalesced. Update this endpoint to handle coalesced ranges and
+// implement tenant filtering, after which it can be moved back into the
+// adminServer instead of the systemAdminServer.
+func (s *systemAdminServer) DataDistribution(
 	ctx context.Context, req *serverpb.DataDistributionRequest,
 ) (_ *serverpb.DataDistributionResponse, retErr error) {
 	if err := s.requireViewClusterMetadataPermission(ctx); err != nil {

@@ -808,6 +808,16 @@ type RestrictedCommandResult interface {
 	// GetBulkJobId returns the id of the job for the query, if the query is
 	// IMPORT, BACKUP or RESTORE.
 	GetBulkJobId() uint64
+
+	// ErrAllowReleased returns the error without asserting the result is not
+	// released yet. It should be used only in clean-up stages of a pausable
+	// portal.
+	ErrAllowReleased() error
+
+	// RevokePortalPausability is to make a portal un-pausable. It is called when
+	// we find the underlying query is not supported for a pausable portal.
+	// This method is implemented only by pgwire.limitedCommandResult.
+	RevokePortalPausability() error
 }
 
 // DescribeResult represents the result of a Describe command (for either
@@ -975,6 +985,16 @@ type streamingCommandResult struct {
 
 var _ RestrictedCommandResult = &streamingCommandResult{}
 var _ CommandResultClose = &streamingCommandResult{}
+
+// ErrAllowReleased is part of the sql.RestrictedCommandResult interface.
+func (r *streamingCommandResult) ErrAllowReleased() error {
+	return r.err
+}
+
+// RevokePortalPausability is part of the sql.RestrictedCommandResult interface.
+func (r *streamingCommandResult) RevokePortalPausability() error {
+	return errors.AssertionFailedf("forPausablePortal is for limitedCommandResult only")
+}
 
 // SetColumns is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {

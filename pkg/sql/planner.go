@@ -272,7 +272,7 @@ type planner struct {
 // hasFlowForPausablePortal returns true if the planner is for re-executing a
 // portal. We reuse the flow stored in p.pausablePortal.pauseInfo.
 func (p *planner) hasFlowForPausablePortal() bool {
-	return p.pausablePortal != nil && p.pausablePortal.pauseInfo != nil && p.pausablePortal.pauseInfo.flow != nil
+	return p.pausablePortal != nil && p.pausablePortal.pauseInfo != nil && p.pausablePortal.pauseInfo.resumableFlow.flow != nil
 }
 
 // resumeFlowForPausablePortal is called when re-executing a portal. We reuse
@@ -282,8 +282,12 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 		return errors.AssertionFailedf("no flow found for pausable portal")
 	}
 	recv.discardRows = p.instrumentation.ShouldDiscardRows()
-	recv.outputTypes = p.pausablePortal.pauseInfo.outputTypes
-	p.pausablePortal.pauseInfo.flow.Resume(recv)
+	recv.outputTypes = p.pausablePortal.pauseInfo.resumableFlow.outputTypes
+	flow := p.pausablePortal.pauseInfo.resumableFlow.flow
+	finishedSetupFn, cleanup := getFinishedSetupFn(p)
+	finishedSetupFn(flow)
+	defer cleanup()
+	flow.Resume(recv)
 	return recv.commErr
 }
 

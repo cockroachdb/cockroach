@@ -5169,7 +5169,8 @@ WHERE
       'use_declarative_schema_changer',
       'distsql_workmem',
       'copy_fast_path_enabled',
-      'direct_columnar_scans_enabled'
+      'direct_columnar_scans_enabled',
+      'multiple_active_portals_enabled'
     );
 ----
 variable                                              value

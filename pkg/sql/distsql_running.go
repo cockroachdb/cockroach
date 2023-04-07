@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -852,15 +853,16 @@ func (dsp *DistSQLPlanner) Run(
 
 	var flow flowinfra.Flow
 	var err error
-	if i := planCtx.getPortalPauseInfo(); i != nil && i.flow != nil {
-		flow = i.flow
+	if i := planCtx.getPortalPauseInfo(); i != nil && i.resumableFlow.flow != nil {
+		flow = i.resumableFlow.flow
 	} else {
 		ctx, flow, err = dsp.setupFlows(
 			ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
 		)
 		if i != nil {
-			i.flow = flow
-			i.outputTypes = plan.GetResultTypes()
+			// TODO(yuzefovich): add a check that this flow runs in a single goroutine.
+			i.resumableFlow.flow = flow
+			i.resumableFlow.outputTypes = plan.GetResultTypes()
 		}
 	}
 
@@ -1545,16 +1547,16 @@ func (r *DistSQLReceiver) PushBatch(
 var (
 	// ErrLimitedResultNotSupported is an error produced by pgwire
 	// indicating the user attempted to have multiple active portals but
-	// either without setting sql.pgwire.multiple_active_portals.enabled to
+	// either without setting session variable multiple_active_portals_enabled to
 	// true or the underlying query does not satisfy the restriction.
 	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(
 		40195,
 		"multiple active portals not supported, "+
-			"please set sql.pgwire.multiple_active_portals.enabled to true. "+
+			"please set session variable multiple_active_portals_enabled to true. "+
 			"Note: this feature is in preview",
 	)
 	// ErrStmtNotSupportedForPausablePortal is returned when the user have set
-	// sql.pgwire.multiple_active_portals.enabled to true but set an unsupported
+	// session variable multiple_active_portals_enabled to true but set an unsupported
 	// statement for a portal.
 	ErrStmtNotSupportedForPausablePortal = unimplemented.NewWithIssue(
 		98911,
@@ -1606,7 +1608,15 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	planner *planner,
 	recv *DistSQLReceiver,
 	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
-) error {
+) (retErr error) {
+	defer func() {
+		if ppInfo := planCtx.getPortalPauseInfo(); ppInfo != nil && !ppInfo.resumableFlow.cleanup.isComplete {
+			ppInfo.resumableFlow.cleanup.isComplete = true
+		}
+		if retErr != nil && planCtx.getPortalPauseInfo() != nil {
+			planCtx.getPortalPauseInfo().resumableFlow.cleanup.run()
+		}
+	}()
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
@@ -1636,6 +1646,25 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 			ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv, finishedSetupFn,
 		)
 	}()
+
+	if p := planCtx.getPortalPauseInfo(); p != nil {
+		if buildutil.CrdbTestBuild && p.resumableFlow.flow == nil {
+			checkErr := errors.AssertionFailedf("flow for portal %s cannot be found", planner.pausablePortal.Name)
+			if recv.commErr != nil {
+				recv.commErr = errors.CombineErrors(recv.commErr, checkErr)
+			} else {
+				return checkErr
+			}
+		}
+		if !p.resumableFlow.cleanup.isComplete {
+			p.resumableFlow.cleanup.appendFunc(namedFunc{
+				fName: "cleanup flow", f: func() {
+					p.resumableFlow.flow.Cleanup(ctx)
+				},
+			})
+		}
+	}
+
 	if recv.commErr != nil || recv.getError() != nil {
 		return recv.commErr
 	}
