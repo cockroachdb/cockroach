@@ -308,7 +308,7 @@ func TestSchemaChanger(t *testing.T) {
 				Initial:     initial,
 				Current:     append([]scpb.Status{}, initial...),
 			}
-			sc := sctestutils.MakePlan(t, cs, scop.PreCommitPhase)
+			sc := sctestutils.MakePlan(t, cs, scop.PreCommitPhase, nil /* memAcc */)
 			stages := sc.StagesForCurrentPhase()
 			for _, s := range stages {
 				exDeps := ti.newExecDeps(txn)
@@ -319,7 +319,7 @@ func TestSchemaChanger(t *testing.T) {
 		}))
 		var after scpb.CurrentState
 		require.NoError(t, ti.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-			sc := sctestutils.MakePlan(t, cs, scop.PostCommitPhase)
+			sc := sctestutils.MakePlan(t, cs, scop.PostCommitPhase, nil /* memAcc */)
 			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn)
 				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, scop.PostCommitPhase, s.Ops())))
@@ -351,7 +351,7 @@ func TestSchemaChanger(t *testing.T) {
 				require.NoError(t, err)
 
 				{
-					sc := sctestutils.MakePlan(t, cs, scop.PreCommitPhase)
+					sc := sctestutils.MakePlan(t, cs, scop.PreCommitPhase, nil /* memAcc */)
 					for _, s := range sc.StagesForCurrentPhase() {
 						exDeps := ti.newExecDeps(txn)
 						require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, scop.PostCommitPhase, s.Ops())))
@@ -362,7 +362,7 @@ func TestSchemaChanger(t *testing.T) {
 			return nil
 		}))
 		require.NoError(t, ti.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-			sc := sctestutils.MakePlan(t, cs, scop.PostCommitPhase)
+			sc := sctestutils.MakePlan(t, cs, scop.PostCommitPhase, nil /* memAcc */)
 			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn)
 				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, scop.PostCommitPhase, s.Ops())))
