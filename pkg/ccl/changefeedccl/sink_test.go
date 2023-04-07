@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -709,7 +710,18 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 
 	})
 	t.Run("compression options validation", func(t *testing.T) {
+		var saramaCompressionCodecOptions = map[string]sarama.CompressionCodec{
+			"NONE":   sarama.CompressionNone,
+			"GZIP":   sarama.CompressionGZIP,
+			"SNAPPY": sarama.CompressionSnappy,
+			"LZ4":    sarama.CompressionLZ4,
+			"ZSTD":   sarama.CompressionZSTD,
+		}
+		testCases := make([]string, 0, len(saramaCompressionCodecOptions)*2)
 		for option := range saramaCompressionCodecOptions {
+			testCases = append(testCases, option, strings.ToLower(option))
+		}
+		for _, option := range testCases {
 			opts := changefeedbase.SinkSpecificJSONConfig(fmt.Sprintf(`{"Compression": "%s"}`, option))
 			cfg, err := getSaramaConfig(opts)
 			require.NoError(t, err)
