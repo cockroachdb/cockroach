@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -1385,7 +1386,7 @@ func (rq *replicateQueue) findRemoveVoter(
 		raftStatus := repl.RaftStatus()
 		if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
 			// If we've lost raft leadership, we're unlikely to regain it so give up immediately.
-			return roachpb.ReplicationTarget{}, "", &benignError{errors.Errorf("not raft leader while range needs removal")}
+			return roachpb.ReplicationTarget{}, "", benignerror.New(errors.Errorf("not raft leader while range needs removal"))
 		}
 		candidates = allocatorimpl.FilterUnremovableReplicas(ctx, raftStatus, existingVoters, lastReplAdded)
 		log.KvDistribution.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
@@ -1416,12 +1417,11 @@ func (rq *replicateQueue) findRemoveVoter(
 	}
 	if len(candidates) == 0 {
 		// If we timed out and still don't have any valid candidates, give up.
-		return roachpb.ReplicationTarget{}, "", &benignError{
+		return roachpb.ReplicationTarget{}, "", benignerror.New(
 			errors.Errorf(
 				"no removable replicas from range that needs a removal: %s",
 				rangeRaftProgress(repl.RaftStatus(), existingVoters),
-			),
-		}
+			))
 	}
 
 	return rq.allocator.RemoveVoter(
