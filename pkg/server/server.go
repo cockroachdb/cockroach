@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -534,8 +535,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		/* deterministic */ false,
 	)
 
+	kvflowHandles := kvserver.MakeStoresFlowControlHandles(stores)
+	kvflowTokenDispatch := kvflowdispatch.New(registry, kvflowHandles, nodeIDContainer)
+
 	raftTransport := kvserver.NewRaftTransport(
-		cfg.AmbientCtx, st, cfg.AmbientCtx.Tracer, nodeDialer, grpcServer.Server, stopper,
+		cfg.AmbientCtx,
+		st,
+		cfg.AmbientCtx.Tracer,
+		nodeDialer,
+		grpcServer.Server,
+		stopper,
+		kvflowTokenDispatch,
+		nil, /* knobs */
 	)
 	registry.AddMetricStruct(raftTransport.Metrics())
 
@@ -1958,6 +1969,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Start the closed timestamp loop.
 	s.ctSender.Run(workersCtx, state.nodeID)
+
+	// Start dispatching extant flow tokens.
+	if err := s.raftTransport.StartFlowTokenLoop(workersCtx); err != nil {
+		return errors.Wrapf(err, "failed to run flow token dispatch loop")
+	}
 
 	// Attempt to upgrade cluster version now that the sql server has been
 	// started. At this point we know that all startupmigrations and permanent

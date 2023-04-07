@@ -144,6 +144,13 @@ type Handle interface {
 	Close(context.Context)
 }
 
+// Handles represent a set of flow control handles. Note that handles are
+// typically held on replicas initiating replication traffic, so on a given node
+// they're uniquely identified by their range ID.
+type Handles interface {
+	Lookup(roachpb.RangeID) (Handle, bool)
+}
+
 // Dispatch is used (i) to dispatch information about admitted raft log entries
 // to specific nodes, and (ii) to read pending dispatches.
 type Dispatch interface {
