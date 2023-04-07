@@ -80,6 +80,11 @@ type sqlConn struct {
 	clusterID           string
 	clusterOrganization string
 
+	// isSystemTenantUnderSecondaryTenants is true if the current
+	// connection is to the system tenant and there are secondary
+	// tenants defined.
+	isSystemTenantUnderSecondaryTenants bool
+
 	// infow and errw are the streams where informational, error and
 	// warning messages are printed.
 	// Echoed queries, if Echo is enabled, are printed to errw too.
@@ -271,6 +276,30 @@ func (c *sqlConn) tryEnableServerExecutionTimings(ctx context.Context) error {
 func (c *sqlConn) GetServerMetadata(
 	ctx context.Context,
 ) (nodeID int32, version, clusterID string, retErr error) {
+	c.isSystemTenantUnderSecondaryTenants = false
+	val, err := c.QueryRow(ctx, `
+	SELECT EXISTS (SELECT 1 FROM system.information_schema.tables WHERE table_name='tenants')`)
+	if c.conn.IsClosed() {
+		return 0, "", "", MarkWithConnectionClosed(err)
+	}
+	if err != nil {
+		return 0, "", "", err
+	}
+	// We use toString() instead of casting val[0] to string because we
+	// get either a go string or bool depending on the SQL driver in
+	// use.
+	if toString(val[0])[0] == 't' {
+		val, err = c.QueryRow(ctx, `
+	SELECT EXISTS (SELECT 1 FROM system.public.tenants LIMIT 1)`)
+		if c.conn.IsClosed() {
+			return 0, "", "", MarkWithConnectionClosed(err)
+		}
+		if err != nil {
+			return 0, "", "", err
+		}
+		c.isSystemTenantUnderSecondaryTenants = toString(val[0])[0] == 't'
+	}
+
 	// Retrieve the node ID and server build info.
 	// Be careful to query against the empty database string, which avoids taking
 	// a lease against the current database (in case it's currently unavailable).
@@ -328,6 +357,7 @@ func (c *sqlConn) GetServerMetadata(
 		c.serverBuild = fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
 			v10fields[0], version, v10fields[2], v10fields[3], v10fields[4])
 	}
+
 	return nodeID, version, clusterID, nil
 }
 
@@ -393,6 +423,12 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 	if err != nil {
 		// It is not an error that the server version cannot be retrieved.
 		fmt.Fprintf(c.errw, "warning: unable to retrieve the server's version: %s\n", err)
+	}
+
+	if c.isSystemTenantUnderSecondaryTenants {
+		fmt.Fprintln(c.infow, "#\n# ATTENTION: YOU ARE CONNECTED TO THE SYSTEM TENANT OF A MULTI-TENANT CLUSTER.\n"+
+			"# PROCEED WITH CAUTION. YOU ARE RESPONSIBLE FOR ENSURING THAT YOU DO NOT\n"+
+			"# PERFORM ANY OPERATIONS THAT COULD DAMAGE THE CLUSTER OR OTHER TENANTS.\n#")
 	}
 
 	// Report the server version only if it the revision has been
