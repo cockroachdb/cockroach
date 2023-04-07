@@ -1322,6 +1322,7 @@ func (cf *cFetcher) finalizeBatch() {
 
 // getCurrentColumnFamilyID returns the column family id of the key in
 // cf.machine.nextKV.Key.
+// gcassert:inline
 func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 	// If the table only has 1 column family, and its ID is 0, we know that the
 	// key has to be the 0th column family.
