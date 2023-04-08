@@ -362,7 +362,7 @@ func TestJobControlByType(t *testing.T) {
 		require.Error(t, err, "unsupported job type")
 	})
 
-	// To test the commands on valid job types, one job of every type in every state will be created
+	// To test the commands on valid job types, one job of every type in every state will be created.
 	var allJobTypes = []jobspb.Type{jobspb.TypeChangefeed, jobspb.TypeImport, jobspb.TypeBackup, jobspb.TypeRestore}
 	var jobspbTypeToString = map[jobspb.Type]string{
 		jobspb.TypeChangefeed: "CHANGEFEED",
@@ -374,7 +374,7 @@ func TestJobControlByType(t *testing.T) {
 	var allJobStates = []Status{StatusPending, StatusRunning, StatusPaused, StatusFailed,
 		StatusReverting, StatusSucceeded, StatusCanceled, StatusCancelRequested, StatusPauseRequested}
 
-	// This is required to make the jobs of each type controllable
+	// Make the jobs of each type controllable.
 	for _, jobType := range allJobTypes {
 		RegisterConstructor(jobType, func(job *Job, _ *cluster.Settings) Resumer {
 			return FakeResumer{
@@ -400,7 +400,7 @@ func TestJobControlByType(t *testing.T) {
 			t.Run(commandQuery, func(t *testing.T) {
 				var jobIDStrings []string
 
-				// Make multiple jobs of every permutation of job type and job state
+				// Make multiple jobs of every permutation of job type and job state.
 				const numJobsPerStatus = 3
 				for _, jobInfo := range []struct {
 					jobDetails  jobspb.Details
@@ -431,7 +431,7 @@ func TestJobControlByType(t *testing.T) {
 
 				jobIdsClause := fmt.Sprint(strings.Join(jobIDStrings, ", "))
 
-				// Execute the command and verify its executed on the expected number of rows
+				// Execute the command and verify it is executed on the expected number of rows.
 				numEffected, err := th.cfg.DB.Executor().ExecEx(
 					context.Background(),
 					"test-num-effected",
@@ -441,16 +441,16 @@ func TestJobControlByType(t *testing.T) {
 				)
 				require.NoError(t, err)
 
-				// Jobs in the starting state should be affected
+				// Jobs in the starting state should be affected.
 				numExpectedJobsAffected := numJobsPerStatus * len(tc.startingStates)
 				require.Equal(t, numExpectedJobsAffected, numEffected)
 
-				// Both the affected jobs + the jobs originally in the target state should be in that state
+				// Both the affected jobs + the jobs originally in the target state should be in that state.
 				numExpectedJobsWithEndState := numExpectedJobsAffected + numJobsPerStatus
 
 				// By verifying that the correct number of jobs are in the expected end state and
 				// the expected number of jobs were affected by the command, we guarantee that
-				// only the expected jobs have changed
+				// only the expected jobs have changed.
 				var numJobs = 0
 				th.sqlDB.QueryRow(
 					t,
