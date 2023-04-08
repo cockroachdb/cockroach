@@ -433,6 +433,11 @@ func TestJobControlByType(t *testing.T) {
 				}
 
 				jobIdsClause := fmt.Sprint(strings.Join(jobIDStrings, ", "))
+				defer func() {
+					// Clear the system.jobs table for the next test run.
+					th.sqlDB.Exec(t, fmt.Sprintf("DELETE FROM system.jobs WHERE id IN (%s)", jobIdsClause))
+					th.sqlDB.Exec(t, fmt.Sprintf("DELETE FROM system.job_info WHERE job_id IN (%s)", jobIdsClause))
+				}()
 
 				// Execute the command and verify it is executed on the expected number of rows.
 				numEffected, err := th.cfg.DB.Executor().ExecEx(
@@ -463,10 +468,6 @@ func TestJobControlByType(t *testing.T) {
 					),
 				).Scan(&numJobs)
 				require.Equal(t, numJobs, numExpectedJobsWithEndState)
-
-				// Clear the system.jobs table for the next test run.
-				th.sqlDB.Exec(t, fmt.Sprintf("DELETE FROM system.jobs WHERE id IN (%s)", jobIdsClause))
-				th.sqlDB.Exec(t, fmt.Sprintf("DELETE FROM system.job_info WHERE job_id IN (%s)", jobIdsClause))
 			})
 		}
 	}
