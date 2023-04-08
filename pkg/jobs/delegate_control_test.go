@@ -359,7 +359,7 @@ func TestJobControlByType(t *testing.T) {
 			sessiondata.RootUserSessionDataOverride,
 			invalidTypeQuery,
 		)
-		require.Error(t, err)
+		require.Error(t, err, "unsupported job type")
 	})
 
 	// To test the commands on valid job types, one job of every type in every state will be created
