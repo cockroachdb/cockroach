@@ -11,10 +11,13 @@
 package optbuilder
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -22,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (outScope *scope) {
@@ -39,11 +44,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	sch, resName := b.resolveSchemaForCreateFunction(&cf.FuncName)
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.FuncName.ObjectNamePrefix = resName
-
-	// TODO(chengxiong,mgartner): this is a hack to disallow UDF usage in UDF and
-	// we will need to lift this hack when we plan to allow it.
 	preFuncResolver := b.semaCtx.FunctionResolver
-	b.semaCtx.FunctionResolver = nil
 
 	b.insideFuncDef = true
 	b.trackSchemaDeps = true
@@ -55,8 +56,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
 		b.qualifyDataSourceNamesInAST = false
-
 		b.semaCtx.FunctionResolver = preFuncResolver
+
 		switch recErr := recover().(type) {
 		case nil:
 			// No error.
@@ -123,10 +124,20 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	var deps opt.SchemaDeps
 	var typeDeps opt.SchemaTypeDeps
 
+	// Collect the user defined type dependency of the return type.
+	funcReturnType, err := tree.ResolveType(b.ctx, cf.ReturnType.Type, b.semaCtx.TypeResolver)
+	if err != nil {
+		panic(err)
+	}
+	typedesc.GetTypeDescriptorClosure(funcReturnType).ForEach(func(id descpb.ID) {
+		typeDeps.Add(int(id))
+	})
+
 	// bodyScope is the base scope for each statement in the body. We add the
 	// named parameters to the scope so that references to them in the body can
 	// be resolved.
 	bodyScope := b.allocScope()
+	paramTypes := make(tree.ParamTypes, len(cf.Params))
 	for i := range cf.Params {
 		param := &cf.Params[i]
 		typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
@@ -143,16 +154,13 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		typedesc.GetTypeDescriptorClosure(typ).ForEach(func(id descpb.ID) {
 			typeDeps.Add(int(id))
 		})
+
+		paramTypes[i] = tree.ParamType{Name: param.Name.String(), Typ: typ}
 	}
 
-	// Collect the user defined type dependency of the return type.
-	funcReturnType, err := tree.ResolveType(b.ctx, cf.ReturnType.Type, b.semaCtx.TypeResolver)
-	if err != nil {
-		panic(err)
-	}
-	typedesc.GetTypeDescriptorClosure(funcReturnType).ForEach(func(id descpb.ID) {
-		typeDeps.Add(int(id))
-	})
+	b.semaCtx.FunctionResolver = b.makeRecursiveFunctionResolver(
+		cf, sch.Name(), paramTypes, funcReturnType,
+	)
 
 	// Parse the function body.
 	stmts, err := parser.Parse(funcBodyStr)
@@ -337,5 +345,102 @@ func checkStmtVolatility(
 		if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
 			panic(pgerror.Newf(pgcode.InvalidParameterValue, "volatile statement not allowed in stable function: %s", stmt.String()))
 		}
+	}
+}
+
+// recursiveFunctionResolver first attempts to resolve a function reference by
+// name as an existing function, but if this fails, it attempts to resolve the
+// reference as a recursive call. For a recursive function call,
+// recursiveFunctionResolver returns a placeholder function overload that
+// contains enough information to satisfy type-checking while the function is
+// created.
+type recursiveFunctionResolver struct {
+	res  tree.FunctionReferenceResolver
+	name *tree.FunctionName
+	def  *tree.ResolvedFunctionDefinition
+}
+
+// ResolveFunction implements the FunctionReferenceResolver interface.
+func (r *recursiveFunctionResolver) ResolveFunction(
+	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+) (*tree.ResolvedFunctionDefinition, error) {
+	def, err := r.res.ResolveFunction(ctx, name, path)
+	if err != nil && errors.Is(err, tree.ErrFunctionUndefined) {
+		if fn, err := name.ToFunctionName(); err == nil {
+			if (!fn.ExplicitCatalog || fn.Catalog() != r.name.Catalog()) &&
+				(!fn.ExplicitSchema || fn.Schema() != r.name.Schema()) &&
+				fn.Object() == r.name.Object() {
+				//nolint:returnerrcheck
+				return r.def, nil
+			}
+		}
+	}
+	return def, err
+}
+
+// ResolveFunctionByOID implements the FunctionReferenceResolver interface.
+func (r *recursiveFunctionResolver) ResolveFunctionByOID(
+	ctx context.Context, oid oid.Oid,
+) (*tree.FunctionName, *tree.Overload, error) {
+	return r.res.ResolveFunctionByOID(ctx, oid)
+}
+
+func (b *Builder) makeRecursiveFunctionResolver(
+	cf *tree.CreateFunction,
+	schemaName *cat.SchemaName,
+	paramTypes tree.TypeList,
+	returnType *types.T,
+) *recursiveFunctionResolver {
+	var functionVol tree.FunctionVolatility
+	var isLeakproof, calledOnNullInput bool
+	for _, option := range cf.Options {
+		switch t := option.(type) {
+		case tree.FunctionVolatility:
+			functionVol = t
+		case tree.FunctionLeakproof:
+			isLeakproof = true
+		case tree.FunctionNullInputBehavior:
+			calledOnNullInput = t == tree.FunctionCalledOnNullInput
+		}
+	}
+
+	var vol volatility.V
+	switch functionVol {
+	case tree.FunctionVolatile:
+		vol = volatility.Volatile
+	case tree.FunctionStable:
+		vol = volatility.Stable
+	case tree.FunctionImmutable:
+		vol = volatility.Immutable
+	default:
+		panic(errors.AssertionFailedf("unknown volatility"))
+	}
+	if isLeakproof {
+		if vol != volatility.Immutable {
+			panic(errors.AssertionFailedf("function is leakproof but not immutable"))
+		}
+		vol = volatility.Leakproof
+	}
+
+	qualifiedFnName := tree.MakeFunctionNameFromPrefix(*schemaName, tree.Name(cf.FuncName.Object()))
+	return &recursiveFunctionResolver{
+		res:  b.semaCtx.FunctionResolver,
+		name: &qualifiedFnName,
+		def: tree.QualifyBuiltinFunctionDefinition(
+			tree.NewFunctionDefinition(
+				cf.FuncName.Object(),
+				&tree.FunctionProperties{},
+				[]tree.Overload{
+					{
+						Types:             paramTypes,
+						ReturnType:        tree.FixedReturnType(returnType),
+						Volatility:        vol,
+						IsUDF:             true,
+						ReturnSet:         cf.ReturnType.IsSet,
+						CalledOnNullInput: calledOnNullInput,
+					},
+				}),
+			schemaName.Schema(),
+		),
 	}
 }

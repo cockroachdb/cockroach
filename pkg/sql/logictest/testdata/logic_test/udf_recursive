@@ -1,0 +1,15 @@
+statement ok
+CREATE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT CASE WHEN a <= 0 THEN 0 ELSE a + f(a-1) END $$;
+
+query I
+SELECT f(5)
+----
+15
+
+statement ok
+CREATE FUNCTION abs(x INT) RETURNS INT LANGUAGE SQL AS $$ SELECT abs(x)+100 $$;
+
+query I
+SELECT public.abs(-1);
+----
+101

@@ -2109,6 +2109,13 @@ func TestLogic_udf_record(
 	runLogicTest(t, "udf_record")
 }
 
+func TestLogic_udf_recursive(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_recursive")
+}
+
 func TestLogic_udf_setof(
 	t *testing.T,
 ) {

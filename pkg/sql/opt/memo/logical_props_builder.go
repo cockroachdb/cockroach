@@ -1662,7 +1662,7 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 		}
 		shared.VolatilitySet.Add(volatility)
 
-	case *UDFExpr:
+	case *UDFCallExpr:
 		shared.HasUDF = true
 		shared.VolatilitySet.Add(t.Volatility)
 

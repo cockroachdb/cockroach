@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 // buildScalar builds a set of memo groups that represent the given scalar
@@ -611,17 +613,27 @@ func (b *Builder) buildFunction(
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
 }
 
-// buildUDF builds a set of memo groups that represents a user-defined function
-// invocation.
-func (b *Builder) buildUDF(
-	f *tree.FuncExpr,
-	def *tree.ResolvedFunctionDefinition,
-	inScope, outScope *scope,
-	outCol *scopeColumn,
-	colRefs *opt.ColSet,
-) (out opt.ScalarExpr) {
+// cacheUDFDefinition builds and caches a UDFDefinition in the metadata, if one
+// is not already cached.
+func (b *Builder) cacheUDFDefinition(f *tree.FuncExpr) (udfDef *memo.UDFDefinition) {
 	o := f.ResolvedOverload()
-	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
+	if o.Oid == 0 {
+		// During creation of a recursive UDF we use a dummy overload that contains
+		// only the information needed for type-checking.
+		return nil
+	}
+	if b.udfDefinitions == nil {
+		b.udfDefinitions = make(map[oid.Oid]*memo.UDFDefinition)
+	}
+	if udfDef = b.udfDefinitions[o.Oid]; udfDef != nil {
+		// Either the definition has already been built, or this is a recursive call
+		// and an outer scope is in the process of building the definition.
+		return udfDef
+	}
+	// Initialize the definition to ensure that recursive calls to this UDF do not
+	// attempt to (re)build the SQL body definition.
+	udfDef = &memo.UDFDefinition{}
+	b.udfDefinitions[o.Oid] = udfDef
 
 	// Validate that the return types match the original return types defined in
 	// the function. Return types like user defined return types may change since
@@ -637,21 +649,6 @@ func (b *Builder) buildUDF(
 			panic(pgerror.Newf(
 				pgcode.InvalidFunctionDefinition,
 				"return type mismatch in function declared to return %s", rtyp.Name()))
-		}
-	}
-
-	// Build the argument expressions.
-	var args memo.ScalarListExpr
-	if len(f.Exprs) > 0 {
-		args = make(memo.ScalarListExpr, len(f.Exprs))
-		for i, pexpr := range f.Exprs {
-			args[i] = b.buildScalar(
-				pexpr.(tree.TypedExpr),
-				inScope,
-				nil, /* outScope */
-				nil, /* outCol */
-				colRefs,
-			)
 		}
 	}
 
@@ -688,8 +685,8 @@ func (b *Builder) buildUDF(
 	}
 
 	// Build an expression for each statement in the function body.
-	rels := make(memo.RelListExpr, len(stmts))
-	isSetReturning := o.Class == tree.GeneratorClass
+	body := make([]memo.RelExpr, len(stmts))
+	bodyProps := make([]*physical.Required, len(stmts))
 	// TODO(mgartner): Once other UDFs can be referenced from within a UDF, a
 	// boolean will not be sufficient to track whether or not we are in a UDF.
 	// We'll need to track the depth of the UDFs we are building expressions
@@ -707,7 +704,7 @@ func (b *Builder) buildUDF(
 			// set-returning. This is valid because any other rows after the
 			// first can simply be ignored. The limit could be beneficial
 			// because it could allow additional optimization.
-			if !isSetReturning {
+			if !o.ReturnSet {
 				b.buildLimit(&tree.Limit{Count: tree.NewDInt(1)}, b.allocScope(), stmtScope)
 				expr = stmtScope.expr
 				// The limit expression will maintain the desired ordering, if any,
@@ -809,22 +806,69 @@ func (b *Builder) buildUDF(
 				}
 			}
 		}
-
-		rels[i] = memo.RelRequiredPropsExpr{
-			RelExpr:   expr,
-			PhysProps: physProps,
-		}
+		body[i] = expr
+		bodyProps[i] = physProps
 	}
 	b.insideUDF = false
 
-	out = b.factory.ConstructUDF(
+	// Set the fields for the UDF definition that was initialized earlier.
+	*udfDef = memo.UDFDefinition{
+		Params:     params,
+		Body:       body,
+		BodyProps:  bodyProps,
+		ReturnType: rtyp,
+	}
+	return udfDef
+}
+
+// buildUDF builds a set of memo groups that represents a user-defined function
+// invocation.
+func (b *Builder) buildUDF(
+	f *tree.FuncExpr,
+	def *tree.ResolvedFunctionDefinition,
+	inScope, outScope *scope,
+	outCol *scopeColumn,
+	colRefs *opt.ColSet,
+) (out opt.ScalarExpr) {
+	o := f.ResolvedOverload()
+	udfDef := b.cacheUDFDefinition(f)
+	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
+
+	// Build the argument expressions.
+	var args memo.ScalarListExpr
+	if len(f.Exprs) > 0 {
+		args = make(memo.ScalarListExpr, len(f.Exprs))
+		for i, pexpr := range f.Exprs {
+			args[i] = b.buildScalar(
+				pexpr.(tree.TypedExpr),
+				inScope,
+				nil, /* outScope */
+				nil, /* outCol */
+				colRefs,
+			)
+		}
+	}
+
+	var returnType *types.T
+	if udfDef != nil {
+		returnType = udfDef.ReturnType
+	} else {
+		returnType = f.ResolvedType()
+		if types.IsRecordType(returnType) {
+			panic(unimplemented.NewWithIssue(88947,
+				"recursive record-returning user-defined functions are not yet supported"))
+		}
+	}
+	isMultiColDataSource := b.insideDataSource && returnType.Family() == types.TupleFamily &&
+		len(returnType.TupleContents()) > 1
+
+	out = b.factory.ConstructUDFCall(
 		args,
-		&memo.UDFPrivate{
+		&memo.UDFCallPrivate{
 			Name:               def.Name,
-			Params:             params,
-			Body:               rels,
-			Typ:                f.ResolvedType(),
-			SetReturning:       isSetReturning,
+			Def:                udfDef,
+			Typ:                returnType,
+			SetReturning:       o.ReturnSet,
 			Volatility:         o.Volatility,
 			CalledOnNullInput:  o.CalledOnNullInput,
 			MultiColDataSource: isMultiColDataSource,
@@ -835,7 +879,7 @@ func (b *Builder) buildUDF(
 	if outCol == nil {
 		if isMultiColDataSource {
 			// TODO(harding): Add the returns record property during create function.
-			f.ResolvedOverload().ReturnsRecordType = types.IsRecordType(rtyp)
+			f.ResolvedOverload().ReturnsRecordType = types.IsRecordType(f.ResolvedType())
 			return b.finishBuildGeneratorFunction(f, f.ResolvedOverload(), out, inScope, outScope, outCol)
 		}
 		if outScope != nil {
