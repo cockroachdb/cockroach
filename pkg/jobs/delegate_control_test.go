@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -349,6 +350,31 @@ func TestJobControlByType(t *testing.T) {
 	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables, argsFn)
 	defer cleanup()
 
+	delayedShowJobs := func(t *testing.T, query string) fmt.Stringer {
+		return delayedStringer{
+			func() string {
+				qrows := th.sqlDB.QueryStr(t, query)
+				jrows := th.sqlDB.QueryStr(t, "TABLE crdb_internal.jobs")
+
+				var buf strings.Builder
+				tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+				fmt.Fprintf(tw, "output of %q:\n", query)
+				for _, row := range qrows {
+					fmt.Fprintln(tw, strings.Join(row, "\t"))
+				}
+				tw.Flush()
+
+				tw = tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+				fmt.Fprintln(tw, "current jobs:\n")
+				for _, row := range jrows {
+					fmt.Fprintln(tw, strings.Join(row, "\t"))
+				}
+				tw.Flush()
+				return buf.String()
+			},
+		}
+	}
+
 	registry := th.server.JobRegistry().(*Registry)
 	blockResume := make(chan struct{})
 	defer close(blockResume)
@@ -400,6 +426,7 @@ func TestJobControlByType(t *testing.T) {
 			{"cancel", []Status{StatusPending, StatusRunning, StatusPaused}, StatusCancelRequested},
 		} {
 			commandQuery := fmt.Sprintf("%s ALL %s JOBS", tc.command, jobspbTypeToString[jobType])
+			subJobs := "SHOW JOBS SELECT id FROM system.jobs WHERE job_type='" + jobspbTypeToString[jobType] + "'"
 			t.Run(commandQuery, func(t *testing.T) {
 				var jobIDStrings []string
 
@@ -428,11 +455,12 @@ func TestJobControlByType(t *testing.T) {
 							_, err := registry.CreateAdoptableJobWithTxn(context.Background(), record, jobID, nil /* txn */)
 							require.NoError(t, err)
 							th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", status, jobID)
+							t.Logf("created job %d (%T) with status %s", jobID, record.Details, status)
 						}
 					}
 				}
 
-				jobIdsClause := fmt.Sprint(strings.Join(jobIDStrings, ", "))
+				jobIdsClause := strings.Join(jobIDStrings, ", ")
 				defer func() {
 					// Clear the system.jobs table for the next test run.
 					th.sqlDB.Exec(t, fmt.Sprintf("DELETE FROM system.jobs WHERE id IN (%s)", jobIdsClause))
@@ -447,11 +475,11 @@ func TestJobControlByType(t *testing.T) {
 					sessiondata.RootUserSessionDataOverride,
 					commandQuery,
 				)
-				require.NoError(t, err)
+				require.NoError(t, err, "%s", delayedShowJobs(t, subJobs))
 
 				// Jobs in the starting state should be affected.
 				numExpectedJobsAffected := numJobsPerStatus * len(tc.startingStates)
-				require.Equal(t, numExpectedJobsAffected, numEffected)
+				require.Equal(t, numExpectedJobsAffected, numEffected+1, "%s", delayedShowJobs(t, subJobs))
 
 				// Both the affected jobs + the jobs originally in the target state should be in that state.
 				numExpectedJobsWithEndState := numExpectedJobsAffected + numJobsPerStatus
@@ -467,8 +495,18 @@ func TestJobControlByType(t *testing.T) {
 						tc.endState, jobType, jobIdsClause,
 					),
 				).Scan(&numJobs)
-				require.Equal(t, numJobs, numExpectedJobsWithEndState)
+				require.Equal(t, numJobs, numExpectedJobsWithEndState, "%s", delayedShowJobs(t, subJobs))
 			})
 		}
 	}
+}
+
+// delayedStringer is a stringer that delays the construction of its
+// result string to the point String() is called.
+type delayedStringer struct {
+	stringFn func() string
+}
+
+func (d delayedStringer) String() string {
+	return d.stringFn()
 }
