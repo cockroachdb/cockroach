@@ -368,8 +368,7 @@ func (r *Replica) leasePostApplyLocked(
 		r.gossipFirstRangeLocked(ctx)
 	}
 
-	if (leaseChangingHands || maybeSplit) && iAmTheLeaseHolder && hasExpirationBasedLease &&
-		r.ownsValidLeaseRLocked(ctx, now) {
+	if (leaseChangingHands || maybeSplit) && iAmTheLeaseHolder && hasExpirationBasedLease {
 		if requiresExpirationBasedLease {
 			// Whenever we first acquire an expiration-based lease for a range that
 			// requires it, notify the lease renewer worker that we want it to keep
@@ -379,7 +378,7 @@ func (r *Replica) leasePostApplyLocked(
 			case r.store.renewableLeasesSignal <- struct{}{}:
 			default:
 			}
-		} else {
+		} else if r.ownsValidLeaseRLocked(ctx, now) {
 			// We received an expiration lease for a range that doesn't require it,
 			// i.e. comes after the liveness keyspan. We've also applied it before
 			// it has expired. Upgrade this lease to the more efficient epoch-based
