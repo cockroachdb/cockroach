@@ -5061,8 +5061,7 @@ func TestRaftSchedulerPrioritizesNodeLiveness(t *testing.T) {
 	livenessRangeID := livenessRepl.RangeID
 
 	// Assert that the node liveness range is prioritized.
-	priorityID := store.RaftSchedulerPriorityID()
-	require.Equal(t, livenessRangeID, priorityID)
+	require.Equal(t, []roachpb.RangeID{livenessRangeID}, store.RaftSchedulerPriorityIDs())
 }
 
 func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
