@@ -234,9 +234,6 @@ func (w *kv) validateConfig() (err error) {
 		return errors.Errorf("key size must be >= %d to fit integer part, requested %d",
 			minStringKeyDigits, w.keySize)
 	}
-	if w.keySize > 0 && w.insertCount > 0 {
-		return errors.New("string keys used by --key-size doesn't support --insert-count")
-	}
 	if w.writeSeq != "" {
 		first := w.writeSeq[0]
 		if len(w.writeSeq) < 2 || (first != 'R' && first != 'S' && first != 'Z') {
@@ -338,15 +335,10 @@ func splitFinder(i, splits int, r keyRange, k keyTransformer) interface{} {
 	return k.getKey(splitPoint)
 }
 
-func (w *kv) insertCountKey(idx, count int64, kr keyRange) int64 {
+func insertCountKey(idx, count int64, kr keyRange) int64 {
 	stride := kr.max/(count+1) - kr.min/(count+1)
 	key := kr.min + (idx+1)*stride
 	return key
-}
-
-var kvtableTypes = []*types.T{
-	types.Int,
-	types.Bytes,
 }
 
 // Tables implements the Generator interface.
@@ -379,8 +371,6 @@ func (w *kv) Tables() []workload.Table {
 	}
 
 	if w.insertCount > 0 {
-		// TODO: make this function parametric to allow different key types.
-		// Conside making a fillColumn method on key type interface for that.
 		const batchSize = 1000
 		table.InitialRows = workload.BatchedTuples{
 			NumBatches: (w.insertCount + batchSize - 1) / batchSize,
@@ -390,9 +380,24 @@ func (w *kv) Tables() []workload.Table {
 					rowEnd = w.insertCount
 				}
 
+				var kvtableTypes = []*types.T{
+					kt.getColumnType(),
+					types.Bytes,
+				}
+
 				cb.Reset(kvtableTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
 
-				keyCol := cb.ColVec(0).Int64()
+				{
+					seq := rowBegin
+					kt.fillColumnBatch(cb, a, func() (s int64, ok bool) {
+						if seq < rowEnd {
+							seq++
+							return insertCountKey(int64(seq-1), int64(w.insertCount), kr), true
+						}
+						return 0, false
+					})
+				}
+
 				valCol := cb.ColVec(1).Bytes()
 				// coldata.Bytes only allows appends so we have to reset it.
 				valCol.Reset()
@@ -400,10 +405,6 @@ func (w *kv) Tables() []workload.Table {
 
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
 					rowOffset := rowIdx - rowBegin
-
-					key := w.insertCountKey(int64(rowIdx), int64(w.insertCount), kr)
-					keyCol.Set(rowOffset, key)
-
 					var payload []byte
 					blockSize, uniqueSize := w.randBlockSize(rndBlock)
 					*a, payload = a.Alloc(blockSize, 0 /* extraCap */)
@@ -708,11 +709,20 @@ func (s *sequence) read() int64 {
 // Converts int64 based keys into database keys. Workload uses int64 based
 // keyspace to allow predictable sharding and splitting. Transformer allows
 // mapping integer key into string of arbitrary size for testing keys size.
+// First two methods are used in table creation and ops, while last ones are
+// only needed for import. If transformer doesn't support import, it should
+// be rejected when parsing flags and methods doesn't need to be implemented.
 type keyTransformer interface {
 	// getKey transforms int keys into table keys for read and write operations.
 	getKey(int64) interface{}
 	// keySQLType returns an SQL type used by create table for key column.
 	keySQLType() string
+
+	// getColumnType returns a key type for inserting initial data.
+	getColumnType() *types.T
+	// fillColumnBatch needs to populate key column with sequence of keys returned by
+	// next.
+	fillColumnBatch(cb coldata.Batch, a *bufalloc.ByteAllocator, next func() (seq int64, ok bool))
 }
 
 // intKeyTransformer is a noop transformer that passes int keys as is.
@@ -724,6 +734,21 @@ func (e intKeyTransformer) getKey(key int64) interface{} {
 
 func (e intKeyTransformer) keySQLType() string {
 	return "BIGINT"
+}
+
+func (e intKeyTransformer) getColumnType() *types.T {
+	return types.Int
+}
+
+func (e intKeyTransformer) fillColumnBatch(
+	cb coldata.Batch, a *bufalloc.ByteAllocator, next func() (seq int64, ok bool),
+) {
+	keyCol := cb.ColVec(0).Int64()
+	var i int
+	for key, ok := next(); ok; key, ok = next() {
+		keyCol.Set(i, key)
+		i++
+	}
 }
 
 // Minimum size of keys is set to fit base 10 representation of max uint64.
@@ -739,6 +764,10 @@ type stringKeyTransformer struct {
 }
 
 func (s stringKeyTransformer) getKey(i int64) interface{} {
+	return s.getKeyInternal(i)
+}
+
+func (s stringKeyTransformer) getKeyInternal(i int64) string {
 	filler := randutil.RandString(randutil.NewTestRandWithSeed(i), s.fillerSize, randutil.PrintableKeyAlphabet)
 	var bigKey big.Int
 	bigKey.Sub(big.NewInt(i), big.NewInt(s.startOffset))
@@ -749,6 +778,23 @@ func (s stringKeyTransformer) getKey(i int64) interface{} {
 
 func (s stringKeyTransformer) keySQLType() string {
 	return "STRING"
+}
+
+func (e stringKeyTransformer) getColumnType() *types.T {
+	return types.String
+}
+
+func (e stringKeyTransformer) fillColumnBatch(
+	cb coldata.Batch, a *bufalloc.ByteAllocator, next func() (seq int64, ok bool),
+) {
+	keyCol := cb.ColVec(0).Bytes()
+	keyCol.Reset()
+	var i int
+	for intKey, ok := next(); ok; intKey, ok = next() {
+		key := e.getKeyInternal(intKey)
+		keyCol.Set(i, []byte(key))
+		i++
+	}
 }
 
 // keyGenerator generates read and write keys. Read keys may not yet exist and
