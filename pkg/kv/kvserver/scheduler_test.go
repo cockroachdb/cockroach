@@ -418,20 +418,22 @@ func BenchmarkSchedulerEnqueueRaftTicks(b *testing.B) {
 	ctx := context.Background()
 
 	for _, collect := range []bool{false, true} {
-		for _, numRanges := range []int{1, 10, 100, 1000, 10000, 100000} {
-			for _, numWorkers := range []int{8, 16, 32, 64, 128} {
-				b.Run(fmt.Sprintf("collect=%t/ranges=%d/workers=%d", collect, numRanges, numWorkers),
-					func(b *testing.B) {
-						runSchedulerEnqueueRaftTicks(ctx, b, collect, numRanges, numWorkers)
-					},
-				)
+		for _, priority := range []bool{false, true} {
+			for _, numRanges := range []int{1, 10, 100, 1000, 10000, 100000} {
+				for _, numWorkers := range []int{8, 16, 32, 64, 128} {
+					b.Run(fmt.Sprintf("collect=%t/priority=%t/ranges=%d/workers=%d", collect, priority, numRanges, numWorkers),
+						func(b *testing.B) {
+							runSchedulerEnqueueRaftTicks(ctx, b, collect, priority, numRanges, numWorkers)
+						},
+					)
+				}
 			}
 		}
 	}
 }
 
 func runSchedulerEnqueueRaftTicks(
-	ctx context.Context, b *testing.B, collect bool, numRanges, numWorkers int,
+	ctx context.Context, b *testing.B, collect bool, priority bool, numRanges, numWorkers int,
 ) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -440,6 +442,12 @@ func runSchedulerEnqueueRaftTicks(
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
 	s := newRaftScheduler(a, m, p, numWorkers, defaultRaftSchedulerShardSize, 5)
+
+	// If requested, add a prioritized range corresponding to e.g. the liveness
+	// range.
+	if priority {
+		s.SetPriorityID(1)
+	}
 
 	// raftTickLoop keeps unquiesced ranges in a map, so we do the same.
 	ranges := make(map[roachpb.RangeID]struct{})
