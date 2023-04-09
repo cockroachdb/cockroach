@@ -127,6 +127,13 @@ func IsAuthError(err error) bool {
 	return false
 }
 
+// IsWaitingForInit checks whether the provided error is because the node is
+// still waiting for initialization.
+func IsWaitingForInit(err error) bool {
+	s, ok := status.FromError(errors.UnwrapAll(err))
+	return ok && s.Code() == codes.Unavailable && strings.Contains(err.Error(), "node waiting for init")
+}
+
 // RequestDidNotStart returns true if the given error from gRPC
 // means that the request definitely could not have started on the
 // remote server.
@@ -141,7 +148,8 @@ func RequestDidNotStart(err error) bool {
 	if errors.HasType(err, connectionNotReadyError{}) ||
 		errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) ||
 		errors.Is(err, circuit.ErrBreakerOpen) ||
-		IsConnectionRejected(err) {
+		IsConnectionRejected(err) ||
+		IsWaitingForInit(err) {
 		return true
 	}
 	s, ok := status.FromError(errors.Cause(err))
