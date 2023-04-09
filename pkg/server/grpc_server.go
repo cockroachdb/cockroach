@@ -11,11 +11,9 @@
 package server
 
 import (
-	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -80,7 +78,7 @@ func (s *grpcServer) intercept(fullName string) error {
 		return nil
 	}
 	if _, allowed := rpcsAllowedWhileBootstrapping[fullName]; !allowed {
-		return s.waitingForInitError(fullName)
+		return NewWaitingForInitError(fullName)
 	}
 	return nil
 }
@@ -93,15 +91,9 @@ func (s *serveMode) get() serveMode {
 	return serveMode(atomic.LoadInt32((*int32)(s)))
 }
 
-// waitingForInitError creates an error indicating that the server cannot run
+// NewWaitingForInitError creates an error indicating that the server cannot run
 // the specified method until the node has been initialized.
-func (s *grpcServer) waitingForInitError(methodName string) error {
+func NewWaitingForInitError(methodName string) error {
+	// NB: this error string is sadly matched in grpcutil.IsWaitingForInit().
 	return grpcstatus.Errorf(codes.Unavailable, "node waiting for init; %s not available", methodName)
-}
-
-// IsWaitingForInit checks whether the provided error is because the node is
-// still waiting for initialization.
-func IsWaitingForInit(err error) bool {
-	s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
-	return ok && s.Code() == codes.Unavailable && strings.Contains(err.Error(), "node waiting for init")
 }
