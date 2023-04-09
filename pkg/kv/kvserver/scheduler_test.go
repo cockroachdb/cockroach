@@ -18,12 +18,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -458,6 +462,39 @@ func TestSchedulerPriority(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return p.readyCount(priorityID) == 2
 	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// TestSchedulerPrioritizesLivenessAndMeta tests that the meta and liveness
+// ranges are prioritized in the Raft scheduler.
+func TestSchedulerPrioritizesLivenessAndMeta(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	store, err := s.GetStores().(*Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	iter, err := s.RangeDescIteratorFactory().(rangedesc.IteratorFactory).
+		NewIterator(ctx, keys.EverythingSpan)
+	require.NoError(t, err)
+
+	expectPrioritySpans := []roachpb.Span{keys.NodeLivenessSpan, keys.MetaSpan}
+	expectPriorityIDs := []roachpb.RangeID{}
+	for ; iter.Valid(); iter.Next() {
+		desc := iter.CurRangeDescriptor()
+		for _, span := range expectPrioritySpans {
+			rspan, err := keys.SpanAddr(span)
+			require.NoError(t, err)
+			if _, err := desc.RSpan().Intersect(rspan); err == nil {
+				expectPriorityIDs = append(expectPriorityIDs, desc.RangeID)
+			}
+		}
+	}
+	require.NotEmpty(t, expectPriorityIDs)
+	require.ElementsMatch(t, expectPriorityIDs, store.RaftSchedulerPriorityIDs())
 }
 
 // BenchmarkSchedulerEnqueueRaftTicks benchmarks the performance of enqueueing
