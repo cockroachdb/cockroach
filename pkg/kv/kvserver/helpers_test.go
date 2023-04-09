@@ -209,9 +209,9 @@ func (s *Store) ReservationCount() int {
 	return int(s.cfg.SnapshotApplyLimit) - s.snapshotApplyQueue.AvailableLen()
 }
 
-// RaftSchedulerPriorityID returns the Raft scheduler's prioritized range.
-func (s *Store) RaftSchedulerPriorityID() roachpb.RangeID {
-	return s.scheduler.PriorityID()
+// RaftSchedulerPriorityID returns the Raft scheduler's prioritized ranges.
+func (s *Store) RaftSchedulerPriorityIDs() []roachpb.RangeID {
+	return s.scheduler.PriorityIDs()
 }
 
 func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
