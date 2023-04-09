@@ -362,8 +362,7 @@ func (r *Replica) leasePostApplyLocked(
 	// Whenever we first acquire an expiration-based lease, notify the lease
 	// renewer worker that we want it to keep proactively renewing the lease
 	// before it expires.
-	if (leaseChangingHands || maybeSplit) && iAmTheLeaseHolder && expirationBasedLease &&
-		r.ownsValidLeaseRLocked(ctx, now) {
+	if (leaseChangingHands || maybeSplit) && iAmTheLeaseHolder && expirationBasedLease {
 		r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
 		select {
 		case r.store.renewableLeasesSignal <- struct{}{}:
