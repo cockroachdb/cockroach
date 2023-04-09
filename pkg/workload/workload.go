@@ -47,13 +47,14 @@ type Generator interface {
 // SupportsFixtures returns whether the Generator supports initialization
 // via fixtures.
 func SupportsFixtures(gen Generator) bool {
-	for _, t := range gen.Tables() {
+	tt := gen.Tables()
+	for _, t := range tt {
 		if t.InitialRows.FillBatch == nil {
 			return false
 		}
 	}
 	// Don't use fixtures if there are no tables.
-	return len(gen.Tables()) != 0
+	return len(tt) != 0
 }
 
 // FlagMeta is metadata about a workload flag.
