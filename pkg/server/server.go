@@ -1534,6 +1534,15 @@ func (s *Server) PreStart(ctx context.Context) error {
 	//   stores)
 	s.node.waitForAdditionalStoreInit()
 
+	// Connect the engines to the disk stats map constructor. This needs to
+	// wait until after waitForAdditionalStoreInit returns since it realizes on
+	// wholly initialized stores (it reads the StoreIdentKeys). It also needs
+	// to come before the call into SetPebbleMetricsProvider, which internally
+	// uses the disk stats map we're initializing.
+	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines); err != nil {
+		return errors.Wrapf(err, "failed to register engines for the disk stats map")
+	}
+
 	// Stores have been initialized, so Node can now provide Pebble metrics.
 	//
 	// Note that all existing stores will be operational before Pebble-level
