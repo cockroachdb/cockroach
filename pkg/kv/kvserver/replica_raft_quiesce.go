@@ -290,14 +290,9 @@ func shouldReplicaQuiesce(
 	// Fast path: don't quiesce expiration-based leases, since they'll likely be
 	// renewed soon. The lease may not be ours, but in that case we wouldn't be
 	// able to quiesce anyway (see leaseholder condition below).
-	//
-	// TODO(erikgrinaker): Out of caution, we only do this when
-	// kv.expiration_leases_only.enabled is true. We should always do this.
 	if l, _ := q.getLeaseRLocked(); l.Type() == roachpb.LeaseExpiration && l.Sequence != 0 {
-		if ExpirationLeasesOnly.Get(&q.ClusterSettings().SV) {
-			log.VInfof(ctx, 4, "not quiescing: expiration-based lease")
-			return nil, nil, false
-		}
+		log.VInfof(ctx, 4, "not quiescing: expiration-based lease")
+		return nil, nil, false
 	}
 	if q.hasPendingProposalsRLocked() {
 		if log.V(4) {
