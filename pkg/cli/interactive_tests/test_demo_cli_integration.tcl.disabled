@@ -48,10 +48,10 @@ eexpect "defaultdb>"
 send "\\q\r"
 eexpect eof
 
-spawn $argv sql --no-line-editor -u root -d cluster:demo-tenant
+spawn $argv sql --no-line-editor -u root -d cluster:demoapp
 eexpect "Welcome"
 eexpect root@
-eexpect "demo-tenant/defaultdb>"
+eexpect "demoapp/defaultdb>"
 send "\\q\r"
 eexpect eof
 end_test
