@@ -12,7 +12,7 @@ import React, { useState, useRef } from "react";
 import { Button, Dropdown } from "antd";
 import "antd/lib/button/style";
 import "antd/lib/dropdown/style";
-import moment, { Moment } from "moment";
+import moment, { Moment } from "moment-timezone";
 import { DateRangeMenu } from "src/dateRangeMenu";
 import { CaretDown } from "src/icon/caretDown";
 import classNames from "classnames/bind";
