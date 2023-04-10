@@ -82,14 +82,10 @@ var logSessionAuth = settings.RegisterBoolSetting(
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false).WithPublic()
 
-// TODO(alyshan): This setting is enforcing max number of connections with superusers not being affected by
-// the limit. However, admin users connections are counted towards the max count. So we should either update the
-// description to say "the maximum number of connections per gateway ... Superusers are not affected by this limit"
-// or stop counting superuser connections towards the max count.
 var maxNumNonAdminConnections = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"server.max_connections_per_gateway",
-	"the maximum number of non-superuser SQL connections per gateway allowed at a given time "+
+	"the maximum number of SQL connections per gateway allowed at a given time "+
 		"(note: this will only limit future connection attempts and will not affect already established connections). "+
 		"Negative values result in unlimited number of connections. Superusers are not affected by this limit.",
 	-1, // Postgres defaults to 100, but we default to -1 to match our previous behavior of unlimited.
