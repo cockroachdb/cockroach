@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1177,5 +1178,47 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 			e2 := r.NewEngineIterator(IterOptions{UpperBound: keys.MaxKey})
 			defer e2.Close()
 		})
+	}
+}
+
+func TestApproximateDiskBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	rng, _ := randutil.NewTestRand()
+
+	p, err := Open(ctx, InMemory(), ForTesting)
+	require.NoError(t, err)
+	defer p.Close()
+
+	key := func(i int) roachpb.Key {
+		return keys.SystemSQLCodec.TablePrefix(uint32(i))
+	}
+
+	// Write keys 0000...0999.
+	b := p.NewUnindexedBatch(true /* write only */)
+	for i := 0; i < 1000; i++ {
+		require.NoError(t, b.PutMVCC(
+			MVCCKey{Key: key(i), Timestamp: hlc.Timestamp{WallTime: int64(i + 1)}},
+			MVCCValue{Value: roachpb.Value{RawBytes: randutil.RandBytes(rng, 100)}},
+		))
+	}
+	require.NoError(t, b.Commit(true /* sync */))
+	require.NoError(t, p.Flush())
+
+	approxBytes := func(span roachpb.Span) uint64 {
+		v, err := p.ApproximateDiskBytes(span.Key, span.EndKey)
+		require.NoError(t, err)
+		t.Logf("%s (%x-%x): %d bytes", span, span.Key, span.EndKey, v)
+		return v
+	}
+
+	all := approxBytes(roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax})
+	for i := 0; i < 1000; i++ {
+		s := roachpb.Span{Key: key(i), EndKey: key(i + 1)}
+		if v := approxBytes(s); v >= all {
+			t.Errorf("ApproximateDiskBytes(%q) = %d >= entire DB size %d", s, v, all)
+		}
 	}
 }
