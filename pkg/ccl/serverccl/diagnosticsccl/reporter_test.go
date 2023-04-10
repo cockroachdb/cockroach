@@ -428,7 +428,8 @@ func startReporterTest(
 				{Key: "city", Value: "nyc"},
 			},
 		},
-		Knobs: rt.testingKnobs,
+		Knobs:        rt.testingKnobs,
+		RequiresRoot: true,
 	}
 	rt.server, rt.serverDB, _ = serverutils.StartServer(t, rt.serverArgs)
 

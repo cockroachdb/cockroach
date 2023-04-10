@@ -109,6 +109,7 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			params, _ := tests.CreateTestServerParams()
+			params.RequiresRoot = true
 			params.Knobs.Server = &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates - 1),

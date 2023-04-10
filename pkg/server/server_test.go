@@ -1057,7 +1057,9 @@ func TestSQLDecommissioned(t *testing.T) {
 		require.True(t, ok, "expected gRPC status error, got %T: %s", err, err)
 		require.Equal(t, codes.PermissionDenied, s.Code())
 
-		sqlClient, err := serverutils.OpenDBConnE(decomSrv.ServingSQLAddr(), "", true, tc.Stopper(), false /*requiresRoot*/)
+		sqlClient, err := serverutils.OpenDBConnE(
+			decomSrv.ServingSQLAddr(), "", true, tc.Stopper(), false, /*requireRoot*/
+		)
 		require.NoError(t, err)
 
 		var result int

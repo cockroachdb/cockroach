@@ -74,6 +74,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot:    true,
 				ScanMinIdleTime: time.Millisecond,
 				ScanMaxIdleTime: time.Millisecond,
 			},
@@ -225,6 +226,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			}
 			for i := 0; i < testCase.nodes; i++ {
 				perNode := base.TestServerArgs{
+					RequiresRoot:    true,
 					ScanMinIdleTime: time.Millisecond,
 					ScanMaxIdleTime: time.Millisecond,
 				}
@@ -374,7 +376,10 @@ func TestReplicateQueueUpReplicateOddVoters(t *testing.T) {
 	const replicaCount = 3
 
 	tc := testcluster.StartTestCluster(t, 1,
-		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+		base.TestClusterArgs{
+			ServerArgs:      base.TestServerArgs{RequiresRoot: true},
+			ReplicationMode: base.ReplicationAuto,
+		},
 	)
 	defer tc.Stopper().Stop(context.Background())
 
@@ -454,6 +459,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot:    true,
 				ScanMinIdleTime: 10 * time.Millisecond,
 				ScanMaxIdleTime: 10 * time.Millisecond,
 				Knobs: base.TestingKnobs{
@@ -537,6 +543,7 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot: true,
 				// Test fails with the default tenant. Disabling and
 				// tracking with #76378.
 				DefaultTestTenant: base.TestTenantDisabled,
@@ -1440,6 +1447,7 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 	// non-voting replicas to them.
 	for i := 1; i <= 5; i++ {
 		serverArgs[i-1] = base.TestServerArgs{
+			RequiresRoot: true,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{
@@ -1906,18 +1914,21 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	clusterArgs := base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
+				RequiresRoot:    true,
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
 					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n1"}},
 				}},
 			},
 			1: {
+				RequiresRoot:    true,
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
 					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n2"}},
 				}},
 			},
 			2: {
+				RequiresRoot:    true,
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
 					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n3"}},
@@ -2216,6 +2227,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	regions := [numNodes]int{1, 1, 1, 2, 2, 3, 3}
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
+			RequiresRoot: true,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{

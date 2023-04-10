@@ -87,6 +87,7 @@ func newTestHelper(
 	}
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs.JobsTestingKnobs = knobs
 	params.Knobs.SQLStatsKnobs = sqlStatsKnobs
 	server, db, _ := serverutils.StartServer(t, params)

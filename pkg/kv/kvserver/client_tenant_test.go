@@ -166,6 +166,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	timeSource := timeutil.NewManualTime(t0)
 
 	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Disable the default test tenant so that we can start our own.
 		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{

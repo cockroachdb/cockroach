@@ -98,6 +98,7 @@ func TestTenantTempTableCleanup(t *testing.T) {
 				// Disable the default test tenant so that we can start it.
 				DefaultTestTenant: base.TestTenantDisabled,
 				Settings:          settings,
+				RequiresRoot:      true,
 			},
 		},
 	)

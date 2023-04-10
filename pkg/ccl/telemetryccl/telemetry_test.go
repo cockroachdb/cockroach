@@ -28,16 +28,19 @@ func TestTelemetry(t *testing.T) {
 		t,
 		[]base.TestServerArgs{
 			{
+				RequiresRoot: true,
 				Locality: roachpb.Locality{
 					Tiers: []roachpb.Tier{{Key: "region", Value: "us-east-1"}},
 				},
 			},
 			{
+				RequiresRoot: true,
 				Locality: roachpb.Locality{
 					Tiers: []roachpb.Tier{{Key: "region", Value: "ca-central-1"}},
 				},
 			},
 			{
+				RequiresRoot: true,
 				Locality: roachpb.Locality{
 					Tiers: []roachpb.Tier{{Key: "region", Value: "ap-southeast-2"}},
 				},

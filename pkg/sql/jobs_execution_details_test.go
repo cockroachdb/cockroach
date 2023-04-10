@@ -93,6 +93,7 @@ func TestJobsExecutionDetails(t *testing.T) {
 	defer cancel()
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	defer jobs.ResetConstructors()()
 	s, sqlDB, _ := serverutils.StartServer(t, params)

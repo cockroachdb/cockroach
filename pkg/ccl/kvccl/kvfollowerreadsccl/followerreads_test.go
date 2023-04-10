@@ -704,6 +704,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot:      true,
 				DefaultTestTenant: base.TestTenantDisabled,
 				UseDatabase:       "t",
 			},
@@ -712,6 +713,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 			// Also, we're going to collect a trace of the test's final query.
 			ServerArgsPerNode: map[int]base.TestServerArgs{
 				3: {
+					RequiresRoot:      true,
 					DefaultTestTenant: base.TestTenantDisabled,
 					UseDatabase:       "t",
 					Knobs: base.TestingKnobs{

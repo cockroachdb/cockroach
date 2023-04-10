@@ -48,6 +48,7 @@ func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
 
 	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BootstrapVersionKeyOverride:    clusterversion.V22_2,

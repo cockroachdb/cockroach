@@ -327,6 +327,7 @@ func TestErrorOnRollback(t *testing.T) {
 
 	// We're going to inject an error into our EndTxn.
 	params := base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *kvpb.Error {
@@ -579,6 +580,7 @@ func TestQueryProgress(t *testing.T) {
 	// run its check(s) by receiving on the `unblock` channel (which the test can
 	// then close once it has checked the progress).
 	params := base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				// A low limit, to force many small scans such that we get progress
@@ -1274,9 +1276,7 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 		// the session expiry should be ignored.
 		// Open a DB connection on the server and not the tenant to test that the session
 		// expiry is ignored outside of the multi-tenant environment.
-		dbConn := serverutils.OpenDBConn(
-			t, s.ServingSQLAddr(), "" /* useDatabase */, false /* insecure */, s.Stopper(), false, /*requiresRoot*/
-		)
+		dbConn := serverutils.OpenDBConn(t, s.ServingSQLAddr(), "" /* useDatabase */, false /* insecure */, s.Stopper(), false /* requireRoot */)
 		defer dbConn.Close()
 		// Set up a dummy database and table to write into for the test.
 		if _, err := dbConn.Exec(`CREATE DATABASE t1;
@@ -1741,7 +1741,7 @@ func TestSessionTotalActiveTime(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params := base.TestServerArgs{}
+	params := base.TestServerArgs{RequiresRoot: true}
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 

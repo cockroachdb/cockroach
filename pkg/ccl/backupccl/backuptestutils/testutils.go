@@ -64,6 +64,7 @@ func backupRestoreTestSetupWithParams(
 	ctx := logtags.AddTag(context.Background(), "backup-restore-test-setup", nil)
 
 	dir, dirCleanupFn := testutils.TempDir(t)
+	params.ServerArgs.RequiresRoot = true
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.UseDatabase = "data"
 	params.ServerArgs.DefaultTestTenant = base.TestTenantDisabled

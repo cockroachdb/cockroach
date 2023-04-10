@@ -64,17 +64,23 @@ func TestSharedProcessTenantNodeLocalAccess(t *testing.T) {
 	}()
 
 	tc := serverutils.StartNewTestCluster(t, nodeCount, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled},
+		ServerArgs: base.TestServerArgs{
+			RequiresRoot:      true,
+			DefaultTestTenant: base.TestTenantDisabled,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
+				RequiresRoot:      true,
 				DefaultTestTenant: base.TestTenantDisabled,
 				ExternalIODir:     dirs[0],
 			},
 			1: {
+				RequiresRoot:      true,
 				DefaultTestTenant: base.TestTenantDisabled,
 				ExternalIODir:     dirs[1],
 			},
 			2: {
+				RequiresRoot:      true,
 				DefaultTestTenant: base.TestTenantDisabled,
 				ExternalIODir:     dirs[2],
 			},
@@ -102,7 +108,9 @@ ALTER TENANT application START SERVICE SHARED`)
 			}
 
 			sqlAddr := tc.Server(i).ServingSQLAddr()
-			db, err := serverutils.OpenDBConnE(sqlAddr, "cluster:application", false, tc.Stopper(), false /*requiresRoot*/)
+			db, err := serverutils.OpenDBConnE(
+				sqlAddr, "cluster:application", false, tc.Stopper(), true, /*requireRoot*/
+			)
 			if err != nil {
 				return err
 			}
@@ -159,6 +167,7 @@ func TestServerControllerHTTP(t *testing.T) {
 	ctx := context.Background()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot:      true,
 		DefaultTestTenant: base.TestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -194,7 +203,9 @@ func TestServerControllerHTTP(t *testing.T) {
 
 	// Get a SQL connection to the test tenant.
 	sqlAddr := s.ServingSQLAddr()
-	db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper(), false /*requiresRoot*/)
+	db2, err := serverutils.OpenDBConnE(
+		sqlAddr, "cluster:hello/defaultdb", false, s.Stopper(), false, /*requireRoot*/
+	)
 	// Expect no error yet: the connection is opened lazily; an
 	// error here means the parameters were incorrect.
 	require.NoError(t, err)
@@ -419,6 +430,7 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 	numNodes := 3
 	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -440,7 +452,9 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 	sqlAddr := tc.Server(serverIdx).ServingSQLAddr()
 	t.Logf("attempting to use tenant server on node %d (%s)", serverIdx, sqlAddr)
 	testutils.SucceedsSoon(t, func() error {
-		tenantDB, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello", false, tc.Stopper(), false /*requiresRoot*/)
+		tenantDB, err := serverutils.OpenDBConnE(
+			sqlAddr, "cluster:hello", false, tc.Stopper(), true, /*requireRoot*/
+		)
 		if err != nil {
 			t.Logf("error connecting to tenant server (will retry): %v", err)
 			return err
@@ -474,6 +488,7 @@ func TestServerStartStop(t *testing.T) {
 	ctx := context.Background()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot:      true,
 		DefaultTestTenant: base.TestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -490,7 +505,9 @@ func TestServerStartStop(t *testing.T) {
 
 	// Check the liveness.
 	testutils.SucceedsSoon(t, func() error {
-		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper(), false /*requiresRoot*/)
+		db2, err := serverutils.OpenDBConnE(
+			sqlAddr, "cluster:hello/defaultdb", false, s.Stopper(), true, /*requireRoot*/
+		)
 		// Expect no error yet: the connection is opened lazily; an
 		// error here means the parameters were incorrect.
 		require.NoError(t, err)
@@ -508,7 +525,9 @@ func TestServerStartStop(t *testing.T) {
 
 	// Verify that the service is indeed stopped.
 	testutils.SucceedsSoon(t, func() error {
-		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper(), false /*requiresRoot*/)
+		db2, err := serverutils.OpenDBConnE(
+			sqlAddr, "cluster:hello/defaultdb", false, s.Stopper(), false, /*requireRoot*/
+		)
 		// Expect no error yet: the connection is opened lazily; an
 		// error here means the parameters were incorrect.
 		require.NoError(t, err)

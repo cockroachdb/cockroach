@@ -184,7 +184,10 @@ func TestRevertSpansFanout(t *testing.T) {
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{UseDatabase: "test"},
+		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
+			UseDatabase:  "test",
+		},
 	})
 	defer tc.Stopper().Stop(context.Background())
 	s := tc.TenantOrServer(0)

@@ -434,6 +434,7 @@ func TestInvalidObjects(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		Store: &kvserver.StoreTestingKnobs{
 			DisableMergeQueue: true,
@@ -555,6 +556,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 	// The filter is needed in order to pause the execution of the running flows
 	// in order to observe them in the virtual tables.
 	params := base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(_ context.Context, req *kvpb.BatchRequest) *kvpb.Error {
@@ -1272,7 +1274,10 @@ func TestExecutionInsights(t *testing.T) {
 	// Start the cluster.
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		RequiresRoot: true,
+		Settings:     settings,
+	}}
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
@@ -1352,6 +1357,7 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			// Because this test modifies system.jobs and asserts its contents,
 			// we should disable jobs from being adopted and disable automatic jobs
@@ -1429,6 +1435,7 @@ func TestInternalSystemJobsTableWorksWithVersionPreV23_1BackfillTypeColumnInJobs
 	defer log.Scope(t).Close(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -1466,6 +1473,7 @@ func TestCorruptPayloadError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			// Because this test modifies system.jobs and asserts its contents,
 			// we should disable jobs from being adopted and disable automatic jobs
@@ -1506,6 +1514,7 @@ func TestInternalSystemJobsAccess(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
 		},

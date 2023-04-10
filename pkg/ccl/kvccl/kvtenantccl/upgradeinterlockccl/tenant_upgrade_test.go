@@ -255,6 +255,7 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 				// tenant.
 				DefaultTestTenant: base.TestTenantDisabled,
 				Settings:          settings,
+				RequiresRoot:      true,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 					SpanConfig: &spanconfig.TestingKnobs{

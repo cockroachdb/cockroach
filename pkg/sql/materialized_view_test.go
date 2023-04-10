@@ -38,6 +38,7 @@ func TestMaterializedViewClearedAfterRefresh(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -158,6 +159,7 @@ func TestMaterializedViewCleansUpOnRefreshFailure(t *testing.T) {
 	var mu syncutil.Mutex
 	shouldError := true
 
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeMaterializedViewRefreshCommit: func() error {
@@ -219,6 +221,7 @@ func TestDropMaterializedView(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, sqlRaw, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 

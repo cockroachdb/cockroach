@@ -1133,6 +1133,7 @@ database_name  grantee   privilege_type  is_grantable
 defaultdb      admin     ALL             YES
 defaultdb      public    CONNECT         NO
 defaultdb      root      ALL             YES
+defaultdb      testuser  CREATE          YES
 other_db       admin     ALL             YES
 other_db       public    CONNECT         NO
 other_db       root      ALL             YES
@@ -1160,6 +1161,7 @@ database_name  grantee   privilege_type  is_grantable
 defaultdb      admin     ALL             YES
 defaultdb      public    CONNECT         NO
 defaultdb      root      ALL             YES
+defaultdb      testuser  CREATE          YES
 other_db       admin     ALL             YES
 other_db       public    CONNECT         NO
 other_db       root      ALL             YES

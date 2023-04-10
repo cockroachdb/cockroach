@@ -65,6 +65,7 @@ func TestTenantUpgrade(t *testing.T) {
 			// tenant.
 			DefaultTestTenant: base.TestTenantDisabled,
 			Settings:          settings,
+			RequiresRoot:      true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -223,6 +224,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 	// Initialize the version to the BinaryMinSupportedVersion.
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			// Test validates tenant behavior. No need for the default test
 			// tenant here.
 			DefaultTestTenant: base.TestTenantDisabled,

@@ -356,6 +356,7 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							// investigation is required. Tracked with #76378.
 							params.DefaultTestTenant = base.TestTenantDisabled
 							var sqlDB *gosql.DB
+							params.RequiresRoot = true
 							params.Knobs = base.TestingKnobs{
 								SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 									BackfillChunkSize: chunkSize,

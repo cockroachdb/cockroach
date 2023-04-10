@@ -276,7 +276,7 @@ func TestGCJobRetry(t *testing.T) {
 	cs := cluster.MakeTestingClusterSettings()
 	gcjob.EmptySpanPollInterval.Override(ctx, &cs.SV, 100*time.Millisecond)
 	storage.MVCCRangeTombstonesEnabledInMixedClusters.Override(ctx, &cs.SV, true)
-	params := base.TestServerArgs{Settings: cs}
+	params := base.TestServerArgs{Settings: cs, RequiresRoot: true}
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
@@ -321,7 +321,10 @@ func TestGCResumer(t *testing.T) {
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 	ctx := context.Background()
-	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	args := base.TestServerArgs{
+		RequiresRoot: true,
+		Knobs:        base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+	}
 	srv, sqlDB, _ := serverutils.StartServer(t, args)
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	jobRegistry := execCfg.JobRegistry
@@ -678,6 +681,7 @@ SELECT descriptor_id, index_id
 func TestLegacyIndexGCSucceedsWithMissingDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	// Override binary version to be older.
 	params.Knobs.Server = &server.TestingKnobs{
 		DisableAutomaticVersionUpgrade: make(chan struct{}),

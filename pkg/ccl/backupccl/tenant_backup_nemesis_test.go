@@ -62,6 +62,7 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 	tc, hostSQLDB, hostClusterCleanupFn := backupRestoreTestSetupEmpty(
 		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot:      true,
 				DefaultTestTenant: base.TestTenantDisabled,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -81,7 +82,10 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	tenant10Conn, err := serverutils.OpenDBConnE(tenant10.SQLAddr(), "defaultdb", false, tenant10.Stopper(), false /*requiresRoot*/)
+
+	tenant10Conn, err := serverutils.OpenDBConnE(
+		tenant10.SQLAddr(), "defaultdb", false, tenant10.Stopper(), false, /*requireRoot*/
+	)
 	require.NoError(t, err)
 	tenant10DB := sqlutils.MakeSQLRunner(tenant10Conn)
 
@@ -110,7 +114,9 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tenant11Conn, err := serverutils.OpenDBConnE(tenant11.SQLAddr(), "bank", false, tenant11.Stopper(), false /*requiresRoot*/)
+	tenant11Conn, err := serverutils.OpenDBConnE(
+		tenant11.SQLAddr(), "bank", false, tenant11.Stopper(), false, /*requireRoot*/
+	)
 	require.NoError(t, err)
 	tenant11DB := sqlutils.MakeSQLRunner(tenant11Conn)
 	countQuery := fmt.Sprintf(`SELECT count(1) FROM bank."%s"`, tableName)
@@ -137,6 +143,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 	tc, hostSQLDB, hostClusterCleanupFn := backupRestoreTestSetupEmpty(
 		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot:      true,
 				DefaultTestTenant: base.TestTenantDisabled,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -158,7 +165,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 	})
 	require.NoError(t, err)
 	tenant10Conn, err := serverutils.OpenDBConnE(
-		tenant10.SQLAddr(), "defaultdb", false, tenant10.Stopper(), false)
+		tenant10.SQLAddr(), "defaultdb", false, tenant10.Stopper(), false /*requireRoot*/)
 	require.NoError(t, err)
 	_, err = tenant10Conn.Exec("CREATE DATABASE bank")
 	require.NoError(t, err)
@@ -260,7 +267,8 @@ func TestTenantBackupNemesis(t *testing.T) {
 	require.NoError(t, err)
 
 	tenant11Conn, err := serverutils.OpenDBConnE(
-		tenant11.SQLAddr(), "bank", false, tenant11.Stopper(), false /*requiresRoot*/)
+		tenant11.SQLAddr(), "bank", false, tenant11.Stopper(), false, /*requireRoot*/
+	)
 	require.NoError(t, err)
 
 	tenant10SQLDB := sqlutils.MakeSQLRunner(tenant10Conn)

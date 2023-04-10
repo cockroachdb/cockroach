@@ -336,7 +336,8 @@ func testMigrationWithFailures(
 			migrationFunc, expectedDescriptor := testMigrationFunc()
 			clusterArgs := base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
-					Settings: settings,
+					RequiresRoot: true,
+					Settings:     settings,
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),

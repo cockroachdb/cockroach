@@ -171,7 +171,8 @@ func TestCancelSessionPermissions(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				Insecure: true,
+				RequiresRoot: true,
+				Insecure:     true,
 			},
 		})
 	defer testCluster.Stopper().Stop(ctx)
@@ -879,6 +880,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	}
 
 	params := base.TestServerArgs{
+		RequiresRoot:      true,
 		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			AdmissionControl: &admission.Options{
@@ -937,7 +939,8 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	require.Equal(t, tableID, int(id))
 
 	makeTenantConn := func() *sqlutils.SQLRunner {
-		return sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, tenant.SQLAddr(), "" /* useDatabase */, false /* insecure */, kvserver.Stopper(), false /*requiresRoot*/))
+		return sqlutils.MakeSQLRunner(
+			serverutils.OpenDBConn(t, tenant.SQLAddr(), "" /* useDatabase */, false /* insecure */, kvserver.Stopper(), false /* requireRoot */))
 	}
 
 	blockers := make([]*sqlutils.SQLRunner, numBlockers)

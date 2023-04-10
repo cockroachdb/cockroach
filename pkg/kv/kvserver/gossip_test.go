@@ -152,8 +152,9 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// the replaced node's leases to time out, but has still shown itself to be
 	// long enough to avoid flakes.
 	serverArgs := base.TestServerArgs{
-		Addr:     util.IsolatedTestAddr.String(),
-		Insecure: true, // because our certs are only valid for 127.0.0.1
+		RequiresRoot: true,
+		Addr:         util.IsolatedTestAddr.String(),
+		Insecure:     true, // because our certs are only valid for 127.0.0.1
 		RetryOptions: retry.Options{
 			InitialBackoff: 10 * time.Millisecond,
 			MaxBackoff:     50 * time.Millisecond,

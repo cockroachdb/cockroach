@@ -475,7 +475,10 @@ func TestSQLSink(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
+		UseDatabase:  "d",
+	})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	sqlDB.Exec(t, `CREATE DATABASE d`)

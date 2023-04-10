@@ -955,7 +955,7 @@ func TestTelemetryScanCounts(t *testing.T) {
 	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
 	defer cleanup()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
 

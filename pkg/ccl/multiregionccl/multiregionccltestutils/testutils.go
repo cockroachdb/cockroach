@@ -106,6 +106,7 @@ func TestingCreateMultiRegionClusterWithRegionList(
 	for _, region := range regionNames {
 		for i := 0; i < serversPerRegion; i++ {
 			serverArgs[totalServerCount] = base.TestServerArgs{
+				RequiresRoot:  true,
 				Settings:      params.settings,
 				Knobs:         knobs,
 				ExternalIODir: params.baseDir,

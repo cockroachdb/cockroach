@@ -1863,10 +1863,6 @@ CREATE DATABASE test; USE test;
 		t.Fatal(err)
 	}
 
-	if _, err := t.db.Exec(fmt.Sprintf("CREATE USER %s;", username.TestUser)); err != nil {
-		t.Fatal(err)
-	}
-
 	t.labelMap = make(map[string]string)
 	t.varMap = make(map[string]string)
 	t.pendingStatements = make(map[string]pendingStatement)

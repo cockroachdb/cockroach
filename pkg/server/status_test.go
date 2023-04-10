@@ -2966,7 +2966,7 @@ func TestStatementDiagnosticsDoesNotReturnExpiredRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(context.Background())
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -3558,8 +3558,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn),
 	)
 
-	conn2 :=
-		serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper(), false /*requiresRoot*/)
+	conn2 := serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper(), false /*requiresRoot*/)
 	defer func() {
 		require.NoError(t, conn2.Close())
 	}()

@@ -451,12 +451,18 @@ GRANT SYSTEM MANAGETENANT TO %s  WITH GRANT OPTION;
 			_ = goDB.Close()
 			cleanupGoDB()
 		}))
+
 	return goDB, nil
 }
 
 // OpenDBConn sets up a gosql DB connection to the given server.
 func OpenDBConn(
-	t testing.TB, sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper, requireRoot bool,
+	t testing.TB,
+	sqlAddr string,
+	useDatabase string,
+	insecure bool,
+	stopper *stop.Stopper,
+	requireRoot bool,
 ) *gosql.DB {
 	conn, err := OpenDBConnE(sqlAddr, useDatabase, insecure, stopper, requireRoot)
 	if err != nil {
@@ -504,7 +510,8 @@ func StartTenant(
 	}
 
 	goDB := OpenDBConn(
-		t, tenant.SQLAddr(), params.UseDatabase, false /* insecure */, stopper, true)
+		t, tenant.SQLAddr(), params.UseDatabase, false /* insecure */, stopper, true, /* requireRoot */
+	)
 	return tenant, goDB
 }
 

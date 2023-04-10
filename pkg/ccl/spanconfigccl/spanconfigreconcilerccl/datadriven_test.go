@@ -99,6 +99,7 @@ func TestDataDriven(t *testing.T) {
 		}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot: true,
 				// Test fails when run under the default test tenant. More
 				// investigation is required.
 				DefaultTestTenant: base.TestTenantDisabled,

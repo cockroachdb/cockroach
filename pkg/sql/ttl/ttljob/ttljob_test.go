@@ -109,6 +109,7 @@ func newRowLevelTTLTestJobTestHelper(
 			DefaultTestTenant: defaultTestTenant,
 			Knobs:             baseTestingKnobs,
 			InsecureWebAccess: true,
+			RequiresRoot:      true,
 		},
 	})
 	th.testCluster = testCluster

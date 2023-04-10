@@ -47,6 +47,7 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			// Fails with the default test tenant due to span limits. Tracked
 			// with #76378.
 			DefaultTestTenant: base.TestTenantDisabled,

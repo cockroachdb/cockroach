@@ -34,7 +34,7 @@ func TestTelemetry(t *testing.T) {
 
 	sqltestutils.TelemetryTest(
 		t,
-		[]base.TestServerArgs{{}},
+		[]base.TestServerArgs{{RequiresRoot: true}},
 		true, /* testTenant */
 	)
 }

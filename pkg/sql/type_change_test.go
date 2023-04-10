@@ -84,6 +84,7 @@ func TestFailedTypeSchemaChangeRetriesTransparently(t *testing.T) {
 	// Ensures just the first try to cleanup returns a retryable error.
 	errReturned := false
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	cleanupSuccessfullyFinished := make(chan struct{})
 	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 		RunBeforeExec: func() error {
@@ -428,6 +429,7 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 			blockTypeSchemaChange := make(chan struct{})
 			finishedSchemaChange := make(chan struct{})
 
+			params.RequiresRoot = true
 			params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 			params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 				RunBeforeEnumMemberPromotion: func(ctx context.Context) error {

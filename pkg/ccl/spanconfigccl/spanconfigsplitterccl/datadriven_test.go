@@ -67,6 +67,7 @@ func TestDataDriven(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot: true,
 				// Fails with nil pointer dereference. Tracked with #76378.
 				DefaultTestTenant: base.TestTenantDisabled,
 				Knobs: base.TestingKnobs{

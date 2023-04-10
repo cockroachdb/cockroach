@@ -182,7 +182,7 @@ func TestImportFixture(t *testing.T) {
 	stats.DefaultRefreshInterval = time.Millisecond
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -230,7 +230,8 @@ func TestImportFixtureCSVServer(t *testing.T) {
 
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
-			UseDatabase: `d`,
+			UseDatabase:  `d`,
+			RequiresRoot: true,
 		},
 	)
 	defer s.Stopper().Stop(ctx)
@@ -264,7 +265,9 @@ func TestImportFixtureNodeCount(t *testing.T) {
 		filesPerNode = 1
 	)
 
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{RequiresRoot: true},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	db := tc.Conns[0]

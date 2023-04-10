@@ -39,7 +39,8 @@ func TestApplier(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	params := base.TestServerArgs{RequiresRoot: true}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)

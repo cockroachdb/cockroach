@@ -92,6 +92,7 @@ func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	defaultZoneConfig := zonepb.DefaultSystemZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
 	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)

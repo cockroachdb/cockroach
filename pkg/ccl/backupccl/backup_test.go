@@ -247,6 +247,7 @@ func TestBackupRestoreJobTagAndLabel(t *testing.T) {
 	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, numNodes, numAccounts, InitManualReplication,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot:      true,
 				DefaultTestTenant: base.TestTenantDisabled,
 				Knobs: base.TestingKnobs{
 					DistSQL: &execinfra.TestingKnobs{
@@ -339,6 +340,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	args := base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
+				RequiresRoot:      true,
 				DefaultTestTenant: base.TestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "west"},
@@ -349,6 +351,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 				}},
 			},
 			1: {
+				RequiresRoot:      true,
 				DefaultTestTenant: base.TestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "east"},
@@ -359,6 +362,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 				}},
 			},
 			2: {
+				RequiresRoot:      true,
 				DefaultTestTenant: base.TestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "east"},
@@ -492,6 +496,7 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 	args := base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
+				RequiresRoot: true,
 				ExternalIODir:     "/west0",
 				DefaultTestTenant: base.TestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
@@ -500,6 +505,7 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 				}},
 			},
 			1: {
+				RequiresRoot: true
 				ExternalIODir:     "/west1",
 				DefaultTestTenant: base.TestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
@@ -508,6 +514,7 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 				}},
 			},
 			2: {
+				RequiresRoot: true,
 				ExternalIODir:     "/east0",
 				DefaultTestTenant: base.TestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
@@ -516,6 +523,7 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 				}},
 			},
 			3: {
+				RequiresRoot: true,
 				ExternalIODir:     "/east1",
 				DefaultTestTenant: base.TestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
@@ -1639,7 +1647,10 @@ func TestRestoreCheckpointing(t *testing.T) {
 		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
-	testServerArgs := base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled}
+	testServerArgs := base.TestServerArgs{
+		RequiresRoot: true,
+		DefaultTestTenant: base.TestTenantDisabled,
+	}
 	params.ServerArgs = testServerArgs
 	params.ServerArgs.Knobs = knobs
 
@@ -1783,6 +1794,7 @@ func TestBackupRestoreResume(t *testing.T) {
 	ctx := context.Background()
 
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	}}
 
@@ -2750,6 +2762,7 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 				typeChangesFinished := make(chan struct{})
 				_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0, InitManualReplication, base.TestClusterArgs{
 					ServerArgs: base.TestServerArgs{
+						RequiresRoot: true,
 						Knobs: base.TestingKnobs{
 							SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
 								RunBeforeEnumMemberPromotion: func(context.Context) error {
@@ -2852,6 +2865,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	args := base.TestServerArgs{
+		RequiresRoot: true,
 		ExternalIODir: dir,
 	}
 
@@ -3209,7 +3223,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 
 	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
+	args := base.TestServerArgs{RequiresRoot: true, ExternalIODir: dir}
 	rng, _ := randutil.NewTestRand()
 
 	var backupDirs []string
@@ -3301,7 +3315,7 @@ func TestBackupRestorePartitionedIncremental(t *testing.T) {
 
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, multiNode, 0, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
+	args := base.TestServerArgs{RequiresRoot: true, ExternalIODir: dir}
 	rng, _ := randutil.NewTestRand()
 
 	// Each incremental backup is written to two different subdirectories in
@@ -4635,7 +4649,7 @@ func TestRestoredPrivileges(t *testing.T) {
 	const numAccounts = 1
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
+	args := base.TestServerArgs{RequiresRoot: true, ExternalIODir: dir}
 
 	rootOnly := sqlDB.QueryStr(t, `SHOW GRANTS ON data.bank`)
 
@@ -5192,6 +5206,7 @@ func TestBackupRestoreSequence(t *testing.T) {
 	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	args := base.TestServerArgs{
+		RequiresRoot:  true,
 		ExternalIODir: dir,
 	}
 
@@ -5409,7 +5424,10 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	defer cleanupFn()
 	// Test fails when run within a tenant. More investigation is
 	// required. Tracked with #76378.
-	args := base.TestServerArgs{ExternalIODir: dir, DefaultTestTenant: base.TestTenantDisabled}
+	args := base.TestServerArgs{
+		RequiresRoot: true,
+		ExternalIODir: dir,
+		DefaultTestTenant: base.TestTenantDisabled,}
 
 	// Setup for sequence ownership backup/restore tests in the same database.
 	backupLoc := localFoo + `/d`
@@ -5969,6 +5987,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
+	params.ServerArgs.RequiresRoot = true
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	// This test instantiates its own secondary tenants below. No need to run
@@ -6264,6 +6283,7 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
+	params.ServerArgs.RequiresRoot = true
 	params.ServerArgs.ExternalIODir = dir
 	// When this test runs under the default test tenant, the RESTORE command
 	// below which is expected to fail, doesn't. This may be a problem with the
@@ -6324,6 +6344,7 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
+	params.ServerArgs.RequiresRoot = true
 	params.ServerArgs.ExternalIODir = dir
 	tc := testcluster.StartTestCluster(t, 1, params)
 	defer tc.Stopper().Stop(ctx)
@@ -6852,6 +6873,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			TenantTestingKnobs: &sql.TenantTestingKnobs{
@@ -7380,6 +7402,8 @@ func TestClientDisconnect(t *testing.T) {
 				},
 			}
 			args.ServerArgs.Knobs = knobs
+			args.ServerArgs.RequiresRoot = true
+
 			tc, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, 1 /* numAccounts */, InitManualReplication, args)
 			defer cleanup()
 			ctx, cancel := context.WithCancel(context.Background())
@@ -7465,6 +7489,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	defer close(allowRequest)
 
 	params := base.TestClusterArgs{}
+	params.ServerArgs.RequiresRoot = true
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	params.ServerArgs.ExternalIODir = dir
@@ -8500,6 +8525,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 	baseDir := "testdata"
 	args := base.TestServerArgs{
+		RequiresRoot: true,
 		ExternalIODir: baseDir,
 		Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: args}
@@ -8594,7 +8620,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	// Disable running within a tenant because expected index span is not received.
 	// More investigation is necessary.
 	// https://github.com/cockroachdb/cockroach/issues/88633F
-	serverArgs := base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled}
+	serverArgs := base.TestServerArgs{RequiresRoot: true, DefaultTestTenant: base.TestTenantDisabled}
 	serverArgs.Knobs = base.TestingKnobs{
 		// Configure knobs to block the index backfills.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -8951,6 +8977,7 @@ func TestRestorePauseOnError(t *testing.T) {
 
 	baseDir := "testdata"
 	args := base.TestServerArgs{
+		RequiresRoot: true,
 		ExternalIODir: baseDir,
 		Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: args}
@@ -9151,6 +9178,7 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		RequiresRoot: true,
 		ExternalIODir: baseDir,
 		// This test hangs when run within a tenant. It's likely that
 		// the cause of the hang is the fact that we're waiting on the GC to
@@ -9326,6 +9354,7 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	tc, sqlDB, iodir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10,
 		InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot: true,
 				// Disabled to run within tenants because the function that sets up the restoring cluster
 				// has not been configured yet to run within tenants.
 				DefaultTestTenant: base.TestTenantDisabled,
@@ -9396,6 +9425,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	defer cleanup()
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			// Test fails when run within a tenant as zone config
 			// updates are not allowed by default. Tracked with 73768.
 			DefaultTestTenant: base.TestTenantDisabled,
@@ -9490,6 +9520,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.RequiresRoot = true
 	// Test fails when run within a tenant. More investigation is
 	// required. Tracked with #76378.
 	params.ServerArgs.DefaultTestTenant = base.TestTenantDisabled
@@ -9585,6 +9616,7 @@ func TestProtectRestoreTargets(t *testing.T) {
 	numAccounts := 100
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			// Allow creating a different tenant if the default test tenant is not started.
 			DefaultTestTenant: base.TestTenantProbabilistic,
 			Knobs: base.TestingKnobs{
@@ -9695,7 +9727,8 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
-	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{ServerArgs: base.TestServerArgs{RequiresRoot: true}})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -9776,9 +9809,7 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 	_, sqlDBRestore2, cleanupEmptyCluster2 := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupEmptyCluster2()
 	t.Run("restore-from-backup-with-existing-user", func(t *testing.T) {
-		// Create testuser and verify that the system user ids are
-		// allocated properly in the restore.
-		sqlDBRestore2.Exec(t, "CREATE USER testuser")
+		// Verify that the system user ids are allocated properly in the restore.
 		sqlDBRestore2.Exec(t, "RESTORE SYSTEM USERS FROM $1", localFoo+"/3")
 		sqlDBRestore2.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
 			{"admin", "root", "true", "2", "1"},
@@ -10058,6 +10089,7 @@ func TestRestoreOnFailOrCancelAfterPause(t *testing.T) {
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dataDir,
 		InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot: true,
 				Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 			},
 		})
@@ -10091,6 +10123,7 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 		},
 	}
 	params.ServerArgs.Knobs = knobs
+	params.ServerArgs.RequiresRoot = true
 
 	// We want the backup to be large enough so that it doesn't finish in
 	// one iteration, which wouldn't test if checkpoints overwrite.
@@ -10327,7 +10360,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 
 	baseDir := "testdata"
 	args := base.TestServerArgs{
-
+		RequiresRoot: true,
 		ExternalIODir: baseDir,
 		Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: args}
@@ -10583,7 +10616,9 @@ func TestBackupRestoreDBWithUDFs(t *testing.T) {
 	tempDir, tempDirCleanupFn := testutils.TempDir(t)
 	defer tempDirCleanupFn()
 
-	srcCluster, sqlDB, srcClusterCleanupFn := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	srcCluster, sqlDB, srcClusterCleanupFn := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{RequiresRoot: true},
+	})
 	srcServer := srcCluster.Server(0)
 	defer srcClusterCleanupFn()
 
@@ -10714,14 +10749,16 @@ func TestBackupRestoreClusterWithUDFs(t *testing.T) {
 	tempDir, tempDirCleanupFn := testutils.TempDir(t)
 	defer tempDirCleanupFn()
 
+	params := base.TestServerArgs{RequiresRoot: true}
+
 	srcCluster, srcSQLDB, srcClusterCleanupFn := backupRestoreTestSetupEmpty(
-		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{},
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{ServerArgs: params},
 	)
 	srcServer := srcCluster.Server(0)
 	defer srcClusterCleanupFn()
 
 	tgtCluster, tgtSQLDB, tgtClusterCleanupFn := backupRestoreTestSetupEmpty(
-		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{},
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{ServerArgs: params},
 	)
 	tgtServer := tgtCluster.Server(0)
 	defer tgtClusterCleanupFn()
@@ -10863,9 +10900,9 @@ func TestBackupInLocality(t *testing.T) {
 
 	// Disabled to run within tenant as certain MR features are not available to tenants.
 	args := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
-		0: {Locality: localityFromStr(t, "region=east,dc=1,az=1")},
-		1: {Locality: localityFromStr(t, "region=east,dc=2,az=2")},
-		2: {Locality: localityFromStr(t, "region=west,dc=1,az=1")},
+		0: {RequiresRoot: true, Locality: localityFromStr(t, "region=east,dc=1,az=1")},
+		1: {RequiresRoot: true, Locality: localityFromStr(t, "region=east,dc=2,az=2")},
+		2: {RequiresRoot: true, Locality: localityFromStr(t, "region=west,dc=1,az=1")},
 	}}
 
 	cluster, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3 /* nodes */, numAccounts, InitManualReplication, args)
@@ -10908,6 +10945,7 @@ func TestExportResponseDataSizeZeroCPUPagination(t *testing.T) {
 	externalDir, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		ExternalIODir: externalDir,
 		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
@@ -10945,7 +10983,7 @@ func TestBackupRestoreForeignKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params := base.TestServerArgs{}
+	params := base.TestServerArgs{RequiresRoot: true}
 	const numAccounts = 1000
 	_, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 		InitManualReplication, base.TestClusterArgs{ServerArgs: params})

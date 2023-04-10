@@ -112,6 +112,7 @@ func TestDropDatabase(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	ctx, cancel := context.WithCancel(context.Background())
+	params.RequiresRoot = true
 	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 		RunBeforeResume: func(jobID jobspb.JobID) error {
 			<-ctx.Done()
@@ -517,6 +518,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	const numRows = 2*chunkSize + 1
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{BackfillChunkSize: chunkSize},
 	}

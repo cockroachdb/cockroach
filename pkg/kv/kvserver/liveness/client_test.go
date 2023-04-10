@@ -140,6 +140,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	skip.UnderShort(t)
 
 	serverArgs := base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				// Disable replica rebalancing to ensure that the liveness range

@@ -232,6 +232,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	serverArgs := base.TestServerArgs{
+		RequiresRoot: true,
 		// This test fails when run from within a test tenant. This is likely
 		// due to the lack of support for tenant streaming, but more
 		// investigation is required. Tracked with #76378.
@@ -329,6 +330,7 @@ func TestStreamPartition(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	h, cleanup := replicationtestutils.NewReplicationHelper(t,
 		base.TestServerArgs{
+			RequiresRoot: true,
 			// Test fails within a test tenant. More investigation is required.
 			// Tracked with #76378.
 			DefaultTestTenant: base.TestTenantDisabled,
@@ -479,6 +481,7 @@ func TestStreamAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Test hangs when run within the default test tenant. Tracked with
 		// #76378.
 		DefaultTestTenant: base.TestTenantDisabled,
@@ -568,6 +571,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 	ctx := context.Background()
 	h, cleanup := replicationtestutils.NewReplicationHelper(t,
 		base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},

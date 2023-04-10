@@ -389,7 +389,8 @@ func startTestFullServer(
 		options.knobsFn(&knobs)
 	}
 	args := base.TestServerArgs{
-		Knobs: knobs,
+		RequiresRoot: true,
+		Knobs:        knobs,
 		// This test suite is already probabilistically running with
 		// tenants. No need for the test tenant.
 		DefaultTestTenant: base.TestTenantDisabled,

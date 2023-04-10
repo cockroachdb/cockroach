@@ -256,6 +256,7 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	fakeTime.setTime(timeutil.Now())
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
 		StubTimeNow: fakeTime.Now,
 	}
@@ -322,9 +323,9 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, conn, _ := serverutils.StartServer(t, params)
-	observer :=
-		serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper(), false /*requiresRoot*/)
+	observer := serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper(), false /*requiresRoot*/)
 
 	defer s.Stopper().Stop(context.Background())
 
@@ -434,6 +435,7 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, conn, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	sqlConn := sqlutils.MakeSQLRunner(conn)

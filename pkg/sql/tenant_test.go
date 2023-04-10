@@ -40,7 +40,7 @@ func TestDropTenantSynchronous(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("latest version", func(t *testing.T) {
-		s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+		s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 		defer s.Stopper().Stop(ctx)
 		testDestroyTenantSynchronous(ctx, t, sqlDB, kvDB)
 	})
@@ -140,6 +140,7 @@ func TestAlterTenantCapabilityMixedVersion22_2_23_1(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),

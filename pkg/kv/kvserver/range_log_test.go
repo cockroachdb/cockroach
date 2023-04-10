@@ -36,7 +36,7 @@ import (
 func TestLogSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	ts := s.(*server.TestServer)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -148,6 +148,7 @@ func TestLogMerges(t *testing.T) {
 
 	ctx := context.Background()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,

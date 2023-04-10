@@ -1481,6 +1481,7 @@ func TestDropEnumValueWithConcurrentPartitionedIndexDrop(t *testing.T) {
 	dropCh := make(chan chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	s, sqlDB, _ = serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeResume: func(jobID jobspb.JobID) error {

@@ -28,7 +28,7 @@ func TestPurgeSession(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 
 	defer s.Stopper().Stop(ctx)
 

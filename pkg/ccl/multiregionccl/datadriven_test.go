@@ -151,7 +151,8 @@ func TestMultiRegionDataDriven(t *testing.T) {
 						},
 					}
 					serverArgs[i] = base.TestServerArgs{
-						Locality: localityCfg,
+						RequiresRoot: true,
+						Locality:     localityCfg,
 						// We need to disable the default test tenant here
 						// because it appears as though operations like
 						// "wait-for-zone-config-changes" only work correctly

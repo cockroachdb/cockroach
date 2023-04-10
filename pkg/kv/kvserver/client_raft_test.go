@@ -3277,6 +3277,7 @@ func TestDecommission(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationAuto,
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ConfigureScratchRange: true,

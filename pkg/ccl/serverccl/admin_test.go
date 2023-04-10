@@ -130,6 +130,7 @@ func TestAdminAPIJobs(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Fails with the default test tenant. Tracked with #76378.
 		DefaultTestTenant: base.TestTenantDisabled,
 		ExternalIODir:     dir})

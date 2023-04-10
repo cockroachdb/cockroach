@@ -223,6 +223,7 @@ func CreateTenantStreamingClusters(
 	ctx context.Context, t *testing.T, args TenantStreamingClustersArgs,
 ) (*TenantStreamingClusters, func()) {
 	serverArgs := base.TestServerArgs{
+		RequiresRoot: true,
 		// Test fails because it tries to set a cluster setting only accessible
 		// to system tenants. Tracked with #76378.
 		DefaultTestTenant: base.TestTenantDisabled,

@@ -938,7 +938,10 @@ func TestSQLLivenessExemption(t *testing.T) {
 
 	// This test fails when run with the default test tenant. Disabling and
 	// tracking with #76378.
-	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot:      true,
+		DefaultTestTenant: base.TestTenantDisabled,
+	})
 	defer hostServer.Stopper().Stop(context.Background())
 
 	tenantID := serverutils.TestTenantID()
@@ -1159,6 +1162,7 @@ func TestConsumptionExternalStorage(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Test fails when run within the default tenant. Tracked with #76378.
 		DefaultTestTenant: base.TestTenantDisabled,
 		ExternalIODir:     dir,

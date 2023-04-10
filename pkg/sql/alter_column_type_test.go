@@ -43,6 +43,7 @@ func TestInsertBeforeOldColumnIsDropped(t *testing.T) {
 
 	var s serverutils.TestServerInterface
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	childJobStartNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 	var doOnce sync.Once
@@ -118,6 +119,7 @@ func TestInsertBeforeOldColumnIsDroppedUsingExpr(t *testing.T) {
 
 	var s serverutils.TestServerInterface
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	childJobStartNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 	var doOnce sync.Once
@@ -368,6 +370,7 @@ func TestSchemaChangeWhileExecutingAlterColumnType(t *testing.T) {
 	childJobStartNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 	var doOnce sync.Once
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeComputedColumnSwap: func() {

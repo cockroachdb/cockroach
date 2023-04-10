@@ -122,6 +122,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 
 	server, conn, _ := serverutils.StartServer(
 		t, base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					AOSTClause: "AS OF SYSTEM TIME '-1us'",

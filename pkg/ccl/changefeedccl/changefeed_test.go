@@ -133,6 +133,7 @@ func TestChangefeedReplanning(t *testing.T) {
 		errChan := make(chan error, 1)
 		readyChan := make(chan struct{})
 		defaultServerArgs := base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				DistSQL: &execinfra.TestingKnobs{
 					Changefeed: &TestingKnobs{
@@ -2808,6 +2809,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot:      true,
 		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -6074,6 +6076,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 
 	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			// Test uses SPLIT AT, which isn't currently supported for
 			// secondary tenants. Tracked with #76378.
 			DefaultTestTenant: base.TestTenantDisabled,
@@ -6142,6 +6145,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 	perServerKnobs := make(map[int]base.TestServerArgs, numNodes)
 	for i := 0; i < numNodes; i++ {
 		perServerKnobs[i] = base.TestServerArgs{
+			RequiresRoot: true,
 			// Test uses SPLIT AT, which isn't currently supported for
 			// secondary tenants. Tracked with #76378.
 			DefaultTestTenant: base.TestTenantDisabled,

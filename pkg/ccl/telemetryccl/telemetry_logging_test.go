@@ -174,6 +174,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 
 	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				EventLog: &sql.EventLogTestingKnobs{
 					// The sampling checks below need to have a deterministic

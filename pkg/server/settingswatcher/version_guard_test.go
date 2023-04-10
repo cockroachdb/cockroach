@@ -29,7 +29,7 @@ import (
 func TestVersionGuard(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 

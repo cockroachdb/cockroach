@@ -68,7 +68,7 @@ func TestSettingsRefresh(t *testing.T) {
 	// Set up some additional cluster settings to play around with. Note that we
 	// need to do this before starting the server, or there will be data races.
 	st := cluster.MakeTestingClusterSettings()
-	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true, Settings: st})
 	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(rawDB)

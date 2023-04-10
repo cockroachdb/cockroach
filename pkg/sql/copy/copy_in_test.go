@@ -304,6 +304,7 @@ func TestCopyFromBinary(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, db, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	defer s.Stopper().Stop(ctx)
@@ -672,6 +673,7 @@ func TestCopyInReleasesLeases(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, db, _ := serverutils.StartServer(t, params)
 	tdb := sqlutils.MakeSQLRunner(db)
 	defer s.Stopper().Stop(ctx)

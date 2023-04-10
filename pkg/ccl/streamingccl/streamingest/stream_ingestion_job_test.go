@@ -55,6 +55,7 @@ func TestTenantStreaming(t *testing.T) {
 	ctx := context.Background()
 
 	args := base.TestServerArgs{
+		RequiresRoot: true,
 		// Disabling the test tenant because the test below assumes that
 		// when it's monitoring the streaming job, it's doing so from the system
 		// tenant and not from within a secondary tenant. When inside
@@ -178,9 +179,15 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srcServer, srcDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	srcServer, srcDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot:      true,
+		DefaultTestTenant: base.TestTenantDisabled,
+	})
 	defer srcServer.Stopper().Stop(ctx)
-	destServer, destDB, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
+	destServer, destDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot:      true,
+		DefaultTestTenant: base.TestTenantDisabled,
+	})
 	defer destServer.Stopper().Stop(ctx)
 
 	srcTenantID := serverutils.TestTenantID()
@@ -404,6 +411,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 
 	progressUpdated := make(chan struct{})
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			Streaming: &sql.StreamingTestingKnobs{
 				OverrideRevertRangeBatchSize: 1,

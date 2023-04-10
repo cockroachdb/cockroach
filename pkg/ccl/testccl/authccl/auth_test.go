@@ -193,7 +193,7 @@ func jwtRunTest(t *testing.T, insecure bool) {
 			sv = &s.TestTenants()[0].ClusterSettings().SV
 		}
 
-		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
+		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER IF NOT EXISTS %s`, username.TestUser)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -420,7 +420,7 @@ func TestClientAddrOverride(t *testing.T) {
 	defer cleanupFunc()
 
 	// Ensure the test user exists.
-	if _, err := db.Exec(fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
+	if _, err := db.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS %s`, username.TestUser)); err != nil {
 		t.Fatal(err)
 	}
 

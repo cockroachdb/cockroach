@@ -221,6 +221,7 @@ func restoreMidSchemaChange(
 		dir, dirCleanupFn := testutils.TempDir(t)
 		params := base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot:  true,
 				ExternalIODir: dir,
 				// This test fails when run within a tenant because
 				// it relies on TestingGetTableDescriptor which isn't supported

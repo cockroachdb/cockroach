@@ -478,6 +478,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 	args := base.TestServerArgs{
 		// Disable the implicit default test tenant so that we can start our own.
 		DefaultTestTenant: base.TestTenantDisabled,
+		RequiresRoot:      true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},

@@ -48,7 +48,8 @@ func TestShowBackup(t *testing.T) {
 	const numAccounts = 11
 	tc, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	kvDB := tc.Server(0).DB()
-	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	params := base.TestServerArgs{RequiresRoot: true}
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 	sqlDB.ExecMultiple(t, strings.Split(`
@@ -479,8 +480,9 @@ func TestShowBackups(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 11
+	params := base.TestServerArgs{RequiresRoot: true}
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
-	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -675,7 +677,7 @@ func TestShowBackupPrivileges(t *testing.T) {
 
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true, ExternalIODir: dir})
 	defer srv.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE USER testuser`)

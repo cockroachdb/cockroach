@@ -36,6 +36,7 @@ func TestVerifyPassword(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
+			RequiresRoot: true,
 			// Need to disable the test tenant here because it appears as
 			// though we don't have all the same roles in the tenant as we
 			// have in the host cluster (like root).

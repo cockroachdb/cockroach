@@ -116,6 +116,7 @@ func TestBuildDataDriven(t *testing.T) {
 		} {
 			t.Run(depsType.name, func(t *testing.T) {
 				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+					RequiresRoot:      true,
 					DefaultTestTenant: base.TestTenantDisabled,
 				})
 				defer s.Stopper().Stop(ctx)
@@ -289,6 +290,7 @@ func walkYaml(root *yaml.Node, f func(node *yaml.Node)) {
 func TestBuildIsMemoryMonitored(t *testing.T) {
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(db)

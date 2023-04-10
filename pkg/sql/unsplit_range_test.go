@@ -269,6 +269,7 @@ func TestUnsplitRanges(t *testing.T) {
 	ctx := context.Background()
 	run := func(t *testing.T, tc testCase) {
 		params, _ := tests.CreateTestServerParams()
+		params.RequiresRoot = true
 		params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 		params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 			SkipWaitingForMVCCGC: true,

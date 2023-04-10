@@ -376,6 +376,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 
 	ctx := context.Background()
 	serverParams, _ := tests.CreateTestServerParams()
+	serverParams.RequiresRoot = true
 	serverParams.Knobs.SpanConfig = &spanconfig.TestingKnobs{
 		ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
 	}

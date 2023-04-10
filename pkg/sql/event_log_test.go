@@ -45,7 +45,7 @@ func TestStructuredEventLogging(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 
 	testStartTs := timeutil.Now()
@@ -693,7 +693,7 @@ func TestPerfLogging(t *testing.T) {
 	defer cleanup()
 
 	// Start a SQL server.
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(context.Background())
 	// TODO(fqazi): Enable with MVCC back filler support, since max_row_size is
 	// not properly enforced right now.

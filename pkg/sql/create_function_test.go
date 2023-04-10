@@ -157,6 +157,7 @@ func TestVersionGatingUDFInCheckConstraints(t *testing.T) {
 
 	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
 		params, _ := tests.CreateTestServerParams()
+		params.RequiresRoot = true
 		// Override binary version to be older.
 		params.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -199,6 +200,7 @@ func TestVersionGatingUDFInColumnDefault(t *testing.T) {
 
 	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
 		params, _ := tests.CreateTestServerParams()
+		params.Insecure = true
 		// Override binary version to be older.
 		params.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),

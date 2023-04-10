@@ -71,6 +71,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
@@ -235,6 +236,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
@@ -432,6 +434,7 @@ func TestPauseMigration(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
@@ -599,7 +602,8 @@ func TestPrecondition(t *testing.T) {
 	ctx := context.Background()
 	args := func() base.TestServerArgs {
 		return base.TestServerArgs{
-			Knobs: knobs,
+			RequiresRoot: true,
+			Knobs:        knobs,
 			Settings: cluster.MakeTestingClusterSettingsWithVersions(
 				v2,    // binaryVersion
 				v0,    // binaryMinSupportedVersion

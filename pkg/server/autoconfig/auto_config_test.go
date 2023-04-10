@@ -160,6 +160,7 @@ func TestAutoConfig(t *testing.T) {
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			AutoConfig: &autoconfig.TestingKnobs{

@@ -103,6 +103,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	ctx := context.Background()
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			// Test fails within a test tenant. More investigation
 			// is required. Tracked with #76378.
 			DefaultTestTenant: base.TestTenantDisabled,

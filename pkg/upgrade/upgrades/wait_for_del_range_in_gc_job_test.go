@@ -44,7 +44,8 @@ func TestWaitForDelRangeInGCJob(t *testing.T) {
 	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
 	storage.MVCCRangeTombstonesEnabledInMixedClusters.Override(ctx, &settings.SV, false)
 	testServer, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: settings,
+		RequiresRoot: true,
+		Settings:     settings,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),

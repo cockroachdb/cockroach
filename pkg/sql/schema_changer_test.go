@@ -90,6 +90,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -218,6 +219,7 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	// Disable synchronous schema change execution so the asynchronous schema
 	// changer executes all schema changes.
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -994,6 +996,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 	retriedBackfill := int64(0)
 	var retriedSpan roachpb.Span
 
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// TODO (lucy): Stress this test. This test used to require fast GC, but
@@ -1702,6 +1705,7 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 	// attempt 2: writing the third chunk returns a permanent failure
 	// purge the schema change.
 	expectedAttempts := 3
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -2061,6 +2065,7 @@ func TestParseSentinelValueWithNewColumnInSentinelFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
@@ -2172,6 +2177,7 @@ func TestAddColumnDuringColumnDrop(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	backfillNotification := make(chan struct{})
 	continueBackfillNotification := make(chan struct{})
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -3267,6 +3273,7 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	var db *gosql.DB
 	shouldCancel := true
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -3550,6 +3557,7 @@ func TestCRUDWhileColumnBackfill(t *testing.T) {
 	continueSchemaChangeNotification := make(chan bool)
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -3798,6 +3806,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 	const maxValue = 3*chunkSize - 1
 	ctx, cancel := context.WithCancel(context.Background())
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -3882,6 +3891,7 @@ func TestSchemaChangeInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -3989,6 +3999,7 @@ func TestSecondaryIndexWithOldStoringEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
@@ -4667,6 +4678,7 @@ func TestSchemaChangeAfterCreateInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -5458,7 +5470,7 @@ func TestCreateStatsAfterSchemaChange(t *testing.T) {
 	stats.DefaultRefreshInterval = time.Millisecond
 	stats.DefaultAsOfTime = time.Microsecond
 
-	server, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	server, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer server.Stopper().Stop(context.Background())
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -6189,6 +6201,7 @@ func TestRetriableErrorDuringRollback(t *testing.T) {
 	ctx := context.Background()
 
 	runTest := func(params base.TestServerArgs) {
+		params.RequiresRoot = true
 		s, sqlDB, kvDB := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 
@@ -6364,6 +6377,7 @@ func TestRetryOnAllErrorsWhenReverting(t *testing.T) {
 	ctx := context.Background()
 
 	runTest := func(t *testing.T, params base.TestServerArgs, gcJobRecord bool) {
+		params.RequiresRoot = true
 		s, sqlDB, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 
@@ -6538,6 +6552,7 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 
 	canProceed := make(chan struct{})
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	jobCancellationsToFail := struct {
 		syncutil.Mutex
 		jobs map[jobspb.JobID]struct{}
@@ -6742,6 +6757,7 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 	// Closed when we're ready to continue with the schema change.
 	continueNotification := make(chan struct{})
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
@@ -7879,6 +7895,7 @@ CREATE TABLE t.test (x INT) WITH (ttl_expire_after = '10 minutes');`,
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			params, _ := tests.CreateTestServerParams()
+			params.RequiresRoot = true
 			childJobStartNotification := make(chan struct{})
 			waitBeforeContinuing := make(chan struct{})
 			var doOnce sync.Once
@@ -7953,6 +7970,7 @@ func TestPauseBeforeRandomDescTxn(t *testing.T) {
 			shouldCount int32 // accessed atomically
 		)
 		params, _ := tests.CreateTestServerParams()
+		params.RequiresRoot = true
 		params.Knobs = base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -8073,6 +8091,7 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 			shouldCount int32 // accessed atomically
 		)
 		params, _ := tests.CreateTestServerParams()
+		params.RequiresRoot = true
 		params.Knobs = base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{

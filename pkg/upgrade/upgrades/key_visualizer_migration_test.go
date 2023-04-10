@@ -31,6 +31,7 @@ func TestKeyVisualizerTablesMigration(t *testing.T) {
 
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),

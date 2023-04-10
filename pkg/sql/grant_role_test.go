@@ -31,6 +31,7 @@ func TestNoOpGrantRole(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(sqlDB)

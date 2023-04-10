@@ -62,6 +62,7 @@ func TestDataDriven(t *testing.T) {
 				numExpectedTasks := len(configprofiles.TestingGetProfiles()[setter.String()])
 
 				s, _, _ = serverutils.StartServer(t, base.TestServerArgs{
+					RequiresRoot:       true,
 					AutoConfigProvider: provider,
 					// This test does not exercise security parameters, so we
 					// keep the configuration simpler to keep the test code also
@@ -73,8 +74,9 @@ func TestDataDriven(t *testing.T) {
 				// We need to force the connection to the system tenant,
 				// because at least one of the config profiles changes the
 				// default tenant.
-				sysTenantDB := serverutils.OpenDBConn(t, s.SQLAddr(), "cluster:system/defaultdb",
-					true /* insecure */, s.Stopper(), false /*requiresRoot*/)
+				sysTenantDB := serverutils.OpenDBConn(
+					t, s.SQLAddr(), "cluster:system/defaultdb", true /* insecure */, s.Stopper(), false, /*requiresRoot*/
+				)
 				db = sqlutils.MakeSQLRunner(sysTenantDB)
 				res.WriteString("server started\n")
 
@@ -116,7 +118,8 @@ AND   status = 'succeeded'`).Scan(&numTasksCompleted)
 				}
 				sqlAddr := s.(*server.TestServer).SQLAddr()
 				testutils.SucceedsSoon(t, func() error {
-					goDB := serverutils.OpenDBConn(t, sqlAddr, "cluster:"+d.Input+"/defaultdb", true /* insecure */, s.Stopper(), false /*requiresRoot*/)
+					goDB := serverutils.OpenDBConn(
+						t, sqlAddr, "cluster:"+d.Input+"/defaultdb", true /* insecure */, s.Stopper(), false /*requireRoot*/)
 					return goDB.Ping()
 				})
 				return "ok"

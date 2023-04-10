@@ -88,6 +88,7 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				RequiresRoot: true,
 				// The test tenant needs to be disabled for this test until
 				// we address #75449.
 				DefaultTestTenant: base.TestTenantDisabled,
@@ -151,6 +152,7 @@ func TestAllRegisteredSetup(t *testing.T) {
 			defer log.Scope(t).Close(t)
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				RequiresRoot: true,
 				// Need to disable the test tenant here until we resolve
 				// #75449 as this test makes use of import through a fixture.
 				DefaultTestTenant: base.TestTenantDisabled,

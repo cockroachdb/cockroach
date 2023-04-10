@@ -54,6 +54,7 @@ func TestFullClusterBackup(t *testing.T) {
 	settings := clustersettings.MakeTestingClusterSettings()
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			// Disabled only because backupRestoreTestSetupEmpty, another DR test
 			// helper function, that is not yet enabled to set up tenants within
 			// clusters by default. Tracking issue
@@ -359,6 +360,7 @@ func TestSingletonSpanConfigJobPostRestore(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			// Disabled only because backupRestoreTestSetupEmpty, another DR test
 			// helper function, is not yet enabled to set up tenants within
 			// clusters by default. Tracking issue
@@ -398,8 +400,9 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 
 	const numAccounts = 10
 	const incrementalBackupLocation = "nodelocal://1/inc-full-backup"
+	params := base.TestServerArgs{RequiresRoot: true}
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
-	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -420,7 +423,9 @@ func TestEmptyFullClusterRestore(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
-	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{RequiresRoot: true},
+	})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -439,8 +444,9 @@ func TestClusterRestoreEmptyDB(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
+	params := base.TestServerArgs{RequiresRoot: true}
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
-	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -458,6 +464,7 @@ func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
+	params := base.TestServerArgs{RequiresRoot: true}
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
@@ -476,10 +483,11 @@ func TestClusterRestoreSystemTableOrdering(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
+	params := base.TestServerArgs{RequiresRoot: true}
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
 		tempDir,
-		InitManualReplication, base.TestClusterArgs{})
+		InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -510,8 +518,9 @@ func TestDisallowFullClusterRestoreOfNonFullBackup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
+	params := base.TestServerArgs{RequiresRoot: true}
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
-	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -597,7 +606,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes >1 min under race")
-	params := base.TestServerArgs{}
+	params := base.TestServerArgs{RequiresRoot: true}
 	// Disable GC job so that the final check of crdb_internal.tables is
 	// guaranteed to not be cleaned up. Although this was never observed by a
 	// stress test, it is here for safety.
@@ -957,6 +966,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 			}},
 	}
 	params.ServerArgs.Knobs = knobs
+	params.ServerArgs.RequiresRoot = true
 	// Disabled only because backupRestoreTestSetupEmpty, another DR test
 	// helper function, is not yet enabled to set up tenants within
 	// clusters by default. Tracking issue
@@ -1071,7 +1081,7 @@ func TestRestoreWithRecreatedDefaultDB(t *testing.T) {
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication,
 		// Disabling the default test tenant due to test failures. More
 		// investigation is required. Tracked with #76378.
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled}})
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{RequiresRoot: true, DefaultTestTenant: base.TestTenantDisabled}})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -1096,7 +1106,10 @@ func TestRestoreWithDroppedDefaultDB(t *testing.T) {
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication,
 		// Disabling the default test tenant due to test failures. More
 		// investigation is required. Tracked with #76378.
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled}})
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+			RequiresRoot:      true,
+			DefaultTestTenant: base.TestTenantDisabled,
+		}})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -1118,6 +1131,7 @@ func TestFullClusterRestoreWithUserIDs(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			// Disabled only because backupRestoreTestSetupEmpty, another DR test
 			// helper function, that is not yet enabled to set up tenants within
 			// clusters by default. Tracking issue

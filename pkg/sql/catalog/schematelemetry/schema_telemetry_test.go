@@ -76,7 +76,9 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, makeTestServerArgs())
+	params := makeTestServerArgs()
+	params.RequiresRoot = true
+	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(db)
 

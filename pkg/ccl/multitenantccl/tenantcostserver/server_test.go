@@ -78,7 +78,7 @@ var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 func (ts *testState) start(t *testing.T) {
 	// Set up a server that we use only for the system tables.
-	ts.s, ts.db, ts.kvDB = serverutils.StartServer(t, base.TestServerArgs{})
+	ts.s, ts.db, ts.kvDB = serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	ts.r = sqlutils.MakeSQLRunner(ts.db)
 
 	ts.clock = timeutil.NewManualTime(t0)

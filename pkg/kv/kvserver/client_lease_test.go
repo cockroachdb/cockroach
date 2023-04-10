@@ -1294,6 +1294,9 @@ func TestAlterRangeRelocate(t *testing.T) {
 	const numStores = 6
 	tc := testcluster.StartTestCluster(t, numStores,
 		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				RequiresRoot: true,
+			},
 			ReplicationMode: base.ReplicationManual,
 		},
 	)
@@ -1521,7 +1524,8 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 	tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			Settings: st,
+			RequiresRoot: true,
+			Settings:     st,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),

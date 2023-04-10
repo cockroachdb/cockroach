@@ -37,6 +37,7 @@ func TestURIRequiresAdminOrPrivilege(t *testing.T) {
 
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		RequiresRoot:      true,
 		SQLMemoryPoolSize: 256 << 20,
 	}})
 	defer tc.Stopper().Stop(ctx)

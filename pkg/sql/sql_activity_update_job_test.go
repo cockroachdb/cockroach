@@ -320,9 +320,11 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true,
-		Settings: st,
-		Knobs:    base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
+		Insecure:     true,
+		Settings:     st,
+		Knobs:        base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}})
 	defer srv.Stopper().Stop(context.Background())
 	defer db.Close()
 	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING sql.stats.flush.interval = '100ms'")

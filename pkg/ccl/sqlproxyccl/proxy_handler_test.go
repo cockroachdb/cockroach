@@ -625,7 +625,8 @@ func TestProxyModifyRequestParams(t *testing.T) {
 
 	sql, sqlDB, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
-			Insecure: false,
+			RequiresRoot: true,
+			Insecure:     false,
 			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
@@ -880,7 +881,7 @@ func TestDenylistUpdate(t *testing.T) {
 	defer sql.Stopper().Stop(ctx)
 
 	// Create some user with password authn.
-	_, err = sqlDB.Exec("CREATE USER testuser WITH PASSWORD 'foo123'")
+	_, err = sqlDB.Exec("ALTER USER testuser WITH PASSWORD 'foo123'")
 	require.NoError(t, err)
 
 	outgoingTLSConfig, err := sql.RPCContext().GetClientTLSConfig()
@@ -971,6 +972,7 @@ func TestDirectoryConnect(t *testing.T) {
 
 	// Start KV server.
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -1079,6 +1081,7 @@ func TestConnectionRebalancingDisabled(t *testing.T) {
 
 	// Start KV server, and enable session migration.
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	_, err := mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
@@ -1162,6 +1165,7 @@ func TestCancelQuery(t *testing.T) {
 
 	// Start KV server, and enable session migration.
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	_, err := mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
@@ -1504,6 +1508,7 @@ func TestPodWatcher(t *testing.T) {
 
 	// Start KV server, and enable session migration.
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	_, err := mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
@@ -1599,6 +1604,7 @@ func TestConnectionMigration(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	// Test must be run from the system tenant as it's altering tenants.
 	params.DefaultTestTenant = base.TestTenantDisabled
+	params.RequiresRoot = true
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tenantID := serverutils.TestTenantID()
@@ -2077,6 +2083,7 @@ func TestCurConnCountMetric(t *testing.T) {
 
 	// Start KV server.
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 

@@ -52,6 +52,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	asyncNotification := make(chan struct{})
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		GCJob: &sql.GCJobTestingKnobs{
 			RunBeforeResume: func(_ jobspb.JobID) error {

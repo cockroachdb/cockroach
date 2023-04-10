@@ -205,6 +205,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	var revertRangeTargetTime hlc.Timestamp
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			// Test hangs with test tenant. More investigation is required.
 			// Tracked with #76378.
 			DefaultTestTenant: base.TestTenantDisabled,

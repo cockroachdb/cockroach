@@ -183,6 +183,7 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 
 	const (
 		rowCount  = 2000
@@ -291,6 +292,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 	}
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	initMergeNotification := func() chan struct{} {
 		mu.Lock()
 		defer mu.Unlock()
@@ -485,6 +487,7 @@ func TestInvertedIndexMergeEveryStateWrite(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	var writeMore func() error
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeDescTxn:  func(_ jobspb.JobID) error { return writeMore() },

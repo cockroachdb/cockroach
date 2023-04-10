@@ -931,7 +931,8 @@ func (ts *TestServer) StartSharedProcessTenant(
 	}
 
 	sqlDB, err := serverutils.OpenDBConnE(
-		ts.SQLAddr(), "cluster:"+string(args.TenantName)+"/"+args.UseDatabase, false /* insecure */, ts.stopper, false /*requiresRoot*/)
+		ts.SQLAddr(), "cluster:"+string(args.TenantName)+"/"+args.UseDatabase, false /* insecure */, ts.stopper, true, /*requireRoot*/
+	)
 	if err != nil {
 		return nil, nil, err
 	}

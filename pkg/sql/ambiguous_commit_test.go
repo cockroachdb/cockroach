@@ -93,6 +93,7 @@ func TestAmbiguousCommit(t *testing.T) {
 			return nil
 		}
 
+		params.RequiresRoot = true
 		params.Knobs.KVClient = &kvcoord.ClientTestingKnobs{
 			TransportFactory: func(
 				opts kvcoord.SendOptions, nodeDialer *nodedialer.Dialer, replicas kvcoord.ReplicaSlice,

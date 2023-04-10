@@ -99,7 +99,10 @@ func setupSplitBurstTest(t *testing.T, delay time.Duration) *splitBurstTest {
 	// the splits by accident.
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
-			1: {Knobs: knobs},
+			1: {
+				RequiresRoot: true,
+				Knobs:        knobs,
+			},
 		},
 		ReplicationMode: base.ReplicationManual,
 	})

@@ -40,6 +40,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot: true,
 				Knobs: base.TestingKnobs{
 					SpanConfig: &spanconfig.TestingKnobs{
 						ConfigureScratchRange: true,

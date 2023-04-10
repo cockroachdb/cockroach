@@ -157,7 +157,8 @@ func TestBumpClusterVersion(t *testing.T) {
 			)
 
 			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-				Settings: st,
+				Settings:     st,
+				RequiresRoot: true,
 				Knobs: base.TestingKnobs{
 					Server: &TestingKnobs{
 						// This test wants to bootstrap at the previously active

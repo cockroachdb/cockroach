@@ -28,6 +28,7 @@ func TestShowTransferState(t *testing.T) {
 	ctx := context.Background()
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tenant, tenantDB := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(serverutils.TestTenantID()))

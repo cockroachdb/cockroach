@@ -29,6 +29,7 @@ func TestSharedProcessTenantNoSpanLimit(t *testing.T) {
 
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot:      true,
 			DefaultTestTenant: base.TestTenantDisabled,
 		}})
 	defer tc.Stopper().Stop(ctx)
@@ -44,7 +45,8 @@ func TestSharedProcessTenantNoSpanLimit(t *testing.T) {
 	var tenantDB *gosql.DB
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		tenantDB, err = serverutils.OpenDBConnE(sqlAddr, "cluster:hello", false, tc.Stopper(), false /*requiresRoot*/)
+		tenantDB, err = serverutils.OpenDBConnE(
+			sqlAddr, "cluster:hello", false, tc.Stopper(), true /*requireRoot*/)
 		if err != nil {
 			return err
 		}

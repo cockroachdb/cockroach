@@ -64,7 +64,7 @@ func TestAdminAuditLogBasic(t *testing.T) {
 	cleanup := installSensitiveAccessLogFileSink(sc, t)
 	defer cleanup()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -97,7 +97,7 @@ func TestAdminAuditLogRegularUser(t *testing.T) {
 	cleanup := installSensitiveAccessLogFileSink(sc, t)
 	defer cleanup()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -148,7 +148,7 @@ func TestAdminAuditLogTransaction(t *testing.T) {
 	cleanup := installSensitiveAccessLogFileSink(sc, t)
 	defer cleanup()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -224,7 +224,7 @@ func TestAdminAuditLogMultipleTransactions(t *testing.T) {
 	cleanup := installSensitiveAccessLogFileSink(sc, t)
 	defer cleanup()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(sqlDB)

@@ -131,6 +131,7 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot: true,
 				// Disabling the test tenant due to test failures. More
 				// investigation is required. Tracked with #76378.
 				DefaultTestTenant: base.TestTenantDisabled,
@@ -248,6 +249,7 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	args := base.TestServerArgs{
+		RequiresRoot:  true,
 		ExternalIODir: dir,
 		// Disabling the test tenant because this test case traps when run
 		// from within a tenant. The problem occurs because we try to

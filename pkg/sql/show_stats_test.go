@@ -27,7 +27,7 @@ func TestShowStatisticsJSON(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(context.Background())
 
 	r := sqlutils.MakeSQLRunner(db)

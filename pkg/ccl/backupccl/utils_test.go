@@ -153,6 +153,7 @@ func backupRestoreTestSetup(
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DefaultTestTenant: base.TestTenantDisabled,
+				RequiresRoot:      true,
 			}})
 }
 
@@ -193,6 +194,7 @@ func backupRestoreTestSetupEmptyWithParams(
 		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
 	}
 
+	params.ServerArgs.RequiresRoot = true
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	init(tc)
 

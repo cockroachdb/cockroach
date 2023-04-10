@@ -41,6 +41,7 @@ func TestStatementReuses(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -276,7 +277,10 @@ func TestExplainStatsCollected(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
+		Insecure:     true,
+	})
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
 	r.Exec(t, "CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE)")
@@ -433,7 +437,10 @@ func TestExplainAnalyzeWarnings(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
+		Insecure:     true,
+	})
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
 

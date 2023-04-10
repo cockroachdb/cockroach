@@ -46,6 +46,7 @@ func TestCleanupSchemaObjects(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -158,9 +159,10 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 		numNodes,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				UseDatabase: "defaultdb",
-				Knobs:       knobs,
-				Settings:    settings,
+				RequiresRoot: true,
+				UseDatabase:  "defaultdb",
+				Knobs:        knobs,
+				Settings:     settings,
 			},
 		},
 	)
@@ -238,7 +240,8 @@ func TestTemporarySchemaDropDatabase(t *testing.T) {
 		numNodes,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				UseDatabase: "defaultdb",
+				RequiresRoot: true,
+				UseDatabase:  "defaultdb",
 			},
 		},
 	)

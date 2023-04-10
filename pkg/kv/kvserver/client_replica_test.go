@@ -4172,6 +4172,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
@@ -4986,7 +4987,8 @@ func TestRangeMigration(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			Settings: cluster.MakeTestingClusterSettingsWithVersions(endV, startV, false),
+			RequiresRoot: true,
+			Settings:     cluster.MakeTestingClusterSettingsWithVersions(endV, startV, false),
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startV,

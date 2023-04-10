@@ -53,7 +53,7 @@ type testClusterCfg struct {
 	numNodes int
 }
 
-func createTestClusterArgs(ctx context.Context, numReplicas, numVoters int32) base.TestClusterArgs {
+func createTestClusterArgs(ctx context.Context, numReplicas, numVoters int32, requireRoot bool) base.TestClusterArgs {
 	zoneCfg := zonepb.DefaultZoneConfig()
 	zoneCfg.NumReplicas = proto.Int32(numReplicas)
 	zoneCfg.NumVoters = proto.Int32(numVoters)
@@ -62,7 +62,8 @@ func createTestClusterArgs(ctx context.Context, numReplicas, numVoters int32) ba
 	kvserver.LoadBasedRebalancingMode.Override(ctx, &clusterSettings.SV, int64(kvserver.LBRebalancingOff))
 	return base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings: clusterSettings,
+			RequiresRoot: true,
+			Settings:     clusterSettings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DefaultZoneConfigOverride:       &zoneCfg,
@@ -724,7 +725,7 @@ func TestRelocateVoters(t *testing.T) {
 				t,
 				testClusterCfg{
 					numNodes:        numNodes,
-					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas),
+					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas, true /*RequireRoot*/),
 				},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)
@@ -801,7 +802,7 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 				t,
 				testClusterCfg{
 					numNodes:        numNodes,
-					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas),
+					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas, false /*RequireRoot*/),
 				},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)
@@ -888,7 +889,7 @@ func TestRelocateNonVoters(t *testing.T) {
 				t,
 				testClusterCfg{
 					numNodes:        numNodes,
-					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas),
+					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas, true /*RequireRoot*/),
 				},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)
@@ -960,7 +961,7 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 				t,
 				testClusterCfg{
 					numNodes:        numNodes,
-					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas),
+					TestClusterArgs: createTestClusterArgs(ctx, expectedNumReplicas, expectedNumVotingReplicas, false /*RequireRoot*/),
 				},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					_, err := db.ExecContext(ctx, createTable)

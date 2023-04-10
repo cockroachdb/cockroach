@@ -531,7 +531,8 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				UseDatabase: "test",
+				RequiresRoot: true,
+				UseDatabase:  "test",
 				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 						TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {

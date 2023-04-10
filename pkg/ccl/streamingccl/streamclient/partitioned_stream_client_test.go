@@ -68,6 +68,7 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 
 	h, cleanup := replicationtestutils.NewReplicationHelper(t,
 		base.TestServerArgs{
+			RequiresRoot: true,
 			// Need to disable the test tenant until tenant-level restore is
 			// supported. Tracked with #76378.
 			DefaultTestTenant: base.TestTenantDisabled,
