@@ -488,7 +488,7 @@ func TestDistSQLReceiverReportsContention(t *testing.T) {
 		// TODO(yuzefovich): add an onContentionEventCb() to
 		// DistSQLRunTestingKnobs and use it here to accumulate contention
 		// events.
-		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 		defer s.Stopper().Stop(ctx)
 
 		// Disable sampling so that only our query (below) gets a trace.

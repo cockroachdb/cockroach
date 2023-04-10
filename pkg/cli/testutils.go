@@ -146,6 +146,7 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		}
 
 		args := base.TestServerArgs{
+			RequiresRoot:  true,
 			Insecure:      params.Insecure,
 			SSLCertsDir:   c.certsDir,
 			StoreSpecs:    params.StoreSpecs,

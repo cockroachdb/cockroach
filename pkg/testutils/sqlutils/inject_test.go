@@ -47,7 +47,7 @@ func TestInjectDescriptors(t *testing.T) {
 
 	var descriptors []*descpb.Descriptor
 	{
-		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 		defer s.Stopper().Stop(context.Background())
 		tdb := sqlutils.MakeSQLRunner(db)
 		for _, stmt := range setupStmts {
@@ -74,7 +74,7 @@ ORDER BY gen_random_uuid(); -- to mix it up
 		}
 	}
 	{
-		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 		defer s.Stopper().Stop(context.Background())
 
 		require.NoError(t, sqlutils.InjectDescriptors(

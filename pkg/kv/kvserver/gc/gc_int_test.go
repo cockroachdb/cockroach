@@ -84,6 +84,7 @@ func TestEndToEndGC(t *testing.T) {
 				manualClock := hlc.NewHybridManualClock()
 				tc := testcluster.NewTestCluster(t, 1, base.TestClusterArgs{
 					ServerArgs: base.TestServerArgs{
+						RequiresRoot: true,
 						Knobs: base.TestingKnobs{
 							Store: &kvserver.StoreTestingKnobs{
 								SmallEngineBlocks: smallEngineBlocks,

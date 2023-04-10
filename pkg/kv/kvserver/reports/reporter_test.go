@@ -52,11 +52,11 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, 5, base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}}}},
-			1: {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}}}},
-			2: {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}}}},
-			3: {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}}}},
-			4: {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}}}},
+			0: {RequiresRoot: true, Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}}}},
+			1: {RequiresRoot: true, Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}}}},
+			2: {RequiresRoot: true, Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}}}},
+			3: {RequiresRoot: true, Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}}}},
+			4: {RequiresRoot: true, Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}}}},
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -133,31 +133,37 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
+				RequiresRoot: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "r1"}, {Key: "dc", Value: "dc1"}},
 				},
 			},
 			1: {
+				RequiresRoot: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "r1"}, {Key: "dc", Value: "dc2"}},
 				},
 			},
 			2: {
+				RequiresRoot: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "r1"}, {Key: "dc", Value: "dc3"}},
 				},
 			},
 			3: {
+				RequiresRoot: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "r2"}, {Key: "dc", Value: "dc4"}},
 				},
 			},
 			4: {
+				RequiresRoot: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "r2"}, {Key: "dc", Value: "dc5"}},
 				},
 			},
 			5: {
+				RequiresRoot: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "r2"}, {Key: "dc", Value: "dc6"}},
 				},
@@ -309,6 +315,7 @@ func TestReplicationStatusReportIntegration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{RequiresRoot: true},
 		// We're going to do our own replication.
 		// All the system ranges will start with a single replica on node 1.
 		ReplicationMode: base.ReplicationManual,

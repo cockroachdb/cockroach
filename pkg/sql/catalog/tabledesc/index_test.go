@@ -415,6 +415,7 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 	swapNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 	args := base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{

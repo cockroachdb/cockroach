@@ -1592,6 +1592,7 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 	// non-voting replicas to them.
 	for i := 1; i <= 3; i++ {
 		serverArgs[i-1] = base.TestServerArgs{
+			RequiresRoot: true,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{

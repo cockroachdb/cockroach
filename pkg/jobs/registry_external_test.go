@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -85,9 +84,11 @@ func TestExpiringSessionsAndClaimJobsDoesNotTouchTerminalJobs(t *testing.T) {
 	// Don't adopt, cancel rapidly.
 	adopt := 10 * time.Hour
 	cancel := 10 * time.Millisecond
-	args := base.TestServerArgs{Knobs: base.TestingKnobs{
-		JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(adopt, cancel, adopt, adopt),
-	}}
+	args := base.TestServerArgs{
+		RequiresRoot: true,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(adopt, cancel, adopt, adopt),
+		}}
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, args)
@@ -346,7 +347,8 @@ func TestGCDurationControl(t *testing.T) {
 	// Shorten the adopt interval to minimize test time.
 	jobs.AdoptIntervalSetting.Override(ctx, &cs.SV, 5*time.Millisecond)
 	args := base.TestServerArgs{
-		Settings: cs,
+		RequiresRoot: true,
+		Settings:     cs,
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{StatementFilter: stmtFilter},
 		},

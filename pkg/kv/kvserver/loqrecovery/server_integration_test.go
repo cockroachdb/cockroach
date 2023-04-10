@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -718,6 +717,7 @@ func prepTestCluster(
 	}
 	for i := 0; i < nodes; i++ {
 		args.ServerArgsPerNode[i] = base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyEngineRegistry: reg,

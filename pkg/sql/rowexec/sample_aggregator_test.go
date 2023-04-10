@@ -308,7 +308,7 @@ func TestSampleAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	server, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	server, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer server.Stopper().Stop(context.Background())
 
 	st := cluster.MakeTestingClusterSettings()

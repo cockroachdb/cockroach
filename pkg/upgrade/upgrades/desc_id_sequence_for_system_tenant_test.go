@@ -36,6 +36,7 @@ func TestDescriptorIDSequenceForSystemTenant(t *testing.T) {
 	notifyToProceedWithCheck := make(chan struct{})
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				TenantTestingKnobs: &sql.TenantTestingKnobs{
 					BeforeCheckingForDescriptorIDSequence: func(ctx context.Context) {

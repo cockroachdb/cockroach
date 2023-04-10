@@ -558,7 +558,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer sqlDB.Close()
 	defer s.Stopper().Stop(ctx)
 
@@ -615,7 +615,7 @@ func TestAutoStatsOnStartupClusterSettingOff(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer sqlDB.Close()
 	defer s.Stopper().Stop(ctx)
 
@@ -751,7 +751,7 @@ func TestDefaultColumns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer sqlDB.Close()
 	defer s.Stopper().Stop(ctx)
 
@@ -788,7 +788,7 @@ func TestAnalyzeSystemTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()

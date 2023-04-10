@@ -44,8 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -289,11 +287,12 @@ func TestUnavailableZip(t *testing.T) {
 
 	// Make a 2-node cluster, with an option to make the first node unavailable.
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Insecure = true
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {Insecure: true, Knobs: base.TestingKnobs{Store: knobs}},
-			1: {Insecure: true},
+			0: {RequiresRoot: true, Insecure: true, Knobs: base.TestingKnobs{Store: knobs}},
+			1: {RequiresRoot: true, Insecure: true},
 		},
 		ServerArgs: params,
 	})

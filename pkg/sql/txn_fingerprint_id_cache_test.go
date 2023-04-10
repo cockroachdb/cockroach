@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
 
@@ -109,6 +108,7 @@ func TestTxnFingerprintIDCache(t *testing.T) {
 	appName := "testTxnFingerprintIDCache"
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs.SQLExecutor = &ExecutorTestingKnobs{
 		BeforeTxnStatsRecorded: func(
 			sessionData *sessiondata.SessionData,

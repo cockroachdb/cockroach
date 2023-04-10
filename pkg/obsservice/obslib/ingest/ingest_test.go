@@ -32,11 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 func TestPersistEvents(t *testing.T) {
@@ -152,6 +149,7 @@ func TestEventIngestionIntegration(t *testing.T) {
 			obsAddr = otlpListener.Addr().String()
 			s, sqlDB, _ = serverutils.StartServer(t,
 				base.TestServerArgs{
+					RequiresRoot:   true,
 					ObsServiceAddr: obsAddr,
 					Knobs: base.TestingKnobs{
 						EventExporter: &obs.EventExporterTestingKnobs{

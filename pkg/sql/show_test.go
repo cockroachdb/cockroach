@@ -36,8 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -868,7 +866,8 @@ func TestShowSessions(t *testing.T) {
 
 	var conn *gosql.DB
 
-	tc := serverutils.StartNewTestCluster(t, 2 /* numNodes */, base.TestClusterArgs{})
+	params := base.TestServerArgs{RequiresRoot: true}
+	tc := serverutils.StartNewTestCluster(t, 2 /* numNodes */, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(context.Background())
 
 	conn = tc.ServerConn(0)
@@ -979,6 +978,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Insecure = true
 	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,6 +91,7 @@ func TestInsertFastPathDisableDDLExtendedProtocol(t *testing.T) {
 	var db *gosql.DB
 
 	params, _ := CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Settings = cluster.MakeTestingClusterSettings()
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})

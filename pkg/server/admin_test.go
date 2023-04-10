@@ -362,7 +362,7 @@ func generateRandomName() string {
 func TestAdminAPIStatementDiagnosticsBundle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
 
@@ -400,6 +400,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Disable the default test tenant for now as this tests fails with
 		// it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TestTenantDisabled,
@@ -930,6 +931,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TestTenantDisabled,
@@ -1037,6 +1039,7 @@ func TestAdminAPIUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TestTenantDisabled,
@@ -1208,6 +1211,7 @@ func TestAdminAPISettings(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TestTenantDisabled,
@@ -1632,6 +1636,7 @@ func TestAdminAPIJobs(t *testing.T) {
 	now := timeutil.Now()
 	retentionTime := 336 * time.Hour
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TestTenantDisabled,
@@ -1843,6 +1848,7 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TestTenantDisabled,
@@ -1968,6 +1974,7 @@ func TestAdminAPILocations(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TestTenantDisabled,
@@ -2051,6 +2058,7 @@ func TestAdminAPIRangeLogByRangeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TestTenantDisabled,
@@ -2120,6 +2128,7 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
+			RequiresRoot: true,
 			// Disable the default test tenant for now as this tests fails
 			// with it enabled. Tracked with #81590.
 			DefaultTestTenant: base.TestTenantDisabled,
@@ -3198,6 +3207,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 
 	ctx := context.Background()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TestTenantDisabled,

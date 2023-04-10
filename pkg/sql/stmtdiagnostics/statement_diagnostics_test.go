@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,7 +42,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
@@ -473,7 +472,8 @@ func TestDiagnosticsRequest(t *testing.T) {
 func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{})
+	params := base.TestServerArgs{RequiresRoot: true}
+	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{ServerArgs: params})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 	db0 := tc.ServerConn(0)

@@ -150,7 +150,8 @@ func TestParallelCreateTables(t *testing.T) {
 	const numberOfTables = 10
 	const numberOfNodes = 3
 
-	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
+	params := base.TestServerArgs{RequiresRoot: true}
+	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(context.Background())
 
 	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE "test"`); err != nil {

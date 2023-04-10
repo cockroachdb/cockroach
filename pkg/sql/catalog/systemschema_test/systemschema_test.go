@@ -49,7 +49,9 @@ func TestValidateSystemSchemaAfterBootStrap(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "bootstrap"), func(t *testing.T, path string) {
 		// initialize per-test state
 		// New database for each test file.
-		s, db, _ := serverutils.StartServer(t, createTestServerParams())
+		params := createTestServerParams()
+		params.RequiresRoot = true
+		s, db, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 

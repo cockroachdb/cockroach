@@ -122,6 +122,7 @@ func TestClusterConnectivity(t *testing.T) {
 		return listener
 	}
 	baseServerArgs := base.TestServerArgs{
+		RequiresRoot: true,
 		// We're going to manually control initialization in this test.
 		NoAutoInitializeCluster: true,
 		StoreSpecs:              []base.StoreSpec{{InMemory: true}},

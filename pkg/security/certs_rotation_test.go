@@ -65,6 +65,7 @@ func TestRotateCerts(t *testing.T) {
 	// authenticate the individual clients being instantiated (session auth has
 	// no effect on what is being tested here).
 	params := base.TestServerArgs{
+		RequiresRoot:      true,
 		SSLCertsDir:       certsDir,
 		InsecureWebAccess: true,
 	}

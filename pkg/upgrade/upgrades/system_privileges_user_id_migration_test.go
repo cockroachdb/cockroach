@@ -49,6 +49,7 @@ func runTestSystemPrivilegesUserIDMigration(t *testing.T, numUsers int) {
 
 	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),

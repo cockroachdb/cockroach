@@ -86,7 +86,8 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 		)
 
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-			Settings: st,
+			RequiresRoot: true,
+			Settings:     st,
 			Knobs: base.TestingKnobs{
 				Server: &TestingKnobs{
 					BinaryVersionOverride: test.binaryVersion,
@@ -258,7 +259,8 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 	)
 	automaticUpgrade := make(chan struct{})
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: st,
+		RequiresRoot: true,
+		Settings:     st,
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
 				DisableAutomaticVersionUpgrade: automaticUpgrade,

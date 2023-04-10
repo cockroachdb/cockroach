@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -161,6 +160,7 @@ func TestFileUpload(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := CreateTestServerParams()
+	params.RequiresRoot = true
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
@@ -190,6 +190,7 @@ func TestUploadEmptyFile(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := CreateTestServerParams()
+	params.RequiresRoot = true
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
@@ -235,6 +236,7 @@ func TestFileExist(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := CreateTestServerParams()
+	params.RequiresRoot = true
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir

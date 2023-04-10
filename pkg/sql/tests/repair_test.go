@@ -40,7 +40,7 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 
 	ctx := context.Background()
 	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
-		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 		return s, db, func() {
 			s.Stopper().Stop(ctx)
 		}
@@ -259,7 +259,7 @@ func TestDescriptorRepair(t *testing.T) {
 
 	ctx := context.Background()
 	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
-		args := base.TestServerArgs{}
+		args := base.TestServerArgs{RequiresRoot: true}
 		args.Knobs.EventLog = &sql.EventLogTestingKnobs{SyncWrites: true}
 		s, db, _ := serverutils.StartServer(t, args)
 		return s, db, func() {
@@ -841,7 +841,7 @@ func TestDescriptorRepairIdGeneration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(db)
 
@@ -892,7 +892,7 @@ func TestCorruptDescriptorRepair(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(db)
 

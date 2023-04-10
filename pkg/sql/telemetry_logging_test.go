@@ -50,6 +50,7 @@ func TestTelemetryLogging(t *testing.T) {
 	sts := logtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			EventLog: &EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic

@@ -1257,7 +1257,8 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 	authBlocked := make(chan struct{})
 	s, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
-			Insecure: true,
+			RequiresRoot: true,
+			Insecure:     true,
 			Knobs: base.TestingKnobs{
 				PGWireTestingKnobs: &sql.PGWireTestingKnobs{
 					AuthHook: func(ctx context.Context) error {
@@ -1808,7 +1809,7 @@ func TestRoleDefaultSettings(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 	defer db.Close()
 
@@ -1969,7 +1970,7 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	testServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer testServer.Stopper().Stop(ctx)
 
 	// Users.

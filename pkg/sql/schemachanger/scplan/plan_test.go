@@ -53,7 +53,7 @@ func TestPlanDataDriven(t *testing.T) {
 	ctx := context.Background()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 		defer s.Stopper().Stop(ctx)
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -251,6 +251,7 @@ func marshalOps(t *testing.T, ts scpb.TargetState, stages []scstage.Stage) strin
 func TestExplainPlanIsMemoryMonitored(t *testing.T) {
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.SQLMemoryPoolSize = 1.049e+7 /* 10MiB */
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())

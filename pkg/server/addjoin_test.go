@@ -36,7 +36,8 @@ func TestConsumeJoinToken(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	sql.FeatureTLSAutoJoinEnabled.Override(ctx, &settings.SV, true)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: settings,
+		RequiresRoot: true,
+		Settings:     settings,
 	})
 	defer s.Stopper().Stop(context.Background())
 

@@ -45,6 +45,7 @@ func TestStartupInjectedFailureSingleNode(t *testing.T) {
 	var enableFaults atomic.Bool
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			StoreSpecs: []base.StoreSpec{
 				{
 					InMemory:               true,

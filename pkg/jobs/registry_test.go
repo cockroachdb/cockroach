@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -115,6 +114,7 @@ func TestRegistryGC(t *testing.T) {
 
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			SpanConfig: &spanconfig.TestingKnobs{
 				// This test directly modifies `system.jobs` and makes over its contents
@@ -268,6 +268,7 @@ func TestRegistryGCPagination(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			SpanConfig: &spanconfig.TestingKnobs{
 				// This test directly modifies `system.jobs` and makes over its contents
@@ -319,6 +320,7 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	args := base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			// Avoiding jobs to be adopted.
 			JobsTestingKnobs: &TestingKnobs{
@@ -505,6 +507,7 @@ func TestBatchJobsCreation(t *testing.T) {
 				}
 
 				args := base.TestServerArgs{
+					RequiresRoot: true,
 					Knobs: base.TestingKnobs{
 						// Avoiding jobs to be adopted.
 						JobsTestingKnobs: &TestingKnobs{
@@ -686,7 +689,8 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		}
 		cs := cluster.MakeTestingClusterSettings()
 		args := base.TestServerArgs{
-			Settings: cs,
+			RequiresRoot: true,
+			Settings:     cs,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: knobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -1016,7 +1020,8 @@ func TestExponentialBackoffSettings(t *testing.T) {
 			retryInitialDelaySetting.Override(ctx, &cs.SV, time.Hour)
 			retryMaxDelaySetting.Override(ctx, &cs.SV, time.Hour)
 			args := base.TestServerArgs{
-				Settings: cs,
+				RequiresRoot: true,
+				Settings:     cs,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: &TestingKnobs{BeforeUpdate: intercept},
 					// This test wants to intercept the jobs that get created.

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/datadriven"
 )
 
 func TestDataDriven(t *testing.T) {
@@ -75,7 +74,7 @@ func TestDataDriven(t *testing.T) {
 				// because at least one of the config profiles changes the
 				// default tenant.
 				sysTenantDB := serverutils.OpenDBConn(
-					t, s.SQLAddr(), "cluster:system/defaultdb", true /* insecure */, s.Stopper(), false, /*requiresRoot*/
+					t, s.SQLAddr(), "cluster:system/defaultdb", true /* insecure */, s.Stopper(), true, /*requiresRoot*/
 				)
 				db = sqlutils.MakeSQLRunner(sysTenantDB)
 				res.WriteString("server started\n")
@@ -119,7 +118,7 @@ AND   status = 'succeeded'`).Scan(&numTasksCompleted)
 				sqlAddr := s.(*server.TestServer).SQLAddr()
 				testutils.SucceedsSoon(t, func() error {
 					goDB := serverutils.OpenDBConn(
-						t, sqlAddr, "cluster:"+d.Input+"/defaultdb", true /* insecure */, s.Stopper(), false /*requireRoot*/)
+						t, sqlAddr, "cluster:"+d.Input+"/defaultdb", true /* insecure */, s.Stopper(), true /*requireRoot*/)
 					return goDB.Ping()
 				})
 				return "ok"

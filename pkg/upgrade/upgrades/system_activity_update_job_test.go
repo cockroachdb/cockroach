@@ -38,7 +38,8 @@ func TestCreateActivityUpdateJobMigration(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings: settings,
+			RequiresRoot: true,
+			Settings:     settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),

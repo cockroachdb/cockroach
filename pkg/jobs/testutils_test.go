@@ -75,7 +75,8 @@ func newTestHelperForTables(
 	}
 
 	args := base.TestServerArgs{
-		Knobs: base.TestingKnobs{JobsTestingKnobs: knobs},
+		RequiresRoot: true,
+		Knobs:        base.TestingKnobs{JobsTestingKnobs: knobs},
 	}
 	if argsFn != nil {
 		argsFn(&args)

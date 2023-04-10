@@ -83,7 +83,8 @@ func TestDecodeSystemTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	params := base.TestServerArgs{RequiresRoot: true}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 	const dummyTableName = "dummy_span_configurations"
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))

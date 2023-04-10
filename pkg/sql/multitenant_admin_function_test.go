@@ -62,7 +62,7 @@ func createTestClusterArgs(ctx context.Context, numReplicas, numVoters int32, re
 	kvserver.LoadBasedRebalancingMode.Override(ctx, &clusterSettings.SV, int64(kvserver.LBRebalancingOff))
 	return base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			RequiresRoot: true,
+			RequiresRoot: requireRoot,
 			Settings:     clusterSettings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -258,7 +258,7 @@ func (tc testCase) runTest(
 		"",    /* useDatabase */
 		false, /* insecure */
 		testServer.Stopper(),
-		false, /*requiresRoot*/
+		cfg.TestClusterArgs.ServerArgs.RequiresRoot, /*requiresRoot*/
 	)
 
 	createSecondaryDB := func(
@@ -595,11 +595,12 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 		},
 	}
 
+	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{RequiresRoot: true}}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			tc.runTest(
 				t,
-				testClusterCfg{},
+				testClusterCfg{TestClusterArgs: params},
 				func(testCluster serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 					setups := tc.setups
 					setup := tc.setup

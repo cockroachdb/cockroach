@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/errors"
 )
 
 // TestCreateStatsControlJob tests that PAUSE JOB, RESUME JOB, and CANCEL JOB
@@ -57,6 +56,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 	var allowRequest chan struct{}
 
 	var serverArgs base.TestServerArgs
+	serverArgs.RequiresRoot = true
 	filter, setTableID := createStatsRequestFilter(&allowRequest)
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()

@@ -80,7 +80,10 @@ func TestSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
+		UseDatabase:  `test`,
+	})
 	defer s.Stopper().Stop(ctx)
 	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
 

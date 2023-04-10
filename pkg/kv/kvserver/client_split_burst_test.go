@@ -98,6 +98,7 @@ func setupSplitBurstTest(t *testing.T, delay time.Duration) *splitBurstTest {
 	// how quickly commands can reach quorum and would backpressure
 	// the splits by accident.
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{RequiresRoot: true},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			1: {
 				RequiresRoot: true,

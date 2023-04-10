@@ -811,6 +811,7 @@ func TestInternalJobsTableRetryColumns(t *testing.T) {
 	testFn := func(validateFn func(context.Context, *sqlutils.SQLRunner)) func(t *testing.T) {
 		return func(t *testing.T) {
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				RequiresRoot: true,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: &jobs.TestingKnobs{
 						DisableAdoptions: true,

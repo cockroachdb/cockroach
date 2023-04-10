@@ -285,7 +285,8 @@ func TestCancelQueryPermissions(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				Insecure: true,
+				RequiresRoot: true,
+				Insecure:     true,
 			},
 		})
 	defer testCluster.Stopper().Stop(ctx)
@@ -940,7 +941,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 
 	makeTenantConn := func() *sqlutils.SQLRunner {
 		return sqlutils.MakeSQLRunner(
-			serverutils.OpenDBConn(t, tenant.SQLAddr(), "" /* useDatabase */, false /* insecure */, kvserver.Stopper(), false /* requireRoot */))
+			serverutils.OpenDBConn(t, tenant.SQLAddr(), "" /* useDatabase */, false /* insecure */, kvserver.Stopper(), true /* requireRoot */))
 	}
 
 	blockers := make([]*sqlutils.SQLRunner, numBlockers)

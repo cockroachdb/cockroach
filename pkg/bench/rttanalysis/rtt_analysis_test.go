@@ -23,8 +23,9 @@ var reg = NewRegistry(1 /* numNodes */, MakeClusterConstructor(func(
 	t testing.TB, knobs base.TestingKnobs,
 ) (_ *gosql.DB, cleanup func()) {
 	s, sql, _ := serverutils.StartServer(t, base.TestServerArgs{
-		UseDatabase: "bench",
-		Knobs:       knobs,
+		RequiresRoot: true,
+		UseDatabase:  "bench",
+		Knobs:        knobs,
 	})
 	// Eventlog is async, and introduces jitter in the benchmark.
 	if _, err := sql.Exec("SET CLUSTER SETTING server.eventlog.enabled = false"); err != nil {

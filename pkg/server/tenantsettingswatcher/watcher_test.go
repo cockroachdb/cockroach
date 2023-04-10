@@ -33,7 +33,8 @@ func TestWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	params := base.TestServerArgs{RequiresRoot: true}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))

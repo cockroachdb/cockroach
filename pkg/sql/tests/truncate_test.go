@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -89,7 +88,8 @@ func TestTruncateWithConcurrentMutations(t *testing.T) {
 			}
 			tc = testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
-					Settings: settings,
+					RequiresRoot: true,
+					Settings:     settings,
 					Knobs: base.TestingKnobs{
 						SQLSchemaChanger: scKnobs,
 					},

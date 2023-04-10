@@ -26,7 +26,7 @@ import (
 
 func TestSetTraceSpansVerbosityBuiltin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	si, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	si, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer si.Stopper().Stop(context.Background())
 	s := si.(*server.TestServer)
 	r := sqlutils.MakeSQLRunner(db)

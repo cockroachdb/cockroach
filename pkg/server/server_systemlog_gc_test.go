@@ -35,7 +35,7 @@ func TestLogGC(t *testing.T) {
 	skip.UnderRace(t, "takes >1 min under race")
 
 	a := assert.New(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	ts := s.(*TestServer)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -187,6 +187,7 @@ func TestLogGCTrigger(t *testing.T) {
 	gcDone := make(chan struct{})
 
 	params := base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				SystemLogsGCGCDone: gcDone,

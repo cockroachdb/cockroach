@@ -37,6 +37,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	defer s.Stopper().Stop(ctx)

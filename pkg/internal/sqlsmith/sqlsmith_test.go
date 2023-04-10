@@ -43,7 +43,7 @@ func TestSetups(t *testing.T) {
 	for name, setup := range Setups {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
-			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 			defer s.Stopper().Stop(ctx)
 
 			rnd, _ := randutil.NewTestRand()
@@ -86,7 +86,7 @@ func TestRandTableInserts(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 
 	rnd, _ := randutil.NewTestRand()

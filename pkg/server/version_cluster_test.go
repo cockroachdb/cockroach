@@ -99,8 +99,9 @@ func setupMixedCluster(
 				v0, v1 := roachpb.MustParseVersion(v[0]), roachpb.MustParseVersion(v[1])
 				st := cluster.MakeTestingClusterSettingsWithVersions(v0, v1, false /* initializeVersion */)
 				args := base.TestServerArgs{
-					Settings: st,
-					Knobs:    knobs,
+					RequiresRoot: true,
+					Settings:     st,
+					Knobs:        knobs,
 				}
 				if dir != "" {
 					args.StoreSpecs = []base.StoreSpec{{Path: filepath.Join(dir, strconv.Itoa(i))}}
@@ -218,6 +219,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	rawTC := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // speeds up test
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          oldVersion,
@@ -342,7 +344,8 @@ func TestAllVersionsAgree(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tcRaw := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	params := base.TestServerArgs{RequiresRoot: true}
+	tcRaw := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{ServerArgs: params})
 	defer tcRaw.Stopper().Stop(ctx)
 	tc := testClusterWithHelpers{
 		T:           t,

@@ -321,7 +321,10 @@ func TestRefreshSession(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "abc", Value: "xyz"}}}})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
+		Locality:     roachpb.Locality{Tiers: []roachpb.Tier{{Key: "abc", Value: "xyz"}}}},
+	)
 	defer s.Stopper().Stop(ctx)
 
 	c1 := sqlutils.MakeSQLRunner(sqlDB)

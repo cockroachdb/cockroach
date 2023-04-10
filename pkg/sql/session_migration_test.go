@@ -45,7 +45,8 @@ func TestSessionMigration(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "session_migration"), func(t *testing.T, path string) {
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+		params := base.TestServerArgs{RequiresRoot: true}
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 		defer tc.Stopper().Stop(ctx)
 
 		openConnFunc := func() *pgx.Conn {

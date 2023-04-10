@@ -33,6 +33,7 @@ func TestDecomposeToElements(t *testing.T) {
 	newCluster := func(t *testing.T, knobs *scexec.TestingKnobs) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func()) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot:      true,
 				DefaultTestTenant: base.TestTenantDisabled,
 			},
 		})

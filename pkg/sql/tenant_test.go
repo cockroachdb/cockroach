@@ -48,6 +48,7 @@ func TestDropTenantSynchronous(t *testing.T) {
 	t.Run("mixed version", func(t *testing.T) {
 		clusterArgs := base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				RequiresRoot: true,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DisableAutomaticVersionUpgrade: make(chan struct{}),

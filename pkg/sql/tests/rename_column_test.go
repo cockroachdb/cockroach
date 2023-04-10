@@ -64,6 +64,7 @@ func TestRenameColumnDuringConcurrentMutation(t *testing.T) {
 	var tc *testcluster.TestCluster
 	tc = testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 					RunBeforePublishWriteAndDelete: func() {

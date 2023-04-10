@@ -62,7 +62,7 @@ func TestRangeLog(t *testing.T) {
 	))
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 
 	// Inject two tables to write into. The first table will be written into by

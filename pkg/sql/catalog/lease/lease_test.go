@@ -2900,6 +2900,7 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	var txnID string
 
 	params := createTestServerParams()
+	params.RequiresRoot = true
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
 	lease.LeaseDuration.Override(ctx, &params.SV, 0)

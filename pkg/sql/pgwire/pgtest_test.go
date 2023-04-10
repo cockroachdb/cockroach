@@ -38,7 +38,8 @@ func TestPGTest(t *testing.T) {
 		newServer := func() (addr, user string, cleanup func()) {
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				Insecure: true,
+				RequiresRoot: true,
+				Insecure:     true,
 			})
 			cleanup = func() {
 				s.Stopper().Stop(ctx)

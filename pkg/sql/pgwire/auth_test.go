@@ -218,7 +218,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		defer cleanup()
 
 		s, conn, _ := serverutils.StartServer(t,
-			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})
+			base.TestServerArgs{RequiresRoot: true, Insecure: insecure, SocketFile: maybeSocketFile})
 		defer s.Stopper().Stop(context.Background())
 
 		// Enable conn/auth logging.
@@ -622,7 +622,7 @@ func TestClientAddrOverride(t *testing.T) {
 	defer sc.Close(t)
 
 	// Start a server.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -782,7 +782,7 @@ func TestSSLSessionVar(t *testing.T) {
 	defer sc.Close(t)
 
 	// Start a server.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	s.(*server.TestServer).Cfg.AcceptSQLWithoutTLS = true
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)

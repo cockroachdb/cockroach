@@ -30,7 +30,7 @@ func TestJobsTableClaimFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	args := base.TestServerArgs{}
+	args := base.TestServerArgs{RequiresRoot: true}
 	args.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{
 		SkipJobBootstrap: true,
 	}

@@ -99,8 +99,9 @@ func TestShowRangesMultipleStores(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				Locality:   roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "1"}}},
-				StoreSpecs: []base.StoreSpec{base.DefaultTestStoreSpec, base.DefaultTestStoreSpec},
+				RequiresRoot: true,
+				Locality:     roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "1"}}},
+				StoreSpecs:   []base.StoreSpec{base.DefaultTestStoreSpec, base.DefaultTestStoreSpec},
 			},
 
 			ReplicationMode: base.ReplicationAuto,
@@ -155,7 +156,7 @@ func TestDeprecatedShowRangesWithClusterSettingChange(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)

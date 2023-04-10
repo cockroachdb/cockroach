@@ -526,7 +526,7 @@ func TestServerStartStop(t *testing.T) {
 	// Verify that the service is indeed stopped.
 	testutils.SucceedsSoon(t, func() error {
 		db2, err := serverutils.OpenDBConnE(
-			sqlAddr, "cluster:hello/defaultdb", false, s.Stopper(), false, /*requireRoot*/
+			sqlAddr, "cluster:hello/defaultdb", false, s.Stopper(), true, /*requireRoot*/
 		)
 		// Expect no error yet: the connection is opened lazily; an
 		// error here means the parameters were incorrect.

@@ -821,7 +821,7 @@ func TestColumnNeedsBackfill(t *testing.T) {
 }
 
 func TestDefaultExprNil(t *testing.T) {
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(context.Background())
 	if _, err := conn.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatalf("%+v", err)

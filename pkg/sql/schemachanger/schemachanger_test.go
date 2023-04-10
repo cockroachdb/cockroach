@@ -44,9 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -78,6 +76,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		var s serverutils.TestServerInterface
 		var kvDB *kv.DB
 		params, _ := tests.CreateTestServerParams()
+		params.RequiresRoot = true
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeResume: func(jobID jobspb.JobID) error {

@@ -267,6 +267,7 @@ func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
 	t.Logf("starting test server")

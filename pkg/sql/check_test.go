@@ -108,7 +108,7 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 			defer s.Stopper().Stop(ctx)
 
 			_, err := sqlDB.Exec(`CREATE TABLE t () WITH (ttl_expire_after = '10 mins')`)

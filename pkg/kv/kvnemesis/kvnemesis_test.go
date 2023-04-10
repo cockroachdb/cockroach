@@ -182,7 +182,10 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	ctx := context.Background()
 	tr := &SeqTracker{}
-	tc := testcluster.StartTestCluster(t, cfg.numNodes, testClusterArgs(tr))
+	clusterArgs := testClusterArgs(tr)
+	params := base.TestServerArgs{RequiresRoot: true}
+	clusterArgs.ServerArgs = params
+	tc := testcluster.StartTestCluster(t, cfg.numNodes, clusterArgs)
 	defer tc.Stopper().Stop(ctx)
 	dbs, sqlDBs := make([]*kv.DB, cfg.numNodes), make([]*gosql.DB, cfg.numNodes)
 	for i := 0; i < cfg.numNodes; i++ {

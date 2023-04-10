@@ -438,6 +438,7 @@ func TestRollbackOfAddingTable(t *testing.T) {
 	shouldError := true
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeQueryBackfill: func() error {
@@ -576,6 +577,7 @@ func TestRaceWithBackfill(t *testing.T) {
 	}
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	initBackfillNotification := func() chan struct{} {
 		mu.Lock()
 		defer mu.Unlock()
@@ -749,6 +751,7 @@ func TestDropWhileBackfill(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	notifyBackfill := func() {
 		mu.Lock()
 		defer mu.Unlock()
@@ -1812,6 +1815,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	// Disable synchronous schema change processing so that the mutations get
 	// processed asynchronously.
 	var enableAsyncSchemaChanges uint32
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -2399,6 +2403,7 @@ func TestOldRevertedDropIndexesAreIgnored(t *testing.T) {
 		sqlDB  *gosql.DB
 		kvDB   *kv.DB
 	)
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeResume: func(jobspb.JobID) error {
@@ -2703,6 +2708,7 @@ func TestSchemaChangeWhileExecutingPrimaryKeyChange(t *testing.T) {
 	waitBeforeContinuing := make(chan struct{})
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(_ roachpb.Span) error {
@@ -2778,6 +2784,7 @@ func TestPrimaryKeyChangeWithOperations(t *testing.T) {
 	backfillNotification := make(chan struct{})
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	initBackfillNotification := func() chan struct{} {
 		mu.Lock()
 		defer mu.Unlock()
@@ -3040,6 +3047,7 @@ func TestPrimaryKeyChangeKVOps(t *testing.T) {
 	waitBeforeContinuing := make(chan struct{})
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(_ roachpb.Span) error {
@@ -3230,6 +3238,7 @@ func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
 	ctx := context.Background()
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
@@ -3358,6 +3367,7 @@ func TestPrimaryKeyDropIndexNotCancelable(t *testing.T) {
 	shouldAttemptCancel.Set(true)
 	hasAttemptedCancel := make(chan struct{})
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		GCJob: &sql.GCJobTestingKnobs{
 			RunBeforeResume: func(jobID jobspb.JobID) error {
@@ -4286,6 +4296,7 @@ func TestTruncateInternals(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	const maxValue = 2000
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	// Disable schema changes.
 	blockGC := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
@@ -4379,6 +4390,7 @@ func TestTruncateCompletion(t *testing.T) {
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
@@ -5525,6 +5537,7 @@ func TestTableValidityWhileAddingFK(t *testing.T) {
 	backfillNotification := make(chan struct{})
 	continueBackfillNotification := make(chan struct{})
 
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforePublishWriteAndDelete: func() {
@@ -5609,6 +5622,7 @@ func TestTableValidityWhileAddingUniqueConstraint(t *testing.T) {
 	backfillNotification := make(chan struct{})
 	continueBackfillNotification := make(chan struct{})
 
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforePublishWriteAndDelete: func() {
@@ -5691,6 +5705,7 @@ func TestWritesWithChecksBeforeDefaultColumnBackfill(t *testing.T) {
 	backfillNotification := make(chan struct{})
 	continueBackfillNotification := make(chan struct{})
 
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforePublishWriteAndDelete: func() {
@@ -5787,6 +5802,7 @@ func TestWritesWithChecksBeforeComputedColumnBackfill(t *testing.T) {
 	backfillNotification := make(chan struct{})
 	continueBackfillNotification := make(chan struct{})
 
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforePublishWriteAndDelete: func() {
@@ -5880,6 +5896,7 @@ func TestIntentRaceWithIndexBackfill(t *testing.T) {
 	var maxValue = 2000
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: 100,
@@ -6126,6 +6143,7 @@ func TestMultipleRevert(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	var db *gosql.DB
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -6650,6 +6668,7 @@ func TestCancelMultipleQueued(t *testing.T) {
 
 	canProceed := make(chan struct{})
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
@@ -6863,6 +6882,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 		var injectedError bool
 		var s serverutils.TestServerInterface
 		params, _ := tests.CreateTestServerParams()
+		params.RequiresRoot = true
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeResume: func(jobID jobspb.JobID) error {
@@ -6948,6 +6968,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 
 		var s serverutils.TestServerInterface
 		params, _ := tests.CreateTestServerParams()
+		params.RequiresRoot = true
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeResume: func(jobID jobspb.JobID) error {
@@ -7305,6 +7326,7 @@ func TestCheckConstraintDropAndColumn(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	var s serverutils.TestServerInterface
+	params.RequiresRoot = true
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeResume: func(jobID jobspb.JobID) error {
@@ -7441,6 +7463,7 @@ func TestJobsWithoutMutationsAreCancelable(t *testing.T) {
 	var registry *jobs.Registry
 	var scJobID jobspb.JobID
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeResume: func(jobID jobspb.JobID) error {
 				job, err := registry.LoadJob(ctx, jobID)
@@ -7779,6 +7802,7 @@ ALTER TABLE t.test SET (ttl_expire_after = '10 hours');
 			knobs := &sql.SchemaChangerTestingKnobs{}
 
 			params, _ := tests.CreateTestServerParams()
+			params.RequiresRoot = true
 			params.Knobs.SQLSchemaChanger = knobs
 			s, sqlDB, kvDB := serverutils.StartServer(t, params)
 			defer s.Stopper().Stop(ctx)
@@ -8000,6 +8024,7 @@ func TestPauseBeforeRandomDescTxn(t *testing.T) {
 		)
 
 		params, _ := tests.CreateTestServerParams()
+		params.RequiresRoot = true
 		params.Knobs = base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -8124,6 +8149,7 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 		)
 
 		params, _ := tests.CreateTestServerParams()
+		params.RequiresRoot = true
 		params.Knobs = base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{

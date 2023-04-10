@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -180,8 +179,9 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	// mark on replicas on node 1 as designated survivors. After that, starting
 	// single node should succeed.
 	tcBefore := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{RequiresRoot: true},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
+			0: {RequiresRoot: true, StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
 		},
 	})
 	tcBefore.Start(t)
@@ -456,6 +456,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	sa := make(map[int]base.TestServerArgs)
 	for i := 0; i < 3; i++ {
 		sa[i] = base.TestServerArgs{
+			RequiresRoot: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyEngineRegistry: storeReg,
@@ -470,6 +471,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		}
 	}
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs:        base.TestServerArgs{RequiresRoot: true},
 		ReusableListeners: true,
 		ServerArgsPerNode: sa,
 	})

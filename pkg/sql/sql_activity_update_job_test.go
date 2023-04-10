@@ -42,7 +42,9 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	// Disable the job since it is called manually from a new instance to avoid
 	// any race conditions.
 	ctx := context.Background()
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true,
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
+		Insecure:     true,
 		Knobs: base.TestingKnobs{UpgradeManager: &upgradebase.TestingKnobs{
 			DontUseJobs:                       true,
 			SkipUpdateSQLActivityJobBootstrap: true,
@@ -197,8 +199,10 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true,
-		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
+		Insecure:     true,
+		Knobs:        base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}})
 	defer srv.Stopper().Stop(context.Background())
 	defer db.Close()
 

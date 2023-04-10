@@ -41,7 +41,7 @@ func TestUserLoginAfterGC(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 
 	// Create a user.
@@ -102,7 +102,7 @@ func TestGetUserTimeout(t *testing.T) {
 				return nil
 			},
 		}
-		params := base.TestServerArgs{Knobs: base.TestingKnobs{Store: knobs}}
+		params := base.TestServerArgs{RequiresRoot: true, Knobs: base.TestingKnobs{Store: knobs}}
 		s, db, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 

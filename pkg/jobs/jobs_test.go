@@ -65,7 +65,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/types"
 	"github.com/google/go-cmp/cmp"
@@ -1870,6 +1869,7 @@ func TestShowJobs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
@@ -2022,6 +2022,7 @@ func TestShowAutomaticJobs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{
 		SkipJobBootstrap: true,
 	}
@@ -2152,6 +2153,7 @@ func TestShowJobsWithError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	params.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
 		DontUseJobs:                       true,
 		SkipJobMetricsPollingJobBootstrap: true,
@@ -2275,9 +2277,11 @@ func TestShowJobWhenComplete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Canceling a job relies on adopt daemon to move the job to state reverting.
-	args := base.TestServerArgs{Knobs: base.TestingKnobs{
-		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-	}}
+	args := base.TestServerArgs{
+		RequiresRoot: true,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		}}
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, args)
@@ -2580,7 +2584,8 @@ func TestStartableJobMixedVersion(t *testing.T) {
 		false, /* initializeVersion */
 	)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: st,
+		RequiresRoot: true,
+		Settings:     st,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
@@ -2989,8 +2994,10 @@ func TestMetrics(t *testing.T) {
 		s serverutils.TestServerInterface, db *gosql.DB, r *jobs.Registry, cleanup func(),
 	) {
 		jobConstructorCleanup := jobs.ResetConstructors()
-		args := base.TestServerArgs{Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+		args := base.TestServerArgs{
+			RequiresRoot: true,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 		}
 		s, db, _ = serverutils.StartServer(t, args)
 		r = s.JobRegistry().(*jobs.Registry)
@@ -3273,6 +3280,7 @@ func TestPauseReason(t *testing.T) {
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},

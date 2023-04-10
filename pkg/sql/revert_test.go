@@ -119,7 +119,7 @@ func TestTableRollbackMultiTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, sqlDB, kv := serverutils.StartServer(
-		t, base.TestServerArgs{UseDatabase: "test"})
+		t, base.TestServerArgs{RequiresRoot: true, UseDatabase: "test"})
 	defer s.Stopper().Stop(context.Background())
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 

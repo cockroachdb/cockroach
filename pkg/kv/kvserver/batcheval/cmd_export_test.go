@@ -52,7 +52,10 @@ func TestExportCmd(t *testing.T) {
 	ctx := context.Background()
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		RequiresRoot:  true,
+		ExternalIODir: dir},
+	})
 	defer tc.Stopper().Stop(ctx)
 	kvDB := tc.Server(0).DB()
 

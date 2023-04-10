@@ -45,6 +45,7 @@ func TestFingerprint(t *testing.T) {
 	var numExportResponses int
 	var numSSTsInExportResponses int
 	serv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+		RequiresRoot: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
@@ -224,7 +225,7 @@ func TestFingerprintConcurrentTransactions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, "CREATE DATABASE IF NOT EXISTS test")
@@ -279,7 +280,7 @@ func TestFingerprintStripped(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{RequiresRoot: true})
 	defer s.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, "CREATE DATABASE IF NOT EXISTS test")

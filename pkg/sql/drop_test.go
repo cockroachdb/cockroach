@@ -227,6 +227,7 @@ func TestDropDatabaseEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
+	params.RequiresRoot = true
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -583,6 +584,7 @@ func TestDropTable(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	ctx, cancel := context.WithCancel(context.Background())
+	params.RequiresRoot = true
 	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 		RunBeforeResume: func(jobID jobspb.JobID) error {
 			<-ctx.Done()
@@ -1313,6 +1315,7 @@ func TestDropPhysicalTableGC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 
+	params.RequiresRoot = true
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	_, err := sqlDB.Exec(`CREATE DATABASE test;`)

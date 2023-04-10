@@ -57,11 +57,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -1017,7 +1015,8 @@ func TestSQLDecommissioned(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 		ServerArgs: base.TestServerArgs{
-			Insecure: true, // to set up a simple SQL client
+			RequiresRoot: true,
+			Insecure:     true, // to set up a simple SQL client
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -1058,7 +1057,7 @@ func TestSQLDecommissioned(t *testing.T) {
 		require.Equal(t, codes.PermissionDenied, s.Code())
 
 		sqlClient, err := serverutils.OpenDBConnE(
-			decomSrv.ServingSQLAddr(), "", true, tc.Stopper(), false, /*requireRoot*/
+			decomSrv.ServingSQLAddr(), "", true, tc.Stopper(), true, /*requireRoot*/
 		)
 		require.NoError(t, err)
 

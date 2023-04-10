@@ -328,7 +328,8 @@ func TestExecBackfiller(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			defer log.Scope(t).Close(t)
 
-			tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+			params := base.TestServerArgs{RequiresRoot: true}
+			tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 			defer tc.Stopper().Stop(ctx)
 
 			testCase.f(t, sqlutils.MakeSQLRunner(tc.ServerConn(0)))

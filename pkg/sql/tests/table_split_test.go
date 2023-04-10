@@ -21,14 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 func TestSplitAtTableBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	params := base.TestServerArgs{RequiresRoot: true}
 	testClusterArgs := base.TestClusterArgs{
+		ServerArgs:      params,
 		ReplicationMode: base.ReplicationAuto,
 	}
 	tc := testcluster.StartTestCluster(t, 3, testClusterArgs)

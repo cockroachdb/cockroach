@@ -1389,7 +1389,7 @@ func TestDescriptorByteSizeOrder(t *testing.T) {
 func TestLeasedDescriptorByteSizeBaseline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	params := base.TestServerArgs{}
+	params := base.TestServerArgs{RequiresRoot: true}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(db)

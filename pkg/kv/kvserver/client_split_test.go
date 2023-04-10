@@ -1398,6 +1398,7 @@ func runSetupSplitSnapshotRace(
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
+			RequiresRoot: true,
 			StoreSpecs: []base.StoreSpec{
 				{
 					InMemory:               true,

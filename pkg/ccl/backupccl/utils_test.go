@@ -215,6 +215,7 @@ func createEmptyCluster(
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 	params := base.TestClusterArgs{}
+	params.ServerArgs.RequiresRoot = true
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		SmallEngineBlocks: smallEngineBlocks,

@@ -466,7 +466,7 @@ func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 	const numAccounts = 10
 	params := base.TestServerArgs{RequiresRoot: true}
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
-	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 

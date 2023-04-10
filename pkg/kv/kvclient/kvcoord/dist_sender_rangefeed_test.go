@@ -12,6 +12,7 @@ package kvcoord_test
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errwrap/testdata/src/github.com/cockroachdb/errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,10 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -267,7 +266,8 @@ func TestBiDirectionalRangefeedNotUsedUntilUpgradeFinalilzed(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual, // Turn off replication queues.
 			ServerArgs: base.TestServerArgs{
-				Settings: st,
+				RequiresRoot: true,
+				Settings:     st,
 				Knobs: base.TestingKnobs{
 					KVClient: &kvcoord.ClientTestingKnobs{
 						TransportFactory: makeTransportFactory(false, nil, nil),

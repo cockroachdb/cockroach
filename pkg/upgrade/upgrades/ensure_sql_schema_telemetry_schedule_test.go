@@ -56,6 +56,7 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 			timeutil.Now(),
 			tree.ScheduledSchemaTelemetryExecutor,
 		)
+		args.RequiresRoot = true
 		args.Knobs.JobsTestingKnobs = jobKnobs
 		args.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 			BeforePrepare: func(ctx context.Context, stmt string, txn *kv.Txn) error {
