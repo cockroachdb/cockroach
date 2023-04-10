@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -79,7 +78,7 @@ func newPrevColumnForDesc(desc *cdcevent.EventDescriptor) (catalog.Column, error
 // cdcPrevType returns a types.T for the tuple corresponding to the
 // event descriptor.
 func cdcPrevType(desc *cdcevent.EventDescriptor) *types.T {
-	numCols := len(desc.ResultColumns()) + 1 /* crdb_internal_mvcc_timestamp */
+	numCols := len(desc.ResultColumns())
 	tupleTypes := make([]*types.T, 0, numCols)
 	tupleLabels := make([]string, 0, numCols)
 
@@ -91,9 +90,6 @@ func cdcPrevType(desc *cdcevent.EventDescriptor) *types.T {
 		tupleTypes = append(tupleTypes, c.Typ)
 	}
 
-	// Add system columns.
-	tupleLabels = append(tupleLabels, colinfo.MVCCTimestampColumnName)
-	tupleTypes = append(tupleTypes, colinfo.MVCCTimestampColumnType)
 	return types.MakeLabeledTuple(tupleTypes, tupleLabels)
 }
 

@@ -196,10 +196,14 @@ func (e *familyEvaluator) eval(
 
 	encDatums := updatedRow.EncDatums()
 	if havePrev {
-		if err := e.copyPrevRow(prevRow); err != nil {
-			return cdcevent.Row{}, err
+		if prevRow.IsDeleted() {
+			encDatums = append(encDatums, rowenc.EncDatum{Datum: tree.DNull})
+		} else {
+			if err := e.copyPrevRow(prevRow); err != nil {
+				return cdcevent.Row{}, err
+			}
+			encDatums = append(encDatums, rowenc.EncDatum{Datum: e.prevRowTuple})
 		}
-		encDatums = append(encDatums, rowenc.EncDatum{Datum: e.prevRowTuple})
 	}
 
 	// Push data into DistSQL.
@@ -465,10 +469,10 @@ func (e *familyEvaluator) setupContextForRow(
 	} else {
 		// Insert or update.
 		if e.rowEvalCtx.withDiff {
-			if prevRow.IsInitialized() {
-				e.rowEvalCtx.op = eventTypeUpdate
-			} else {
+			if prevRow.IsDeleted() || !prevRow.IsInitialized() {
 				e.rowEvalCtx.op = eventTypeInsert
+			} else {
+				e.rowEvalCtx.op = eventTypeUpdate
 			}
 		} else {
 			// Without diff option we can't tell insert from update; so, use upsert.
