@@ -1,0 +1,32 @@
+parse
+DECLARE
+BEGIN
+MOVE RELATIVE 10 FROM cursor_name;
+END
+----
+DECLARE
+BEGIN
+MOVE RELATIVE 10 FROM cursor_name
+END
+
+parse
+DECLARE
+BEGIN
+MOVE ABSOLUTE 9 FROM cursor_name;
+END
+----
+DECLARE
+BEGIN
+MOVE ABSOLUTE 9 FROM cursor_name
+END
+
+parse
+DECLARE
+BEGIN
+MOVE FORWARD FROM cursor_name;
+END
+----
+DECLARE
+BEGIN
+MOVE FORWARD cursor_name
+END
