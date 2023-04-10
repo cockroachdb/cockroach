@@ -237,6 +237,17 @@ var ExportRequestsLimit = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// eagerLeaseAcquisitionLimit is the number of concurrent, eager lease
+// acquisitions made during Raft ticks. Note that this does not include
+// expiration lease extensions, which are unbounded.
+var eagerLeaseAcquisitionLimit = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.store.concurrent_eager_lease_acquisitions",
+	"the number of concurrent, eager lease acquisitions to make (0 disables eager acquisition)",
+	256,
+	settings.NonNegativeInt,
+)
+
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	return testStoreConfig(clock, clusterversion.TestingBinaryVersion)
@@ -991,6 +1002,10 @@ type Store struct {
 	// tenantRateLimiters manages tenantrate.Limiters
 	tenantRateLimiters *tenantrate.LimiterFactory
 
+	// eagerLeaseAcquisitionLimiter limits the number of concurrent eager lease
+	// acquisitions made during Raft ticks.
+	eagerLeaseAcquisitionLimiter *quotapool.IntPool
+
 	computeInitialMetrics              sync.Once
 	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 	spanConfigUpdateQueueRateLimiter   *quotapool.RateLimiter
@@ -1353,6 +1368,13 @@ func NewStore(
 	s.limiters.ConcurrentExportRequests = limit.MakeConcurrentRequestLimiter(
 		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
+
+	s.eagerLeaseAcquisitionLimiter = quotapool.NewIntPool("eager-lease-acquisitions",
+		uint64(eagerLeaseAcquisitionLimit.Get(&cfg.Settings.SV)))
+	eagerLeaseAcquisitionLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		s.eagerLeaseAcquisitionLimiter.UpdateCapacity(
+			uint64(eagerLeaseAcquisitionLimit.Get(&cfg.Settings.SV)))
+	})
 
 	// The snapshot storage is usually empty at this point since it is cleared
 	// after each snapshot application, except when the node crashed right before
