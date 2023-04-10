@@ -804,6 +804,92 @@ INSERT INTO f VALUES
   (42, '{"a": "a"}'),
   (43, '[[0, 1, 2], [0, 1, 2], "s"]')
 
+# Testing the equality operator without the fetch value
+# operator on an inverted index.
+
+query T
+SELECT j FROM f@i WHERE j = '[[0, 1, 2]]' ORDER BY k
+----
+[[0, 1, 2]]
+
+query T
+SELECT j FROM f@i WHERE j = '{"a": "a"}' ORDER BY k
+----
+{"a": "a"}
+
+query T
+SELECT j FROM f@i WHERE j = '{"b": 2, "a": 1}' ORDER BY k
+----
+{"a": 1, "b": 2}
+
+query T
+SELECT j FROM f@i WHERE j = '{"a": {"b": "c"}, "d": "e"}' ORDER BY k
+----
+{"a": {"b": "c"}, "d": "e"}
+
+query T
+SELECT j FROM f@i WHERE j = 'null' ORDER BY k
+----
+null
+
+query T
+SELECT j FROM f@i WHERE j = '[]' ORDER BY k
+----
+[]
+
+query T
+SELECT j FROM f@i WHERE j = '{}' ORDER BY k
+----
+{}
+
+query T
+SELECT j FROM f@i WHERE j = '1' ORDER BY k
+----
+
+query T
+SELECT j FROM f@i WHERE j = '[[]]' ORDER BY k
+----
+[[]]
+
+query T
+SELECT j FROM f@i WHERE j = '[[0, 1, 2], [0, 1, 2], "s"]' ORDER BY k
+----
+[[0, 1, 2], [0, 1, 2], "s"]
+
+# Testing the IN operator without the fetch value operator on
+# an inverted index.
+
+query T
+SELECT j FROM f@i WHERE j IN ('{}', '[]', 'null') ORDER BY k
+----
+null
+{}
+[]
+
+query T
+SELECT j FROM f@i WHERE j IN ('[1]') ORDER BY k
+----
+
+query T
+SELECT j FROM f@i WHERE j IN ('{"a": "b", "x": ["c", "d", "e"]}', '{}') ORDER BY k
+----
+{"a": "b", "x": ["c", "d", "e"]}
+{}
+
+query T
+SELECT j FROM f@i WHERE j IN ('{"a": []}', '{"a": {}}') ORDER BY k
+----
+{"a": []}
+{"a": {}}
+
+query T
+SELECT j FROM f@i WHERE j IN ('{"a": [1, 2, null]}', '[[]]', '[[{"a": {"b": []}}]]')
+ORDER BY k
+----
+{"a": [1, 2, null]}
+[[]]
+[[{"a": {"b": []}}]]
+
 query T
 SELECT j FROM f@i WHERE j->0 @> '[0, 1, 2, 3]' ORDER BY k
 ----
