@@ -205,7 +205,10 @@ func dropColumn(
 			})
 		case *scpb.SecondaryIndex:
 			indexElts := b.QueryByID(e.TableID).Filter(hasIndexIDAttrFilter(e.IndexID))
-			_, _, indexName := scpb.FindIndexName(indexElts.Filter(publicTargetFilter))
+			_, indexTargetStatus, indexName := scpb.FindIndexName(indexElts)
+			if indexTargetStatus == scpb.ToAbsent {
+				return
+			}
 			name := tree.TableIndexName{
 				Table: *tn,
 				Index: tree.UnrestrictedName(indexName.Name),
