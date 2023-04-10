@@ -979,8 +979,6 @@ type tpccBenchSpec struct {
 	// change (i.e. CockroachDB gets faster!).
 	EstimatedMax int
 
-	// MinVersion to pass to testRegistryImpl.Add.
-	MinVersion string
 	// Tags to pass to testRegistryImpl.Add.
 	Tags map[string]struct{}
 	// EncryptionEnabled determines if the benchmark uses encrypted stores (i.e.
@@ -1068,16 +1066,11 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
 	nodes := r.MakeClusterSpec(numNodes, opts...)
 
-	minVersion := b.MinVersion
-	if minVersion == "" {
-		minVersion = "v19.1.0" // needed for import
-	}
-
 	r.Add(registry.TestSpec{
 		Name:              name,
 		Owner:             owner,
 		Cluster:           nodes,
-		Timeout:           5 * time.Hour,
+		Timeout:           7 * time.Hour,
 		Tags:              b.Tags,
 		EncryptionSupport: encryptionSupport,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
