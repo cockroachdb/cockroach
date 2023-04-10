@@ -940,7 +940,10 @@ func newChangeFrontierProcessor(
 		return nil, err
 	}
 
-	if cf.encoder, err = getEncoder(encodingOpts, AllTargets(spec.Feed), makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMertics); err != nil {
+	if cf.encoder, err = getEncoder(
+		encodingOpts, AllTargets(spec.Feed), spec.Feed.Select != "",
+		makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMertics,
+	); err != nil {
 		return nil, err
 	}
 
