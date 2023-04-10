@@ -1215,13 +1215,9 @@ func (r *Replica) tick(
 
 	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, now)
 
-	// Eagerly extend expiration leases if kv.expiration_leases_only.enabled is
-	// set. We can do this here because we don't allow ranges with expiration
-	// leases to quiesce in this case. We check the lease type and owner first,
-	// since leaseStatusAtRLocked() is moderately expensive.
-	//
-	// TODO(erikgrinaker): we should remove the store lease renewer and always
-	// do this, but we keep it for now out of caution.
+	// Eagerly extend expiration leases. We can do this here because we don't
+	// allow ranges with expiration leases to quiesce. We check the lease type and
+	// owner first, since leaseStatusAtRLocked() is moderately expensive.
 	//
 	// TODO(erikgrinaker): the replicate queue is responsible for acquiring leases
 	// for ranges that don't have one, and for switching the lease type when e.g.
@@ -1229,9 +1225,7 @@ func (r *Replica) tick(
 	// remove quiescence.
 	if !r.store.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
 		if l := r.mu.state.Lease; l.Type() == roachpb.LeaseExpiration && l.OwnedBy(r.StoreID()) {
-			if ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) {
-				r.maybeExtendLeaseAsyncLocked(ctx, r.leaseStatusAtRLocked(ctx, now))
-			}
+			r.maybeExtendLeaseAsyncLocked(ctx, r.leaseStatusAtRLocked(ctx, now))
 		}
 	}
 

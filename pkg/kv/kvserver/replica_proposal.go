@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -373,38 +372,22 @@ func (r *Replica) leasePostApplyLocked(
 		r.gossipFirstRangeLocked(ctx)
 	}
 
-	isExpirationLease := newLease.Type() == roachpb.LeaseExpiration
-	if isExpirationLease && (leaseChangingHands || maybeSplit) && iAmTheLeaseHolder {
-		if r.requiresExpirationLeaseRLocked() {
-			// Whenever we first acquire an expiration-based lease for a range that
-			// requires it (i.e. the liveness or meta ranges), notify the lease
-			// renewer worker that we want it to keep proactively renewing the lease
-			// before it expires.
-			//
-			// Other expiration leases are only proactively renewed if
-			// kv.expiration_leases_only.enabled is true, but in that case the renewal
-			// is handled by the Raft scheduler during Raft ticks.
-			r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
-			select {
-			case r.store.renewableLeasesSignal <- struct{}{}:
-			default:
-			}
-		} else if !r.shouldUseExpirationLeaseRLocked() && r.ownsValidLeaseRLocked(ctx, now) {
-			// We received an expiration lease for a range that shouldn't keep using
-			// it, most likely as part of a lease transfer (which is always
-			// expiration-based). We've also applied it before it has expired. Upgrade
-			// this lease to the more efficient epoch-based one.
-			if log.V(1) {
-				log.VEventf(ctx, 1, "upgrading expiration lease %s to an epoch-based one", newLease)
-			}
-
-			if r.store.TestingKnobs().LeaseUpgradeInterceptor != nil {
-				r.store.TestingKnobs().LeaseUpgradeInterceptor(newLease)
-			}
-			st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{})
-			// Ignore the returned handle as we won't block on it.
-			_ = r.requestLeaseLocked(ctx, st)
+	if newLease.Type() == roachpb.LeaseExpiration && (leaseChangingHands || maybeSplit) &&
+		iAmTheLeaseHolder && !r.shouldUseExpirationLeaseRLocked() && r.ownsValidLeaseRLocked(ctx, now) {
+		// We received an expiration lease for a range that shouldn't keep using
+		// it, most likely as part of a lease transfer (which is always
+		// expiration-based). We've also applied it before it has expired. Upgrade
+		// this lease to the more efficient epoch-based one.
+		if log.V(1) {
+			log.VEventf(ctx, 1, "upgrading expiration lease %s to an epoch-based one", newLease)
 		}
+
+		if r.store.TestingKnobs().LeaseUpgradeInterceptor != nil {
+			r.store.TestingKnobs().LeaseUpgradeInterceptor(newLease)
+		}
+		st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{})
+		// Ignore the returned handle as we won't block on it.
+		_ = r.requestLeaseLocked(ctx, st)
 	}
 
 	// If we're the current raft leader, may want to transfer the leadership to
