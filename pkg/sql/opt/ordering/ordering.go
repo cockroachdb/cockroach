@@ -88,6 +88,7 @@ func BuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Orderi
 		return nil
 	}
 	provided := funcMap[expr.Op()].buildProvidedOrdering(expr, required)
+	provided = finalizeProvided(provided, required, expr.Relational().OutputCols)
 
 	if buildutil.CrdbTestBuild {
 		checkProvided(expr, required, provided)
@@ -423,6 +424,53 @@ func trimProvided(
 	return provided[:provIdx]
 }
 
+// finalizeProvided ensures that the provided ordering satisfies the following
+// properties:
+//  1. The provided ordering can be proven to satisfy the required ordering
+//     without the use of additional (e.g. functional dependency) information.
+//  2. The provided ordering is simplified, such that it does not contain any
+//     columns from the required ordering optional set.
+//  3. The provided ordering only refers to output columns for the operator.
+//
+// This step is necessary because it is possible for child operators to have
+// different functional dependency information than their parents as well as
+// different output columns. We have to protect against the case where a parent
+// operator cannot prove that its child's provided ordering satisfies its
+// required ordering.
+func finalizeProvided(
+	provided opt.Ordering, required *props.OrderingChoice, outCols opt.ColSet,
+) (newProvided opt.Ordering) {
+	// First check if the given provided is already suitable.
+	providedCols := provided.ColSet()
+	if len(provided) == len(required.Columns) && providedCols.SubsetOf(outCols) {
+		needsRemap := false
+		for i := range provided {
+			choice, ordCol := required.Columns[i], provided[i]
+			if !choice.Group.Contains(ordCol.ID()) || choice.Descending != ordCol.Descending() {
+				needsRemap = true
+				break
+			}
+		}
+		if !needsRemap {
+			return provided
+		}
+	}
+	newProvided = make(opt.Ordering, len(required.Columns))
+	for i, choice := range required.Columns {
+		group := choice.Group.Intersection(outCols)
+		if group.Intersects(providedCols) {
+			// Prefer using columns from the provided ordering if possible.
+			group.IntersectionWith(providedCols)
+		}
+		col, ok := group.Next(0)
+		if !ok {
+			panic(errors.AssertionFailedf("no output column equivalent to %d", redact.Safe(col)))
+		}
+		newProvided[i] = opt.MakeOrderingColumn(col, choice.Descending)
+	}
+	return newProvided
+}
+
 // checkRequired runs sanity checks on the ordering required of an operator.
 func checkRequired(expr memo.RelExpr, required *props.OrderingChoice) {
 	rel := expr.Relational()
@@ -471,13 +519,5 @@ func checkProvided(expr memo.RelExpr, required *props.OrderingChoice, provided o
 				"provided %s does not intersect required %s (FDs: %s)", provided, required, fds,
 			))
 		}
-	}
-
-	// The provided ordering should not have unnecessary columns.
-	fds := &expr.Relational().FuncDeps
-	if trimmed := trimProvided(provided, required, fds); len(trimmed) != len(provided) {
-		panic(errors.AssertionFailedf(
-			"provided %s can be trimmed to %s (FDs: %s)", redact.Safe(provided), redact.Safe(trimmed), redact.Safe(fds),
-		))
 	}
 }
