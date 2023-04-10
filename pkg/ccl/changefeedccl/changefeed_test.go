@@ -903,7 +903,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			sqlsmith.DisableAggregateFuncs(),
 			sqlsmith.DisableWindowFuncs(),
 			sqlsmith.DisableJoins(),
-			sqlsmith.DisableLimits(),
+			sqlsmith.DisableUDFs(),
 			sqlsmith.DisableIndexHints(),
 			sqlsmith.SetScalarComplexity(0.5),
 			sqlsmith.SetComplexity(0.5),
@@ -6538,7 +6538,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		progress := loadProgress()
 		require.NotNil(t, progress.GetChangefeed())
 		h := progress.GetHighWater()
-		noHighWater := (h == nil || h.IsEmpty())
+		noHighWater := h == nil || h.IsEmpty()
 		require.True(t, noHighWater)
 
 		jobCheckpoint := progress.GetChangefeed().Checkpoint
