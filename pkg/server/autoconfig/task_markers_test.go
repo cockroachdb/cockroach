@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig"
@@ -47,6 +48,25 @@ func TestEncodeDecodeMarkers(t *testing.T) {
 				require.Error(t, tr2.DecodeStartMarkerKey(encodedComplete))
 			})
 		}
+	}
+}
+
+// TestPrefixes ensures that the prefix keys used for job info searches
+// are properly encoded.
+func TestPrefixes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, testEnv := range []autoconfig.EnvironmentID{"", "foo", "bar"} {
+		t.Run(string(testEnv), func(t *testing.T) {
+			tref := autoconfig.InfoKeyTaskRef{Environment: testEnv}
+
+			prefix := autoconfig.InfoKeyStartPrefix(testEnv)
+			marker := tref.EncodeStartMarkerKey()
+			require.True(t, strings.HasPrefix(marker, prefix), "%q vs %q", marker, prefix)
+
+			prefix = autoconfig.InfoKeyCompletionPrefix(testEnv)
+			marker = tref.EncodeCompletionMarkerKey()
+			require.True(t, strings.HasPrefix(marker, prefix), "%q vs %q", marker, prefix)
+		})
 	}
 }
 

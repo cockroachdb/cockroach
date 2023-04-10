@@ -34,20 +34,36 @@ const infoKeyStartPrefix = "started-"
 // InfoKeyStartPrefix returns the info_key scan start key for
 // all task start markers for the given environment.
 func InfoKeyStartPrefix(env EnvironmentID) string {
+	orderedKeyBytes := make([]byte, 0, len(env)+10)
+	orderedKeyBytes = encoding.EncodeStringAscending(orderedKeyBytes, string(env))
+
 	var buf strings.Builder
-	buf.Grow(len(infoKeyStartPrefix) + len(env))
+	buf.Grow(len(infoKeyStartPrefix) + hex.EncodedLen(len(orderedKeyBytes)))
 	buf.WriteString(infoKeyStartPrefix)
-	buf.WriteString(string(env))
+	hexEncode := hex.NewEncoder(&buf)
+	_, err := hexEncode.Write(orderedKeyBytes)
+	if err != nil {
+		// This can't happen because strings.Builder always auto-grows.
+		panic(errors.HandleAsAssertionFailure(err))
+	}
 	return buf.String()
 }
 
 // InfoKeyCompletionPrefix returns the info_key scan start key for
 // all task completion markers for the given environment.
 func InfoKeyCompletionPrefix(env EnvironmentID) string {
+	orderedKeyBytes := make([]byte, 0, len(env)+10)
+	orderedKeyBytes = encoding.EncodeStringAscending(orderedKeyBytes, string(env))
+
 	var buf strings.Builder
-	buf.Grow(len(infoKeyCompletionPrefix) + len(env))
+	buf.Grow(len(infoKeyStartPrefix) + hex.EncodedLen(len(orderedKeyBytes)))
 	buf.WriteString(infoKeyCompletionPrefix)
-	buf.WriteString(string(env))
+	hexEncode := hex.NewEncoder(&buf)
+	_, err := hexEncode.Write(orderedKeyBytes)
+	if err != nil {
+		// This can't happen because strings.Builder always auto-grows.
+		panic(errors.HandleAsAssertionFailure(err))
+	}
 	return buf.String()
 }
 
