@@ -1408,40 +1408,51 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	}
 }
 
-// shouldExtendLeaseRLocked determines whether the lease should be extended
-// asynchronously, i.e. if:
+// shouldRequestLeaseRLocked determines whether the replica should request a
+// new lease. This covers the following cases:
 //
-// * The range uses expiration-based leases.
-// * The most recent lease is owned by this replica.
-// * The lease is in need of renewal.
-// * There is no pending extension.
-func (r *Replica) shouldExtendLeaseRLocked(st kvserverpb.LeaseStatus) bool {
-	if st.Lease.Type() != roachpb.LeaseExpiration {
-		return false
-	}
-	if !st.Lease.OwnedBy(r.StoreID()) {
-		return false
-	}
-	if _, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
-		return false
-	}
-	renewal := st.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
-	return renewal.LessEq(st.Now.ToTimestamp())
-}
+//   - The lease has expired, so the Raft leader should attempt to acquire it.
+//   - The lease is expiration-based, ours, and in need of extension.
+//   - The node has restarted, and should reacquire its former leases.
+//   - The lease is ours but has an incorrect type (epoch/expiration).
+func (r *Replica) shouldRequestLeaseRLocked(st kvserverpb.LeaseStatus) bool {
+	switch st.State {
+	case kvserverpb.LeaseState_EXPIRED:
+		// Attempt to acquire an expired lease if we're the Raft leader.
+		return r.isRaftLeaderRLocked()
 
-// maybeExtendLeaseAsyncLocked attempts to extend the expiration-based lease
-// asynchronously, if doing so is deemed beneficial by shouldExtendLeaseRLocked.
-func (r *Replica) maybeExtendLeaseAsyncLocked(ctx context.Context, st kvserverpb.LeaseStatus) {
-	if !r.shouldExtendLeaseRLocked(st) {
-		return
+	case kvserverpb.LeaseState_PROSCRIBED:
+		// Reacquire leases after a restart, if the lease is still ours. This could
+		// also happen after we revoked our lease as part of a lease transfer, but
+		// in that case the transferred lease should typically take effect before
+		// this one is requested.
+		return st.OwnedBy(r.StoreID())
+
+	case kvserverpb.LeaseState_VALID, kvserverpb.LeaseState_UNUSABLE:
+		// Someone else has the lease, so leave it alone.
+		if !st.OwnedBy(r.StoreID()) {
+			return false
+		}
+		// Extend expiration leases if they're due.
+		if st.Lease.Type() == roachpb.LeaseExpiration {
+			renewal := st.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
+			if renewal.LessEq(st.Now.ToTimestamp()) {
+				return true
+			}
+		}
+		// Switch the lease type if it's incorrect.
+		if !r.hasCorrectLeaseTypeRLocked(st.Lease) {
+			return true
+		}
+		return false
+
+	case kvserverpb.LeaseState_ERROR:
+		return false
+
+	default:
+		log.Fatalf(context.Background(), "invalid lease state %s", st.State)
+		return false
 	}
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "extending lease %s at %s", st.Lease, st.Now)
-	}
-	// We explicitly ignore the returned handle as we won't block on it. This
-	// context might be cancelled soon (when the caller completes), but the lease
-	// request will continue to completion independently of the caller's context
-	_ = r.requestLeaseLocked(ctx, st)
 }
 
 // maybeSwitchLeaseType will synchronously renew a lease using the appropriate

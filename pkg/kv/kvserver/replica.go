@@ -2178,7 +2178,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 // both the lease holder and the raft leader before being applied by other
 // replicas).
 func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
-	ctx context.Context, now hlc.ClockTimestamp,
+	ctx context.Context, status kvserverpb.LeaseStatus,
 ) {
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
@@ -2186,7 +2186,6 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
 	if !r.isRaftLeaderRLocked() { // fast path
 		return
 	}
-	status := r.leaseStatusAtRLocked(ctx, now)
 	if !status.IsValid() || status.OwnedBy(r.StoreID()) {
 		return
 	}
