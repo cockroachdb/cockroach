@@ -39,7 +39,10 @@ end_test
 start_test "Check that a SQL shell can connect to the app tenant without special arguments as root"
 spawn $argv sql --no-line-editor -u root
 eexpect "Welcome"
-eexpect root@
+expect {
+    "ATTENTION: YOU ARE CONNECTED TO THE SYSTEM TENANT" { exit 1 }
+    root@ {}
+}
 eexpect "defaultdb>"
 send "table system.tenants;\r"
 eexpect "ERROR"
@@ -50,7 +53,10 @@ eexpect eof
 
 spawn $argv sql --no-line-editor -u root -d cluster:demoapp
 eexpect "Welcome"
-eexpect root@
+expect {
+    "ATTENTION: YOU ARE CONNECTED TO THE SYSTEM TENANT" { exit 1 }
+    root@ {}
+}
 eexpect "demoapp/defaultdb>"
 send "\\q\r"
 eexpect eof
@@ -87,7 +93,10 @@ system "$argv sql -u root -e \"alter user root with password 'abc'\""
 set ssldir $env(HOME)/.cockroach-demo
 spawn $argv sql --no-line-editor --url "postgresql://root:abc@/defaultdb?host=$ssldir&port=26257"
 eexpect "Welcome"
-eexpect root@
+expect {
+    "ATTENTION: YOU ARE CONNECTED TO THE SYSTEM TENANT" { exit 1 }
+    root@ {}
+}
 eexpect "defaultdb>"
 send "table system.tenants;\r"
 eexpect "ERROR"
@@ -167,6 +176,19 @@ eexpect eof
 set spawn_id $demo_spawn_id
 send "\\q\r"
 eexpect eof
+
+
+start_test "Check that the warning for the system tenant is not printed when there are no secondary tenants"
+spawn $argv demo --empty --no-line-editor --multitenant=false
+eexpect "Welcome"
+expect {
+    "ATTENTION: YOU ARE CONNECTED TO THE SYSTEM TENANT" { exit 1 }
+    demo@ {}
+}
+eexpect "defaultdb>"
+send "\\q\r"
+eexpect eof
+end_test
 
 # Regression test for #95135.
 start_test "Verify that the demo command did not leave tenant directories around."

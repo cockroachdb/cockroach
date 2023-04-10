@@ -5361,6 +5361,15 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 			Undocumented: true,
 		},
 		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.BytesArray),
+			Fn: func(_ context.Context, evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
+				return spanToDatum(evalCtx.Codec.TenantSpan())
+			},
+			Info:       "This function returns the span that contains the keys for the current tenant.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "tenant_id", Typ: types.Int},
 			},
@@ -5400,18 +5409,10 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 					return nil, err
 				}
 				start := keys.MakeTenantPrefix(tid)
-				end := start.PrefixEnd()
-
-				result := tree.NewDArray(types.Bytes)
-				if err := result.Append(tree.NewDBytes(tree.DBytes(start))); err != nil {
-					return nil, err
-				}
-
-				if err := result.Append(tree.NewDBytes(tree.DBytes(end))); err != nil {
-					return nil, err
-				}
-
-				return result, nil
+				return spanToDatum(roachpb.Span{
+					Key:    start,
+					EndKey: start.PrefixEnd(),
+				})
 			},
 			Info:       "This function returns the span that contains the keys for the given tenant.",
 			Volatility: volatility.Immutable,
@@ -5430,18 +5431,10 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				tabID := uint32(tree.MustBeDInt(args[0]))
 
 				start := evalCtx.Codec.TablePrefix(tabID)
-				end := start.PrefixEnd()
-
-				result := tree.NewDArray(types.Bytes)
-				if err := result.Append(tree.NewDBytes(tree.DBytes(start))); err != nil {
-					return nil, err
-				}
-
-				if err := result.Append(tree.NewDBytes(tree.DBytes(end))); err != nil {
-					return nil, err
-				}
-
-				return result, nil
+				return spanToDatum(roachpb.Span{
+					Key:    start,
+					EndKey: start.PrefixEnd(),
+				})
 			},
 			Info:       "This function returns the span that contains the keys for the given table.",
 			Volatility: volatility.Leakproof,
@@ -5464,18 +5457,10 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				start := roachpb.Key(rowenc.MakeIndexKeyPrefix(evalCtx.Codec,
 					catid.DescID(tabID),
 					catid.IndexID(indexID)))
-				end := start.PrefixEnd()
-
-				result := tree.NewDArray(types.Bytes)
-				if err := result.Append(tree.NewDBytes(tree.DBytes(start))); err != nil {
-					return nil, err
-				}
-
-				if err := result.Append(tree.NewDBytes(tree.DBytes(end))); err != nil {
-					return nil, err
-				}
-
-				return result, nil
+				return spanToDatum(roachpb.Span{
+					Key:    start,
+					EndKey: start.PrefixEnd(),
+				})
 			},
 			Info:       "This function returns the span that contains the keys for the given index.",
 			Volatility: volatility.Leakproof,
@@ -10471,4 +10456,15 @@ func parseSpan(arg tree.Datum) (roachpb.Span, error) {
 	startKey := []byte(tree.MustBeDBytes(arr.Array[0]))
 	endKey := []byte(tree.MustBeDBytes(arr.Array[1]))
 	return roachpb.Span{Key: startKey, EndKey: endKey}, nil
+}
+
+func spanToDatum(span roachpb.Span) (tree.Datum, error) {
+	result := tree.NewDArray(types.Bytes)
+	if err := result.Append(tree.NewDBytes(tree.DBytes(span.Key))); err != nil {
+		return nil, err
+	}
+	if err := result.Append(tree.NewDBytes(tree.DBytes(span.EndKey))); err != nil {
+		return nil, err
+	}
+	return result, nil
 }

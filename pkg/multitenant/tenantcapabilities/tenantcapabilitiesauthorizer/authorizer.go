@@ -159,12 +159,12 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
 	kvpb.AdminUnsplit:        tenantcapabilities.CanAdminUnsplit,
 	kvpb.AdminRelocateRange:  tenantcapabilities.CanAdminRelocateRange,
 	kvpb.AdminTransferLease:  tenantcapabilities.CanAdminRelocateRange,
+	kvpb.CheckConsistency:    tenantcapabilities.CanCheckConsistency,
 
 	// TODO(knz,arul): Verify with the relevant teams whether secondary
 	// tenants have legitimate access to any of those.
 	kvpb.AdminMerge:                    onlySystemTenant,
 	kvpb.AdminVerifyProtectedTimestamp: onlySystemTenant,
-	kvpb.CheckConsistency:              onlySystemTenant,
 	kvpb.ComputeChecksum:               onlySystemTenant,
 	kvpb.GC:                            onlySystemTenant,
 	kvpb.Merge:                         onlySystemTenant,

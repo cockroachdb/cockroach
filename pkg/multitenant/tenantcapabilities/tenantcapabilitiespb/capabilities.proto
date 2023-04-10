@@ -88,6 +88,10 @@ message TenantCapabilities {
   // CanUseNodelocalStorage if set to true, grants the tenant the ability
   // to use nodelocal storage  on any KV node.
   bool can_use_nodelocal_storage = 9;
+
+  // CanCheckConsistency if set to true, grants the tenant the ability to run
+  // range consistency checks.
+  bool can_check_consistency = 10;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may

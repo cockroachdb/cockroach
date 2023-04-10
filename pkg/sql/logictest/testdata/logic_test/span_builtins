@@ -2,10 +2,23 @@
 
 ## Tests for span construction/manipulation builtins
 
+subtest tenant_span_0_arg
+
+skipif config 3node-tenant-default-configs
 query T
-select crdb_internal.trim_tenant_prefix(crdb_internal.table_span(1))
+SELECT crdb_internal.tenant_span()
 ----
-{"\\x89","\\x8a"}
+{"\\x","\\xffff"}
+
+onlyif config 3node-tenant-default-configs
+query T
+SELECT crdb_internal.tenant_span()
+----
+{"\\xfe92","\\xfe93"}
+
+subtest end
+
+subtest tenant_span_name_arg
 
 skipif config 3node-tenant-default-configs
 statement ok
@@ -13,23 +26,45 @@ CREATE TENANT "foo-bar";
 
 skipif config 3node-tenant-default-configs
 query T
-select crdb_internal.tenant_span('foo-bar')
+SELECT crdb_internal.tenant_span('foo-bar')
 ----
 {"\\xfe8a","\\xfe8b"}
 
+subtest end
+
+subtest tenant_span_by_id
+
 query T
-select crdb_internal.trim_tenant_prefix(crdb_internal.index_span(1, 1))
+SELECT crdb_internal.tenant_span(2)
+----
+{"\\xfe8a","\\xfe8b"}
+
+subtest end
+
+subtest table_span
+
+query T
+SELECT crdb_internal.trim_tenant_prefix(crdb_internal.table_span(1))
+----
+{"\\x89","\\x8a"}
+
+subtest end
+
+subtest index_span
+
+query T
+SELECT crdb_internal.trim_tenant_prefix(crdb_internal.index_span(1, 1))
 ----
 {"\\x8989","\\x898a"}
 
-query T
-select crdb_internal.tenant_span(2)
-----
-{"\\xfe8a","\\xfe8b"}
+subtest end
 
+subtest trim_tenant_prefix
 
 # Keys that don't have a valid tenant prefix are returned verbatim.
 query T
 SELECT encode(crdb_internal.trim_tenant_prefix('\xfe8828a09b'), 'hex');
 ----
 fe8828a09b
+
+subtest end
