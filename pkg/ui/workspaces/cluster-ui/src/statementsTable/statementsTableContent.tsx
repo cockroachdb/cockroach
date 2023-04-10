@@ -31,7 +31,7 @@ import {
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { EllipsisVertical } from "@cockroachlabs/icons";
-import { getBasePath } from "../api";
+import { getBasePath } from "src/api/basePath";
 
 export type NodeNames = { [nodeId: string]: string };
 const cx = classNames.bind(styles);

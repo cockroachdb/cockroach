@@ -130,14 +130,16 @@ export function makeTransactionsColumns(
       title: statisticsTableTitles.transactions(statType),
       cell: (item: TransactionInfo) =>
         transactionLink({
-          transactionText: statementFingerprintIdsToText(
-            item.stats_data.statement_fingerprint_ids,
-            statements,
-          ),
-          transactionSummary: statementFingerprintIdsToSummarizedText(
-            item.stats_data.statement_fingerprint_ids,
-            statements,
-          ),
+          transactionText:
+            statementFingerprintIdsToText(
+              item.stats_data.statement_fingerprint_ids,
+              statements,
+            ) || "Transaction query unavailable.",
+          transactionSummary:
+            statementFingerprintIdsToSummarizedText(
+              item.stats_data.statement_fingerprint_ids,
+              statements,
+            ) || "Transaction query unavailable.",
           aggregatedTs: TimestampToString(item.stats_data.aggregated_ts),
           transactionFingerprintId:
             item.stats_data.transaction_fingerprint_id.toString(),

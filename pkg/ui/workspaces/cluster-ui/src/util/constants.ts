@@ -46,4 +46,4 @@ export const serverToClientErrorMessageMap = new Map([
   ],
 ]);
 
-export const STATS_LONG_LOADING_DURATION = duration(2, "s");
+export const NO_SAMPLES_FOUND = "no samples";

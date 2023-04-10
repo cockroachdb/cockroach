@@ -257,6 +257,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
                 <ColumnsSelector
                   options={tableColumns}
                   onSubmitColumns={onColumnsChange}
+                  size={"small"}
                 />
                 <TableStatistics
                   pagination={pagination}

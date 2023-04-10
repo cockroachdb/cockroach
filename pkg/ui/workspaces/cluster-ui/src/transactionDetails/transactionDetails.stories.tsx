@@ -21,6 +21,7 @@ import {
   transaction,
   transactionFingerprintId,
 } from "./transactionDetails.fixture";
+import { SqlStatsSortOptions } from "src/api/statementsApi";
 
 import { TransactionDetails } from ".";
 import moment from "moment";
@@ -46,6 +47,9 @@ storiesOf("Transactions Details", module)
       onTimeScaleChange={noop}
       refreshNodes={noop}
       lastUpdated={moment("0001-01-01T00:00:00Z")}
+      isDataValid={true}
+      limit={100}
+      reqSortSetting={SqlStatsSortOptions.EXECUTION_COUNT}
     />
   ))
   .add("with loading indicator", () => (
@@ -64,6 +68,9 @@ storiesOf("Transactions Details", module)
       onTimeScaleChange={noop}
       refreshNodes={noop}
       lastUpdated={moment("0001-01-01T00:00:00Z")}
+      isDataValid={true}
+      limit={100}
+      reqSortSetting={SqlStatsSortOptions.EXECUTION_COUNT}
     />
   ))
   .add("with error alert", () => (
@@ -83,6 +90,9 @@ storiesOf("Transactions Details", module)
       onTimeScaleChange={noop}
       refreshNodes={noop}
       lastUpdated={moment("0001-01-01T00:00:00Z")}
+      isDataValid={false}
+      limit={100}
+      reqSortSetting={SqlStatsSortOptions.EXECUTION_COUNT}
     />
   ))
   .add("No data for this time frame; no cached transaction text", () => {
@@ -102,6 +112,9 @@ storiesOf("Transactions Details", module)
         onTimeScaleChange={noop}
         refreshNodes={noop}
         lastUpdated={moment("0001-01-01T00:00:00Z")}
+        isDataValid={true}
+        limit={100}
+        reqSortSetting={SqlStatsSortOptions.EXECUTION_COUNT}
       />
     );
   });

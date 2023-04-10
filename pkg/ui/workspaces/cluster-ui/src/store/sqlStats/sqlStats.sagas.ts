@@ -20,6 +20,7 @@ import {
   actions as sqlStatsActions,
   UpdateTimeScalePayload,
 } from "./sqlStats.reducer";
+import { actions as txnStatsActions } from "../transactionStats";
 import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
 
 export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
@@ -54,6 +55,7 @@ export function* resetSQLStatsSaga() {
     yield all([
       put(sqlDetailsStatsActions.invalidateAll()),
       put(sqlStatsActions.invalidated()),
+      put(txnStatsActions.invalidated()),
     ]);
   } catch (e) {
     yield put(sqlStatsActions.failed(e));

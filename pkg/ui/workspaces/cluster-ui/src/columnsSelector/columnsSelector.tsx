@@ -36,6 +36,7 @@ export interface ColumnsSelectorProps {
   // options provides the list of available columns and their initial selection state
   options: SelectOption[];
   onSubmitColumns: (selectedColumns: string[]) => void;
+  size?: "default" | "small";
 }
 
 export interface ColumnsSelectorState {
@@ -222,6 +223,7 @@ export default class ColumnsSelector extends React.Component<
 
   render(): React.ReactElement {
     const { hide } = this.state;
+    const { size = "default" } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
     const options = this.getOptions();
     const columnsSelected = options.filter(o => o.isSelected);
@@ -230,9 +232,9 @@ export default class ColumnsSelector extends React.Component<
       <div
         onClick={this.insideClick}
         ref={this.dropdownRef}
-        className={cx("float")}
+        className={cx("btn-area")}
       >
-        <Button type="secondary" size="small" onClick={this.toggleOpen}>
+        <Button type="secondary" size={size} onClick={this.toggleOpen}>
           <Gear className={cx("icon")} />
           Columns
         </Button>
