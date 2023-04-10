@@ -105,6 +105,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
@@ -735,37 +736,45 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			))
 		},
 	)
+	eagerLeaseAcquisitionLimiter := quotapool.NewIntPool("eager-lease-acquisitions",
+		uint64(kvserver.EagerLeaseAcquisitionConcurrency.Get(&cfg.Settings.SV)))
+	kvserver.EagerLeaseAcquisitionConcurrency.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		eagerLeaseAcquisitionLimiter.UpdateCapacity(
+			uint64(kvserver.EagerLeaseAcquisitionConcurrency.Get(&cfg.Settings.SV)))
+	})
+
 	storeCfg := kvserver.StoreConfig{
-		DefaultSpanConfig:        cfg.DefaultZoneConfig.AsSpanConfig(),
-		Settings:                 st,
-		AmbientCtx:               cfg.AmbientCtx,
-		RaftConfig:               cfg.RaftConfig,
-		Clock:                    clock,
-		DB:                       db,
-		Gossip:                   g,
-		NodeLiveness:             nodeLiveness,
-		Transport:                raftTransport,
-		NodeDialer:               nodeDialer,
-		RPCContext:               rpcContext,
-		ScanInterval:             cfg.ScanInterval,
-		ScanMinIdleTime:          cfg.ScanMinIdleTime,
-		ScanMaxIdleTime:          cfg.ScanMaxIdleTime,
-		HistogramWindowInterval:  cfg.HistogramWindowInterval(),
-		StorePool:                storePool,
-		LogRangeAndNodeEvents:    cfg.EventLogEnabled,
-		RangeDescriptorCache:     distSender.RangeDescriptorCache(),
-		TimeSeriesDataStore:      tsDB,
-		ClosedTimestampSender:    ctSender,
-		ClosedTimestampReceiver:  ctReceiver,
-		ProtectedTimestampReader: protectedTSReader,
-		KVMemoryMonitor:          kvMemoryMonitor,
-		RangefeedBudgetFactory:   rangeReedBudgetFactory,
-		SystemConfigProvider:     systemConfigWatcher,
-		SpanConfigSubscriber:     spanConfig.subscriber,
-		SpanConfigsDisabled:      cfg.SpanConfigsDisabled,
-		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
-		SnapshotSendLimit:        cfg.SnapshotSendLimit,
-		RangeLogWriter:           rangeLogWriter,
+		DefaultSpanConfig:            cfg.DefaultZoneConfig.AsSpanConfig(),
+		Settings:                     st,
+		AmbientCtx:                   cfg.AmbientCtx,
+		RaftConfig:                   cfg.RaftConfig,
+		Clock:                        clock,
+		DB:                           db,
+		Gossip:                       g,
+		NodeLiveness:                 nodeLiveness,
+		Transport:                    raftTransport,
+		NodeDialer:                   nodeDialer,
+		RPCContext:                   rpcContext,
+		ScanInterval:                 cfg.ScanInterval,
+		ScanMinIdleTime:              cfg.ScanMinIdleTime,
+		ScanMaxIdleTime:              cfg.ScanMaxIdleTime,
+		HistogramWindowInterval:      cfg.HistogramWindowInterval(),
+		StorePool:                    storePool,
+		LogRangeAndNodeEvents:        cfg.EventLogEnabled,
+		RangeDescriptorCache:         distSender.RangeDescriptorCache(),
+		TimeSeriesDataStore:          tsDB,
+		ClosedTimestampSender:        ctSender,
+		ClosedTimestampReceiver:      ctReceiver,
+		ProtectedTimestampReader:     protectedTSReader,
+		EagerLeaseAcquisitionLimiter: eagerLeaseAcquisitionLimiter,
+		KVMemoryMonitor:              kvMemoryMonitor,
+		RangefeedBudgetFactory:       rangeReedBudgetFactory,
+		SystemConfigProvider:         systemConfigWatcher,
+		SpanConfigSubscriber:         spanConfig.subscriber,
+		SpanConfigsDisabled:          cfg.SpanConfigsDisabled,
+		SnapshotApplyLimit:           cfg.SnapshotApplyLimit,
+		SnapshotSendLimit:            cfg.SnapshotSendLimit,
+		RangeLogWriter:               rangeLogWriter,
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)

@@ -381,7 +381,7 @@ func (r *Replica) leasePostApplyLocked(
 			r.store.TestingKnobs().LeaseUpgradeInterceptor(newLease)
 		}
 		// Ignore the returned handle as we won't block on it.
-		_ = r.requestLeaseLocked(ctx, st)
+		_ = r.requestLeaseLocked(ctx, st, nil /* limiter */)
 	}
 
 	// If we're the current raft leader, may want to transfer the leadership to

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1219,9 +1220,16 @@ func (r *Replica) tick(
 	// never quiesce expiration leases, but for epoch leases we fall back to the
 	// replicate queue which will do this within 10 minutes.
 	if !r.store.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
-		if r.shouldRequestLeaseRLocked(leaseStatus) {
+		if shouldRequest, isExtension := r.shouldRequestLeaseRLocked(leaseStatus); shouldRequest {
 			if _, requestPending := r.mu.pendingLeaseRequest.RequestPending(); !requestPending {
-				_ = r.requestLeaseLocked(ctx, leaseStatus)
+				var limiter *quotapool.IntPool
+				if !isExtension { // don't limit lease extensions
+					limiter = r.store.eagerLeaseAcquisitionLimiter
+				}
+				// Check quota first to avoid wasted work.
+				if limiter == nil || limiter.ApproximateQuota() > 0 {
+					_ = r.requestLeaseLocked(ctx, leaseStatus, limiter)
+				}
 			}
 		}
 	}
