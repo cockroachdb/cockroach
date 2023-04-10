@@ -10,7 +10,11 @@
 
 package plpgsqltree
 
-import "github.com/cockroachdb/errors"
+import (
+	"math"
+
+	"github.com/cockroachdb/errors"
+)
 
 // PLpgSQLRaiseOptionType represents the severity of the error in
 // a raise statement.
@@ -90,6 +94,38 @@ func (k PLpgSQLGetDiagKind) String() string {
 // PLpgSQLFetchDirection represents the direction clause passed into a
 // fetch statement.
 type PLpgSQLFetchDirection int
+
+const (
+	PLpgSQLFetchForward PLpgSQLFetchDirection = iota
+	PLpgSQLFetchBackward
+	PLpgSQLFetchAbsolute
+	PLpgSQLFetchRelative
+)
+
+func (k PLpgSQLFetchDirection) String() string {
+	switch k {
+	case PLpgSQLFetchForward:
+		return "FORWARD"
+	case PLpgSQLFetchBackward:
+		return "BACKWARD"
+	case PLpgSQLFetchAbsolute:
+		return "ABSOLUTE"
+	case PLpgSQLFetchRelative:
+		return "RELATIVE"
+	default:
+		panic(errors.AssertionFailedf("not known fetch direction"))
+	}
+}
+
+// TODO(janexing): better naming and comments.
+type PLpgSQLFetchHowMany int
+
+const (
+	PLpgSQLFetchAll  PLpgSQLFetchHowMany = math.MaxInt64
+	PlpgSQLFetchLast PLpgSQLFetchHowMany = -1
+)
+
+type PLpgSQLPromiseType int
 
 // PLpgSQLCursorOpt represents a cursor option, which describes
 // how a cursor will behave.

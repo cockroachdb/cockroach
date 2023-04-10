@@ -277,6 +277,7 @@ func (l *lexer) ReadSqlExpressionStr(terminator int) (sqlStr string) {
 	return sqlStr
 }
 
+// TODO(janexing): better naming and commments.
 func (l *lexer) ReadSqlExpressionStr2(
 	terminator1 int, terminator2 int,
 ) (sqlStr string, terminatorMet int) {
@@ -340,6 +341,109 @@ func (l *lexer) ProcessQueryForCursorWithoutExplicitExpr(openStmt *plpgsqltree.P
 	} else {
 		openStmt.Query = l.ReadSqlExpressionStr(';')
 	}
+}
+
+func (l *lexer) ReadIntoTarget() (targets []string, strict bool) {
+	targets = make([]string, 0)
+	strict = false
+
+	if int(l.Peek().id) == STRICT {
+		strict = true
+		l.lastPos++
+	}
+
+	for {
+		target, endToken := l.ReadSqlExpressionStr2(',', ';')
+		l.lastPos++
+		if target != "" {
+			targets = append(targets, target)
+		}
+		if endToken != ',' {
+			break
+		}
+	}
+
+	return targets, strict
+}
+
+func (l *lexer) completeDirection(fetchStmt *plpgsqltree.PLpgSQLStmtFetch) (checkFrom bool) {
+	tok := l.Peek()
+	if tok.id == 0 {
+		l.setErr(errors.AssertionFailedf("unexpected end of function definition"))
+	}
+	switch int(l.Peek().id) {
+	case FROM, IN:
+		return false
+	case ALL:
+		fetchStmt.HowMany = plpgsqltree.PLpgSQLFetchAll
+		fetchStmt.ReturnsMultiRows = true
+		return true
+	}
+	fetchStmt.Expr, _ = l.ReadSqlExpressionStr2(FROM, IN)
+	fetchStmt.ReturnsMultiRows = true
+	l.lastPos++
+	return false
+}
+
+func (l *lexer) ReadFetchDirection() (fetchStmt *plpgsqltree.PLpgSQLStmtFetch) {
+	res := &plpgsqltree.PLpgSQLStmtFetch{
+		Direction: plpgsqltree.PLpgSQLFetchForward,
+	}
+	tok := l.Peek()
+	if tok.id == 0 {
+		l.setErr(errors.AssertionFailedf("unexpected end of function definition"))
+	}
+	checkFROM := true
+	switch int(l.Peek().id) {
+	case NEXT:
+	case PRIOR:
+		res.Direction = plpgsqltree.PLpgSQLFetchBackward
+	case FIRST:
+		res.Direction = plpgsqltree.PLpgSQLFetchAbsolute
+	case LAST:
+		res.Direction = plpgsqltree.PLpgSQLFetchAbsolute
+		res.HowMany = plpgsqltree.PlpgSQLFetchLast
+	case ABSOLUTE:
+		res.Direction = plpgsqltree.PLpgSQLFetchAbsolute
+		// TODO(janexing): This looks ugly. Try embedding the ++ in
+		// ReadSqlExpressionStr2().
+		l.lastPos++
+		res.Expr, _ = l.ReadSqlExpressionStr2(FROM, IN)
+		l.lastPos++
+		checkFROM = false
+	case RELATIVE:
+		res.Direction = plpgsqltree.PLpgSQLFetchRelative
+		// TODO(janexing): This looks ugly. Try embedding the ++ in
+		// ReadSqlExpressionStr2().
+		l.lastPos++
+		res.Expr, _ = l.ReadSqlExpressionStr2(FROM, IN)
+		l.lastPos++
+		checkFROM = false
+	case ALL:
+		res.HowMany = plpgsqltree.PLpgSQLFetchAll
+		res.ReturnsMultiRows = true
+	case FORWARD:
+		checkFROM = l.completeDirection(res)
+	case BACKWARD:
+		res.Direction = plpgsqltree.PLpgSQLFetchBackward
+		checkFROM = l.completeDirection(res)
+	case FROM, IN:
+		checkFROM = false
+	default:
+		// This is a cursor name
+		checkFROM = false
+	}
+
+	if checkFROM {
+		l.lastPos++
+		if tok := int(l.Peek().id); tok != FROM && tok != IN {
+			l.setErr(errors.AssertionFailedf("expected FROM or IN"))
+		}
+	}
+
+	tok = l.Peek()
+	res.CurVar = tok.str
+	return res
 }
 
 // Peek peeks

@@ -113,6 +113,10 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtOpen() *plpgsqltree.PLpgSQLStmtOpen {
     return u.val.(*plpgsqltree.PLpgSQLStmtOpen)
 }
 
+func (u *plpgsqlSymUnion) pLpgSQLStmtFetch() *plpgsqltree.PLpgSQLStmtFetch {
+    return u.val.(*plpgsqltree.PLpgSQLStmtFetch)
+}
+
 %}
 /*
  * Basic non-keyword token types.  These are hard-wired into the core lexer.
@@ -573,7 +577,9 @@ proc_stmt:pl_block ';'
 | stmt_open
   { }
 | stmt_fetch
-  { }
+  {
+    $$.val = $1.plpgsqlStatement()
+  }
 | stmt_move
   { }
 | stmt_close
@@ -938,20 +944,24 @@ stmt_open: OPEN IDENT open_stmt_processor ';'
   }
 ;
 
-stmt_fetch: FETCH opt_fetch_direction cursor_variable INTO
+stmt_fetch: FETCH opt_fetch_direction IDENT INTO
   {
+    fetchStmt := $2.pLpgSQLStmtFetch()
+    targets, _ := plpgsqllex.(*lexer).ReadIntoTarget()
+    fetchStmt.Targets = targets
+    $$.val = fetchStmt
   }
 ;
 
-stmt_move: MOVE opt_fetch_direction cursor_variable ';'
+stmt_move: MOVE opt_fetch_direction IDENT ';'
   {
   }
 ;
 
 opt_fetch_direction:
   {
-  }
-;
+  $$.val = plpgsqllex.(*lexer).ReadFetchDirection()
+  };
 
 stmt_close: CLOSE cursor_variable ';'
   {

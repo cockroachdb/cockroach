@@ -505,20 +505,60 @@ func (s *PLpgSQLStmtOpen) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("\n")
 }
 
-// stmt_fetch
-// stmt_move (where IsMove = true)
 type PLpgSQLStmtFetch struct {
 	PLpgSQLStatementImpl
-	Target           PLpgSQLVariable
-	CurVar           int // TODO: this could just a PLpgSQLVariable
-	Direction        PLpgSQLFetchDirection
-	HowMany          int64
-	Expr             PLpgSQLExpr
+	Targets   []string
+	CurVar    string
+	Direction PLpgSQLFetchDirection
+	HowMany   PLpgSQLFetchHowMany
+	// Expr is integer-valued expression. It is meant for the number of results to
+	// be returned.
+	Expr string
+	// IsMove is set true if this is a MOVE statement.
 	IsMove           bool
 	ReturnsMultiRows bool
 }
 
 func (s *PLpgSQLStmtFetch) Format(ctx *tree.FmtCtx) {
+	if !s.IsMove {
+		ctx.WriteString("FETCH ")
+	} else {
+		ctx.WriteString("MOVE ")
+	}
+
+	if s.HowMany == PLpgSQLFetchAll {
+		ctx.WriteString("ALL ")
+	} else {
+		switch s.Direction {
+		case PLpgSQLFetchAbsolute:
+			if s.HowMany == PlpgSQLFetchLast {
+				ctx.WriteString("LAST ")
+			} else if s.Expr != "" {
+				ctx.WriteString(fmt.Sprintf("ABSOLUTE %s FROM ", s.Expr))
+			} else {
+				ctx.WriteString("FIRST ")
+			}
+		case PLpgSQLFetchRelative:
+			ctx.WriteString(fmt.Sprintf("RELATIVE %s FROM ", s.Expr))
+		default:
+			ctx.WriteString(fmt.Sprintf("%s ", s.Direction.String()))
+		}
+	}
+
+	ctx.WriteString(
+		fmt.Sprintf(
+			"%s INTO ",
+			s.CurVar,
+		))
+
+	for idx, target := range s.Targets {
+		ctx.WriteString(target)
+		if idx != len(s.Targets)-1 {
+			ctx.WriteString(", ")
+		} else {
+			ctx.WriteString("\n")
+		}
+	}
 }
 
 // stmt_close
