@@ -78,7 +78,7 @@ AND jobs.status IN (%s) AND jobs.created_by_id IN (%s)`,
 
 	if stmt.Type != "" {
 		if _, ok := protobufNameForType[stmt.Type]; !ok {
-			return nil, errors.New("Unsupported job type")
+			return nil, errors.New("unsupported job type")
 		}
 		queryStrFormat := `%s JOBS (
   SELECT id
