@@ -35,13 +35,7 @@ eexpect "connection closed unexpectedly"
 # Check that the prompt immediately succeeds the error message
 eexpect "connection lost"
 eexpect "opening new connection: all session settings will be lost"
-expect {
-    "\r\n# " {
-	report "unexpected server message"
-	exit 1
-    }
-    "root@" {}
-}
+eexpect "root@"
 
 # Check the reconnect did succeed - this also resets the connection state to good.
 send "select 1;\r"

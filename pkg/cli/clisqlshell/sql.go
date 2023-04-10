@@ -16,7 +16,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -130,10 +129,10 @@ Commands specific to the demo shell (EXPERIMENTAL):
   \demo add <locality>         add a node (locality specified as "region=<region>,zone=<zone>").
 `
 
-	defaultPromptPattern = "%n@%M/%/%x>"
+	defaultPromptPattern = "%n@%M/%C%/%x>"
 
 	// debugPromptPattern avoids substitution patterns that require a db roundtrip.
-	debugPromptPattern = "%n@%M>"
+	debugPromptPattern = "%n@%M %C>"
 )
 
 // cliState defines the current state of the CLI during
@@ -934,7 +933,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	} else {
 		// Configure the editor to use the new prompt.
 
-		parsedURL, err := url.Parse(c.conn.GetURL())
+		parsedURL, err := pgurl.Parse(c.conn.GetURL())
 		if err != nil {
 			// If parsing fails, we'll keep the entire URL. The Open call succeeded, and that
 			// is the important part.
@@ -943,10 +942,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 			return nextState
 		}
 
-		userName := ""
-		if parsedURL.User != nil {
-			userName = parsedURL.User.Username()
-		}
+		userName := parsedURL.GetUsername()
 
 		dbName := unknownDbName
 		c.lastKnownTxnStatus = unknownTxnStatus
@@ -961,14 +957,35 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 			dbName = c.refreshDatabaseName()
 		}
 
+		// Do we have a "cluster" option; either as an options= parameter
+		// or as a prefix to the database name?
+		opts := parsedURL.GetExtraOptions()
+		var logicalCluster string
+		if extOptsS := opts.Get("options"); extOptsS != "" {
+			extOpts, err := pgurl.ParseExtendedOptions(extOptsS)
+			if err == nil {
+				logicalCluster = extOpts.Get("cluster")
+			}
+		}
+		if urlDB := parsedURL.GetDatabase(); strings.HasPrefix(urlDB, "cluster:") {
+			parts := strings.SplitN(urlDB, "/", 2)
+			logicalCluster = parts[0][len("cluster:"):]
+		}
+		if logicalCluster != "" {
+			logicalCluster += "/"
+		}
+
 		c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.iCtx.customPromptPattern, func(m string) string {
 			switch m {
 			case "%M":
-				return parsedURL.Host // full host name.
+				_, host, port := parsedURL.GetNetworking()
+				return host + ":" + port // server:port
 			case "%m":
-				return parsedURL.Hostname() // host name.
+				_, host, _ := parsedURL.GetNetworking()
+				return host
 			case "%>":
-				return parsedURL.Port() // port.
+				_, _, port := parsedURL.GetNetworking()
+				return port
 			case "%n": // user name.
 				return userName
 			case "%/": // database name.
@@ -977,6 +994,8 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 				return c.lastKnownTxnStatus
 			case "%%":
 				return "%"
+			case "%C":
+				return logicalCluster
 			default:
 				err = fmt.Errorf("unrecognized format code in prompt: %q", m)
 				return ""
