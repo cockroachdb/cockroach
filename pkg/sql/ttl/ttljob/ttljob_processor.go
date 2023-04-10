@@ -247,24 +247,13 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 	ie := serverCfg.DB.Executor()
 
 	selectBatchSize := ttlSpec.SelectBatchSize
-
-	aostDuration := ttlSpec.AOSTDuration
-	if aostDuration == 0 {
-		// Read AOST in case of mixed 22.2.0/22.2.1+ cluster where the job started on a 22.2.0 node.
-		//lint:ignore SA1019 execinfrapb.TTLSpec.AOST is deprecated
-		aost := ttlSpec.AOST
-		if !aost.IsZero() {
-			aostDuration = aost.Sub(details.Cutoff)
-		}
-	}
-
 	selectBuilder := MakeSelectQueryBuilder(
 		cutoff,
 		pkColNames,
 		pkColDirs,
 		relationName,
 		bounds,
-		aostDuration,
+		ttlSpec.AOSTDuration,
 		selectBatchSize,
 		ttlExpr,
 	)
