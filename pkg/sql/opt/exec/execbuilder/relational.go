@@ -675,6 +675,11 @@ func (b *Builder) scanParams(
 			if !(maxResults == 1 && scan.Constraint.Spans.Count() == 1) {
 				parallelize = true
 			}
+		} else if b.evalCtx != nil {
+			// If 'unbounded_parallel_scans' is true, even though we cannot
+			// guarantee a sufficiently small upper bound on the number of rows
+			// scanned, we still will parallelize this scan.
+			parallelize = b.evalCtx.SessionData().UnboundedParallelScans
 		}
 	}
 

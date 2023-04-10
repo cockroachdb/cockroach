@@ -1534,142 +1534,171 @@ CREATE TABLE b (a INT, b INT, c INT NULL, d INT NULL, PRIMARY KEY (a, b), FAMILY
 
 # No parallel line printed out for single-span selects.
 query T
-EXPLAIN SELECT * FROM a WHERE a = 10
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE a = 10
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (a, item, price)
+  estimated row count: 1 (missing stats)
   table: a@a_pkey
-  spans: [/10 - /10]
+  spans: /10/0
 
 query T
-EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE a = 10 OR a = 20
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (a, item, price)
+  estimated row count: 2 (missing stats)
   table: a@a_pkey
-  spans: [/10 - /10] [/20 - /20]
+  spans: /10/0 /20/0
+  parallel
 
 query T
-EXPLAIN SELECT * FROM a WHERE a IN (10, 20)
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE a IN (10, 20)
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (a, item, price)
+  estimated row count: 2 (missing stats)
   table: a@a_pkey
-  spans: [/10 - /10] [/20 - /20]
+  spans: /10/0 /20/0
+  parallel
 
 # Verify that consolidated point spans are still parallelized.
 query T
-EXPLAIN SELECT * FROM a WHERE a in (10, 11)
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE a in (10, 11)
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (a, item, price)
+  estimated row count: 2 (missing stats)
   table: a@a_pkey
-  spans: [/10 - /11]
+  spans: /10-/12
+  parallel
 
 query T
-EXPLAIN SELECT * FROM a WHERE a > 10 AND a < 20
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE a > 10 AND a < 20
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (a, item, price)
+  estimated row count: 9 (missing stats)
   table: a@a_pkey
-  spans: [/11 - /19]
+  spans: /11-/20
+  parallel
 
 # This ticks all the boxes for parallelization apart from the fact that there
 # is no end key in the span.
 query T
-EXPLAIN SELECT * FROM a WHERE a > 10
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE a > 10
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (a, item, price)
+  estimated row count: 333 (missing stats)
   table: a@a_pkey
-  spans: [/11 - ]
+  spans: /11-
 
 # Test non-int types.
 
 # Point queries on non-int types are parallel.
 query T
-EXPLAIN SELECT price FROM a WHERE item IN ('sock', 'ball')
+EXPLAIN (VERBOSE) SELECT price FROM a WHERE item IN ('sock', 'ball')
 ----
 distribution: local
 vectorized: true
 ·
-• index join
-│ table: a@a_pkey
+• project
+│ columns: (price)
 │
-└── • scan
-      missing stats
-      table: a@item
-      spans: [/'ball' - /'ball'] [/'sock' - /'sock']
+└── • index join
+    │ columns: (item, price)
+    │ estimated row count: 2 (missing stats)
+    │ table: a@a_pkey
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a, item)
+          estimated row count: 2 (missing stats)
+          table: a@item
+          spans: /"ball"/0 /"sock"/0
+          parallel
 
 # Range queries on non-int types are not parallel due to unbounded number of
 # results.
 query T
-EXPLAIN SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND price < 40
+EXPLAIN (VERBOSE) SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND price < 40
 ----
 distribution: local
 vectorized: true
 ·
-• index join
-│ table: a@a_pkey
+• project
+│ columns: (item)
 │
-└── • scan
-      missing stats
-      table: a@p
-      spans: [/5.000000000000001 - /9.999999999999998] [/20.000000000000004 - /39.99999999999999]
+└── • index join
+    │ columns: (item, price)
+    │ estimated row count: 110 (missing stats)
+    │ table: a@a_pkey
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a, price)
+          estimated row count: 110 (missing stats)
+          table: a@p
+          spans: /5.000000000000001-/9.999999999999998/PrefixEnd /20.000000000000004-/39.99999999999999/PrefixEnd
 
 query T
-EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
+EXPLAIN (VERBOSE) SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (a, b, c, d)
+  estimated row count: 1 (missing stats)
   table: b@b_pkey
-  spans: [/10/10 - /10/10] [/20/20 - /20/20]
+  spans: /10/10/0 /20/20/0
+  parallel
 
 # This one isn't parallelizable because it's not a point lookup - only part of
 # the primary key is specified.
 query T
-EXPLAIN SELECT * FROM b WHERE a = 10 OR a = 20
+EXPLAIN (VERBOSE) SELECT * FROM b WHERE a = 10 OR a = 20
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (a, b, c, d)
+  estimated row count: 20 (missing stats)
   table: b@b_pkey
-  spans: [/10 - /10] [/20 - /20]
+  spans: /10-/11 /20-/21
 
 # This one isn't parallelizable because it has a LIMIT clause.
 query T
-EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20 LIMIT 1
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE a = 10 OR a = 20 LIMIT 1
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (a, item, price)
+  estimated row count: 1 (missing stats)
   table: a@a_pkey
-  spans: [/10 - /10] [/20 - /20]
+  spans: /10/0 /20/0
   limit: 1
 
 statement ok
@@ -1677,15 +1706,16 @@ CREATE INDEX on b(b) STORING (c)
 
 # This one isn't parallelizable because its index isn't unique.
 query T
-EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
+EXPLAIN (VERBOSE) SELECT b FROM b WHERE b = 10 OR b = 20
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (b)
+  estimated row count: 20 (missing stats)
   table: b@b_b_idx
-  spans: [/10 - /10] [/20 - /20]
+  spans: /10-/11 /20-/21
 
 statement ok
 CREATE UNIQUE INDEX on b(c)
@@ -1693,26 +1723,29 @@ CREATE UNIQUE INDEX on b(c)
 # If the index has nullable values, parallelize only when the spans do not
 # specify any nulls.
 query T
-EXPLAIN SELECT c FROM b WHERE c = 10 OR c = 20
+EXPLAIN (VERBOSE) SELECT c FROM b WHERE c = 10 OR c = 20
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (c)
+  estimated row count: 2 (missing stats)
   table: b@b_c_key
-  spans: [/10 - /10] [/20 - /20]
+  spans: /10/0 /20/0
+  parallel
 
 query T
-EXPLAIN SELECT c FROM b WHERE c = 10 OR c < 2
+EXPLAIN (VERBOSE) SELECT c FROM b WHERE c = 10 OR c < 2
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (c)
+  estimated row count: 330 (missing stats)
   table: b@b_c_key
-  spans: (/NULL - /1] [/10 - /10]
+  spans: /!NULL-/2 /10/0
 
 statement ok
 CREATE UNIQUE INDEX on b(d DESC)
@@ -1720,15 +1753,16 @@ CREATE UNIQUE INDEX on b(d DESC)
 # This scan is not parallelizable because the second span has a null in its end
 # key.
 query T
-EXPLAIN SELECT d FROM b WHERE d = 10 OR d < 2
+EXPLAIN (VERBOSE) SELECT d FROM b WHERE d = 10 OR d < 2
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (d)
+  estimated row count: 330 (missing stats)
   table: b@b_d_key
-  spans: [/10 - /10] [/1 - /NULL)
+  spans: /10/0 /1-/NULL
 
 statement ok
 CREATE UNIQUE INDEX ON b(c, d)
@@ -1736,15 +1770,19 @@ CREATE UNIQUE INDEX ON b(c, d)
 # This scan is not parallelizable because although the second column is
 # constrained, the first column is null.
 query T
-EXPLAIN SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
+EXPLAIN (VERBOSE) SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
 ----
 distribution: local
 vectorized: true
 ·
-• scan
-  missing stats
-  table: b@b_c_d_key
-  spans: [/NULL/1 - /NULL/1] [/10/10 - /10/10]
+• project
+│ columns: (d)
+│
+└── • scan
+      columns: (c, d)
+      estimated row count: 1 (missing stats)
+      table: b@b_c_d_key
+      spans: /NULL/1-/NULL/2 /10/10/0
 
 statement ok
 DROP INDEX b_b_idx
@@ -1754,15 +1792,134 @@ CREATE UNIQUE INDEX on b(b) STORING (c)
 
 # This one is parallelizable because its index is unique and non-null.
 query T
-EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
+EXPLAIN (VERBOSE) SELECT b FROM b WHERE b = 10 OR b = 20
 ----
 distribution: local
 vectorized: true
 ·
 • scan
-  missing stats
+  columns: (b)
+  estimated row count: 2 (missing stats)
   table: b@b_b_key
-  spans: [/10 - /10] [/20 - /20]
+  spans: /10/0 /20/0
+  parallel
+
+# Now verify that if 'unbounded_parallel_scans' is 'true', then the scans are
+# parallelized even when we don't have a small upper bound.
+
+statement ok
+SET unbounded_parallel_scans = true
+
+# No end key in the span.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE a > 10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, item, price)
+  estimated row count: 333 (missing stats)
+  table: a@a_pkey
+  spans: /11-
+  parallel
+
+# Range queries have unbounded number of results.
+query T
+EXPLAIN (VERBOSE) SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND price < 40
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (item)
+│
+└── • index join
+    │ columns: (item, price)
+    │ estimated row count: 110 (missing stats)
+    │ table: a@a_pkey
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a, price)
+          estimated row count: 110 (missing stats)
+          table: a@p
+          spans: /5.000000000000001-/9.999999999999998/PrefixEnd /20.000000000000004-/39.99999999999999/PrefixEnd
+          parallel
+
+# Only part of the primary key is specified.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM b WHERE a = 10 OR a = 20
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b, c, d)
+  estimated row count: 20 (missing stats)
+  table: b@b_pkey
+  spans: /10-/11 /20-/21
+  parallel
+
+# Still not parallelizable because it has a LIMIT clause.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE a = 10 OR a = 20 LIMIT 1
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, item, price)
+  estimated row count: 1 (missing stats)
+  table: a@a_pkey
+  spans: /10/0 /20/0
+  limit: 1
+
+# NULLs at the span boundaries prevent us from putting a bound on the row count.
+query T
+EXPLAIN (VERBOSE) SELECT c FROM b WHERE c = 10 OR c < 2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (c)
+  estimated row count: 330 (missing stats)
+  table: b@b_c_key
+  spans: /!NULL-/2 /10/0
+  parallel
+
+query T
+EXPLAIN (VERBOSE) SELECT d FROM b WHERE d = 10 OR d < 2
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (d)
+  estimated row count: 330 (missing stats)
+  table: b@b_d_key
+  spans: /10/0 /1-/NULL
+  parallel
+
+query T
+EXPLAIN (VERBOSE) SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (d)
+│
+└── • scan
+      columns: (c, d)
+      estimated row count: 1 (missing stats)
+      table: b@b_c_d_key
+      spans: /NULL/1-/NULL/2 /10/10/0
+      parallel
+
+statement ok
+SET unbounded_parallel_scans = false
 
 statement ok
 ALTER TABLE a SPLIT AT VALUES(5)

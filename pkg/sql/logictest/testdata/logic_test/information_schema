@@ -4836,6 +4836,7 @@ transaction_rows_written_err                          0
 transaction_rows_written_log                          0
 transaction_status                                    NoTxn
 troubleshooting_mode                                  off
+unbounded_parallel_scans                              off
 unconstrained_non_covering_index_scan_enabled         off
 variable_inequality_lookup_join_enabled               on
 xmloption                                             content

@@ -655,6 +655,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		{sessionSetting: "testing_optimizer_disable_rule_probability"},
 		{sessionSetting: "testing_optimizer_random_seed"},
 		{sessionSetting: "timezone"},
+		{sessionSetting: "unbounded_parallel_scans"},
 		{sessionSetting: "unconstrained_non_covering_index_scan_enabled"},
 		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
 	}
