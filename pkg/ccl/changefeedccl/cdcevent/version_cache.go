@@ -28,15 +28,3 @@ type CacheKey struct {
 	Version  descpb.DescriptorVersion
 	FamilyID descpb.FamilyID
 }
-
-// GetCachedOrCreate returns cached object, or creates and caches new one.
-func GetCachedOrCreate(
-	k CacheKey, c *cache.UnorderedCache, creator func() interface{},
-) interface{} {
-	if v, ok := c.Get(k); ok {
-		return v
-	}
-	v := creator()
-	c.Add(k, v)
-	return v
-}
