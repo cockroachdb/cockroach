@@ -608,6 +608,15 @@ SELECT true FROM x WHERE j->'a' @> '2'::JSONB
 true
 
 query T
+SELECT j FROM x WHERE j ?| ARRAY[NULL]
+----
+
+query T
+SELECT j FROM x WHERE j ?& ARRAY[NULL::STRING]
+----
+{"a": [1, 2, 3]}
+
+query T
 SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo', 'bar']
 ----
 {"foo": {}}
