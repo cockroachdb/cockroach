@@ -11,6 +11,8 @@
 package sqlsmith
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -108,6 +110,7 @@ var (
 	}
 	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},
+		{1, makeCreateFunc},
 	}
 	allStatements = append(mutatingStatements, nonMutatingStatements...)
 
@@ -868,6 +871,113 @@ func (s *Smither) makeSelectList(
 		}
 	}
 	return result, selectRefs, true
+}
+
+func makeCreateFunc(s *Smither) (tree.Statement, bool) {
+	if s.disableUDFs {
+		return nil, false
+	}
+	return s.makeCreateFunc()
+}
+
+func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
+	fname := s.name("func")
+	name := tree.MakeFunctionNameFromPrefix(tree.ObjectNamePrefix{}, fname)
+	// Return a record, which means the UDF can return any number or type in its
+	// final SQL statement.
+	// TODO(harding): Return scalars, UDTs, and tables in addition to records.
+	// Return multiple rows with the SETOF option about 33% of the time.
+	setof := false
+	if s.d6() < 3 {
+		setof = true
+	}
+	rtype := tree.FuncReturnType{
+		Type:  types.AnyTuple,
+		IsSet: setof,
+	}
+	// TODO(harding): Test with multiple input params.
+	// TODO(harding): Allow params to be referenced in the statement body.
+	var params tree.FuncParams
+
+	// There are up to 5 function options that may be applied to UDFs.
+	var opts tree.FunctionOptions
+	opts = make(tree.FunctionOptions, 0, 5)
+
+	// FunctionNullInputBehavior
+	// 50%: Do not specify behavior (default is FunctionCalledOnNullInput).
+	// ~17%: FunctionCalledOnNullInput
+	// ~17%: FunctionReturnsNullOnNullInput
+	// ~17%: FunctionStrict
+	switch s.d6() {
+	case 1:
+		opts = append(opts, tree.FunctionCalledOnNullInput)
+	case 2:
+		opts = append(opts, tree.FunctionReturnsNullOnNullInput)
+	case 3:
+		opts = append(opts, tree.FunctionStrict)
+	}
+
+	// FunctionVolatility
+	// 50%: Do not specify behavior (default is volatile).
+	// ~17%: FunctionVolatile
+	// ~17%: FunctionImmutable
+	// ~17%: FunctionStable
+	immutable := false
+	switch s.d6() {
+	case 1:
+		opts = append(opts, tree.FunctionVolatile)
+	case 2:
+		opts = append(opts, tree.FunctionImmutable)
+		immutable = true
+	case 3:
+		opts = append(opts, tree.FunctionStable)
+	}
+
+	// FunctionLeakproof
+	// Leakproof can only be used with immutable volatility. If the function is
+	// immutable, also specify leakproof 50% of the time. Otherwise, specify
+	// not leakproof 50% of the time (default is not leakproof).
+	leakproof := false
+	if immutable {
+		leakproof = s.coin()
+	}
+	if leakproof || s.coin() {
+		opts = append(opts, tree.FunctionLeakproof(leakproof))
+	}
+
+	// FunctionLanguage
+	// Currently only SQL is supported.
+	opts = append(opts, tree.FunctionLangSQL)
+
+	// FunctionBodyStr
+	// Generate SQL statements for the function body. More than one may be
+	// generated, but only the result of the final statement will matter for
+	// the function return type. Use the FunctionBodyStr option so the statements
+	// are formatted correctly.
+	stmtCnt := s.rnd.Intn(11)
+	stmts := make([]string, 0, stmtCnt)
+	// TODO(harding): Make the desired types of the final statement match the
+	// function return type.
+	for i := 0; i < stmtCnt; i++ {
+		// UDFs currently only support SELECT statements.
+		stmt, _, ok := s.makeSelect(nil /* desiredTypes */, nil /* refs */)
+		if !ok {
+			continue
+		}
+		stmts = append(stmts, tree.AsStringWithFlags(stmt, tree.FmtParsable))
+	}
+	if len(stmts) > 0 {
+		opts = append(opts, tree.FunctionBodyStr(strings.Join(stmts, "\n")))
+	}
+
+	stmt := &tree.CreateFunction{
+		FuncName:   name,
+		ReturnType: rtype,
+		Params:     params,
+		Options:    opts,
+	}
+	// TODO(harding): Register existing functions so we can refer to them in queries.
+	return stmt, true
 }
 
 func makeDelete(s *Smither) (tree.Statement, bool) {
