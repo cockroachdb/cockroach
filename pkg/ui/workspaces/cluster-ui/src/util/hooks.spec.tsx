@@ -17,7 +17,7 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react";
-import moment from "moment";
+import moment from "moment-timezone";
 
 describe("useScheduleFunction", () => {
   let mockFn: jest.Mock;

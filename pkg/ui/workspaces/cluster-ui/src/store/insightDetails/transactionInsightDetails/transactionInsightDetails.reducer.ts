@@ -10,7 +10,7 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "src/store/utils";
-import moment, { Moment } from "moment";
+import moment, { Moment } from "moment-timezone";
 import { ErrorWithKey } from "src/api/statementsApi";
 import {
   TxnInsightDetailsRequest,

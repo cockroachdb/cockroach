@@ -11,7 +11,7 @@
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import moment from "moment";
+import moment from "moment-timezone";
 import { Link } from "react-router-dom";
 import { isUndefined } from "lodash";
 

@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import moment from "moment";
+import moment from "moment-timezone";
 import { createSelector } from "reselect";
 
 import { hoverOff, hoverOn, HoverState } from "src/redux/hover";

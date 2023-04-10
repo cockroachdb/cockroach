@@ -11,13 +11,23 @@
 import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
 import { cockroach } from "src/js/protos";
-import moment from "moment";
-import { util } from "@cockroachlabs/cluster-ui";
+import moment from "moment-timezone";
+import { CoordinatedUniversalTime, util } from "@cockroachlabs/cluster-ui";
 
 export const selectClusterSettings = createSelector(
   (state: AdminUIState) => state.cachedData.settings?.data,
   (settings: cockroach.server.serverpb.SettingsResponse) =>
     settings?.key_values,
+);
+
+export const selectTimezoneSetting = createSelector(
+  selectClusterSettings,
+  settings => {
+    if (!settings) {
+      return CoordinatedUniversalTime;
+    }
+    return settings["ui.display_timezone"]?.value || CoordinatedUniversalTime;
+  },
 );
 
 export const selectResolution10sStorageTTL = createSelector(

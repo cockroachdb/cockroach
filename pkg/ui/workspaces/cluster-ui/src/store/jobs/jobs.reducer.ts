@@ -11,7 +11,7 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { JobsRequest, JobsResponse } from "src/api/jobsApi";
 import { DOMAIN_NAME } from "../utils";
-import moment from "moment";
+import moment from "moment-timezone";
 
 export type JobsState = {
   data: JobsResponse;

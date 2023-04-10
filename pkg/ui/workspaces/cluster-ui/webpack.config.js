@@ -12,7 +12,10 @@ const path = require("path");
 const webpack = require("webpack");
 const WebpackBar = require("webpackbar");
 const MomentLocalesPlugin = require("moment-locales-webpack-plugin");
+const MomentTimezoneDataPlugin = require("moment-timezone-data-webpack-plugin")
 const { ESBuildMinifyPlugin } = require("esbuild-loader");
+
+const currentYear = new Date().getFullYear();
 
 // tslint:disable:object-literal-sort-keys
 module.exports = (env, argv) => {
@@ -168,6 +171,16 @@ module.exports = (env, argv) => {
         /node_modules\/antd\/lib\/style\/index\.less/,
         path.resolve(__dirname, "src/core/antd-patch.less"),
       ),
+
+      // Use MomentTimezoneDataPlugin to remove timezone data that we don't need.
+      new MomentTimezoneDataPlugin({
+        matchZones: ['Etc/UTC', 'America/New_York'],
+        startYear: 2021,
+        endYear: currentYear + 10,
+        // We have to tell the plugin where to store the pruned file
+        // otherwise webpack can't find it.
+        cacheDir: path.resolve(__dirname, "timezones"),
+      })
     ],
 
     // When importing a module whose path matches one of the following, just

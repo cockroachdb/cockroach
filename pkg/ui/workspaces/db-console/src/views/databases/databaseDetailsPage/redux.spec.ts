@@ -25,7 +25,7 @@ import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
-import moment from "moment";
+import moment from "moment-timezone";
 
 function fakeRouteComponentProps(
   key: string,

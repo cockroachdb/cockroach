@@ -11,7 +11,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { connect } from "react-redux";
-import moment, { Moment } from "moment";
+import moment, { Moment } from "moment-timezone";
 import { createSelector } from "reselect";
 import _ from "lodash";
 

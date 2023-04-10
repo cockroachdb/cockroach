@@ -11,7 +11,7 @@
 import _ from "lodash";
 import { Action, combineReducers } from "redux";
 import { ThunkAction, ThunkDispatch } from "redux-thunk";
-import moment from "moment";
+import moment from "moment-timezone";
 import {
   api as clusterUiApi,
   util,

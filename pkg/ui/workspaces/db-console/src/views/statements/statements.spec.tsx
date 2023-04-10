@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import Long from "long";
-import moment from "moment";
+import moment from "moment-timezone";
 import { RouteComponentProps } from "react-router-dom";
 import * as H from "history";
 import { merge } from "lodash";

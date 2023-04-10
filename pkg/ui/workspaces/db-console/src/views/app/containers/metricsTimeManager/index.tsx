@@ -10,7 +10,7 @@
 
 import React from "react";
 import { connect } from "react-redux";
-import moment from "moment";
+import moment from "moment-timezone";
 
 import { AdminUIState } from "src/redux/state";
 import * as timewindow from "src/redux/timeScale";

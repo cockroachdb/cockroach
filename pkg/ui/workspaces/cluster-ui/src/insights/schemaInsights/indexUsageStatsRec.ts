@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment";
+import moment from "moment-timezone";
 
 export const indexNeverUsedReason =
   "This index has not been used and can be removed for better write performance.";

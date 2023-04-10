@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import moment from "moment";
+import moment from "moment-timezone";
 import React, { useState } from "react";
 import { Nodes } from "@cockroachlabs/icons";
 import { NamedOperationMetadata } from "src/api/tracezApi";

@@ -23,7 +23,7 @@ import {
 } from "./sqlApi";
 import { IndexUsageStatistic, recommendDropUnusedIndex } from "../insights";
 import { Format, Identifier, QualifiedIdentifier } from "./safesql";
-import moment from "moment";
+import moment from "moment-timezone";
 import { fromHexString, withTimeout } from "./util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 

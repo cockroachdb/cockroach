@@ -12,6 +12,7 @@ go_library(
         "//pkg/base",
         "//pkg/build",
         "//pkg/server/serverpb",
+        "//pkg/settings",
         "//pkg/util/httputil",
         "//pkg/util/log",
     ],

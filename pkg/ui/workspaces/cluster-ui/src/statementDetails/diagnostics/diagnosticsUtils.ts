@@ -11,7 +11,7 @@
 import { isUndefined } from "lodash";
 import { DiagnosticStatuses } from "src/statementsDiagnostics";
 import { StatementDiagnosticsReport } from "../../api";
-import moment from "moment";
+import moment from "moment-timezone";
 
 export function getDiagnosticsStatus(
   diagnosticsRequest: StatementDiagnosticsReport,
