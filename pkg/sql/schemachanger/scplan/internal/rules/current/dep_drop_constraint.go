@@ -72,7 +72,7 @@ func init() {
 	// longer visible.
 	registerDepRuleForDrop(
 		"Constraint should be hidden before name",
-		scgraph.SameStagePrecedence,
+		scgraph.Precedence,
 		"constraint-name", "constraint",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
