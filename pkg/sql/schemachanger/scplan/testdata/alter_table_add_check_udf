@@ -118,5 +118,5 @@ ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
   rule: CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED
 - from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, WRITE_ONLY]
   to:   [ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: simple constraint visible before name

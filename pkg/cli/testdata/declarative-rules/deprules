@@ -295,7 +295,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: Constraint should be hidden before name
   from: constraint-name-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: constraint-Node
   query:
     - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
@@ -308,7 +308,7 @@ deprules
     - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
 - name: Constraint should be hidden before name
   from: constraint-name-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: constraint-Node
   query:
     - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
@@ -321,7 +321,7 @@ deprules
     - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
 - name: Constraint should be hidden before name
   from: constraint-name-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: constraint-Node
   query:
     - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
@@ -335,7 +335,7 @@ deprules
     - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
 - name: Constraint should be hidden before name
   from: constraint-name-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: constraint-Node
   query:
     - $constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
@@ -3402,7 +3402,7 @@ deprules
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
 - name: simple constraint visible before name
   from: simple-constraint-Node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: constraint-name-Node
   query:
     - $simple-constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.ColumnNotNull']

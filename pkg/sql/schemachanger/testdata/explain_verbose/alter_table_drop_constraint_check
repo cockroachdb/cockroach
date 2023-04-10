@@ -10,28 +10,42 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT check_i;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 1 element transitioning toward ABSENT
+│       ├── • 2 elements transitioning toward ABSENT
 │       │   │
-│       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│       │       │ PUBLIC → VALIDATED
+│       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │         rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+│       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│       │             rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+│       │       └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │             rule: "Constraint should be hidden before name"
 │       │
-│       └── • 1 Mutation operation
+│       └── • 2 Mutation operations
 │           │
-│           └── • MakePublicCheckConstraintValidated
+│           ├── • MakePublicCheckConstraintValidated
+│           │     ConstraintID: 2
+│           │     TableID: 104
+│           │
+│           └── • SetConstraintName
 │                 ConstraintID: 2
+│                 Name: crdb_internal_constraint_2_name_placeholder
 │                 TableID: 104
 │
 ├── • PreCommitPhase
 │   │
 │   ├── • Stage 1 of 2 in PreCommitPhase
 │   │   │
-│   │   ├── • 1 element transitioning toward ABSENT
+│   │   ├── • 2 elements transitioning toward ABSENT
 │   │   │   │
-│   │   │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│   │   │         VALIDATED → PUBLIC
+│   │   │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│   │   │   │     VALIDATED → PUBLIC
+│   │   │   │
+│   │   │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+│   │   │         ABSENT → PUBLIC
 │   │   │
 │   │   └── • 1 Mutation operation
 │   │       │
@@ -40,18 +54,29 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT check_i;
 │   │
 │   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       ├── • 1 element transitioning toward ABSENT
+│       ├── • 2 elements transitioning toward ABSENT
 │       │   │
-│       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│       │       │ PUBLIC → VALIDATED
+│       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │         rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+│       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│       │             rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+│       │       └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │             rule: "Constraint should be hidden before name"
 │       │
-│       └── • 3 Mutation operations
+│       └── • 4 Mutation operations
 │           │
 │           ├── • MakePublicCheckConstraintValidated
 │           │     ConstraintID: 2
+│           │     TableID: 104
+│           │
+│           ├── • SetConstraintName
+│           │     ConstraintID: 2
+│           │     Name: crdb_internal_constraint_2_name_placeholder
 │           │     TableID: 104
 │           │
 │           ├── • SetJobStateOnDescriptor
@@ -65,7 +90,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT check_i;
 │                 - 104
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 1 MutationType op pending
 │                 Statements:
 │                 - statement: ALTER TABLE t DROP CONSTRAINT check_i
 │                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CONSTRAINT ‹check_i›
@@ -75,29 +100,18 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT check_i;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 2 elements transitioning toward ABSENT
+        ├── • 1 element transitioning toward ABSENT
         │   │
-        │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-        │   │   │ VALIDATED → ABSENT
-        │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-        │   │   │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
-        │   │   │
-        │   │   └── • SameStagePrecedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
-        │   │         rule: "Constraint should be hidden before name"
-        │   │
-        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
-        │       │ PUBLIC → ABSENT
+        │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │       │ VALIDATED → ABSENT
         │       │
-        │       └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │       ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │       │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
+        │       │
+        │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
         │             rule: "Constraint should be hidden before name"
         │
-        └── • 4 Mutation operations
-            │
-            ├── • SetConstraintName
-            │     ConstraintID: 2
-            │     Name: crdb_internal_constraint_2_name_placeholder
-            │     TableID: 104
+        └── • 3 Mutation operations
             │
             ├── • RemoveCheckConstraint
             │     ConstraintID: 2

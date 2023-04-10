@@ -11,28 +11,42 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 1 element transitioning toward ABSENT
+│       ├── • 2 elements transitioning toward ABSENT
 │       │   │
-│       │   └── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
-│       │       │ PUBLIC → VALIDATED
+│       │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   │         rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
+│       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
-│       │             rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+│       │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │             rule: "Constraint should be hidden before name"
 │       │
-│       └── • 1 Mutation operation
+│       └── • 2 Mutation operations
 │           │
-│           └── • MakePublicForeignKeyConstraintValidated
+│           ├── • MakePublicForeignKeyConstraintValidated
+│           │     ConstraintID: 2
+│           │     TableID: 105
+│           │
+│           └── • SetConstraintName
 │                 ConstraintID: 2
+│                 Name: crdb_internal_constraint_2_name_placeholder
 │                 TableID: 105
 │
 ├── • PreCommitPhase
 │   │
 │   ├── • Stage 1 of 2 in PreCommitPhase
 │   │   │
-│   │   ├── • 1 element transitioning toward ABSENT
+│   │   ├── • 2 elements transitioning toward ABSENT
 │   │   │   │
-│   │   │   └── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
-│   │   │         VALIDATED → PUBLIC
+│   │   │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│   │   │   │     VALIDATED → PUBLIC
+│   │   │   │
+│   │   │   └── • ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
+│   │   │         ABSENT → PUBLIC
 │   │   │
 │   │   └── • 1 Mutation operation
 │   │       │
@@ -41,18 +55,29 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
 │   │
 │   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       ├── • 1 element transitioning toward ABSENT
+│       ├── • 2 elements transitioning toward ABSENT
 │       │   │
-│       │   └── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
-│       │       │ PUBLIC → VALIDATED
+│       │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   │         rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
+│       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
-│       │             rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+│       │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │             rule: "Constraint should be hidden before name"
 │       │
-│       └── • 4 Mutation operations
+│       └── • 5 Mutation operations
 │           │
 │           ├── • MakePublicForeignKeyConstraintValidated
 │           │     ConstraintID: 2
+│           │     TableID: 105
+│           │
+│           ├── • SetConstraintName
+│           │     ConstraintID: 2
+│           │     Name: crdb_internal_constraint_2_name_placeholder
 │           │     TableID: 105
 │           │
 │           ├── • SetJobStateOnDescriptor
@@ -71,7 +96,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
 │                 - 105
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
 │                 Statements:
 │                 - statement: ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey
 │                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CONSTRAINT ‹t1_i_fkey›
@@ -81,29 +106,18 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 2 elements transitioning toward ABSENT
+        ├── • 1 element transitioning toward ABSENT
         │   │
-        │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
-        │   │   │ VALIDATED → ABSENT
-        │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
-        │   │   │     rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
-        │   │   │
-        │   │   └── • SameStagePrecedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
-        │   │         rule: "Constraint should be hidden before name"
-        │   │
-        │   └── • ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
-        │       │ PUBLIC → ABSENT
+        │   └── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+        │       │ VALIDATED → ABSENT
         │       │
-        │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+        │       ├── • PreviousStagePrecedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+        │       │     rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
+        │       │
+        │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
         │             rule: "Constraint should be hidden before name"
         │
-        └── • 6 Mutation operations
-            │
-            ├── • SetConstraintName
-            │     ConstraintID: 2
-            │     Name: crdb_internal_constraint_2_name_placeholder
-            │     TableID: 105
+        └── • 5 Mutation operations
             │
             ├── • RemoveForeignKeyBackReference
             │     OriginConstraintID: 2
