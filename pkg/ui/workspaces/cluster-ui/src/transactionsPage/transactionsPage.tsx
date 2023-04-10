@@ -46,6 +46,7 @@ import {
   defaultFilters,
   handleFiltersFromQueryString,
   updateFiltersQueryParamsOnTab,
+  SelectedFilters,
 } from "../queryFilter";
 import { UIConfigState } from "../store";
 import {
@@ -490,16 +491,6 @@ export class TransactionsPage extends React.Component<
     );
 
     const period = timeScaleToString(this.props.timeScale);
-    const clearFilter = activeFilters ? (
-      <PageConfigItem>
-        <Button onClick={this.onClearFilters} type="flat" size="small">
-          clear filter
-        </Button>
-      </PageConfigItem>
-    ) : (
-      <></>
-    );
-
     const sortSettingLabel = getSortLabel(this.props.reqSortSetting);
     return (
       <>
@@ -534,7 +525,6 @@ export class TransactionsPage extends React.Component<
                 onSubmitColumns={onColumnsChange}
               />
             </PageConfigItem>
-            {clearFilter}
           </PageConfig>
           <PageConfig className={cx("float-right")}>
             <PageConfigItem>
@@ -558,6 +548,11 @@ export class TransactionsPage extends React.Component<
           </PageConfig>
         </section>
         <section className={statisticsClasses.tableContainerClass}>
+          <SelectedFilters
+            filters={filters}
+            onRemoveFilter={this.onSubmitFilters}
+            onClearFilters={this.onClearFilters}
+          />
           <TransactionsTable
             columns={displayColumns}
             transactions={transactionsToDisplay}
