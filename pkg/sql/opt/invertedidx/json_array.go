@@ -391,12 +391,12 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	case *memo.EqExpr:
 		if fetch, ok := t.Left.(*memo.FetchValExpr); ok {
 			invertedExpr = j.extractJSONFetchValEqCondition(ctx, evalCtx, fetch, t.Right)
+		} else if fetch, ok := t.Left.(*memo.VariableExpr); ok {
+			invertedExpr = j.extractJSONEqCondition(ctx, evalCtx, fetch, t.Right)
 		}
 	case *memo.InExpr:
-		if fetch, ok := t.Left.(*memo.FetchValExpr); ok {
-			if tuple, ok := t.Right.(*memo.TupleExpr); ok {
-				invertedExpr = j.extractJSONInCondition(ctx, evalCtx, fetch, tuple)
-			}
+		if tuple, ok := t.Right.(*memo.TupleExpr); ok {
+			invertedExpr = j.extractJSONInCondition(ctx, evalCtx, t.Left, tuple)
 		}
 	case *memo.OverlapsExpr:
 		invertedExpr = j.extractArrayOverlapsCondition(ctx, evalCtx, t.Left, t.Right)
@@ -424,16 +424,32 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 // InvertedExpression cannot be generated from the expression, an
 // inverted.NonInvertedColExpression is returned.
 func (j *jsonOrArrayFilterPlanner) extractJSONInCondition(
-	ctx context.Context, evalCtx *eval.Context, left *memo.FetchValExpr, right *memo.TupleExpr,
+	ctx context.Context, evalCtx *eval.Context, left opt.ScalarExpr, right *memo.TupleExpr,
 ) inverted.Expression {
+
+	fetch := false
+	switch left.(type) {
+	case *memo.FetchValExpr:
+		fetch = true
+	case *memo.VariableExpr:
+		fetch = false
+	default:
+		return inverted.NonInvertedColExpression{}
+	}
+
 	// The right side of the expression should be a constant JSON value.
 	if !memo.CanExtractConstDatum(right) {
 		return inverted.NonInvertedColExpression{}
 	}
 	var invertedExpr inverted.Expression
+	var expr inverted.Expression
 	for i := range right.Elems {
 		scalarExprElem := right.Elems[i]
-		expr := j.extractJSONFetchValEqCondition(ctx, evalCtx, left, scalarExprElem)
+		if fetch {
+			expr = j.extractJSONFetchValEqCondition(ctx, evalCtx, left.(*memo.FetchValExpr), scalarExprElem)
+		} else {
+			expr = j.extractJSONEqCondition(ctx, evalCtx, left.(*memo.VariableExpr), scalarExprElem)
+		}
 		if invertedExpr == nil {
 			invertedExpr = expr
 		} else {
@@ -541,6 +557,42 @@ func (j *jsonOrArrayFilterPlanner) extractJSONExistsCondition(
 	}
 	// If none of the conditions are met, we cannot create an InvertedExpression.
 	return inverted.NonInvertedColExpression{}
+}
+
+// extractJSONEqCondition extracts an InvertedExpression representing an
+// inverted filter over the planner's inverted index, based on equality between
+// two scalar expressions. If an InvertedExpression cannot be generated from the
+// expression, an inverted.NonInvertedColExpression is returned. This is different
+// from extractJSONFetchValEqCondition since no fetch val operators exist when
+// checking for equality.
+func (j *jsonOrArrayFilterPlanner) extractJSONEqCondition(
+	ctx context.Context, evalCtx *eval.Context, left *memo.VariableExpr, right opt.ScalarExpr,
+) inverted.Expression {
+	// The right side of the expression should be a constant JSON value.
+	if !memo.CanExtractConstDatum(right) {
+		return inverted.NonInvertedColExpression{}
+	}
+	val, ok := memo.ExtractConstDatum(right).(*tree.DJSON)
+	if !ok {
+		return inverted.NonInvertedColExpression{}
+	}
+
+	// For Equals expressions, we will generate the inverted expression for the
+	// single object built from the keys and val.
+	invertedExpr := getInvertedExprForJSONOrArrayIndexForContaining(ctx, evalCtx, val)
+
+	// Generated inverted expression won't be tight as we are searching for rows
+	// inside of the index consisting of a particular JSON value. Since the exact
+	// position of this value is not specified, the generated expression is not tight.
+	//
+	// For example, consider a filter of the form: j = '1' where j is a JSON column
+	// on which an inverted index is constructed. Other entries inside of this
+	// index, such as JSON arrays and objects, may contain the element 1 along with
+	// other elements. Since the encodings inside the index do not contain the position
+	// of their elements, the generated inverted expressions are not tight.
+	invertedExpr.SetNotTight()
+
+	return invertedExpr
 }
 
 // extractJSONFetchValEqCondition extracts an InvertedExpression representing an
