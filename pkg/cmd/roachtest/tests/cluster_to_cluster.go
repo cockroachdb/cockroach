@@ -846,6 +846,15 @@ func (rsp *replResilienceSpec) getTargetAndWatcherNodes(ctx context.Context) {
 		return info.db.QueryRowContext(ctx,
 			`SELECT coordinator_id FROM crdb_internal.jobs WHERE job_id = $1`, jobID).Scan(&coordinatorNode)
 	}, time.Minute)
+	if !rsp.onSrc {
+		// From the destination cluster's perspective, node ids range from 1 to
+		// num_dest_nodes, but from roachprod's perspective they range from
+		// num_source_nodes+1 to num_crdb_roachprod nodes. We need to adjust for
+		// this to shut down the right node. Example: if the coordinator node on the
+		// dest cluster is 1, and there are 4 src cluster nodes, then
+		// shut down roachprod node 5.
+		coordinatorNode += rsp.spec.srcNodes
+	}
 
 	var targetNode int
 
