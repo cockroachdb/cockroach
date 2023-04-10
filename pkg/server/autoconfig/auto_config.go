@@ -17,12 +17,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/autoconfigpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/time/rate"
+)
+
+// autoConfigMaxNewRunnersPerSecond determines the rate at which the
+// top level job can create per-environment runners.
+var autoConfigMaxNewRunnersPerSecond = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"jobs.auto_config.new_runners_per_second.max_rate",
+	"maximum rate at which the auto config subsystem can create new per-environment runners (set 0 to suspend job creation entirely)",
+	// We keep this limit low because the tasks subsystem is intended
+	// as a low-frequency, high-latency subsystem. The limit is more meant
+	// as a throttle to prevent runaway creation of jobs.
+	1,
+)
+
+// autoConfigMaxTasksPerSecond determines the rate at which each
+// per-env runner can create new job tasks.
+var autoConfigMaxTasksPerSecond = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"jobs.auto_config.new_tasks_per_second.max_rate",
+	"maximum rate at which each task runner can create new jobs (set 0 to suspend job creation entirely)",
+	// We keep this limit low because the tasks subsystem is intended
+	// as a low-frequency, high-latency subsystem. The limit is more meant
+	// as a throttle to prevent runaway creation of jobs.
+	10,
 )
 
 // autoConfigRunner runs the job that accepts new auto configuration
@@ -69,6 +95,10 @@ func (r *autoConfigRunner) Resume(ctx context.Context, execCtx interface{}) erro
 	// environments is updated.
 	waitForEnvChange := provider.EnvUpdate()
 
+	// limiter ensures we don't generate too many jobs per second.
+	prevLimit := float64(0)
+	var limiter *rate.Limiter
+
 	for {
 		// No tasks to create. Just wait until some tasks are delivered.
 		log.Infof(ctx, "waiting for environment activation...")
@@ -79,13 +109,25 @@ func (r *autoConfigRunner) Resume(ctx context.Context, execCtx interface{}) erro
 		case <-waitForEnvChange:
 		}
 
-		r.job.MarkIdle(false)
 		for _, envID := range provider.ActiveEnvironments() {
+			// Check if the rate limit has changed. If it has, make a new limiter.
+			if curLimit := autoConfigMaxNewRunnersPerSecond.Get(&execCfg.Settings.SV); curLimit != prevLimit || limiter == nil {
+				limiter = rate.NewLimiter(rate.Limit(curLimit), 1)
+				prevLimit = curLimit
+			}
+			// Wait according to the configured rate limit.
+			limiter.Wait(ctx)
+
+			// Ensure that the idleness is not changed while we call
+			// `limiter.Wait`. This ensures that orchestration feels free to
+			// stop this server if the rate limiter decided we should wait
+			// (or if the operator decided to change the limit to 0).
+			r.job.MarkIdle(false)
 			if err := refreshEnvJob(ctx, execCfg, envID); err != nil {
 				log.Warningf(ctx, "error refreshing environment %q: %v", envID, err)
 			}
+			r.job.MarkIdle(true)
 		}
-		r.job.MarkIdle(true)
 	}
 }
 

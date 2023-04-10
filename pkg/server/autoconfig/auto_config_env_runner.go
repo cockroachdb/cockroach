@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"golang.org/x/time/rate"
 )
 
 // createEnvRunnerJob creates a job to execute tasks for the given
@@ -88,6 +89,10 @@ func (r *envRunner) Resume(ctx context.Context, execCtx interface{}) error {
 	// Provider gives us tasks to run.
 	provider := getProvider(ctx, execCfg)
 
+	// limiter ensures we don't generate too many jobs per second.
+	prevLimit := float64(0)
+	var limiter *rate.Limiter
+
 	for {
 		log.Infof(ctx, "waiting for more tasks...")
 		task, err := provider.Peek(ctx, r.envID)
@@ -98,6 +103,14 @@ func (r *envRunner) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 			return err
 		}
+
+		// Check if the rate limit has changed. If it has, make a new limiter.
+		if curLimit := autoConfigMaxTasksPerSecond.Get(&execCfg.Settings.SV); curLimit != prevLimit || limiter == nil {
+			limiter = rate.NewLimiter(rate.Limit(curLimit), 1)
+			prevLimit = curLimit
+		}
+		// Wait according to the configured rate limit.
+		limiter.Wait(ctx)
 
 		r.job.MarkIdle(false)
 		var waitSome bool

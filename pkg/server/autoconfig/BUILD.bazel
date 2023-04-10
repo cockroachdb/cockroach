@@ -19,6 +19,7 @@ go_library(
         "//pkg/security/username",
         "//pkg/server/autoconfig/acprovider",
         "//pkg/server/autoconfig/autoconfigpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/isql",
@@ -27,6 +28,7 @@ go_library(
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@org_golang_x_time//rate",
     ],
 )
 
