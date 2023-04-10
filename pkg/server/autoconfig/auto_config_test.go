@@ -24,12 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
 
 const testEnvID autoconfigpb.EnvironmentID = "my test env"
 
 type testProvider struct {
+	syncutil.Mutex
+
 	t          *testing.T
 	notifyCh   chan struct{}
 	peekWaitCh chan struct{}
@@ -93,6 +96,9 @@ func (p *testProvider) ActiveEnvironments() []autoconfigpb.EnvironmentID {
 func (p *testProvider) Pop(
 	_ context.Context, envID autoconfigpb.EnvironmentID, taskID autoconfigpb.TaskID,
 ) error {
+	p.Lock()
+	defer p.Unlock()
+
 	p.t.Logf("runner reports completed task %d (env %q)", taskID, envID)
 	for len(p.tasks) > 0 {
 		if taskID >= p.tasks[0].task.TaskID {
@@ -105,14 +111,25 @@ func (p *testProvider) Pop(
 	return nil
 }
 
+func (p *testProvider) head() (bool, *testTask) {
+	p.Lock()
+	defer p.Unlock()
+
+	if len(p.tasks) == 0 {
+		return false, nil
+	}
+	return true, &p.tasks[0]
+}
+
 func (p *testProvider) Peek(
 	ctx context.Context, envID autoconfigpb.EnvironmentID,
 ) (autoconfigpb.Task, error) {
 	p.t.Logf("runner peeking (env %q)", envID)
-	if len(p.tasks) == 0 {
+	hasTask, tt := p.head()
+	if !hasTask {
 		return autoconfigpb.Task{}, acprovider.ErrNoMoreTasks
 	}
-	if !p.tasks[0].seen {
+	if !tt.seen {
 		// seen ensures that the runner job won't have to wait a second
 		// time when peeking the task.
 		select {
@@ -121,8 +138,11 @@ func (p *testProvider) Peek(
 		case <-p.peekWaitCh:
 		}
 	}
-	p.tasks[0].seen = true
-	return p.tasks[0].task, nil
+
+	p.Lock()
+	defer p.Unlock()
+	tt.seen = true
+	return tt.task, nil
 }
 
 func TestAutoConfig(t *testing.T) {
