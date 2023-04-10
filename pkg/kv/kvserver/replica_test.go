@@ -9906,13 +9906,14 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 type testQuiescer struct {
 	st              *cluster.Settings
+	storeID         roachpb.StoreID
 	desc            roachpb.RangeDescriptor
 	numProposals    int
 	pendingQuota    bool
 	status          *raftSparseStatus
 	lastIndex       kvpb.RaftIndex
 	raftReady       bool
-	lease           roachpb.Lease
+	leaseStatus     kvserverpb.LeaseStatus
 	mergeInProgress bool
 	isDestroyed     bool
 
@@ -9923,6 +9924,10 @@ type testQuiescer struct {
 
 func (q *testQuiescer) ClusterSettings() *cluster.Settings {
 	return q.st
+}
+
+func (q *testQuiescer) StoreID() roachpb.StoreID {
+	return q.storeID
 }
 
 func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
@@ -9957,14 +9962,6 @@ func (q *testQuiescer) hasPendingProposalQuotaRLocked() bool {
 	return q.pendingQuota
 }
 
-func (q *testQuiescer) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool {
-	return q.lease.Replica.ReplicaID == 1
-}
-
-func (q *testQuiescer) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
-	return q.lease, q.lease
-}
-
 func (q *testQuiescer) mergeInProgressRLocked() bool {
 	return q.mergeInProgress
 }
@@ -9988,7 +9985,8 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 			// true. The transform function is intended to perform one mutation to
 			// this quiescer so that shouldReplicaQuiesce will return false.
 			q := &testQuiescer{
-				st: cluster.MakeTestingClusterSettings(),
+				st:      cluster.MakeTestingClusterSettings(),
+				storeID: 1,
 				desc: roachpb.RangeDescriptor{
 					InternalReplicas: []roachpb.ReplicaDescriptor{
 						{NodeID: 1, ReplicaID: 1},
@@ -10016,13 +10014,16 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				},
 				lastIndex: logIndex,
 				raftReady: false,
-				lease: roachpb.Lease{
-					Sequence: 1,
-					Epoch:    1,
-					Replica: roachpb.ReplicaDescriptor{
-						NodeID:    1,
-						StoreID:   1,
-						ReplicaID: 1,
+				leaseStatus: kvserverpb.LeaseStatus{
+					State: kvserverpb.LeaseState_VALID,
+					Lease: roachpb.Lease{
+						Sequence: 1,
+						Epoch:    1,
+						Replica: roachpb.ReplicaDescriptor{
+							NodeID:    1,
+							StoreID:   1,
+							ReplicaID: 1,
+						},
 					},
 				},
 				livenessMap: livenesspb.IsLiveMap{
@@ -10032,7 +10033,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				},
 			}
 			q = transform(q)
-			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, hlc.ClockTimestamp{}, q.livenessMap, q.paused)
+			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, q.leaseStatus, q.livenessMap, q.paused)
 			require.Equal(t, expected, ok)
 			if ok {
 				// Any non-live replicas should be in the laggingReplicaSet.
@@ -10106,7 +10107,23 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
-		q.lease.Replica.ReplicaID = 9
+		q.storeID = 9
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_ERROR
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_UNUSABLE
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_EXPIRED
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_PROSCRIBED
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
@@ -10168,16 +10185,16 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	// of kv.expiration_leases_only.enabled.
 	test(false, func(q *testQuiescer) *testQuiescer {
 		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, true)
-		q.lease.Epoch = 0
-		q.lease.Expiration = &hlc.Timestamp{
+		q.leaseStatus.Lease.Epoch = 0
+		q.leaseStatus.Lease.Expiration = &hlc.Timestamp{
 			WallTime: timeutil.Now().Add(time.Minute).Unix(),
 		}
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
 		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, false)
-		q.lease.Epoch = 0
-		q.lease.Expiration = &hlc.Timestamp{
+		q.leaseStatus.Lease.Epoch = 0
+		q.leaseStatus.Lease.Expiration = &hlc.Timestamp{
 			WallTime: timeutil.Now().Add(time.Minute).Unix(),
 		}
 		return q
