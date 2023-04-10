@@ -510,10 +510,18 @@ func createChangefeedJobRecord(
 			}
 			opts.ForceDiff()
 		} else if opts.IsSet(changefeedbase.OptDiff) {
-			opts.ClearDiff()
-			p.BufferClientNotice(ctx, pgnotice.Newf(
-				"turning off unused %s option (expression <%s> does not use cdc_prev)",
-				changefeedbase.OptDiff, tree.AsString(normalized)))
+			// Expression didn't reference cdc_prev, but the diff option was specified.
+			// This only makes sense if we have wrapped envelope.
+			encopts, err := opts.GetEncodingOptions()
+			if err != nil {
+				return nil, err
+			}
+			if encopts.Envelope != changefeedbase.OptEnvelopeWrapped {
+				opts.ClearDiff()
+				p.BufferClientNotice(ctx, pgnotice.Newf(
+					"turning off unused %s option (expression <%s> does not use cdc_prev)",
+					changefeedbase.OptDiff, tree.AsString(normalized)))
+			}
 		}
 
 		// TODO: Set the default envelope to row here when using a sink and format
@@ -571,7 +579,8 @@ func createChangefeedJobRecord(
 	if err != nil {
 		return nil, err
 	}
-	if _, err := getEncoder(encodingOpts, AllTargets(details), makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil); err != nil {
+	if _, err := getEncoder(encodingOpts, AllTargets(details), details.Select != "",
+		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil); err != nil {
 		return nil, err
 	}
 
