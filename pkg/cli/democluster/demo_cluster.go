@@ -114,7 +114,7 @@ const demoOrg = "Cockroach Demo"
 const demoUsername = "demo"
 
 // demoTenantName is the name of the demo tenant.
-const demoTenantName = "demo-tenant"
+const demoTenantName = "demoapp"
 
 // LoggerFn is the type of a logger function to use by the
 // demo cluster to report special events.
