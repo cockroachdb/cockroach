@@ -4188,10 +4188,14 @@ func TestRangeQuiescence(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				Settings: st,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						DisableScanner: true,
@@ -4302,19 +4306,22 @@ func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
 		return err
 	})
 
-	// Let the snapshot through. The up-replication attempt should succeed, the
-	// replica should now be initialized, and the replica should quiesce again.
+	// Let the snapshot through. The up-replication attempt should succeed. The
+	// replica should now be initialized, and the replica should quiesce again
+	// unless kv.expiration_leases_only.enabled is true.
 	close(blockSnapshot)
 	require.NoError(t, <-replicateErrChan)
 	repl, err := s2.GetReplica(desc.RangeID)
 	require.NoError(t, err)
 	require.True(t, repl.IsInitialized())
-	testutils.SucceedsSoon(t, func() error {
-		if !repl.IsQuiescent() {
-			return errors.Errorf("%s not quiescent", repl)
-		}
-		return nil
-	})
+	if !kvserver.ExpirationLeasesOnly.Get(&tc.Servers[0].ClusterSettings().SV) {
+		testutils.SucceedsSoon(t, func() error {
+			if !repl.IsQuiescent() {
+				return errors.Errorf("%s not quiescent", repl)
+			}
+			return nil
+		})
+	}
 }
 
 // TestInitRaftGroupOnRequest verifies that an uninitialized Raft group
