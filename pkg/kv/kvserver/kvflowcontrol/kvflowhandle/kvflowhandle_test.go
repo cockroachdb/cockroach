@@ -12,6 +12,8 @@ package kvflowhandle_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,11 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -125,6 +130,7 @@ func TestHandleAdmit(t *testing.T) {
 	}
 }
 
+// TestFlowControlMode tests the behavior of kvadmission.flow_control.mode.
 func TestFlowControlMode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -221,5 +227,75 @@ func TestFlowControlMode(t *testing.T) {
 			}
 		})
 	}
+}
 
+// TestInspectHandle tests the Inspect() API.
+func TestInspectHandle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	registry := metric.NewRegistry()
+	clock := hlc.NewClockForTesting(nil)
+	st := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+	kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
+
+	pos := func(d uint64) kvflowcontrolpb.RaftLogPosition {
+		return kvflowcontrolpb.RaftLogPosition{Term: 1, Index: d}
+	}
+	stream := func(i uint64) kvflowcontrol.Stream {
+		return kvflowcontrol.Stream{
+			TenantID: roachpb.MustMakeTenantID(1),
+			StoreID:  roachpb.StoreID(i),
+		}
+	}
+
+	controller := kvflowcontroller.New(registry, st, clock)
+	handle := kvflowhandle.New(
+		controller,
+		kvflowhandle.NewMetrics(registry),
+		clock,
+		roachpb.RangeID(1),
+		roachpb.SystemTenantID,
+	)
+	marshaller := jsonpb.Marshaler{
+		Indent:       "  ",
+		EmitDefaults: true,
+		OrigName:     true,
+	}
+
+	var buf strings.Builder
+	defer func() { echotest.Require(t, buf.String(), datapathutils.TestDataPath(t, "handle_inspect")) }()
+
+	record := func(header string) {
+		if buf.Len() > 0 {
+			buf.WriteString("\n\n")
+		}
+		state := handle.Inspect(ctx)
+		marshaled, err := marshaller.MarshalToString(&state)
+		require.NoError(t, err)
+		buf.WriteString(fmt.Sprintf("# %s\n", header))
+		buf.WriteString(marshaled)
+	}
+	record("No connected streams.")
+
+	handle.ConnectStream(ctx, pos(42), stream(1))
+	record("Single connected stream with no tracked deductions.")
+
+	handle.DeductTokensFor(ctx, admissionpb.NormalPri, pos(43), kvflowcontrol.Tokens(1<<20 /* 1 MiB */))
+	handle.DeductTokensFor(ctx, admissionpb.BulkNormalPri, pos(44), kvflowcontrol.Tokens(1<<20 /* 1 MiB */))
+	record("Single connected stream with one 1MiB tracked deduction per work class.")
+
+	handle.ReturnTokensUpto(ctx, admissionpb.NormalPri, pos(43), stream(1))
+	handle.ConnectStream(ctx, pos(45), stream(2))
+	handle.ConnectStream(ctx, pos(46), stream(3))
+	handle.DeductTokensFor(ctx, admissionpb.BulkNormalPri, pos(47), kvflowcontrol.Tokens(1<<20 /* 1 MiB */))
+	record("Triply connected stream with 2MiB, 1MiB, and 1MiB tracked elastic deductions respectively.")
+
+	handle.DisconnectStream(ctx, stream(2))
+	record("Doubly connected stream with 2MiB and 1MiB tracked elastic deductions respectively.")
+
+	handle.ResetStreams(ctx)
+	record("Doubly connected stream with no tracked deductions.")
 }
