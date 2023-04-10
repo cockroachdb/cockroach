@@ -289,8 +289,10 @@ func (c *sqlConn) GetServerMetadata(
 	// get either a go string or bool depending on the SQL driver in
 	// use.
 	if toString(val[0])[0] == 't' {
+		// There's always at least 1 row in the tenants table, for the
+		// system tenant.
 		val, err = c.QueryRow(ctx, `
-	SELECT EXISTS (SELECT 1 FROM system.public.tenants LIMIT 1)`)
+	SELECT (SELECT count(id) FROM system.public.tenants LIMIT 2)>1`)
 		if c.conn.IsClosed() {
 			return 0, "", "", MarkWithConnectionClosed(err)
 		}
