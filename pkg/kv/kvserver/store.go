@@ -997,6 +997,10 @@ type Store struct {
 	// tenantRateLimiters manages tenantrate.Limiters
 	tenantRateLimiters *tenantrate.LimiterFactory
 
+	// eagerLeaseAcquisitionLimiter limits the number of concurrent eager lease
+	// acquisitions made during Raft ticks.
+	eagerLeaseAcquisitionLimiter *quotapool.IntPool
+
 	computeInitialMetrics              sync.Once
 	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 	spanConfigUpdateQueueRateLimiter   *quotapool.RateLimiter
@@ -1091,6 +1095,11 @@ type StoreConfig struct {
 	IntentResolverTaskLimit int
 
 	TestingKnobs StoreTestingKnobs
+
+	// EagerLeaseAcquisitionLimiter is used to limit the number of concurrent
+	// eager lease extensions. Normally shared between all stores on a node.
+	// Can be nil, which disables the limit.
+	EagerLeaseAcquisitionLimiter *quotapool.IntPool
 
 	// SnapshotApplyLimit specifies the maximum number of empty
 	// snapshots and the maximum number of non-empty snapshots that are permitted
@@ -1377,6 +1386,7 @@ func NewStore(
 	s.limiters.ConcurrentExportRequests = limit.MakeConcurrentRequestLimiter(
 		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
+	s.eagerLeaseAcquisitionLimiter = cfg.EagerLeaseAcquisitionLimiter
 
 	// The snapshot storage is usually empty at this point since it is cleared
 	// after each snapshot application, except when the node crashed right before

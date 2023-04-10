@@ -1963,7 +1963,7 @@ func TestLeaseConcurrent(t *testing.T) {
 			if err := stopper.RunAsyncTask(ctx, "test", func(ctx context.Context) {
 				tc.repl.mu.Lock()
 				status := tc.repl.leaseStatusAtRLocked(ctx, now)
-				llHandle := tc.repl.requestLeaseLocked(ctx, status)
+				llHandle := tc.repl.requestLeaseLocked(ctx, status, nil)
 				tc.repl.mu.Unlock()
 				wg.Done()
 				pErr := <-llHandle.C()
@@ -2061,7 +2061,7 @@ func TestLeaseCallerCancelled(t *testing.T) {
 		wg.Add(1)
 		tc.repl.mu.Lock()
 		status := tc.repl.leaseStatusAtRLocked(ctx, now)
-		llHandles = append(llHandles, tc.repl.requestLeaseLocked(ctx, status))
+		llHandles = append(llHandles, tc.repl.requestLeaseLocked(ctx, status, nil))
 		tc.repl.mu.Unlock()
 	}
 	for _, llHandle := range llHandles {
@@ -2080,6 +2080,52 @@ func TestLeaseCallerCancelled(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for lease request")
 	}
+}
+
+// TestRequestLeaseLimit tests that lease requests respect the limiter
+func TestRequestLeaseLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	var tc testContext
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+
+	requestLease := func(ctx context.Context, limiter *quotapool.IntPool) error {
+		now := tc.Clock().NowAsClockTimestamp()
+		tc.repl.mu.Lock()
+		status := tc.repl.leaseStatusAtRLocked(ctx, now)
+		llHandle := tc.repl.requestLeaseLocked(ctx, status, limiter)
+		tc.repl.mu.Unlock()
+		pErr := <-llHandle.C()
+		return pErr.GoError()
+	}
+
+	// A 0 limit should immediately error.
+	limiter := quotapool.NewIntPool("test", 0)
+	err := requestLease(ctx, limiter)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, stop.ErrThrottled), "%v", err)
+
+	// A limit of 1 should work. Wait for the quota to get released.
+	limiter.UpdateCapacity(1)
+	err = requestLease(ctx, limiter)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return limiter.ApproximateQuota() > 0
+	}, 3*time.Second, 100*time.Millisecond)
+
+	// Acquire the slot, and watch the lease request error again.
+	_, err = limiter.TryAcquire(ctx, 1)
+	require.NoError(t, err)
+	err = requestLease(ctx, limiter)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, stop.ErrThrottled), "%v", err)
 }
 
 // TestReplicaUpdateTSCache verifies that reads and ranged writes update the
@@ -13899,7 +13945,7 @@ func TestRangeInfoReturned(t *testing.T) {
 
 		tc.repl.mu.Lock()
 		st := tc.repl.leaseStatusAtRLocked(ctx, tc.Clock().NowAsClockTimestamp())
-		ll := tc.repl.requestLeaseLocked(ctx, st)
+		ll := tc.repl.requestLeaseLocked(ctx, st, nil /* limiter */)
 		tc.repl.mu.Unlock()
 		select {
 		case pErr := <-ll.C():
