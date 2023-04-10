@@ -26,7 +26,7 @@ import {
   StmtInsightEvent,
 } from "src/insights";
 import moment from "moment";
-import { INTERNAL_APP_NAME_PREFIX } from "src/recentExecutions/recentStatementUtils";
+import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 import { FixFingerprintHexValue } from "../util";
 import { getContentionDetailsApi } from "./contentionApi";
 
