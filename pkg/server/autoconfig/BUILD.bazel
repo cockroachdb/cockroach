@@ -21,6 +21,7 @@ go_library(
         "//pkg/server/autoconfig/autoconfigpb",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/isql",
         "//pkg/sql/sessiondata",
         "//pkg/util/encoding",
@@ -54,6 +55,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "//pkg/util/syncutil",
         "@com_github_stretchr_testify//require",
     ],
 )
