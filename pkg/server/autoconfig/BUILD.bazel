@@ -54,6 +54,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "//pkg/util/syncutil",
         "@com_github_stretchr_testify//require",
     ],
 )
