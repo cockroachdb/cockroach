@@ -18,7 +18,7 @@ import {
   formatApiResult,
 } from "./sqlApi";
 import { ContentionDetails } from "src/insights";
-import moment from "moment";
+import moment from "moment-timezone";
 
 export type ContentionFilters = {
   waitingTxnID?: string;

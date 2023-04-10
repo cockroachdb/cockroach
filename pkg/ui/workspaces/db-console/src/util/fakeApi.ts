@@ -14,7 +14,7 @@ import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "src/js/protos";
 import { API_PREFIX, STATUS_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
-import moment from "moment";
+import moment from "moment-timezone";
 
 const {
   SettingsResponse,

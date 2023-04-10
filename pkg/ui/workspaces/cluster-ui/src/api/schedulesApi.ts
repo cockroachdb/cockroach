@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import Long from "long";
-import moment from "moment";
+import moment from "moment-timezone";
 import {
   executeInternalSql,
   SqlExecutionRequest,

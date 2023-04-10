@@ -10,7 +10,7 @@
 
 /* eslint-disable prettier/prettier */
 import { StatementsPageProps } from "./statementsPage";
-import moment from "moment";
+import moment from "moment-timezone";
 import { createMemoryHistory } from "history";
 import Long from "long";
 import { noop } from "lodash";
