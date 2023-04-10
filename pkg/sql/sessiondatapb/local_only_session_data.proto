@@ -369,6 +369,11 @@ message LocalOnlySessionData {
   // DisableDropTenant causes errors when the client
   // attempts to drop tenants or tenant records.
   bool disable_drop_tenant = 99;
+  // MultipleActivePortalEnabled determines if the pgwire portal execution
+  // for certain queries can be paused. If true, portals with read-only SELECT
+  // query without sub/post queries can be executed in interleaving manner, but
+  // with a local execution plan.
+  bool multiple_active_portals_enabled = 100;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

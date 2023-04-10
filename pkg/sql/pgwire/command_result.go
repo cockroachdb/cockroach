@@ -118,6 +118,11 @@ type paramStatusUpdate struct {
 
 var _ sql.CommandResult = &commandResult{}
 
+// RevokePortalPausability is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) RevokePortalPausability() error {
+	return errors.AssertionFailedf("RevokePortalPausability is only implemented by limitedCommandResult only")
+}
+
 // Close is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
 	r.assertNotReleased()
@@ -194,6 +199,11 @@ func (r *commandResult) Discard() {
 // Err is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) Err() error {
 	r.assertNotReleased()
+	return r.err
+}
+
+// ErrAllowReleased is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) ErrAllowReleased() error {
 	return r.err
 }
 
@@ -460,21 +470,6 @@ func (c *conn) newMiscResult(pos sql.CmdPos, typ completionMsgType) *commandResu
 // to AddRow will block until the associated client connection asks for more
 // rows. It essentially implements the "execute portal with limit" part of the
 // Postgres protocol.
-//
-// This design is known to be flawed. It only supports a specific subset of the
-// protocol. We only allow a portal suspension in an explicit transaction where
-// the suspended portal is completely exhausted before any other pgwire command
-// is executed, otherwise an error is produced. You cannot, for example,
-// interleave portal executions (a portal must be executed to completion before
-// another can be executed). It also breaks the software layering by adding an
-// additional state machine here, instead of teaching the state machine in the
-// sql package about portals.
-//
-// This has been done because refactoring the executor to be able to correctly
-// suspend a portal will require a lot of work, and we wanted to move
-// forward. The work included is things like auditing all of the defers and
-// post-execution stuff (like stats collection) to have it only execute once
-// per statement instead of once per portal.
 type limitedCommandResult struct {
 	*commandResult
 	portalName  string
@@ -487,6 +482,8 @@ type limitedCommandResult struct {
 	reachedLimit     bool
 	portalPausablity sql.PortalPausablity
 }
+
+var _ sql.RestrictedCommandResult = &limitedCommandResult{}
 
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
@@ -514,6 +511,12 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 			return r.moreResultsNeeded(ctx)
 		}
 	}
+	return nil
+}
+
+// RevokePortalPausability is part of the sql.RestrictedCommandResult interface.
+func (r *limitedCommandResult) RevokePortalPausability() error {
+	r.portalPausablity = sql.NotPausablePortalForUnsupportedStmt
 	return nil
 }
 

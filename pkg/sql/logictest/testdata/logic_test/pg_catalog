@@ -2669,7 +2669,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled')
+  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled', 'multiple_active_portals_enabled')
 ----
 name                                                  setting             category  short_desc  extra_desc  vartype
 allow_ordinal_column_references                       off                 NULL      NULL        NULL        string
@@ -2822,7 +2822,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled')
+  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled', 'multiple_active_portals_enabled')
 ----
 name                                                  setting             unit  context  enumvals  boot_val            reset_val
 allow_ordinal_column_references                       off                 NULL  user     NULL      off                 off
@@ -3058,6 +3058,7 @@ lock_timeout                                          NULL    NULL     NULL     
 log_timezone                                          NULL    NULL     NULL     NULL        NULL
 max_identifier_length                                 NULL    NULL     NULL     NULL        NULL
 max_index_keys                                        NULL    NULL     NULL     NULL        NULL
+multiple_active_portals_enabled                       NULL    NULL     NULL     NULL        NULL
 node_id                                               NULL    NULL     NULL     NULL        NULL
 null_ordered_last                                     NULL    NULL     NULL     NULL        NULL
 on_update_rehome_row_enabled                          NULL    NULL     NULL     NULL        NULL
