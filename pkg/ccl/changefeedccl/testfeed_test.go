@@ -2359,11 +2359,11 @@ func makePubsubFeedFactory(srvOrCluster interface{}, db *gosql.DB) cdctest.TestF
 
 	switch t := srvOrCluster.(type) {
 	case serverutils.TestTenantInterface:
-		t.DistSQLServer().(*distsql.ServerImpl).TestingKnobs.Changefeed.(*TestingKnobs).PubsubClientSkipCredentialsCheck = true
+		t.DistSQLServer().(*distsql.ServerImpl).TestingKnobs.Changefeed.(*TestingKnobs).PubsubClientSkipClientCreation = true
 	case serverutils.TestClusterInterface:
 		servers := make([]feedInjectable, t.NumServers())
 		for i := range servers {
-			t.Server(i).DistSQLServer().(*distsql.ServerImpl).TestingKnobs.Changefeed.(*TestingKnobs).PubsubClientSkipCredentialsCheck = true
+			t.Server(i).DistSQLServer().(*distsql.ServerImpl).TestingKnobs.Changefeed.(*TestingKnobs).PubsubClientSkipClientCreation = true
 		}
 	}
 
@@ -2404,8 +2404,6 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		defer mu.Unlock()
 		if batchingSink, ok := s.(*batchingSink); ok {
 			if sinkClient, ok := batchingSink.client.(*pubsubSinkClient); ok {
-				_ = sinkClient.client.Close()
-
 				conn, _ := mockServer.Dial()
 				mockClient, _ := pubsubv1.NewPublisherClient(context.Background(), option.WithGRPCConn(conn))
 				sinkClient.client = mockClient

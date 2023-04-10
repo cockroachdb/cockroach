@@ -104,9 +104,16 @@ func makePubsubSinkClient(
 		return nil, errors.New("missing project name")
 	}
 
-	publisherClient, err := makePublisherClient(ctx, pubsubURL, unordered, knobs)
-	if err != nil {
-		return nil, err
+	var err error
+	var publisherClient *pubsub.PublisherClient
+
+	// In unit tests the publisherClient gets set immediately after initializing
+	// the sink object via knobs.WrapSink.
+	if knobs == nil || !knobs.PubsubClientSkipClientCreation {
+		publisherClient, err = makePublisherClient(ctx, pubsubURL, unordered)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	sinkClient := &pubsubSinkClient{
@@ -250,7 +257,7 @@ func (pe *pubsubSinkClient) Close() error {
 }
 
 func makePublisherClient(
-	ctx context.Context, url sinkURL, unordered bool, knobs *TestingKnobs,
+	ctx context.Context, url sinkURL, unordered bool,
 ) (*pubsub.PublisherClient, error) {
 	const regionParam = "region"
 	region := url.consumeParam(regionParam)
@@ -267,21 +274,15 @@ func makePublisherClient(
 		endpoint = gcpEndpointForRegion(region)
 	}
 
-	options := []option.ClientOption{
-		option.WithEndpoint(endpoint),
-	}
-
-	if knobs == nil || !knobs.PubsubClientSkipCredentialsCheck {
-		creds, err := getGCPCredentials(ctx, url)
-		if err != nil {
-			return nil, err
-		}
-		options = append(options, creds)
+	creds, err := getGCPCredentials(ctx, url)
+	if err != nil {
+		return nil, err
 	}
 
 	client, err := pubsub.NewPublisherClient(
 		ctx,
-		options...,
+		option.WithEndpoint(endpoint),
+		creds,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "opening client")
