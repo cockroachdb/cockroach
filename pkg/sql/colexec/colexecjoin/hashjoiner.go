@@ -284,7 +284,7 @@ func (hj *hashJoiner) Next() coldata.Batch {
 }
 
 func (hj *hashJoiner) build() {
-	hj.ht.FullBuild(hj.InputTwo)
+	hj.ht.FullBuild(hj.InputTwo, false /* storeHashCodes */)
 
 	// If we might have duplicates in the hash table (meaning that RightDistinct
 	// is false), we need to set up Same and Visited slices for the prober
