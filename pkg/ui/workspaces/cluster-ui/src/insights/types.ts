@@ -330,6 +330,7 @@ export interface indexDetails {
 
 // These are the fields used for workload insight recommendations.
 export interface ExecutionDetails {
+  application?: string;
   databaseName?: string;
   elapsedTimeMillis?: number;
   contentionTimeMs?: number;

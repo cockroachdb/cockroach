@@ -382,6 +382,7 @@ export function getStmtInsightRecommendations(
   if (!insightDetails) return [];
 
   const execDetails: ExecutionDetails = {
+    application: insightDetails.application,
     statement: insightDetails.query,
     fingerprintID: insightDetails.statementFingerprintID,
     retries: insightDetails.retries,
@@ -409,6 +410,7 @@ export function getTxnInsightRecommendations(
   if (!insightDetails) return [];
 
   const execDetails: ExecutionDetails = {
+    application: insightDetails.application,
     transactionExecutionID: insightDetails.transactionExecutionID,
     retries: insightDetails.retries,
     contentionTimeMs: insightDetails.contentionTime.asMilliseconds(),

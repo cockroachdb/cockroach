@@ -1,3 +1,5 @@
+# tenant-capability-override-opt: can_check_consistency=true
+
 statement ok
 CREATE TABLE foo (a int)
 
@@ -3869,7 +3871,8 @@ SELECT ‹'yes'› IN (‹'no'›, ‹'maybe'›, ‹'yes'›)
 query T
 SELECT crdb_internal.redactable_sql_constants(e'\r')
 ----
-‹›
+‹
+›
 
 query T
 SELECT crdb_internal.redactable_sql_constants('SELECT crdb_internal.redactable_sql_constants('''')')
@@ -3973,3 +3976,31 @@ query T
 SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(ARRAY['SELECT 1', NULL, 'SELECT ''hello''', '']))
 ----
 {"SELECT ‹×›",NULL,"SELECT ‹×›",‹×›}
+
+subtest check_consistency
+
+# Sanity-check crdb_internal.check_consistency.
+
+statement error start key must be >=
+SELECT crdb_internal.check_consistency(true, '\x00', crdb_internal.tenant_span()[2])
+
+statement error end key must be <=
+SELECT crdb_internal.check_consistency(true, crdb_internal.tenant_span()[1], '\xffff00')
+
+statement error start key must be less than end key
+SELECT crdb_internal.check_consistency(true, crdb_internal.tenant_span()[2], crdb_internal.tenant_span()[2])
+
+query TT
+SELECT status, regexp_replace(detail, '[0-9]+', '', 'g')
+FROM crdb_internal.check_consistency(true, crdb_internal.tenant_span()[1], crdb_internal.tenant_span()[2])
+ORDER BY range_id
+LIMIT 1
+----
+RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SeparatedIntentCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
+
+# Fill a table with consistency check results. This used to panic.
+# See: https://github.com/cockroachdb/cockroach/issues/88222
+statement ok
+CREATE TABLE conscheckresult AS (SELECT * FROM crdb_internal.check_consistency(false, '', ''));
+
+subtest end

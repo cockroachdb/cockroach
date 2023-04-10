@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -35,12 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
 	"github.com/cockroachdb/cockroach/pkg/util/randident/randidentcfg"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -1931,7 +1930,7 @@ func (j *jsonRecordSetGenerator) Next(ctx context.Context) (bool, error) {
 type checkConsistencyGenerator struct {
 	txn                *kv.Txn // to load range descriptors
 	consistencyChecker eval.ConsistencyCheckRunner
-	from, to           roachpb.Key
+	rangeDescIterator  rangedesc.Iterator
 	mode               kvpb.ChecksumMode
 
 	// The descriptors for which we haven't yet emitted rows. Rows are consumed
@@ -1956,11 +1955,6 @@ var _ eval.ValueGenerator = &checkConsistencyGenerator{}
 func makeCheckConsistencyGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	if !evalCtx.Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(
-			errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
-	}
-
 	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err
@@ -1972,23 +1966,28 @@ func makeCheckConsistencyGenerator(
 	keyFrom := roachpb.Key(*args[1].(*tree.DBytes))
 	keyTo := roachpb.Key(*args[2].(*tree.DBytes))
 
-	if len(keyFrom) == 0 {
-		// NB: you'd expect LocalMax here but when we go and call ScanMetaKVs, it
-		// would interpret LocalMax as Meta1Prefix and translate that to KeyMin,
-		// then fail on the scan. That method should really handle this better
-		// but also we should use IterateRangeDescriptors instead.
-		keyFrom = keys.Meta2Prefix
-	}
-	if len(keyTo) == 0 {
-		keyTo = roachpb.KeyMax
+	minKey := evalCtx.Codec.TenantPrefix()
+	maxKey := minKey.PrefixEnd()
+	if minKey.Compare(keys.LocalMax) < 0 {
+		// Consistency checks cannot run on the local keyspace [/Min, /LocalMax).
+		// The keys in the local keyspace are "virtual" - they exist in the logical
+		// keyspace, but are invisible to the KV replication layer because they
+		// correspond to per-node local storage and are therefore not consistent.
+		minKey = keys.LocalMax
 	}
 
-	if bytes.Compare(keyFrom, keys.LocalMax) <= 0 {
-		return nil, errors.Errorf("start key must be > %q", []byte(keys.LocalMax))
+	if len(keyFrom) == 0 {
+		keyFrom = minKey
+	} else if bytes.Compare(keyFrom, minKey) < 0 {
+		return nil, errors.Errorf("start key must be >= %q", []byte(minKey))
 	}
-	if bytes.Compare(keyTo, roachpb.KeyMax) > 0 {
-		return nil, errors.Errorf("end key must be < %q", []byte(roachpb.KeyMax))
+
+	if len(keyTo) == 0 {
+		keyTo = maxKey
+	} else if bytes.Compare(keyTo, maxKey) > 0 {
+		return nil, errors.Errorf("end key must be <= %q", []byte(maxKey))
 	}
+
 	if bytes.Compare(keyFrom, keyTo) >= 0 {
 		return nil, errors.New("start key must be less than end key")
 	}
@@ -2005,11 +2004,17 @@ func makeCheckConsistencyGenerator(
 		)
 	}
 
+	rangeDescIterator, err := evalCtx.Planner.GetRangeDescIterator(ctx, roachpb.Span{
+		Key:    keyFrom,
+		EndKey: keyTo,
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &checkConsistencyGenerator{
 		txn:                evalCtx.Txn,
 		consistencyChecker: evalCtx.ConsistencyChecker,
-		from:               keyFrom,
-		to:                 keyTo,
+		rangeDescIterator:  rangeDescIterator,
 		mode:               mode,
 	}, nil
 }
@@ -2026,29 +2031,13 @@ func (*checkConsistencyGenerator) ResolvedType() *types.T {
 
 // Start is part of the tree.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error {
-	span := roachpb.Span{Key: c.from, EndKey: c.to}
-	// NB: should use IterateRangeDescriptors here which is in the 'upgrade'
-	// package to avoid pulling all into memory. That needs a refactor, though.
-	// kvprober also has some code to iterate in batches.
-	descs, err := kvclient.ScanMetaKVs(ctx, c.txn, span)
-	if err != nil {
-		return err
-	}
-	for _, v := range descs {
-		var desc roachpb.RangeDescriptor
-		if err := v.ValueProto(&desc); err != nil {
-			return err
-		}
+	for c.rangeDescIterator.Valid() {
+		desc := c.rangeDescIterator.CurRangeDescriptor()
 		if len(desc.StartKey) == 0 {
 			desc.StartKey = keys.MustAddr(keys.LocalMax)
-			// Elide potential second copy we might be getting for r1
-			// if meta1 and meta2 haven't split.
-			// This too should no longer be necessary with IterateRangeDescriptors.
-			if len(c.descs) == 1 {
-				continue
-			}
 		}
 		c.descs = append(c.descs, desc)
+		c.rangeDescIterator.Next()
 	}
 	return nil
 }

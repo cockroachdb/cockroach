@@ -598,7 +598,6 @@ const statementsPagePropsFixture: StatementsPageProps = {
     key: "Custom",
   },
   apps: ["$ internal", "movr", "$ cockroach demo"],
-  totalFingerprints: 95,
   lastReset: "2020-04-13 07:22:23",
   columns: null,
   isTenant: false,

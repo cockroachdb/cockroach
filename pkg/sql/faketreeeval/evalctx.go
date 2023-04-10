@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -466,6 +467,13 @@ func (ep *DummyEvalPlanner) IsANSIDML() bool {
 // EnforceHomeRegion is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) EnforceHomeRegion() bool {
 	return false
+}
+
+// GetRangeDescIterator is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetRangeDescIterator(
+	context.Context, roachpb.Span,
+) (_ rangedesc.Iterator, _ error) {
+	return
 }
 
 // GetRangeDescByID is part of the eval.Planner interface.
