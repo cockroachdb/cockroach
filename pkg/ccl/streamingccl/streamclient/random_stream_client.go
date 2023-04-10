@@ -78,7 +78,8 @@ const (
 // TODO(dt): just make interceptors a singleton, not the whole client.
 var randomStreamClientSingleton = func() *RandomStreamClient {
 	c := RandomStreamClient{}
-	c.mu.tableID = 52
+	// Make the base tableID really large to prevent colliding with system table IDs.
+	c.mu.tableID = 5000
 	return &c
 }()
 
