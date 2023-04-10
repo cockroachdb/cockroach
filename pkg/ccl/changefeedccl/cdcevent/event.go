@@ -351,7 +351,7 @@ func NewEventDescriptor(
 
 	allCols := make([]int, len(sd.cols))
 	for i := 0; i < len(sd.cols); i++ {
-		allCols = append(allCols, i)
+		allCols[i] = i
 	}
 	sd.allCols = allCols
 
@@ -561,15 +561,15 @@ type fetcher struct {
 	*row.Fetcher
 }
 
-// nextRow returns the next row from the fetcher, but stips out
-// tableoid system column if the row is the "previous" row.
+// nextRow returns the next row from the fetcher, but strips out
+// system columns.
 func (f *fetcher) nextRow(ctx context.Context, isPrev bool) (rowenc.EncDatumRow, error) {
 	r, _, err := f.Fetcher.NextRow(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if isPrev {
-		r = r[:len(r)-1]
+		r = r[:len(r)-len(systemColumns)]
 	}
 	return r, nil
 }
