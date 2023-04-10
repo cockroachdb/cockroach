@@ -2477,7 +2477,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().ExperimentalHashGroupJoinEnabled), nil
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: globalTrue,
 	},
 	`allow_ordinal_column_references`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`allow_ordinal_column_references`),
