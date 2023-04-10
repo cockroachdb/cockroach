@@ -13,7 +13,7 @@ package tsearch
 import (
 	"bytes"
 	"embed"
-	"path/filepath"
+	"path"
 	"strings"
 )
 
@@ -31,7 +31,9 @@ func init() {
 	for _, f := range dir {
 		filename := f.Name()
 		name := strings.TrimSuffix(filename, ".stop")
-		contents, err := stopwordFS.ReadFile(filepath.Join("stopwords", filename))
+		// N.B. we use path.Join here instead of filepath.Join because go:embed
+		// always uses forward slashes. https://github.com/golang/go/issues/45230
+		contents, err := stopwordFS.ReadFile(path.Join("stopwords", filename))
 		if err != nil {
 			panic("error loading stopwords: " + err.Error())
 		}
