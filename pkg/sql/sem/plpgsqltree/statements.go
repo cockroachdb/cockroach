@@ -545,20 +545,19 @@ func (s *PLpgSQLStmtFetch) Format(ctx *tree.FmtCtx) {
 		}
 	}
 
-	ctx.WriteString(
-		fmt.Sprintf(
-			"%s INTO ",
-			s.CurVar,
-		))
+	ctx.WriteString(s.CurVar)
 
-	for idx, target := range s.Targets {
-		ctx.WriteString(target)
-		if idx != len(s.Targets)-1 {
-			ctx.WriteString(", ")
-		} else {
-			ctx.WriteString("\n")
+	if !s.IsMove {
+		ctx.WriteString(" INTO ")
+		for idx, target := range s.Targets {
+			ctx.WriteString(target)
+			if idx != len(s.Targets)-1 {
+				ctx.WriteString(", ")
+			}
 		}
 	}
+
+	ctx.WriteString("\n")
 }
 
 // stmt_close

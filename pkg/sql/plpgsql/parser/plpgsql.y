@@ -944,6 +944,7 @@ stmt_open: OPEN IDENT open_stmt_processor ';'
   }
 ;
 
+// IDENT here is the cursor name.
 stmt_fetch: FETCH opt_fetch_direction IDENT INTO
   {
     fetchStmt := $2.pLpgSQLStmtFetch()
@@ -955,6 +956,9 @@ stmt_fetch: FETCH opt_fetch_direction IDENT INTO
 
 stmt_move: MOVE opt_fetch_direction IDENT ';'
   {
+  fetchStmt := $2.pLpgSQLStmtFetch()
+  fetchStmt.IsMove = true
+  $$.val = fetchStmt
   }
 ;
 
