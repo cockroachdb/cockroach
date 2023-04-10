@@ -13,6 +13,7 @@ package kvflowcontroller
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
@@ -27,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// regularTokensPerStream determines the flow tokens available for regular work
+// on a per-stream basis.
 var regularTokensPerStream = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_controller.regular_tokens_per_stream",
@@ -35,6 +38,8 @@ var regularTokensPerStream = settings.RegisterByteSizeSetting(
 	validateTokenRange,
 )
 
+// elasticTokensPerStream determines the flow tokens available for elastic work
+// on a per-stream basis.
 var elasticTokensPerStream = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_controller.elastic_tokens_per_stream",
@@ -245,6 +250,12 @@ func (c *Controller) Inspect(ctx context.Context) []kvflowinspectpb.Stream {
 			AvailableElasticTokens: int64(b.tokens[elastic]),
 		})
 	}
+	sort.Slice(streams, func(i, j int) bool { // for determinism
+		if streams[i].TenantID != streams[j].TenantID {
+			return streams[i].TenantID.ToUint64() < streams[j].TenantID.ToUint64()
+		}
+		return streams[i].StoreID < streams[j].StoreID
+	})
 	return streams
 }
 

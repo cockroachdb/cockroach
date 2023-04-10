@@ -30,6 +30,7 @@ go_test(
     name = "kvflowhandle_test",
     srcs = ["kvflowhandle_test.go"],
     args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
     deps = [
         ":kvflowhandle",
         "//pkg/kv/kvserver/kvflowcontrol",
@@ -37,11 +38,14 @@ go_test(
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "@com_github_gogo_protobuf//jsonpb",
         "@com_github_stretchr_testify//require",
     ],
 )
