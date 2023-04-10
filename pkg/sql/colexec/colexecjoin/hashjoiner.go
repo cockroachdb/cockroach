@@ -293,7 +293,7 @@ func (hj *hashJoiner) Next() coldata.Batch {
 }
 
 func (hj *hashJoiner) build() {
-	hj.ht.FullBuild(hj.InputTwo)
+	hj.ht.FullBuild(hj.InputTwo, false /* storeHashCodes */)
 
 	// At this point, we have fully built the hash table on the right side
 	// (meaning we have fully consumed the right input), so it'd be a shame to
