@@ -173,7 +173,7 @@ var PubsubV2Enabled = settings.RegisterBoolSetting(
 	"changefeed.new_pubsub_sink_enabled",
 	"if enabled, this setting enables a new implementation of the pubsub sink"+
 		" that allows for a higher throughput",
-	util.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink_enabled", false),
+	false, // `true` fails in CI with "google: could not find default credentials"
 )
 
 func getSink(
