@@ -15,11 +15,11 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/raft/v3"
@@ -181,9 +181,9 @@ func (r *Replica) canUnquiesceRLocked() bool {
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
 func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
-	ctx context.Context, now hlc.ClockTimestamp, livenessMap livenesspb.IsLiveMap,
+	ctx context.Context, leaseStatus kvserverpb.LeaseStatus, livenessMap livenesspb.IsLiveMap,
 ) bool {
-	status, lagging, ok := shouldReplicaQuiesce(ctx, r, now, livenessMap, r.mu.pausedFollowers)
+	status, lagging, ok := shouldReplicaQuiesce(ctx, r, leaseStatus, livenessMap, r.mu.pausedFollowers)
 	if !ok {
 		return false
 	}
@@ -192,6 +192,7 @@ func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
 
 type quiescer interface {
 	ClusterSettings() *cluster.Settings
+	StoreID() roachpb.StoreID
 	descRLocked() *roachpb.RangeDescriptor
 	isRaftLeaderRLocked() bool
 	raftSparseStatusRLocked() *raftSparseStatus
@@ -200,8 +201,6 @@ type quiescer interface {
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
-	getLeaseRLocked() (roachpb.Lease, roachpb.Lease)
-	ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
 }
@@ -275,7 +274,7 @@ func (s laggingReplicaSet) Less(i, j int) bool { return s[i].NodeID < s[j].NodeI
 func shouldReplicaQuiesce(
 	ctx context.Context,
 	q quiescer,
-	now hlc.ClockTimestamp,
+	leaseStatus kvserverpb.LeaseStatus,
 	livenessMap livenesspb.IsLiveMap,
 	pausedFollowers map[roachpb.ReplicaID]struct{},
 ) (*raftSparseStatus, laggingReplicaSet, bool) {
@@ -291,7 +290,7 @@ func shouldReplicaQuiesce(
 	// Fast path: don't quiesce expiration-based leases, since they'll likely be
 	// renewed soon. The lease may not be ours, but in that case we wouldn't be
 	// able to quiesce anyway (see leaseholder condition below).
-	if l, _ := q.getLeaseRLocked(); l.Type() == roachpb.LeaseExpiration && l.Sequence != 0 {
+	if l := leaseStatus.Lease; l.Type() == roachpb.LeaseExpiration && l.Sequence != 0 {
 		log.VInfof(ctx, 4, "not quiescing: expiration-based lease")
 		return nil, nil, false
 	}
@@ -354,7 +353,7 @@ func shouldReplicaQuiesce(
 	// Only quiesce if this replica is the leaseholder as well;
 	// otherwise the replica which is the valid leaseholder may have
 	// pending commands which it's waiting on this leader to propose.
-	if !q.ownsValidLeaseRLocked(ctx, now) {
+	if !leaseStatus.IsValid() || !leaseStatus.OwnedBy(q.StoreID()) {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
 		}
