@@ -272,7 +272,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 			return nil
 		}), "Failed to activate replication queue")
 	}
-	require.NoError(t, err, tcAfter.WaitForFullReplication(), "Failed to perform full replication")
+	require.NoError(t, tcAfter.WaitForFullReplication(), "Failed to perform full replication")
 
 	for i := 0; i < len(tcAfter.Servers); i++ {
 		require.NoError(t, tcAfter.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
