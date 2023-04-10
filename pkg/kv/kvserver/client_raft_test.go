@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -1278,14 +1280,24 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	log.Infof(ctx, "test: sending request")
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	getRequest := getArgs(key)
-	_, pErr := kv.SendWrapped(timeoutCtx, partitionedStoreSender, getRequest)
-	require.NotNil(t, pErr, "unexpected success")
-	nlhe := pErr.GetDetail().(*kvpb.NotLeaseHolderError)
-	require.NotNil(t, nlhe, "expected NotLeaseholderError, got: %s", pErr)
-	require.False(t, nlhe.Lease.Empty())
-	require.NotNil(t, nlhe.Lease.Replica, "expected NotLeaseholderError with a known leaseholder, got: %s", pErr)
-	require.Equal(t, leaderReplicaID, nlhe.Lease.Replica.ReplicaID)
+	for {
+		getRequest := getArgs(key)
+		_, pErr := kv.SendWrapped(timeoutCtx, partitionedStoreSender, getRequest)
+		require.Error(t, pErr.GoError(), "unexpected success")
+		nlhe := &kvpb.NotLeaseHolderError{}
+		require.ErrorAs(t, pErr.GetDetail(), &nlhe)
+		// Someone else (e.g. the Raft scheduler) may have attempted to acquire the
+		// lease in the meanwhile, bumping the node's epoch and causing an
+		// ErrEpochIncremented, so we ignore these and try again.
+		if strings.Contains(nlhe.Error(), liveness.ErrEpochIncremented.Error()) { // no cause chain
+			t.Logf("got %s, retrying", nlhe)
+			continue
+		}
+		require.False(t, nlhe.Lease.Empty(), "expected NotLeaseholderError with a lease, got: %s", pErr)
+		require.NotNil(t, nlhe.Lease.Replica, "expected NotLeaseholderError with a known leaseholder, got: %s", pErr)
+		require.Equal(t, leaderReplicaID, nlhe.Lease.Replica.ReplicaID)
+		break
+	}
 }
 
 // TestRequestsOnFollowerWithNonLiveLeaseholder tests the availability of a
