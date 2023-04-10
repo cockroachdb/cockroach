@@ -1,0 +1,228 @@
+echo
+----
+----
+# No connected streams.
+{
+  "range_id": "1",
+  "connected_streams": [
+  ]
+}
+
+# Single connected stream with no tracked deductions.
+{
+  "range_id": "1",
+  "connected_streams": [
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 1,
+        "available_regular_tokens": "16777216",
+        "available_elastic_tokens": "8388608"
+      },
+      "tracked_deductions": [
+      ]
+    }
+  ]
+}
+
+# Single connected stream with one 1MiB tracked deduction per work class.
+{
+  "range_id": "1",
+  "connected_streams": [
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 1,
+        "available_regular_tokens": "15728640",
+        "available_elastic_tokens": "6291456"
+      },
+      "tracked_deductions": [
+        {
+          "priority": -30,
+          "tokens": "1048576",
+          "raft_log_position": {
+            "term": "1",
+            "index": "44"
+          }
+        },
+        {
+          "priority": 0,
+          "tokens": "1048576",
+          "raft_log_position": {
+            "term": "1",
+            "index": "43"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+# Triply connected stream with 2MiB, 1MiB, and 1MiB tracked elastic deductions respectively.
+{
+  "range_id": "1",
+  "connected_streams": [
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 1,
+        "available_regular_tokens": "16777216",
+        "available_elastic_tokens": "6291456"
+      },
+      "tracked_deductions": [
+        {
+          "priority": -30,
+          "tokens": "1048576",
+          "raft_log_position": {
+            "term": "1",
+            "index": "44"
+          }
+        },
+        {
+          "priority": -30,
+          "tokens": "1048576",
+          "raft_log_position": {
+            "term": "1",
+            "index": "47"
+          }
+        }
+      ]
+    },
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 2,
+        "available_regular_tokens": "16777216",
+        "available_elastic_tokens": "7340032"
+      },
+      "tracked_deductions": [
+        {
+          "priority": -30,
+          "tokens": "1048576",
+          "raft_log_position": {
+            "term": "1",
+            "index": "47"
+          }
+        }
+      ]
+    },
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 3,
+        "available_regular_tokens": "16777216",
+        "available_elastic_tokens": "7340032"
+      },
+      "tracked_deductions": [
+        {
+          "priority": -30,
+          "tokens": "1048576",
+          "raft_log_position": {
+            "term": "1",
+            "index": "47"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+# Doubly connected stream with 2MiB and 1MiB tracked elastic deductions respectively.
+{
+  "range_id": "1",
+  "connected_streams": [
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 1,
+        "available_regular_tokens": "16777216",
+        "available_elastic_tokens": "6291456"
+      },
+      "tracked_deductions": [
+        {
+          "priority": -30,
+          "tokens": "1048576",
+          "raft_log_position": {
+            "term": "1",
+            "index": "44"
+          }
+        },
+        {
+          "priority": -30,
+          "tokens": "1048576",
+          "raft_log_position": {
+            "term": "1",
+            "index": "47"
+          }
+        }
+      ]
+    },
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 3,
+        "available_regular_tokens": "16777216",
+        "available_elastic_tokens": "7340032"
+      },
+      "tracked_deductions": [
+        {
+          "priority": -30,
+          "tokens": "1048576",
+          "raft_log_position": {
+            "term": "1",
+            "index": "47"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+# Doubly connected stream with no tracked deductions.
+{
+  "range_id": "1",
+  "connected_streams": [
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 1,
+        "available_regular_tokens": "16777216",
+        "available_elastic_tokens": "8388608"
+      },
+      "tracked_deductions": [
+      ]
+    },
+    {
+      "stream": {
+        "tenant_id": {
+          "id": "1"
+        },
+        "store_id": 3,
+        "available_regular_tokens": "16777216",
+        "available_elastic_tokens": "8388608"
+      },
+      "tracked_deductions": [
+      ]
+    }
+  ]
+}
+----
+----
+
+# vim:ft=conf
