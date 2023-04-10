@@ -970,6 +970,8 @@ func TestDenylistUpdate(t *testing.T) {
 
 func TestDirectoryConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	skip.WithIssue(t, 76839, "flaky test")
 	// TODO(jaylim-crl): This is a potential port reuse issue, so skip this
 	// under stress. See linked GitHub issue.
 	skip.UnderStress(t, "https://github.com/cockroachdb/cockroach/issues/76839")
