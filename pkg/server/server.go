@@ -1798,6 +1798,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// to bypass admission control.
 	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node, s.node)
 
+	// Connect the engines to the disk stats map constructor.
+	// This also needs to wait until after `waitForAdditionalStoreInit` returns,
+	// as the store IDs may not be known until then.
+	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines); err != nil {
+		return errors.Wrapf(err, "failed to register engines for the disk stats map")
+	}
+
 	// Once all stores are initialized, check if offline storage recovery
 	// was done prior to start and record any actions appropriately.
 	logPendingLossOfQuorumRecoveryEvents(workersCtx, s.node.stores)
@@ -1936,11 +1943,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		if err := s.eventsExporter.Start(ctx, s.stopper); err != nil {
 			return errors.Wrapf(err, "failed to start events exporter")
 		}
-	}
-
-	// Connect the engines to the disk stats map constructor.
-	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines); err != nil {
-		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
 
 	if storage.WorkloadCollectorEnabled {

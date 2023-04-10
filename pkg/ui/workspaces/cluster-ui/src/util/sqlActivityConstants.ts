@@ -22,20 +22,23 @@ export const limitOptions = [
   { value: 500, label: "500" },
 ];
 
-export function getSortLabel(sort: SqlStatsSortType): string {
+export function getSortLabel(
+  sort: SqlStatsSortType,
+  type: "Statement" | "Transaction",
+): string {
   switch (sort) {
     case SqlStatsSortOptions.SERVICE_LAT:
-      return "Service Latency";
+      return `${type} Time`;
     case SqlStatsSortOptions.EXECUTION_COUNT:
       return "Execution Count";
     case SqlStatsSortOptions.CPU_TIME:
       return "CPU Time";
     case SqlStatsSortOptions.P99_STMTS_ONLY:
-      return "P99";
+      return "P99 Latency";
     case SqlStatsSortOptions.CONTENTION_TIME:
       return "Contention Time";
     case SqlStatsSortOptions.PCT_RUNTIME:
-      return "% Of All Runtime";
+      return "% of All Runtime";
     default:
       return "";
   }
@@ -63,7 +66,7 @@ export function getSortColumn(sort: SqlStatsSortType): string {
 export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions)
   .map(sortVal => ({
     value: sortVal as SqlStatsSortType,
-    label: getSortLabel(sortVal as SqlStatsSortType),
+    label: getSortLabel(sortVal as SqlStatsSortType, "Statement"),
   }))
   .sort((a, b) => {
     if (a.label < b.label) return -1;
@@ -71,11 +74,21 @@ export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions)
     return 0;
   });
 
-export const txnRequestSortOptions = stmtRequestSortOptions.filter(
-  option =>
-    option.value !== SqlStatsSortOptions.P99_STMTS_ONLY &&
-    option.value !== SqlStatsSortOptions.PCT_RUNTIME,
-);
+export const txnRequestSortOptions = Object.values(SqlStatsSortOptions)
+  .map(sortVal => ({
+    value: sortVal as SqlStatsSortType,
+    label: getSortLabel(sortVal as SqlStatsSortType, "Transaction"),
+  }))
+  .sort((a, b) => {
+    if (a.label < b.label) return -1;
+    if (a.label > b.label) return 1;
+    return 0;
+  })
+  .filter(
+    option =>
+      option.value !== SqlStatsSortOptions.P99_STMTS_ONLY &&
+      option.value !== SqlStatsSortOptions.PCT_RUNTIME,
+  );
 
 export const STATS_LONG_LOADING_DURATION = duration(2, "s");
 
