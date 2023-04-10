@@ -89,6 +89,17 @@ func TestTracker(t *testing.T) {
 				require.NotNilf(t, tracker, "uninitialized tracker (did you use 'init'?)")
 				return tracker.TestingPrintIter()
 
+			case "inspect":
+				var buf strings.Builder
+				for _, tracked := range tracker.Inspect(ctx) {
+					buf.WriteString(fmt.Sprintf("pri=%s tokens=%s %s\n",
+						admissionpb.WorkPriority(tracked.Priority),
+						testingPrintTrimmedTokens(kvflowcontrol.Tokens(tracked.Tokens)),
+						tracked.RaftLogPosition,
+					))
+				}
+				return buf.String()
+
 			case "untrack":
 				require.NotNilf(t, tracker, "uninitialized tracker (did you use 'init'?)")
 				var priStr, logPositionStr string
