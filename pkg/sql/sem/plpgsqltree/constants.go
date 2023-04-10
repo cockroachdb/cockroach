@@ -10,7 +10,10 @@
 
 package plpgsqltree
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/errors"
+	"math"
+)
 
 type DatumType int
 
@@ -70,8 +73,32 @@ type PLpgSQLFetchDirection int
 
 const (
 	PLpgSQLFetchForward PLpgSQLFetchDirection = iota
-	// TODO Check if we have existing enum for FetchDirection if not add more
-	// directions.
+	PLpgSQLFetchBackward
+	PLpgSQLFetchAbsolute
+	PLpgSQLFetchRelative
+)
+
+func (k PLpgSQLFetchDirection) String() string {
+	switch k {
+	case PLpgSQLFetchForward:
+		return "FORWARD"
+	case PLpgSQLFetchBackward:
+		return "BACKWARD"
+	case PLpgSQLFetchAbsolute:
+		return "ABSOLUTE"
+	case PLpgSQLFetchRelative:
+		return "RELATIVE"
+	default:
+		panic(errors.AssertionFailedf("not known fetch direction"))
+	}
+}
+
+// TODO(janexing): better naming and comments.
+type PLpgSQLFetchHowMany int
+
+const (
+	PLpgSQLFetchAll  PLpgSQLFetchHowMany = math.MaxInt64
+	PlpgSQLFetchLast PLpgSQLFetchHowMany = -1
 )
 
 type PLpgSQLPromiseType int
