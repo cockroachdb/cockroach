@@ -53,10 +53,12 @@ var testTasks = []testTask{
 			SimpleSQL: &autoconfigpb.SimpleSQL{
 				UsernameProto: username.NodeUserName().EncodeProto(),
 				NonTransactionalStatements: []string{
-					"CREATE TABLE IF NOT EXISTS system.foo(x INT)",
 					// This checks that the non-txn part works properly: SET
 					// CLUSTER SETTING can only be run outside of explicit txns.
 					"SET CLUSTER SETTING cluster.organization = 'woo'",
+				},
+				TransactionalStatements: []string{
+					"CREATE TABLE IF NOT EXISTS system.foo(x INT)",
 				},
 			},
 		},
@@ -77,8 +79,8 @@ var testTasks = []testTask{
 		MinVersion:  clusterversion.TestingBinaryVersion,
 		Payload: &autoconfigpb.Task_SimpleSQL{
 			SimpleSQL: &autoconfigpb.SimpleSQL{
-				UsernameProto:              username.NodeUserName().EncodeProto(),
-				NonTransactionalStatements: []string{"CREATE TABLE IF NOT EXISTS system.bar(y INT)"},
+				UsernameProto:           username.NodeUserName().EncodeProto(),
+				TransactionalStatements: []string{"CREATE TABLE IF NOT EXISTS system.bar(y INT)"},
 			},
 		},
 	}},

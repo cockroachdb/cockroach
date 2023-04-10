@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/autoconfigpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -156,7 +157,11 @@ func execSimpleSQL(
 
 	// Now execute all the transactional, potentially not idempotent
 	// statements.
-	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	//
+	// We use DescsTxn here because the tasks may contain DDL statements
+	// and we want to ensure that each txn will wait for the leases from
+	// previous txns.
+	return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		for _, stmt := range sqlPayload.TransactionalStatements {
 			log.Infof(ctx, "attempting execution of task statement:\n%s", stmt)
 			_, err := txn.ExecEx(ctx, "exec-task-statement",

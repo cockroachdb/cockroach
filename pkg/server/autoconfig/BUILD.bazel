@@ -21,6 +21,7 @@ go_library(
         "//pkg/server/autoconfig/autoconfigpb",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/isql",
         "//pkg/sql/sessiondata",
         "//pkg/util/encoding",
