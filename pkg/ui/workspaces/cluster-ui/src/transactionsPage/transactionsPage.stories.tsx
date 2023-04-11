@@ -59,6 +59,7 @@ storiesOf("Transactions Page", module)
       reqSortSetting={SqlStatsSortOptions.PCT_RUNTIME}
       onChangeLimit={noop}
       onChangeReqSort={noop}
+      onApplySearchCriteria={noop}
     />
   ))
   .add("without data", () => {
@@ -86,6 +87,7 @@ storiesOf("Transactions Page", module)
         reqSortSetting={SqlStatsSortOptions.PCT_RUNTIME}
         onChangeLimit={noop}
         onChangeReqSort={noop}
+        onApplySearchCriteria={noop}
       />
     );
   })
@@ -121,6 +123,7 @@ storiesOf("Transactions Page", module)
         reqSortSetting={SqlStatsSortOptions.PCT_RUNTIME}
         onChangeLimit={noop}
         onChangeReqSort={noop}
+        onApplySearchCriteria={noop}
       />
     );
   })
@@ -149,6 +152,7 @@ storiesOf("Transactions Page", module)
         reqSortSetting={SqlStatsSortOptions.PCT_RUNTIME}
         onChangeLimit={noop}
         onChangeReqSort={noop}
+        onApplySearchCriteria={noop}
       />
     );
   })
@@ -184,6 +188,7 @@ storiesOf("Transactions Page", module)
         reqSortSetting={SqlStatsSortOptions.PCT_RUNTIME}
         onChangeLimit={noop}
         onChangeReqSort={noop}
+        onApplySearchCriteria={noop}
       />
     );
   });

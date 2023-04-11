@@ -55,6 +55,7 @@ import {
   setGlobalTimeScaleAction,
 } from "src/redux/statements";
 import {
+  trackApplySearchCriteriaAction,
   trackCancelDiagnosticsBundleAction,
   trackDownloadDiagnosticsBundleAction,
   trackStatementsPaginationAction,
@@ -359,6 +360,7 @@ const fingerprintsPageActions = {
     ),
   onChangeLimit: (newLimit: number) => limitSetting.set(newLimit),
   onChangeReqSort: (sort: api.SqlStatsSortType) => reqSortSetting.set(sort),
+  onApplySearchCriteria: trackApplySearchCriteriaAction,
 };
 
 type StateProps = {

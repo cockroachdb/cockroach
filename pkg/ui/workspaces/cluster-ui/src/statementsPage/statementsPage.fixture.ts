@@ -907,6 +907,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onFilterChange: noop,
   onChangeLimit: noop,
   onChangeReqSort: noop,
+  onApplySearchCriteria: noop,
 };
 
 export const statementsPagePropsWithRequestError: StatementsPageProps = {
