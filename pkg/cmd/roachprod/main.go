@@ -655,7 +655,8 @@ var runCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(1),
 	Run: wrap(func(_ *cobra.Command, args []string) error {
-		return roachprod.Run(context.Background(), config.Logger, args[0], extraSSHOptions, tag, secure, os.Stdout, os.Stderr, args[1:])
+		return roachprod.Run(context.Background(), config.Logger, args[0], extraSSHOptions, tag,
+			secure, os.Stdout, os.Stderr, args[1:], install.WithWaitOnFail())
 	}),
 }
 
