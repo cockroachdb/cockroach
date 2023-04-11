@@ -23,7 +23,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • SameStagePrecedence dependency from WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │       └── • Precedence dependency from WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │             rule: "simple constraint visible before name"
 │       │
 │       └── • 2 Mutation operations
@@ -70,7 +70,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • SameStagePrecedence dependency from WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │       └── • Precedence dependency from WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │             rule: "simple constraint visible before name"
 │       │
 │       └── • 4 Mutation operations

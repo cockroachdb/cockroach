@@ -58,7 +58,7 @@
 /pkg/sql/row*                @cockroachdb/sql-queries
 /pkg/sql/control_job*        @cockroachdb/sql-queries @cockroachdb/jobs-prs
 /pkg/sql/job_exec_context*   @cockroachdb/sql-queries @cockroachdb/jobs-prs
-/pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs
+/pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 
 /pkg/sql/importer/           @cockroachdb/sql-queries
 /pkg/ccl/importerccl/        @cockroachdb/sql-queries
@@ -114,7 +114,7 @@
 /pkg/cli/demo*.go            @cockroachdb/sql-sessions @cockroachdb/server-prs @cockroachdb/cli-prs
 /pkg/cli/democluster         @cockroachdb/sql-sessions @cockroachdb/server-prs @cockroachdb/cli-prs
 /pkg/cli/debug*.go           @cockroachdb/kv-prs         @cockroachdb/cli-prs
-/pkg/cli/debug_job_trace*.go @cockroachdb/jobs-prs
+/pkg/cli/debug_job_trace*.go @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/cli/doctor*.go          @cockroachdb/sql-schema     @cockroachdb/cli-prs
 /pkg/cli/import_test.go      @cockroachdb/sql-sessions @cockroachdb/cli-prs
 /pkg/cli/sql*.go             @cockroachdb/sql-sessions @cockroachdb/cli-prs
@@ -176,7 +176,7 @@
 /pkg/server/user*.go                     @cockroachdb/obs-inf-prs @cockroachdb/server-prs @cockroachdb/prodsec
 
 
-/pkg/ccl/jobsccl/            @cockroachdb/jobs-prs
+/pkg/ccl/jobsccl/            @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
 
 /pkg/ccl/streamingccl/       @cockroachdb/disaster-recovery
@@ -401,7 +401,7 @@
 /pkg/internal/rsg/           @cockroachdb/sql-queries
 /pkg/internal/sqlsmith/      @cockroachdb/sql-queries
 /pkg/internal/team/          @cockroachdb/test-eng
-/pkg/jobs/                   @cockroachdb/jobs-prs
+/pkg/jobs/                   @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/keys/                   @cockroachdb/kv-prs
 /pkg/keysbase/               @cockroachdb/kv-prs
 # Don't ping KV on updates to reserved descriptor IDs and such.
@@ -426,7 +426,7 @@
 /pkg/roachprod/              @cockroachdb/test-eng
 /pkg/rpc/                    @cockroachdb/kv-prs
 /pkg/rpc/auth.go             @cockroachdb/server-prs @cockroachdb/kv-prs @cockroachdb/prodsec
-/pkg/scheduledjobs/          @cockroachdb/jobs-prs
+/pkg/scheduledjobs/          @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/security/               @cockroachdb/server-prs @cockroachdb/prodsec
 /pkg/security/clientsecopts/ @cockroachdb/server-prs @cockroachdb/sql-sessions @cockroachdb/prodsec
 #!/pkg/settings/             @cockroachdb/unowned
@@ -435,7 +435,7 @@
 #!/pkg/testutils/              @cockroachdb/test-eng-noreview
 /pkg/testutils/reduce/       @cockroachdb/sql-queries
 /pkg/testutils/sqlutils/     @cockroachdb/sql-queries
-/pkg/testutils/jobutils/     @cockroachdb/jobs-prs
+/pkg/testutils/jobutils/     @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/ts/                     @cockroachdb/kv-prs
 /pkg/ts/catalog/             @cockroachdb/obs-inf-prs
 #!/pkg/util/                 @cockroachdb/unowned

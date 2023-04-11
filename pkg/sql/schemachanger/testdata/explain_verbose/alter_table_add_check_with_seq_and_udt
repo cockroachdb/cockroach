@@ -23,7 +23,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
 │       │   └── • ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • SameStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+│       │       └── • Precedence dependency from WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
 │       │             rule: "simple constraint visible before name"
 │       │
 │       └── • 4 Mutation operations
@@ -83,7 +83,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
 │       │   └── • ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • SameStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+│       │       └── • Precedence dependency from WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
 │       │             rule: "simple constraint visible before name"
 │       │
 │       └── • 9 Mutation operations

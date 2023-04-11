@@ -52,7 +52,7 @@ func init() {
 	// we won't have the correct message inside errors.
 	registerDepRule(
 		"simple constraint visible before name",
-		scgraph.SameStagePrecedence,
+		scgraph.Precedence,
 		"simple-constraint", "constraint-name",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
