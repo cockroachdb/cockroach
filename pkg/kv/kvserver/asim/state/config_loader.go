@@ -257,12 +257,22 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 	s := newState(settings)
 	// A new state has a single range - add the replica load for that range.
 	s.clusterinfo = c
-	// TODO(lidor): load locality info to be used by the allocator. Do we need a
-	// NodeDescriptor and higher level localities? or can we simulate those?
 	for _, r := range c.Regions {
+		regionTier := roachpb.Tier{
+			Key:   "region",
+			Value: r.Name,
+		}
 		for _, z := range r.Zones {
+			zoneTier := roachpb.Tier{
+				Key:   "zone",
+				Value: z.Name,
+			}
+			locality := roachpb.Locality{
+				Tiers: []roachpb.Tier{regionTier, zoneTier},
+			}
 			for i := 0; i < z.NodeCount; i++ {
 				node := s.AddNode()
+				s.SetNodeLocality(node.NodeID(), locality)
 				storesRequired := z.StoresPerNode
 				if storesRequired < 1 {
 					storesRequired = 1
