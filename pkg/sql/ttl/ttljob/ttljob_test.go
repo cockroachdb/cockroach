@@ -211,7 +211,7 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRowsJobOnly(
 		var progressBytes []byte
 		require.NoError(t, rows.Scan(&status, &progressBytes))
 
-		require.Equal(t, "succeeded", status)
+		require.Equal(t, string(jobs.StatusSucceeded), status)
 
 		var progress jobspb.Progress
 		require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
@@ -242,7 +242,7 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 		var progressBytes []byte
 		require.NoError(t, rows.Scan(&status, &progressBytes))
 
-		require.Equal(t, "succeeded", status)
+		require.Equal(t, string(jobs.StatusSucceeded), status)
 
 		var progress jobspb.Progress
 		require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
@@ -879,4 +879,33 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			th.verifyExpiredRowsJobOnly(t, tc.numExpiredRows)
 		})
 	}
+}
+
+func TestOutboundForeignKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+		t,
+		&sql.TTLTestingKnobs{
+			AOSTDuration:     &zeroDuration,
+			ReturnStatsError: true,
+		},
+		false, /* testMultiTenant */
+		1,     /* numNodes */
+	)
+	defer cleanupFunc()
+
+	sqlDB := th.sqlDB
+	sqlDB.Exec(t, "CREATE TABLE parent (id INT PRIMARY KEY)")
+	sqlDB.Exec(t, "CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ, parent_id INT REFERENCES parent (id)) WITH (ttl_expiration_expression = 'expire_at')")
+
+	sqlDB.Exec(t, "INSERT INTO parent VALUES (1)")
+	sqlDB.Exec(t, "INSERT INTO tbl VALUES (1, '2020-01-01', 1)")
+
+	// Force the schedule to execute.
+	th.waitForScheduledJob(t, jobs.StatusSucceeded, "")
+
+	results := sqlDB.QueryStr(t, "SELECT * FROM tbl")
+	require.Empty(t, results)
 }
