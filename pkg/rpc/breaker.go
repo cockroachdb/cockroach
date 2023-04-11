@@ -171,7 +171,7 @@ func (rpcCtx *Context) newPeerBreaker(k connKey) *circuitbreaker.Breaker {
 						return
 					case <-t.C:
 						t.Read = true
-						t.Reset(rpcCtx.heartbeatTimeout + rpcCtx.heartbeatInterval)
+						t.Reset( /*rpcCtx.heartbeatTimeout +*/ rpcCtx.heartbeatInterval)
 					}
 
 					err := rpcCtx.runHeartbeat(ctx, conn, k, func() {
