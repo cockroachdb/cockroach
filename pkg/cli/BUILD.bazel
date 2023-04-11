@@ -162,6 +162,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/protoreflect",
         "//pkg/sql/row",

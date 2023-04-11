@@ -13,8 +13,8 @@ package parser
 import (
 	"go/constant"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -23,44 +23,6 @@ import (
 func init() {
 	scanner.NewNumValFn = func(a constant.Value, s string, b bool) interface{} { return tree.NewNumVal(a, s, b) }
 	scanner.NewPlaceholderFn = func(s string) (interface{}, error) { return tree.NewPlaceholder(s) }
-}
-
-// Statement is the result of parsing a single statement. It contains the AST
-// node along with other information.
-type Statement struct {
-	// AST is the root of the AST tree for the parsed statement.
-	AST *plpgsqltree.PLpgSQLStmtBlock
-
-	// SQL is the original SQL from which the statement was parsed. Note that this
-	// is not appropriate for use in logging, as it may contain passwords and
-	// other sensitive data.
-	SQL string
-
-	// NumPlaceholders indicates the number of arguments to the statement (which
-	// are referenced through placeholders). This corresponds to the highest
-	// argument position (i.e. the x in "$x") that appears in the query.
-	//
-	// Note: where there are "gaps" in the placeholder positions, this number is
-	// based on the highest position encountered. For example, for `SELECT $3`,
-	// NumPlaceholders is 3. These cases are malformed and will result in a
-	// type-check error.
-	NumPlaceholders int
-
-	// NumAnnotations indicates the number of annotations in the tree. It is equal
-	// to the maximum annotation index.
-	NumAnnotations tree.AnnotationIdx
-}
-
-// String returns the AST formatted as a string.
-func (stmt Statement) String() string {
-	return stmt.StringWithFlags(tree.FmtSimple)
-}
-
-// StringWithFlags returns the AST formatted as a string (with the given flags).
-func (stmt Statement) StringWithFlags(flags tree.FmtFlags) string {
-	ctx := tree.NewFmtCtx(flags)
-	stmt.AST.Format(ctx)
-	return ctx.CloseAndGetString()
 }
 
 // Parser wraps a scanner, parser and other utilities present in the parser
@@ -79,7 +41,7 @@ type Parser struct {
 var defaultNakedIntType = types.Int
 
 // Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string) (Statement, error) {
+func (p *Parser) Parse(sql string) (statements.PLPGStatement, error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
@@ -113,16 +75,16 @@ func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool) 
 
 func (p *Parser) parseWithDepth(
 	depth int, plpgsql string, nakedIntType *types.T,
-) (Statement, error) {
+) (statements.PLPGStatement, error) {
 	p.scanner.Init(plpgsql)
 	defer p.scanner.Cleanup()
 	sql, tokens, done := p.scanFnBlock()
 	stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
 	if err != nil {
-		return Statement{}, err
+		return statements.PLPGStatement{}, err
 	}
 	if !done {
-		return Statement{}, errors.AssertionFailedf("invalid plpgsql function: %s", plpgsql)
+		return statements.PLPGStatement{}, errors.AssertionFailedf("invalid plpgsql function: %s", plpgsql)
 	}
 	return stmt, nil
 }
@@ -130,7 +92,7 @@ func (p *Parser) parseWithDepth(
 // parse parses a statement from the given scanned tokens.
 func (p *Parser) parse(
 	depth int, sql string, tokens []plpgsqlSymType, nakedIntType *types.T,
-) (Statement, error) {
+) (statements.PLPGStatement, error) {
 	p.lexer.init(sql, tokens, nakedIntType)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
@@ -154,9 +116,9 @@ func (p *Parser) parse(
 			err = errors.WithTelemetry(err, tkeys...)
 		}
 
-		return Statement{}, err
+		return statements.PLPGStatement{}, err
 	}
-	return Statement{
+	return statements.PLPGStatement{
 		AST:             p.lexer.stmt,
 		SQL:             sql,
 		NumPlaceholders: p.lexer.numPlaceholders,
@@ -165,7 +127,7 @@ func (p *Parser) parse(
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
-func Parse(sql string) (Statement, error) {
+func Parse(sql string) (statements.PLPGStatement, error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }

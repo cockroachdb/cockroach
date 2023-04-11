@@ -34,6 +34,7 @@ go_test(
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",

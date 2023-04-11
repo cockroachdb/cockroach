@@ -14,10 +14,10 @@ genrule(
     ],
     outs = ["plpgsql.go"],
     cmd = """
-      $(location :plpgsql-gen) $(location plpgsql.y) ""\
+      $(location :plpgsql-gen) $(location plpgsql.y) plpgsql ""\
           $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc) \
           $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
-          plpgsql
+
     """,
     exec_tools = [
         ":plpgsql-gen",
@@ -39,6 +39,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/parser",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/scanner",
