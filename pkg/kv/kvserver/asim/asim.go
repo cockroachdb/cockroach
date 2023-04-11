@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
@@ -38,6 +39,7 @@ type Simulator struct {
 
 	// The simulator can run multiple workload Generators in parallel.
 	generators []workload.Generator
+	events     event.DelayedEventList
 
 	pacers map[state.StoreID]queue.ReplicaPacer
 
@@ -80,6 +82,7 @@ func NewSimulator(
 	initialState state.State,
 	settings *config.SimulationSettings,
 	m *metrics.Tracker,
+	events ...event.DelayedEvent,
 ) *Simulator {
 	pacers := make(map[state.StoreID]queue.ReplicaPacer)
 	rqs := make(map[state.StoreID]queue.RangeQueue)
@@ -107,6 +110,7 @@ func NewSimulator(
 		// TODO(kvoli): Keeping the state around is a bit hacky, find a better
 		// method of reporting the ranges.
 		history:  History{Recorded: [][]metrics.StoreMetrics{}},
+		events:   events,
 		settings: settings,
 	}
 
@@ -209,8 +213,14 @@ func (s *Simulator) RunSim(ctx context.Context) {
 			break
 		}
 
+		s.AddLogTag("tick", tick.Format(time.StampMilli))
+		ctx = s.AmbientContext.AnnotateCtx(ctx)
+
 		// Update the store clocks with the current tick time.
 		s.tickStoreClocks(tick)
+
+		// Tick any events.
+		s.tickEvents(ctx, tick)
 
 		// Update the state with generated load.
 		s.tickWorkload(ctx, tick)
@@ -330,4 +340,23 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, st
 // tickMetrics prints the metrics up to the given tick.
 func (s *Simulator) tickMetrics(ctx context.Context, tick time.Time) {
 	s.metrics.Tick(ctx, tick, s.state)
+}
+
+// tickEvents ticks the registered simulation events.
+func (s *Simulator) tickEvents(ctx context.Context, tick time.Time) {
+	var idx int
+	// Assume the events are in sorted order and the event list is never added
+	// to.
+	for i := range s.events {
+		if !tick.Before(s.events[i].At) {
+			idx = i + 1
+			log.Infof(ctx, "applying event (scheduled=%s tick=%s)", s.events[i].At, tick)
+			s.events[i].EventFn(ctx, tick, s.state)
+		} else {
+			break
+		}
+	}
+	if idx != 0 {
+		s.events = s.events[idx:]
+	}
 }
