@@ -679,6 +679,19 @@ func (f *FuncDepSet) ComputeClosureNoCopy(cols opt.ColSet) opt.ColSet {
 	return cols
 }
 
+// IsClosureEqual returns true if the closure of the given columns is equal to
+// the given column set. In other words, it returns true if ComputeClosure will
+// return the same set of columns that it is given.
+func (f *FuncDepSet) IsClosureEqual(cols opt.ColSet) bool {
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
+		if fd.strict && fd.from.SubsetOf(cols) && !fd.to.SubsetOf(cols) {
+			return false
+		}
+	}
+	return true
+}
+
 // AreColsEquiv returns true if the two given columns are equivalent.
 func (f *FuncDepSet) AreColsEquiv(col1, col2 opt.ColumnID) bool {
 	if col1 == col2 {
@@ -728,6 +741,21 @@ func (f *FuncDepSet) ComputeEquivClosureNoCopy(cols opt.ColSet) opt.ColSet {
 		}
 	}
 	return cols
+}
+
+// IsEquivClosureEqual returns true if the equivalence closure of the given
+// columns is equal to the given column set. In other words, it returns true if
+// ComputeEquivClosure will return the same set of columns that it is given.
+func (f *FuncDepSet) IsEquivClosureEqual(cols opt.ColSet) bool {
+	// Don't need to get transitive closure, because equivalence closures are
+	// already maintained for every column.
+	for i := range f.deps {
+		fd := &f.deps[i]
+		if fd.equiv && fd.from.SubsetOf(cols) && !fd.to.SubsetOf(cols) {
+			return false
+		}
+	}
+	return true
 }
 
 // ComputeEquivGroup returns the group of columns that are equivalent to the
