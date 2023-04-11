@@ -200,15 +200,22 @@ var MultiRangeConfig = []RangeInfo{
 
 // RangeInfoWithReplicas returns a new RangeInfo using the supplied arguments.
 func RangeInfoWithReplicas(
-	startKey Key, replicas []StoreID, leaseholder StoreID, config *roachpb.SpanConfig,
+	startKey Key, voters, nonVoters []StoreID, leaseholder StoreID, config *roachpb.SpanConfig,
 ) RangeInfo {
 	desc := roachpb.RangeDescriptor{
 		StartKey:         startKey.ToRKey(),
-		InternalReplicas: make([]roachpb.ReplicaDescriptor, len(replicas)),
+		InternalReplicas: make([]roachpb.ReplicaDescriptor, len(voters)+len(nonVoters)),
 	}
-	for i, storeID := range replicas {
+	for i, storeID := range voters {
 		desc.InternalReplicas[i] = roachpb.ReplicaDescriptor{
 			StoreID: roachpb.StoreID(storeID),
+			Type:    roachpb.VOTER_FULL,
+		}
+	}
+	for i, storeID := range nonVoters {
+		desc.InternalReplicas[i+len(voters)] = roachpb.ReplicaDescriptor{
+			StoreID: roachpb.StoreID(storeID),
+			Type:    roachpb.NON_VOTER,
 		}
 	}
 	return RangeInfo{Descriptor: desc, Leaseholder: leaseholder, Config: config}
@@ -238,6 +245,7 @@ type ClusterInfo struct {
 type RangeInfo struct {
 	Descriptor  roachpb.RangeDescriptor
 	Config      *roachpb.SpanConfig
+	Size        int64
 	Leaseholder StoreID
 }
 
@@ -278,11 +286,13 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 					storesRequired = 1
 				}
 				for store := 0; store < storesRequired; store++ {
-					if _, ok := s.AddStore(node.NodeID()); !ok {
+					if newStore, ok := s.AddStore(node.NodeID()); !ok {
 						panic(fmt.Sprintf(
 							"Unable to load config: cannot add store %d",
 							node.NodeID(),
 						))
+					} else {
+						s.SetStoreCapacity(newStore.StoreID(), int64(c.DiskCapacityGB)*1<<30)
 					}
 				}
 			}
@@ -337,8 +347,9 @@ func LoadRangeInfo(s State, rangeInfos ...RangeInfo) {
 	for _, r := range rangeInfos {
 		startKey := ToKey(r.Descriptor.StartKey.AsRawKey())
 		rng := s.RangeFor(startKey)
+		s.SetRangeBytes(rng.RangeID(), r.Size)
 		for _, desc := range r.Descriptor.InternalReplicas {
-			if _, ok := s.AddReplica(rng.RangeID(), StoreID(desc.StoreID), roachpb.VOTER_FULL); !ok {
+			if _, ok := s.AddReplica(rng.RangeID(), StoreID(desc.StoreID), desc.Type); !ok {
 				panic(fmt.Sprintf(
 					"Unable to load config: add replica to store %d failed at "+
 						"for range %s replicas %s",
