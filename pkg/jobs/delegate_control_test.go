@@ -350,6 +350,17 @@ func TestJobControlByType(t *testing.T) {
 	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables, argsFn)
 	defer cleanup()
 
+	// Disable automatic statistics collection so that it does interrupt with the
+	// creation and control of multiple fake jobs below.
+	_, err := th.cfg.DB.Executor().ExecEx(
+		context.Background(),
+		"disable-automatic-stats",
+		nil,
+		sessiondata.RootUserSessionDataOverride,
+		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`,
+	)
+	require.NoError(t, err)
+
 	delayedShowJobs := func(t *testing.T, query string) fmt.Stringer {
 		return delayedStringer{
 			func() string {
