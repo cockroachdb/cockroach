@@ -134,18 +134,13 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		}
 
 		const timeout = time.Minute
-		useStmtTimeout := rng.Float64() < 0.5
-		if useStmtTimeout {
-			setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout.String())
-			t.Status("setting statement_timeout")
-			t.L().Printf("statement timeout:\n%s", setStmtTimeout)
-			if _, err := conn.Exec(setStmtTimeout); err != nil {
-				t.Fatal(err)
-			}
-			logStmt(setStmtTimeout)
-		} else {
-			t.Status("using pgwire cancellation")
+		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout.String())
+		t.Status("setting statement_timeout")
+		t.L().Printf("statement timeout:\n%s", setStmtTimeout)
+		if _, err := conn.Exec(setStmtTimeout); err != nil {
+			t.Fatal(err)
 		}
+		logStmt(setStmtTimeout)
 
 		smither, err := sqlsmith.NewSmither(conn, rng, setting.Options...)
 		if err != nil {
@@ -183,7 +178,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
-				go func(ctx context.Context) {
+				go func(context.Context) {
 					// Generate can potentially panic in bad cases, so
 					// to avoid Go routines from dying we are going
 					// catch that here, and only pass the error into
@@ -202,12 +197,9 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 						return
 					}
 
-					if !useStmtTimeout {
-						var cancel context.CancelFunc
-						ctx, cancel = context.WithTimeout(ctx, timeout)
-						defer cancel()
-					}
-					_, err := conn.ExecContext(ctx, stmt)
+					// TODO(yuzefovich): investigate why using the context with
+					// a timeout results in poisoning the connection (#101208).
+					_, err := conn.Exec(stmt)
 					if err == nil {
 						logStmt(stmt)
 						stmt = "EXPLAIN " + stmt
