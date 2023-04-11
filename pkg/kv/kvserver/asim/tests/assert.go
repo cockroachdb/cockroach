@@ -18,6 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/montanaflynn/stats"
 )
@@ -180,4 +182,169 @@ func (ba balanceAssertion) String() string {
 	return fmt.Sprintf(
 		"balance stat=%s threshold=%.2f ticks=%d",
 		ba.stat, ba.threshold, ba.ticks)
+}
+
+type storeStatAssertion struct {
+	ticks         int
+	stat          string
+	stores        []int
+	acceptedValue float64
+}
+
+// Assert looks at a simulation run history and returns true if the
+// assertion holds and false if not. When the assertion does not hold, the
+// reason is also returned.
+func (sa storeStatAssertion) Assert(
+	ctx context.Context, h asim.History,
+) (holds bool, reason string) {
+	m := h.Recorded
+	ticks := len(m)
+	if sa.ticks > ticks {
+		log.VInfof(ctx, 2,
+			"The history to run assertions against (%d) is shorter than "+
+				"the assertion duration (%d)", ticks, sa.ticks)
+		return true, ""
+	}
+
+	ts := metrics.MakeTS(m)
+	statTs := ts[sa.stat]
+	holds = true
+	// Set holds to be true initially, holds is set to false if the steady
+	// state assertion doesn't hold on any store.
+	holds = true
+	buf := strings.Builder{}
+
+	for _, store := range sa.stores {
+		trimmedStoreStats := statTs[store-1][ticks-sa.ticks-1:]
+		for _, stat := range trimmedStoreStats {
+			if stat != sa.acceptedValue {
+				if holds {
+					holds = false
+					fmt.Fprintf(&buf, "  %s\n", sa)
+				}
+				fmt.Fprintf(&buf,
+					"\tstore=%d stat=%.2f\n",
+					store, stat)
+			}
+		}
+	}
+	return holds, buf.String()
+}
+
+// String returns the string representation of the assertion.
+func (sa storeStatAssertion) String() string {
+	return fmt.Sprintf("stat=%s value=%.2f ticks=%d",
+		sa.stat, sa.acceptedValue, sa.ticks)
+}
+
+type conformanceAssertion struct {
+	underreplicated int
+	overreplicated  int
+	violating       int
+	unavailable     int
+}
+
+// conformanceAssertionSentinel declares a sentinel value which when any of the
+// conformanceAssertion parameters are set to, we ignore the conformance
+// reports value for that type of conformance.
+const conformanceAssertionSentinel = -1
+
+// Assert looks at a simulation run history and returns true if the
+// assertion holds and false if not. When the assertion does not hold, the
+// reason is also returned.
+func (ca conformanceAssertion) Assert(
+	ctx context.Context, h asim.History,
+) (holds bool, reason string) {
+	report := h.S.Report()
+	buf := strings.Builder{}
+	holds = true
+
+	unavailable, under, over, violating := len(report.Unavailable), len(report.UnderReplicated), len(report.OverReplicated), len(report.ViolatingConstraints)
+
+	maybeInitHolds := func() {
+		if holds {
+			holds = false
+			fmt.Fprintf(&buf, "  %s\n", ca)
+			fmt.Fprintf(&buf, "  actual unavailable=%d under=%d, over=%d violating=%d\n",
+				unavailable, under, over, violating,
+			)
+		}
+	}
+
+	if ca.unavailable != conformanceAssertionSentinel &&
+		ca.unavailable != unavailable {
+		maybeInitHolds()
+		buf.WriteString(PrintSpanConfigConformanceList(
+			"unavailable", report.Unavailable))
+	}
+	if ca.underreplicated != conformanceAssertionSentinel &&
+		ca.underreplicated != under {
+		maybeInitHolds()
+		buf.WriteString(PrintSpanConfigConformanceList(
+			"under replicated", report.UnderReplicated))
+	}
+	if ca.overreplicated != conformanceAssertionSentinel &&
+		ca.overreplicated != over {
+		maybeInitHolds()
+		buf.WriteString(PrintSpanConfigConformanceList(
+			"over replicated", report.OverReplicated))
+	}
+	if ca.violating != conformanceAssertionSentinel &&
+		ca.violating != violating {
+		maybeInitHolds()
+		buf.WriteString(PrintSpanConfigConformanceList(
+			"violating constraints", report.ViolatingConstraints))
+	}
+
+	return holds, buf.String()
+}
+
+// String returns the string representation of the assertion.
+func (ca conformanceAssertion) String() string {
+	buf := strings.Builder{}
+	fmt.Fprintf(&buf, "conformance ")
+	if ca.unavailable != conformanceAssertionSentinel {
+		fmt.Fprintf(&buf, "unavailable=%d ", ca.unavailable)
+	}
+	if ca.underreplicated != conformanceAssertionSentinel {
+		fmt.Fprintf(&buf, "under=%d ", ca.underreplicated)
+	}
+	if ca.overreplicated != conformanceAssertionSentinel {
+		fmt.Fprintf(&buf, "over=%d ", ca.overreplicated)
+	}
+	if ca.violating != conformanceAssertionSentinel {
+		fmt.Fprintf(&buf, "violating=%d ", ca.violating)
+	}
+	return buf.String()
+}
+
+func printRangeDesc(r roachpb.RangeDescriptor) string {
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("r%d:", r.RangeID))
+	buf.WriteString(r.RSpan().String())
+	buf.WriteString(" [")
+	if allReplicas := r.Replicas().Descriptors(); len(allReplicas) > 0 {
+		for i, rep := range allReplicas {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(rep.String())
+		}
+	} else {
+		buf.WriteString("<no replicas>")
+	}
+	buf.WriteString("]")
+	return buf.String()
+}
+
+func PrintSpanConfigConformanceList(tag string, ranges []roachpb.ConformanceReportedRange) string {
+	var buf strings.Builder
+	for i, r := range ranges {
+		if i == 0 {
+			buf.WriteString(fmt.Sprintf("%s:\n", tag))
+		}
+		buf.WriteString(fmt.Sprintf("  %s applying %s\n", printRangeDesc(r.RangeDescriptor),
+			spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(r.Config)))
+	}
+	return buf.String()
 }
