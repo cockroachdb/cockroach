@@ -69,6 +69,7 @@ go_library(
         "//pkg/sql/opt/props",
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/parser",
+        "//pkg/sql/parser/plsql",
         "//pkg/sql/parser/statements",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

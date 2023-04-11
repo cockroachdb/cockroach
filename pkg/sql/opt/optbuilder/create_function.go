@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -20,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/plsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
@@ -89,7 +92,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	// Note that function body can be an empty string.
 	funcBodyFound := false
 	languageFound := false
+	var lang catpb.Function_Language
 	var funcBodyStr string
+	var err error
 	for _, option := range cf.Options {
 		switch opt := option.(type) {
 		case tree.FunctionBodyStr:
@@ -98,7 +103,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		case tree.FunctionLanguage:
 			languageFound = true
 			// Check the language here, before attempting to parse the function body.
-			if _, err := funcinfo.FunctionLangToProto(opt); err != nil {
+			if lang, err = funcinfo.FunctionLangToProto(opt); err != nil {
 				panic(err)
 			}
 
@@ -163,7 +168,13 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	)
 
 	// Parse the function body.
-	stmts, err := parser.Parse(funcBodyStr)
+	var stmts statements.Statements
+	switch lang {
+	case catpb.Function_SQL:
+		stmts, err = parser.Parse(funcBodyStr)
+	case catpb.Function_PLPGSQL:
+		_, err = plsql.Parse(funcBodyStr)
+	}
 	if err != nil {
 		panic(err)
 	}

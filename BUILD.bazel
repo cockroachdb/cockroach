@@ -115,6 +115,7 @@ exports_files([
 # gazelle:exclude pkg/sql/parser/sql.go
 # gazelle:exclude pkg/sql/parser/helpmap_test.go
 # gazelle:exclude pkg/sql/parser/help_messages.go
+# gazelle:exclude pkg/sql/parser/plsql/plsql.go
 # gazelle:exclude pkg/sql/lexbase/keywords.go
 # gazelle:exclude pkg/sql/lexbase/tokens.go
 # gazelle:exclude pkg/sql/lexbase/reserved_keywords.go

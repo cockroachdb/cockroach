@@ -70,6 +70,7 @@ go_library(
         "persistence.go",
         "pgwire_encode.go",
         "placeholders.go",
+        "plsql.go",
         "prepare.go",
         "pretty.go",
         "reassign_owned_by.go",
