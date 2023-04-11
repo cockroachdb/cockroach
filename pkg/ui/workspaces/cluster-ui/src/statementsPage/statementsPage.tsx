@@ -180,29 +180,6 @@ function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
   });
 }
 
-// filterBySearchQuery returns true if a search query matches the statement.
-export function filterBySearchQuery(
-  statement: AggregateStatistics,
-  search: string,
-): boolean {
-  const matchString = statement.label.toLowerCase();
-  const matchFingerPrintId = statement.aggregatedFingerprintHexID;
-
-  // If search term is wrapped by quotes, do the exact search term.
-  if (search.startsWith('"') && search.endsWith('"')) {
-    search = search.substring(1, search.length - 1);
-
-    return matchString.includes(search) || matchFingerPrintId.includes(search);
-  }
-
-  return search
-    .toLowerCase()
-    .split(" ")
-    .every(
-      val => matchString.includes(val) || matchFingerPrintId.includes(val),
-    );
-}
-
 export class StatementsPage extends React.Component<
   StatementsPageProps,
   StatementsPageState
@@ -534,13 +511,7 @@ export class StatementsPage extends React.Component<
       databases,
       hasAdminRole,
     } = this.props;
-    const data = filteredStatementsData(
-      filters,
-      search,
-      statements,
-      nodeRegions,
-      isTenant,
-    );
+    const data = filteredStatementsData(filters, search, statements, isTenant);
 
     const apps = getAppsFromStmtsResponseMemoized(
       this.props.statementsResponse?.data,
