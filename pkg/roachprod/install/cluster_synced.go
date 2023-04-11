@@ -640,7 +640,7 @@ func (c *SyncedCluster) Monitor(
 
 			snippet := `
 {{ if .IgnoreEmpty }}
-if [ ! -f "{{.Store}}/CURRENT" ]; then
+if ! ls {{.Store}}/marker.* 1> /dev/null 2>&1; then
   echo "skipped"
   exit 0
 fi
