@@ -42,6 +42,7 @@ type state struct {
 	quickLivenessMap        map[NodeID]livenesspb.NodeLivenessStatus
 	capacityChangeListeners []CapacityChangeListener
 	newCapacityListeners    []NewCapacityListener
+	configChangeListeners   []ConfigChangeListener
 	capacityOverrides       map[StoreID]CapacityOverride
 	ranges                  *rmap
 	clusterinfo             ClusterInfo
@@ -479,6 +480,10 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 
 	// Add a usage info struct.
 	_ = s.usageInfo.storeRef(storeID)
+
+	for _, listener := range s.configChangeListeners {
+		listener.StoreAddNotify(storeID, s)
+	}
 
 	return store, true
 }
@@ -1168,6 +1173,13 @@ func (s *state) publishNewCapacityEvent(capacity roachpb.StoreCapacity, storeID 
 	for _, listener := range s.newCapacityListeners {
 		listener.NewCapacityNotify(capacity, storeID)
 	}
+}
+
+// RegisterCapacityListener registers a listener which will be called when
+// a new store capacity has been generated from scratch, for a specific
+// store.
+func (s *state) RegisterConfigChangeListener(listener ConfigChangeListener) {
+	s.configChangeListeners = append(s.configChangeListeners, listener)
 }
 
 // node is an implementation of the Node interface.
