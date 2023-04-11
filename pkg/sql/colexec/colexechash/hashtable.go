@@ -158,10 +158,11 @@ type hashTableProbeBuffer struct {
 	// from the corresponding "candidate" tuple specified in ToCheckID.
 	differs []bool
 
-	// distinct stores whether the probing tuple is distinct (i.e. it will
-	// differ from all possible "candidates"). Used only for the hash aggregator
-	// and the unordered distinct.
-	distinct []bool
+	// foundNull stores whether the probing tuple contains a NULL value in the
+	// key. Populated only by the unordered distinct when
+	// allowNullEquality=false since a single NULL makes the key distinct from
+	// all other possible "candidates".
+	foundNull []bool
 
 	// HeadID stores the keyID of the tuple that has an equality match with the
 	// tuple at any given index from the probing batch. Unlike First where we
@@ -407,7 +408,7 @@ func probeBufferInternalMaxMemUsed() int64 {
 	//   - hashTableProbeBuffer.HashBuffer
 	// - two bool slices:
 	//   - hashTableProbeBuffer.differs
-	//   - hashTableProbeBuffer.distinct.
+	//   - hashTableProbeBuffer.foundNull.
 	return memsize.Uint64*int64(5*coldata.BatchSize()) + memsize.Bool*int64(2*coldata.BatchSize())
 }
 
@@ -819,7 +820,10 @@ func (p *hashTableProbeBuffer) SetupLimitedSlices(length int, buildMode HashTabl
 	p.HeadID = colexecutils.MaybeAllocateLimitedUint64Array(p.HeadID, length)
 	p.differs = colexecutils.MaybeAllocateLimitedBoolArray(p.differs, length)
 	if buildMode == HashTableDistinctBuildMode {
-		p.distinct = colexecutils.MaybeAllocateLimitedBoolArray(p.distinct, length)
+		// TODO(yuzefovich): foundNull is not used by the hash aggregator, so we
+		// could only allocate it when the hash table is used by the unordered
+		// distinct.
+		p.foundNull = colexecutils.MaybeAllocateLimitedBoolArray(p.foundNull, length)
 	}
 	// Note that we don't use maybeAllocate* methods below because ToCheckID and
 	// ToCheck don't need to be zeroed out when reused.
@@ -854,8 +858,10 @@ func (ht *HashTable) CheckBuildForDistinct(
 	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
-		if ht.ProbeScratch.distinct[toCheck] {
-			ht.ProbeScratch.distinct[toCheck] = false
+		if ht.ProbeScratch.foundNull[toCheck] {
+			// foundNull is only set to true when allowNullEquality is false, so
+			// since this tuple has a NULL value, it's distinct from all others.
+			ht.ProbeScratch.foundNull[toCheck] = false
 			// Calculated using the convention: keyID = keys.indexOf(key) + 1.
 			ht.ProbeScratch.HeadID[toCheck] = toCheck + 1
 		} else if ht.ProbeScratch.differs[toCheck] {
@@ -882,6 +888,9 @@ func (ht *HashTable) CheckBuildForAggregation(
 	if probeSel == nil {
 		colexecerror.InternalError(errors.AssertionFailedf("invalid selection vector"))
 	}
+	if !ht.allowNullEquality {
+		colexecerror.InternalError(errors.AssertionFailedf("NULL equality is assumed to be allowed in CheckBuildForAggregation"))
+	}
 	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
 	toCheckSlice := ht.ProbeScratch.ToCheck
@@ -889,21 +898,17 @@ func (ht *HashTable) CheckBuildForAggregation(
 	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
-		if !ht.ProbeScratch.distinct[toCheck] {
-			// If the tuple is distinct, it doesn't have a duplicate in the
-			// hash table already, so we skip it.
-			if ht.ProbeScratch.differs[toCheck] {
-				// We have a hash collision, so we need to continue probing
-				// against the next tuples in the hash chain.
-				ht.ProbeScratch.differs[toCheck] = false
-				//gcassert:bce
-				toCheckSlice[nDiffers] = toCheck
-				nDiffers++
-			} else {
-				// This tuple has a duplicate in the hash table, so we remember
-				// keyID of that duplicate.
-				ht.ProbeScratch.HeadID[toCheck] = ht.ProbeScratch.ToCheckID[toCheck]
-			}
+		if ht.ProbeScratch.differs[toCheck] {
+			// We have a hash collision, so we need to continue probing against
+			// the next tuples in the hash chain.
+			ht.ProbeScratch.differs[toCheck] = false
+			//gcassert:bce
+			toCheckSlice[nDiffers] = toCheck
+			nDiffers++
+		} else {
+			// This tuple has a duplicate in the hash table, so we remember
+			// keyID of that duplicate.
+			ht.ProbeScratch.HeadID[toCheck] = ht.ProbeScratch.ToCheckID[toCheck]
 		}
 	}
 	return nDiffers
@@ -947,7 +952,7 @@ func (ht *HashTable) Reset(_ context.Context) {
 	// ht.ProbeScratch.Next, ht.Same and ht.Visited are reset separately before
 	// they are used (these slices are not used in all of the code paths).
 	// ht.ProbeScratch.HeadID, ht.ProbeScratch.differs, and
-	// ht.ProbeScratch.distinct are reset before they are used (these slices
+	// ht.ProbeScratch.foundNull are reset before they are used (these slices
 	// are limited in size and dynamically allocated).
 	// ht.ProbeScratch.ToCheckID and ht.ProbeScratch.ToCheck don't need to be
 	// reset because they are populated manually every time before checking the

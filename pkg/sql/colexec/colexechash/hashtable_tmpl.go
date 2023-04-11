@@ -203,13 +203,7 @@ func _CHECK_COL_BODY(
 					// {{end}}
 				} else {
 					// {{if .SelectDistinct}}
-					// {{/*
-					//     We know that nulls are distinct (because
-					//     allowNullEquality is false) and our probing tuple has
-					//     a NULL value in the current column, so the probing
-					//     tuple is distinct from the build table.
-					// */}}
-					ht.ProbeScratch.distinct[toCheck] = true
+					ht.ProbeScratch.foundNull[toCheck] = true
 					// {{else}}
 					ht.ProbeScratch.ToCheckID[toCheck] = 0
 					// {{end}}
@@ -454,23 +448,28 @@ func (ht *HashTable) checkColForDistinctTuples(
 // {{end}}
 
 // {{/*
-func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DISTINCT bool) { // */}}
+func _CHECK_BODY(
+	_SELECT_SAME_TUPLES bool,
+	_DELETING_PROBE_MODE bool,
+	_SELECT_DISTINCT bool,
+	_ALLOW_NULL_EQUALITY bool,
+) { // */}}
 	// {{define "checkBody" -}}
 	toCheckSlice := ht.ProbeScratch.ToCheck
 	_ = toCheckSlice[nToCheck-1]
 	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
-		// {{if .SelectDistinct}}
-		if ht.ProbeScratch.distinct[toCheck] {
+		// {{if and (.SelectDistinct) (not .AllowNullEquality)}}
+		if ht.ProbeScratch.foundNull[toCheck] {
 			// {{/*
 			//     The hash table is used for the unordered distinct operator.
 			//     This code block is only relevant when we're probing the batch
 			//     against itself in order to separate all tuples in the batch
 			//     into equality buckets (where equality buckets are specified
-			//     by the same HeadID values). In this case we see that the
-			//     probing tuple is distinct (i.e. it is unique in the batch),
-			//     so we want to mark it as equal to itself only.
+			//     by the same HeadID values) and when NULLs are considered
+			//     different. In this case we see that the probing tuple has a
+			//     NULL value, so we want to mark it as equal to itself only.
 			// */}}
 			ht.ProbeScratch.HeadID[toCheck] = toCheck + 1
 			continue
@@ -594,12 +593,12 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 	switch ht.probeMode {
 	case HashTableDefaultProbeMode:
 		if ht.Same != nil {
-			_CHECK_BODY(true, false, false)
+			_CHECK_BODY(true, false, false, false)
 		} else {
-			_CHECK_BODY(false, false, false)
+			_CHECK_BODY(false, false, false, false)
 		}
 	case HashTableDeletingProbeMode:
-		_CHECK_BODY(false, true, false)
+		_CHECK_BODY(false, true, false, false)
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unsupported hash table probe mode"))
 	}
@@ -617,7 +616,11 @@ func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 		ht.checkColAgainstItselfForDistinct(vecs[i], nToCheck, sel)
 	}
 	nDiffers := uint64(0)
-	_CHECK_BODY(false, false, true)
+	if ht.allowNullEquality {
+		_CHECK_BODY(false, false, true, true)
+	} else {
+		_CHECK_BODY(false, false, true, false)
+	}
 	return nDiffers
 }
 
@@ -632,8 +635,8 @@ func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 	hashBuffer := ht.ProbeScratch.HashBuffer
 	_ = HeadIDs[batchLength-1]
 	_ = hashBuffer[batchLength-1]
-	// Reuse the buffer allocated for distinct.
-	visited := ht.ProbeScratch.distinct
+	// Reuse the buffer allocated for foundNull.
+	visited := ht.ProbeScratch.foundNull
 	copy(visited, colexecutils.ZeroBoolColumn)
 	distinctCount := 0
 	for i := 0; i < batchLength && distinctCount < batchLength; i++ {
