@@ -705,8 +705,7 @@ func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
 		}
 
 		// Add this group's columns and find closure with new columns.
-		equiv := fdset.ComputeEquivGroup(group.AnyID())
-		closure.UnionWith(equiv)
+		closure = fdset.ComputeEquivGroupAndUnionWith(closure, group.AnyID())
 		// ComputeClosureNoCopy is safe here because of the implicit copy in the
 		// ComputeClosure above.
 		closure = fdset.ComputeClosureNoCopy(closure)
