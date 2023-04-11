@@ -338,7 +338,7 @@ func LoadRangeInfo(s State, rangeInfos ...RangeInfo) {
 		startKey := ToKey(r.Descriptor.StartKey.AsRawKey())
 		rng := s.RangeFor(startKey)
 		for _, desc := range r.Descriptor.InternalReplicas {
-			if _, ok := s.AddReplica(rng.RangeID(), StoreID(desc.StoreID)); !ok {
+			if _, ok := s.AddReplica(rng.RangeID(), StoreID(desc.StoreID), roachpb.VOTER_FULL); !ok {
 				panic(fmt.Sprintf(
 					"Unable to load config: add replica to store %d failed at "+
 						"for range %s replicas %s",
