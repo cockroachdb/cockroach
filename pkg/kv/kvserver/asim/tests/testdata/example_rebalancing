@@ -2,7 +2,10 @@
 # where there are 7 stores, 7 ranges and initially the replicas are placed
 # following a skewed distribution (where s1 has the most replicas, s2 has half
 # as many as s1...).
-gen_state stores=7 ranges=7 placement_skew=true
+gen_cluster stores=7
+----
+
+gen_ranges ranges=7 placement_skew=true
 ----
 
 # Create a load generator, where there are 7k ops/s and the access follows a
