@@ -10,6 +10,8 @@
 
 package intsets
 
+import "github.com/cockroachdb/errors"
+
 // Sparse is a set of integers. It is not thread-safe. It must be copied with
 // the Copy method.
 //
@@ -150,6 +152,22 @@ func (s *Sparse) Remove(i int) {
 		}
 		last = sb
 	}
+}
+
+// KeepOne removes all but one integer in the set. No-op if the set is empty.
+// This implementation happens to keep the minimum integer in the set.
+func (s *Sparse) KeepOne() {
+	sb := &s.root
+	if sb.empty() {
+		return
+	}
+	b, ok := sb.bits.Next(0)
+	if !ok {
+		panic(errors.AssertionFailedf("expected non-empty bitmap"))
+	}
+	sb.bits = bitmap{}
+	sb.bits.Set(b)
+	sb.next = nil
 }
 
 // Contains returns true if the set contains the given integer.

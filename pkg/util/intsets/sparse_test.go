@@ -61,10 +61,21 @@ func TestSparse(t *testing.T) {
 						sCopy.Copy(s)
 						s = sCopy
 					case 3:
-						// Clear operation infrequently.
-						if rng.Intn(20) == 0 {
+						switch rng.Intn(20) {
+						case 0:
+							// Clear operation infrequently.
 							o.Clear()
 							s.Clear()
+						case 1:
+							// KeepOne operation infrequently.
+							o.KeepOne()
+							if o.Len() > 1 {
+								t.Fatalf("expected oracle to have length 0 or 1, has %d", o.Len())
+							}
+							s.KeepOne()
+							if s.Len() > 1 {
+								t.Fatalf("expected sparse to have length 0 or 1, has %d", s.Len())
+							}
 						}
 					}
 					validateSparseSet(t, o, s)

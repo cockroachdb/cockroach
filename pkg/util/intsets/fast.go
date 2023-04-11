@@ -93,6 +93,32 @@ func (s *Fast) Remove(i int) {
 	}
 }
 
+// KeepOne removes all but one integer in the set. No-op if the set is empty.
+// This implementation will keep the minimum integer in the range [0, 128), if
+// one exists. If not, it will keep the minimum integer in the set.
+func (s *Fast) KeepOne() {
+	if s.Empty() {
+		return
+	}
+	if s.small == (bitmap{}) {
+		// The large set must have at least one integer if the entire set is
+		// non-empty and the small set is empty.
+		s.large.KeepOne()
+		return
+	}
+	// If the small set is non-empty, remove all but one integer.
+	i, ok := s.small.Next(0)
+	if !ok {
+		panic(errors.AssertionFailedf("expected non-empty bitmap"))
+	}
+	s.small = bitmap{}
+	s.small.Set(i)
+	if s.large != nil {
+		// Clear the large set.
+		s.large.Clear()
+	}
+}
+
 // Contains returns true if the set contains the value.
 func (s Fast) Contains(i int) bool {
 	if i >= 0 && i < smallCutoff {
