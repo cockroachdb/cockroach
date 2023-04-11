@@ -101,6 +101,16 @@ export function shortStatement(
   }
 }
 
+function formatStringArray(databases: string): string {
+  try {
+    // Case where the database is returned as an array in a string form.
+    return JSON.parse(databases).join(", ");
+  } catch (e) {
+    // Case where the database is a single value as a string.
+    return databases;
+  }
+}
+
 export function makeStatementsColumns(
   statements: AggregateStatistics[],
   selectedApps: string[],
@@ -173,7 +183,7 @@ export function makeStatementsColumns(
       name: "database",
       title: statisticsTableTitles.database(statType),
       className: cx("statements-table__col-database"),
-      cell: (stmt: AggregateStatistics) => stmt.database,
+      cell: (stmt: AggregateStatistics) => formatStringArray(stmt.database),
       sort: (stmt: AggregateStatistics) => stmt.database,
       showByDefault: false,
     },
