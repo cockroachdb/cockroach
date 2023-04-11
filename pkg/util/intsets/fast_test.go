@@ -45,6 +45,14 @@ func TestFast(t *testing.T) {
 						in[v] = false
 						s.Remove(v)
 					}
+					if rng.Intn(50) == 0 {
+						// KeepOne operation infrequently.
+						keepOne(in)
+						s.KeepOne()
+						if s.Len() > 1 {
+							t.Fatalf("expected set to have length 0 or 1, has %d", s.Len())
+						}
+					}
 					empty := true
 					for j := minVal; j < maxVal; j++ {
 						empty = empty && !in[j]
@@ -326,4 +334,34 @@ func TestFastString(t *testing.T) {
 			}
 		})
 	}
+}
+
+// keepOne mimics Fast.KeepOne.
+func keepOne(in map[int]bool) {
+	preferred := func(x int) bool {
+		return x >= 0 && x < smallCutoff
+	}
+	min := MaxInt
+	empty := true
+	for k, b := range in {
+		if !b {
+			continue
+		}
+		empty = false
+		switch {
+		case preferred(k) && preferred(min) && k < min:
+			min = k
+		case preferred(k) && !preferred(min):
+			min = k
+		case !preferred(k) && preferred(min):
+			// no-op
+		case k < min:
+			min = k
+		}
+		in[k] = false
+	}
+	if empty {
+		return
+	}
+	in[min] = true
 }
