@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
@@ -155,18 +157,26 @@ func TestErrorDuringExtendedProtocolCommit(t *testing.T) {
 	var db *gosql.DB
 
 	var shouldErrorOnAutoCommit syncutil.AtomicBool
+	var traceID tracingpb.TraceID
 	params, _ := CreateTestServerParams()
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		DisableAutoCommitDuringExec: true,
 		BeforeExecute: func(ctx context.Context, stmt string) {
 			if strings.Contains(stmt, "SELECT 'cat'") {
 				shouldErrorOnAutoCommit.Set(true)
+				traceID = tracing.SpanFromContext(ctx).TraceID()
 			}
 		},
 		BeforeAutoCommit: func(ctx context.Context, stmt string) error {
 			if shouldErrorOnAutoCommit.Get() {
 				shouldErrorOnAutoCommit.Set(false)
-				return errors.New("injected error")
+				// Only inject the error if we're in the same trace as the one we
+				// saw when executing our test query. This is so we know that this
+				// autocommit corresponds to our test qyery rather than an internal
+				// query.
+				if traceID == tracing.SpanFromContext(ctx).TraceID() {
+					return errors.New("injected error")
+				}
 			}
 			return nil
 		},
