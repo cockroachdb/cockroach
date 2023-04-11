@@ -471,7 +471,7 @@ func makeFunctionArg(
 	}
 
 	if arg.DefaultVal != nil {
-		return descpb.FunctionDescriptor_Argument{}, unimplemented.New("CREATE FUNCTION argument", "default value")
+		return descpb.FunctionDescriptor_Argument{}, unimplemented.NewWithIssue(100962, "default value")
 	}
 
 	return pbArg, nil
