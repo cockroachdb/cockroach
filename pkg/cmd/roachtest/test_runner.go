@@ -1141,12 +1141,13 @@ func (r *testRunner) teardownTest(
 			}
 		}
 
-		// Detect dead nodes. This will call t.Error() when appropriate. Note that
-		// we do this even if t.Failed() since a down node is often the reason for
-		// the failure, and it's helpful to have the listing in the teardown logs
-		// as well (it is typically already in the main logs if the test used a
-		// monitor).
-		c.assertNoDeadNode(ctx, t)
+		// When a dead node is detected, the subsequent post validation queries are likely
+		// to hang (reason unclear), and eventually timeout according to the statement_timeout.
+		// If this occurs frequently enough, we can look at skipping post validations on a node
+		// failure (or even on any test failure).
+		if err := c.assertNoDeadNode(ctx, t); err != nil {
+			t.Error(err)
+		}
 
 		// We avoid trying to do this when t.Failed() (and in particular when there
 		// are dead nodes) because for reasons @tbg does not understand this gets
@@ -1160,6 +1161,8 @@ func (r *testRunner) teardownTest(
 		if db != nil {
 			defer db.Close()
 			t.L().Printf("running validation checks on node %d (<10m)", node)
+			// If this validation fails due to a timeout, it is very likely that
+			// the Replica Divegence check below will also fail.
 			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
 				c.FailOnInvalidDescriptors(ctx, db, t)
 			}

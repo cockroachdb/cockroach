@@ -1393,6 +1393,7 @@ func (c *clusterImpl) CopyRoachprodState(ctx context.Context) error {
 //
 // `COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob ./cockroach start-single-node --insecure --store=$(mktemp -d)`
 func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger) error {
+	l.Printf("fetching timeseries data\n")
 	return contextutil.RunWithTimeout(ctx, "fetch tsdata", 5*time.Minute, func(ctx context.Context) error {
 		node := 1
 		for ; node <= c.spec.NodeCount; node++ {
@@ -1507,21 +1508,47 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 	})
 }
 
-// checkNoDeadNode reports an error (via `t.Error`) if nodes that have a populated
+// checkNoDeadNode returns an error if at least one of the nodes that have a populated
 // data dir are found to be not running. It prints both to t.L() and the test
 // output.
-func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) {
+func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
-		return
+		return nil
 	}
 
-	_, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
-	// If there's an error, it means either that the monitor command failed
-	// completely, or that it found a dead node worth complaining about.
+	t.L().Printf("checking for dead nodes")
+	ch, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
+
+	// An error here means there was a problem initialising a SyncedCluster.
 	if err != nil {
-		t.Errorf("dead node detection: %s", err)
+		return err
 	}
+
+	isDead := func(msg string) bool {
+		if msg == "" || msg == "skipped" {
+			return false
+		}
+		// A numeric message is a PID and implies that the node is running.
+		_, err := strconv.Atoi(msg)
+		return err != nil
+	}
+
+	deadNodes := 0
+	for n := range ch {
+		// If there's an error, it means either that the monitor command failed
+		// completely, or that it found a dead node worth complaining about.
+		if n.Err != nil || isDead(n.Msg) {
+			deadNodes++
+		}
+
+		t.L().Printf("node %d: err=%v,msg=%s", n.Node, n.Err, n.Msg)
+	}
+
+	if deadNodes > 0 {
+		return errors.Newf("%d dead node(s) detected", deadNodes)
+	}
+	return nil
 }
 
 // ConnectToLiveNode returns a connection to a live node in the cluster. If no
@@ -1560,6 +1587,7 @@ func (c *clusterImpl) ConnectToLiveNode(ctx context.Context, t *testImpl) (*gosq
 // FailOnInvalidDescriptors fails the test if there exists any descriptors in
 // the crdb_internal.invalid_objects virtual table.
 func (c *clusterImpl) FailOnInvalidDescriptors(ctx context.Context, db *gosql.DB, t *testImpl) {
+	t.L().Printf("checking for invalid descriptors")
 	if err := contextutil.RunWithTimeout(
 		ctx, "invalid descriptors check", 5*time.Minute,
 		func(ctx context.Context) error {
@@ -1574,6 +1602,7 @@ func (c *clusterImpl) FailOnInvalidDescriptors(ctx context.Context, db *gosql.DB
 // crdb_internal.check_consistency(true, ”, ”) indicates that any ranges'
 // replicas are inconsistent with each other.
 func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, db *gosql.DB, t *testImpl) {
+	t.L().Printf("checking for replica divergence")
 	if err := contextutil.RunWithTimeout(
 		ctx, "consistency check", 5*time.Minute,
 		func(ctx context.Context) error {
