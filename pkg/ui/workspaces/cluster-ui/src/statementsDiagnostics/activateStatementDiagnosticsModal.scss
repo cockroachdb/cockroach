@@ -40,6 +40,7 @@
 
   &__heading {
     font-family: $font-family--semi-bold;
+    margin-bottom: $spacing-smaller;
   }
 
   &__btn-group {
@@ -48,7 +49,6 @@
   }
 
   &__radio-btn {
-    margin-top: $spacing-smaller;
     font-family: $font-family--base;
     font-weight: $font-weight--light;
   }
@@ -57,12 +57,29 @@
     display: flex;
     flex-direction: column;
     margin-left: $spacing-medium;
+    margin-top: $spacing-smaller;
   }
 
   &__min-latency-container {
     display: flex;
     flex-direction: row;
     margin-top: $spacing-smaller;
+  }
+
+  &__trace-container {
+    display: flex;
+    flex-direction: row;
+    margin-top: $spacing-smaller;
+    margin-bottom: $spacing-smaller;
+  }
+
+  &__trace-warning {
+    font-family: $font-family--base;
+    font-size: $font-size--small;
+    font-weight: $font-weight--light;
+    margin-left: $spacing-x-small;
+    white-space: break-spaces;
+    width: 240px;
   }
 
   &__expires-after-container {
@@ -74,6 +91,12 @@
     font-family: $font-family--base;
     font-weight: $font-weight--light;
     display: inline;
+  }
+
+  &__select-text {
+    font-family: $font-family--base;
+    font-weight: $font-weight--light;
+    display: block;
   }
 
   &__input {
@@ -99,25 +122,25 @@
         margin-top: 0;
       }
     }
+    &__trace {
+      width: 215px;
+      height: 40px;
+      line-height: 40px;
+
+      .ant-select-selection__rendered {
+        margin-top: 0;
+      }
+    }
   }
 
   &__alert {
     margin-top: $spacing-small;
     margin-left: $spacing-medium;
+    white-space: normal;
+  }
 
-    .ant-alert-info {
-      background-color: $colors--primary-blue-alert;
-      border: none;
-    }
-
-    &-icon {
-      margin-top: $spacing-medium-small;
-    }
-
-    &-message {
-      font-family: $font-family--base;
-      font-weight: $font-weight--light;
-      margin-left: $spacing-smaller;
-    }
+  &__warning {
+    margin: $spacing-xx-small 0px;
+    white-space: normal;
   }
 }
