@@ -19,6 +19,7 @@ go_library(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/gossip",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/allocatorimpl",
@@ -52,6 +53,7 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":state"],
     deps = [
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/workload",
         "//pkg/kv/kvserver/load",

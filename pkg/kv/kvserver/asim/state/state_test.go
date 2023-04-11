@@ -592,7 +592,7 @@ func TestSetSpanConfig(t *testing.T) {
 func TestSetNodeLiveness(t *testing.T) {
 	t.Run("liveness func", func(t *testing.T) {
 		s := LoadClusterInfo(
-			ClusterInfoWithStoreCount(3),
+			ClusterInfoWithStoreCount(3, 1),
 			config.DefaultSimulationSettings(),
 		)
 
@@ -611,7 +611,7 @@ func TestSetNodeLiveness(t *testing.T) {
 
 	t.Run("node count fn", func(t *testing.T) {
 		s := LoadClusterInfo(
-			ClusterInfoWithStoreCount(10),
+			ClusterInfoWithStoreCount(10, 1),
 			config.DefaultSimulationSettings(),
 		)
 
