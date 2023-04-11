@@ -22,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/storerebalancer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Simulator simulates an entire cluster, and runs the allocator of each store
 // in that cluster.
 type Simulator struct {
+	log.AmbientContext
 	curr time.Time
 	end  time.Time
 	// interval is the step between ticks for active simulaton components, such
@@ -52,6 +54,8 @@ type Simulator struct {
 	changer  state.Changer
 	gossip   gossip.Gossip
 	shuffler func(n int, swap func(i, j int))
+
+	settings *config.SimulationSettings
 
 	metrics *metrics.Tracker
 	history History
@@ -83,73 +87,89 @@ func NewSimulator(
 	srs := make(map[state.StoreID]storerebalancer.StoreRebalancer)
 	changer := state.NewReplicaChanger()
 	controllers := make(map[state.StoreID]op.Controller)
-	for _, store := range initialState.Stores() {
-		storeID := store.StoreID()
-		allocator := initialState.MakeAllocator(storeID)
-		storePool := initialState.StorePool(storeID)
-		// TODO(kvoli): Instead of passing in individual settings to construct
-		// the each ticking component, pass a pointer to the simulation
-		// settings struct. That way, the settings may be adjusted dynamically
-		// during a simulation.
-		rqs[storeID] = queue.NewReplicateQueue(
-			storeID,
-			changer,
-			settings.ReplicaChangeDelayFn(),
-			allocator,
-			storePool,
-			settings.StartTime,
-		)
-		sqs[storeID] = queue.NewSplitQueue(
-			storeID,
-			changer,
-			settings.RangeSplitDelayFn(),
-			settings.RangeSizeSplitThreshold,
-			settings.StartTime,
-		)
-		pacers[storeID] = queue.NewScannerReplicaPacer(
-			initialState.NextReplicasFn(storeID),
-			settings.PacerLoopInterval,
-			settings.PacerMinIterInterval,
-			settings.PacerMaxIterIterval,
-			settings.Seed,
-		)
-		controllers[storeID] = op.NewController(
-			changer,
-			allocator,
-			storePool,
-			settings,
-			storeID,
-		)
-		srs[storeID] = storerebalancer.NewStoreRebalancer(
-			settings.StartTime,
-			storeID,
-			controllers[storeID],
-			allocator,
-			storePool,
-			settings,
-			storerebalancer.GetStateRaftStatusFn(initialState),
-		)
-	}
 
 	s := &Simulator{
-		curr:        settings.StartTime,
-		end:         settings.StartTime.Add(duration),
-		interval:    settings.TickInterval,
-		generators:  wgs,
-		state:       initialState,
-		changer:     changer,
-		rqs:         rqs,
-		sqs:         sqs,
-		controllers: controllers,
-		srs:         srs,
-		pacers:      pacers,
-		gossip:      gossip.NewGossip(initialState, settings),
-		metrics:     m,
-		shuffler:    state.NewShuffler(settings.Seed),
-		history:     History{Recorded: [][]metrics.StoreMetrics{}},
+		AmbientContext: log.MakeTestingAmbientCtxWithNewTracer(),
+		curr:           settings.StartTime,
+		end:            settings.StartTime.Add(duration),
+		interval:       settings.TickInterval,
+		generators:     wgs,
+		state:          initialState,
+		changer:        changer,
+		rqs:            rqs,
+		sqs:            sqs,
+		controllers:    controllers,
+		srs:            srs,
+		pacers:         pacers,
+		gossip:         gossip.NewGossip(initialState, settings),
+		metrics:        m,
+		shuffler:       state.NewShuffler(settings.Seed),
+		// TODO(kvoli): Keeping the state around is a bit hacky, find a better
+		// method of reporting the ranges.
+		history:  History{Recorded: [][]metrics.StoreMetrics{}},
+		settings: settings,
 	}
+
+	for _, store := range initialState.Stores() {
+		storeID := store.StoreID()
+		s.addStore(storeID, settings.StartTime)
+	}
+	s.state.RegisterConfigChangeListener(s)
+
 	m.Register(&s.history)
 	return s
+}
+
+// StoreAddNotify notifies that a new store has been added with ID storeID.
+func (s *Simulator) StoreAddNotify(storeID state.StoreID, _ state.State) {
+	s.addStore(storeID, s.curr)
+}
+
+func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
+	allocator := s.state.MakeAllocator(storeID)
+	storePool := s.state.StorePool(storeID)
+	// TODO(kvoli): Instead of passing in individual settings to construct
+	// the each ticking component, pass a pointer to the simulation
+	// settings struct. That way, the settings may be adjusted dynamically
+	// during a simulation.
+	s.rqs[storeID] = queue.NewReplicateQueue(
+		storeID,
+		s.changer,
+		s.settings.ReplicaChangeDelayFn(),
+		allocator,
+		storePool,
+		tick,
+	)
+	s.sqs[storeID] = queue.NewSplitQueue(
+		storeID,
+		s.changer,
+		s.settings.RangeSplitDelayFn(),
+		s.settings.RangeSizeSplitThreshold,
+		tick,
+	)
+	s.pacers[storeID] = queue.NewScannerReplicaPacer(
+		s.state.NextReplicasFn(storeID),
+		s.settings.PacerLoopInterval,
+		s.settings.PacerMinIterInterval,
+		s.settings.PacerMaxIterIterval,
+		s.settings.Seed,
+	)
+	s.controllers[storeID] = op.NewController(
+		s.changer,
+		allocator,
+		storePool,
+		s.settings,
+		storeID,
+	)
+	s.srs[storeID] = storerebalancer.NewStoreRebalancer(
+		tick,
+		storeID,
+		s.controllers[storeID],
+		allocator,
+		storePool,
+		s.settings,
+		storerebalancer.GetStateRaftStatusFn(s.state),
+	)
 }
 
 // GetNextTickTime returns a simulated tick time, or an indication that the
