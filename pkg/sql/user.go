@@ -78,6 +78,7 @@ func GetUserSessionInitInfo(
 	ctx context.Context, execCfg *ExecutorConfig, user username.SQLUsername, databaseName string,
 ) (
 	exists bool,
+	userID username.SQLUserID,
 	canLoginSQL bool,
 	canLoginDBConsole bool,
 	isSuperuser bool,
@@ -109,7 +110,7 @@ func GetUserSessionInitInfo(
 
 		// Root user cannot have password expiry and must have login.
 		// It also never has default settings applied to it.
-		return true, true, true, true, nil, rootFn, nil
+		return true, username.RootUserID, true, true, true, nil, rootFn, nil
 	}
 
 	var authInfo sessioninit.AuthInfo
@@ -169,6 +170,7 @@ func GetUserSessionInitInfo(
 	}
 
 	return authInfo.UserExists,
+		authInfo.UserID,
 		canLoginSQL,
 		authInfo.CanLoginDBConsoleRoleOpt,
 		isSuperuser,
@@ -255,13 +257,13 @@ func retrieveAuthInfo(
 	// Use fully qualified table name to avoid looking up "".system.users.
 	// We use a nil txn as login is not tied to any transaction state, and
 	// we should always look up the latest data.
-	const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
+	const getUserIDAndHashedPassword = `SELECT user_id, "hashedPassword" FROM system.public.users ` +
 		`WHERE username=$1`
 	ie := f.Executor()
 	values, err := ie.QueryRowEx(
-		ctx, "get-hashed-pwd", nil, /* txn */
+		ctx, "get-user-id-and-hashed-pwd", nil, /* txn */
 		sessiondata.RootUserSessionDataOverride,
-		getHashedPassword, user)
+		getUserIDAndHashedPassword, user)
 
 	if err != nil {
 		return aInfo, errors.Wrapf(err, "error looking up user %s", user)
@@ -270,6 +272,9 @@ func retrieveAuthInfo(
 	if values != nil {
 		aInfo.UserExists = true
 		if v := values[0]; v != tree.DNull {
+			aInfo.UserID = username.SQLUserID(tree.MustBeDOid(v).Oid)
+		}
+		if v := values[1]; v != tree.DNull {
 			hashedPassword = []byte(*(v.(*tree.DBytes)))
 		}
 	}
