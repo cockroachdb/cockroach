@@ -84,7 +84,7 @@ func TestReplicateQueue(t *testing.T) {
 		s := state.NewStateWithReplCounts(replicaCounts, 2 /* replsPerRange */, 1000 /* keyspace */, testSettings)
 		spanConfig := roachpb.SpanConfig{NumVoters: replicationFactor, NumReplicas: replicationFactor}
 		for _, r := range s.Ranges() {
-			s.SetSpanConfig(r.RangeID(), spanConfig)
+			s.SetSpanConfigForRange(r.RangeID(), spanConfig)
 		}
 		return s
 	}
