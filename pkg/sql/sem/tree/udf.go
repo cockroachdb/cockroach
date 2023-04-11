@@ -287,13 +287,21 @@ type FunctionBodyStr string
 // Format implements the NodeFormatter interface.
 func (node FunctionBodyStr) Format(ctx *FmtCtx) {
 	ctx.WriteString("AS ")
-	ctx.WriteString("$$")
+	if ctx.flags.HasFlags(FmtTagDollarQuotes) {
+		ctx.WriteString("$funcbody$")
+	} else {
+		ctx.WriteString("$$")
+	}
 	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
 		ctx.WriteString("_")
 	} else {
 		ctx.WriteString(string(node))
 	}
-	ctx.WriteString("$$")
+	if ctx.flags.HasFlags(FmtTagDollarQuotes) {
+		ctx.WriteString("$funcbody$")
+	} else {
+		ctx.WriteString("$$")
+	}
 }
 
 // FuncParams represents a list of FuncParam.
