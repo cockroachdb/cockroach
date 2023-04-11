@@ -376,7 +376,7 @@ func execStatementWithTestDeps(
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
 		for _, stmt := range stmts {
-			state, err = scbuild.Build(ctx, deps, state, stmt.AST)
+			state, err = scbuild.Build(ctx, deps, state, stmt.AST, nil /* memAcc */)
 			require.NoError(t, err, "error in builder")
 			stateAfterBuildingEachStatement = append(stateAfterBuildingEachStatement, state)
 			state, _, err = scrun.RunStatementPhase(ctx, s.TestingKnobs(), s, state)
