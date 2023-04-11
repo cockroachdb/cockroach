@@ -49,6 +49,7 @@ type storeGossiper struct {
 	lastIntervalGossip time.Time
 	descriptorGetter   func(cached bool) roachpb.StoreDescriptor
 	pendingOutbound    *roachpb.StoreDescriptor
+	addingStore        bool
 }
 
 func newStoreGossiper(descriptorGetter func(cached bool) roachpb.StoreDescriptor) *storeGossiper {
@@ -112,10 +113,14 @@ func NewGossip(s state.State, settings *config.SimulationSettings) *gossip {
 	}
 	s.RegisterCapacityChangeListener(g)
 	s.RegisterCapacityListener(g)
+	s.RegisterConfigChangeListener(g)
 	return g
 }
 
 func (g *gossip) addStoreToGossip(s state.State, storeID state.StoreID) {
+	// Add the store gossip in an "adding" state initially, this is to avoid
+	// recursive calls to get the store descriptor.
+	g.storeGossip[storeID] = &storeGossiper{addingStore: true}
 	g.storeGossip[storeID] = newStoreGossiper(func(cached bool) roachpb.StoreDescriptor {
 		return s.StoreDescriptors(cached, storeID)[0]
 	})
@@ -160,7 +165,9 @@ func (g *gossip) Tick(ctx context.Context, tick time.Time, s state.State) {
 // for the store with ID StoreID.
 func (g *gossip) CapacityChangeNotify(cce kvserver.CapacityChangeEvent, storeID state.StoreID) {
 	if sg, ok := g.storeGossip[storeID]; ok {
-		sg.local.MaybeGossipOnCapacityChange(context.Background(), cce)
+		if !sg.addingStore {
+			sg.local.MaybeGossipOnCapacityChange(context.Background(), cce)
+		}
 	} else {
 		panic(
 			fmt.Sprintf("capacity change event but no found store in store gossip with ID %d",
@@ -173,13 +180,20 @@ func (g *gossip) CapacityChangeNotify(cce kvserver.CapacityChangeEvent, storeID 
 // the store with ID StoreID.
 func (g *gossip) NewCapacityNotify(capacity roachpb.StoreCapacity, storeID state.StoreID) {
 	if sg, ok := g.storeGossip[storeID]; ok {
-		sg.local.UpdateCachedCapacity(capacity)
+		if !sg.addingStore {
+			sg.local.UpdateCachedCapacity(capacity)
+		}
 	} else {
 		panic(
 			fmt.Sprintf("new capacity event but no found store in store gossip with ID %d",
 				storeID,
 			))
 	}
+}
+
+// StoreAddNotify notifies that a new store has been added with ID storeID.
+func (g *gossip) StoreAddNotify(storeID state.StoreID, s state.State) {
+	g.addStoreToGossip(s, storeID)
 }
 
 func (g *gossip) maybeUpdateState(tick time.Time, s state.State) {
