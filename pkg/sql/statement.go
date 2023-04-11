@@ -13,12 +13,13 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // Statement contains a statement with optional expected result columns and metadata.
 type Statement struct {
-	parser.Statement
+	statements.Statement[tree.Statement]
 
 	StmtNoConstants string
 	StmtSummary     string
@@ -39,7 +40,9 @@ type Statement struct {
 	Prepared *PreparedStatement
 }
 
-func makeStatement(parserStmt parser.Statement, queryID clusterunique.ID) Statement {
+func makeStatement(
+	parserStmt statements.Statement[tree.Statement], queryID clusterunique.ID,
+) Statement {
 	return Statement{
 		Statement:       parserStmt,
 		StmtNoConstants: formatStatementHideConstants(parserStmt.AST),
