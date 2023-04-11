@@ -50,7 +50,7 @@ func (c *serverController) sqlMux(
 			// servers to see and process the cancel at approximately the
 			// same time as every other.
 			if err := c.stopper.RunAsyncTask(ctx, "cancel", func(ctx context.Context) {
-				s.server.handleCancel(ctx, status.CancelKey)
+				s.handleCancel(ctx, status.CancelKey)
 			}); err != nil {
 				return err
 			}
