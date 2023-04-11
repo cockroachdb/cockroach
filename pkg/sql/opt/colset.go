@@ -63,6 +63,9 @@ func (s *ColSet) Add(col ColumnID) {
 // Remove removes a column from the set. No-op if the column is not in the set.
 func (s *ColSet) Remove(col ColumnID) { s.set.Remove(setVal(col)) }
 
+// KeepOne removes all but one column from the set. No-op if the set is empty.
+func (s *ColSet) KeepOne() { s.set.KeepOne() }
+
 // Contains returns true if the set contains the column.
 func (s ColSet) Contains(col ColumnID) bool { return s.set.Contains(setVal(col)) }
 

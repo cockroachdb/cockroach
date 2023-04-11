@@ -761,7 +761,8 @@ func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 		// Set group to columns equivalent to an arbitrary column in the group
 		// based on the FD set. This can both add and remove columns from the
 		// group.
-		group.Group = fdset.ComputeEquivGroup(group.AnyID())
+		group.Group.KeepOne()
+		group.Group = fdset.ComputeEquivClosureNoCopy(group.Group)
 
 		// Add this group's columns and find closure with the new columns.
 		closure.UnionWith(group.Group)
