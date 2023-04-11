@@ -693,11 +693,11 @@ export function createSelectorForCachedDataField<
       state.cachedData[fieldName] as CachedDataReducerState<RespType>,
     (response): clusterUiApi.RequestState<RespType> => {
       return {
-        data: response.data,
-        error: response.lastError,
-        valid: response.valid,
-        inFlight: response.inFlight,
-        lastUpdated: response.setAt,
+        data: response?.data,
+        error: response?.lastError,
+        valid: response?.valid ?? false,
+        inFlight: response?.inFlight ?? false,
+        lastUpdated: response?.setAt,
       };
     },
   );

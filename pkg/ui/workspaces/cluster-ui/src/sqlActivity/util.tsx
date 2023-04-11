@@ -8,37 +8,60 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Filters, getTimeValueInSeconds } from "../queryFilter";
-import { AggregateStatistics } from "../statementsTable";
+import { containAny } from "src/util/arrays";
 import {
   CollectedStatementStatistics,
-  containAny,
-  FixFingerprintHexValue,
   flattenStatementStats,
-  unset,
-} from "../util";
-import { filterBySearchQuery } from "../statementsPage";
+} from "src/util/appStats/appStats";
+import { FixFingerprintHexValue } from "src/util/format";
+import { unset } from "src/util/constants";
 import { createSelector } from "@reduxjs/toolkit";
-import { SqlStatsResponse } from "../api";
+import { SqlStatsResponse } from "src/api/statementsApi";
+import { Filters, getTimeValueInSeconds } from "src/queryFilter";
+import { AggregateStatistics } from "src/statementsTable";
+
+// filterBySearchQuery returns true if a search query matches the statement.
+export function filterBySearchQuery(
+  statement: AggregateStatistics,
+  search: string,
+): boolean {
+  const matchString = statement.label.toLowerCase();
+  const matchFingerPrintId = statement.aggregatedFingerprintHexID;
+
+  // If search term is wrapped by quotes, do the exact search term.
+  if (search.startsWith('"') && search.endsWith('"')) {
+    search = search.substring(1, search.length - 1);
+
+    return matchString.includes(search) || matchFingerPrintId.includes(search);
+  }
+
+  return search
+    .toLowerCase()
+    .split(" ")
+    .every(
+      val => matchString.includes(val) || matchFingerPrintId.includes(val),
+    );
+}
 
 export function filteredStatementsData(
   filters: Filters,
   search: string,
   statements: AggregateStatistics[],
-  nodeRegions: { [key: string]: string },
   isTenant: boolean,
 ): AggregateStatistics[] {
   const timeValue = getTimeValueInSeconds(filters);
   const sqlTypes =
     filters.sqlType?.length > 0
-      ? filters.sqlType.split(",").map(function (sqlType: string) {
+      ? filters.sqlType.split(",").map(sqlType => {
           // Adding "Type" to match the value on the Statement
           // Possible values: TypeDDL, TypeDML, TypeDCL and TypeTCL
-          return "Type" + sqlType;
+          return "Type" + sqlType.trim();
         })
       : [];
   const databases =
-    filters.database?.length > 0 ? filters.database.split(",") : [];
+    filters.database?.length > 0
+      ? filters.database.split(",").map(db => db.trim())
+      : [];
   if (databases.includes(unset)) {
     databases.push("");
   }
@@ -67,6 +90,10 @@ export function filteredStatementsData(
         return databases.length === 0 || databases.includes(statement.database);
       }
     })
+    .filter(
+      statement =>
+        !appNames?.length || appNames.includes(statement.applicationName),
+    )
     .filter(statement => (filters.fullScan ? statement.fullScan : true))
     .filter(
       statement =>
@@ -74,13 +101,13 @@ export function filteredStatementsData(
     )
     .filter(
       statement =>
-        sqlTypes.length == 0 || sqlTypes.includes(statement.stats.sql_type),
+        sqlTypes.length === 0 || sqlTypes.includes(statement.stats.sql_type),
     )
     .filter(
       // The statement must contain at least one value from the selected regions
       // list if the list is not empty.
       statement =>
-        regions.length == 0 ||
+        regions.length === 0 ||
         statement.stats.regions?.some(region => regions.includes(region)),
     )
     .filter(
@@ -90,7 +117,7 @@ export function filteredStatementsData(
       // about nodes.
       statement =>
         isTenant ||
-        nodes.length == 0 ||
+        nodes.length === 0 ||
         (statement.stats.nodes &&
           containAny(
             statement.stats.nodes.map(node => "n" + node),
@@ -101,54 +128,65 @@ export function filteredStatementsData(
       search ? filterBySearchQuery(statement, search) : true,
     );
 }
+// convertRawStmtsToAggregateStatistics converts statements from the
+// server response to AggregatedStatistics[]
+export const convertRawStmtsToAggregateStatistics = (
+  stmts: CollectedStatementStatistics[],
+): AggregateStatistics[] => {
+  if (!stmts?.length) return [];
 
+  const statements = flattenStatementStats(stmts);
+
+  return statements.map(stmt => {
+    return {
+      aggregatedFingerprintID: stmt.statement_fingerprint_id?.toString(),
+      aggregatedFingerprintHexID: FixFingerprintHexValue(
+        stmt.statement_fingerprint_id?.toString(16),
+      ),
+      label: stmt.statement,
+      summary: stmt.statement_summary,
+      aggregatedTs: stmt.aggregated_ts,
+      implicitTxn: stmt.implicit_txn,
+      fullScan: stmt.full_scan,
+      database: stmt.database,
+      applicationName: stmt.app,
+      stats: stmt.stats,
+    };
+  });
+};
+
+// We separate the memoized version for testing.
 export const convertRawStmtsToAggregateStatisticsMemoized = createSelector(
   (stmts: CollectedStatementStatistics[]) => stmts,
-  (stmts): AggregateStatistics[] => {
-    if (!stmts?.length) return [];
-
-    const statements = flattenStatementStats(stmts);
-
-    return statements.map(stmt => {
-      return {
-        aggregatedFingerprintID: stmt.statement_fingerprint_id?.toString(),
-        aggregatedFingerprintHexID: FixFingerprintHexValue(
-          stmt.statement_fingerprint_id?.toString(16),
-        ),
-        label: stmt.statement,
-        summary: stmt.statement_summary,
-        aggregatedTs: stmt.aggregated_ts,
-        implicitTxn: stmt.implicit_txn,
-        fullScan: stmt.full_scan,
-        database: stmt.database,
-        applicationName: stmt.app,
-        stats: stmt.stats,
-      };
-    });
-  },
+  (stmts): AggregateStatistics[] => convertRawStmtsToAggregateStatistics(stmts),
 );
 
-// getAppsFromStmtsResponseMemoized returns the array of all unique apps within the data.
+// getAppsFromStmtsResponse returns the array of all unique apps within the data.
+export const getAppsFromStmtsResponse = (data: SqlStatsResponse): string[] => {
+  if (!data?.statements) {
+    return [];
+  }
+
+  const apps = new Set<string>();
+  data.statements?.forEach(statement => {
+    const app = statement.key?.key_data?.app;
+
+    if (app == null) return;
+
+    if (
+      data.internal_app_name_prefix &&
+      app.startsWith(data.internal_app_name_prefix)
+    ) {
+      apps.add(data.internal_app_name_prefix);
+      return;
+    }
+    apps.add(app ? app : unset);
+  });
+
+  return Array.from(apps).sort();
+};
+
 export const getAppsFromStmtsResponseMemoized = createSelector(
   (data: SqlStatsResponse) => data,
-  data => {
-    if (!data) {
-      return [];
-    }
-
-    const apps = new Set<string>();
-    data.statements?.forEach(statement => {
-      const app = statement.key.key_data.app;
-      if (
-        data.internal_app_name_prefix &&
-        app.startsWith(data.internal_app_name_prefix)
-      ) {
-        apps.add(data.internal_app_name_prefix);
-        return;
-      }
-      apps.add(app ? app : unset);
-    });
-
-    return Array.from(apps).sort();
-  },
+  data => getAppsFromStmtsResponse(data),
 );
