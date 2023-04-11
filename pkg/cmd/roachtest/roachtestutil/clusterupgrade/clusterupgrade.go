@@ -133,7 +133,7 @@ func InstallFixtures(
 		}
 	}
 	// Extract fixture. Fail if there's already an LSM in the store dir.
-	c.Run(ctx, nodes, "cd {store-dir} && [ ! -f {store-dir}/CURRENT ] && tar -xf fixture.tgz")
+	c.Run(ctx, nodes, "ls {store-dir}/marker.* 1> /dev/null 2>&1 && exit 1 || (cd {store-dir} && tar -xf fixture.tgz)")
 	return nil
 }
 
