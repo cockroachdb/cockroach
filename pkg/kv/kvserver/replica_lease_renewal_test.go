@@ -36,7 +36,10 @@ func TestLeaseRenewer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 100689)
+	// stressrace and deadlock make the test too slow, resulting in an inability
+	// to maintain leases and Raft leadership.
+	skip.UnderStressRace(t)
+	skip.UnderDeadlock(t)
 
 	// When kv.expiration_leases_only.enabled is true, the Raft scheduler is
 	// responsible for extensions, but we still track expiration leases for system
@@ -48,9 +51,18 @@ func TestLeaseRenewer(t *testing.T) {
 		tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
+				// Speed up lease extensions to speed up the test, but adjust tick-based
+				// timeouts to retain their default wall-time values.
 				RaftConfig: base.RaftConfig{
-					RangeLeaseDuration: time.Second,
-					RaftTickInterval:   100 * time.Millisecond,
+					RangeLeaseRenewalFraction:  0.95,
+					RaftTickInterval:           100 * time.Millisecond,
+					RaftElectionTimeoutTicks:   20,
+					RaftReproposalTimeoutTicks: 30,
+				},
+				Knobs: base.TestingKnobs{
+					Store: &StoreTestingKnobs{
+						LeaseRenewalDurationOverride: 100 * time.Millisecond,
+					},
 				},
 			},
 		})
@@ -173,7 +185,8 @@ func TestLeaseRenewer(t *testing.T) {
 		assertStoreLeaseRenewer(desc.RangeID)
 
 		// Transfer the lease to a different leaseholder, and assert that the lease is
-		// still extended.
+		// still extended. Wait for the split to apply on all nodes first.
+		require.NoError(t, tc.WaitForFullReplication())
 		lease, _ := getNodeReplica(1, desc.RangeID).GetLease()
 		target := tc.Target(lookupNode(lease.Replica.NodeID%3 + 1))
 		tc.TransferRangeLeaseOrFatal(t, desc, target)
