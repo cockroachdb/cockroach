@@ -52,7 +52,7 @@ func TestCanHaveCompositeKeyEncoding(t *testing.T) {
 		{types.IntArray, false},
 		{types.Interval, false},
 		{types.IntervalArray, false},
-		{types.Jsonb, false},
+		{types.Jsonb, true},
 		{types.Name, false},
 		{types.Oid, false},
 		{types.String, false},

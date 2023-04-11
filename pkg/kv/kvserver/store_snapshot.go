@@ -77,6 +77,15 @@ var snapshotPrioritizationEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+// snapshotMetrics contains metrics on the number and size of snapshots in
+// progress or in the snapshot queue.
+type snapshotMetrics struct {
+	QueueLen        *metric.Gauge
+	QueueSize       *metric.Gauge
+	InProgress      *metric.Gauge
+	TotalInProgress *metric.Gauge
+}
+
 // incomingSnapshotStream is the minimal interface on a GRPC stream required
 // to receive a snapshot over the network.
 type incomingSnapshotStream interface {
@@ -678,13 +687,19 @@ func (s *Store) reserveReceiveSnapshot(
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveReceiveSnapshot")
 	defer sp.Finish()
 
-	return s.throttleSnapshot(ctx, s.snapshotApplyQueue,
-		int(header.SenderQueueName), header.SenderQueuePriority,
+	return s.throttleSnapshot(ctx,
+		s.snapshotApplyQueue,
+		int(header.SenderQueueName),
+		header.SenderQueuePriority,
 		-1,
 		header.RangeSize,
 		header.RaftMessageRequest.RangeID,
-		s.metrics.RangeSnapshotRecvQueueLength,
-		s.metrics.RangeSnapshotRecvInProgress, s.metrics.RangeSnapshotRecvTotalInProgress,
+		snapshotMetrics{
+			s.metrics.RangeSnapshotRecvQueueLength,
+			s.metrics.RangeSnapshotRecvQueueSize,
+			s.metrics.RangeSnapshotRecvInProgress,
+			s.metrics.RangeSnapshotRecvTotalInProgress,
+		},
 	)
 }
 
@@ -698,14 +713,19 @@ func (s *Store) reserveSendSnapshot(
 		fn()
 	}
 
-	return s.throttleSnapshot(ctx, s.snapshotSendQueue,
+	return s.throttleSnapshot(ctx,
+		s.snapshotSendQueue,
 		int(req.SenderQueueName),
 		req.SenderQueuePriority,
 		req.QueueOnDelegateLen,
 		rangeSize,
 		req.RangeID,
-		s.metrics.RangeSnapshotSendQueueLength,
-		s.metrics.RangeSnapshotSendInProgress, s.metrics.RangeSnapshotSendTotalInProgress,
+		snapshotMetrics{
+			s.metrics.RangeSnapshotSendQueueLength,
+			s.metrics.RangeSnapshotSendQueueSize,
+			s.metrics.RangeSnapshotSendInProgress,
+			s.metrics.RangeSnapshotSendTotalInProgress,
+		},
 	)
 }
 
@@ -720,7 +740,7 @@ func (s *Store) throttleSnapshot(
 	maxQueueLength int64,
 	rangeSize int64,
 	rangeID roachpb.RangeID,
-	waitingSnapshotMetric, inProgressSnapshotMetric, totalInProgressSnapshotMetric *metric.Gauge,
+	snapshotMetrics snapshotMetrics,
 ) (cleanup func(), funcErr error) {
 
 	tBegin := timeutil.Now()
@@ -742,8 +762,13 @@ func (s *Store) throttleSnapshot(
 			}
 		}()
 
-		waitingSnapshotMetric.Inc(1)
-		defer waitingSnapshotMetric.Dec(1)
+		// Total bytes of snapshots waiting in the snapshot queue
+		snapshotMetrics.QueueSize.Inc(rangeSize)
+		defer snapshotMetrics.QueueSize.Dec(rangeSize)
+		// Total number of snapshots waiting in the snapshot queue
+		snapshotMetrics.QueueLen.Inc(1)
+		defer snapshotMetrics.QueueLen.Dec(1)
+
 		queueCtx := ctx
 		if deadline, ok := queueCtx.Deadline(); ok {
 			// Enforce a more strict timeout for acquiring the snapshot reservation to
@@ -778,10 +803,10 @@ func (s *Store) throttleSnapshot(
 		}
 
 		// Counts non-empty in-progress snapshots.
-		inProgressSnapshotMetric.Inc(1)
+		snapshotMetrics.InProgress.Inc(1)
 	}
 	// Counts all in-progress snapshots.
-	totalInProgressSnapshotMetric.Inc(1)
+	snapshotMetrics.TotalInProgress.Inc(1)
 
 	// The choice here is essentially arbitrary, but with a default range size of 128mb-512mb and the
 	// Raft snapshot rate limiting of 32mb/s, we expect to spend less than 16s per snapshot.
@@ -804,10 +829,10 @@ func (s *Store) throttleSnapshot(
 	return func() {
 		s.metrics.ReservedReplicaCount.Dec(1)
 		s.metrics.Reserved.Dec(rangeSize)
-		totalInProgressSnapshotMetric.Dec(1)
+		snapshotMetrics.TotalInProgress.Dec(1)
 
 		if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
-			inProgressSnapshotMetric.Dec(1)
+			snapshotMetrics.InProgress.Dec(1)
 			snapshotQueue.Release(permit)
 		}
 	}, nil

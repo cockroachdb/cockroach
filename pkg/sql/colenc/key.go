@@ -180,6 +180,21 @@ func encodeKeys[T []byte | roachpb.Key](
 			}
 			kys[r] = b
 		}
+	case types.JsonFamily:
+		jsonVector := vec.JSON()
+		for r := 0; r < count; r++ {
+			b := kys[r]
+			if partialIndexAndNullCheck(kys, r, start, nulls, dir) {
+				continue
+			}
+			var err error
+			jsonObj := jsonVector.Get(r + start)
+			b, err = jsonObj.EncodeForwardIndex(b, dir)
+			if err != nil {
+				return err
+			}
+			kys[r] = b
+		}
 	default:
 		if buildutil.CrdbTestBuild {
 			if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) != typeconv.DatumVecCanonicalTypeFamily {

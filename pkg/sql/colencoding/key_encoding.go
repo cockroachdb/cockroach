@@ -187,12 +187,21 @@ func decodeTableKeyToCol(
 		}
 		vecs.IntervalCols[colIdx][rowIdx] = d
 	case types.JsonFamily:
-		// Don't attempt to decode the JSON value. Instead, just return the
-		// remaining bytes of the key.
-		var jsonLen int
-		jsonLen, err = encoding.PeekLength(key)
-		vecs.JSONCols[colIdx].Bytes.Set(rowIdx, key[:jsonLen])
-		rkey = key[jsonLen:]
+		// Decode the JSON, and then store the bytes in the
+		// vector in the value-encoded format.
+		// TODO (shivam): Make it possible for the vector to store
+		// key-encoded JSONs instead of value-encoded JSONs.
+		var d tree.Datum
+		encDir := encoding.Ascending
+		if dir == catenumpb.IndexColumn_DESC {
+			encDir = encoding.Descending
+		}
+		d, rkey, err = keyside.Decode(da, valType, key, encDir)
+		json, ok := d.(*tree.DJSON)
+		if !ok {
+			return nil, false, scratch, errors.AssertionFailedf("Could not type assert into DJSON")
+		}
+		vecs.JSONCols[colIdx].Set(rowIdx, json.JSON)
 	case types.EncodedKeyFamily:
 		// Don't attempt to decode the inverted key.
 		keyLen, err := encoding.PeekLength(key)
