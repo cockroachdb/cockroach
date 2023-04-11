@@ -372,8 +372,8 @@ func (r *Replica) leasePostApplyLocked(
 		r.gossipFirstRangeLocked(ctx)
 	}
 
-	if newLease.Type() == roachpb.LeaseExpiration && (leaseChangingHands || maybeSplit) &&
-		iAmTheLeaseHolder && r.ownsValidLeaseRLocked(ctx, now) {
+	isExpirationLease := newLease.Type() == roachpb.LeaseExpiration
+	if isExpirationLease && (leaseChangingHands || maybeSplit) && iAmTheLeaseHolder {
 		if r.requiresExpirationLeaseRLocked() {
 			// Whenever we first acquire an expiration-based lease for a range that
 			// requires it (i.e. the liveness or meta ranges), notify the lease
@@ -388,7 +388,7 @@ func (r *Replica) leasePostApplyLocked(
 			case r.store.renewableLeasesSignal <- struct{}{}:
 			default:
 			}
-		} else if !r.shouldUseExpirationLeaseRLocked() {
+		} else if !r.shouldUseExpirationLeaseRLocked() && r.ownsValidLeaseRLocked(ctx, now) {
 			// We received an expiration lease for a range that shouldn't keep using
 			// it, most likely as part of a lease transfer (which is always
 			// expiration-based). We've also applied it before it has expired. Upgrade
