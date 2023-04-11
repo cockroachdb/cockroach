@@ -2698,7 +2698,11 @@ func (d *trackingListener) Close() error {
 }
 
 func newRegisteredServer(
-	t testing.TB, ctx context.Context, stopper *stop.Stopper, clusterID uuid.UUID, nodeID roachpb.NodeID,
+	t testing.TB,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	clusterID uuid.UUID,
+	nodeID roachpb.NodeID,
 ) (*Context, string, chan *PingRequest, *trackingListener) {
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 1))
 	// We don't want to stall sending to this channel.
