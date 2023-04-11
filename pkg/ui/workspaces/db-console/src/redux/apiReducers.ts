@@ -32,8 +32,9 @@ import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 import * as protos from "src/js/protos";
 import Long from "long";
-import { createSelector } from "reselect";
+import { createSelector, ParametricSelector } from "reselect";
 import { AdminUIState } from "./state";
+import { RouteComponentProps } from "react-router";
 
 const { generateStmtDetailsToID, HexStringToInt64String } = util;
 
@@ -698,6 +699,46 @@ export function createSelectorForCachedDataField<
         valid: response?.valid ?? false,
         inFlight: response?.inFlight ?? false,
         lastUpdated: response?.setAt,
+      };
+    },
+  );
+}
+
+// Extract the data types we store in the KeyedCachedData manager.
+type KeyedCachedDataTypesInState = {
+  [K in keyof APIReducersState]: APIReducersState[K] extends KeyedCachedDataReducerState<unknown>
+    ? APIReducersState[K][string]["data"]
+    : never;
+}[keyof APIReducersState];
+
+export function createSelectorForKeyedCachedDataField<
+  RespType extends KeyedCachedDataTypesInState,
+>(
+  fieldName: KeysMatchingType<
+    APIReducersState,
+    KeyedCachedDataReducerState<RespType>
+  >,
+  selectKey: ParametricSelector<unknown, RouteComponentProps, string>,
+) {
+  return createSelector<
+    AdminUIState,
+    RouteComponentProps,
+    KeyedCachedDataReducerState<RespType>,
+    string,
+    clusterUiApi.RequestState<RespType>
+  >(
+    (state: AdminUIState, _props: RouteComponentProps) =>
+      state.cachedData[fieldName] as KeyedCachedDataReducerState<RespType>,
+    selectKey,
+    (response, key): clusterUiApi.RequestState<RespType> => {
+      const cachedEntry = response[key];
+
+      return {
+        data: cachedEntry?.data,
+        error: cachedEntry?.lastError,
+        valid: cachedEntry?.valid ?? true,
+        inFlight: cachedEntry?.inFlight ?? false,
+        lastUpdated: cachedEntry?.setAt,
       };
     },
   );
