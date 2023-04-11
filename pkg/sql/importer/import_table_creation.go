@@ -162,7 +162,6 @@ func MakeSimpleTableDescriptor(
 		TxnTimestamp:       timeutil.Unix(0, walltime),
 		Settings:           st,
 	}
-	evalCtx.SetDeprecatedContext(ctx)
 	affected := make(map[descpb.ID]*tabledesc.Mutable)
 
 	tableDesc, err := sql.NewTableDesc(

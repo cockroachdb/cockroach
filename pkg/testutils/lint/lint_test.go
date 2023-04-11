@@ -1788,16 +1788,6 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/server/dumpstore.*\.go.*"io/ioutil" has been deprecated since Go 1\.16: As of Go 1\.16`),
 				stream.GrepNot(`pkg/server/profiler/profilestore_test\.go.*"io/ioutil" has been deprecated since Go 1\.16`),
 				stream.GrepNot(`pkg/util/log/file_api\.go.*"io/ioutil" has been deprecated since Go 1\.16`),
-				// TODO(yuzefovich): remove these exclusions.
-				stream.GrepNot(`pkg/sql/conn_executor.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/instrumentation.go:.*SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/planner.go:.*SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/schema_changer.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/distsql/server.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/execinfra/processorsbase.go:.*SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/importer/import_table_creation.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/row/expr_walker_test.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/schemachanger/scbuild/tree_context_builder.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
 				stream.GrepNot(`pkg/sql/schemachanger/scplan/internal/rules/.*/.*go:.* should not use dot imports \(ST1001\)`),
 				// TODO(yuzefovich): remove this exclusion (#100438).
 				stream.GrepNot(`pkg/util/bulk/tracing_aggregator.go:.*SetLazyTagLocked is deprecated: .*`),

@@ -213,7 +213,7 @@ func newBuilderState(
 	bs := builderState{
 		ctx:                      ctx,
 		clusterSettings:          d.ClusterSettings(),
-		evalCtx:                  newEvalCtx(ctx, d),
+		evalCtx:                  newEvalCtx(d),
 		semaCtx:                  newSemaCtx(d),
 		cr:                       d.CatalogReader(),
 		tr:                       d.TableReader(),

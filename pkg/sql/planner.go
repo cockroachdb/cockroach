@@ -542,7 +542,6 @@ func internalExtendedEvalCtx(
 		Descs:           tables,
 		indexUsageStats: indexUsageStats,
 	}
-	ret.SetDeprecatedContext(ctx)
 	ret.copyFromExecCfg(execCfg)
 	return ret
 }
