@@ -46,6 +46,7 @@ go_library(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
         "//pkg/util/cache",
