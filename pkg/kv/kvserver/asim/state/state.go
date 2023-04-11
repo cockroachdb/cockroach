@@ -90,6 +90,8 @@ type State interface {
 	// AddStore modifies the state to include one additional store on the Node
 	// with ID NodeID. This fails if no Node exists with ID NodeID.
 	AddStore(NodeID) (Store, bool)
+	// SetStoreCapacity sets the capacity in bytes of the store with ID storeID.
+	SetStoreCapacity(StoreID, int64)
 	// CanAddReplica returns whether adding a replica for the Range with ID RangeID
 	// to the Store with ID StoreID is valid.
 	CanAddReplica(RangeID, StoreID) bool
@@ -121,6 +123,9 @@ type State interface {
 	// SetSpanConfig sets the span config for all ranges represented by the span,
 	// splitting if necessary.
 	SetSpanConfig(roachpb.Span, roachpb.SpanConfig)
+	// SetRangeBytes sets the size of the range with ID RangeID to be equal to
+	// the bytes given.
+	SetRangeBytes(RangeID, int64)
 	// ValidTransfer returns whether transferring the lease for the Range with ID
 	// RangeID, to the Store with ID StoreID is valid.
 	ValidTransfer(RangeID, StoreID) bool

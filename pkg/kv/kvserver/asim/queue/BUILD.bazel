@@ -12,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/asim/state",
