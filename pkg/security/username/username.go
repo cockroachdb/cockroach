@@ -17,9 +17,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 // SQLUsername represents a username valid inside SQL.
@@ -62,11 +62,14 @@ type SQLUsername struct {
 	u string
 }
 
+// SQLUserID represents the ID of a SQL user.
+type SQLUserID oid.Oid
+
 // EmptyRole is a pseudo-role that's used in system tables.
 const EmptyRole = ""
 
 // EmptyRoleID is the ID for EmptyRole.
-const EmptyRoleID = 0
+const EmptyRoleID SQLUserID = 0
 
 // EmptyRoleName is the SQLUsername for EmptyRole.
 func EmptyRoleName() SQLUsername { return SQLUsername{EmptyRole} }
@@ -78,7 +81,7 @@ func (s SQLUsername) IsEmptyRole() bool { return s.u == EmptyRole }
 const NodeUser = "node"
 
 // NodeUserID is the ID for NodeUser.
-const NodeUserID = 3
+const NodeUserID SQLUserID = 3
 
 // NodeUserName is the SQLUsername for NodeUser.
 func NodeUserName() SQLUsername { return SQLUsername{NodeUser} }
@@ -90,7 +93,7 @@ func (s SQLUsername) IsNodeUser() bool { return s.u == NodeUser }
 const RootUser = "root"
 
 // RootUserID is the ID for RootUser.
-const RootUserID = 1
+const RootUserID SQLUserID = 1
 
 // RootUserName is the SQLUsername for RootUser.
 func RootUserName() SQLUsername { return SQLUsername{RootUser} }
@@ -102,7 +105,7 @@ func (s SQLUsername) IsRootUser() bool { return s.u == RootUser }
 const AdminRole = "admin"
 
 // AdminRoleID is the ID for admin.
-const AdminRoleID = 2
+const AdminRoleID SQLUserID = 2
 
 // AdminRoleName is the SQLUsername for AdminRole.
 func AdminRoleName() SQLUsername { return SQLUsername{AdminRole} }
@@ -117,7 +120,7 @@ func (s SQLUsername) IsAdminRole() bool { return s.u == AdminRole }
 const PublicRole = "public"
 
 // PublicRoleID is the ID for public role.
-const PublicRoleID = 4
+const PublicRoleID SQLUserID = 4
 
 // PublicRoleName is the SQLUsername for PublicRole.
 func PublicRoleName() SQLUsername { return SQLUsername{PublicRole} }
@@ -129,7 +132,7 @@ func (s SQLUsername) IsPublicRole() bool { return s.u == PublicRole }
 // Right now this should always hold as we cannot rename any of the
 // roles defined in this map.
 // TODO(richardjcai): Add checks to ensure that this mapping always holds.
-var roleNameToID = map[SQLUsername]catid.RoleID{
+var roleNameToID = map[SQLUsername]SQLUserID{
 	RootUserName():   RootUserID,
 	AdminRoleName():  AdminRoleID,
 	NodeUserName():   NodeUserID,
@@ -137,7 +140,7 @@ var roleNameToID = map[SQLUsername]catid.RoleID{
 }
 
 // GetDefaultRoleNameToID returns a role id for default roles.
-func GetDefaultRoleNameToID(username SQLUsername) catid.RoleID {
+func GetDefaultRoleNameToID(username SQLUsername) SQLUserID {
 	return roleNameToID[username]
 }
 
