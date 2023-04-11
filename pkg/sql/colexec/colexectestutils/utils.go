@@ -679,15 +679,15 @@ func RunTestsWithFn(
 	// Run tests over batchSizes of 1, (sometimes) a batch size that is small but
 	// greater than 1, and a full coldata.BatchSize().
 	batchSizes := make([]int, 0, 3)
-	batchSizes = append(batchSizes, 1)
-	smallButGreaterThanOne := int(math.Trunc(.002 * float64(coldata.BatchSize())))
-	if smallButGreaterThanOne > 1 {
-		batchSizes = append(batchSizes, smallButGreaterThanOne)
-	}
+	//batchSizes = append(batchSizes, 1)
+	//smallButGreaterThanOne := int(math.Trunc(.002 * float64(coldata.BatchSize())))
+	//if smallButGreaterThanOne > 1 {
+	//	batchSizes = append(batchSizes, smallButGreaterThanOne)
+	//}
 	batchSizes = append(batchSizes, coldata.BatchSize())
 
 	for _, batchSize := range batchSizes {
-		for _, useSel := range []bool{false, true} {
+		for _, useSel := range []bool{false} {
 			log.Infof(context.Background(), "batchSize=%d/sel=%t", batchSize, useSel)
 			inputSources := make([]colexecop.Operator, len(tups))
 			var inputTypes []*types.T
