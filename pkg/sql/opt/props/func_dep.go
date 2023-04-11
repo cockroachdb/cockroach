@@ -679,6 +679,19 @@ func (f *FuncDepSet) ComputeClosureNoCopy(cols opt.ColSet) opt.ColSet {
 	return cols
 }
 
+// IsClosureEqual returns true if the closure of the given columns is equal to
+// the given column set. In other words, it returns true if ComputeClosure will
+// return the same set of columns that it is given.
+func (f *FuncDepSet) IsClosureEqual(cols opt.ColSet) bool {
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
+		if fd.strict && fd.from.SubsetOf(cols) && !fd.to.SubsetOf(cols) {
+			return false
+		}
+	}
+	return true
+}
+
 // AreColsEquiv returns true if the two given columns are equivalent.
 func (f *FuncDepSet) AreColsEquiv(col1, col2 opt.ColumnID) bool {
 	if col1 == col2 {
@@ -728,6 +741,49 @@ func (f *FuncDepSet) ComputeEquivClosureNoCopy(cols opt.ColSet) opt.ColSet {
 		}
 	}
 	return cols
+}
+
+// IsEquivClosureEqual returns true if the equivalence closure of the given
+// column is equal to the given column set. In other words, it returns true if
+// ComputeEquivClosure will return a set equal to cols when given a set with
+// only a single column, col.
+func (f *FuncDepSet) IsEquivClosureEqual(col opt.ColumnID, cols opt.ColSet) bool {
+	// subsetOfSingleCol returns true if set is a subset of the hypothetical set
+	// containing the single column, col. It helps avoid allocations by not
+	// creating a set for c.
+	isSubsetOfCol := func(set opt.ColSet) bool {
+		return set.Empty() || set.Len() == 1 && set.Contains(col)
+	}
+	// Don't need to get transitive closure, because equivalence closures are
+	// already maintained for every column.
+	for i := range f.deps {
+		fd := &f.deps[i]
+		if !fd.equiv {
+			continue
+		}
+		// Return false if the equivalence closure would contain columns that
+		// are not already in cols.
+		if isSubsetOfCol(fd.from) && !isSubsetOfCol(fd.to) && !fd.to.SubsetOf(cols) {
+			return false
+		}
+	}
+	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
+		cIncludedInEquivClosure := c == col
+		for i := range f.deps {
+			fd := &f.deps[i]
+			if !fd.equiv {
+				continue
+			}
+			if isSubsetOfCol(fd.from) && !isSubsetOfCol(fd.to) && fd.to.Contains(c) {
+				cIncludedInEquivClosure = true
+			}
+		}
+		// Return false if the equivalence closure will not contain c.
+		if !cIncludedInEquivClosure {
+			return false
+		}
+	}
+	return true
 }
 
 // ComputeEquivGroup returns the group of columns that are equivalent to the
