@@ -723,6 +723,12 @@ func (f *FuncDepSet) ComputeEquivClosureNoCopy(cols opt.ColSet) opt.ColSet {
 	return cols
 }
 
+// ComputeEquivGroup returns the group of columns that are equivalent to the
+// given column. See ComputeEquivClosure for more details.
+func (f *FuncDepSet) ComputeEquivGroup(rep opt.ColumnID) opt.ColSet {
+	return f.ComputeEquivClosureNoCopy(opt.MakeColSet(rep))
+}
+
 // AddStrictKey adds an FD for a new key. The given key columns are reduced to a
 // candidate key, and that becomes the determinant for the allCols column set.
 // The resulting FD is strict, meaning that a NULL key value always maps to the
@@ -1552,12 +1558,6 @@ func (f *FuncDepSet) EquivReps() opt.ColSet {
 		}
 	}
 	return reps
-}
-
-// ComputeEquivGroup returns the group of columns that are equivalent to the
-// given column. See ComputeEquivClosure for more details.
-func (f *FuncDepSet) ComputeEquivGroup(rep opt.ColumnID) opt.ColSet {
-	return f.ComputeEquivClosureNoCopy(opt.MakeColSet(rep))
 }
 
 // ensureKeyClosure checks whether the closure for this FD set's key (if there
