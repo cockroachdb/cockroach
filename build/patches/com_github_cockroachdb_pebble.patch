@@ -9,3 +9,14 @@ diff -urN a/internal/invariants/BUILD.bazel b/internal/invariants/BUILD.bazel
          "on.go",
          "race_off.go",
          "race_on.go",
+diff -urN a/objstorage/objstorageprovider/objiotracing/BUILD.bazel b/objstorage/objstorageprovider/objiotracing/BUILD.bazel
+--- a/objstorage/objstorageprovider/objiotracing/BUILD.bazel 1969-12-31 19:00:00.000000000 -0500
+--- b/objstorage/objstorageprovider/objiotracing/BUILD.bazel 2023-03-29 09:59:04.529504100 -0700
+@@ -5,6 +5,7 @@
+     srcs = [
+         "obj_io_tracing.go",
+         "obj_io_tracing_off.go",
++        "obj_io_tracing_on.go",
+     ],
+     importpath = "github.com/cockroachdb/pebble/objstorage/objstorageprovider/objiotracing",
+     visibility = ["//visibility:public"],
