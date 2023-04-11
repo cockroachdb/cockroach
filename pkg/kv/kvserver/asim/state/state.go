@@ -115,8 +115,11 @@ type State interface {
 	// RangeSpan returns the [StartKey, EndKey) for the range with ID RangeID
 	// if it exists, otherwise it returns false.
 	RangeSpan(RangeID) (Key, Key, bool)
-	// SetSpanConfig set the span config for the Range with ID RangeID.
-	SetSpanConfig(RangeID, roachpb.SpanConfig) bool
+	// SetSpanConfigForRange set the span config for the Range with ID RangeID.
+	SetSpanConfigForRange(RangeID, roachpb.SpanConfig) bool
+	// SetSpanConfig sets the span config for all ranges represented by the span,
+	// splitting if necessary.
+	SetSpanConfig(roachpb.Span, roachpb.SpanConfig)
 	// ValidTransfer returns whether transferring the lease for the Range with ID
 	// RangeID, to the Store with ID StoreID is valid.
 	ValidTransfer(RangeID, StoreID) bool
