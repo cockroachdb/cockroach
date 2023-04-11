@@ -658,7 +658,14 @@ func (f *FuncDepSet) InClosureOf(cols, in opt.ColSet) bool {
 // columns. Therefore, if two rows have the same value for (a), then the rows
 // will be duplicates, since all other columns will be equal.
 func (f *FuncDepSet) ComputeClosure(cols opt.ColSet) opt.ColSet {
-	cols = cols.Copy()
+	return f.ComputeClosureNoCopy(cols.Copy())
+}
+
+// ComputeClosureNoCopy is similar to ComputeClosure, but computes the closure
+// in-place (e.g. the argument ColSet will be mutated). It should only be used
+// when it is ok to mutate the argument. This avoids allocations when columns
+// overflow the small set of intsets.Fast.
+func (f *FuncDepSet) ComputeClosureNoCopy(cols opt.ColSet) opt.ColSet {
 	for i := 0; i < len(f.deps); i++ {
 		fd := &f.deps[i]
 
