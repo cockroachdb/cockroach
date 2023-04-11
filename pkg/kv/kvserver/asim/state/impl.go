@@ -544,13 +544,89 @@ func (s *state) removeReplica(rangeID RangeID, storeID StoreID) bool {
 	return true
 }
 
-// SetSpanConfig set the span config for the Range with ID RangeID.
-func (s *state) SetSpanConfig(rangeID RangeID, spanConfig roachpb.SpanConfig) bool {
+// SetSpanConfigForRange set the span config for the Range with ID RangeID.
+func (s *state) SetSpanConfigForRange(rangeID RangeID, spanConfig roachpb.SpanConfig) bool {
 	if rng, ok := s.ranges.rangeMap[rangeID]; ok {
 		rng.config = spanConfig
 		return true
 	}
 	return false
+}
+
+// SetSpanConfig sets the span config for all ranges represented by the span,
+// splitting if necessary.
+func (s *state) SetSpanConfig(span roachpb.Span, config roachpb.SpanConfig) {
+	startKey := ToKey(span.Key)
+	endKey := ToKey(span.EndKey)
+
+	// Decide whether we need to split due to the config intersecting an existing
+	// range boundary. Split if necessary. Then apply the span config to all the
+	// ranges contained within the span. e.g.
+	//   ranges r1: [a, c) r2: [c, z)
+	//   span: [b, f)
+	// resulting ranges:
+	//   [a, b)         - keeps old span config from [a,c)
+	//   [b, c) [c, f)  - gets the new span config passed in
+	//   [f, z)         - keeps old span config from [c,z)
+
+	splitsRequired := []Key{}
+	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: startKey}, func(i btree.Item) bool {
+		cur, _ := i.(*rng)
+		rStart := cur.startKey
+		// There are two cases we handle:
+		// (1) rStart == startKey: We don't need to split.
+		// (2) rStart < startKey:  We need to split into lhs [rStart, startKey) and
+		//     rhs [startKey, ...). Where the lhs does not have the span config
+		//     applied and the rhs does.
+		if rStart < startKey {
+			splitsRequired = append(splitsRequired, startKey)
+		}
+		return false
+	})
+
+	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: endKey}, func(i btree.Item) bool {
+		cur, _ := i.(*rng)
+		rEnd := cur.endKey
+		rStart := cur.startKey
+		if rStart == endKey {
+			return false
+		}
+		// There are two cases we handle:
+		// (1) rEnd == endKey: We don't need to split.
+		// (2) rEnd >  endKey: We need to split into lhs [..., endKey) and rhs
+		//     [endKey, rEnd). Where the lhs has the span config applied and the rhs
+		//     does not.
+		// Split required if its the last range we will hit.
+		if rEnd > endKey {
+			splitsRequired = append(splitsRequired, endKey)
+		}
+		return false
+	})
+
+	for _, splitKey := range splitsRequired {
+		// We panic here as we don't have any way to roll back the split if one
+		// succeeds and another doesn't
+		if _, _, ok := s.SplitRange(splitKey); !ok {
+			panic(fmt.Sprintf(
+				"programming error: unable to split range (key=%d) for set span "+
+					"config=%s, state=%s", splitKey, config.String(), s))
+		}
+	}
+
+	// Apply the span config to all the ranges affected.
+	s.ranges.rangeTree.AscendGreaterOrEqual(&rng{startKey: startKey}, func(i btree.Item) bool {
+		cur, _ := i.(*rng)
+		if cur.startKey == endKey {
+			return false
+		}
+		if cur.startKey > endKey {
+			panic("programming error: unexpected range found with start key > end key")
+		}
+		if !s.SetSpanConfigForRange(cur.rangeID, config) {
+			panic("programming error: unable to set span config for range")
+		}
+		return true
+	})
 }
 
 // SplitRange splits the Range which contains Key in [StartKey, EndKey).
