@@ -11,9 +11,11 @@
 package state
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +39,7 @@ type state struct {
 	stores                  map[StoreID]*store
 	load                    map[RangeID]ReplicaLoad
 	loadsplits              map[StoreID]LoadSplitter
+	quickLivenessMap        map[NodeID]livenesspb.NodeLivenessStatus
 	capacityChangeListeners []CapacityChangeListener
 	newCapacityListeners    []NewCapacityListener
 	ranges                  *rmap
@@ -51,6 +54,8 @@ type state struct {
 	storeSeqGen StoreID
 }
 
+var _ State = &state{}
+
 // NewState returns an implementation of the State interface.
 func NewState(settings *config.SimulationSettings) State {
 	return newState(settings)
@@ -58,13 +63,14 @@ func NewState(settings *config.SimulationSettings) State {
 
 func newState(settings *config.SimulationSettings) *state {
 	s := &state{
-		nodes:      make(map[NodeID]*node),
-		stores:     make(map[StoreID]*store),
-		loadsplits: make(map[StoreID]LoadSplitter),
-		clock:      &ManualSimClock{nanos: settings.StartTime.UnixNano()},
-		ranges:     newRMap(),
-		usageInfo:  newClusterUsageInfo(),
-		settings:   settings,
+		nodes:            make(map[NodeID]*node),
+		stores:           make(map[StoreID]*store),
+		loadsplits:       make(map[StoreID]LoadSplitter),
+		quickLivenessMap: make(map[NodeID]livenesspb.NodeLivenessStatus),
+		clock:            &ManualSimClock{nanos: settings.StartTime.UnixNano()},
+		ranges:           newRMap(),
+		usageInfo:        newClusterUsageInfo(),
+		settings:         settings,
 	}
 	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
 	return s
@@ -305,7 +311,92 @@ func (s *state) AddNode() Node {
 		stores: []StoreID{},
 	}
 	s.nodes[nodeID] = node
+	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
 	return node
+}
+func (s *state) SetNodeLocality(nodeID NodeID, locality roachpb.Locality) {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		panic(fmt.Sprintf(
+			"programming error: attempt to set locality for node which doesn't "+
+				"exist (NodeID=%d, Nodes=%s)", nodeID, s))
+	}
+	node.desc.Locality = locality
+	for _, storeID := range node.stores {
+		s.stores[storeID].desc.Node = node.desc
+	}
+}
+
+// Topology represents the locality hierarchy information for a cluster.
+type Topology struct {
+	children map[string]*Topology
+	nodes    []int
+}
+
+// Topology returns the locality hierarchy information for a cluster.
+func (s *state) Topology() Topology {
+	nodes := s.Nodes()
+	root := Topology{children: map[string]*Topology{}}
+	for _, node := range nodes {
+		current := &root
+		for _, tier := range node.Descriptor().Locality.Tiers {
+			_, ok := current.children[tier.Value]
+			if !ok {
+				current.children[tier.Value] = &Topology{children: map[string]*Topology{}}
+			}
+			current = current.children[tier.Value]
+		}
+		current.nodes = append(current.nodes, int(node.NodeID()))
+	}
+	return root
+}
+
+// String returns a compact string representing the locality hierarchy of the
+// Topology.
+func (t *Topology) String() string {
+	var buf bytes.Buffer
+	t.stringHelper(&buf, "", true)
+	return buf.String()
+}
+
+func (t *Topology) stringHelper(buf *bytes.Buffer, prefix string, isLast bool) {
+	if len(t.children) > 0 {
+		childPrefix := prefix
+		if isLast {
+			childPrefix += "  "
+		} else {
+			childPrefix += "│ "
+		}
+
+		keys := make([]string, 0, len(t.children))
+		for key := range t.children {
+			keys = append(keys, key)
+		}
+
+		sort.Strings(keys)
+		for i, key := range keys {
+			buf.WriteString(fmt.Sprintf("%s%s\n", prefix, t.formatKey(key)))
+			child := t.children[key]
+			if i == len(keys)-1 {
+				child.stringHelper(buf, childPrefix, true)
+			} else {
+				child.stringHelper(buf, childPrefix, false)
+			}
+
+		}
+	}
+
+	if len(t.nodes) > 0 {
+		buf.WriteString(fmt.Sprintf("%s└── %v\n", prefix, t.nodes))
+	}
+}
+
+func (t *Topology) formatKey(key string) string {
+	if _, err := strconv.Atoi(key); err == nil {
+		return fmt.Sprintf("[%s]", key)
+	}
+
+	return key
 }
 
 // AddStore modifies the state to include one additional store on the Node
@@ -762,26 +853,34 @@ func (s *state) NextReplicasFn(storeID StoreID) func() []Replica {
 	return nextReplFn
 }
 
+// SetNodeLiveness sets the liveness status of the node with ID NodeID to be
+// the status given.
+func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessStatus) {
+	s.quickLivenessMap[nodeID] = status
+}
+
 // NodeLivenessFn returns a function, that when called will return the
 // liveness of the Node with ID NodeID.
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeLivenessFn() storepool.NodeLivenessFunc {
-	nodeLivenessFn := func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
-		// TODO(kvoli): Implement liveness records for nodes, that signal they
-		// are dead when simulating partitions, crashes etc.
-		return livenesspb.NodeLivenessStatus_LIVE
+	return func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+		return s.quickLivenessMap[NodeID(nid)]
 	}
-	return nodeLivenessFn
 }
 
 // NodeCountFn returns a function, that when called will return the current
 // number of nodes that exist in this state.
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeCountFn() storepool.NodeCountFunc {
-	nodeCountFn := func() int {
-		return len(s.Nodes())
+	return func() int {
+		count := 0
+		for _, status := range s.quickLivenessMap {
+			if status != livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+				count++
+			}
+		}
+		return count
 	}
-	return nodeCountFn
 }
 
 // MakeAllocator returns an allocator for the Store with ID StoreID, it
