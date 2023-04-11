@@ -127,6 +127,10 @@ type State interface {
 	// SetRangeBytes sets the size of the range with ID RangeID to be equal to
 	// the bytes given.
 	SetRangeBytes(RangeID, int64)
+	// SetCapacityOverride updates the capacity for the store with ID StoreID to
+	// always return the overriden value given for any set fields in
+	// CapacityOverride.
+	SetCapacityOverride(StoreID, CapacityOverride)
 	// ValidTransfer returns whether transferring the lease for the Range with ID
 	// RangeID, to the Store with ID StoreID is valid.
 	ValidTransfer(RangeID, StoreID) bool

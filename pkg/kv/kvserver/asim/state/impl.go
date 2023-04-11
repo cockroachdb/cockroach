@@ -42,6 +42,7 @@ type state struct {
 	quickLivenessMap        map[NodeID]livenesspb.NodeLivenessStatus
 	capacityChangeListeners []CapacityChangeListener
 	newCapacityListeners    []NewCapacityListener
+	capacityOverrides       map[StoreID]CapacityOverride
 	ranges                  *rmap
 	clusterinfo             ClusterInfo
 	usageInfo               *ClusterUsageInfo
@@ -63,14 +64,15 @@ func NewState(settings *config.SimulationSettings) State {
 
 func newState(settings *config.SimulationSettings) *state {
 	s := &state{
-		nodes:            make(map[NodeID]*node),
-		stores:           make(map[StoreID]*store),
-		loadsplits:       make(map[StoreID]LoadSplitter),
-		quickLivenessMap: make(map[NodeID]livenesspb.NodeLivenessStatus),
-		clock:            &ManualSimClock{nanos: settings.StartTime.UnixNano()},
-		ranges:           newRMap(),
-		usageInfo:        newClusterUsageInfo(),
-		settings:         settings,
+		nodes:             make(map[NodeID]*node),
+		stores:            make(map[StoreID]*store),
+		loadsplits:        make(map[StoreID]LoadSplitter),
+		quickLivenessMap:  make(map[NodeID]livenesspb.NodeLivenessStatus),
+		capacityOverrides: make(map[StoreID]CapacityOverride),
+		clock:             &ManualSimClock{nanos: settings.StartTime.UnixNano()},
+		ranges:            newRMap(),
+		usageInfo:         newClusterUsageInfo(),
+		settings:          settings,
 	}
 	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
 	return s
@@ -197,10 +199,59 @@ func (s *state) StoreDescriptors(cached bool, storeIDs ...StoreID) []roachpb.Sto
 
 func (s *state) updateStoreCapacity(storeID StoreID) {
 	if store, ok := s.stores[storeID]; ok {
-		capacity := Capacity(s, storeID)
+		capacity := s.capacity(storeID)
+		if override, ok := s.capacityOverrides[storeID]; ok {
+			capacity = mergeOverride(capacity, override)
+		}
 		store.desc.Capacity = capacity
 		s.publishNewCapacityEvent(capacity, storeID)
 	}
+}
+
+func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
+	// TODO(kvoli,lidorcarmel): Store capacity will need to be populated with
+	// the following missing fields: l0sublevels, bytesperreplica, writesperreplica.
+	store, ok := s.stores[storeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: store (%d) doesn't exist", storeID))
+	}
+
+	// We re-use the existing store capacity and selectively zero out the fields
+	// we intend to change.
+	capacity := store.desc.Capacity
+	capacity.QueriesPerSecond = 0
+	capacity.WritesPerSecond = 0
+	capacity.LogicalBytes = 0
+	capacity.LeaseCount = 0
+	capacity.RangeCount = 0
+	capacity.Used = 0
+	capacity.Available = 0
+
+	for _, repl := range s.Replicas(storeID) {
+		rangeID := repl.Range()
+		replicaID := repl.ReplicaID()
+		rng, _ := s.Range(rangeID)
+		if rng.Leaseholder() == replicaID {
+			// TODO(kvoli): We currently only consider load on the leaseholder
+			// replica for a range. The other replicas have an estimate that is
+			// calculated within the allocation algorithm. Adapt this to
+			// support follower reads, when added to the workload generator.
+			usage := s.RangeUsageInfo(rng.RangeID(), storeID)
+			capacity.QueriesPerSecond += usage.QueriesPerSecond
+			capacity.WritesPerSecond += usage.WritesPerSecond
+			capacity.LogicalBytes += usage.LogicalBytes
+			capacity.LeaseCount++
+		}
+		capacity.RangeCount++
+	}
+
+	// TODO(kvoli): parameterize the logical to actual used storage bytes. At the
+	// moment we use 1.25 as a rough estimate.
+	used := int64(float64(capacity.LogicalBytes) * 1.25)
+	available := capacity.Capacity - used
+	capacity.Used = used
+	capacity.Available = available
+	return capacity
 }
 
 // Store returns the Store with ID StoreID. This fails if no Store exists
@@ -645,6 +696,23 @@ func (s *state) SetRangeBytes(rangeID RangeID, bytes int64) {
 		panic(fmt.Sprintf("programming error: no range with with ID %d", rangeID))
 	}
 	rng.size = bytes
+}
+
+// SetCapacityOverride updates the capacity for the store with ID StoreID to
+// always return the overriden value given for any set fields in
+// CapacityOverride.
+func (s *state) SetCapacityOverride(storeID StoreID, override CapacityOverride) {
+	if _, ok := s.stores[storeID]; !ok {
+		panic(fmt.Sprintf("programming error: no store exist with ID %d", storeID))
+	}
+
+	existing, ok := s.capacityOverrides[storeID]
+	if !ok {
+		s.capacityOverrides[storeID] = override
+		return
+	}
+
+	s.capacityOverrides[storeID] = CapacityOverride(mergeOverride(roachpb.StoreCapacity(existing), override))
 }
 
 // SplitRange splits the Range which contains Key in [StartKey, EndKey).
