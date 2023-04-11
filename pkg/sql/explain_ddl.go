@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -68,20 +69,26 @@ func (n *explainDDLNode) startExec(params runParams) error {
 			return explainNotPossibleError
 		}
 	}
-	return n.setExplainValues(params.ctx, params.ExecCfg().Settings, scNode.plannedState)
+	return n.setExplainValues(params.ctx, params.ExecCfg().Settings,
+		scNode.plannedState, &params.p.ExtendedEvalContext().SchemaChangerState.memAcc)
 }
 
 func (n *explainDDLNode) setExplainValues(
-	ctx context.Context, settings *cluster.Settings, scState scpb.CurrentState,
+	ctx context.Context,
+	settings *cluster.Settings,
+	scState scpb.CurrentState,
+	memAcc *mon.BoundAccount,
 ) (err error) {
 	defer func() {
 		err = errors.WithAssertionFailure(err)
 	}()
 	var p scplan.Plan
 	p, err = scplan.MakePlan(ctx, scState, scplan.Params{
+		Ctx:                        ctx,
 		ActiveVersion:              settings.Version.ActiveVersion(ctx),
 		ExecutionPhase:             scop.StatementPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
+		MemAcc:                     memAcc,
 	})
 	if err != nil {
 		return err

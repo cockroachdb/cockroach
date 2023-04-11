@@ -1087,7 +1087,8 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.jobs = newTxnJobsCollection()
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangerState = &SchemaChangerState{
-		mode: ex.sessionData().NewSchemaChangerMode,
+		mode:   ex.sessionData().NewSchemaChangerMode,
+		memAcc: ex.sessionMon.MakeBoundAccount(),
 	}
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
 	ex.mu.ActiveQueries = make(map[clusterunique.ID]*queryMeta)
@@ -1463,6 +1464,8 @@ type connExecutor struct {
 		// statements.
 		transactionStatementsHash util.FNV64
 
+		// schemaChangerState captures the state of the ongoing declarative schema
+		// in the transaction.
 		schemaChangerState *SchemaChangerState
 
 		// shouldCollectTxnExecutionStats specifies whether the statements in
@@ -1923,8 +1926,10 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	} else {
 		ex.extraTxnState.descCollection.ReleaseAll(ctx)
 		ex.extraTxnState.jobs.reset()
+		ex.extraTxnState.schemaChangerState.memAcc.Clear(ctx)
 		ex.extraTxnState.schemaChangerState = &SchemaChangerState{
-			mode: ex.sessionData().NewSchemaChangerMode,
+			mode:   ex.sessionData().NewSchemaChangerMode,
+			memAcc: ex.sessionMon.MakeBoundAccount(),
 		}
 	}
 

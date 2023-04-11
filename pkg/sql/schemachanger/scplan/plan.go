@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -32,6 +33,9 @@ import (
 
 // Params holds the arguments for planning.
 type Params struct {
+	// context.Context for planning.
+	Ctx context.Context
+
 	// ActiveVersion contains the version currently active in the cluster.
 	ActiveVersion clusterversion.ClusterVersion
 
@@ -52,6 +56,12 @@ type Params struct {
 	// SkipPlannerSanityChecks, if false, strictly enforces sanity checks in the
 	// declarative schema changer planner.
 	SkipPlannerSanityChecks bool
+
+	// MemAcc returns the injected bound account that
+	// tracks memory allocations that long-live `scplan.MakePlan` function.
+	// It is currently only used to track memory allocation for EXPLAIN(DDL)
+	// output, as it's considered a continuation of the planning process.
+	MemAcc *mon.BoundAccount
 }
 
 // Exported internal types
