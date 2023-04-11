@@ -68,6 +68,7 @@ type Simulator struct {
 // TODO(kvoli): Add a range log like structure to the history.
 type History struct {
 	Recorded [][]metrics.StoreMetrics
+	S        state.State
 }
 
 // Listen implements the metrics.StoreMetricListener interface.
@@ -109,7 +110,7 @@ func NewSimulator(
 		shuffler:       state.NewShuffler(settings.Seed),
 		// TODO(kvoli): Keeping the state around is a bit hacky, find a better
 		// method of reporting the ranges.
-		history:  History{Recorded: [][]metrics.StoreMetrics{}},
+		history:  History{Recorded: [][]metrics.StoreMetrics{}, S: initialState},
 		events:   events,
 		settings: settings,
 	}
@@ -121,6 +122,7 @@ func NewSimulator(
 	s.state.RegisterConfigChangeListener(s)
 
 	m.Register(&s.history)
+	s.AddLogTag("asim", nil)
 	return s
 }
 
