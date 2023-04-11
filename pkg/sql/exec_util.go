@@ -2115,6 +2115,7 @@ type SessionDefaults map[string]string
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
 	User                        username.SQLUsername
+	UserID                      username.SQLUserID
 	IsSuperuser                 bool
 	IsSSL                       bool
 	SystemIdentity              username.SQLUsername
