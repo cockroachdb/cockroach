@@ -83,7 +83,6 @@ func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
 	stats := rl.loadStats.Stats()
 
 	return allocator.RangeUsageInfo{
-		LogicalBytes:     rl.WriteBytes,
 		QueriesPerSecond: stats.QueriesPerSecond,
 		WritesPerSecond:  float64(rl.WriteKeys),
 	}
@@ -133,7 +132,7 @@ func Capacity(state State, storeID StoreID) roachpb.StoreCapacity {
 			// replica for a range. The other replicas have an estimate that is
 			// calculated within the allocation algorithm. Adapt this to
 			// support follower reads, when added to the workload generator.
-			usage := state.ReplicaLoad(rng.RangeID(), storeID).Load()
+			usage := state.RangeUsageInfo(rng.RangeID(), storeID)
 			capacity.QueriesPerSecond += usage.QueriesPerSecond
 			capacity.WritesPerSecond += usage.WritesPerSecond
 			capacity.LogicalBytes += usage.LogicalBytes
