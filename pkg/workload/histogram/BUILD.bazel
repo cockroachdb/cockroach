@@ -3,7 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "histogram",
-    srcs = ["histogram.go"],
+    srcs = [
+        "histogram.go",
+        "sender.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/histogram",
     visibility = ["//visibility:public"],
     deps = [

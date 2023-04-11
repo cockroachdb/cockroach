@@ -47,6 +47,7 @@ const (
 type NamedHistogram struct {
 	name                string
 	prometheusHistogram prometheus.Histogram
+	sender              Sender
 	mu                  struct {
 		syncutil.Mutex
 		current *hdrhistogram.Histogram
@@ -65,6 +66,7 @@ func (w *Registry) newNamedHistogramLocked(name string) *NamedHistogram {
 	hist := &NamedHistogram{
 		name:                name,
 		prometheusHistogram: w.getPrometheusHistogramLocked(name),
+		sender:              CreateSender(),
 	}
 	hist.mu.current = w.newHistogram()
 	return hist
@@ -72,6 +74,8 @@ func (w *Registry) newNamedHistogramLocked(name string) *NamedHistogram {
 
 // Record saves a new datapoint and should be called once per logical operation.
 func (w *NamedHistogram) Record(elapsed time.Duration) {
+	// Ignore the error if there is no listener.
+	_ = w.sender.Send(elapsed, 0)
 	w.prometheusHistogram.Observe(float64(elapsed.Nanoseconds()) / float64(time.Second))
 	maxLatency := time.Duration(w.mu.current.HighestTrackableValue())
 	if elapsed < minLatency {
