@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -191,33 +190,12 @@ func (c *controller) processRelocateRange(
 	change := state.ReplicaChange{
 		RangeID: rng.RangeID(),
 		Author:  c.storeID,
+		Changes: ops,
 	}
 
-	// The replica changer currently only supports at most two operations
-	// atomically; an add and a remove of a voter. When there are more than
-	// this number of changes, error.
-	// TOOD(kvoli): Support arbitrary number of operations for changes.
-	if len(ops) > 2 {
-		return errors.Newf("Expected 2 ops, found %d", len(ops))
-	}
-
-	var add, remove int
-	for _, op := range ops {
-		switch op.ChangeType {
-		case roachpb.ADD_VOTER:
-			add++
-			change.Add = state.StoreID(op.Target.StoreID)
-			change.Wait = c.settings.ReplicaChangeDelayFn()(rng.Size(), true /* use range size */)
-		case roachpb.REMOVE_VOTER:
-			remove++
-			change.Remove = state.StoreID(op.Target.StoreID)
-		default:
-			return errors.Newf("Unrecognized operation type %s", op)
-		}
-	}
-
-	if add > 1 || remove > 1 {
-		return errors.Newf("Expected at most 1 add or remove each %d adds, %d removes", add, remove)
+	targets := kvserver.SynthesizeTargetsByChangeType(ops)
+	if len(targets.VoterAdditions) > 0 || len(targets.NonVoterAdditions) > 0 {
+		change.Wait = c.settings.ReplicaChangeDelayFn()(rng.Size(), true /* use range size */)
 	}
 
 	completeAt, ok := c.changer.Push(tick, &change)
