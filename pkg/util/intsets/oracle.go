@@ -34,6 +34,18 @@ func (o *oracle) Remove(i int) {
 	delete(o.m, i)
 }
 
+// KeepOne removes all but one integer in the set. No-op if the set is empty.
+// This implementation happens to keep the minimum integer in the set, which
+// mimics the behavior of Sparse.KeepOne.
+func (o *oracle) KeepOne() {
+	if o.Empty() {
+		return
+	}
+	min := o.LowerBound(MinInt)
+	o.Clear()
+	o.Add(min)
+}
+
 // Contains returns true if the set contains the given integer.
 func (o oracle) Contains(i int) bool {
 	_, ok := o.m[i]
