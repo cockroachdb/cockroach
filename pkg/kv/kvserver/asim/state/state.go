@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/raft/v3"
@@ -81,6 +82,11 @@ type State interface {
 	// AddNode modifies the state to include one additional node. This cannot
 	// fail. The new Node is returned.
 	AddNode() Node
+	// SetNodeLocality sets the locality of the node with ID NodeID to be the
+	// locality given.
+	SetNodeLocality(NodeID, roachpb.Locality)
+	// Topology returns the locality hierarchy information for a cluster.
+	Topology() Topology
 	// AddStore modifies the state to include one additional store on the Node
 	// with ID NodeID. This fails if no Node exists with ID NodeID.
 	AddStore(NodeID) (Store, bool)
@@ -138,6 +144,9 @@ type State interface {
 	// NextReplicasFn returns a function, that when called will return the current
 	// replicas that exist on the store.
 	NextReplicasFn(StoreID) func() []Replica
+	// SetNodeLiveness sets the liveness status of the node with ID NodeID to be
+	// the status given.
+	SetNodeLiveness(NodeID, livenesspb.NodeLivenessStatus)
 	// NodeLivenessFn returns a function, that when called will return the
 	// liveness of the Node with ID NodeID.
 	// TODO(kvoli): Find a better home for this method, required by the
