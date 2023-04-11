@@ -40,6 +40,9 @@ const (
 
 	sigFigs    = 1
 	minLatency = 100 * time.Microsecond
+	// senderAddr is the address we send individual latency measurements to. This
+	// is always on localhost. This could be made configurable if necessary.
+	senderAddr = ":12345"
 )
 
 // NamedHistogram is a named histogram for use in Operations. It is threadsafe
@@ -47,6 +50,8 @@ const (
 type NamedHistogram struct {
 	name                string
 	prometheusHistogram prometheus.Histogram
+	id                  int
+	sender              Sender
 	mu                  struct {
 		syncutil.Mutex
 		current *hdrhistogram.Histogram
@@ -62,9 +67,12 @@ type NamedHistogram struct {
 // gets more complex once we have to merge multiple prom histograms together
 // for exposure via Gatherer()). See *Histograms for details.
 func (w *Registry) newNamedHistogramLocked(name string) *NamedHistogram {
+	prometheusHistogram, id := w.getPrometheusHistogramLocked(name)
 	hist := &NamedHistogram{
 		name:                name,
-		prometheusHistogram: w.getPrometheusHistogramLocked(name),
+		prometheusHistogram: prometheusHistogram,
+		id:                  id,
+		sender:              w.sender,
 	}
 	hist.mu.current = w.newHistogram()
 	return hist
@@ -72,6 +80,9 @@ func (w *Registry) newNamedHistogramLocked(name string) *NamedHistogram {
 
 // Record saves a new datapoint and should be called once per logical operation.
 func (w *NamedHistogram) Record(elapsed time.Duration) {
+	// Ignore the error if there is no listener. We don't expect to have more than
+	// 256 histograms, so cast this as a byte.
+	w.sender.Send(elapsed, w.id)
 	w.prometheusHistogram.Observe(float64(elapsed.Nanoseconds()) / float64(time.Second))
 	w.mu.Lock()
 	maxLatency := time.Duration(w.mu.current.HighestTrackableValue())
@@ -127,12 +138,16 @@ type Registry struct {
 		// maps histogram name to a single prometheus histogram shared by all
 		// handles. These will be registered with promReg.
 		prometheusHistograms map[string]prometheus.Histogram
+		idMap                map[string]int
+
+		histogramId int
 	}
 
 	start         time.Time
 	cumulative    map[string]*hdrhistogram.Histogram
 	prevTick      map[string]time.Time
 	histogramPool *sync.Pool
+	sender        Sender
 }
 
 // NewRegistry returns an initialized Registry.
@@ -148,6 +163,7 @@ func NewRegistry(maxLat time.Duration, workloadName string) *Registry {
 		cumulative:   make(map[string]*hdrhistogram.Histogram),
 		prevTick:     make(map[string]time.Time),
 		promReg:      prometheus.NewRegistry(),
+		sender:       CreateSender(senderAddr),
 		histogramPool: &sync.Pool{
 			New: func() interface{} {
 				return hdrhistogram.New(minLatency.Nanoseconds(), maxLat.Nanoseconds(), sigFigs)
@@ -156,6 +172,7 @@ func NewRegistry(maxLat time.Duration, workloadName string) *Registry {
 	}
 	r.mu.registered = make(map[string][]*NamedHistogram)
 	r.mu.prometheusHistograms = make(map[string]prometheus.Histogram)
+	r.mu.idMap = make(map[string]int)
 	return r
 }
 
@@ -185,7 +202,7 @@ func makePrometheusLatencyHistogramBuckets() []float64 {
 	return prometheus.ExponentialBuckets(0.0005, 1.1, 150)
 }
 
-func (w *Registry) getPrometheusHistogramLocked(name string) prometheus.Histogram {
+func (w *Registry) getPrometheusHistogramLocked(name string) (prometheus.Histogram, int) {
 	ph, ok := w.mu.prometheusHistograms[name]
 
 	if !ok {
@@ -198,9 +215,14 @@ func (w *Registry) getPrometheusHistogramLocked(name string) prometheus.Histogra
 			Buckets:   makePrometheusLatencyHistogramBuckets(),
 		})
 		w.mu.prometheusHistograms[name] = ph
+		// We only give ids to histograms with unique names.
+		w.mu.idMap[name] = w.mu.histogramId
+		w.mu.histogramId++
 	}
+	// This will always exist.
+	id := w.mu.idMap[name]
 
-	return ph
+	return ph, id
 }
 
 // GetHandle returns a thread-local handle for creating and registering
