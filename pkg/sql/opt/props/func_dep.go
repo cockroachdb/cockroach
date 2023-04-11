@@ -764,6 +764,27 @@ func (f *FuncDepSet) ComputeEquivGroup(rep opt.ColumnID) opt.ColSet {
 	return f.ComputeEquivClosureNoCopy(opt.MakeColSet(rep))
 }
 
+// ComputeEquivGroupAndUnionWith is similar to ComputeEquivGroup, but modifies
+// the given set in place by adding the columns that are in the same equivalence
+// closure of the given column. The give column is always adding to the set.
+func (f *FuncDepSet) ComputeEquivGroupAndUnionWith(cols opt.ColSet, col opt.ColumnID) opt.ColSet {
+	// Don't need to get transitive closure, because equivalence closures are
+	// already maintained for every column.
+	for i := range f.deps {
+		fd := &f.deps[i]
+		if !fd.equiv {
+			continue
+		}
+		fromIsSubset := fd.from.Empty() || (fd.from.Len() == 1 && fd.from.Contains(col))
+		toIsSubset := fd.to.Empty() || (fd.to.Len() == 1 && fd.to.Contains(col))
+		if fromIsSubset && !toIsSubset {
+			cols.UnionWith(fd.to)
+		}
+	}
+	cols.Add(col)
+	return cols
+}
+
 // AddStrictKey adds an FD for a new key. The given key columns are reduced to a
 // candidate key, and that becomes the determinant for the allCols column set.
 // The resulting FD is strict, meaning that a NULL key value always maps to the
