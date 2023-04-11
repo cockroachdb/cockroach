@@ -25,8 +25,8 @@ func (c *serverController) getServer(
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if e, ok := c.mu.servers[tenantName]; ok {
-		if e.state.started.Get() {
-			return e.server, nil
+		if so, isReady := e.getServer(); isReady {
+			return so.(onDemandServer), nil
 		}
 	}
 	return nil, errors.Mark(errors.Newf("no server for tenant %q", tenantName), errNoTenantServerRunning)
@@ -40,14 +40,15 @@ var errNoTenantServerRunning error = noTenantServerRunning{}
 
 // getServers retrieves all the currently instantiated and running
 // in-memory servers.
-func (c *serverController) getServers() (res []*serverEntry) {
+func (c *serverController) getServers() (res []onDemandServer) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, e := range c.mu.servers {
-		if !e.state.started.Get() {
+		so, isReady := e.getServer()
+		if !isReady {
 			continue
 		}
-		res = append(res, e)
+		res = append(res, so.(onDemandServer))
 	}
 	return res
 }
@@ -59,7 +60,7 @@ func (c *serverController) getCurrentTenantNames() []roachpb.TenantName {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for name, e := range c.mu.servers {
-		if !e.state.started.Get() {
+		if _, isReady := e.getServer(); !isReady {
 			continue
 		}
 		serverNames = append(serverNames, name)

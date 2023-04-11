@@ -33,50 +33,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// serverState coordinates the lifecycle of a tenant server. It ensures
-// sane concurrent behavior between:
-// - requests to start a server manually, e.g. via TestServer;
-// - async changes to the tenant service mode;
-// - quiescence of the outer stopper;
-// - RPC drain requests on the tenant server;
-// - server startup errors if any.
-//
-// Generally, the lifecycle is as follows:
-//  1. a request to start a server will cause a serverEntry to be added
-//     to the server controller, in the state "not yet started".
-//  2. the "managed-tenant-server" async task starts, via
-//     StartControlledServer()
-//  3. the async task attempts to start the server (with retries and
-//     backoff delay as needed), or cancels the startup if
-//     a request to stop is received asynchronously.
-//  4. after the server is started, the async task waits for a shutdown
-//     request.
-//  5. once a shutdown request is received the async task
-//     stops the server.
-//
-// The async task is also responsible for reporting the server
-// start/stop events in the event log.
-type serverState struct {
-	// startedOrStopped is closed when the server has either started or
-	// stopped. This can be used to wait for a server start.
-	startedOrStopped <-chan struct{}
-
-	// startErr, once startedOrStopped is closed, reports the error
-	// during server creation if any.
-	startErr error
-
-	// started is marked true when the server has started. This can
-	// be used to observe the start state without waiting.
-	started syncutil.AtomicBool
-
-	// requestStop can be called to request a server to stop.
-	// It can be called multiple times.
-	requestStop func()
-
-	// stopped is closed when the server has stopped.
-	stopped <-chan struct{}
-}
-
 // start monitors changes to the service mode and updates
 // the running servers accordingly.
 func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
@@ -164,7 +120,7 @@ func (c *serverController) scanTenantsForRunnableServices(
 		if _, ok := nameLookup[name]; !ok {
 			log.Infof(ctx, "tenant %q has changed service mode, should now stop", name)
 			// Mark the server for async shutdown.
-			srv.state.requestStop()
+			srv.requestGracefulShutdown(ctx)
 		}
 	}
 
@@ -183,11 +139,37 @@ func (c *serverController) scanTenantsForRunnableServices(
 
 func (c *serverController) createServerEntryLocked(
 	ctx context.Context, tenantName roachpb.TenantName,
-) (*serverEntry, error) {
+) (serverState, error) {
 	if c.draining.Get() {
 		return nil, errors.New("server is draining")
 	}
-	entry, err := c.startControlledServer(ctx, tenantName)
+
+	// finalizeFn is called when the server is fully stopped.
+	// It is called from a different goroutine than the caller of
+	// startControlledServer, and so needs to lock c.mu itself.
+	finalizeFn := func(ctx context.Context, tenantName roachpb.TenantName) {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		delete(c.mu.servers, tenantName)
+	}
+	// startErrorFn is called every time there is an error starting
+	// the server.
+	startErrorFn := func(ctx context.Context, tenantName roachpb.TenantName, err error) {
+		c.logStartEvent(ctx, roachpb.TenantID{}, 0, tenantName, false /* success */, err)
+	}
+	// serverStartedFn is called when the server has started
+	// successfully and is accepting clients.
+	serverStartedFn := func(ctx context.Context, tenantName roachpb.TenantName, tid roachpb.TenantID, sid base.SQLInstanceID) {
+		c.logStartEvent(ctx, tid, sid, tenantName, true /* success */, nil)
+	}
+	// serverStoppingFn is called when the server is shutting down
+	// after a successful start.
+	serverStoppingFn := func(ctx context.Context, tenantName roachpb.TenantName, tid roachpb.TenantID, sid base.SQLInstanceID) {
+		c.logStopEvent(ctx, tid, sid, tenantName)
+	}
+
+	entry, err := c.orchestrator.startControlledServer(ctx, tenantName,
+		finalizeFn, startErrorFn, serverStartedFn, serverStoppingFn)
 	if err != nil {
 		return nil, err
 	}
@@ -195,26 +177,43 @@ func (c *serverController) createServerEntryLocked(
 	return entry, nil
 }
 
-// startControlledServer starts the orchestration task that starts,
-// then shuts down, the server for the given tenant.
-func (c *serverController) startControlledServer(
-	ctx context.Context, tenantName roachpb.TenantName,
-) (*serverEntry, error) {
+// startControlledServer is part of the serverOrchestrator interface.
+func (o *channelOrchestrator) startControlledServer(
+	ctx context.Context,
+	// tenantName is the name of the tenant for which a server should
+	// be created.
+	tenantName roachpb.TenantName,
+	// finalizeFn is called when the server is fully stopped.
+	// This is always called, even if there is a server startup error.
+	finalizeFn func(ctx context.Context, tenantName roachpb.TenantName),
+	// startErrorFn is called every time there is an error starting
+	// the server. Suggested use is for logging. To synchronize on the
+	// server's state, use the resulting serverState instead.
+	startErrorFn func(ctx context.Context, tenantName roachpb.TenantName, err error),
+	// serverStartedFn is called when the server has started
+	// successfully and is accepting clients. Suggested use is for
+	// logging. To synchronize on the server's state, use the
+	// resulting serverState instead.
+	startCompleteFn func(ctx context.Context, tenantName roachpb.TenantName, tid roachpb.TenantID, sid base.SQLInstanceID),
+	// serverStoppingFn is called when the server is shutting down
+	// after a successful start. Suggested use is for logging. To
+	// synchronize on the server's state, use the resulting
+	// serverState instead.
+	serverStoppingFn func(ctx context.Context, tenantName roachpb.TenantName, tid roachpb.TenantID, sid base.SQLInstanceID),
+) (serverState, error) {
 	var stoppedChClosed syncutil.AtomicBool
 	stopRequestCh := make(chan struct{})
 	stoppedCh := make(chan struct{})
 	startedOrStoppedCh := make(chan struct{})
-	entry := &serverEntry{
-		nameContainer: roachpb.NewTenantNameContainer(tenantName),
-		state: serverState{
-			startedOrStopped: startedOrStoppedCh,
-			requestStop: func() {
-				if !stoppedChClosed.Swap(true) {
-					close(stopRequestCh)
-				}
-			},
-			stopped: stoppedCh,
+	state := &serverStateUsingChannels{
+		nc:                 roachpb.NewTenantNameContainer(tenantName),
+		startedOrStoppedCh: startedOrStoppedCh,
+		requestStop: func() {
+			if !stoppedChClosed.Swap(true) {
+				close(stopRequestCh)
+			}
 		},
+		stoppedCh: stoppedCh,
 	}
 
 	topCtx := ctx
@@ -237,7 +236,7 @@ func (c *serverController) startControlledServer(
 
 	// Ensure that if the surrounding server requests shutdown, we
 	// propagate it to the new server.
-	if err := c.stopper.RunAsyncTask(ctx, "propagate-close", func(ctx context.Context) {
+	if err := o.parentStopper.RunAsyncTask(ctx, "propagate-close", func(ctx context.Context) {
 		defer log.Infof(ctx, "propagate-close task terminating")
 		select {
 		case <-stoppedCh:
@@ -245,7 +244,7 @@ func (c *serverController) startControlledServer(
 			// request was made to terminate it.
 			log.Infof(ctx, "tenant %q terminating", tenantName)
 
-		case <-c.stopper.ShouldQuiesce():
+		case <-o.parentStopper.ShouldQuiesce():
 			// Surrounding server is stopping; propagate the stop to the
 			// control goroutine below.
 			// Note: we can't do a graceful drain in that case because
@@ -278,7 +277,7 @@ func (c *serverController) startControlledServer(
 		return nil, err
 	}
 
-	if err := c.stopper.RunAsyncTask(ctx, "managed-tenant-server", func(_ context.Context) {
+	if err := o.parentStopper.RunAsyncTask(ctx, "managed-tenant-server", func(_ context.Context) {
 		startedOrStoppedChAlreadyClosed := false
 		defer func() {
 			// We may be returning early due to an error in the server initialization
@@ -287,18 +286,18 @@ func (c *serverController) startControlledServer(
 			// and we could get a goroutine leak for the above task.
 			// To prevent this, we call requestStop() which tells the goroutine above
 			// to call tenantStopper.Stop() and terminate.
-			entry.state.requestStop()
-			entry.state.started.Set(false)
+			state.requestStop()
+			state.started.Set(false)
 			close(stoppedCh)
 			if !startedOrStoppedChAlreadyClosed {
-				entry.state.startErr = errors.New("server stop before successful start")
+				state.startErr = errors.New("server stop before successful start")
 				close(startedOrStoppedCh)
 			}
 
-			// Remove the entry from the server map.
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			delete(c.mu.servers, tenantName)
+			// Call the finalizer.
+			if finalizeFn != nil {
+				finalizeFn(ctx, tenantName)
+			}
 		}()
 
 		// We use our detached tenantCtx, the incoming ctx given by
@@ -327,7 +326,7 @@ func (c *serverController) startControlledServer(
 		// succeeded.
 		var tenantStopper *stop.Stopper
 
-		var tenantServer onDemandServer
+		var tenantServer orchestratedServer
 		for retry := retry.StartWithCtx(ctx, retryOpts); retry.Next(); {
 			tenantStopper = stop.NewStopper()
 
@@ -352,7 +351,7 @@ func (c *serverController) startControlledServer(
 							// latter has been linked to ctlStopper.Quiesce already
 							// -- and in this select branch that context has been
 							// canceled already.
-							drainCtx, cancel := c.stopper.WithCancelOnQuiesce(tenantCtx)
+							drainCtx, cancel := o.parentStopper.WithCancelOnQuiesce(tenantCtx)
 							defer cancel()
 							log.Infof(drainCtx, "starting graceful drain")
 							// Call the drain service on that tenant's server. This may take a
@@ -364,7 +363,7 @@ func (c *serverController) startControlledServer(
 					default:
 					}
 					tenantStopper.Stop(ctx)
-				case <-c.stopper.ShouldQuiesce():
+				case <-o.parentStopper.ShouldQuiesce():
 					// Expedited shutdown of the surrounding KV node.
 					tenantStopper.Stop(ctx)
 				}
@@ -374,8 +373,8 @@ func (c *serverController) startControlledServer(
 			}
 
 			// Try to create the server.
-			s, err := func() (onDemandServer, error) {
-				s, err := c.newServerInternal(ctx, entry.nameContainer, tenantStopper)
+			s, err := func() (orchestratedServer, error) {
+				s, err := o.serverFactory.newServerForOrchestrator(ctx, state.nc, tenantStopper)
 				if err != nil {
 					return nil, errors.Wrap(err, "while creating server")
 				}
@@ -395,12 +394,13 @@ func (c *serverController) startControlledServer(
 				// Creation failed. We stop the tenant stopper here, which also
 				// takes care of terminating the async task we've just started above.
 				tenantStopper.Stop(ctx)
-				c.logStartEvent(ctx, roachpb.TenantID{}, 0,
-					entry.nameContainer.Get(), false /* success */, err)
+				if startErrorFn != nil {
+					startErrorFn(ctx, tenantName, err)
+				}
 				log.Warningf(ctx,
 					"unable to start server for tenant %q (attempt %d, will retry): %v",
 					tenantName, retry.CurrentAttempt(), err)
-				entry.state.startErr = err
+				state.startErr = err
 				continue
 			}
 			tenantServer = s
@@ -416,15 +416,19 @@ func (c *serverController) startControlledServer(
 
 		// Log the start event and ensure the stop event is logged eventually.
 		tid, iid := tenantServer.getTenantID(), tenantServer.getInstanceID()
-		c.logStartEvent(ctx, tid, iid, tenantName, true /* success */, nil)
-		tenantStopper.AddCloser(stop.CloserFn(func() {
-			c.logStopEvent(ctx, tid, iid, tenantName)
-		}))
+		if startCompleteFn != nil {
+			startCompleteFn(ctx, tenantName, tid, iid)
+		}
+		if serverStoppingFn != nil {
+			tenantStopper.AddCloser(stop.CloserFn(func() {
+				serverStoppingFn(ctx, tenantName, tid, iid)
+			}))
+		}
 
 		// Indicate the server has started.
-		entry.server = tenantServer
+		state.server = tenantServer
 		startedOrStoppedChAlreadyClosed = true
-		entry.state.started.Set(true)
+		state.started.Set(true)
 		close(startedOrStoppedCh)
 
 		// Wait for a request to shut down.
@@ -436,15 +440,15 @@ func (c *serverController) startControlledServer(
 			log.Infof(ctx, "tenant %q requesting their own shutdown: %v",
 				tenantName, shutdownRequest.ShutdownCause())
 			// Make the async stop goroutine above pick up the task of shutting down.
-			entry.state.requestStop()
+			state.requestStop()
 		}
 	}); err != nil {
 		// Clean up the task we just started before.
-		entry.state.requestStop()
+		state.requestStop()
 		return nil, err
 	}
 
-	return entry, nil
+	return state, nil
 }
 
 // getExpectedRunningTenants retrieves the tenant IDs that should
@@ -486,7 +490,7 @@ ORDER BY name`, mtinfopb.ServiceModeShared, mtinfopb.DataStateReady)
 func (c *serverController) startAndWaitForRunningServer(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (onDemandServer, error) {
-	entry, err := func() (*serverEntry, error) {
+	entry, err := func() (serverState, error) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if entry, ok := c.mu.servers[tenantName]; ok {
@@ -499,8 +503,12 @@ func (c *serverController) startAndWaitForRunningServer(
 	}
 
 	select {
-	case <-entry.state.startedOrStopped:
-		return entry.server, entry.state.startErr
+	case <-entry.startedOrStopped():
+		s, isReady := entry.getServer()
+		if isReady {
+			return s.(onDemandServer), nil
+		}
+		return nil, entry.getLastStartupError()
 	case <-c.stopper.ShouldQuiesce():
 		return nil, errors.New("server stopping")
 	case <-ctx.Done():
@@ -508,9 +516,11 @@ func (c *serverController) startAndWaitForRunningServer(
 	}
 }
 
-func (c *serverController) newServerInternal(
+// newServerForOrchestrator implements the
+// serverFactoryForOrchestration interface.
+func (c *serverController) newServerForOrchestrator(
 	ctx context.Context, nameContainer *roachpb.TenantNameContainer, tenantStopper *stop.Stopper,
-) (onDemandServer, error) {
+) (orchestratedServer, error) {
 	tenantName := nameContainer.Get()
 	testArgs := c.testArgs[tenantName]
 
@@ -526,45 +536,50 @@ func (c *serverController) newServerInternal(
 
 // Close implements the stop.Closer interface.
 func (c *serverController) Close() {
-	entries := c.requestStopAll()
+	// Note Close() is only called in the case of expedited shutdown.
+	// It should not invoke the graceful drain process.
+	entries := c.getAllEntries()
+	// Request immediate shutdown. This is probably not needed; the
+	// server should already be sensitive to the parent stopper
+	// quiescing.
+	for _, e := range entries {
+		e.requestImmediateShutdown(context.Background())
+	}
 
 	// Wait for shutdown for all servers.
 	for _, e := range entries {
-		<-e.state.stopped
+		<-e.stopped()
 	}
 }
 
 func (c *serverController) drain(ctx context.Context) (stillRunning int) {
-	entries := c.requestStopAll()
+	entries := c.getAllEntries()
+	// Request shutdown for all servers.
+	for _, e := range entries {
+		e.requestGracefulShutdown(ctx)
+	}
+
 	// How many entries are _not_ stopped yet?
 	notStopped := 0
 	for _, e := range entries {
 		select {
-		case <-e.state.stopped:
+		case <-e.stopped():
 		default:
-			log.Infof(ctx, "server for tenant %q still running", e.nameContainer)
+			log.Infof(ctx, "server for tenant %q still running", e.nameContainer())
 			notStopped++
 		}
 	}
 	return notStopped
 }
 
-func (c *serverController) requestStopAll() []*serverEntry {
-	entries := func() (res []*serverEntry) {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		res = make([]*serverEntry, 0, len(c.mu.servers))
-		for _, e := range c.mu.servers {
-			res = append(res, e)
-		}
-		return res
-	}()
-
-	// Request shutdown for all servers.
-	for _, e := range entries {
-		e.state.requestStop()
+func (c *serverController) getAllEntries() (res []serverState) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	res = make([]serverState, 0, len(c.mu.servers))
+	for _, e := range c.mu.servers {
+		res = append(res, e)
 	}
-	return entries
+	return res
 }
 
 type nodeEventLogger interface {
