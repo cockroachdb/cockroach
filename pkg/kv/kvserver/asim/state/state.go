@@ -192,6 +192,9 @@ type State interface {
 	// a new store capacity has been generated from scratch, for a specific
 	// store.
 	RegisterCapacityListener(NewCapacityListener)
+	// RegisterConfigChangeListener registers a listener which will be called
+	// when a cluster configuration change occurs such as a store being added.
+	RegisterConfigChangeListener(ConfigChangeListener)
 }
 
 // Node is a container for stores and is part of a cluster.
