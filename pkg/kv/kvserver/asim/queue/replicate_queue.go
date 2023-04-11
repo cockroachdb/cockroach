@@ -134,7 +134,7 @@ func (rq *replicateQueue) considerRebalance(
 		nil, /* raftStatus */
 		rng.Descriptor().Replicas().VoterDescriptors(),
 		rng.Descriptor().Replicas().NonVoterDescriptors(),
-		s.ReplicaLoad(rng.RangeID(), rq.storeID).Load(),
+		s.RangeUsageInfo(rng.RangeID(), rq.storeID),
 		storepool.StoreFilterNone,
 		rq.allocator.ScorerOptions(ctx),
 	)
