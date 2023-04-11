@@ -419,7 +419,7 @@ func RunWithDetails(
 	if len(title) > 30 {
 		title = title[:27] + "..."
 	}
-	return c.RunWithDetails(ctx, l, c.Nodes, title, cmd, install.WithFailSlow())
+	return c.RunWithDetails(ctx, l, c.Nodes, title, cmd)
 }
 
 // SQL runs `cockroach sql` on a remote cluster. If a single node is passed,

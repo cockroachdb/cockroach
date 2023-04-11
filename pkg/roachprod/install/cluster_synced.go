@@ -916,8 +916,9 @@ func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) 
 }
 
 // RunWithDetails runs a command on the specified nodes and returns results details and an error.
+// This will wait for all commands to complete before returning unless encountering a roachprod error.
 func (c *SyncedCluster) RunWithDetails(
-	ctx context.Context, l *logger.Logger, nodes Nodes, title, cmd string, opts ...ParallelOption,
+	ctx context.Context, l *logger.Logger, nodes Nodes, title, cmd string,
 ) ([]RunResultDetails, error) {
 	display := fmt.Sprintf("%s: %s", c.Name, title)
 
@@ -931,7 +932,7 @@ func (c *SyncedCluster) RunWithDetails(
 		result, err := c.runCmdOnSingleNode(ctx, l, nodes[i], cmd, false, l.Stdout, l.Stderr)
 		resultPtrs[i] = result
 		return result, err
-	}, append(opts, WithDisplay(display))...)
+	}, WithDisplay(display), WithFailSlow())
 
 	// Return values to preserve API
 	results := make([]RunResultDetails, len(nodes))
@@ -2481,7 +2482,7 @@ func (c *SyncedCluster) Parallel(
 	opts ...ParallelOption,
 ) error {
 	failed, err := c.ParallelE(ctx, l, count, fn, opts...)
-	if err != nil {
+	if err != nil || len(failed) > 0 {
 		sort.Slice(failed, func(i, j int) bool { return failed[i].Index < failed[j].Index })
 		for _, f := range failed {
 			l.Errorf("%d: %+v: %s", f.Index, f.Err, f.Out)
@@ -2492,16 +2493,19 @@ func (c *SyncedCluster) Parallel(
 }
 
 // ParallelE runs the given function in parallel across the given
-// nodes. In the event of an error on any of the nodes, the function
-// will fail fast and return the error and the accompanying ParallelResult.
-// Successful invocation will return a nil result and nil error.
+// nodes.
+//
+// By default, this will fail fast if an error occurs on any node, in which
+// case the function will return a slice containing the result, and an error.
+//
+// If `WithFailSlow()` is passed in, then the function will wait for all
+// invocations to complete before returning a slice with all failed results, but
+// a nil error. It is up to the caller to check the slice for errors.
 //
 // ParallelE runs the user-defined functions on the first `count`
 // nodes in the cluster. It runs at most `concurrency` (or
 // `config.MaxConcurrency` if it is lower) in parallel. If `concurrency` is
 // 0, then it defaults to `count`.
-//
-// By default, ParallelE will fail fast if an error occurs on any node.
 //
 // The function returns a pointer to RunResultDetails as we may enrich
 // the result with retry information (attempt number, wrapper error).
@@ -2510,9 +2514,6 @@ func (c *SyncedCluster) Parallel(
 // the function fails, but returns a nil error. A non-nil error returned by the
 // function denotes a roachprod error and will not be retried regardless of the
 // retry options.
-//
-// If err is non-nil, the slice of ParallelResults will contain the
-// results from any of the failed invocations.
 func (c *SyncedCluster) ParallelE(
 	ctx context.Context,
 	l *logger.Logger,
@@ -2547,6 +2548,8 @@ func (c *SyncedCluster) ParallelE(
 		// the context through, a cancellation will be handled by the command itself.
 		go func(i int) {
 			defer wg.Done()
+			// This is rarely expected to return an error, but we fail fast in case.
+			// Command errors, which are far more common, will be contained within the result.
 			res, err := runWithMaybeRetry(groupCtx, l, options.retryOpts, func(ctx context.Context) (*RunResultDetails, error) { return fn(ctx, i) })
 			if err != nil {
 				errorChannel <- err
@@ -2597,12 +2600,11 @@ func (c *SyncedCluster) ParallelE(
 				fmt.Fprintf(out, ".")
 			}
 		case r, ok := <-results:
-			if r.Err != nil {
+			if r.Err != nil { // Command error
 				failed = append(failed, r)
-
 				if !options.failSlow {
 					groupCancel()
-					return failed, errors.WithDetail(r.Err, "parallel execution failed fast on first error")
+					return failed, errors.WithDetail(r.Err, "failed fast on first command error")
 				}
 			}
 			done = !ok
@@ -2612,8 +2614,7 @@ func (c *SyncedCluster) ParallelE(
 			if index < count {
 				startNext()
 			}
-		case err := <-errorChannel:
-			// Always fail fast on roachprod errors, which are also the ones that will never be retried.
+		case err := <-errorChannel: // Roachprod error
 			groupCancel()
 			return nil, err
 		}
@@ -2640,15 +2641,7 @@ func (c *SyncedCluster) ParallelE(
 		fmt.Fprintf(out, "\n")
 	}
 
-	if len(failed) > 0 {
-		// We will only get here if options.failSlow
-		var err error
-		for _, res := range failed {
-			err = errors.CombineErrors(err, res.Err)
-		}
-		return failed, errors.Wrap(err, "parallel execution failure")
-	}
-	return nil, nil
+	return failed, nil
 }
 
 // Init initializes the cluster. It does it through node 1 (as per TargetNodes)
