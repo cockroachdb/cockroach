@@ -737,7 +737,7 @@ func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
 func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 	oc.Optional = fdset.ComputeClosure(oc.Optional)
 
-	closure := oc.Optional
+	closure := oc.Optional.Copy()
 	n := 0
 	for i := range oc.Columns {
 		group := &oc.Columns[i]
@@ -763,8 +763,10 @@ func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 		group.Group = fdset.ComputeEquivGroup(group.AnyID())
 
 		// Add this group's columns and find closure with the new columns.
-		closure = closure.Union(group.Group)
-		closure = fdset.ComputeClosure(closure)
+		closure.UnionWith(group.Group)
+		// ComputeClosureNoCopy is safe here because closure was already copied
+		// before the loop.
+		closure = fdset.ComputeClosureNoCopy(closure)
 
 		if n != i {
 			oc.Columns[n] = oc.Columns[i]
