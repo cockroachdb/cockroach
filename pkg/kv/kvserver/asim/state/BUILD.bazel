@@ -31,6 +31,7 @@ go_library(
         "//pkg/kv/kvserver/split",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
