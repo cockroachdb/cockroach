@@ -432,6 +432,15 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	return store, true
 }
 
+func (s *state) SetStoreCapacity(storeID StoreID, capacity int64) {
+	store, ok := s.stores[storeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: store with ID %d doesn't exist", storeID))
+	}
+	// TODO(kvoli): deal with overwriting this.
+	store.desc.Capacity.Capacity = capacity
+}
+
 // AddReplica modifies the state to include one additional range for the
 // Range with ID RangeID, placed on the Store with ID StoreID. This fails
 // if a Replica for the Range already exists the Store.
@@ -626,6 +635,16 @@ func (s *state) SetSpanConfig(span roachpb.Span, config roachpb.SpanConfig) {
 		}
 		return true
 	})
+}
+
+// SetRangeBytes sets the size of the range with ID RangeID to be equal to
+// the bytes given.
+func (s *state) SetRangeBytes(rangeID RangeID, bytes int64) {
+	rng, ok := s.ranges.rangeMap[rangeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: no range with with ID %d", rangeID))
+	}
+	rng.size = bytes
 }
 
 // SplitRange splits the Range which contains Key in [StartKey, EndKey).
