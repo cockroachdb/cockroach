@@ -48,7 +48,7 @@ func createJobsMetricsPollingJob(
 				Description:   jobspb.TypePollJobsStats.String(),
 				Details:       jobspb.PollJobsStatsDetails{},
 				Progress:      jobspb.PollJobsStatsProgress{},
-				CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
+				CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: int64(username.RootUserID)},
 				Username:      username.RootUserName(),
 				NonCancelable: true,
 			}

@@ -9,9 +9,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/lexbase",
-        "//pkg/sql/sem/catid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_lib_pq//oid",
     ],
 )
 
