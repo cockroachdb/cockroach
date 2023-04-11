@@ -245,6 +245,9 @@ type HashTable struct {
 	// Same is only used when the HashTable contains non-distinct keys (in
 	// HashTableFullBuildMode mode) and is probed via HashTableDefaultProbeMode
 	// mode.
+	// TODO(yuzefovich): think through whether we could get rid of this slice
+	// and, instead, divide all build tuples into "equality buckets", similar to
+	// how we do hash aggregation.
 	Same []keyID
 	// Visited represents whether each of the corresponding keys have been
 	// touched by the prober.

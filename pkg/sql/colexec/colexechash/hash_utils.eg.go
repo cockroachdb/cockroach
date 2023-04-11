@@ -2150,3 +2150,190 @@ func rehash64(
 	}
 	cancelChecker.CheckEveryCall()
 }
+
+// DistinctCollect prepares the batch with the joined output columns where the
+// build row index for each probe row is given in the ToCheckID slice. The
+// function only handles inner, outer, and left semi joins (since all others
+// need facilities of the non-distinct collection) in the case that the equality
+// columns form a key over the right side.
+func (ht *HashTable) DistinctCollect(
+	ps *JoinProbeState, batch coldata.Batch, batchSize int, sel []int,
+) int {
+	nResults := 0
+
+	if ps.Type.IsLeftOuterOrFullOuter() {
+		nResults = batchSize
+		if sel != nil {
+			distinctCollectProbeOuter_true(ht, ps, batchSize, sel)
+		} else {
+			distinctCollectProbeOuter_false(ht, ps, batchSize, sel)
+		}
+	} else {
+		if sel != nil {
+			nResults = distinctCollectProbeNoOuter_true(ht, ps, batchSize, nResults, sel)
+		} else {
+			nResults = distinctCollectProbeNoOuter_false(ht, ps, batchSize, nResults, sel)
+		}
+	}
+
+	return nResults
+}
+
+const _ = "template_distinctCollectProbeOuter"
+
+const _ = "template_distinctCollectProbeNoOuter"
+
+// execgen:inline
+const _ = "template_getIdx"
+
+func distinctCollectProbeOuter_true(
+	ht *HashTable, ps *JoinProbeState, batchSize int, sel []int) {
+	// Early bounds checks.
+	// Capture the slices in order for BCE to occur.
+	toCheckIDs := ht.ProbeScratch.ToCheckID
+	probeRowUnmatched := ps.ProbeRowUnmatched
+	buildIdx := ps.BuildIdx
+	probeIdx := ps.ProbeIdx
+	_ = toCheckIDs[batchSize-1]
+	_ = probeRowUnmatched[batchSize-1]
+	_ = buildIdx[batchSize-1]
+	_ = probeIdx[batchSize-1]
+	_ = sel[batchSize-1]
+	for i := 0; i < batchSize; i++ {
+		// Index of keys and outputs in the hash table is calculated as ID - 1.
+		//gcassert:bce
+		id := toCheckIDs[i]
+		rowUnmatched := id == 0
+		//gcassert:bce
+		probeRowUnmatched[i] = rowUnmatched
+		if rowUnmatched {
+			// The row is unmatched, and we set the corresponding BuildIdx
+			// to zero so that (as long as the build hash table has at least
+			// one row) we can copy the values vector without paying
+			// attention to ProbeRowUnmatched.
+			//gcassert:bce
+			buildIdx[i] = 0
+		} else {
+			//gcassert:bce
+			buildIdx[i] = int(id - 1)
+		}
+		var pIdx int
+		{
+			var __retval_0 int
+			{
+				{
+					__retval_0 = sel[i]
+				}
+			}
+			pIdx = __retval_0
+		}
+		//gcassert:bce
+		probeIdx[i] = pIdx
+	}
+}
+
+func distinctCollectProbeOuter_false(
+	ht *HashTable, ps *JoinProbeState, batchSize int, sel []int) {
+	// Early bounds checks.
+	// Capture the slices in order for BCE to occur.
+	toCheckIDs := ht.ProbeScratch.ToCheckID
+	probeRowUnmatched := ps.ProbeRowUnmatched
+	buildIdx := ps.BuildIdx
+	probeIdx := ps.ProbeIdx
+	_ = toCheckIDs[batchSize-1]
+	_ = probeRowUnmatched[batchSize-1]
+	_ = buildIdx[batchSize-1]
+	_ = probeIdx[batchSize-1]
+	for i := 0; i < batchSize; i++ {
+		// Index of keys and outputs in the hash table is calculated as ID - 1.
+		//gcassert:bce
+		id := toCheckIDs[i]
+		rowUnmatched := id == 0
+		//gcassert:bce
+		probeRowUnmatched[i] = rowUnmatched
+		if rowUnmatched {
+			// The row is unmatched, and we set the corresponding BuildIdx
+			// to zero so that (as long as the build hash table has at least
+			// one row) we can copy the values vector without paying
+			// attention to ProbeRowUnmatched.
+			//gcassert:bce
+			buildIdx[i] = 0
+		} else {
+			//gcassert:bce
+			buildIdx[i] = int(id - 1)
+		}
+		var pIdx int
+		{
+			var __retval_0 int
+			{
+				{
+					__retval_0 = i
+				}
+			}
+			pIdx = __retval_0
+		}
+		//gcassert:bce
+		probeIdx[i] = pIdx
+	}
+}
+
+func distinctCollectProbeNoOuter_true(
+	ht *HashTable, ps *JoinProbeState, batchSize int, nResults int, sel []int) int {
+	// Early bounds checks.
+	// Capture the slice in order for BCE to occur.
+	toCheckIDs := ht.ProbeScratch.ToCheckID
+	_ = toCheckIDs[batchSize-1]
+	_ = sel[batchSize-1]
+	for i := 0; i < batchSize; i++ {
+		//gcassert:bce
+		id := toCheckIDs[i]
+		if id != 0 {
+			// Index of keys and outputs in the hash table is calculated as ID - 1.
+			ps.BuildIdx[nResults] = int(id - 1)
+			{
+				var __retval_0 int
+				{
+					{
+						__retval_0 = sel[i]
+					}
+				}
+				ps.ProbeIdx[nResults] = __retval_0
+			}
+			nResults++
+		}
+	}
+	return nResults
+}
+
+func distinctCollectProbeNoOuter_false(
+	ht *HashTable, ps *JoinProbeState, batchSize int, nResults int, sel []int) int {
+	// Early bounds checks.
+	// Capture the slice in order for BCE to occur.
+	toCheckIDs := ht.ProbeScratch.ToCheckID
+	_ = toCheckIDs[batchSize-1]
+	for i := 0; i < batchSize; i++ {
+		//gcassert:bce
+		id := toCheckIDs[i]
+		if id != 0 {
+			// Index of keys and outputs in the hash table is calculated as ID - 1.
+			ps.BuildIdx[nResults] = int(id - 1)
+			{
+				var __retval_0 int
+				{
+					{
+						__retval_0 = i
+					}
+				}
+				ps.ProbeIdx[nResults] = __retval_0
+			}
+			nResults++
+		}
+	}
+	return nResults
+}
+
+// execgen:inline
+const _ = "inlined_getIdx_true"
+
+// execgen:inline
+const _ = "inlined_getIdx_false"
