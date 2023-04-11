@@ -118,6 +118,7 @@ var kvMeta = workload.Meta{
 	`,
 	Version:    `1.0.0`,
 	RandomSeed: RandomSeed,
+	Operations: []string{`del`, `read`, `span`, `write`, `follower-read`},
 	New: func() workload.Generator {
 		g := &kv{}
 		g.flags.FlagSet = pflag.NewFlagSet(`kv`, pflag.ContinueOnError)

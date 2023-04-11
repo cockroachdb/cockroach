@@ -165,6 +165,9 @@ type Meta struct {
 	// be of limited teaching value to other teams or end-users.
 	TestInfraOnly bool
 
+	// Operations is a list of operations that this generator will generate.
+	Operations []string
+
 	// New returns an unconfigured instance of this generator.
 	New func() Generator
 }

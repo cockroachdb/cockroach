@@ -2,12 +2,18 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "histogram",
-    srcs = ["histogram.go"],
+    srcs = [
+        "histogram.go",
+        "udp_publisher.go",
+        "udp_receiver.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/histogram",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/grpcutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_golang//prometheus/promauto",
@@ -16,7 +22,10 @@ go_library(
 
 go_test(
     name = "histogram_test",
-    srcs = ["histogram_test.go"],
+    srcs = [
+        "histogram_test.go",
+        "udp_test.go",
+    ],
     embed = [":histogram"],
     deps = [
         "//pkg/util/ctxgroup",

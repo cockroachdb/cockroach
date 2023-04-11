@@ -75,6 +75,16 @@ var prometheusPort = sharedFlags.Int(
 	"Port to expose prometheus metrics if the workload has a prometheus gatherer set.",
 )
 
+// individualOperationReceiverAddr is the address we send individual latency
+// measurements to. By default it sends the operations to poer 12345 on
+// localhost.
+var individualOperationReceiverAddr = sharedFlags.String(
+	"operation-receiver",
+	":12345",
+	"Address to which to send individual operation metrics. "+
+		"By default send the operations to localhost.",
+)
+
 var histograms = runFlags.String(
 	"histograms", "",
 	"File to write per-op incremental and cumulative histogram data.")
@@ -412,9 +422,10 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	if !ok {
 		return errors.Errorf(`no operations defined for %s`, gen.Meta().Name)
 	}
-	reg := histogram.NewRegistry(
+	reg := histogram.NewRegistryWithPublisher(
 		*histogramsMaxLatency,
 		gen.Meta().Name,
+		histogram.CreateUdpPublisher(*individualOperationReceiverAddr, gen.Meta().Operations),
 	)
 	reg.Registerer().MustRegister(collectors.NewGoCollector())
 	// Expose the prometheus gatherer.
