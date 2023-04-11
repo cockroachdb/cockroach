@@ -43,10 +43,18 @@ export function filteredStatementsData(
   // Current filters: search text, database, fullScan, service latency,
   // SQL Type, nodes and regions.
   return statements
-    .filter(
-      statement =>
-        databases.length == 0 || databases.includes(statement.database),
-    )
+    .filter(statement => {
+      try {
+        // Case where the database is returned as an array in a string form.
+        const dbList = JSON.parse(statement.database);
+        return (
+          databases.length === 0 || databases.some(d => dbList.includes(d))
+        );
+      } catch (e) {
+        // Case where the database is a single value as a string.
+        return databases.length === 0 || databases.includes(statement.database);
+      }
+    })
     .filter(statement => (filters.fullScan ? statement.fullScan : true))
     .filter(
       statement =>
