@@ -666,6 +666,13 @@ var charts = []sectionDescription{
 					"range.snapshots.delegate.sent-bytes",
 				},
 			},
+			{
+				Title: "Snapshot Queue Bytes",
+				Metrics: []string{
+					"range.snapshots.send-queue-bytes",
+					"range.snapshots.recv-queue-bytes",
+				},
+			},
 		},
 	},
 	{

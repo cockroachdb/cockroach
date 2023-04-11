@@ -3622,6 +3622,45 @@ func NewDJSON(j json.JSON) *DJSON {
 	return &DJSON{j}
 }
 
+// IsComposite implements the CompositeDatum interface.
+func (d *DJSON) IsComposite() bool {
+	switch d.JSON.Type() {
+	case json.NumberJSONType:
+		dec, ok := d.JSON.AsDecimal()
+		if !ok {
+			panic(errors.AssertionFailedf("could not convert into JSON Decimal"))
+		}
+		DDec := DDecimal{Decimal: *dec}
+		return DDec.IsComposite()
+	case json.ArrayJSONType:
+		jsonArray, ok := d.AsArray()
+		if !ok {
+			panic(errors.AssertionFailedf("could not extract the JSON Array"))
+		}
+		for _, elem := range jsonArray {
+			dJsonVal := DJSON{elem}
+			if dJsonVal.IsComposite() {
+				return true
+			}
+		}
+	case json.ObjectJSONType:
+		if it, err := d.ObjectIter(); it != nil && err == nil {
+			// Assumption: no collated strings are present as JSON keys.
+			// Thus, JSON keys are not being checked if they are
+			// composite or not.
+			for it.Next() {
+				valDJSON := NewDJSON(it.Value())
+				if valDJSON.IsComposite() {
+					return true
+				}
+			}
+		} else if err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "could not receive an ObjectKeyIterator"))
+		}
+	}
+	return false
+}
+
 // ParseDJSON takes a string of JSON and returns a DJSON value.
 func ParseDJSON(s string) (Datum, error) {
 	j, err := json.ParseJSON(s)

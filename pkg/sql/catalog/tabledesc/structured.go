@@ -714,6 +714,14 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 			colIDs = idx.CollectKeyColumnIDs()
 		}
 
+		// Inverted indexes don't store composite values in the individual
+		// paths present. The composite values will be encoded in
+		// the primary index itself.
+		compositeColIDsLocal := compositeColIDs.Copy()
+		if isInverted {
+			compositeColIDsLocal.Remove(invID)
+		}
+
 		// StoreColumnIDs are derived from StoreColumnNames just like KeyColumnIDs
 		// derives from KeyColumnNames.
 		// For primary indexes this set of columns is typically defined as the set
@@ -755,12 +763,12 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 		// or in the primary key whose type has a composite encoding, like DECIMAL
 		// for instance.
 		for _, colID := range idx.IndexDesc().KeyColumnIDs {
-			if compositeColIDs.Contains(colID) {
+			if compositeColIDsLocal.Contains(colID) {
 				idx.IndexDesc().CompositeColumnIDs = append(idx.IndexDesc().CompositeColumnIDs, colID)
 			}
 		}
 		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
-			if compositeColIDs.Contains(colID) {
+			if compositeColIDsLocal.Contains(colID) {
 				idx.IndexDesc().CompositeColumnIDs = append(idx.IndexDesc().CompositeColumnIDs, colID)
 			}
 		}

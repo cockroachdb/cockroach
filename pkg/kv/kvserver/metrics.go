@@ -899,6 +899,18 @@ var (
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeSnapshotSendQueueSize = metric.Metadata{
+		Name:        "range.snapshots.send-queue-bytes",
+		Help:        "Total size of all snapshots in the snapshot send queue",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRangeSnapshotRecvQueueSize = metric.Metadata{
+		Name:        "range.snapshots.recv-queue-bytes",
+		Help:        "Total size of all snapshots in the snapshot receive queue",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 
 	metaRangeRaftLeaderTransfers = metric.Metadata{
 		Name:        "range.raftleadertransfers",
@@ -2046,6 +2058,8 @@ type StoreMetrics struct {
 	RangeSnapshotRecvInProgress      *metric.Gauge
 	RangeSnapshotSendTotalInProgress *metric.Gauge
 	RangeSnapshotRecvTotalInProgress *metric.Gauge
+	RangeSnapshotSendQueueSize       *metric.Gauge
+	RangeSnapshotRecvQueueSize       *metric.Gauge
 
 	// Delegate snapshot metrics. These don't count self-delegated snapshots.
 	DelegateSnapshotSendBytes  *metric.Counter
@@ -2645,6 +2659,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotRecvInProgress:                  metric.NewGauge(metaRangeSnapshotRecvInProgress),
 		RangeSnapshotSendTotalInProgress:             metric.NewGauge(metaRangeSnapshotSendTotalInProgress),
 		RangeSnapshotRecvTotalInProgress:             metric.NewGauge(metaRangeSnapshotRecvTotalInProgress),
+		RangeSnapshotSendQueueSize:                   metric.NewGauge(metaRangeSnapshotSendQueueSize),
+		RangeSnapshotRecvQueueSize:                   metric.NewGauge(metaRangeSnapshotRecvQueueSize),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 		DelegateSnapshotSendBytes:                    metric.NewCounter(metaDelegateSnapshotSendBytes),
