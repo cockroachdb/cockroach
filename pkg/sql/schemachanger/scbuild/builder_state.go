@@ -146,19 +146,23 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	panic(errors.AssertionFailedf("unsupported incumbent target %s", oldTarget.Status()))
 }
 
+func (b *builderState) upsertElementState(es elementState) {
+	if existing := b.getExistingElementState(es.element); existing != nil {
+		if err := b.localMemAcc.Grow(b.ctx, es.byteSize()-existing.byteSize()); err != nil {
+			panic(err)
+		}
+		*existing = es
+	} else {
+		b.addNewElementState(es)
+	}
+}
+
 func (b *builderState) getExistingElementState(e scpb.Element) *elementState {
 	if e == nil {
 		panic(errors.AssertionFailedf("cannot define target for nil element"))
 	}
 	id := screl.GetDescID(e)
-	if b.newDescriptors.Contains(id) {
-		if _, ok := b.descCache[id]; !ok {
-			b.descCache[id] = b.newCachedDescForNewDesc()
-		}
-	} else {
-		b.ensureDescriptor(id)
-	}
-
+	b.ensureDescriptor(id)
 	c := b.descCache[id]
 
 	key := screl.ElementString(e)
@@ -175,6 +179,9 @@ func (b *builderState) getExistingElementState(e scpb.Element) *elementState {
 }
 
 func (b *builderState) addNewElementState(es elementState) {
+	if err := b.localMemAcc.Grow(b.ctx, es.byteSize()); err != nil {
+		panic(err)
+	}
 	id := screl.GetDescID(es.element)
 	key := screl.ElementString(es.element)
 	c := b.descCache[id]
@@ -1186,10 +1193,20 @@ func (b *builderState) resolveBackReferences(c *cachedDesc) {
 	c.backrefsResolved = true
 }
 
+// ensureDescriptor ensures descriptor `id` is "tracked" inside the builder state,
+// as a *cacheDesc.
+// For newly created descriptors, it merely creates a zero-valued *cacheDesc entry;
+// For existing descriptors, it creates and populate the *cacheDesc entry and
+// decompose it into elements (as tracked in b.output).
 func (b *builderState) ensureDescriptor(id catid.DescID) {
 	if _, found := b.descCache[id]; found {
 		return
 	}
+	if b.newDescriptors.Contains(id) {
+		b.descCache[id] = b.newCachedDescForNewDesc()
+		return
+	}
+
 	c := b.newCachedDesc(id)
 	// Collect privileges
 	if !c.hasOwnership {

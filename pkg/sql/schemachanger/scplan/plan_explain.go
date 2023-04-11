@@ -106,6 +106,7 @@ func (p Plan) explain(style treeprinter.Style) (string, error) {
 	tp := treeprinter.NewWithStyle(style)
 	var sb strings.Builder
 	{
+		// Don't bother to memory monitor this "prologue" part as it is small and fixed.
 		sb.WriteString("Schema change plan for ")
 		if p.InRollback {
 			sb.WriteString("rolling back ")
@@ -216,20 +217,32 @@ func (p Plan) explainTargets(s scstage.Stage, sn treeprinter.Node, style treepri
 			if t.TargetStatus != ts.Status() || before == after {
 				continue
 			}
-			// Add element node and child rule nodes.
+			// Add element node and child rule nodes, and monitor memory allocation.
 			var en treeprinter.Node
+			var str string
+			var estimatedMemAlloc int
 			if style == treeprinter.BulletStyle {
-				en = tn.Child(screl.ElementString(t.Element()))
-				en.AddLine(fmt.Sprintf("%s → %s", before, after))
+				str = screl.ElementString(t.Element())
+				en = tn.Child(str)
+				estimatedMemAlloc += len(str)
+				str = fmt.Sprintf("%s → %s", before, after)
+				en.AddLine(str)
+				estimatedMemAlloc += len(str)
 			} else {
-				en = tn.Childf(fmtCompactTransition, before, after, screl.ElementString(t.Element()))
+				str = fmt.Sprintf(fmtCompactTransition, before, after, screl.ElementString(t.Element()))
+				en = tn.Child(str)
+				estimatedMemAlloc += len(str)
 			}
 			depEdges := depEdgeByElement[t.Element()]
 			for _, de := range depEdges {
-				rn := en.Childf("%s dependency from %s %s",
+				str = fmt.Sprintf("%s dependency from %s %s",
 					de.Kind(), de.From().CurrentStatus, screl.ElementString(de.From().Element()))
+				rn := en.Child(str)
+				estimatedMemAlloc += len(str)
 				for _, r := range de.Rules() {
-					rn.AddLine(fmt.Sprintf("rule: %q", r.Name))
+					str = fmt.Sprintf("rule: %q", r.Name)
+					rn.AddLine(str)
+					estimatedMemAlloc += len(str)
 				}
 			}
 			noOpEdges := noOpByElement[t.Element()]
@@ -238,11 +251,18 @@ func (p Plan) explainTargets(s scstage.Stage, sn treeprinter.Node, style treepri
 				if len(noOpRules) == 0 {
 					continue
 				}
-				nn := en.Childf("skip %s → %s operations",
+				str = fmt.Sprintf("skip %s → %s operations",
 					oe.From().CurrentStatus, oe.To().CurrentStatus)
+				nn := en.Child(str)
+				estimatedMemAlloc += len(str)
 				for _, rule := range noOpRules {
-					nn.AddLine(fmt.Sprintf("rule: %q", rule))
+					str = fmt.Sprintf("rule: %q", rule)
+					nn.AddLine(str)
+					estimatedMemAlloc += len(str)
 				}
+			}
+			if err := p.Params.MemAcc.Grow(p.Params.Ctx, int64(estimatedMemAlloc)); err != nil {
+				return err
 			}
 		}
 	}
@@ -260,6 +280,7 @@ func (p Plan) explainOps(s scstage.Stage, sn treeprinter.Node, style treeprinter
 	}
 	on := sn.Childf("%d %s operation%s", len(ops), strings.TrimSuffix(s.Type().String(), "Type"), plural)
 	for _, op := range ops {
+		var estimatedMemAlloc int
 		if setJobStateOp, ok := op.(*scop.SetJobStateOnDescriptor); ok {
 			clone := *setJobStateOp
 			clone.State = scpb.DescriptorState{}
@@ -268,12 +289,14 @@ func (p Plan) explainOps(s scstage.Stage, sn treeprinter.Node, style treeprinter
 		opName := strings.TrimPrefix(fmt.Sprintf("%T", op), "*scop.")
 		if style == treeprinter.BulletStyle {
 			n := on.Child(opName)
+			estimatedMemAlloc += len(opName)
 			opBody, err := explainOpBodyVerbose(op)
 			if err != nil {
 				return err
 			}
 			for _, line := range strings.Split(opBody, "\n") {
 				n.AddLine(line)
+				estimatedMemAlloc += len(line)
 			}
 		} else {
 			opBody, err := explainOpBodyCompact(op)
@@ -282,9 +305,15 @@ func (p Plan) explainOps(s scstage.Stage, sn treeprinter.Node, style treeprinter
 			}
 			if len(opBody) == 0 {
 				on.Child(opName)
+				estimatedMemAlloc += len(opName)
 			} else {
-				on.Childf("%s %s", opName, opBody)
+				str := fmt.Sprintf("%s %s", opName, opBody)
+				on.Child(str)
+				estimatedMemAlloc += len(str)
 			}
+		}
+		if err := p.Params.MemAcc.Grow(p.Params.Ctx, int64(estimatedMemAlloc)); err != nil {
+			return err
 		}
 	}
 	return nil

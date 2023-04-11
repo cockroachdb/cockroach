@@ -12,6 +12,7 @@ package scbuild
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/redact"
 )
 
@@ -39,16 +41,31 @@ import (
 // execution of their corresponding statement phase stages. In other words,
 // the incumbent state encodes the schema change such as it has been defined
 // prior to this call, along with any in-transaction side effects.
+//
+// `memAcc` is an injected memory account to track allocation of objects that
+// long-live this function (i.e. objects that will not be destroyed after this
+// function returns).
 func Build(
-	ctx context.Context, dependencies Dependencies, incumbent scpb.CurrentState, n tree.Statement,
+	ctx context.Context,
+	dependencies Dependencies,
+	incumbent scpb.CurrentState,
+	n tree.Statement,
+	memAcc *mon.BoundAccount,
 ) (_ scpb.CurrentState, err error) {
 	defer scerrors.StartEventf(
 		ctx,
 		"building declarative schema change targets for %s",
 		redact.Safe(n.StatementTag()),
 	).HandlePanicAndLogError(ctx, &err)
-	incumbent = incumbent.DeepCopy()
-	bs := newBuilderState(ctx, dependencies, incumbent)
+
+	// localMemAcc is opened to track memory allocation for local objects
+	// and should be cleared before this function returns.
+	localMemAcc := makeBoundAccount(memAcc.Monitor())
+	defer func() {
+		localMemAcc.Clear(ctx)
+	}()
+
+	bs := newBuilderState(ctx, dependencies, incumbent, localMemAcc)
 	els := newEventLogState(dependencies, incumbent, n)
 	// TODO(fqazi): The optimizer can end up already modifying the statement above
 	// to fully resolve names. We need to take this into account for CTAS/CREATE
@@ -70,6 +87,12 @@ func Build(
 	currentStatementID := uint32(len(els.statements) - 1)
 	els.statements[currentStatementID].RedactedStatement = string(
 		dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
+
+	// estimatedTargetStateSize is an estimated memory usage of the to-be-return scpb.TargetState.
+	estimatedTargetStateSize := int(unsafe.Sizeof(scpb.Target{})+2*unsafe.Sizeof(scpb.Status(0))) * len(bs.output)
+	if err := memAcc.Grow(ctx, int64(estimatedTargetStateSize)); err != nil {
+		return scpb.CurrentState{}, err
+	}
 	ts := scpb.TargetState{
 		Targets:       make([]scpb.Target, 0, len(bs.output)),
 		Statements:    els.statements,
@@ -104,24 +127,41 @@ func Build(
 			withLogEvent = append(withLogEvent, t)
 		}
 	}
-	// Ensure that no concurrent schema change are on going on any targets.
-	descSet := screl.AllTargetDescIDs(ts)
-	descSet.ForEach(func(id descpb.ID) {
-		bs.ensureDescriptor(id)
-		cached := bs.descCache[id]
-		// If a descriptor is being created, we don't need to worry about concurrent
-		// schema changes.
-		if !cached.isBeingCreated() && cached.desc.HasConcurrentSchemaChanges() {
-			panic(scerrors.ConcurrentSchemaChangeError(cached.desc))
-		}
-	})
+
+	// Ensure none of the involving descriptors have an ongoing schema change,
+	// unless it's newly created.
+	ensureNoConcurrentSchemaChange(&ts, bs)
+
 	// Write to event log and return.
 	logEvents(b, ts, withLogEvent)
+
 	return scpb.CurrentState{
 		TargetState: ts,
 		Initial:     initial,
 		Current:     current,
 	}, nil
+}
+
+// ensureNoConcurrentSchemaChange panics if any involving descriptor has an
+// ongoing schema changer, unless the descriptor is being added.
+func ensureNoConcurrentSchemaChange(ts *scpb.TargetState, bs *builderState) {
+	screl.AllTargetDescIDs(*ts).ForEach(func(id descpb.ID) {
+		bs.ensureDescriptor(id)
+		cached := bs.descCache[id]
+		if !cached.isBeingCreated() && cached.desc.HasConcurrentSchemaChanges() {
+			panic(scerrors.ConcurrentSchemaChangeError(cached.desc))
+		}
+	})
+}
+
+// makeBoundAccount is the same as `monitor.MakeBountAccount`
+// except that it returns a pointer.
+func makeBoundAccount(monitor *mon.BytesMonitor) (ret *mon.BoundAccount) {
+	if monitor != nil {
+		memAcc := monitor.MakeBoundAccount()
+		ret = &memAcc
+	}
+	return ret
 }
 
 // IsFullySupportedWithFalsePositive returns if a statement is fully supported
@@ -158,6 +198,13 @@ type elementState struct {
 	withLogEvent bool
 }
 
+// byteSize returns an estimated memory usage of `es` in bytes.
+func (es *elementState) byteSize() int64 {
+	// scpb.Element + 3 * scpb.Status + scpb.TargetMetadata + bool
+	return int64(es.element.Size()) + 3*int64(unsafe.Sizeof(scpb.Status(0))) +
+		int64(es.metadata.Size()) + int64(unsafe.Sizeof(false))
+}
+
 // builderState is the backing struct for scbuildstmt.BuilderState interface.
 type builderState struct {
 	// Dependencies
@@ -180,6 +227,12 @@ type builderState struct {
 	descCache      map[catid.DescID]*cachedDesc
 	tempSchemas    map[catid.DescID]catalog.SchemaDescriptor
 	newDescriptors catalog.DescriptorIDSet
+
+	// localMemAcc is an account to track memory allocation short-lived inside
+	// scbuild.Build function.
+	// For memory allocation long-lived scbuild.Build function, see the
+	// memory account in the build dependency.
+	localMemAcc *mon.BoundAccount
 }
 
 type cachedDesc struct {
@@ -208,7 +261,7 @@ func (c *cachedDesc) isBeingCreated() bool {
 
 // newBuilderState constructs a builderState.
 func newBuilderState(
-	ctx context.Context, d Dependencies, incumbent scpb.CurrentState,
+	ctx context.Context, d Dependencies, incumbent scpb.CurrentState, localMemAcc *mon.BoundAccount,
 ) *builderState {
 	bs := builderState{
 		ctx:                      ctx,
@@ -225,6 +278,7 @@ func newBuilderState(
 		commentGetter:            d.DescriptorCommentGetter(),
 		zoneConfigReader:         d.ZoneConfigGetter(),
 		referenceProviderFactory: d.ReferenceProviderFactory(),
+		localMemAcc:              localMemAcc,
 	}
 	var err error
 	bs.hasAdmin, err = bs.auth.HasAdminRole(ctx)
@@ -235,18 +289,13 @@ func newBuilderState(
 		bs.ensureDescriptor(screl.GetDescID(t.Element()))
 	}
 	for i, t := range incumbent.TargetState.Targets {
-		src := elementState{
+		bs.upsertElementState(elementState{
 			element:  t.Element(),
 			initial:  incumbent.Initial[i],
 			current:  incumbent.Current[i],
 			target:   scpb.AsTargetStatus(t.TargetStatus),
 			metadata: t.Metadata,
-		}
-		if dst := bs.getExistingElementState(src.element); dst != nil {
-			*dst = src
-		} else {
-			bs.addNewElementState(src)
-		}
+		})
 	}
 	return &bs
 }
