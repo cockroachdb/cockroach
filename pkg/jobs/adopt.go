@@ -328,7 +328,7 @@ func (r *Registry) resumeJob(
 				return err
 			}
 			if !exists {
-				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job not found in system.job_info")
+				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job payload not found in system.job_info")
 			}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
 				return err
@@ -339,7 +339,7 @@ func (r *Registry) resumeJob(
 				return err
 			}
 			if !exists {
-				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job not found in system.job_info")
+				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job progress not found in system.job_info")
 			}
 			return protoutil.Unmarshal(progressBytes, progress)
 		}); err != nil {

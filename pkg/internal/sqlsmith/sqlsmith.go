@@ -104,6 +104,7 @@ type Smither struct {
 	disableInsertSelect        bool
 	disableDivision            bool
 	disableDecimals            bool
+	disableUDFs                bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -503,6 +504,11 @@ var DisableDivision = simpleOption("disable division", func(s *Smither) {
 // DisableDecimals disables use of decimal type columns in the query.
 var DisableDecimals = simpleOption("disable decimals", func(s *Smither) {
 	s.disableDecimals = true
+})
+
+// DisableUDFs causes the Smither to disable user-defined functions.
+var DisableUDFs = simpleOption("disable udfs", func(s *Smither) {
+	s.disableUDFs = true
 })
 
 // CompareMode causes the Smither to generate statements that have

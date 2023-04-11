@@ -500,7 +500,7 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 			tenant.fifoPriorityThreshold = int(admissionpb.LowPri)
 		}
 		if tenant.fifoPriorityThreshold != prevThreshold || doLog {
-			logVerb := "is"
+			logVerb := redact.SafeString("is")
 			if tenant.fifoPriorityThreshold != prevThreshold {
 				logVerb = "changed to"
 			}
