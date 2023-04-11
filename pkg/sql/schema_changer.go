@@ -2567,7 +2567,8 @@ func NewFakeSessionData(sv *settings.Values) *sessiondata.SessionData {
 			Internal:      true,
 		},
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-			DistSQLMode: sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
+			DistSQLMode:              sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
+			OptimizerFKCascadesLimit: optDrivenFKCascadesClusterLimit.Get(sv),
 		},
 		SearchPath:    sessiondata.DefaultSearchPathForUser(username.NodeUserName()),
 		SequenceState: sessiondata.NewSequenceState(),
