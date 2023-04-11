@@ -1098,7 +1098,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 										if fullOuter {
 											joinType = descpb.FullOuterJoin
 										}
-										hjSpec := colexecjoin.MakeHashJoinerSpec(
+										hjSpec := colexecargs.MakeHashJoinerSpec(
 											joinType,
 											[]uint32{0, 1}, []uint32{2, 3},
 											sourceTypes, sourceTypes,
