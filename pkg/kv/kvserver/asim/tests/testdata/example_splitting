@@ -1,6 +1,9 @@
 # Explore how load based and sized based splitting occur in isolation. In this
 # example, there is only one store so no rebalancing activity should occur. 
-gen_state stores=1 ranges=1 repl_factor=1
+gen_cluster stores=1
+----
+
+gen_ranges ranges=1 repl_factor=1
 ----
 
 # Create a load generator, where there is higher ops/s than the qps split
