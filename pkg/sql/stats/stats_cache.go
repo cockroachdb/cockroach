@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
@@ -727,8 +728,8 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 	// TODO(michae2): Add an index on system.table_statistics (tableID, createdAt,
 	// columnIDs, statisticID).
 
-	it, err := sc.SQLExecutor.QueryIterator(
-		ctx, "get-table-statistics", nil /* txn */, getTableStatisticsStmt, tableID,
+	it, err := sc.SQLExecutor.QueryIteratorEx(
+		ctx, "get-table-statistics", nil /* txn */, sessiondata.NodeUserSessionDataOverride, getTableStatisticsStmt, tableID,
 	)
 	if err != nil {
 		return nil, err
