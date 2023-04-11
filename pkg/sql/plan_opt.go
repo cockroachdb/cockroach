@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -631,7 +632,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var bld *execbuilder.Builder
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		bld = execbuilder.New(ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
-			evalCtx, allowAutoCommit, stmt.IsANSIDML())
+			evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST))
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -641,7 +642,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
 		bld = execbuilder.New(ctx, explainFactory, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
-			evalCtx, allowAutoCommit, stmt.IsANSIDML())
+			evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST))
 		plan, err := bld.Build()
 		if err != nil {
 			return err

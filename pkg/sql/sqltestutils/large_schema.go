@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 )
 
 // GenerateViewBasedGraphSchemaParams input parameters for
@@ -50,8 +51,8 @@ type GenerateViewBasedGraphSchemaParams struct {
 //     as the depth increases.
 func GenerateViewBasedGraphSchema(
 	params GenerateViewBasedGraphSchemaParams,
-) (parser.Statements, error) {
-	statements := make(parser.Statements, 0, int(math.Pow(float64(params.NumTablesPerDepth), float64(params.GraphDepth))))
+) (statements.Statements, error) {
+	statements := make(statements.Statements, 0, int(math.Pow(float64(params.NumTablesPerDepth), float64(params.GraphDepth))))
 	stmt, err := parser.ParseOne("BEGIN;")
 	if err != nil {
 		return nil, err
