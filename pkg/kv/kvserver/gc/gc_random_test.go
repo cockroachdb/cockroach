@@ -36,10 +36,11 @@ import (
 // running randomized GC tests as well as benchmarking new code vs preserved
 // legacy GC.
 type randomRunGCTestSpec struct {
-	ds           distSpec
-	now          hlc.Timestamp
-	ttlSec       int32
-	intentAgeSec int32
+	ds             distSpec
+	now            hlc.Timestamp
+	ttlSec         int32
+	intentAgeSec   int32
+	clearRangeKeys int64 // Set to 0 for test default value or -1 to disable.
 }
 
 var (
@@ -186,6 +187,7 @@ func BenchmarkRun(b *testing.B) {
 			CalculateThreshold(spec.now, ttl), RunOptions{
 				IntentAgeThreshold:  intentThreshold,
 				TxnCleanupThreshold: txnCleanupThreshold,
+				ClearRangeMinKeys:   defaultClearRangeMinKeys,
 			},
 			ttl,
 			NoopGCer{},
@@ -271,12 +273,56 @@ func TestNewVsInvariants(t *testing.T) {
 			now: hlc.Timestamp{
 				WallTime: 100 * time.Second.Nanoseconds(),
 			},
+			ttlSec:       10,
+			intentAgeSec: 15,
+			// Reduced clear range sequence to allow key batches to be split at
+			// various boundaries.
+			clearRangeKeys: 49,
+		},
+		{
+			ds: someVersionsWithSomeRangeKeys,
+			now: hlc.Timestamp{
+				WallTime: 100 * time.Second.Nanoseconds(),
+			},
+			ttlSec:       10,
+			intentAgeSec: 15,
+			// Disable clear range to reliably engage specific code paths that handle
+			// simplified no-clear-range batching.
+			clearRangeKeys: -1,
+		},
+		{
+			ds: someVersionsWithSomeRangeKeys,
+			now: hlc.Timestamp{
+				WallTime: 100 * time.Second.Nanoseconds(),
+			},
 			// Higher TTL means range tombstones between 70 sec and 50 sec are
 			// not removed.
 			ttlSec: 50,
 		},
+		{
+			ds: someVersionsWithSomeRangeKeys,
+			now: hlc.Timestamp{
+				WallTime: 100 * time.Second.Nanoseconds(),
+			},
+			// Higher TTL means range tombstones between 70 sec and 50 sec are
+			// not removed.
+			ttlSec: 50,
+			// Reduced clear range sequence to allow key batches to be split at
+			// various boundaries.
+			clearRangeKeys: 10,
+		},
 	} {
-		t.Run(fmt.Sprintf("%v@%v,ttl=%vsec", tc.ds, tc.now, tc.ttlSec), func(t *testing.T) {
+		clearRangeKeys := int64(0)
+		switch tc.clearRangeKeys {
+		case -1:
+		case 0:
+			// Default value for test.
+			clearRangeKeys = 100
+		default:
+			clearRangeKeys = tc.clearRangeKeys
+		}
+		name := fmt.Sprintf("%v@%v,ttl=%vsec,clearRangeKeys=%d", tc.ds, tc.now, tc.ttlSec, clearRangeKeys)
+		t.Run(name, func(t *testing.T) {
 			rng, seed := randutil.NewTestRand()
 			t.Logf("Using subtest seed: %d", seed)
 
@@ -298,7 +344,7 @@ func TestNewVsInvariants(t *testing.T) {
 				gcThreshold, RunOptions{
 					IntentAgeThreshold:  intentAgeThreshold,
 					TxnCleanupThreshold: txnCleanupThreshold,
-					ClearRangeMinKeys:   100,
+					ClearRangeMinKeys:   clearRangeKeys,
 				}, ttl,
 				&gcer,
 				gcer.resolveIntents,
