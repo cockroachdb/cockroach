@@ -186,6 +186,7 @@ go_library(
         "//pkg/sql/importer",
         "//pkg/sql/optionalnodeliveness",
         "//pkg/sql/parser",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

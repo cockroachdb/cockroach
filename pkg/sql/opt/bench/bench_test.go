@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -849,7 +850,7 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 		root,
 		&h.evalCtx,
 		true, /* allowAutoCommit */
-		stmt.IsANSIDML(),
+		statements.IsANSIDML(stmt.AST),
 	)
 	if _, err = eb.Build(); err != nil {
 		tb.Fatalf("%v", err)

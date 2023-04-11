@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -88,7 +89,7 @@ import (
 //	then the statement cannot have any placeholder.
 func (ex *connExecutor) execStmt(
 	ctx context.Context,
-	parserStmt parser.Statement,
+	parserStmt statements.Statement[tree.Statement],
 	prepared *PreparedStatement,
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
@@ -252,7 +253,7 @@ func (ex *connExecutor) execPortal(
 // The returned event can be nil if no state transition is required.
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context,
-	parserStmt parser.Statement,
+	parserStmt statements.Statement[tree.Statement],
 	prepared *PreparedStatement,
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
@@ -580,7 +581,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 		}
 		prepStmt := makeStatement(
-			parser.Statement{
+			statements.Statement[tree.Statement]{
 				// We need the SQL string just for the part that comes after
 				// "PREPARE ... AS",
 				// TODO(radu): it would be nice if the parser would figure out this

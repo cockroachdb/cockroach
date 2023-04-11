@@ -24,6 +24,7 @@ import (
 	"go/constant"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
@@ -37,70 +38,6 @@ func init() {
 	scanner.NewPlaceholderFn = func(s string) (interface{}, error) { return tree.NewPlaceholder(s) }
 }
 
-// Statement is the result of parsing a single statement. It contains the AST
-// node along with other information.
-type Statement struct {
-	// AST is the root of the AST tree for the parsed statement.
-	AST tree.Statement
-
-	// SQL is the original SQL from which the statement was parsed. Note that this
-	// is not appropriate for use in logging, as it may contain passwords and
-	// other sensitive data.
-	SQL string
-
-	// NumPlaceholders indicates the number of arguments to the statement (which
-	// are referenced through placeholders). This corresponds to the highest
-	// argument position (i.e. the x in "$x") that appears in the query.
-	//
-	// Note: where there are "gaps" in the placeholder positions, this number is
-	// based on the highest position encountered. For example, for `SELECT $3`,
-	// NumPlaceholders is 3. These cases are malformed and will result in a
-	// type-check error.
-	NumPlaceholders int
-
-	// NumAnnotations indicates the number of annotations in the tree. It is equal
-	// to the maximum annotation index.
-	NumAnnotations tree.AnnotationIdx
-}
-
-// IsANSIDML returns true if the AST is one of the 4 DML statements,
-// SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of these statements.
-func (stmt Statement) IsANSIDML() bool {
-	return IsANSIDML(stmt.AST)
-}
-
-// IsANSIDML returns true if the AST is one of the 4 DML statements,
-// SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of these statements.
-func IsANSIDML(stmt tree.Statement) bool {
-	switch t := stmt.(type) {
-	case *tree.Select, *tree.ParenSelect, *tree.Delete, *tree.Insert, *tree.Update:
-		return true
-	case *tree.Explain:
-		return IsANSIDML(t.Statement)
-	}
-	return false
-}
-
-// Statements is a list of parsed statements.
-type Statements []Statement
-
-// String returns the AST formatted as a string.
-func (stmts Statements) String() string {
-	return stmts.StringWithFlags(tree.FmtSimple)
-}
-
-// StringWithFlags returns the AST formatted as a string (with the given flags).
-func (stmts Statements) StringWithFlags(flags tree.FmtFlags) string {
-	ctx := tree.NewFmtCtx(flags)
-	for i, s := range stmts {
-		if i > 0 {
-			ctx.WriteString("; ")
-		}
-		ctx.FormatNode(s.AST)
-	}
-	return ctx.CloseAndGetString()
-}
-
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
@@ -108,7 +45,7 @@ type Parser struct {
 	lexer      lexer
 	parserImpl sqlParserImpl
 	tokBuf     [8]sqlSymType
-	stmtBuf    [1]Statement
+	stmtBuf    [1]statements.Statement[tree.Statement]
 }
 
 // INT8 is the historical interpretation of INT. This should be left
@@ -130,23 +67,25 @@ func NakedIntTypeFromDefaultIntSize(defaultIntSize int32) *types.T {
 }
 
 // Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string) (Statements, error) {
+func (p *Parser) Parse(sql string) (statements.Statements, error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
 // ParseWithInt parses a sql statement string and returns a list of
 // Statements. The INT token will result in the specified TInt type.
-func (p *Parser) ParseWithInt(sql string, nakedIntType *types.T) (Statements, error) {
+func (p *Parser) ParseWithInt(sql string, nakedIntType *types.T) (statements.Statements, error) {
 	return p.parseWithDepth(1, sql, nakedIntType)
 }
 
-func (p *Parser) parseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
+func (p *Parser) parseOneWithInt(
+	sql string, nakedIntType *types.T,
+) (statements.Statement[tree.Statement], error) {
 	stmts, err := p.parseWithDepth(1, sql, nakedIntType)
 	if err != nil {
-		return Statement{}, err
+		return statements.Statement[tree.Statement]{}, err
 	}
 	if len(stmts) != 1 {
-		return Statement{}, errors.AssertionFailedf("expected 1 statement, but found %d", len(stmts))
+		return statements.Statement[tree.Statement]{}, errors.AssertionFailedf("expected 1 statement, but found %d", len(stmts))
 	}
 	return stmts[0], nil
 }
@@ -199,8 +138,10 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 	}
 }
 
-func (p *Parser) parseWithDepth(depth int, sql string, nakedIntType *types.T) (Statements, error) {
-	stmts := Statements(p.stmtBuf[:0])
+func (p *Parser) parseWithDepth(
+	depth int, sql string, nakedIntType *types.T,
+) (statements.Statements, error) {
+	stmts := statements.Statements(p.stmtBuf[:0])
 	p.scanner.Init(sql)
 	defer p.scanner.Cleanup()
 	for {
@@ -222,7 +163,7 @@ func (p *Parser) parseWithDepth(depth int, sql string, nakedIntType *types.T) (S
 // parse parses a statement from the given scanned tokens.
 func (p *Parser) parse(
 	depth int, sql string, tokens []sqlSymType, nakedIntType *types.T,
-) (Statement, error) {
+) (statements.Statement[tree.Statement], error) {
 	p.lexer.init(sql, tokens, nakedIntType)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
@@ -246,9 +187,10 @@ func (p *Parser) parse(
 			err = errors.WithTelemetry(err, tkeys...)
 		}
 
-		return Statement{}, err
+		return statements.Statement[tree.Statement]{}, err
 	}
-	return Statement{
+
+	return statements.Statement[tree.Statement]{
 		AST:             p.lexer.stmt,
 		SQL:             sql,
 		NumPlaceholders: p.lexer.numPlaceholders,
@@ -275,13 +217,13 @@ func unaryNegation(e tree.Expr) tree.Expr {
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
-func Parse(sql string) (Statements, error) {
+func Parse(sql string) (statements.Statements, error) {
 	return ParseWithInt(sql, defaultNakedIntType)
 }
 
 // ParseWithInt parses a sql statement string and returns a list of
 // Statements. The INT token will result in the specified TInt type.
-func ParseWithInt(sql string, nakedIntType *types.T) (Statements, error) {
+func ParseWithInt(sql string, nakedIntType *types.T) (statements.Statements, error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, nakedIntType)
 }
@@ -292,13 +234,15 @@ func ParseWithInt(sql string, nakedIntType *types.T) (Statements, error) {
 // used in various internal-execution paths where we might receive
 // bits of SQL from other nodes. In general,earwe expect that all
 // user-generated SQL has been run through the ParseWithInt() function.
-func ParseOne(sql string) (Statement, error) {
+func ParseOne(sql string) (statements.Statement[tree.Statement], error) {
 	return ParseOneWithInt(sql, defaultNakedIntType)
 }
 
 // ParseOneWithInt is similar to ParseOn but interprets the INT and SERIAL
 // types as the provided integer type.
-func ParseOneWithInt(sql string, nakedIntType *types.T) (Statement, error) {
+func ParseOneWithInt(
+	sql string, nakedIntType *types.T,
+) (statements.Statement[tree.Statement], error) {
 	var p Parser
 	return p.parseOneWithInt(sql, nakedIntType)
 }

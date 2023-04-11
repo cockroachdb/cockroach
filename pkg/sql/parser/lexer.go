@@ -272,8 +272,7 @@ func (l *lexer) Error(e string) {
 	l.populateErrorDetails()
 }
 
-// PopulateErrorDetails was created so plpgsql lexer and sql can share a
-// single function
+// PopulateErrorDetails properly wraps the "last error" field in the lexer.
 func PopulateErrorDetails(
 	tokID int32, lastTokStr string, lastTokPos int32, lastErr error, lIn string,
 ) error {

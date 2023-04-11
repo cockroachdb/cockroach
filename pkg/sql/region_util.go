@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -2337,5 +2338,5 @@ func (p *planner) GetMultiregionConfig(databaseID descpb.ID) (interface{}, bool)
 
 // IsANSIDML is part of the eval.Planner interface.
 func (p *planner) IsANSIDML() bool {
-	return p.stmt.IsANSIDML()
+	return statements.IsANSIDML(p.stmt.AST)
 }
