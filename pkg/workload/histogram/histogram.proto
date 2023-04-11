@@ -11,8 +11,13 @@
 syntax = "proto3";
 package histogram;
 
-// Latency is the latency for a single operation.
+import "google/protobuf/duration.proto";
+import "gogoproto/gogo.proto";
+
+// Latency records the duration for a single operation.
 message Latency {
+  // A description of the operation.
   string operation = 1;
-  uint32 duration = 2;
+  google.protobuf.Duration duration = 2
+      [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
 }
