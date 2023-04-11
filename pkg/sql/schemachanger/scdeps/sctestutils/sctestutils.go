@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kylelemons/godebug/diff"
 	"github.com/stretchr/testify/require"
@@ -176,11 +177,15 @@ func ProtoDiff(a, b protoutil.Message, args DiffArgs, rewrites ...func(interface
 }
 
 // MakePlan is a convenient alternative to calling scplan.MakePlan in tests.
-func MakePlan(t *testing.T, state scpb.CurrentState, phase scop.Phase) scplan.Plan {
+func MakePlan(
+	t *testing.T, state scpb.CurrentState, phase scop.Phase, memAcc *mon.BoundAccount,
+) scplan.Plan {
 	plan, err := scplan.MakePlan(context.Background(), state, scplan.Params{
+		Ctx:                        context.Background(),
 		ActiveVersion:              clusterversion.TestingClusterVersion,
 		ExecutionPhase:             phase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
+		MemAcc:                     memAcc,
 	})
 	require.NoError(t, err)
 	return plan
