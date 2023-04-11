@@ -43,7 +43,7 @@ func TestRangeSplit(t *testing.T) {
 	n1 := s.AddNode()
 	s1, _ := s.AddStore(n1.NodeID())
 
-	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID())
+	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
 
 	// Set the replica load of the existing replica to 100 write keys, to assert
 	// on the post split 50/50 load distribution.
@@ -130,7 +130,7 @@ func TestValidTransfer(t *testing.T) {
 	s2, _ := s.AddStore(n1.NodeID())
 
 	// Add replicas to store s2 on range r1.
-	s.AddReplica(r1.RangeID(), s2.StoreID())
+	s.AddReplica(r1.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
 
 	// Transferring a lease for range that does't exist shouldn't be possible.
 	require.False(t, s.ValidTransfer(100, s1.StoreID()))
@@ -142,7 +142,7 @@ func TestValidTransfer(t *testing.T) {
 	require.False(t, s.ValidTransfer(r1.RangeID(), s1.StoreID()))
 
 	// Add replicas to store s1 on range r1.
-	s.AddReplica(r1.RangeID(), s1.StoreID())
+	s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
 
 	// Transferring a lease to store s2 (from s2) should not be possible, as s2
 	// already has the lease.
@@ -163,8 +163,8 @@ func TestTransferLease(t *testing.T) {
 	s2, _ := s.AddStore(n1.NodeID())
 
 	// Add replicas to store s1,s2 on range r1.
-	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID())
-	repl2, _ := s.AddReplica(r1.RangeID(), s2.StoreID())
+	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
+	repl2, _ := s.AddReplica(r1.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
 
 	// Assert that the initial leaseholder is replica 1, on store 1.
 	require.Equal(t, r1.Leaseholder(), repl1.ReplicaID())
@@ -206,8 +206,8 @@ func TestValidReplicaTarget(t *testing.T) {
 	require.False(t, s.CanRemoveReplica(r1.RangeID(), s1.StoreID()))
 
 	// Add replicas to store s1,s2 on range r1.
-	s.AddReplica(r1.RangeID(), s1.StoreID())
-	s.AddReplica(r1.RangeID(), s2.StoreID())
+	s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r1.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
 
 	// Ensure the lease is on s1.
 	s.TransferLease(r1.RangeID(), s1.StoreID())
@@ -231,9 +231,9 @@ func TestAddReplica(t *testing.T) {
 	s2, _ := s.AddStore(n1.NodeID())
 
 	// Add two replicas on s1, one on s2.
-	r1repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID())
-	r2repl1, _ := s.AddReplica(r2.RangeID(), s1.StoreID())
-	r2repl2, _ := s.AddReplica(r2.RangeID(), s2.StoreID())
+	r1repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
+	r2repl1, _ := s.AddReplica(r2.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
+	r2repl2, _ := s.AddReplica(r2.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
 
 	require.Equal(t, ReplicaID(1), r1repl1.ReplicaID())
 	require.Equal(t, ReplicaID(1), r2repl1.ReplicaID())
@@ -257,9 +257,9 @@ func TestWorkloadApply(t *testing.T) {
 	_, r2, _ := s.SplitRange(1000)
 	_, r3, _ := s.SplitRange(10000)
 
-	s.AddReplica(r1.RangeID(), s1.StoreID())
-	s.AddReplica(r2.RangeID(), s2.StoreID())
-	s.AddReplica(r3.RangeID(), s3.StoreID())
+	s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r2.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r3.RangeID(), s3.StoreID(), roachpb.VOTER_FULL)
 
 	applyLoadToStats := func(key int64, count int) {
 		for i := 0; i < count; i++ {
@@ -302,7 +302,7 @@ func TestReplicaLoadQPS(t *testing.T) {
 	qps := 1000
 	s1, _ := s.AddStore(n1.NodeID())
 	_, r1, _ := s.SplitRange(k1)
-	s.AddReplica(r1.RangeID(), s1.StoreID())
+	s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
 
 	applyLoadToStats := func(key int64, count int) {
 		for i := 0; i < count; i++ {

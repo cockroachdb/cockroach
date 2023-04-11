@@ -96,10 +96,11 @@ type State interface {
 	// CanRemoveReplica returns whether removing a replica for the Range with
 	// ID RangeID from the Store with ID StoreID is valid.
 	CanRemoveReplica(RangeID, StoreID) bool
-	// AddReplica modifies the state to include one additional range for the
-	// Range with ID RangeID, placed on the Store with ID StoreID. This fails
-	// if a Replica for the Range already exists the Store.
-	AddReplica(RangeID, StoreID) (Replica, bool)
+	// AddReplica modifies the state to include one additional replica for the
+	// Range with ID RangeID, placed on the Store with ID StoreID. The replica
+	// type is set to the given replica type.  This fails if a Replica for the
+	// Range already exists the Store.
+	AddReplica(RangeID, StoreID, roachpb.ReplicaType) (Replica, bool)
 	// RemoveReplica modifies the state to remove a Replica with the ID
 	// ReplicaID. It fails if this Replica does not exist.
 	RemoveReplica(RangeID, StoreID) bool

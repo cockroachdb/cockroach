@@ -13,6 +13,7 @@ package state
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/google/btree"
 )
 
@@ -136,14 +137,14 @@ func (rc *ReplicaChange) Apply(s State) {
 		// Nothing to do.
 	case rc.Add > 0 && rc.Remove == 0:
 		if s.CanAddReplica(rc.RangeID, rc.Add) {
-			s.AddReplica(rc.RangeID, rc.Add)
+			s.AddReplica(rc.RangeID, rc.Add, roachpb.VOTER_FULL)
 		}
 	case rc.Add == 0 && rc.Remove > 0:
 		if s.CanRemoveReplica(rc.RangeID, rc.Remove) {
 			s.RemoveReplica(rc.RangeID, rc.Remove)
 		}
 	case rc.Add > 0 && rc.Remove > 0:
-		s.AddReplica(rc.RangeID, rc.Add)
+		s.AddReplica(rc.RangeID, rc.Add, roachpb.VOTER_FULL)
 		if !s.CanRemoveReplica(rc.RangeID, rc.Remove) {
 			// We want to remove a replica, however we cannot currently. This can only
 			// be due to the requested remove store holding a lease. Check if it's

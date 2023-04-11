@@ -119,7 +119,7 @@ func (rm *rmap) initFirstRange() {
 		desc:        desc,
 		config:      defaultSpanConfig,
 		replicas:    make(map[StoreID]*replica),
-		leaseholder: 0,
+		leaseholder: -1,
 	}
 
 	rm.rangeTree.ReplaceOrInsert(rng)
@@ -435,11 +435,15 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 // AddReplica modifies the state to include one additional range for the
 // Range with ID RangeID, placed on the Store with ID StoreID. This fails
 // if a Replica for the Range already exists the Store.
-func (s *state) AddReplica(rangeID RangeID, storeID StoreID) (Replica, bool) {
-	return s.addReplica(rangeID, storeID)
-
+func (s *state) AddReplica(
+	rangeID RangeID, storeID StoreID, rtype roachpb.ReplicaType,
+) (Replica, bool) {
+	return s.addReplica(rangeID, storeID, rtype)
 }
-func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
+
+func (s *state) addReplica(
+	rangeID RangeID, storeID StoreID, rtype roachpb.ReplicaType,
+) (*replica, bool) {
 	// Check whether it is possible to add the replica.
 	if !s.CanAddReplica(rangeID, storeID) {
 		return nil, false
@@ -447,14 +451,9 @@ func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
 
 	store := s.stores[storeID]
 	nodeID := store.nodeID
-	rng, ok := s.rng(rangeID)
-	if !ok {
-		panic(
-			fmt.Sprintf("programming error: attemtpted to add replica for a range=%d that doesn't exist",
-				rangeID))
-	}
+	rng, _ := s.rng(rangeID)
 
-	desc := rng.desc.AddReplica(roachpb.NodeID(nodeID), roachpb.StoreID(storeID), roachpb.VOTER_FULL)
+	desc := rng.desc.AddReplica(roachpb.NodeID(nodeID), roachpb.StoreID(storeID), rtype)
 	replica := &replica{
 		replicaID: ReplicaID(desc.ReplicaID),
 		storeID:   storeID,
@@ -470,7 +469,7 @@ func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
 	// leaseholder as a placeholder. The caller can update the lease, however
 	// we want to ensure that for any range that has replicas, a leaseholder
 	// exists at all times.
-	if len(rng.replicas) == 1 {
+	if rng.leaseholder == -1 && rtype == roachpb.VOTER_FULL {
 		s.setLeaseholder(rangeID, storeID)
 	}
 
@@ -722,11 +721,19 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	// create replicas on the same stores for the RHS.
 	for _, replica := range predecessorRange.Replicas() {
 		storeID := replica.StoreID()
-		s.AddReplica(rangeID, storeID)
+		if _, ok := s.AddReplica(rangeID, storeID, replica.Descriptor().Type); !ok {
+			panic(
+				fmt.Sprintf("programming error: unable to add replica for range=%d to store=%d",
+					r.rangeID, storeID))
+		}
 		if replica.HoldsLease() {
 			// The successor range's leaseholder was on this store, copy the
 			// leaseholder store over for the new split range.
-			leaseholderStore, _ := s.LeaseholderStore(r.rangeID)
+			leaseholderStore, ok := s.LeaseholderStore(r.rangeID)
+			if !ok {
+				panic(fmt.Sprintf("programming error: expected leaseholder store to "+
+					"exist for RangeID %d", r.rangeID))
+			}
 			// NB: This operation cannot fail.
 			s.replaceLeaseHolder(r.rangeID, storeID, leaseholderStore.StoreID())
 			// Reset the recorded load split statistics on the predecessor
