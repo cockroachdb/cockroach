@@ -11,11 +11,14 @@
 package state
 
 import (
+	"math"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
@@ -447,4 +450,103 @@ func TestSplitRangeDeterministic(t *testing.T) {
 		require.Equal(t, lhsA, lhsB, "lhs not equal, failed after %d splits", i)
 		require.Equal(t, rhsA, rhsB, "rhs not equal, failed after %d splits", i)
 	}
+}
+
+func TestSetNodeLiveness(t *testing.T) {
+	t.Run("liveness func", func(t *testing.T) {
+		s := LoadClusterInfo(
+			ClusterInfoWithStoreCount(3),
+			config.DefaultSimulationSettings(),
+		)
+
+		liveFn := s.NodeLivenessFn()
+
+		s.SetNodeLiveness(1, livenesspb.NodeLivenessStatus_LIVE)
+		s.SetNodeLiveness(2, livenesspb.NodeLivenessStatus_DEAD)
+		s.SetNodeLiveness(3, livenesspb.NodeLivenessStatus_DECOMMISSIONED)
+
+		// Liveness status returend should ignore time till store dead or the
+		// timestamp given.
+		require.Equal(t, livenesspb.NodeLivenessStatus_LIVE, liveFn(1, time.Time{}, math.MaxInt64))
+		require.Equal(t, livenesspb.NodeLivenessStatus_DEAD, liveFn(2, time.Time{}, math.MaxInt64))
+		require.Equal(t, livenesspb.NodeLivenessStatus_DECOMMISSIONED, liveFn(3, time.Time{}, math.MaxInt64))
+	})
+
+	t.Run("node count fn", func(t *testing.T) {
+		s := LoadClusterInfo(
+			ClusterInfoWithStoreCount(10),
+			config.DefaultSimulationSettings(),
+		)
+
+		countFn := s.NodeCountFn()
+
+		// Set node 1-5 as decommissioned and nodes 6-10 as dead. There should be a
+		// node count of 5.
+		for i := 1; i <= 5; i++ {
+			s.SetNodeLiveness(NodeID(i), livenesspb.NodeLivenessStatus_DECOMMISSIONED)
+		}
+		for i := 6; i <= 10; i++ {
+			s.SetNodeLiveness(NodeID(i), livenesspb.NodeLivenessStatus_DEAD)
+		}
+		require.Equal(t, 5, countFn())
+	})
+}
+
+// TestTopology loads cluster configurations and checks that the topology
+// output matches expectations.
+func TestTopology(t *testing.T) {
+	singleRegionTopology := LoadClusterInfo(SingleRegionConfig, config.DefaultSimulationSettings()).Topology()
+	require.Equal(t, `US
+  US_1
+    └── [1 2 3 4 5]
+  US_2
+    └── [6 7 8 9 10]
+  US_3
+    └── [11 12 13 14 15]
+`, singleRegionTopology.String())
+
+	multiRegionTopology := LoadClusterInfo(MultiRegionConfig, config.DefaultSimulationSettings()).Topology()
+	require.Equal(t, `EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
+  │ └── [1 2 3 4]
+  US_East_2
+  │ └── [5 6 7 8]
+  US_East_3
+  │ └── [9 10 11 12]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
+`, multiRegionTopology.String())
+
+	complexTopology := LoadClusterInfo(ComplexConfig, config.DefaultSimulationSettings()).Topology()
+	require.Equal(t, `EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+`, complexTopology.String())
+
 }
