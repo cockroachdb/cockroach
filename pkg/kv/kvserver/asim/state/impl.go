@@ -12,6 +12,7 @@ package state
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"sort"
@@ -28,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/google/btree"
 	"go.etcd.io/raft/v3"
@@ -1147,6 +1150,124 @@ func (s *state) RaftStatus(rangeID RangeID, storeID StoreID) *raft.Status {
 	}
 
 	return status
+}
+
+func (s *state) GetIsLiveMap() livenesspb.IsLiveMap {
+	isLiveMap := livenesspb.IsLiveMap{}
+
+	for nodeID, status := range s.quickLivenessMap {
+		nid := roachpb.NodeID(nodeID)
+		entry := livenesspb.IsLiveMapEntry{
+			Liveness: livenesspb.Liveness{
+				NodeID:     nid,
+				Expiration: hlc.LegacyTimestamp{WallTime: math.MaxInt64},
+				Draining:   false,
+				Membership: livenesspb.MembershipStatus_ACTIVE,
+			},
+			IsLive: true,
+		}
+
+		switch status {
+		case livenesspb.NodeLivenessStatus_UNKNOWN:
+			continue
+		case livenesspb.NodeLivenessStatus_DEAD:
+			// Set liveness expiration to be greater than
+			// server.time_until_store_dead in the past - so that the store is
+			// considered dead.
+			entry.Liveness.Expiration.WallTime = int64(0)
+			entry.IsLive = false
+		case livenesspb.NodeLivenessStatus_UNAVAILABLE:
+			// Set liveness expiration to be just recently expired. This needs to be
+			// within now - server.time_until_store_dead and now, otherwise the store
+			// will be considered dead, not unavailable.
+			entry.Liveness.Expiration.WallTime = s.clock.Now().Add(-time.Second).UnixNano()
+			entry.IsLive = false
+		case livenesspb.NodeLivenessStatus_LIVE:
+		case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
+			entry.Membership = livenesspb.MembershipStatus_DECOMMISSIONING
+		case livenesspb.NodeLivenessStatus_DECOMMISSIONED:
+			// Similar to DEAD, set the expiration in the past. A decommissioned
+			// store should not have a valid liveness expiration.
+			entry.Membership = livenesspb.MembershipStatus_DECOMMISSIONED
+			entry.Liveness.Expiration.WallTime = int64(0)
+			entry.IsLive = false
+		case livenesspb.NodeLivenessStatus_DRAINING:
+			entry.Draining = true
+		}
+		isLiveMap[nid] = entry
+	}
+
+	return isLiveMap
+}
+
+func (s *state) GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
+	if descs := s.StoreDescriptors(false, StoreID(storeID)); len(descs) == 0 {
+		return roachpb.StoreDescriptor{}, false
+	} else {
+		return descs[0], true
+	}
+}
+
+// NeedsSplit is added for the spanconfig.StoreReader interface, required for
+// SpanConfigConformanceReport.
+func (s *state) NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error) {
+	// We don't need to implement this method for conformance reports.
+	panic("not implemented")
+}
+
+// ComputeSplitKey is added for the spanconfig.StoreReader interface, required for
+// SpanConfigConformanceReport.
+func (s *state) ComputeSplitKey(
+	ctx context.Context, start, end roachpb.RKey,
+) (roachpb.RKey, error) {
+	// We don't need to implement this method for conformance reports.
+	panic("not implemented")
+}
+
+// GetSpanConfigForKey is added for the spanconfig.StoreReader interface, required for
+// SpanConfigConformanceReport.
+func (s *state) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, error) {
+	rng := s.rangeFor(ToKey(key.AsRawKey()))
+	if rng == nil {
+		panic(fmt.Sprintf("programming error: range for key %s doesn't exist", key))
+	}
+	return rng.config, nil
+}
+
+// Scan is added for the rangedesc.Scanner interface, required for
+// SpanConfigConformanceReport. We ignore the span passed in and return every
+// descriptor available.
+func (s *state) Scan(
+	ctx context.Context,
+	pageSize int,
+	init func(),
+	span roachpb.Span,
+	fn func(descriptors ...roachpb.RangeDescriptor) error,
+) error {
+	// NB: we ignore the span passed in, we pass the fn every range descriptor
+	// available.
+	rngs := s.Ranges()
+	descriptors := make([]roachpb.RangeDescriptor, len(rngs))
+	for i, rng := range rngs {
+		descriptors[i] = *rng.Descriptor()
+	}
+	return fn(descriptors...)
+}
+
+// Report returns the span config conformance report for every range in the
+// simulated cluster. This may be used to assert on the current conformance
+// state of ranges.
+func (s *state) Report() roachpb.SpanConfigConformanceReport {
+	reporter := spanconfigreporter.New(
+		s, s, s, s,
+		cluster.MakeClusterSettings(), &spanconfig.TestingKnobs{})
+	report, err := reporter.SpanConfigConformance(context.Background(), []roachpb.Span{{}})
+	if err != nil {
+		panic(fmt.Sprintf("programming error: error getting span config report %s", err.Error()))
+	}
+	return report
 }
 
 // RegisterCapacityChangeListener registers a listener which will be called

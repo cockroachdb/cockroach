@@ -184,6 +184,8 @@ type State interface {
 	// RaftStatus returns the current raft status for the replica of the Range
 	// with ID RangeID, on the store with ID StoreID.
 	RaftStatus(RangeID, StoreID) *raft.Status
+	// Report returns the span config conformance report for every range.
+	Report() roachpb.SpanConfigConformanceReport
 	// RegisterCapacityChangeListener registers a listener which will be
 	// notified on events where there is a lease or replica addition or
 	// removal, for a specific store.
