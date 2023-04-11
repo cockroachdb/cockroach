@@ -900,7 +900,7 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 
 // ReplicaLoad returns the usage information for the Range with ID
 // RangeID on the store with ID StoreID.
-func (s *state) ReplicaLoad(rangeID RangeID, storeID StoreID) ReplicaLoad {
+func (s *state) RangeUsageInfo(rangeID RangeID, storeID StoreID) allocator.RangeUsageInfo {
 	// NB: we only return the actual replica load, if the range leaseholder is
 	// currently on the store given. Otherwise, return an empty, zero counter
 	// value.
@@ -909,16 +909,19 @@ func (s *state) ReplicaLoad(rangeID RangeID, storeID StoreID) ReplicaLoad {
 		panic(fmt.Sprintf("no leaseholder store found for range %d", storeID))
 	}
 
+	r, _ := s.Range(rangeID)
 	// TODO(kvoli): The requested storeID is not the leaseholder. Non
 	// leaseholder load tracking is not currently supported but is checked by
 	// other components such as hot ranges. In this case, ignore it but we
 	// should also track non leaseholder load. See load.go for more. Return an
 	// empty initialized load counter here.
 	if store.StoreID() != storeID {
-		return NewReplicaLoadCounter(s.clock)
+		return allocator.RangeUsageInfo{LogicalBytes: r.Size()}
 	}
 
-	return s.load[rangeID]
+	usage := s.load[rangeID].Load()
+	usage.LogicalBytes = r.Size()
+	return usage
 }
 
 // ClusterUsageInfo returns the usage information for the Range with ID

@@ -273,14 +273,15 @@ func TestWorkloadApply(t *testing.T) {
 
 	// Assert that the leaseholder replica load correctly matches the number of
 	// requests made.
-	require.Equal(t, float64(100), s.ReplicaLoad(r1.RangeID(), s1.StoreID()).Load().WritesPerSecond)
-	require.Equal(t, float64(1000), s.ReplicaLoad(r2.RangeID(), s2.StoreID()).Load().WritesPerSecond)
-	require.Equal(t, float64(10000), s.ReplicaLoad(r3.RangeID(), s3.StoreID()).Load().WritesPerSecond)
+	require.Equal(t, float64(100), s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).WritesPerSecond)
+	require.Equal(t, float64(1000), s.RangeUsageInfo(r2.RangeID(), s2.StoreID()).WritesPerSecond)
+	require.Equal(t, float64(10000), s.RangeUsageInfo(r3.RangeID(), s3.StoreID()).WritesPerSecond)
 
 	expectedLoad := roachpb.StoreCapacity{WritesPerSecond: 100, LeaseCount: 1, RangeCount: 1}
-	sc1 := Capacity(s, s1.StoreID())
-	sc2 := Capacity(s, s2.StoreID())
-	sc3 := Capacity(s, s3.StoreID())
+	descs := s.StoreDescriptors(false, s1.StoreID(), s2.StoreID(), s3.StoreID())
+	sc1 := descs[0].Capacity
+	sc2 := descs[1].Capacity
+	sc3 := descs[2].Capacity
 
 	// Assert that the store load is also updated upon request GetStoreLoad.
 	require.Equal(t, expectedLoad, sc1)
@@ -311,7 +312,7 @@ func TestReplicaLoadQPS(t *testing.T) {
 	}
 
 	s.TickClock(start)
-	s.ReplicaLoad(r1.RangeID(), s1.StoreID()).ResetLoad()
+	testingResetLoad(s, r1.RangeID())
 	for i := 1; i < 100; i++ {
 		applyLoadToStats(int64(k1), qps)
 		s.TickClock(OffsetTick(start, int64(i)))
@@ -319,7 +320,7 @@ func TestReplicaLoadQPS(t *testing.T) {
 
 	// Assert that the rated avg comes out to rate of queries applied per
 	// second.
-	require.Equal(t, float64(qps), s.ReplicaLoad(r1.RangeID(), s1.StoreID()).Load().QueriesPerSecond)
+	require.Equal(t, float64(qps), s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).QueriesPerSecond)
 }
 
 // TestKeyTranslation asserts that key encoding between roachpb keys and

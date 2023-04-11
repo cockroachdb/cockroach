@@ -49,15 +49,17 @@ func TestingWorkloadSeed() int64 {
 // TestingSetRangeQPS sets the QPS for the range with ID rangeID. This will
 // show on the current leaseholder replica load for this range and persist
 // between transfers.
-func TestingSetRangeQPS(s State, rangeID RangeID, qps float64) bool {
-	store, ok := s.LeaseholderStore(rangeID)
-	if !ok {
-		return false
-	}
+func TestingSetRangeQPS(s State, rangeID RangeID, qps float64) {
+	st := s.(*state)
+	rlc := st.load[rangeID].(*ReplicaLoadCounter)
 
-	rlc := s.ReplicaLoad(rangeID, store.StoreID()).(*ReplicaLoadCounter)
 	rlc.loadStats.TestingSetStat(load.Queries, qps)
-	return true
+}
+
+func testingResetLoad(s State, rangeID RangeID) {
+	st := s.(*state)
+	rlc := st.load[rangeID].(*ReplicaLoadCounter)
+	rlc.ResetLoad()
 }
 
 // NewStorePool returns a store pool with no gossip instance and default values
@@ -121,9 +123,7 @@ func TestDistributeQPSCounts(s State, qpsCounts []float64) {
 
 		qpsPerRange := qpsCount / float64(len(lhs))
 		for _, rng := range lhs {
-			rl := s.ReplicaLoad(rng.RangeID(), storeID)
-			rlc := rl.(*ReplicaLoadCounter)
-			rlc.loadStats.TestingSetStat(load.Queries, qpsPerRange)
+			TestingSetRangeQPS(s, rng.RangeID(), qpsPerRange)
 		}
 	}
 }

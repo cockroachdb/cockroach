@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -140,9 +141,9 @@ type State interface {
 	// likewise modified to reflect this in it's Capacity, held in the
 	// StoreDescriptor.
 	ApplyLoad(workload.LoadBatch)
-	// ReplicaLoad returns the usage information for the Range with ID
-	// RangeID on the store with ID StoreID.
-	ReplicaLoad(RangeID, StoreID) ReplicaLoad
+	// RangeUsageInfo returns the usage information for the Range with ID RangeID
+	// on the store with ID StoreID.
+	RangeUsageInfo(RangeID, StoreID) allocator.RangeUsageInfo
 	// ClusterUsageInfo returns the usage information for the entire cluster.
 	ClusterUsageInfo() *ClusterUsageInfo
 	// TickClock modifies the state Clock time to Tick.
