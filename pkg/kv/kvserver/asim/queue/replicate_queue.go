@@ -15,6 +15,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
@@ -149,10 +150,11 @@ func (rq *replicateQueue) considerRebalance(
 	// 	ReplicateQueue.
 	change := state.ReplicaChange{
 		RangeID: state.RangeID(rng.Descriptor().RangeID),
-		Add:     state.StoreID(add.StoreID),
-		Remove:  state.StoreID(remove.StoreID),
-		Wait:    rq.delay(rng.Size(), true),
-		Author:  rq.storeID,
+		Changes: append(
+			kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, add),
+			kvpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, remove)...),
+		Wait:   rq.delay(rng.Size(), true),
+		Author: rq.storeID,
 	}
 	if completeAt, ok := rq.stateChanger.Push(tick, &change); ok {
 		rq.next = completeAt
