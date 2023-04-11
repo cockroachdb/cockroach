@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/cmd/reduce/reduce",
         "//pkg/sql/parser",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
     ],

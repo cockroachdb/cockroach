@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -82,7 +82,7 @@ func PlanCDCExpression(
 		opt.apply(&cfg)
 	}
 
-	p.stmt = makeStatement(parser.Statement{
+	p.stmt = makeStatement(statements.Statement[tree.Statement]{
 		AST: cdcExpr,
 		SQL: tree.AsString(cdcExpr),
 	}, clusterunique.ID{} /* queryID */)

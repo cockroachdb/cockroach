@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"strings"
 	"testing"
 
@@ -849,7 +850,7 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 		root,
 		&h.evalCtx,
 		true, /* allowAutoCommit */
-		stmt.IsANSIDML(),
+		statements.IsANSIDML(stmt.AST),
 	)
 	if _, err = eb.Build(); err != nil {
 		tb.Fatalf("%v", err)

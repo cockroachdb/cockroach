@@ -16,6 +16,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -43,7 +44,7 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 		return errors.Errorf("tab width must be > 0: %d", sqlfmtCtx.tabWidth)
 	}
 
-	var sl parser.Statements
+	var sl statements.Statements
 	if len(sqlfmtCtx.execStmts) != 0 {
 		for _, exec := range sqlfmtCtx.execStmts {
 			stmts, err := parser.Parse(exec)

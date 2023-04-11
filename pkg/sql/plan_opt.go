@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -631,7 +632,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var bld *execbuilder.Builder
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		bld = execbuilder.New(ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
-			evalCtx, allowAutoCommit, stmt.IsANSIDML())
+			evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST))
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -641,7 +642,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
 		bld = execbuilder.New(ctx, explainFactory, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
-			evalCtx, allowAutoCommit, stmt.IsANSIDML())
+			evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST))
 		plan, err := bld.Build()
 		if err != nil {
 			return err
