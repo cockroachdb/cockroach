@@ -452,6 +452,143 @@ func TestSplitRangeDeterministic(t *testing.T) {
 	}
 }
 
+func TestSetSpanConfig(t *testing.T) {
+	settings := config.DefaultSimulationSettings()
+
+	setupState := func() State {
+		s := newState(settings)
+		node := s.AddNode()
+		_, ok := s.AddStore(node.NodeID())
+		require.True(t, ok)
+
+		// Setup with the following ranges:
+		// [1,50) [50, 100) [100, 1000)
+		_, _, ok = s.SplitRange(1)
+		require.True(t, ok)
+		_, _, ok = s.SplitRange(50)
+		require.True(t, ok)
+		_, _, ok = s.SplitRange(100)
+		require.True(t, ok)
+		return s
+	}
+
+	keySet := func(keys ...Key) map[Key]struct{} {
+		ret := make(map[Key]struct{}, len(keys))
+		for _, key := range keys {
+			ret[key] = struct{}{}
+		}
+		return ret
+	}
+
+	testCases := []struct {
+		desc                        string
+		end, start                  Key
+		expectedAppliedStartKeys    map[Key]struct{}
+		expectedNonAppliedStartKeys map[Key]struct{}
+	}{
+		{
+			// Matching start and end key over a single range.
+			desc:                        "[1,50)",
+			start:                       1,
+			end:                         50,
+			expectedAppliedStartKeys:    keySet(1),
+			expectedNonAppliedStartKeys: keySet(50, 100),
+		},
+		{
+			// Matching start and end key over multiple ranges.
+			desc:                        "[1,100)",
+			start:                       1,
+			end:                         100,
+			expectedAppliedStartKeys:    keySet(1, 50),
+			expectedNonAppliedStartKeys: keySet(100),
+		},
+		{
+			// Matching start key, overlapping end key over single range.
+			desc:                        "[1,40)",
+			start:                       1,
+			end:                         40,
+			expectedAppliedStartKeys:    keySet(1),
+			expectedNonAppliedStartKeys: keySet(40, 50, 100),
+		},
+		{
+			// Matching start key, overlapping end key over multiple ranges.
+			desc:                        "[1,70)",
+			start:                       1,
+			end:                         70,
+			expectedAppliedStartKeys:    keySet(1, 50),
+			expectedNonAppliedStartKeys: keySet(70, 100),
+		},
+		{
+			// Overlapping start key, matching end key over single range.
+			desc:                        "[20,50)",
+			start:                       20,
+			end:                         50,
+			expectedAppliedStartKeys:    keySet(20),
+			expectedNonAppliedStartKeys: keySet(1, 50, 100),
+		},
+		{
+			// Overlapping start key, matching end key over multiple ranges.
+			desc:                        "[20,100)",
+			start:                       20,
+			end:                         100,
+			expectedAppliedStartKeys:    keySet(20, 50),
+			expectedNonAppliedStartKeys: keySet(1, 100),
+		},
+		{
+			// Overlapping start and end key over single range.
+			desc:                        "[20,40)",
+			start:                       20,
+			end:                         40,
+			expectedAppliedStartKeys:    keySet(20),
+			expectedNonAppliedStartKeys: keySet(1, 40, 50, 100),
+		},
+		{
+			// Overlapping start and end key over multiple ranges.
+			desc:                        "[20,70)",
+			start:                       20,
+			end:                         70,
+			expectedAppliedStartKeys:    keySet(20, 50),
+			expectedNonAppliedStartKeys: keySet(1, 70, 100),
+		},
+	}
+
+	const sentinel = int64(-1)
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			s := setupState()
+			config := roachpb.SpanConfig{
+				RangeMinBytes: sentinel,
+			}
+			span := roachpb.Span{
+				Key:    tc.start.ToRKey().AsRawKey(),
+				EndKey: tc.end.ToRKey().AsRawKey(),
+			}
+			s.SetSpanConfig(span, config)
+			for _, rng := range s.Ranges() {
+				start, _, ok := s.RangeSpan(rng.RangeID())
+				require.True(t, ok)
+				config := rng.SpanConfig()
+
+				// We ignore the range starting with the min key as we have pre-split
+				// the keyspace to start at key=1.
+				if start == MinKey {
+					continue
+				}
+
+				if _, ok := tc.expectedAppliedStartKeys[start]; ok {
+					require.Equal(t, sentinel, config.RangeMinBytes,
+						"sentinel not set, when should be for start key %d", start)
+				} else if _, ok := tc.expectedNonAppliedStartKeys[start]; ok {
+					require.NotEqual(t, sentinel, config.RangeMinBytes,
+						"sentinel set, when it should not be for start key %d", start)
+				} else {
+					t.Fatalf("Start key not found in either expected apply keys or unapplied keys %s", rng)
+				}
+			}
+		})
+	}
+}
+
 func TestSetNodeLiveness(t *testing.T) {
 	t.Run("liveness func", func(t *testing.T) {
 		s := LoadClusterInfo(
