@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"sort"
 	"strings"
 
@@ -2375,12 +2376,12 @@ func (p *planner) GetMultiregionConfig(
 
 // IsANSIDML is part of the eval.Planner interface.
 func (p *planner) IsANSIDML() bool {
-	return p.stmt.IsANSIDML()
+	return statements.IsANSIDML(p.stmt.AST)
 }
 
 // EnforceHomeRegion is part of the eval.Planner interface.
 func (p *planner) EnforceHomeRegion() bool {
-	return p.EvalContext().SessionData().EnforceHomeRegion && p.stmt.IsANSIDML()
+	return p.EvalContext().SessionData().EnforceHomeRegion && statements.IsANSIDML(p.stmt.AST)
 }
 
 // GetRangeDescIterator is part of the eval.Planner interface.

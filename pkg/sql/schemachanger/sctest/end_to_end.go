@@ -17,6 +17,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"io"
 	"os"
 	"path/filepath"
@@ -166,9 +168,9 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 	tdb := sqlutils.MakeSQLRunner(db)
 	defer cleanup()
 	numTestStatementsObserved := 0
-	var setupStmts parser.Statements
+	var setupStmts statements.Statements
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-		parseStmts := func() (parser.Statements, func()) {
+		parseStmts := func() (statements.Statements, func()) {
 			sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
@@ -276,7 +278,7 @@ const (
 func checkExplainDiagrams(
 	t *testing.T,
 	path string,
-	setupStmts, stmts parser.Statements,
+	setupStmts, stmts statements.Statements,
 	explainedStmt, fileNameSuffix string,
 	state scpb.CurrentState,
 	inRollback, rewrite bool,
@@ -365,7 +367,7 @@ func replaceNonDeterministicOutput(text string) string {
 // execStatementWithTestDeps executes the DDL statement using the declarative
 // schema changer with testing dependencies injected.
 func execStatementWithTestDeps(
-	ctx context.Context, t *testing.T, deps *sctestdeps.TestState, stmts ...parser.Statement,
+	ctx context.Context, t *testing.T, deps *sctestdeps.TestState, stmts ...statements.Statement[tree.Statement],
 ) (stateAfterBuildingEachStatement []scpb.CurrentState) {
 	var jobID jobspb.JobID
 	var state scpb.CurrentState

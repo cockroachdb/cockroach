@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -124,7 +125,7 @@ func (r *StmtBufReader) AdvanceOne() {
 // interface{} so that external packages can call NewInternalPlanner and pass
 // the result) and executes a sql statement through the DistSQLPlanner.
 func (dsp *DistSQLPlanner) Exec(
-	ctx context.Context, localPlanner interface{}, stmt parser.Statement, distribute bool,
+	ctx context.Context, localPlanner interface{}, stmt statements.Statement[tree.Statement], distribute bool,
 ) error {
 	p := localPlanner.(*planner)
 	p.stmt = makeStatement(stmt, clusterunique.ID{} /* queryID */)

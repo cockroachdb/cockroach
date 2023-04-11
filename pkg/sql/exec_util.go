@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"net"
 	"net/url"
 	"reflect"
@@ -2069,7 +2070,7 @@ type queryMeta struct {
 	start time.Time
 
 	// The SQL statement being executed.
-	stmt parser.Statement
+	stmt statements.Statement[tree.Statement]
 
 	// The placeholders that the query was executed with if any.
 	placeholders *tree.PlaceholderInfo

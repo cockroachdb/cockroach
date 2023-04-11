@@ -15,6 +15,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"io"
 	"net/http"
 	"time"
@@ -204,9 +205,9 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		ApplicationName string `json:"application_name"`
 		Execute         bool   `json:"execute"`
 		Statements      []struct {
-			SQL       string           `json:"sql"`
-			stmt      parser.Statement `json:"-"`
-			Arguments []interface{}    `json:"arguments,omitempty"`
+			SQL       string                               `json:"sql"`
+			stmt      statements.Statement[tree.Statement] `json:"-"`
+			Arguments []interface{}                        `json:"arguments,omitempty"`
 		} `json:"statements"`
 	}
 	// Type for the result.

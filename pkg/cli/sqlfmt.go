@@ -12,6 +12,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"io"
 	"os"
 
@@ -43,7 +44,7 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 		return errors.Errorf("tab width must be > 0: %d", sqlfmtCtx.tabWidth)
 	}
 
-	var sl parser.Statements
+	var sl statements.Statements
 	if len(sqlfmtCtx.execStmts) != 0 {
 		for _, exec := range sqlfmtCtx.execStmts {
 			stmts, err := parser.Parse(exec)

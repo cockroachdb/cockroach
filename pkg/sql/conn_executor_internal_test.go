@@ -11,6 +11,8 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"math"
 	"testing"
 	"time"
@@ -236,7 +238,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 }
 
-func mustParseOne(s string) parser.Statement {
+func mustParseOne(s string) statements.Statement[tree.Statement] {
 	stmts, err := parser.Parse(s)
 	if err != nil {
 		log.Fatalf(context.Background(), "%v", err)

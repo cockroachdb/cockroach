@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"io"
 	"math"
 	"math/rand"
@@ -2878,7 +2879,7 @@ func (ex *connExecutor) execCopyOut(
 	return nil, nil
 }
 
-func (ex *connExecutor) setCopyLoggingFields(stmt parser.Statement) {
+func (ex *connExecutor) setCopyLoggingFields(stmt statements.Statement[tree.Statement]) {
 	// These fields need to be set for logging purposes.
 	ex.planner.stmt = Statement{
 		Statement: stmt,

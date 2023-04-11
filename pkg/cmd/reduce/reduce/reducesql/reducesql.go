@@ -12,6 +12,7 @@ package reducesql
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"go/constant"
 	"regexp"
 	"strings"
@@ -399,7 +400,7 @@ func Pretty(s string) (string, error) {
 	return joinASTs(collectASTs(stmts)), nil
 }
 
-func collectASTs(stmts parser.Statements) []tree.NodeFormatter {
+func collectASTs(stmts statements.Statements) []tree.NodeFormatter {
 	asts := make([]tree.NodeFormatter, len(stmts))
 	for i, stmt := range stmts {
 		asts[i] = stmt.AST
