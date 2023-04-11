@@ -646,7 +646,7 @@ func makeNewHashJoinerArgs(
 	accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
 		ctx, flowCtx, opName, args.Spec.ProcessorID, 2, /* numAccounts */
 	)
-	spec := colexecjoin.MakeHashJoinerSpec(
+	spec := colexecargs.MakeHashJoinerSpec(
 		core.Type,
 		core.LeftEqColumns,
 		core.RightEqColumns,

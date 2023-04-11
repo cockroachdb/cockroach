@@ -1118,7 +1118,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 						)
 						for _, nEqCols := range []int{1, 3} {
 							eqCols := []uint32{0, 1, 2}[:nEqCols]
-							hjSpec := colexecjoin.MakeHashJoinerSpec(
+							hjSpec := colexecargs.MakeHashJoinerSpec(
 								descpb.InnerJoin, eqCols, eqCols,
 								sourceTypes, sourceTypes, rightDistinct,
 							)
