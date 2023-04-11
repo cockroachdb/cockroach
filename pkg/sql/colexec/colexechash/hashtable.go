@@ -679,42 +679,6 @@ func (ht *HashTable) ComputeHashAndBuildChains(batch coldata.Batch) {
 	ht.buildNextChains(ht.ProbeScratch.First, ht.ProbeScratch.Next, 1 /* offset */, uint64(batchLength))
 }
 
-// FindBuckets finds the buckets for all tuples in batch when probing against a
-// hash table that is specified by 'first' and 'next' vectors as well as
-// 'duplicatesChecker'. `duplicatesChecker` takes a slice of key columns of the
-// batch, number of tuples to check, and the selection vector of the batch, and
-// it returns number of tuples that needs to be checked for next iteration.
-// The "buckets" are specified by equal values in ht.ProbeScratch.HeadID.
-// NOTE: *first* and *next* vectors should be properly populated.
-// NOTE: batch is assumed to be non-zero length.
-func (ht *HashTable) FindBuckets(
-	batch coldata.Batch,
-	keyCols []coldata.Vec,
-	first, next []keyID,
-	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
-) {
-	batchLength := batch.Length()
-	sel := batch.Selection()
-
-	ht.ProbeScratch.SetupLimitedSlices(batchLength, ht.BuildMode)
-	// Early bounds checks.
-	toCheckIDs := ht.ProbeScratch.ToCheckID
-	_ = toCheckIDs[batchLength-1]
-	for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-		f := first[hash]
-		//gcassert:bce
-		toCheckIDs[i] = f
-	}
-	copy(ht.ProbeScratch.ToCheck, HashTableInitialToCheck[:batchLength])
-
-	for nToCheck := uint64(batchLength); nToCheck > 0; {
-		// Continue searching for the build table matching keys while the ToCheck
-		// array is non-empty.
-		nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
-		ht.FindNext(next, nToCheck)
-	}
-}
-
 // RemoveDuplicates updates the selection vector of the batch to only include
 // distinct tuples when probing against a hash table specified by 'first' and
 // 'next' vectors as well as 'duplicatesChecker'.
@@ -865,14 +829,6 @@ func (p *hashTableProbeBuffer) SetupLimitedSlices(length int, buildMode HashTabl
 		p.ToCheck = make([]uint64, length)
 	} else {
 		p.ToCheck = p.ToCheck[:length]
-	}
-}
-
-// FindNext determines the id of the next key inside the ToCheckID buckets for
-// each equality column key in ToCheck.
-func (ht *HashTable) FindNext(next []keyID, nToCheck uint64) {
-	for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-		ht.ProbeScratch.ToCheckID[toCheck] = next[ht.ProbeScratch.ToCheckID[toCheck]]
 	}
 }
 
