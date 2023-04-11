@@ -30,8 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -236,7 +238,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 }
 
-func mustParseOne(s string) parser.Statement {
+func mustParseOne(s string) statements.Statement[tree.Statement] {
 	stmts, err := parser.Parse(s)
 	if err != nil {
 		log.Fatalf(context.Background(), "%v", err)

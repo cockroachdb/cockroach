@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/opt/memo",
-        "//pkg/sql/parser",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/syncutil",

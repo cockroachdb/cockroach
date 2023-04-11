@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -536,15 +537,15 @@ func (m *stageExecStmtMap) GetInjectionCallback(
 func cumulativeTest(
 	t *testing.T,
 	relPath string,
-	tf func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, stageExecMap *stageExecStmtMap),
+	tf func(t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], stageExecMap *stageExecStmtMap),
 ) {
 	skip.UnderStress(t)
 	skip.UnderRace(t)
 	path := datapathutils.RewritableDataPath(t, relPath)
-	var setup []parser.Statement
+	var setup []statements.Statement[tree.Statement]
 	stageExecMap := makeStageExecStmtMap()
 	rewrite := false
-	var testStmts parser.Statements
+	var testStmts statements.Statements
 	var lines []string
 	numTestStmts := 0
 
@@ -613,7 +614,7 @@ func cumulativeTest(
 // but ignores the expected output.
 func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	countRevertiblePostCommitStages := func(
-		t *testing.T, setup, stmts []parser.Statement,
+		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
 	) (n int) {
 		processPlanInPhase(
 			t, newCluster, setup, stmts, scop.PostCommitPhase,
@@ -623,9 +624,9 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 		return n
 	}
 	var testRollbackCase func(
-		t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, ord, n int,
+		t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], ord, n int,
 	)
-	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
+	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
 		n := countRevertiblePostCommitStages(t, setup, stmts)
 		if n == 0 {
 			t.Logf("test case has no revertible post-commit stages, skipping...")
@@ -643,7 +644,7 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	}
 
 	testRollbackCase = func(
-		t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, ord, n int,
+		t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], ord, n int,
 	) {
 		var numInjectedFailures uint32
 		var numCheckedExplainInRollback uint32
@@ -731,7 +732,7 @@ ORDER BY
 func Pause(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	var postCommit, nonRevertible int
 	countStages := func(
-		t *testing.T, setup, stmts []parser.Statement,
+		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
 	) {
 		processPlanInPhase(t, newCluster, setup, stmts, scop.PostCommitPhase, func(
 			p scplan.Plan,
@@ -741,9 +742,9 @@ func Pause(t *testing.T, relPath string, newCluster NewClusterFunc) {
 		}, nil)
 	}
 	var testPauseCase func(
-		t *testing.T, setup, stmts []parser.Statement, ord int,
+		t *testing.T, setup, stmts []statements.Statement[tree.Statement], ord int,
 	)
-	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
+	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
 		countStages(t, setup, stmts)
 		n := postCommit + nonRevertible
 		if n == 0 {
@@ -770,7 +771,7 @@ func Pause(t *testing.T, relPath string, newCluster NewClusterFunc) {
 		postCommit = 0
 		nonRevertible = 0
 	}
-	testPauseCase = func(t *testing.T, setup, stmts []parser.Statement, ord int) {
+	testPauseCase = func(t *testing.T, setup, stmts []statements.Statement[tree.Statement], ord int) {
 		var numInjectedFailures uint32
 		// TODO(ajwerner): It'd be nice to assert something about the number of
 		// remaining stages before the pause and then after. It's not totally
@@ -825,10 +826,10 @@ func Pause(t *testing.T, relPath string, newCluster NewClusterFunc) {
 func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	jobErrorMutex := syncutil.Mutex{}
 	var testDMLInjectionCase func(
-		t *testing.T, setup, stmts []parser.Statement, key stageKey, injectPreCommit bool,
+		t *testing.T, setup, stmts []statements.Statement[tree.Statement], key stageKey, injectPreCommit bool,
 	)
 	var injectionFunc execInjectionCallback
-	testFunc := func(t *testing.T, _ string, rewrite bool, setup, stmts []parser.Statement, execMap *stageExecStmtMap) {
+	testFunc := func(t *testing.T, _ string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], execMap *stageExecStmtMap) {
 		var postCommit, nonRevertible int
 		processPlanInPhase(t, newCluster, setup, stmts, scop.PostCommitPhase, func(
 			p scplan.Plan,
@@ -860,7 +861,7 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewCluster
 			}
 		}
 	}
-	testDMLInjectionCase = func(t *testing.T, setup, stmts []parser.Statement, injection stageKey, injectPreCommit bool) {
+	testDMLInjectionCase = func(t *testing.T, setup, stmts []statements.Statement[tree.Statement], injection stageKey, injectPreCommit bool) {
 		var schemaChangeErrorRegex *regexp.Regexp
 		var lastRollbackStageKey *stageKey
 		usedStages := make(map[int]struct{})
@@ -957,16 +958,16 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewCluster
 		}
 	}()
 	var testCorpusCollect func(
-		t *testing.T, setup, stmts []parser.Statement,
+		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
 	)
-	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
+	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
 		if !t.Run("starting",
 			func(t *testing.T) { testCorpusCollect(t, setup, stmts) },
 		) {
 			return
 		}
 	}
-	testCorpusCollect = func(t *testing.T, setup, stmts []parser.Statement) {
+	testCorpusCollect = func(t *testing.T, setup, stmts []statements.Statement[tree.Statement]) {
 		// If any of the statements are not supported, then skip over this
 		// file for the corpus.
 		for _, stmt := range stmts {
@@ -1019,7 +1020,7 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 	// postCommit and postCommitNonRevertible stages for executing `stmts`.
 	// It also initializes `after` and `dbName` here.
 	countStages := func(
-		t *testing.T, setup, stmts []parser.Statement,
+		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
 	) (postCommit, nonRevertible int) {
 		var pl scplan.Plan
 		processPlanInPhase(t, newCluster, setup, stmts, scop.PostCommitPhase,
@@ -1046,13 +1047,13 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 	// comment below for details) and expect the restore to finish the schema change job
 	// as if the backup/restore had never happened.
 	testBackupRestoreCase := func(
-		t *testing.T, setup, stmts []parser.Statement, ord int,
+		t *testing.T, setup, stmts []statements.Statement[tree.Statement], ord int,
 	) {
 		// If tables are empty then, backfills should never lead to rollbacks
 		// in restores.
 		hasDMLInSetup := false
 		for _, setupStmt := range setup {
-			hasDMLInSetup = hasDMLInSetup || setupStmt.IsANSIDML()
+			hasDMLInSetup = hasDMLInSetup || statements.IsANSIDML(setupStmt.AST)
 		}
 		type stage struct {
 			p        scplan.Plan
@@ -1406,7 +1407,7 @@ SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
 		}
 	}
 
-	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
+	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
 		postCommit, nonRevertible := countStages(t, setup, stmts)
 		n := postCommit + nonRevertible
 		t.Logf(
@@ -1465,7 +1466,7 @@ SELECT name
 func processPlanInPhase(
 	t *testing.T,
 	newCluster NewClusterFunc,
-	setup, stmts []parser.Statement,
+	setup, stmts []statements.Statement[tree.Statement],
 	phaseToProcess scop.Phase,
 	processFunc func(p scplan.Plan),
 	after func(db *gosql.DB),
@@ -1494,8 +1495,8 @@ func processPlanInPhase(
 func executeSchemaChangeTxn(
 	ctx context.Context,
 	t *testing.T,
-	setup []parser.Statement,
-	stmts []parser.Statement,
+	setup []statements.Statement[tree.Statement],
+	stmts []statements.Statement[tree.Statement],
 	db *gosql.DB,
 	before func(),
 	txnStartCallback func(),
@@ -1594,14 +1595,14 @@ func executeSchemaChangeTxn(
 // state for the cluster.
 func ValidateMixedVersionElements(t *testing.T, path string, newCluster NewMixedClusterFunc) {
 	var testValidateMixedVersionElements func(
-		t *testing.T, setup, stmts []parser.Statement,
+		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
 	)
 	downlevelClusterFunc := func(t *testing.T, knobs *scexec.TestingKnobs,
 	) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func()) {
 		return newCluster(t, knobs, true)
 	}
 	countPostCommitStages := func(
-		t *testing.T, setup, stmts []parser.Statement,
+		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
 	) (postCommitCount int, postCommitNonRevertibleCount int) {
 		processPlanInPhase(
 			t, downlevelClusterFunc, setup, stmts, scop.PostCommitPhase,
@@ -1626,14 +1627,14 @@ func ValidateMixedVersionElements(t *testing.T, path string, newCluster NewMixed
 			skip.IgnoreLint(t, "skipping due to randomness")
 		}
 	}
-	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
+	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
 		if !t.Run("Starting",
 			func(t *testing.T) { testValidateMixedVersionElements(t, setup, stmts) },
 		) {
 			return
 		}
 	}
-	testValidateMixedVersionElements = func(t *testing.T, setup, stmts []parser.Statement) {
+	testValidateMixedVersionElements = func(t *testing.T, setup, stmts []statements.Statement[tree.Statement]) {
 		// If any of the statements are not supported, then skip over this
 		// file for the corpus.
 		for _, stmt := range stmts {
@@ -1739,7 +1740,7 @@ func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedCl
 	// postCommit and postCommitNonRevertible stages for executing `stmts`.
 	// It also initializes `after` and `dbName` here.
 	countStages := func(
-		t *testing.T, setup, stmts []parser.Statement,
+		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
 	) (postCommit, nonRevertible int) {
 		var pl scplan.Plan
 		processPlanInPhase(t, downlevelClusterFunc, setup, stmts, scop.PostCommitPhase,
@@ -1766,13 +1767,13 @@ func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedCl
 	// comment below for details) and expect the restore to finish the schema change job
 	// as if the backup/restore had never happened.
 	testBackupRestoreCase := func(
-		t *testing.T, setup, stmts []parser.Statement, ord int,
+		t *testing.T, setup, stmts []statements.Statement[tree.Statement], ord int,
 	) {
 		// If tables are empty then, backfills should never lead to rollbacks
 		// in restores.
 		hasDMLInSetup := false
 		for _, setupStmt := range setup {
-			hasDMLInSetup = hasDMLInSetup || setupStmt.IsANSIDML()
+			hasDMLInSetup = hasDMLInSetup || statements.IsANSIDML(setupStmt.AST)
 		}
 		successExpected := atomic.Bool{}
 		type stage struct {
@@ -2050,7 +2051,7 @@ SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
 		}
 	}
 
-	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
+	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
 		for _, stmt := range stmts {
 			supported := scbuild.IsFullySupportedWithFalsePositive(stmt.AST, testVersion)
 			if !supported {

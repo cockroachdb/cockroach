@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	// Import builtins.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -399,7 +400,7 @@ func Pretty(s string) (string, error) {
 	return joinASTs(collectASTs(stmts)), nil
 }
 
-func collectASTs(stmts parser.Statements) []tree.NodeFormatter {
+func collectASTs(stmts statements.Statements) []tree.NodeFormatter {
 	asts := make([]tree.NodeFormatter, len(stmts))
 	for i, stmt := range stmts {
 		asts[i] = stmt.AST

@@ -6,13 +6,10 @@
 
 set -euo pipefail
 
-if [ "$6" != plpgsql ]; then
-  SYMUNION="sqlSymUnion"
-  GENYACC=sql-gen.y
-else
-  SYMUNION="plpgsqlSymUnion"
-  GENYACC=plpgsql-gen.y
-fi;
+LANG=$2
+SYMUNION="${LANG}"'SymUnion'
+GENYACC=$LANG-gen.y
+
 
     awk -v regex="$SYMUNION" '/func.*'"$SYMUNION"'/ {print $(NF - 1)}' $1 | \
         sed -e 's/[]\/$*.^|[]/\\&/g' | \
@@ -20,8 +17,8 @@ fi;
         awk '{print $0")>_\\1 <union> /* <\\2> */_"}' > types_regex.tmp
 
     sed -E -f types_regex.tmp < $1 | \
-        if [ "$6" != plpgsql ]; then \
-            awk -f $2 | \
+        if [ $LANG != plpgsql ]; then \
+            awk -f $3 | \
           sed -Ee 's,//.*$$,,g;s,/[*]([^*]|[*][^/])*[*]/, ,g;s/ +$$//g' > $GENYACC
         else
           sed -Ee 's,//.*$$,,g;s,/[*]([^*]|[*][^/])*[*]/, ,g;s/ +$$//g' > $GENYACC
@@ -29,9 +26,9 @@ fi;
 
     rm types_regex.tmp
 
-    ret=$($4 -p $6 -o $3 $GENYACC); \
+    ret=$($5 -p $LANG -o $4 $GENYACC); \
       if expr "$ret" : ".*conflicts" >/dev/null; then \
         echo "$ret"; exit 1; \
       fi;
     rm $GENYACC
-    $5 -w $3
+    $6 -w $4

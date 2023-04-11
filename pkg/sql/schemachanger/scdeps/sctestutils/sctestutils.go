@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -209,7 +209,7 @@ func TruncateJobOps(plan *scplan.Plan) {
 }
 
 // TableNameFromStmt fetch table name from a statement.
-func TableNameFromStmt(stmt parser.Statement) string {
+func TableNameFromStmt(stmt statements.Statement[tree.Statement]) string {
 	tableName := ""
 	switch node := stmt.AST.(type) {
 	case *tree.CreateTable:

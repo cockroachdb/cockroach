@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -2069,7 +2070,7 @@ type queryMeta struct {
 	start time.Time
 
 	// The SQL statement being executed.
-	stmt parser.Statement
+	stmt statements.Statement[tree.Statement]
 
 	// The placeholders that the query was executed with if any.
 	placeholders *tree.PlaceholderInfo
