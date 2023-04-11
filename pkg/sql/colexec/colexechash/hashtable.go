@@ -689,7 +689,10 @@ func (ht *HashTable) RemoveDuplicates(
 	first, next []keyID,
 	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
 ) {
-	ht.FindBuckets(batch, keyCols, first, next, duplicatesChecker)
+	ht.FindBuckets(
+		batch, keyCols, first, next, duplicatesChecker,
+		false, /* zeroHeadIDForDistinctTuple */
+	)
 	ht.updateSel(batch)
 }
 
@@ -798,7 +801,7 @@ func (ht *HashTable) buildNextChains(first, next []keyID, offset, batchSize uint
 		// keyID in each equality chain. firstKeyID==0 means it is the first tuple
 		// that we have encountered with the given hash value.
 		if firstKeyID == 0 || id < firstKeyID {
-			next[id] = first[hash]
+			next[id] = firstKeyID
 			first[hash] = id
 		} else {
 			next[id] = next[firstKeyID]
