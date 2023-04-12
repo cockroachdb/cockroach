@@ -12,7 +12,6 @@ package mon
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"math"
 	"math/bits"
@@ -473,10 +472,10 @@ func (mm *BytesMonitor) StartNoReserved(ctx context.Context, pool *BytesMonitor)
 // - reserved is the pre-reserved budget (see above).
 func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved *BoundAccount) {
 	if mm.mu.curAllocated != 0 {
-		panic(fmt.Sprintf("%s: started with %d bytes left over", mm.name, mm.mu.curAllocated))
+		panic(errors.AssertionFailedf("%s: started with %d bytes left over", mm.name, mm.mu.curAllocated))
 	}
 	if mm.mu.curBudget.mon != nil {
-		panic(fmt.Sprintf("%s: already started with pool %s", mm.name, mm.mu.curBudget.mon.name))
+		panic(errors.AssertionFailedf("%s: already started with pool %s", mm.name, mm.mu.curBudget.mon.name))
 	}
 	mm.mu.curAllocated = 0
 	mm.mu.maxAllocated = 0
@@ -539,7 +538,6 @@ func NewUnlimitedMonitor(
 ) *BytesMonitor {
 	if log.V(2) {
 		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", name)
-
 	}
 	m := &BytesMonitor{
 		name:                 name,
