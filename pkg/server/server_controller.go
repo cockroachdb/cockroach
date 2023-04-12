@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
@@ -53,6 +54,8 @@ type onDemandServer interface {
 // Instantiation can fail, e.g. if the target tenant doesn't exist or
 // is not active.
 type serverController struct {
+	log.AmbientContext
+
 	// nodeID is the node ID of the server where the controller
 	// is running. This is used for logging only.
 	nodeID *base.NodeIDContainer
@@ -100,6 +103,7 @@ type serverController struct {
 
 func newServerController(
 	ctx context.Context,
+	ambientCtx log.AmbientContext,
 	logger nodeEventLogger,
 	parentNodeID *base.NodeIDContainer,
 	parentStopper *stop.Stopper,
@@ -110,6 +114,7 @@ func newServerController(
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName),
 ) *serverController {
 	c := &serverController{
+		AmbientContext:      ambientCtx,
 		nodeID:              parentNodeID,
 		logger:              logger,
 		st:                  st,
