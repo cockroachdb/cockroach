@@ -1063,7 +1063,12 @@ func (f *cloudFeedFactory) Feed(
 	// parquet format with a probability of 0.4. The rest of the time json is used
 	parquetPossible := true
 
+	explicitEnvelope := false
 	for _, opt := range createStmt.Options {
+		if string(opt.Key) == changefeedbase.OptEnvelope {
+			explicitEnvelope = true
+		}
+
 		if string(opt.Key) == changefeedbase.OptFormat {
 			parquetPossible = false
 			break
@@ -1117,7 +1122,7 @@ func (f *cloudFeedFactory) Feed(
 		ss:             ss,
 		seenTrackerMap: make(map[string]struct{}),
 		dir:            feedDir,
-		isBare:         createStmt.Select != nil,
+		isBare:         createStmt.Select != nil && !explicitEnvelope,
 	}
 	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
 		return nil, err
@@ -2033,11 +2038,18 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 		return &notifyFlushSink{Sink: s, sync: ss}
 	}
 
+	explicitEnvelope := false
+	for _, opt := range createStmt.Options {
+		if string(opt.Key) == changefeedbase.OptEnvelope {
+			explicitEnvelope = true
+		}
+	}
+
 	c := &webhookFeed{
 		jobFeed:        newJobFeed(f.jobsTableConn(), wrapSink),
 		seenTrackerMap: make(map[string]struct{}),
 		ss:             ss,
-		isBare:         createStmt.Select != nil,
+		isBare:         createStmt.Select != nil && !explicitEnvelope,
 		mockSink:       sinkDest,
 	}
 	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {

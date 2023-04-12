@@ -262,6 +262,138 @@ func TestChangefeedBasics(t *testing.T) {
 	// cloudStorageTest is a regression test for #36994.
 }
 
+func TestChangefeedBasicQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		// Currently, parquet format (which may be injected by feed() call,  doesn't
+		// know how to handle tuple types (cdc_prev); so, force JSON format.
+		foo := feed(t, f, `
+CREATE CHANGEFEED WITH format='json' 
+AS SELECT *, event_op() AS op, cdc_prev FROM foo`)
+		defer closeFeed(t, foo)
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"a": 0, "b": "updated", "cdc_prev": null, "op": "insert"}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"a": 1, "b": "a", "cdc_prev": null, "op": "insert"}`,
+			`foo: [2]->{"a": 2, "b": "b", "cdc_prev": null, "op": "insert"}`,
+		})
+
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		assertPayloads(t, foo, []string{
+			`foo: [2]->{"a": 2, "b": "c", "cdc_prev": {"a": 2, "b": "b"}, "op": "update"}`,
+			`foo: [3]->{"a": 3, "b": "d", "cdc_prev": null, "op": "insert"}`,
+		})
+
+		// Deleted rows with bare envelope are emitted with only
+		// the key columns set.
+		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"a": 1, "b": null, "cdc_prev": {"a": 1, "b": "a"}, "op": "delete"}`,
+		})
+	}
+
+	cdcTest(t, testFn)
+}
+
+// Same test as TestChangefeedBasicQuery, but using wrapped envelope with CDC query.
+func TestChangefeedBasicQueryWrapped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		// Currently, parquet format (which may be injected by feed() call),  doesn't
+		// know how to handle tuple types (cdc_prev); so, force JSON format.
+		foo := feed(t, f, `
+CREATE CHANGEFEED WITH envelope='wrapped', format='json', diff
+AS SELECT b||a AS ba, event_op() AS op  FROM foo`)
+		defer closeFeed(t, foo)
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"ba": "updated0", "op": "insert"}, "before": null}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"ba": "a1", "op": "insert"}, "before": null}`,
+			`foo: [2]->{"after": {"ba": "b2", "op": "insert"}, "before": null}`,
+		})
+
+		// Wrapped envelope results in "before" having entire previous row state -- *not* projection.
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		assertPayloads(t, foo, []string{
+			`foo: [2]->{"after": {"ba": "c2", "op": "update"}, "before": {"a": 2, "b": "b"}}`,
+			`foo: [3]->{"after": {"ba": "d3", "op": "insert"}, "before": null}`,
+		})
+
+		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": null, "before": {"a": 1, "b": "a"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
+}
+
+// Same test as TestChangefeedBasicQueryWrapped, but this time using AVRO.
+func TestChangefeedBasicQueryWrappedAvro(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		foo := feed(t, f, `
+CREATE CHANGEFEED WITH envelope='wrapped', format='avro', diff
+AS SELECT *, event_op() AS op  FROM foo`)
+		defer closeFeed(t, foo)
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, foo, []string{
+			`foo: {"a":{"long":0}}->{"after":{"foo":{"a":{"long":0},"b":{"string":"updated"},"op":{"string":"insert"}}},"before":null}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"a"},"op":{"string":"insert"}}},"before":null}`,
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":{"string":"b"},"op":{"string":"insert"}}},"before":null}`,
+		})
+
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		assertPayloads(t, foo, []string{
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":{"string":"c"},"op":{"string":"update"}}},"before":{"foo_before":{"a":{"long":2},"b":{"string":"b"}}}}`,
+			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"string":"d"},"op":{"string":"insert"}}},"before":null}`,
+		})
+
+		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		assertPayloads(t, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":null,"before":{"foo_before":{"a":{"long":1},"b":{"string":"a"}}}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
 func TestToJSONAsChangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1235,14 +1367,12 @@ func TestChangefeedProjectionDelete(t *testing.T) {
 
 		sqlDB.Exec(t, `CREATE TABLE foo (id int primary key, a string)`)
 		sqlDB.Exec(t, `INSERT INTO foo values (0, 'a')`)
-		foo := feed(t, f, `CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT * FROM foo`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH envelope='wrapped' AS SELECT * FROM foo`)
 		defer closeFeed(t, foo)
-		assertPayloads(t, foo, []string{
-			`foo: [0]->{"a": "a", "id": 0}`,
-		})
+		assertPayloads(t, foo, []string{`foo: [0]->{"after": {"a": "a", "id": 0}}`})
 		sqlDB.Exec(t, `DELETE FROM foo WHERE id = 0`)
 		assertPayloads(t, foo, []string{
-			`foo: [0]->{}`,
+			`foo: [0]->{"after": null}`,
 		})
 	}
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))

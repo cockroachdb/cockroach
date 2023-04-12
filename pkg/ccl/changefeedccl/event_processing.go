@@ -108,7 +108,8 @@ func newEventConsumer(
 
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		var err error
-		encoder, err := getEncoder(encodingOpts, feed.Targets, makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics)
+		encoder, err := getEncoder(encodingOpts, feed.Targets, spec.Select.Expr != "",
+			makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics)
 		if err != nil {
 			return nil, err
 		}
@@ -369,22 +370,18 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	}
 
 	if c.evaluator != nil {
-		projection, err := c.evaluator.Eval(ctx, updatedRow, prevRow)
+		updatedRow, err = c.evaluator.Eval(ctx, updatedRow, prevRow)
 		if err != nil {
 			return err
 		}
 
-		if !projection.IsInitialized() {
+		if !updatedRow.IsInitialized() {
 			// Filter did not match.
 			c.metrics.FilteredMessages.Inc(1)
 			a := ev.DetachAlloc()
 			a.Release(ctx)
 			return nil
 		}
-
-		// Clear out prevRow.  Projection can already emit previous row; thus
-		// it would be superfluous to also encode prevRow.
-		updatedRow, prevRow = projection, cdcevent.Row{}
 	}
 
 	return c.encodeAndEmit(ctx, updatedRow, prevRow, schemaTimestamp, ev.DetachAlloc())
