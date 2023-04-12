@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -184,8 +185,7 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 				fmt.Fprintln(&buf, rec)
 				fmt.Fprintln(&buf)
 			}
-			sl := make([]byte, 5<<20 /* 5mb */)
-			sl = sl[:runtime.Stack(sl, true /* all */)]
+			sl := allstacks.Get()
 			return errors.Newf("%s\n\ngoroutines of interest: %v\nstacks:\n\n%s", buf.String(), ids, sl)
 		})
 	}

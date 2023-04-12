@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -749,12 +750,6 @@ fi'`
 	}
 }
 
-func allStacks() []byte {
-	// Collect up to 5mb worth of stacks.
-	b := make([]byte, 5*(1<<20))
-	return b[:runtime.Stack(b, true /* all */)]
-}
-
 // An error is returned if the test is still running (on another goroutine) when
 // this returns. This happens when the test doesn't respond to cancellation.
 //
@@ -980,7 +975,7 @@ func (r *testRunner) teardownTest(
 			// We make sure to fail the test later when handling the timedOut variable.
 			const stacksFile = "__stacks"
 			if cl, err := t.L().ChildLogger(stacksFile, logger.QuietStderr, logger.QuietStdout); err == nil {
-				sl := allStacks()
+				sl := allstacks.Get()
 				if c.Spec().NodeCount == 0 {
 					sl = []byte("<elided during unit test>") // keep test outputs clutter-free
 				}

@@ -6,7 +6,10 @@ go_library(
     srcs = ["dump.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_maruel_panicparse_v2//stack"],
+    deps = [
+        "//pkg/util/allstacks",
+        "@com_github_maruel_panicparse_v2//stack",
+    ],
 )
 
 go_test(
