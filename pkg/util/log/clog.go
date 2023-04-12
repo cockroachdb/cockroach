@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -257,9 +258,9 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 
 		switch traceback {
 		case tracebackSingle:
-			entry.stacks = getStacks(false)
+			entry.stacks = debug.Stack()
 		case tracebackAll:
-			entry.stacks = getStacks(true)
+			entry.stacks = allstacks.Get()
 		}
 
 		for _, s := range l.sinkInfos {
@@ -404,7 +405,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 // output, and also to stderr if the remainder of the logs don't go to
 // stderr by default.
 func DumpStacks(ctx context.Context, reason redact.RedactableString) {
-	allStacks := getStacks(true)
+	allStacks := allstacks.Get()
 	// TODO(knz): This should really be a "debug" level, not "info".
 	Shoutf(ctx, severity.INFO, "%s. stack traces:\n%s", reason, allStacks)
 }
