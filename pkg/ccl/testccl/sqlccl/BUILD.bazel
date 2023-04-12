@@ -23,7 +23,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/internal/sqlsmith",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
