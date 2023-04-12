@@ -89,7 +89,8 @@ cockroachdb/multi-tenant:
 cockroachdb/jobs:
   aliases:
     cockroachdb/jobs-prs: other
-  triage_column_id: 16360666
+  # Jobs uses GH projects v2, which doesn't have a REST API, so no triage column ID
+  # see .github/workflows/add-issues-to-project.yml
   label: T-jobs
 cockroachdb/cloud-identity:
   triage_column_id: 18588697
