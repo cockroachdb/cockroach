@@ -156,6 +156,7 @@ ElementState:
     constraintId: 1
     geoConfig: null
     indexId: 1
+    invisibility: 0
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false
@@ -171,6 +172,7 @@ ElementState:
     expr: g::STRING = 'hi':::STRING
     geoConfig: null
     indexId: 2
+    invisibility: 0
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false
@@ -821,6 +823,7 @@ ElementState:
     constraintId: 1
     geoConfig: null
     indexId: 1
+    invisibility: 0
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false
@@ -836,6 +839,7 @@ ElementState:
     expr: (c).a = 3:::INT8
     geoConfig: null
     indexId: 2
+    invisibility: 0
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false
