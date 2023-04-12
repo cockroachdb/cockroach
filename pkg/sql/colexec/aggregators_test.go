@@ -1017,7 +1017,7 @@ func benchmarkAggregateFunction(
 			return
 		}
 	}
-	rng, _ := randutil.NewTestRand()
+	rng := randutil.NewTestRandWithSeed(17)
 	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
