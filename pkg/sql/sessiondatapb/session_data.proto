@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.sql.sessiondatapb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb";
 
+import "security/usernamepb/user_identity_details.proto";
 import "sql/lex/encode.proto";
 import "util/duration/duration.proto";
 import "util/timeutil/pgdate/pgdate.proto";
@@ -29,6 +30,7 @@ message SessionData {
   // session. This can be used for logging and per-application statistics.
   string application_name = 2;
   // User is the name of the user logged into the session.
+  // TODO(yang): Deprecate this field.
   string user_proto = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
   // DataConversion gives access to the data conversion configuration.
   DataConversionConfig data_conversion_config = 4 [(gogoproto.nullable) = false];
@@ -112,6 +114,9 @@ message SessionData {
   // that is used for builtins like to_tsvector and to_tsquery if no
   // text search configuration is explicitly passed in.
   string default_text_search_config = 26;
+  // CurrentUser contains identity details about the session's current user,
+  // which may be overridden from the user that logged in to the session.
+  security.usernamepb.UserIdentityDetails current_user = 27;
 }
 
 // DataConversionConfig contains the parameters that influence the output

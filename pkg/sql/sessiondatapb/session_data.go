@@ -84,9 +84,15 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 	return m, true
 }
 
-// User retrieves the current user.
+// User retrieves the current user's username.
 func (s *SessionData) User() username.SQLUsername {
 	return s.UserProto.Decode()
+	//return s.CurrentUser.UserName.Decode()
+}
+
+// UserID retrieves the current user's user ID.
+func (s *SessionData) UserID() username.SQLUserID {
+	return s.CurrentUser.UserID
 }
 
 // SystemIdentity retrieves the session's system identity.
