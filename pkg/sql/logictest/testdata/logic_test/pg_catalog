@@ -325,10 +325,10 @@ nspname      NAME       false        NULL            ·                      {} 
 nspowner     OID        true         NULL            ·                      {}       false
 nspacl       STRING[]   true         NULL            ·                      {}       false
 
-query TTBITTTBBB colnames
+query TTBITTTBBBF colnames
 SHOW INDEXES FROM pg_catalog.pg_namespace
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
 
 query TTTTB colnames
 SHOW CONSTRAINTS FROM pg_catalog.pg_namespace

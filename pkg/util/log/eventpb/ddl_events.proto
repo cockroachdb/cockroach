@@ -336,7 +336,10 @@ message AlterIndexVisible {
   // The name of the affected index.
   string index_name = 4 [(gogoproto.jsontag) = ",omitempty"];
   // Set true if index is not visible.
-  bool not_visible = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // NOTE: THIS FIELD IS DEPRECATED in favor of invisibility.
+  bool not_visible = 5 [(gogoproto.jsontag) = ",omitempty", deprecated = true];
+  // The new invisibility of the affected index.
+  double invisibility = 6 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 
