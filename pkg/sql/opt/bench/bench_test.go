@@ -2000,6 +2000,44 @@ var slowSchemas = []string{
 			UNIQUE (col3_10 DESC, col3_3 ASC, col2_1 DESC, col3_9 ASC)
 		);
 	`,
+	`
+		CREATE TABLE multi_col_pk (
+			region STRING NOT NULL,
+			id INT NOT NULL,
+			c1 INT NOT NULL, c2 INT NOT NULL, c3 INT NOT NULL, c4 INT NOT NULL, c5 INT NOT NULL,
+			c6 INT NOT NULL, c7 INT NOT NULL, c8 INT NOT NULL, c9 INT NOT NULL, c10 INT NOT NULL,
+			c11 INT NOT NULL, c12 INT NOT NULL, c13 INT NOT NULL, c14 INT NOT NULL, c15 INT NOT NULL,
+			c16 INT NOT NULL, c17 INT NOT NULL, c18 INT NOT NULL, c19 INT NOT NULL, c20 INT NOT NULL,
+			c21 INT NOT NULL, c22 INT NOT NULL, c23 INT NOT NULL, c24 INT NOT NULL, c25 INT NOT NULL,
+			c26 INT NOT NULL, c27 INT NOT NULL, c28 INT NOT NULL, c29 INT NOT NULL, c30 INT NOT NULL,
+			c31 INT NOT NULL, c32 INT NOT NULL, c33 INT NOT NULL, c34 INT NOT NULL, c35 INT NOT NULL,
+			c36 INT NOT NULL, c37 INT NOT NULL, c38 INT NOT NULL, c39 INT NOT NULL, c40 INT NOT NULL,
+			c41 INT NOT NULL, c42 INT NOT NULL, c43 INT NOT NULL, c44 INT NOT NULL, c45 INT NOT NULL,
+			c46 INT NOT NULL, c47 INT NOT NULL, c48 INT NOT NULL, c49 INT NOT NULL, c50 INT NOT NULL,
+			CHECK (c41 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
+			CHECK (c42 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
+			CHECK (c43 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
+			CHECK (c44 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
+			CHECK (c45 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
+			CHECK (c46 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
+			CHECK (c47 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
+			CHECK (c48 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
+			CHECK (c49 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
+			CHECK (c50 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
+			CHECK (region IN ('east', 'west', 'north', 'south')),
+			INDEX (c41, c31),
+			INDEX (c42, c32),
+			INDEX (c43, c33),
+			INDEX (c44, c34),
+			INDEX (c45, c35),
+			INDEX (c46, c36),
+			INDEX (c47, c37),
+			INDEX (c48, c38),
+			INDEX (c49, c39),
+			INDEX (c50, c40),
+			PRIMARY KEY (region, id)
+		);
+	`,
 }
 
 var slowQueries = [...]benchQuery{
@@ -2190,6 +2228,22 @@ var slowQueries = [...]benchQuery{
         tab1.col8 DESC;
     `,
 		args: []interface{}{},
+	},
+	{
+		name: "slow-query-4",
+		query: `
+			SELECT * FROM multi_col_pk t1
+			LEFT JOIN multi_col_pk t2 ON t1.region = t2.region AND t1.id = t2.id
+			LEFT JOIN multi_col_pk t3 ON t1.region = t3.region AND t1.id = t3.id
+			LEFT JOIN multi_col_pk t4 ON t1.region = t4.region AND t1.id = t4.id
+			LEFT JOIN multi_col_pk t5 ON t1.region = t5.region AND t1.id = t5.id
+			LEFT JOIN multi_col_pk t6 ON t1.region = t6.region AND t1.id = t6.id
+			LEFT JOIN multi_col_pk t7 ON t1.region = t7.region AND t1.id = t7.id
+			LEFT JOIN multi_col_pk t8 ON t1.region = t8.region AND t1.id = t8.id
+			LEFT JOIN multi_col_pk t9 ON t1.region = t9.region AND t1.id = t9.id
+			WHERE t1.c1 IN ($1, $2, $3) AND t1.c2 IN ($4, $5, $6) AND t1.c3 IN ($7, $8, $9)
+    `,
+		args: []interface{}{10, 20, 30, 40, 50, 60, 70, 80, 90},
 	},
 }
 
