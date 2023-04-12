@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -914,15 +915,21 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	// parameters are supported.
 	// TODO(100962): Set a param default value sometimes.
 	params := make(tree.FuncParams, paramCnt)
+	paramTypes := make(tree.ParamTypes, paramCnt)
 	for i := 0; i < paramCnt; i++ {
 		// Do not allow collated string types. These are not supported in UDFs.
 		ptyp := s.randType()
 		for ptyp.Family() == types.CollatedStringFamily {
 			ptyp = s.randType()
 		}
+		pname := fmt.Sprintf("p%d", i)
 		params[i] = tree.FuncParam{
-			Name: tree.Name(fmt.Sprintf("p%d", i)),
+			Name: tree.Name(pname),
 			Type: ptyp,
+		}
+		paramTypes[i] = tree.ParamType{
+			Name: pname,
+			Typ:  ptyp,
 		}
 	}
 
@@ -949,15 +956,18 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	// ~17%: FunctionVolatile
 	// ~17%: FunctionImmutable
 	// ~17%: FunctionStable
-	immutable := false
+	funcVol := tree.FunctionVolatile
+	vol := volatility.Volatile
 	switch s.d6() {
 	case 1:
-		opts = append(opts, tree.FunctionVolatile)
+		funcVol = tree.FunctionImmutable
+		vol = volatility.Immutable
 	case 2:
-		opts = append(opts, tree.FunctionImmutable)
-		immutable = true
-	case 3:
-		opts = append(opts, tree.FunctionStable)
+		funcVol = tree.FunctionStable
+		vol = volatility.Stable
+	}
+	if funcVol != tree.FunctionVolatile || s.coin() {
+		opts = append(opts, funcVol)
 	}
 
 	// FunctionLeakproof
@@ -965,10 +975,13 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	// immutable, also specify leakproof 50% of the time. Otherwise, specify
 	// not leakproof 50% of the time (default is not leakproof).
 	leakproof := false
-	if immutable {
+	if funcVol == tree.FunctionImmutable {
 		leakproof = s.coin()
 	}
 	if leakproof || s.coin() {
+		if leakproof {
+			vol = volatility.Leakproof
+		}
 		opts = append(opts, tree.FunctionLeakproof(leakproof))
 	}
 
@@ -985,11 +998,14 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	stmts := make([]string, 0, stmtCnt)
 	// Disable CTEs temporarily, since they are not currently supported in UDFs.
 	// TODO(92961): Allow CTEs in generated statements in UDF bodies.
+	// TODO(93049): Allow UDFs to call other UDFs, as well as create other UDFs.
 	oldDisableWith := s.disableWith
 	defer func() {
 		s.disableWith = oldDisableWith
+		s.disableUDFs = false
 	}()
 	s.disableWith = true
+	s.disableUDFs = true
 	for i := 0; i < stmtCnt; i++ {
 		// UDFs currently only support SELECT statements.
 		// TODO(87289): Add mutations to the generated statements.
@@ -1017,7 +1033,27 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 		Params:     params,
 		Options:    opts,
 	}
-	// TODO(harding): Register existing functions so we can refer to them in queries.
+
+	// Add this function to the functions list so that we can use it in future
+	// queries. Unfortunately, if the function fails to be created, then any
+	// queries that reference it will also fail.
+	class := tree.NormalClass
+	if setof {
+		class = tree.GeneratorClass
+	}
+
+	// We only add overload fields that are necessary to generate functions.
+	ov := &tree.Overload{
+		Volatility: vol,
+		Types:      paramTypes,
+		Class:      class,
+		IsUDF:      true,
+	}
+
+	functions[class][rtyp.Oid()] = append(functions[class][rtyp.Oid()], function{
+		def:      tree.NewFunctionDefinition(name.String(), &tree.FunctionProperties{}, nil /* def */),
+		overload: ov,
+	})
 	return stmt, true
 }
 
