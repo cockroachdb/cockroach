@@ -472,6 +472,32 @@ func RoleExists(ctx context.Context, txn isql.Txn, role username.SQLUsername) (b
 	return row != nil, nil
 }
 
+// GetUserID returns a user's ID.
+func (p *planner) GetUserID(
+	ctx context.Context, user username.SQLUsername,
+) (username.SQLUserID, error) {
+	return GetUserID(ctx, p.InternalSQLTxn(), user)
+}
+
+// GetUserID returns a user's ID.
+func GetUserID(
+	ctx context.Context, txn isql.Txn, user username.SQLUsername,
+) (username.SQLUserID, error) {
+	query := `SELECT user_id FROM system.users WHERE username = $1`
+	row, err := txn.QueryRowEx(
+		ctx, "get-user-id", txn.KV(),
+		sessiondata.RootUserSessionDataOverride,
+		query, user,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if row == nil {
+		return 0, errors.Newf("cannot get user ID for non-existent user %s", user)
+	}
+	return username.SQLUserID(tree.MustBeDOid(row[0]).Oid), nil
+}
+
 var roleMembersTableName = tree.MakeTableNameWithSchema("system", tree.PublicSchemaName, "role_members")
 
 // BumpRoleMembershipTableVersion increases the table version for the
