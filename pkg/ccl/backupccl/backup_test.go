@@ -5784,18 +5784,46 @@ func TestBackupHandlesDroppedTypeStatsCollection(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP foo TO $1`, dest)
 }
 
+type fakeResumer struct {
+	unblockCh chan struct{}
+	doneCh    chan struct{}
+}
+
+var _ jobs.Resumer = (*fakeResumer)(nil)
+
+func (d *fakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	<-d.unblockCh
+	d.doneCh <- struct{}{}
+	return nil
+}
+
+func (d *fakeResumer) OnFailOrCancel(context.Context, interface{}, error) error {
+	return nil
+}
+
 // TestBatchedInsertStats is a test for the `insertStats` method used in a
 // cluster restore to restore backed up statistics.
 func TestBatchedInsertStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
 
-	const numAccounts = 1
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts,
-		InitManualReplication)
-	defer cleanupFn()
+	unblockCh := make(chan struct{})
+	doneCh := make(chan struct{})
+	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return &fakeResumer{
+			unblockCh: unblockCh,
+			doneCh:    doneCh,
+		}
+	}, jobs.UsesTenantCostControl)
+	params := base.TestServerArgs{Knobs: base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}}
+	server, db, _ := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.Background())
+	s := server.TenantOrServer()
+	sqlDB := sqlutils.MakeSQLRunner(db)
 	ctx := context.Background()
-	s := tc.Server(0)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	registry := s.JobRegistry().(*jobs.Registry)
 	mkJob := func(t *testing.T) *jobs.Job {
@@ -5810,6 +5838,7 @@ func TestBatchedInsertStats(t *testing.T) {
 		require.NoError(t, err)
 		return job
 	}
+	job := mkJob(t)
 
 	generateTableStatistics := func(numStats int) []*stats.TableStatisticProto {
 		tableStats := make([]*stats.TableStatisticProto, 0, numStats)
@@ -5849,6 +5878,10 @@ func TestBatchedInsertStats(t *testing.T) {
 			name:          "greater-than-batch-size",
 			numTableStats: 15,
 		},
+		{
+			name:          "greater-than-batch-size-times-concurrent-workers",
+			numTableStats: 100,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			dbName := fmt.Sprintf("foo%d", i)
@@ -5859,17 +5892,27 @@ func TestBatchedInsertStats(t *testing.T) {
 
 			// Clear the stats.
 			sqlDB.Exec(t, `DELETE FROM system.table_statistics WHERE true`)
-			job := mkJob(t)
 			require.NoError(t, insertStats(ctx, job, &execCfg, stats))
 			// If there are no stats to insert, we exit early without updating the
 			// job.
 			if test.numTableStats != 0 {
 				require.True(t, job.Details().(jobspb.RestoreDetails).StatsInserted)
 			}
-			res := sqlDB.QueryStr(t, `SELECT * FROM system.table_statistics`)
-			require.Len(t, res, test.numTableStats)
+			var count int
+			sqlDB.QueryRow(t, `SELECT	count(*) FROM system.table_statistics`).Scan(&count)
+			require.Equal(t, test.numTableStats, count)
+
+			// Reset the job state, for the next iteration of the test.
+			details := job.Details().(jobspb.RestoreDetails)
+			details.StatsInserted = false
+			require.NoError(t, job.NoTxn().SetDetails(ctx, details))
+			var err error
+			job, err = registry.LoadJob(ctx, job.ID())
+			require.NoError(t, err)
 		})
 	}
+	close(unblockCh)
+	<-doneCh
 }
 
 func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
