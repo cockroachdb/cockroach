@@ -114,6 +114,7 @@ func (n *alterIndexVisibleNode) startExec(params runParams) error {
 			TableName:    n.n.Index.Table.FQString(),
 			IndexName:    n.index.GetName(),
 			NotVisible:   n.n.Invisibility != 0.0,
+			Invisibility: n.n.Invisibility,
 		})
 }
 func (n *alterIndexVisibleNode) Next(runParams) (bool, error) { return false, nil }
