@@ -133,6 +133,7 @@ type OptTester struct {
 	appliedRules RuleSet
 
 	builder strings.Builder
+	f       *norm.Factory
 }
 
 // Flags are control knobs for tests. Note that specific testcases can
@@ -270,6 +271,8 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 		semaCtx: tree.MakeSemaContext(),
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+	ot.f = &norm.Factory{}
+	ot.f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
 	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 	ot.evalCtx.SessionData().OptimizerUseMultiColStats = true
 	ot.Flags.ctx = ot.ctx
@@ -854,7 +857,7 @@ func (ot *OptTester) checkExpectedRules(tb testing.TB, d *datadriven.TestData) {
 }
 
 func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Expr) {
-	fillInLazyProps(e)
+	ot.fillInLazyProps(e)
 
 	if rel, ok := e.(memo.RelExpr); ok {
 		for _, cols := range ot.Flags.ColStats {
@@ -865,13 +868,13 @@ func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Ex
 }
 
 // Fills in lazily-derived properties (for display).
-func fillInLazyProps(e opt.Expr) {
+func (ot *OptTester) fillInLazyProps(e opt.Expr) {
 	if rel, ok := e.(memo.RelExpr); ok {
 		// These properties are derived from the normalized expression.
 		rel = rel.FirstExpr()
 
 		// Derive columns that are candidates for pruning.
-		norm.DerivePruneCols(rel, intsets.Fast{} /* disabledRules */)
+		ot.f.CustomFuncs().DerivePruneCols(rel, intsets.Fast{} /* disabledRules */)
 
 		// Derive columns that are candidates for null rejection.
 		norm.DeriveRejectNullCols(rel, intsets.Fast{} /* disabledRules */)
@@ -881,7 +884,7 @@ func fillInLazyProps(e opt.Expr) {
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {
-		fillInLazyProps(e.Child(i))
+		ot.fillInLazyProps(e.Child(i))
 	}
 }
 
@@ -1283,6 +1286,7 @@ func (ot *OptTester) Memo() (string, error) {
 func (ot *OptTester) Expr() (opt.Expr, error) {
 	var f norm.Factory
 	f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
+	ot.f = &f
 	f.DisableOptimizations()
 
 	return exprgen.Build(ot.ctx, ot.catalog, &f, ot.sql)
@@ -1293,6 +1297,7 @@ func (ot *OptTester) Expr() (opt.Expr, error) {
 func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	var f norm.Factory
 	f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
+	ot.f = &f
 	f.SetDisabledRules(ot.Flags.DisableRules)
 
 	if !ot.Flags.NoStableFolds {
@@ -2245,6 +2250,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 	var o xform.Optimizer
 	o.Init(ot.ctx, &ot.evalCtx, ot.catalog)
+	ot.f = o.Factory()
 	o.Factory().SetDisabledRules(ot.Flags.DisableRules)
 	o.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
 		// Exploration rules are marked as "applied" if they generate one or
@@ -2272,8 +2278,8 @@ func (ot *OptTester) optimizeExpr(
 	if err != nil {
 		return nil, err
 	}
+	o.Memo().ResetLogProps(ot.ctx, &ot.evalCtx)
 	if ot.Flags.PerturbCost != 0 {
-		o.Memo().ResetLogProps(ot.ctx, &ot.evalCtx)
 		o.RecomputeCost()
 	}
 	return root, nil
