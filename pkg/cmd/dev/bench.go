@@ -173,7 +173,7 @@ func (d *dev) getGoTestEnvArgs() []string {
 	var goTestEnv []string
 	// Make the `$HOME/.cache/crdb-test-fixtures` directory available for reusable
 	// test fixtures, if available. See testfixtures.ReuseOrGenerate().
-	if cacheDir, err := os.UserCacheDir(); err == nil {
+	if cacheDir, err := d.os.UserCacheDir(); err == nil {
 		dir := filepath.Join(cacheDir, "crdb-test-fixtures")
 		if err := os.MkdirAll(dir, 0755); err == nil {
 			goTestEnv = append(goTestEnv, "--test_env", fmt.Sprintf("COCKROACH_TEST_FIXTURES_DIR=%s", dir))
