@@ -484,3 +484,14 @@ SELECT t1.x FROM t1 INNER LOOKUP JOIN t2 ON t1.x = t2.x
 ----
 [1, [2, 3]]
 
+# Regression test for not supporting vectorized span encoder for JSONs (#101356).
+statement ok
+CREATE TABLE t101356 (j JSONB PRIMARY KEY, i1 INT, i2 INT, INDEX (i1));
+INSERT INTO t101356 VALUES ('1'::JSON, 1, 1);
+
+# This query reads from the index and then performs the index join - during the
+# index join is when the vectorized span encoder is utilized.
+query TII
+SELECT * FROM t101356 WHERE i1 = 1
+----
+1  1  1
