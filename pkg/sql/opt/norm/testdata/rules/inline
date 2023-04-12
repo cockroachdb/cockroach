@@ -1106,6 +1106,12 @@ CREATE FUNCTION add(x INT, y INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
 $$
 ----
 
+exec-ddl
+CREATE FUNCTION rec(r RECORD) RETURNS RECORD IMMUTABLE LANGUAGE SQL AS $$
+  SELECT r
+$$
+----
+
 norm expect=InlineUDF
 SELECT add(1, i) FROM (VALUES (1), (2), (3)) v(i)
 ----
@@ -1139,6 +1145,68 @@ project
       └── filters
            └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
 
+# A UDF with a placehold argument should be inlined.
+norm expect=InlineUDF
+SELECT add(1, $1)
+----
+values
+ ├── columns: add:4
+ ├── cardinality: [1 - 1]
+ ├── immutable, has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── tuple
+      └── subquery
+           └── values
+                ├── columns: "?column?":3
+                ├── cardinality: [1 - 1]
+                ├── immutable, has-placeholder
+                ├── key: ()
+                ├── fd: ()-->(3)
+                └── ($1 + 1,)
+
+# A UDF with an argument that is a tuple of constants, variables, and
+# placeholders should be inlined.
+norm expect=InlineUDF
+SELECT rec((1, i, $1::INT)) FROM a
+----
+project
+ ├── columns: rec:10
+ ├── has-placeholder
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── (1, i:2, $1) [as=rec:10, outer=(2)]
+
+# A UDF is not inlined when the arguments are not constants or either Variable or Const
+# expressions.
+norm expect-not=InlineUDF
+SELECT add(1, i+10) FROM (VALUES (1), (2), (3)) v(i)
+----
+project
+ ├── columns: add:5
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (3,)
+ └── projections
+      └── add(1, column1:1 + 10) [as=add:5, outer=(1), immutable, udf]
+
+norm expect-not=InlineUDF
+SELECT rec((1, i+10, $1::INT)) FROM a
+----
+project
+ ├── columns: rec:10
+ ├── immutable, has-placeholder
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── rec((1, i:2 + 10, $1)) [as=rec:10, outer=(2), immutable, udf]
+
 # Nested UDFs should be inlined.
 norm expect=InlineUDF
 SELECT add(10, add(i, 20)) FROM a WHERE add(k, add(10, f::INT)) = 100
@@ -1147,22 +1215,40 @@ project
  ├── columns: add:20
  ├── immutable
  ├── select
- │    ├── columns: i:2 "?column?":13!null
+ │    ├── columns: k:1!null i:2 f:3
  │    ├── immutable
- │    ├── fd: ()-->(13)
- │    ├── project
- │    │    ├── columns: "?column?":13 i:2
- │    │    ├── immutable
- │    │    ├── scan a
- │    │    │    ├── columns: k:1!null i:2 f:3
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2,3)
- │    │    └── projections
- │    │         └── k:1 + (f:3::INT8 + 10) [as="?column?":13, outer=(1,3), immutable]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3)
  │    └── filters
- │         └── "?column?":13 = 100 [outer=(13), constraints=(/13: [/100 - /100]; tight), fd=()-->(13)]
+ │         └── add(k:1, add(10, f:3::INT8)) = 100 [outer=(1,3), immutable, udf]
  └── projections
-      └── (i:2 + 20) + 10 [as=add:20, outer=(2), immutable]
+      └── u-d-f: &{add [values
+           ├── columns: "?column?":19(int)
+           ├── outer: (17,18)
+           ├── cardinality: [1 - 1]
+           ├── immutable
+           ├── stats: [rows=1]
+           ├── key: ()
+           ├── fd: ()-->(19)
+           └── tuple [type=tuple{int}]
+                └── plus [type=int]
+                     ├── variable: x:17 [type=int]
+                     └── variable: y:18 [type=int]
+          ] [17 18] int false immutable true} [as=add:20, outer=(2), immutable, correlated-subquery, udf]
+           ├── 10
+           └── subquery
+                └── values
+                     ├── columns: "?column?":16
+                     ├── outer: (2)
+                     ├── cardinality: [1 - 1]
+                     ├── immutable
+                     ├── key: ()
+                     ├── fd: ()-->(16)
+                     └── (i:2 + 20,)
 
 exec-ddl
 CREATE FUNCTION min_x() RETURNS INT STABLE LANGUAGE SQL AS $$
@@ -1221,60 +1307,61 @@ CREATE FUNCTION min_x_gt(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
 $$
 ----
 
-# Nested stable UDFs should be inlined.
+# Only the inner stable UDF should be inlined.
 norm expect=InlineUDF
 SELECT k FROM a WHERE k = min_x_gt(min_x_gt(0))
 ----
 select
  ├── columns: k:1!null
+ ├── stable
  ├── key: (1)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── filters
-      └── eq [outer=(1), subquery, constraints=(/1: (/NULL - ])]
+      └── eq [outer=(1), stable, subquery, udf, constraints=(/1: (/NULL - ])]
            ├── k:1
-           └── subquery
-                └── limit
-                     ├── columns: x:14!null
-                     ├── internal-ordering: +14
-                     ├── cardinality: [0 - 1]
-                     ├── key: ()
-                     ├── fd: ()-->(14)
-                     ├── select
-                     │    ├── columns: x:14!null
-                     │    ├── key: (14)
-                     │    ├── ordering: +14
-                     │    ├── limit hint: 1.00
-                     │    ├── scan xy
-                     │    │    ├── columns: x:14!null
-                     │    │    ├── key: (14)
-                     │    │    ├── ordering: +14
-                     │    │    └── limit hint: 3.00
-                     │    └── filters
-                     │         └── gt [outer=(14), subquery, constraints=(/14: (/NULL - ])]
-                     │              ├── x:14
-                     │              └── subquery
-                     │                   └── limit
-                     │                        ├── columns: x:9!null
-                     │                        ├── internal-ordering: +9
-                     │                        ├── cardinality: [0 - 1]
-                     │                        ├── key: ()
-                     │                        ├── fd: ()-->(9)
-                     │                        ├── select
-                     │                        │    ├── columns: x:9!null
-                     │                        │    ├── key: (9)
-                     │                        │    ├── ordering: +9
-                     │                        │    ├── limit hint: 1.00
-                     │                        │    ├── scan xy
-                     │                        │    │    ├── columns: x:9!null
-                     │                        │    │    ├── key: (9)
-                     │                        │    │    ├── ordering: +9
-                     │                        │    │    └── limit hint: 3.00
-                     │                        │    └── filters
-                     │                        │         └── x:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
-                     │                        └── 1
-                     └── 1
+           └── udf: min_x_gt
+                ├── params: i:13
+                ├── args
+                │    └── subquery
+                │         └── limit
+                │              ├── columns: x:9!null
+                │              ├── internal-ordering: +9
+                │              ├── cardinality: [0 - 1]
+                │              ├── key: ()
+                │              ├── fd: ()-->(9)
+                │              ├── select
+                │              │    ├── columns: x:9!null
+                │              │    ├── key: (9)
+                │              │    ├── ordering: +9
+                │              │    ├── limit hint: 1.00
+                │              │    ├── scan xy
+                │              │    │    ├── columns: x:9!null
+                │              │    │    ├── key: (9)
+                │              │    │    ├── ordering: +9
+                │              │    │    └── limit hint: 3.00
+                │              │    └── filters
+                │              │         └── x:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
+                │              └── 1
+                └── body
+                     └── limit
+                          ├── columns: x:14!null
+                          ├── internal-ordering: +14
+                          ├── outer: (13)
+                          ├── cardinality: [0 - 1]
+                          ├── key: ()
+                          ├── fd: ()-->(14)
+                          ├── select
+                          │    ├── columns: x:14!null
+                          │    ├── outer: (13)
+                          │    ├── key: (14)
+                          │    ├── scan xy
+                          │    │    ├── columns: x:14!null
+                          │    │    └── key: (14)
+                          │    └── filters
+                          │         └── x:14 > i:13 [outer=(13,14), constraints=(/13: (/NULL - ]; /14: (/NULL - ])]
+                          └── 1
 
 # UDFs with volatile arguments are not inlined.
 norm expect-not=InlineUDF
@@ -1363,3 +1450,62 @@ project
  │    └── ()
  └── projections
       └── empty() [as=empty:2, stable, udf]
+
+exec-ddl
+CREATE FUNCTION x_0_1_y_2(x INT, y INT) RETURNS BOOL IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x = 0 OR x = 1 OR y = 2
+$$
+----
+
+# Do not inline a UDF when the parameter corresponding to a subquery argument is
+# referenced multiple times.
+# TODO(mgartner): Fix the formatting of subquery UDF arguments.
+norm expect-not=InlineUDF
+SELECT x_0_1_y_2((SELECT v FROM (VALUES (10), (20)) v(v) WHERE v > a.i), 10) FROM a
+----
+project
+ ├── columns: x_0_1_y_2:12
+ ├── immutable
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── u-d-f: &{x_0_1_y_2 [values
+           ├── columns: "?column?":11(bool)
+           ├── outer: (9,10)
+           ├── cardinality: [1 - 1]
+           ├── stats: [rows=1]
+           ├── key: ()
+           ├── fd: ()-->(11)
+           └── tuple [type=tuple{bool}]
+                └── or [type=bool]
+                     ├── or [type=bool]
+                     │    ├── eq [type=bool]
+                     │    │    ├── variable: x:9 [type=int]
+                     │    │    └── const: 0 [type=int]
+                     │    └── eq [type=bool]
+                     │         ├── variable: x:9 [type=int]
+                     │         └── const: 1 [type=int]
+                     └── eq [type=bool]
+                          ├── variable: y:10 [type=int]
+                          └── const: 2 [type=int]
+          ] [9 10] bool false immutable true} [as=x_0_1_y_2:12, outer=(2), immutable, correlated-subquery, udf]
+           ├── subquery
+           │    └── max1-row
+           │         ├── columns: column1:8!null
+           │         ├── error: "more than one row returned by a subquery used as an expression"
+           │         ├── outer: (2)
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(8)
+           │         └── select
+           │              ├── columns: column1:8!null
+           │              ├── outer: (2)
+           │              ├── cardinality: [0 - 2]
+           │              ├── values
+           │              │    ├── columns: column1:8!null
+           │              │    ├── cardinality: [2 - 2]
+           │              │    ├── (10,)
+           │              │    └── (20,)
+           │              └── filters
+           │                   └── column1:8 > i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+           └── 10
