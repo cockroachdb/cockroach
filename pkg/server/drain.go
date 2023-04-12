@@ -334,6 +334,8 @@ func (s *drainServer) drainInner(
 	if err = s.drainClients(ctx, reporter); err != nil {
 		return err
 	}
+	log.Infof(ctx, "done draining clients")
+
 	// Mark the node as draining in liveness and drain all range leases.
 	return s.drainNode(ctx, reporter, verbose)
 }
