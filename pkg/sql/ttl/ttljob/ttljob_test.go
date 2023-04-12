@@ -962,3 +962,102 @@ func TestOutboundForeignKey(t *testing.T) {
 	results := sqlDB.QueryStr(t, "SELECT * FROM tbl")
 	require.Empty(t, results)
 }
+
+func TestInboundForeignKeyOnDeleteCascade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+		t,
+		&sql.TTLTestingKnobs{
+			AOSTDuration:     &zeroDuration,
+			ReturnStatsError: true,
+		},
+		false, /* testMultiTenant */
+		1,     /* numNodes */
+		0,     /* version */
+	)
+	defer cleanupFunc()
+
+	sqlDB := th.sqlDB
+	sqlDB.Exec(t, "CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at')")
+	sqlDB.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, tbl_id INT REFERENCES tbl (id) ON DELETE CASCADE)")
+
+	sqlDB.Exec(t, "INSERT INTO tbl VALUES (1, '2020-01-01')")
+	sqlDB.Exec(t, "INSERT INTO child VALUES (1, 1)")
+
+	// Force the schedule to execute.
+	th.waitForScheduledJob(t, jobs.StatusSucceeded, "")
+
+	results := sqlDB.QueryStr(t, "SELECT * FROM tbl")
+	require.Empty(t, results)
+
+	results = sqlDB.QueryStr(t, "SELECT * FROM child")
+	require.Empty(t, results)
+}
+
+func TestInboundForeignKeyOnDeleteRestrict(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+		t,
+		&sql.TTLTestingKnobs{
+			AOSTDuration:     &zeroDuration,
+			ReturnStatsError: true,
+		},
+		false, /* testMultiTenant */
+		1,     /* numNodes */
+		0,     /* version */
+	)
+	defer cleanupFunc()
+
+	sqlDB := th.sqlDB
+	sqlDB.Exec(t, "CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at')")
+	sqlDB.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, tbl_id INT REFERENCES tbl (id) ON DELETE RESTRICT)")
+
+	sqlDB.Exec(t, "INSERT INTO tbl VALUES (1, '2020-01-01')")
+	sqlDB.Exec(t, "INSERT INTO child VALUES (1, 1)")
+
+	// Force the schedule to execute.
+	th.waitForScheduledJob(t, jobs.StatusFailed, `delete on table "tbl" violates foreign key constraint "child_tbl_id_fkey" on table "child"`)
+
+	results := sqlDB.QueryStr(t, "SELECT * FROM tbl")
+	require.Len(t, results, 1)
+
+	results = sqlDB.QueryStr(t, "SELECT * FROM child")
+	require.Len(t, results, 1)
+}
+
+func TestInboundForeignKeyOnDeleteRestrictNull(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+		t,
+		&sql.TTLTestingKnobs{
+			AOSTDuration:     &zeroDuration,
+			ReturnStatsError: true,
+		},
+		false, /* testMultiTenant */
+		1,     /* numNodes */
+		0,     /* version */
+	)
+	defer cleanupFunc()
+
+	sqlDB := th.sqlDB
+	sqlDB.Exec(t, "CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at')")
+	sqlDB.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, tbl_id INT REFERENCES tbl (id) ON DELETE RESTRICT)")
+
+	sqlDB.Exec(t, "INSERT INTO tbl VALUES (1, '2020-01-01')")
+	sqlDB.Exec(t, "INSERT INTO child VALUES (1, NULL)")
+
+	// Force the schedule to execute.
+	th.waitForScheduledJob(t, jobs.StatusSucceeded, "")
+
+	results := sqlDB.QueryStr(t, "SELECT * FROM tbl")
+	require.Len(t, results, 0)
+
+	results = sqlDB.QueryStr(t, "SELECT * FROM child")
+	require.Len(t, results, 1)
+}

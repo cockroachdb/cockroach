@@ -962,31 +962,6 @@ ALTER TABLE tbl_crdb_internal_expiration_already_defined SET (ttl_expire_after =
 
 subtest end
 
-subtest foreign_key_constraint
-
-statement ok
-CREATE TABLE ttl_table (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 mins')
-
-statement error foreign keys to table with TTL "ttl_table" are not permitted
-CREATE TABLE ref_table (id INT PRIMARY KEY, ref INT REFERENCES ttl_table(id))
-
-statement ok
-CREATE TABLE ref_table (id INT PRIMARY KEY, ref INT)
-
-statement error foreign keys to table with TTL "ttl_table" are not permitted
-ALTER TABLE ref_table ADD CONSTRAINT fk FOREIGN KEY (ref) REFERENCES ttl_table (id)
-
-statement ok
-CREATE TABLE become_ttl_table (id INT PRIMARY KEY)
-
-statement ok
-CREATE TABLE become_ref_table (id INT PRIMARY KEY, ref INT REFERENCES become_ttl_table(id))
-
-statement error foreign keys to table with TTL "become_ttl_table" are not permitted
-ALTER TABLE become_ttl_table SET (ttl_expire_after = '10 mins')
-
-subtest end
-
 subtest desc_pk_with_ttl
 
 statement error non-ascending ordering on PRIMARY KEYs are not supported
