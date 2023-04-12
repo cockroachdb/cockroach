@@ -334,7 +334,13 @@ func registerRestore(r registry.Registry) {
 		},
 		{
 			// The nightly 8TB Restore test.
-			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000}),
+			//
+			// TODO(rui): this test currently uses high mem nodes as a
+			// workaround for OOMs caused by high raft memory usage in
+			// https://github.com/cockroachdb/cockroach/issues/100341. The mem
+			// settings can be reverted back to standard once the memory issues
+			// have been addressed.
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000, mem: spec.High}),
 			backup: makeBackupSpecs(backupSpecs{
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 500000}}),
@@ -343,7 +349,13 @@ func registerRestore(r registry.Registry) {
 		},
 		{
 			// The weekly 32TB Restore test.
-			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000}),
+			//
+			// TODO(rui): this test currently uses high mem nodes as a
+			// workaround for OOMs caused by high raft memory usage in
+			// https://github.com/cockroachdb/cockroach/issues/100983. The mem
+			// settings can be reverted back to standard once the memory issues
+			// have been addressed.
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000, mem: spec.High}),
 			backup: makeBackupSpecs(backupSpecs{
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 2000000}}),
