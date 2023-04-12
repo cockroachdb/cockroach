@@ -742,8 +742,6 @@ func findBuckets(
 	batchLength := batch.Length()
 	sel := batch.Selection()
 	// Early bounds checks.
-	hashBuffer := ht.ProbeScratch.HashBuffer
-	_ = hashBuffer[batchLength-1]
 	toCheckIDs := ht.ProbeScratch.ToCheckID
 	_ = toCheckIDs[batchLength-1]
 	toCheckSlice := ht.ProbeScratch.ToCheck
@@ -753,9 +751,8 @@ func findBuckets(
 		_ = headIDs[batchLength-1]
 	}
 	var nToCheck uint64
-	for toCheck := uint64(0); toCheck < uint64(batchLength) && nToCheck < uint64(batchLength); toCheck++ {
-		//gcassert:bce
-		hash := hashBuffer[toCheck]
+	for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
+		toCheck := uint64(i)
 		nextToCheckID := first[hash]
 		handleNextToCheckID(ht, toCheck, toCheckSlice, nextToCheckID, toCheckIDs, zeroHeadIDForDistinctTuple, probingAgainstItself, true)
 	}
@@ -765,16 +762,10 @@ func findBuckets(
 		//     Continue searching for the build table matching keys while the
 		//     ToCheck array is non-empty.
 		// */}}
-		numToCheck := duplicatesChecker(keyCols, nToCheck, sel)
-		if numToCheck == 0 {
-			break
-		}
-		toCheckSlice = ht.ProbeScratch.ToCheck[:numToCheck]
-		_ = toCheckSlice[numToCheck-1]
+		nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
+		toCheckSlice = ht.ProbeScratch.ToCheck[:nToCheck]
 		nToCheck = 0
-		for i := uint64(0); i < numToCheck && nToCheck < numToCheck; i++ {
-			//gcassert:bce
-			toCheck := toCheckSlice[i]
+		for _, toCheck := range toCheckSlice {
 			nextToCheckID := next[toCheckIDs[toCheck]]
 			handleNextToCheckID(ht, toCheck, toCheckSlice, nextToCheckID, toCheckIDs, zeroHeadIDForDistinctTuple, probingAgainstItself, false)
 		}
@@ -852,7 +843,6 @@ func includeTupleToCheck(
 	// */}}
 	//gcassert:bce
 	toCheckIDs[toCheck] = nextToCheckID
-	//gcassert:bce
 	toCheckSlice[nToCheck] = toCheck
 	nToCheck++
 }
