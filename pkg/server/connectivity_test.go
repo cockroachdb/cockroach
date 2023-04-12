@@ -375,10 +375,10 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 				decomSrv.RPCAddr(), decomSrv.NodeID(), rpc.DefaultClass,
 			).Connect(ctx)
 			s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
-			if !ok || s.Code() != codes.PermissionDenied {
+			if !ok || s.Code() != codes.FailedPrecondition {
 				// NB: errors.Wrapf(nil, ...) returns nil.
 				// nolint:errwrap
-				return errors.Errorf("expected permission denied for n%d->n%d, got %v", clusterSrv.NodeID(), decomSrv.NodeID(), err)
+				return errors.Errorf("expected failed precondition for n%d->n%d, got %v", clusterSrv.NodeID(), decomSrv.NodeID(), err)
 			}
 
 			// And similarly, n3 will be refused by n1, n2.

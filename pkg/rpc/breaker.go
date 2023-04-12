@@ -170,7 +170,7 @@ func (rpcCtx *Context) newPeerBreaker(k connKey) *circuitbreaker.Breaker {
 						return
 					case <-t.C:
 						t.Read = true
-						t.Reset( /*rpcCtx.heartbeatTimeout +*/ rpcCtx.heartbeatInterval)
+						t.Reset(rpcCtx.heartbeatInterval)
 					}
 
 					err := rpcCtx.runHeartbeat(ctx, conn, k, func() {
@@ -179,10 +179,13 @@ func (rpcCtx *Context) newPeerBreaker(k connKey) *circuitbreaker.Breaker {
 						})
 						report(nil) // successful heartbeat
 					})
-
 					// TODO(tbg): the string matching is a bad hack, we're getting a gRPC error if *we* are the decommissioned
 					// node and need to react to that.
 					if errors.Is(err, errMarkDecommissioned) || (err != nil && strings.Contains(err.Error(), "permanently removed")) {
+						// Stop probing for "dial back" connections after failed heartbeat.
+						if k.nodeID == 0 && k.class == SystemClass {
+							return
+						}
 						rpcCtx.m.withPeer(k, func(k connKey, p *peer) {
 							p.decommissioned = true
 						})
