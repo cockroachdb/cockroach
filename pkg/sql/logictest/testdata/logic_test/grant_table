@@ -1038,6 +1038,8 @@ system         public        statement_activity               admin    SELECT   
 system         public        statement_activity               root     SELECT          true
 system         public        transaction_activity             admin    SELECT          true
 system         public        transaction_activity             root     SELECT          true
+system         public        tenant_id_seq                    admin    SELECT          true
+system         public        tenant_id_seq                    root     SELECT          true
 a              pg_extension  NULL                             public   USAGE           false
 a              public        NULL                             admin    ALL             true
 a              public        NULL                             public   CREATE          false
@@ -1542,6 +1544,7 @@ system         public       task_payloads                    root     DELETE    
 system         public       task_payloads                    root     INSERT          true
 system         public       task_payloads                    root     SELECT          true
 system         public       task_payloads                    root     UPDATE          true
+system         public       tenant_id_seq                    root     SELECT          true
 system         public       tenant_settings                  root     DELETE          true
 system         public       tenant_settings                  root     INSERT          true
 system         public       tenant_settings                  root     SELECT          true

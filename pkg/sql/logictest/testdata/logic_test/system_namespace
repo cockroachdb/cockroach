@@ -48,6 +48,7 @@ SELECT * FROM system.namespace
 1    29  statement_statistics             42
 1    29  table_statistics                 20
 1    29  task_payloads                    58
+1    29  tenant_id_seq                    62
 1    29  tenant_settings                  50
 1    29  tenant_tasks                     59
 1    29  tenant_usage                     45

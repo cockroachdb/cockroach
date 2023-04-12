@@ -53,6 +53,7 @@ public  statement_diagnostics_requests   table     NULL  NULL
 public  statement_statistics             table     NULL  NULL
 public  table_statistics                 table     NULL  NULL
 public  task_payloads                    table     NULL  NULL
+public  tenant_id_seq                    sequence  NULL  NULL
 public  tenant_settings                  table     NULL  NULL
 public  tenant_tasks                     table     NULL  NULL
 public  tenant_usage                     table     NULL  NULL
@@ -173,6 +174,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 59
 60
 61
+62
 100
 101
 102
@@ -672,6 +674,8 @@ system  public  task_payloads                    root    DELETE  true
 system  public  task_payloads                    root    INSERT  true
 system  public  task_payloads                    root    SELECT  true
 system  public  task_payloads                    root    UPDATE  true
+system  public  tenant_id_seq                    admin   SELECT  true
+system  public  tenant_id_seq                    root    SELECT  true
 system  public  tenant_settings                  admin   DELETE  true
 system  public  tenant_settings                  admin   INSERT  true
 system  public  tenant_settings                  admin   SELECT  true

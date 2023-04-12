@@ -36,6 +36,7 @@ state offset=47
 /Table/{59-60}                             database system (host)
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/6{2-3}                              database system (host)
 /Tenant/10{-\x00}                          database system (tenant)
 /Tenant/11{-\x00}                          database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
@@ -110,6 +111,7 @@ state offset=47
 /Table/{59-60}                             database system (host)
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/6{2-3}                              database system (host)
 /Tenant/10{-/Table/4}                      database system (tenant)
 /Tenant/10/Table/{4-5}                     database system (tenant)
 /Tenant/10/Table/{5-6}                     database system (tenant)
@@ -179,6 +181,7 @@ upsert /Tenant/10/Table/11{3-4}            range default
 state offset=81
 ----
 ...
+/Tenant/10/NamespaceTable/{30-Max}         database system (tenant)
 /Tenant/10/{NamespaceTable/Max-Table/32}   database system (tenant)
 /Tenant/10/Table/3{2-3}                    database system (tenant)
 /Tenant/10/Table/3{3-4}                    database system (tenant)
