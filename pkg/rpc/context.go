@@ -2398,7 +2398,7 @@ func (rpcCtx *Context) runHeartbeat(
 		}
 
 		if retErr != nil {
-			if errors.Is(retErr, context.Canceled) || grpcutil.IsContextCanceled(retErr) || errors.Is(retErr, stop.ErrUnavailable) || errors.Is(retErr, errMarkDecommissioned) {
+			if errors.Is(retErr, context.Canceled) || grpcutil.IsContextCanceled(retErr) || errors.Is(retErr, stop.ErrUnavailable) {
 				// Give some nicer errors during shutdown.
 				conn.err.Store(errQuiescing)
 			} else {
