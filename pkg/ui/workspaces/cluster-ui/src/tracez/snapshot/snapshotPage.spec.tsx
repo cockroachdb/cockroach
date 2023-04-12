@@ -59,9 +59,15 @@ const getMockSnapshotPageProps = (): SnapshotPageProps => {
     ): Promise<SetTraceRecordingTypeResponse> => {
       return Promise.resolve(undefined);
     },
-    snapshot: GetTracingSnapshotResponse.fromObject({
+    snapshot: new GetTracingSnapshotResponse({
       snapshot: {
-        spans: [{ span_id: 1, operation: "spanny" }],
+        spans: [
+          new cockroach.server.serverpb.TracingSpan({
+            span_id: Long.fromInt(1),
+            parent_span_id: Long.fromInt(0),
+            operation: "spanny",
+          }),
+        ],
       },
     }),
     snapshotLoading: false,
