@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
@@ -427,9 +428,14 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	var ops workload.QueryLoad
 	prepareStart := timeutil.Now()
 	log.Infof(ctx, "creating load generator...")
-	const prepareTimeout = 90 * time.Minute
-	prepareCtx, cancel := context.WithTimeout(ctx, prepareTimeout)
+	prepareCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	stacksCh := make(chan []byte, 1)
+	const prepareTimeout = 90 * time.Minute
+	defer time.AfterFunc(prepareTimeout, func() {
+		stacksCh <- allstacks.Get()
+		cancel()
+	}).Stop()
 	if prepareErr := func(ctx context.Context) error {
 		retry := retry.StartWithCtx(ctx, retry.Options{})
 		var err error
@@ -451,7 +457,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			// control of --duration, so we're avoiding retrying endlessly.
 			log.Errorf(ctx, "Attempt to create load generator failed. "+
 				"It's been more than %s since we started trying to create the load generator "+
-				"so we're giving up. Last failure: %s", prepareTimeout, err)
+				"so we're giving up. Last failure: %s\nStacks:%s", prepareTimeout, err, <-stacksCh)
 		}
 		return err
 	}(prepareCtx); prepareErr != nil {
