@@ -39,7 +39,7 @@ func TestCombinesUniqueInt64(t *testing.T) {
 			expected: []int64{1, 3},
 		},
 	} {
-		output := CombineUniqueInt64(tc.inputA, tc.inputB)
+		output := CombineUnique(tc.inputA, tc.inputB)
 		require.Equal(t, tc.expected, output)
 	}
 }
@@ -67,7 +67,7 @@ func TestCombinesUniqueStrings(t *testing.T) {
 			expected: []string{"a", "c"},
 		},
 	} {
-		output := CombineUniqueString(tc.inputA, tc.inputB)
+		output := CombineUnique(tc.inputA, tc.inputB)
 		require.Equal(t, tc.expected, output)
 	}
 }

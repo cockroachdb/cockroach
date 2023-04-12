@@ -752,7 +752,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 				}
 				sort.Strings(regions)
 				nodeStats.Regions = regions
-				allRegions = util.CombineUniqueString(allRegions, regions)
+				allRegions = util.CombineUnique(allRegions, regions)
 				n.Annotate(exec.ExecutionStatsID, &nodeStats)
 			}
 		}

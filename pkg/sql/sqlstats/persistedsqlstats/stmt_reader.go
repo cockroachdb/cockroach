@@ -192,7 +192,7 @@ func rowToStmtStats(row tree.Datums) (*appstatspb.CollectedStatementStatistics, 
 	recommendations := tree.MustBeDArray(row[9])
 	var indexRecommendations []string
 	for _, s := range recommendations.Array {
-		indexRecommendations = util.CombineUniqueString(indexRecommendations, []string{string(tree.MustBeDString(s))})
+		indexRecommendations = util.CombineUnique(indexRecommendations, []string{string(tree.MustBeDString(s))})
 	}
 	stats.Stats.IndexRecommendations = indexRecommendations
 
