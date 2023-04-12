@@ -697,6 +697,9 @@ func (ht *HashTable) updateSel(b coldata.Batch) {
 // tuple will be represented (i.e. this tuple is distinct from all tuples in the
 // hash table). If zeroHeadIDForDistinctTuple is true, then this tuple will have
 // HeadID of 0, otherwise, it'll have HeadID[i] = keyID(i) = i + 1.
+// - probingAgainstItself, if true, indicates that the hash table was built on
+// the probing batch itself. In such a scenario the behavior can be optimized
+// since we know that every tuple has at least one match.
 //
 // NOTE: *first* and *next* vectors should be properly populated.
 // NOTE: batch is assumed to be non-zero length.
@@ -706,17 +709,26 @@ func (ht *HashTable) FindBuckets(
 	first, next []keyID,
 	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
 	zeroHeadIDForDistinctTuple bool,
+	probingAgainstItself bool,
 ) {
 	ht.ProbeScratch.SetupLimitedSlices(batch.Length(), ht.BuildMode)
 	if zeroHeadIDForDistinctTuple {
-		findBuckets(ht, batch, keyCols, first, next, duplicatesChecker, true)
+		if probingAgainstItself {
+			findBuckets(ht, batch, keyCols, first, next, duplicatesChecker, true, true)
+		} else {
+			findBuckets(ht, batch, keyCols, first, next, duplicatesChecker, true, false)
+		}
 	} else {
-		findBuckets(ht, batch, keyCols, first, next, duplicatesChecker, false)
+		if probingAgainstItself {
+			findBuckets(ht, batch, keyCols, first, next, duplicatesChecker, false, true)
+		} else {
+			findBuckets(ht, batch, keyCols, first, next, duplicatesChecker, false, false)
+		}
 	}
 }
 
 // execgen:inline
-// execgen:template<zeroHeadIDForDistinctTuple>
+// execgen:template<zeroHeadIDForDistinctTuple,probingAgainstItself>
 func findBuckets(
 	ht *HashTable,
 	batch coldata.Batch,
@@ -725,6 +737,7 @@ func findBuckets(
 	next []uint64,
 	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
 	zeroHeadIDForDistinctTuple bool,
+	probingAgainstItself bool,
 ) {
 	batchLength := batch.Length()
 	sel := batch.Selection()
@@ -735,7 +748,7 @@ func findBuckets(
 	_ = toCheckIDs[batchLength-1]
 	toCheckSlice := ht.ProbeScratch.ToCheck
 	_ = toCheckSlice[batchLength-1]
-	if !zeroHeadIDForDistinctTuple {
+	if !zeroHeadIDForDistinctTuple || probingAgainstItself {
 		headIDs := ht.ProbeScratch.HeadID
 		_ = headIDs[batchLength-1]
 	}
@@ -744,7 +757,7 @@ func findBuckets(
 		//gcassert:bce
 		hash := hashBuffer[toCheck]
 		nextToCheckID := first[hash]
-		handleNextToCheckID(ht, toCheck, toCheckSlice, nextToCheckID, toCheckIDs, zeroHeadIDForDistinctTuple, true)
+		handleNextToCheckID(ht, toCheck, toCheckSlice, nextToCheckID, toCheckIDs, zeroHeadIDForDistinctTuple, probingAgainstItself, true)
 	}
 
 	for nToCheck > 0 {
@@ -763,13 +776,13 @@ func findBuckets(
 			//gcassert:bce
 			toCheck := toCheckSlice[i]
 			nextToCheckID := next[toCheckIDs[toCheck]]
-			handleNextToCheckID(ht, toCheck, toCheckSlice, nextToCheckID, toCheckIDs, zeroHeadIDForDistinctTuple, false)
+			handleNextToCheckID(ht, toCheck, toCheckSlice, nextToCheckID, toCheckIDs, zeroHeadIDForDistinctTuple, probingAgainstItself, false)
 		}
 	}
 }
 
 // execgen:inline
-// execgen:template<zeroHeadIDForDistinctTuple,headIDsBCE>
+// execgen:template<zeroHeadIDForDistinctTuple,probingAgainstItself,headIDsBCE>
 func handleNextToCheckID(
 	ht *HashTable,
 	toCheck uint64,
@@ -777,41 +790,71 @@ func handleNextToCheckID(
 	nextToCheckID uint64,
 	toCheckIDs []uint64,
 	zeroHeadIDForDistinctTuple bool,
+	probingAgainstItself bool,
 	headIDsBCE bool,
 ) {
-	if nextToCheckID != 0 {
+	if probingAgainstItself {
 		// {{/*
-		//     We should always get BCE on toCheckIDs slice because:
-		//     - for the first call site, we access toCheckIDs[i] for largest
-		//     value of i that we have in the loop before the loop
-		//     - for the second call site, bounds checks are done when
-		//     evaluating nextToCheckID.
+		//      When probing against itself, we know for sure that each tuple
+		//      has at least one hash match (with itself), so nextToCheckID will
+		//      never be zero, so we skip the non-zero conditional.
 		// */}}
-		//gcassert:bce
-		toCheckIDs[toCheck] = nextToCheckID
-		//gcassert:bce
-		toCheckSlice[nToCheck] = toCheck
-		nToCheck++
-	} else {
-		// {{/*
-		//     This tuple doesn't have a duplicate.
-		// */}}
-		if zeroHeadIDForDistinctTuple {
+		if uint64(toCheck+1) == nextToCheckID {
 			// {{/*
-			//     We leave the HeadID of this tuple unchanged (i.e. zero - that
-			//     was set in SetupLimitedSlices).
-			// */}}
-		} else {
-			// {{/*
-			//     Set the HeadID of this tuple to point to itself since it is an
-			//     equality chain consisting only of a single element.
+			//     When our "match candidate" tuple is the tuple itself, we know
+			//     for sure they will be equal, so we can just mark this tuple
+			//     accordingly, without including it into the ToCheck slice.
 			// */}}
 			if headIDsBCE {
 				//gcassert:gce
 			}
-			headIDs[toCheck] = toCheck + 1
+			headIDs[toCheck] = nextToCheckID
+		} else {
+			includeTupleToCheck(toCheck, toCheckSlice, nextToCheckID, toCheckIDs)
+		}
+	} else {
+		if nextToCheckID != 0 {
+			includeTupleToCheck(toCheck, toCheckSlice, nextToCheckID, toCheckIDs)
+		} else {
+			// {{/*
+			//     This tuple doesn't have a duplicate.
+			// */}}
+			if zeroHeadIDForDistinctTuple {
+				// {{/*
+				//     We leave the HeadID of this tuple unchanged (i.e. zero - that
+				//     was set in SetupLimitedSlices).
+				// */}}
+			} else {
+				// {{/*
+				//     Set the HeadID of this tuple to point to itself since it is an
+				//     equality chain consisting only of a single element.
+				// */}}
+				if headIDsBCE {
+					//gcassert:gce
+				}
+				headIDs[toCheck] = toCheck + 1
+			}
 		}
 	}
+}
+
+// execgen:inline
+func includeTupleToCheck(
+	toCheck uint64, toCheckSlice []uint64, nextToCheckID uint64, toCheckIDs []uint64,
+) {
+	// {{/*
+	//     We should always get BCE on toCheckIDs slice because:
+	//     - for the first call site of handleNextToCheckID, we access
+	//     toCheckIDs[i] for largest value of i that we have in the loop before
+	//     the loop
+	//     - for the second call site of handleNextToCheckID, bounds checks are
+	//     done when evaluating nextToCheckID.
+	// */}}
+	//gcassert:bce
+	toCheckIDs[toCheck] = nextToCheckID
+	//gcassert:bce
+	toCheckSlice[nToCheck] = toCheck
+	nToCheck++
 }
 
 // {{end}}

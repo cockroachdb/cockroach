@@ -349,7 +349,7 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 	op.ht.ComputeHashAndBuildChains(b)
 	op.ht.FindBuckets(
 		b, op.ht.Keys, op.ht.ProbeScratch.First, op.ht.ProbeScratch.Next, op.ht.CheckProbeForDistinct,
-		false, /* zeroHeadIDForDistinctTuple */
+		false /* zeroHeadIDForDistinctTuple */, true, /* probingAgainstItself */
 	)
 
 	// Step 2: now that we have op.ht.ProbeScratch.HeadID populated we can
@@ -372,7 +372,7 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 		const zeroHeadIDForDistinctTuple = true
 		op.ht.FindBuckets(
 			b, op.ht.Keys, op.ht.BuildScratch.First, op.ht.BuildScratch.Next, op.ht.CheckBuildForAggregation,
-			zeroHeadIDForDistinctTuple,
+			zeroHeadIDForDistinctTuple, false, /* probingAgainstItself */
 		)
 		for eqChainsSlot, HeadID := range op.ht.ProbeScratch.HeadID[:eqChainsCount] {
 			if HeadID != 0 {

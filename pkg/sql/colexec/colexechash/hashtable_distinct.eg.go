@@ -5174,6 +5174,9 @@ func (ht *HashTable) updateSel(b coldata.Batch) {
 // tuple will be represented (i.e. this tuple is distinct from all tuples in the
 // hash table). If zeroHeadIDForDistinctTuple is true, then this tuple will have
 // HeadID of 0, otherwise, it'll have HeadID[i] = keyID(i) = i + 1.
+// - probingAgainstItself, if true, indicates that the hash table was built on
+// the probing batch itself. In such a scenario the behavior can be optimized
+// since we know that every tuple has at least one match.
 //
 // NOTE: *first* and *next* vectors should be properly populated.
 // NOTE: batch is assumed to be non-zero length.
@@ -5183,120 +5186,261 @@ func (ht *HashTable) FindBuckets(
 	first, next []keyID,
 	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
 	zeroHeadIDForDistinctTuple bool,
+	probingAgainstItself bool,
 ) {
 	ht.ProbeScratch.SetupLimitedSlices(batch.Length(), ht.BuildMode)
 	if zeroHeadIDForDistinctTuple {
-		{
-			batchLength := batch.Length()
-			sel := batch.Selection()
-			// Early bounds checks.
-			hashBuffer := ht.ProbeScratch.HashBuffer
-			_ = hashBuffer[batchLength-1]
-			toCheckIDs := ht.ProbeScratch.ToCheckID
-			_ = toCheckIDs[batchLength-1]
-			toCheckSlice := ht.ProbeScratch.ToCheck
-			_ = toCheckSlice[batchLength-1]
-			var nToCheck uint64
-			for toCheck := uint64(0); toCheck < uint64(batchLength) && nToCheck < uint64(batchLength); toCheck++ {
-				//gcassert:bce
-				hash := hashBuffer[toCheck]
-				nextToCheckID := first[hash]
-				{
-					if nextToCheckID != 0 {
+		if probingAgainstItself {
+			{
+				batchLength := batch.Length()
+				sel := batch.Selection()
+				// Early bounds checks.
+				hashBuffer := ht.ProbeScratch.HashBuffer
+				_ = hashBuffer[batchLength-1]
+				toCheckIDs := ht.ProbeScratch.ToCheckID
+				_ = toCheckIDs[batchLength-1]
+				toCheckSlice := ht.ProbeScratch.ToCheck
+				_ = toCheckSlice[batchLength-1]
+				headIDs := ht.ProbeScratch.HeadID
+				_ = headIDs[batchLength-1]
+				var nToCheck uint64
+				for toCheck := uint64(0); toCheck < uint64(batchLength) && nToCheck < uint64(batchLength); toCheck++ {
+					//gcassert:bce
+					hash := hashBuffer[toCheck]
+					nextToCheckID := first[hash]
+					{
+						if uint64(toCheck+1) == nextToCheckID {
+							_ = true
+							//gcassert:gce
+							headIDs[toCheck] = nextToCheckID
+						} else {
+							{
+								//gcassert:bce
+								toCheckIDs[toCheck] = nextToCheckID
+								//gcassert:bce
+								toCheckSlice[nToCheck] = toCheck
+								nToCheck++
+							}
+						}
+					}
+				}
+
+				for nToCheck > 0 {
+					numToCheck := duplicatesChecker(keyCols, nToCheck, sel)
+					if numToCheck == 0 {
+						break
+					}
+					toCheckSlice = ht.ProbeScratch.ToCheck[:numToCheck]
+					_ = toCheckSlice[numToCheck-1]
+					nToCheck = 0
+					for i := uint64(0); i < numToCheck && nToCheck < numToCheck; i++ {
 						//gcassert:bce
-						toCheckIDs[toCheck] = nextToCheckID
-						//gcassert:bce
-						toCheckSlice[nToCheck] = toCheck
-						nToCheck++
-					} else {
-						_ = true
+						toCheck := toCheckSlice[i]
+						nextToCheckID := next[toCheckIDs[toCheck]]
+						{
+							if uint64(toCheck+1) == nextToCheckID {
+								_ = true
+								headIDs[toCheck] = nextToCheckID
+							} else {
+								{
+									//gcassert:bce
+									toCheckIDs[toCheck] = nextToCheckID
+									//gcassert:bce
+									toCheckSlice[nToCheck] = toCheck
+									nToCheck++
+								}
+							}
+						}
 					}
 				}
 			}
-
-			for nToCheck > 0 {
-				numToCheck := duplicatesChecker(keyCols, nToCheck, sel)
-				if numToCheck == 0 {
-					break
-				}
-				toCheckSlice = ht.ProbeScratch.ToCheck[:numToCheck]
-				_ = toCheckSlice[numToCheck-1]
-				nToCheck = 0
-				for i := uint64(0); i < numToCheck && nToCheck < numToCheck; i++ {
+		} else {
+			{
+				batchLength := batch.Length()
+				sel := batch.Selection()
+				// Early bounds checks.
+				hashBuffer := ht.ProbeScratch.HashBuffer
+				_ = hashBuffer[batchLength-1]
+				toCheckIDs := ht.ProbeScratch.ToCheckID
+				_ = toCheckIDs[batchLength-1]
+				toCheckSlice := ht.ProbeScratch.ToCheck
+				_ = toCheckSlice[batchLength-1]
+				var nToCheck uint64
+				for toCheck := uint64(0); toCheck < uint64(batchLength) && nToCheck < uint64(batchLength); toCheck++ {
 					//gcassert:bce
-					toCheck := toCheckSlice[i]
-					nextToCheckID := next[toCheckIDs[toCheck]]
+					hash := hashBuffer[toCheck]
+					nextToCheckID := first[hash]
 					{
 						if nextToCheckID != 0 {
-							//gcassert:bce
-							toCheckIDs[toCheck] = nextToCheckID
-							//gcassert:bce
-							toCheckSlice[nToCheck] = toCheck
-							nToCheck++
+							{
+								//gcassert:bce
+								toCheckIDs[toCheck] = nextToCheckID
+								//gcassert:bce
+								toCheckSlice[nToCheck] = toCheck
+								nToCheck++
+							}
 						} else {
 							_ = true
+						}
+					}
+				}
+
+				for nToCheck > 0 {
+					numToCheck := duplicatesChecker(keyCols, nToCheck, sel)
+					if numToCheck == 0 {
+						break
+					}
+					toCheckSlice = ht.ProbeScratch.ToCheck[:numToCheck]
+					_ = toCheckSlice[numToCheck-1]
+					nToCheck = 0
+					for i := uint64(0); i < numToCheck && nToCheck < numToCheck; i++ {
+						//gcassert:bce
+						toCheck := toCheckSlice[i]
+						nextToCheckID := next[toCheckIDs[toCheck]]
+						{
+							if nextToCheckID != 0 {
+								{
+									//gcassert:bce
+									toCheckIDs[toCheck] = nextToCheckID
+									//gcassert:bce
+									toCheckSlice[nToCheck] = toCheck
+									nToCheck++
+								}
+							} else {
+								_ = true
+							}
 						}
 					}
 				}
 			}
 		}
 	} else {
-		{
-			batchLength := batch.Length()
-			sel := batch.Selection()
-			// Early bounds checks.
-			hashBuffer := ht.ProbeScratch.HashBuffer
-			_ = hashBuffer[batchLength-1]
-			toCheckIDs := ht.ProbeScratch.ToCheckID
-			_ = toCheckIDs[batchLength-1]
-			toCheckSlice := ht.ProbeScratch.ToCheck
-			_ = toCheckSlice[batchLength-1]
-			headIDs := ht.ProbeScratch.HeadID
-			_ = headIDs[batchLength-1]
-			var nToCheck uint64
-			for toCheck := uint64(0); toCheck < uint64(batchLength) && nToCheck < uint64(batchLength); toCheck++ {
-				//gcassert:bce
-				hash := hashBuffer[toCheck]
-				nextToCheckID := first[hash]
-				{
-					if nextToCheckID != 0 {
+		if probingAgainstItself {
+			{
+				batchLength := batch.Length()
+				sel := batch.Selection()
+				// Early bounds checks.
+				hashBuffer := ht.ProbeScratch.HashBuffer
+				_ = hashBuffer[batchLength-1]
+				toCheckIDs := ht.ProbeScratch.ToCheckID
+				_ = toCheckIDs[batchLength-1]
+				toCheckSlice := ht.ProbeScratch.ToCheck
+				_ = toCheckSlice[batchLength-1]
+				headIDs := ht.ProbeScratch.HeadID
+				_ = headIDs[batchLength-1]
+				var nToCheck uint64
+				for toCheck := uint64(0); toCheck < uint64(batchLength) && nToCheck < uint64(batchLength); toCheck++ {
+					//gcassert:bce
+					hash := hashBuffer[toCheck]
+					nextToCheckID := first[hash]
+					{
+						if uint64(toCheck+1) == nextToCheckID {
+							_ = true
+							//gcassert:gce
+							headIDs[toCheck] = nextToCheckID
+						} else {
+							{
+								//gcassert:bce
+								toCheckIDs[toCheck] = nextToCheckID
+								//gcassert:bce
+								toCheckSlice[nToCheck] = toCheck
+								nToCheck++
+							}
+						}
+					}
+				}
+
+				for nToCheck > 0 {
+					numToCheck := duplicatesChecker(keyCols, nToCheck, sel)
+					if numToCheck == 0 {
+						break
+					}
+					toCheckSlice = ht.ProbeScratch.ToCheck[:numToCheck]
+					_ = toCheckSlice[numToCheck-1]
+					nToCheck = 0
+					for i := uint64(0); i < numToCheck && nToCheck < numToCheck; i++ {
 						//gcassert:bce
-						toCheckIDs[toCheck] = nextToCheckID
-						//gcassert:bce
-						toCheckSlice[nToCheck] = toCheck
-						nToCheck++
-					} else {
-						_ = true
-						_ = true
-						//gcassert:gce
-						headIDs[toCheck] = toCheck + 1
+						toCheck := toCheckSlice[i]
+						nextToCheckID := next[toCheckIDs[toCheck]]
+						{
+							if uint64(toCheck+1) == nextToCheckID {
+								_ = true
+								headIDs[toCheck] = nextToCheckID
+							} else {
+								{
+									//gcassert:bce
+									toCheckIDs[toCheck] = nextToCheckID
+									//gcassert:bce
+									toCheckSlice[nToCheck] = toCheck
+									nToCheck++
+								}
+							}
+						}
 					}
 				}
 			}
-
-			for nToCheck > 0 {
-				numToCheck := duplicatesChecker(keyCols, nToCheck, sel)
-				if numToCheck == 0 {
-					break
-				}
-				toCheckSlice = ht.ProbeScratch.ToCheck[:numToCheck]
-				_ = toCheckSlice[numToCheck-1]
-				nToCheck = 0
-				for i := uint64(0); i < numToCheck && nToCheck < numToCheck; i++ {
+		} else {
+			{
+				batchLength := batch.Length()
+				sel := batch.Selection()
+				// Early bounds checks.
+				hashBuffer := ht.ProbeScratch.HashBuffer
+				_ = hashBuffer[batchLength-1]
+				toCheckIDs := ht.ProbeScratch.ToCheckID
+				_ = toCheckIDs[batchLength-1]
+				toCheckSlice := ht.ProbeScratch.ToCheck
+				_ = toCheckSlice[batchLength-1]
+				headIDs := ht.ProbeScratch.HeadID
+				_ = headIDs[batchLength-1]
+				var nToCheck uint64
+				for toCheck := uint64(0); toCheck < uint64(batchLength) && nToCheck < uint64(batchLength); toCheck++ {
 					//gcassert:bce
-					toCheck := toCheckSlice[i]
-					nextToCheckID := next[toCheckIDs[toCheck]]
+					hash := hashBuffer[toCheck]
+					nextToCheckID := first[hash]
 					{
 						if nextToCheckID != 0 {
-							//gcassert:bce
-							toCheckIDs[toCheck] = nextToCheckID
-							//gcassert:bce
-							toCheckSlice[nToCheck] = toCheck
-							nToCheck++
+							{
+								//gcassert:bce
+								toCheckIDs[toCheck] = nextToCheckID
+								//gcassert:bce
+								toCheckSlice[nToCheck] = toCheck
+								nToCheck++
+							}
 						} else {
 							_ = true
 							_ = true
+							//gcassert:gce
 							headIDs[toCheck] = toCheck + 1
+						}
+					}
+				}
+
+				for nToCheck > 0 {
+					numToCheck := duplicatesChecker(keyCols, nToCheck, sel)
+					if numToCheck == 0 {
+						break
+					}
+					toCheckSlice = ht.ProbeScratch.ToCheck[:numToCheck]
+					_ = toCheckSlice[numToCheck-1]
+					nToCheck = 0
+					for i := uint64(0); i < numToCheck && nToCheck < numToCheck; i++ {
+						//gcassert:bce
+						toCheck := toCheckSlice[i]
+						nextToCheckID := next[toCheckIDs[toCheck]]
+						{
+							if nextToCheckID != 0 {
+								{
+									//gcassert:bce
+									toCheckIDs[toCheck] = nextToCheckID
+									//gcassert:bce
+									toCheckSlice[nToCheck] = toCheck
+									nToCheck++
+								}
+							} else {
+								_ = true
+								_ = true
+								headIDs[toCheck] = toCheck + 1
+							}
 						}
 					}
 				}
@@ -5312,19 +5456,40 @@ const _ = "template_findBuckets"
 const _ = "template_handleNextToCheckID"
 
 // execgen:inline
-const _ = "inlined_findBuckets_true"
+const _ = "inlined_includeTupleToCheck"
 
 // execgen:inline
-const _ = "inlined_findBuckets_false"
+const _ = "inlined_findBuckets_true_true"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_true_true"
+const _ = "inlined_findBuckets_true_false"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_true_false"
+const _ = "inlined_findBuckets_false_true"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_false_true"
+const _ = "inlined_findBuckets_false_false"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_false_false"
+const _ = "inlined_handleNextToCheckID_true_true_true"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_true_true_false"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_true_false_true"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_true_false_false"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_true_true"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_true_false"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_false_true"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_false_false"

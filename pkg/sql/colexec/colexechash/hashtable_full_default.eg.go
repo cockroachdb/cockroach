@@ -5433,19 +5433,37 @@ func (ht *HashTable) checkCol(
 }
 
 // execgen:inline
-const _ = "inlined_findBuckets_true"
+const _ = "inlined_findBuckets_true_true"
 
 // execgen:inline
-const _ = "inlined_findBuckets_false"
+const _ = "inlined_findBuckets_true_false"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_true_true"
+const _ = "inlined_findBuckets_false_true"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_true_false"
+const _ = "inlined_findBuckets_false_false"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_false_true"
+const _ = "inlined_handleNextToCheckID_true_true_true"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_false_false"
+const _ = "inlined_handleNextToCheckID_true_true_false"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_true_false_true"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_true_false_false"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_true_true"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_true_false"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_false_true"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_false_false"
