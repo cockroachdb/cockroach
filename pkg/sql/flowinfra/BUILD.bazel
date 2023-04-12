@@ -36,6 +36,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/buildutil",
         "//pkg/util/cancelchecker",
         "//pkg/util/contextutil",
         "//pkg/util/log",
