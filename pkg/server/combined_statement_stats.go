@@ -952,7 +952,7 @@ func getTotalStatementDetails(
 	apps := tree.MustBeDArray(row[1])
 	var appNames []string
 	for _, s := range apps.Array {
-		appNames = util.CombineUniqueString(appNames, []string{string(tree.MustBeDString(s))})
+		appNames = util.CombineUnique(appNames, []string{string(tree.MustBeDString(s))})
 	}
 	aggregatedMetadata.AppNames = appNames
 
@@ -1222,7 +1222,7 @@ func getStatementDetailsPerPlanHash(
 		recommendations := tree.MustBeDArray(row[4])
 		var idxRecommendations []string
 		for _, s := range recommendations.Array {
-			idxRecommendations = util.CombineUniqueString(idxRecommendations, []string{string(tree.MustBeDString(s))})
+			idxRecommendations = util.CombineUnique(idxRecommendations, []string{string(tree.MustBeDString(s))})
 		}
 
 		// A metadata is unique for each plan, meaning if any of the counts are greater than zero,
