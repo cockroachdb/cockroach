@@ -22,11 +22,8 @@ import { LineGraph } from "src/views/cluster/components/linegraph";
 import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
-import {
-  AxisUnits,
-  TimeScaleDropdown,
-  TimeScale,
-} from "@cockroachlabs/cluster-ui";
+import TimeScaleDropdown from "oss/src/views/cluster/containers/timeScaleDropdownWithSearchParams";
+import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
 import {
   PageConfig,
   PageConfigItem,
