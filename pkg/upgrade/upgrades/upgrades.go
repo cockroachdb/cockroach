@@ -305,6 +305,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		alterPayloadColumnToNullable,
 	),
+	upgrade.NewSystemUpgrade(
+		"create system.tenant_id_seq",
+		toCV(clusterversion.V23_1_TenantIDSequence),
+		tenantIDSequenceForSystemTenant,
+	),
 }
 
 func init() {
