@@ -160,6 +160,12 @@ func (h *rowLevelTTLTestJobTestHelper) waitForScheduledJob(
 		h.env.ScheduledJobsTableName(),
 	)
 
+	var regex *regexp.Regexp
+	if expectedErrorRe != "" {
+		var err error
+		regex, err = regexp.Compile(expectedErrorRe)
+		require.NoError(t, err)
+	}
 	testutils.SucceedsSoon(t, func() error {
 		// Force newly created job to be adopted and verify it succeeds.
 		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
@@ -174,12 +180,8 @@ func (h *rowLevelTTLTestJobTestHelper) waitForScheduledJob(
 		if status != string(expectedStatus) {
 			return errors.Newf("expected status %s, got %s (error: %s)", expectedStatus, status, errorStr)
 		}
-		if expectedErrorRe != "" {
-			r, err := regexp.Compile(expectedErrorRe)
-			require.NoError(t, err)
-			if !r.MatchString(errorStr) {
-				return errors.Newf("expected error matches %s, got %s", expectedErrorRe, errorStr)
-			}
+		if regex != nil && !regex.MatchString(errorStr) {
+			return errors.Newf("expected error matches %s, got %s", expectedErrorRe, errorStr)
 		}
 		return nil
 	})
