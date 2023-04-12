@@ -577,6 +577,13 @@ func TestTenantLogic_dependencies(
 	runLogicTest(t, "dependencies")
 }
 
+func TestTenantLogic_deserialize_session(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "deserialize_session")
+}
+
 func TestTenantLogic_discard(
 	t *testing.T,
 ) {

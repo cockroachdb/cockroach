@@ -1,0 +1,19 @@
+subtest param_type_hints_gt_params
+
+# Prepare a statement with more parameter type hints than parameters.
+statement ok
+PREPARE p (int) AS SELECT 1
+
+let $session_hex
+SELECT encode(crdb_internal.serialize_session(), 'hex')
+
+# DEALLOCATE p because it will be added back by crdb_internal.deserialize_session.
+statement ok
+DEALLOCATE p
+
+query B
+SELECT crdb_internal.deserialize_session(decode('$session_hex', 'hex'))
+----
+true
+
+subtest end

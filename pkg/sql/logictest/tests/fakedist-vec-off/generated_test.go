@@ -555,6 +555,13 @@ func TestLogic_dependencies(
 	runLogicTest(t, "dependencies")
 }
 
+func TestLogic_deserialize_session(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "deserialize_session")
+}
+
 func TestLogic_discard(
 	t *testing.T,
 ) {
