@@ -437,6 +437,15 @@ func (m *AlterIndexVisible) AppendJSONFields(printComma bool, b redact.Redactabl
 		b = append(b, "\"NotVisible\":true"...)
 	}
 
+	if m.Invisibility != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Invisibility\":"...)
+		b = strconv.AppendFloat(b, float64(m.Invisibility), 'f', -1, 64)
+	}
+
 	return printComma, b
 }
 
