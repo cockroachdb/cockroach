@@ -281,11 +281,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		createComputedIndexesOnSystemSQLStatistics,
 	),
-	upgrade.NewPermanentTenantUpgrade(
+	upgrade.NewTenantUpgrade(
 		"create statement_activity and transaction_activity tables",
 		toCV(clusterversion.V23_1AddSystemActivityTables),
+		upgrade.NoPrecondition,
 		systemStatisticsActivityTableMigration,
-		"create statement_activity and transaction_activity job",
 	),
 	upgrade.NewPermanentSystemUpgrade(
 		"change TTL for SQL Stats system tables",
