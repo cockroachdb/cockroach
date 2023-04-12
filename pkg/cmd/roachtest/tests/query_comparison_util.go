@@ -195,6 +195,7 @@ func runOneRoundQueryComparison(
 		sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
 		sqlsmith.DisableIndexHints(), sqlsmith.DisableWith(), sqlsmith.DisableDecimals(),
 		sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
+		sqlsmith.DisableUDFs(),
 		sqlsmith.SetComplexity(.3),
 		sqlsmith.SetScalarComplexity(.1),
 	)
