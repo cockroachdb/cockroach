@@ -171,3 +171,91 @@ SELECT * FROM "restore-test".t4 ORDER BY k
 3 3 3
 
 subtest end
+
+# incorrect-schema-id is a regression test to ensure that we use the correct schema ID
+# when checking for object collision during restore.
+subtest incorrect-schema-id
+
+new-cluster name=s4
+----
+
+exec-sql
+CREATE DATABASE b;
+----
+
+exec-sql
+CREATE SCHEMA b.me;
+----
+
+exec-sql
+CREATE TABLE b.me.foo (id INT);
+----
+
+exec-sql
+INSERT INTO b.me.foo VALUES (1), (2), (3);
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster'
+----
+
+query-sql
+SELECT id, name FROM system.namespace WHERE name = 'me';
+----
+109 me
+
+new-cluster name=s5 share-io-dir=s4
+----
+
+exec-sql
+CREATE DATABASE d
+----
+
+exec-sql
+CREATE SCHEMA d.foo;
+CREATE SCHEMA d.bar;
+CREATE SCHEMA d.baz;
+----
+
+exec-sql
+CREATE DATABASE collide
+----
+
+query-sql
+SELECT id, name FROM system.namespace WHERE name = 'collide'
+----
+109 collide
+
+exec-sql
+RESTORE TABLE b.me.foo FROM LATEST IN 'nodelocal://1/cluster' WITH into_db=collide
+----
+
+query-sql
+SELECT * FROM collide.me.foo ORDER BY id
+----
+1
+2
+3
+
+exec-sql
+CREATE DATABASE d2;
+CREATE SCHEMA d2.me;
+----
+
+exec-sql
+RESTORE TABLE b.me.foo FROM LATEST IN 'nodelocal://1/cluster' WITH into_db=d2
+----
+
+query-sql
+SELECT * FROM d2.me.foo ORDER BY id
+----
+1
+2
+3
+
+exec-sql expect-error-regex=relation \"foo\" already exists
+RESTORE TABLE b.me.foo FROM LATEST IN 'nodelocal://1/cluster' WITH into_db=d2
+----
+regex matches error
+
+subtest end
