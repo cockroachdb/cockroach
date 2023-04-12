@@ -38,7 +38,6 @@ const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
       data: {
         jobs,
         earliest_retained_time: earliestRetainedTime,
-        toJSON: () => ({}),
       },
       valid: true,
       lastUpdated: moment(),
