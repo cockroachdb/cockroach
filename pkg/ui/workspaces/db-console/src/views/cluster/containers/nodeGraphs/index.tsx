@@ -75,11 +75,8 @@ import {
   selectTimeScale,
 } from "src/redux/timeScale";
 import { InlineAlert } from "src/components";
-import {
-  Anchor,
-  TimeScaleDropdown,
-  TimeScale,
-} from "@cockroachlabs/cluster-ui";
+import TimeScaleDropdown from "../timeScaleDropdownWithSearchParams";
+import { Anchor, TimeScale } from "@cockroachlabs/cluster-ui";
 import { reduceStorageOfTimeSeriesDataOperationalFlags } from "src/util/docs";
 import moment from "moment-timezone";
 import {
