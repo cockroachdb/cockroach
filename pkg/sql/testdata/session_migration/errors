@@ -60,6 +60,7 @@ SELECT crdb_internal.deserialize_session(
 ----
 ERROR: crdb_internal.deserialize_session(): can only deserialize matching session users (SQLSTATE 42501)
 
+# TODO(yang): Figure out how to replace the below string to set the new fields.
 # We cannot deserialize a different session_user, even if current_user matches.
 exec
 SELECT crdb_internal.deserialize_session(

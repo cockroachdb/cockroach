@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.sql.sessiondatapb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb";
 
+import "security/usernamepb/user_identity_details.proto";
 import "gogoproto/gogo.proto";
 
 // LocalOnlySessionData contains the serializable components of session
@@ -164,14 +165,7 @@ message LocalOnlySessionData {
   map<uint32, sessiondatapb.SequenceCacheEntry> sequence_cache = 44 [(gogoproto.casttype) = "SequenceCache"];
   // PlacementEnabled indicates whether PLACEMENT can be used or not.
   bool placement_enabled = 45;
-  // SessionUserProto is the name of the user which has performed a SET ROLE
-  // command. In other words, it is the name of the user which originally
-  // established the connection before SET ROLE was first performed.
-  // This is only populated when SET ROLE is used, otherwise the session_user
-  // is the same as the UserProto in SessionData.
-  // Postgres allows the SessionUser to be changed with SET SESSION AUTHORIZATION
-  // but CockroachDB doesn't allow that at the time of this writing.
-  string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+  reserved 46;
   // TxnRowsWrittenLog is the threshold for the number of rows written by a SQL
   // transaction which - once exceeded - will trigger a logging event to SQL_PERF
   // (or SQL_INTERNAL_PERF for internal transactions); 0 means disabled.
@@ -379,6 +373,14 @@ message LocalOnlySessionData {
   // parallelization will still be disabled for queries with LIMITs, and it can
   // lead to increased likelihood of OOMs.
   bool unbounded_parallel_scans = 101;
+  // SessionUserDetails contains details about the user who has performed a SET ROLE
+  // command (i.e. the user who originally established the connection before
+  // SET ROLE was first performed).
+  // This is only populated when SET ROLE is used, otherwise the session_user
+  // is the same as the current_user in SessionData.
+  // Postgres allows the session_user to be changed with SET SESSION AUTHORIZATION
+  // but CockroachDB doesn't allow that at the time of this writing.
+  security.usernamepb.UserIdentityDetails session_user_details = 102;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

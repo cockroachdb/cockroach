@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/security/usernamepb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -608,9 +609,9 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 
 			// The "none" user does resets the SessionUserProto in a SET ROLE.
 			if becomeUser.IsNoneRole() {
-				if m.data.SessionUserProto.Decode().Normalized() != "" {
-					m.data.UserProto = m.data.SessionUserProto
-					m.data.SessionUserProto = ""
+				if m.data.SessionUserDetails != nil {
+					m.data.UserProto = m.data.SessionUserDetails.UserName
+					m.data.SessionUserDetails = nil
 				}
 				m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
 				return nil
@@ -618,8 +619,13 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 
 			// Only update session_user when we are transitioning from the current_user
 			// being the session_user.
-			if m.data.SessionUserProto == "" {
-				m.data.SessionUserProto = m.data.UserProto
+			if m.data.SessionUserDetails == nil {
+				userName := m.data.UserProto.Decode()
+				userID, err := p.GetUserID(ctx, userName)
+				if err != nil {
+					return err
+				}
+				m.data.SessionUserDetails = usernamepb.NewUserIdentityDetails(userName, userID)
 			}
 			m.data.UserProto = becomeUser.EncodeProto()
 			m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
