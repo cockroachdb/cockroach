@@ -408,7 +408,6 @@ function makeDetails(
       statement_statistics_per_aggregated_ts: [],
       statement_statistics_per_plan_hash: [],
       internal_app_name_prefix: "$ internal",
-      toJSON: () => ({}),
     },
   };
 }
@@ -496,12 +495,12 @@ function makeStateWithStatementsAndLastReset(
   const state = merge(store.getState(), {
     cachedData: {
       statements: {
-        data: protos.cockroach.server.serverpb.StatementsResponse.fromObject({
+        data: new protos.cockroach.server.serverpb.StatementsResponse({
           statements,
-          last_reset: {
-            seconds: lastReset,
+          last_reset: new protos.google.protobuf.Timestamp({
+            seconds: Long.fromNumber(lastReset),
             nanos: 0,
-          },
+          }),
           internal_app_name_prefix: INTERNAL_STATEMENT_PREFIX,
         }),
         inFlight: false,
@@ -535,14 +534,12 @@ function makeStateWithStatementsAndLastReset(
           timeEnd,
         )
       ] = {
-        data: protos.cockroach.server.serverpb.StatementDetailsResponse.fromObject(
-          {
-            statement: stmt.details.statement,
-            statement_statistics_per_aggregated_ts: [],
-            statement_statistics_per_plan_hash: [],
-            internal_app_name_prefix: "$ internal",
-          },
-        ),
+        data: new protos.cockroach.server.serverpb.StatementDetailsResponse({
+          statement: stmt.details.statement,
+          statement_statistics_per_aggregated_ts: [],
+          statement_statistics_per_plan_hash: [],
+          internal_app_name_prefix: "$ internal",
+        }),
         inFlight: false,
         valid: true,
       };

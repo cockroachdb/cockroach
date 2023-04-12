@@ -69,7 +69,6 @@ const statementDetailsNoData: StatementDetailsResponse = {
   internal_app_name_prefix: "$ internal",
   statement_statistics_per_aggregated_ts: [],
   statement_statistics_per_plan_hash: [],
-  toJSON: () => ({}),
 };
 
 const statementDetailsData: StatementDetailsResponse = {
@@ -756,7 +755,6 @@ const statementDetailsData: StatementDetailsResponse = {
     },
   ],
   internal_app_name_prefix: "$ internal",
-  toJSON: () => ({}),
 };
 
 export const getStatementDetailsPropsFixture = (
