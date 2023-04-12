@@ -92,6 +92,7 @@ ElementState:
     constraintId: 1
     geoConfig: null
     indexId: 1
+    invisibility: 0
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false
@@ -107,6 +108,7 @@ ElementState:
     embeddedExpr: null
     geoConfig: null
     indexId: 2
+    invisibility: 0
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: true
@@ -503,6 +505,7 @@ ElementState:
     constraintId: 2
     geoConfig: null
     indexId: 1
+    invisibility: 0
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false
@@ -518,6 +521,7 @@ ElementState:
     embeddedExpr: null
     geoConfig: null
     indexId: 2
+    invisibility: 0
     isConcurrently: false
     isCreatedExplicitly: false
     isInverted: false

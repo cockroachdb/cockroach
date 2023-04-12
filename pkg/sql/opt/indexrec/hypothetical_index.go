@@ -115,11 +115,11 @@ func (hi *hypotheticalIndex) IsInverted() bool {
 	return hi.inverted
 }
 
-// IsNotVisible is part of the cat.Index interface.
-func (hi *hypotheticalIndex) IsNotVisible() bool {
+// GetInvisibility is part of the cat.Index interface.
+func (hi *hypotheticalIndex) GetInvisibility() float64 {
 	// A hypotheticalIndex should not be invisible because there is no motivation
 	// to recommend a not visible index.
-	return false
+	return 0.0
 }
 
 // ColumnCount is part of the cat.Index interface.

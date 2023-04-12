@@ -112,6 +112,11 @@ func (w index) IsNotVisible() bool {
 	return w.desc.NotVisible
 }
 
+// GetInvisibility returns index invisibility.
+func (w index) GetInvisibility() float64 {
+	return w.desc.Invisibility
+}
+
 // IsCreatedExplicitly returns true iff this index was created explicitly, i.e.
 // via 'CREATE INDEX' statement.
 func (w index) IsCreatedExplicitly() bool {

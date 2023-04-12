@@ -199,7 +199,8 @@ func makeIndexDescriptor(
 		StoreColumnNames:  n.Storing.ToStrings(),
 		CreatedExplicitly: true,
 		CreatedAtNanos:    params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
-		NotVisible:        n.NotVisible,
+		NotVisible:        n.Invisibility != 0.0,
+		Invisibility:      n.Invisibility,
 	}
 
 	if n.Inverted {
