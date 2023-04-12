@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -88,9 +89,14 @@ type serverStateUsingChannels struct {
 	// be used to observe the start state without waiting.
 	started syncutil.AtomicBool
 
-	// requestStop can be called to request a server to stop.
+	// requestImmediateStop can be called to request a server to stop
+	// ungracefully.
 	// It can be called multiple times.
-	requestStop func()
+	requestImmediateStop func()
+
+	// requestGracefulStop can be called to request a server to stop gracefully.
+	// It can be called multiple times.
+	requestGracefulStop func()
 
 	// stopped is closed when the server has stopped.
 	stoppedCh <-chan struct{}
@@ -115,25 +121,14 @@ func (s *serverStateUsingChannels) getLastStartupError() error {
 
 // requestGracefulShutdown is part of the serverState interface.
 func (s *serverStateUsingChannels) requestGracefulShutdown(ctx context.Context) {
-	// TODO(knz): this is the code that was originally implemented, and
-	// it is incorrect because it does not obey the incoming context's
-	// cancellation.
-	s.requestStop()
+	// TODO(knz): this is incorrect because it does not obey the
+	// incoming context's cancellation.
+	s.requestGracefulStop()
 }
 
 // requestImmediateShutdown is part of the serverState interface.
 func (s *serverStateUsingChannels) requestImmediateShutdown(ctx context.Context) {
-	// TODO(knz): this is the code that was originally implemented,
-	// and it is incorrect; this should strigger a stop on
-	// the tenant stopper.
-	//
-	// Luckly, this implementation error happens to be innocuous because
-	// the only call to reqquestImmediateShutdown() happens after the
-	// parent stopper quiescence, and the control loop is already
-	// sensitive to that.
-	//
-	// We should refactor this to remove the potential for confusion.
-	s.requestStop()
+	s.requestImmediateStop()
 }
 
 // stopped is part of the serverState interface.
@@ -158,11 +153,12 @@ func (o *channelOrchestrator) makeServerStateForSystemTenant(
 	close(closedChan)
 	closeCtx, cancelFn := context.WithCancel(context.Background())
 	st := &serverStateUsingChannels{
-		nc:                 nc,
-		server:             systemSrv,
-		startedOrStoppedCh: closedChan,
-		requestStop:        cancelFn,
-		stoppedCh:          closeCtx.Done(),
+		nc:                   nc,
+		server:               systemSrv,
+		startedOrStoppedCh:   closedChan,
+		requestImmediateStop: cancelFn,
+		requestGracefulStop:  cancelFn,
+		stoppedCh:            closeCtx.Done(),
 	}
 
 	st.started.Set(true)
@@ -193,19 +189,30 @@ func (o *channelOrchestrator) startControlledServer(
 	// serverState instead.
 	serverStoppingFn func(ctx context.Context, tenantName roachpb.TenantName, tid roachpb.TenantID, sid base.SQLInstanceID),
 ) (serverState, error) {
-	var stoppedChClosed syncutil.AtomicBool
-	stopRequestCh := make(chan struct{})
+	var immediateStopRequest sync.Once
+	immediateStopRequestCh := make(chan struct{})
+	immediateStopFn := func() {
+		immediateStopRequest.Do(func() {
+			close(immediateStopRequestCh)
+		})
+	}
+	var gracefulStopRequest sync.Once
+	gracefulStopRequestCh := make(chan struct{})
+	gracefulStopFn := func() {
+		gracefulStopRequest.Do(func() {
+			close(gracefulStopRequestCh)
+		})
+	}
+
 	stoppedCh := make(chan struct{})
 	startedOrStoppedCh := make(chan struct{})
+
 	state := &serverStateUsingChannels{
-		nc:                 roachpb.NewTenantNameContainer(tenantName),
-		startedOrStoppedCh: startedOrStoppedCh,
-		requestStop: func() {
-			if !stoppedChClosed.Swap(true) {
-				close(stopRequestCh)
-			}
-		},
-		stoppedCh: stoppedCh,
+		nc:                   roachpb.NewTenantNameContainer(tenantName),
+		startedOrStoppedCh:   startedOrStoppedCh,
+		requestImmediateStop: immediateStopFn,
+		requestGracefulStop:  gracefulStopFn,
+		stoppedCh:            stoppedCh,
 	}
 
 	topCtx := ctx
@@ -253,10 +260,16 @@ func (o *channelOrchestrator) startControlledServer(
 			markDrainMode(false)
 			ctlStopper.Stop(tenantCtx)
 
-		case <-stopRequestCh:
+		case <-gracefulStopRequestCh:
 			// Someone requested a graceful shutdown.
 			log.Infof(ctx, "received request for tenant %q to terminate gracefully", tenantName)
 			markDrainMode(true)
+			ctlStopper.Stop(tenantCtx)
+
+		case <-immediateStopRequestCh:
+			// Someone requested a graceful shutdown.
+			log.Infof(ctx, "received request for tenant %q to terminate immediately", tenantName)
+			markDrainMode(false)
 			ctlStopper.Stop(tenantCtx)
 
 		case <-topCtx.Done():
@@ -283,9 +296,11 @@ func (o *channelOrchestrator) startControlledServer(
 			// not otherwise caused by a server shutdown. In that case, we don't have
 			// a guarantee that the tenantStopper.Stop() call will ever be called
 			// and we could get a goroutine leak for the above task.
-			// To prevent this, we call requestStop() which tells the goroutine above
-			// to call tenantStopper.Stop() and terminate.
-			state.requestStop()
+			//
+			// To prevent this, we call requestImmediateStop() which tells
+			// the goroutine above to call tenantStopper.Stop() and
+			// terminate.
+			state.requestImmediateStop()
 			state.started.Set(false)
 			close(stoppedCh)
 			if !startedOrStoppedChAlreadyClosed {
@@ -439,11 +454,11 @@ func (o *channelOrchestrator) startControlledServer(
 			log.Infof(ctx, "tenant %q requesting their own shutdown: %v",
 				tenantName, shutdownRequest.ShutdownCause())
 			// Make the async stop goroutine above pick up the task of shutting down.
-			state.requestStop()
+			state.requestImmediateStop()
 		}
 	}); err != nil {
 		// Clean up the task we just started before.
-		state.requestStop()
+		state.requestImmediateStop()
 		return nil, err
 	}
 
