@@ -492,4 +492,3 @@ RESET disable_drop_tenant
 
 statement ok
 DROP TENANT nodelete
-

@@ -211,6 +211,7 @@ func ingestionPlanHook(
 			p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, p.Txn()),
 			tenantInfo, initialTenantZoneConfig,
 			ingestionStmt.IfNotExists,
+			p.ExecCfg().TenantTestingKnobs,
 		)
 		if err != nil {
 			return err
