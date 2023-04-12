@@ -1640,7 +1640,6 @@ func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 
 // TenantTestingKnobs contains knobs for tenant behavior.
 type TenantTestingKnobs struct {
-
 	// TenantIDCodecOverride overrides the tenant ID used to construct the SQL
 	// server's codec, but nothing else (e.g. its certs).
 	TenantIDCodecOverride roachpb.TenantID
@@ -1653,6 +1652,11 @@ type TenantTestingKnobs struct {
 	// the connExecutor checks for the presence of system.descriptor_id_seq after
 	// handling a system tenant descriptor ID generator migration error.
 	BeforeCheckingForDescriptorIDSequence func(ctx context.Context)
+
+	// EnableTenantIDReuse avoids using the tenant ID sequence to ensure
+	// that automatic tenant ID allocation is always monotonic. This can
+	// be used in tests that wish to control the tenant ID.
+	EnableTenantIDReuse bool
 }
 
 var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}

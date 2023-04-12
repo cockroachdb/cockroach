@@ -231,6 +231,11 @@ func CreateTenantStreamingClusters(
 			},
 			Streaming:                      args.TestingKnobs,
 			TenantCapabilitiesTestingKnobs: args.TenantCapabilitiesTestingKnobs,
+			TenantTestingKnobs: &sql.TenantTestingKnobs{
+				// The streaming tests want tenant ID stability. So we want
+				// easy-to-predict IDs when we create a tenant after a drop.
+				EnableTenantIDReuse: true,
+			},
 		},
 	}
 
