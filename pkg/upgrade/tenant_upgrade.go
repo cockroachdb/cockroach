@@ -108,6 +108,7 @@ func NewTenantUpgrade(
 
 // NewPermanentTenantUpgrade constructs a TenantUpgrade marked as "permanent":
 // an upgrade that will run regardless of the cluster's bootstrap version.
+// Note however that the upgrade will still run at most once.
 func NewPermanentTenantUpgrade(
 	description string, v roachpb.Version, fn TenantUpgradeFunc, v22_2StartupMigrationName string,
 ) *TenantUpgrade {
