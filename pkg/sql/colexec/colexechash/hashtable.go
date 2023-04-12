@@ -637,13 +637,13 @@ func (ht *HashTable) DistinctBuild(batch coldata.Batch) {
 	ht.ComputeHashAndBuildChains(batch)
 	ht.RemoveDuplicates(
 		batch, ht.Keys, ht.ProbeScratch.First, ht.ProbeScratch.Next,
-		ht.CheckProbeForDistinct,
+		ht.CheckProbeForDistinct, true, /* probingAgainstItself */
 	)
 	// We only check duplicates when there is at least one buffered tuple.
 	if ht.Vals.Length() > 0 {
 		ht.RemoveDuplicates(
 			batch, ht.Keys, ht.BuildScratch.First, ht.BuildScratch.Next,
-			ht.CheckBuildForDistinct,
+			ht.CheckBuildForDistinct, false, /* probingAgainstItself */
 		)
 	}
 	if batch.Length() > 0 {
@@ -695,10 +695,11 @@ func (ht *HashTable) RemoveDuplicates(
 	keyCols []coldata.Vec,
 	first, next []keyID,
 	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
+	probingAgainstItself bool,
 ) {
 	ht.FindBuckets(
 		batch, keyCols, first, next, duplicatesChecker,
-		false, /* zeroHeadIDForDistinctTuple */
+		false /* zeroHeadIDForDistinctTuple */, probingAgainstItself,
 	)
 	ht.updateSel(batch)
 }
