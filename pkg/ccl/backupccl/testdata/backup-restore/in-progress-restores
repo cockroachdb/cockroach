@@ -1,6 +1,3 @@
-skip issue-num=93731
-----
-
 # This test ensures that table, database and cluster backups properly backup and
 # restore (i.e. capture) an in progress database or table RESTORE. The
 # in-progress restore may take other kinds of descriptors offline (e.g. type,
@@ -158,10 +155,10 @@ SELECT * FROM b2.me.baz;
 
 
 query-sql
-SELECT * FROM [SHOW INDEX FROM b2.me.baz] WHERE index_name = 'greeting_idx';
+SELECT table_name,index_name,non_unique,seq_in_index,column_name FROM [SHOW INDEX FROM b2.me.baz] WHERE index_name = 'greeting_idx';
 ----
-baz greeting_idx true 1 y ASC false false true
-baz greeting_idx true 2 rowid ASC false true true
+baz greeting_idx true 1 y
+baz greeting_idx true 2 rowid
 
 
 #################

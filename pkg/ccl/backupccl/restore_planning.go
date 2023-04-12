@@ -392,12 +392,33 @@ func allocateDescriptorRewrites(
 					}
 					parentID = newParentID
 				}
-				// Check that the table name is _not_ in use.
+
+				// If we are restoring the table into an existing schema in the target
+				// database, we must ensure that the table name is _not_ in use.
 				// This would fail the CPut later anyway, but this yields a prettier error.
-				tableName := tree.NewUnqualifiedTableName(tree.Name(table.GetName()))
-				err := descs.CheckObjectNameCollision(ctx, col, txn.KV(), parentID, table.GetParentSchemaID(), tableName)
-				if err != nil {
-					return err
+				//
+				// If we are restoring the table into a schema that is also being
+				// restored then we do not need to check for collisions as the backing
+				// up cluster would enforce uniqueness of table names in a schema.
+				rw, ok := descriptorRewrites[table.GetParentSchemaID()]
+				// We may not find an entry for the parent schema in our
+				// descriptorRewrites if it is a table being restored into the public
+				// schema of the system database. This public schema is a pseudo-schema
+				// i.e. it is not backed by a descriptor, hence we check for that case
+				// separately below.
+				restoringIntoExistingSchema := ok && rw.ToExisting
+				isSystemTable := table.GetParentID() == keys.SystemDatabaseID &&
+					table.GetParentSchemaID() == keys.SystemPublicSchemaID
+				if restoringIntoExistingSchema || isSystemTable {
+					schemaID := table.GetParentSchemaID()
+					if ok {
+						schemaID = rw.ID
+					}
+					tableName := tree.NewUnqualifiedTableName(tree.Name(table.GetName()))
+					err := descs.CheckObjectNameCollision(ctx, col, txn.KV(), parentID, schemaID, tableName)
+					if err != nil {
+						return err
+					}
 				}
 
 				// Check privileges.
@@ -472,26 +493,41 @@ func allocateDescriptorRewrites(
 						"failed to lookup parent DB %d", errors.Safe(parentID))
 				}
 
-				// See if there is an existing type with the same name.
-				getParentSchemaID := func(typ *typedesc.Mutable) (parentSchemaID descpb.ID) {
-					parentSchemaID = typ.GetParentSchemaID()
-					// If we find UDS with same name defined in the restoring DB, use its ID instead.
-					if rewrite, ok := descriptorRewrites[parentSchemaID]; ok && rewrite.ID != 0 {
-						parentSchemaID = rewrite.ID
+				// If we are restoring the type into an existing schema in the target
+				// database, we can find the type with the same name and don't need to
+				// create it as part of the restore.
+				//
+				// If we are restoring the type into a schema that is also being
+				// restored then we need to create the type and the array type as part
+				// of the restore.
+				var desc catalog.Descriptor
+				if rewrite, ok := descriptorRewrites[typ.GetParentSchemaID()]; ok && rewrite.ToExisting {
+					var err error
+					desc, err = descs.GetDescriptorCollidingWithObjectName(
+						ctx,
+						col,
+						txn.KV(),
+						parentID,
+						rewrite.ID,
+						typ.Name,
+					)
+					if err != nil {
+						return err
 					}
-					return
+
+					if desc == nil {
+						// If we did not find a type descriptor, ensure that the
+						// corresponding array type descriptor does not exist. This is
+						// because we will create both the type and array type below.
+						arrTyp := typesByID[typ.ArrayTypeID]
+						typeName := tree.NewUnqualifiedTypeName(arrTyp.GetName())
+						err = descs.CheckObjectNameCollision(ctx, col, txn.KV(), parentID, rewrite.ID, typeName)
+						if err != nil {
+							return errors.Wrapf(err, "name collision for %q's array type", typ.Name)
+						}
+					}
 				}
-				desc, err := descs.GetDescriptorCollidingWithObjectName(
-					ctx,
-					col,
-					txn.KV(),
-					parentID,
-					getParentSchemaID(typ),
-					typ.Name,
-				)
-				if err != nil {
-					return err
-				}
+
 				if desc == nil {
 					// If we didn't find a type with the same name, then mark that we
 					// need to create the type.
@@ -507,14 +543,8 @@ func allocateDescriptorRewrites(
 					// Create a rewrite entry for the type.
 					descriptorRewrites[typ.ID] = &jobspb.DescriptorRewrite{ParentID: parentID}
 
-					// Ensure that there isn't a collision with the array type name.
-					arrTyp := typesByID[typ.ArrayTypeID]
-					typeName := tree.NewUnqualifiedTypeName(arrTyp.GetName())
-					err = descs.CheckObjectNameCollision(ctx, col, txn.KV(), parentID, getParentSchemaID(typ), typeName)
-					if err != nil {
-						return errors.Wrapf(err, "name collision for %q's array type", typ.Name)
-					}
 					// Create the rewrite entry for the array type as well.
+					arrTyp := typesByID[typ.ArrayTypeID]
 					descriptorRewrites[arrTyp.ID] = &jobspb.DescriptorRewrite{ParentID: parentID}
 				} else {
 					// If there was a name collision, we'll try to see if we can remap
