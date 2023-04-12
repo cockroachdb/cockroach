@@ -5431,3 +5431,15 @@ func (ht *HashTable) checkCol(
 		}
 	}
 }
+
+// execgen:inline
+const _ = "inlined_findBuckets_true"
+
+// execgen:inline
+const _ = "inlined_findBuckets_false"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_true"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false"
