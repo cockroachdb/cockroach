@@ -13,26 +13,12 @@ package goroutineui
 import (
 	"bytes"
 	"io"
-	"runtime"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/maruel/panicparse/v2/stack"
 )
-
-// stacks is a wrapper for runtime.Stack that attempts to recover the data for all goroutines.
-func stacks() []byte {
-	// We don't know how big the traces are, so grow a few times if they don't fit. Start large, though.
-	var trace []byte
-	for n := 1 << 20; /* 1mb */ n <= (1 << 29); /* 512mb */ n *= 2 {
-		trace = make([]byte, n)
-		nbytes := runtime.Stack(trace, true /* all */)
-		if nbytes < len(trace) {
-			return trace[:nbytes]
-		}
-	}
-	return trace
-}
 
 // A Dump wraps a goroutine dump with functionality to output through panicparse.
 type Dump struct {
@@ -42,7 +28,7 @@ type Dump struct {
 
 // NewDump grabs a goroutine dump.
 func NewDump() Dump {
-	return newDumpFromBytes(stacks(), stack.DefaultOpts())
+	return newDumpFromBytes(allstacks.Get(), stack.DefaultOpts())
 }
 
 // newDumpFromBytes is like NewDump, but treats the supplied bytes as a goroutine
