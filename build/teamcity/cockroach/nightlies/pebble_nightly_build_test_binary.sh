@@ -16,6 +16,13 @@ DEST="$2"
 BAZEL_BIN=$(bazel info bazel-bin --config ci)
 
 bazel run @go_sdk//:bin/go get "github.com/cockroachdb/pebble@$PEBBLE_BRANCH"
+
+# Remove the patch, which doesn't work with older versions (the "unpatched"
+# config assumes the invariants tag is set). Once we remove the patch,
+# cmd/mirror/go below will not find it and it won't be referenced in the
+# resulting DEPS.bzl.
+rm -f build/patches/com_github_cockroachdb_pebble.patch
+
 NEW_DEPS_BZL_CONTENT=$(bazel run //pkg/cmd/mirror/go:mirror)
 echo "$NEW_DEPS_BZL_CONTENT" > DEPS.bzl
 
@@ -32,5 +39,5 @@ cp $BAZEL_BIN/external/com_github_cockroachdb_pebble/internal/metamorphic/metamo
 chmod a+w "$DEST/$PEBBLE_SHA.test"
 echo "$PEBBLE_SHA"
 
-# Return DEPS.bzl to its previous contents.
-git checkout HEAD -- DEPS.bzl
+# Return DEPS.bzl and the patch to its previous contents.
+git checkout HEAD -- DEPS.bzl build/patches
