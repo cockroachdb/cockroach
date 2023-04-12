@@ -172,12 +172,12 @@ func (f *unorderedDistinctFilterer) Next() coldata.Batch {
 		// Remove the duplicates within batch itself.
 		f.ud.Ht.RemoveDuplicates(
 			batch, f.ud.Ht.Keys, f.ud.Ht.ProbeScratch.First, f.ud.Ht.ProbeScratch.Next,
-			f.ud.Ht.CheckProbeForDistinct,
+			f.ud.Ht.CheckProbeForDistinct, true, /* probingAgainstItself */
 		)
 		// Remove the duplicates of already emitted distinct tuples.
 		f.ud.Ht.RemoveDuplicates(
 			batch, f.ud.Ht.Keys, f.ud.Ht.BuildScratch.First, f.ud.Ht.BuildScratch.Next,
-			f.ud.Ht.CheckBuildForDistinct,
+			f.ud.Ht.CheckBuildForDistinct, false, /* probingAgainstItself */
 		)
 		f.ud.MaybeEmitErrorOnDup(origLen, batch.Length())
 		if batch.Length() > 0 {
