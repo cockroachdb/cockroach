@@ -704,7 +704,7 @@ func addUniqueWithoutIndexTableDef(
 			"partitioned unique constraints without an index are not supported",
 		)
 	}
-	if d.NotVisible {
+	if d.Invisibility != 0.0 {
 		// Theoretically, this should never happen because this is not supported by
 		// the parser. This is just a safe check.
 		return pgerror.Newf(pgcode.FeatureNotSupported,
@@ -1792,7 +1792,8 @@ func NewTableDesc(
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
-				NotVisible:       d.NotVisible,
+				NotVisible:       d.Invisibility != 0.0,
+				Invisibility:     d.Invisibility,
 			}
 			if d.Inverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
@@ -1904,7 +1905,8 @@ func NewTableDesc(
 				Unique:           true,
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
-				NotVisible:       d.NotVisible,
+				NotVisible:       d.Invisibility != 0.0,
+				Invisibility:     d.Invisibility,
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
@@ -2603,11 +2605,11 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					continue
 				}
 				indexDef := tree.IndexTableDef{
-					Name:       tree.Name(idx.GetName()),
-					Inverted:   idx.GetType() == descpb.IndexDescriptor_INVERTED,
-					Storing:    make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
-					Columns:    make(tree.IndexElemList, 0, idx.NumKeyColumns()),
-					NotVisible: idx.IsNotVisible(),
+					Name:         tree.Name(idx.GetName()),
+					Inverted:     idx.GetType() == descpb.IndexDescriptor_INVERTED,
+					Storing:      make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
+					Columns:      make(tree.IndexElemList, 0, idx.NumKeyColumns()),
+					Invisibility: idx.GetInvisibility(),
 				}
 				numColumns := idx.NumKeyColumns()
 				if idx.IsSharded() {
