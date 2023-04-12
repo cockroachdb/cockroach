@@ -38,6 +38,16 @@ func TestCombinesUniqueInt64(t *testing.T) {
 			inputB:   []int64{1, 3},
 			expected: []int64{1, 3},
 		},
+		{
+			inputA:   []int64{4, 4},
+			inputB:   []int64{1, 1, 4, 4, 4, 5, 5},
+			expected: []int64{1, 1, 4, 4, 4, 5, 5},
+		},
+		{
+			inputA:   []int64{4, 4, 4},
+			inputB:   []int64{1, 1, 4, 4, 5, 5},
+			expected: []int64{1, 1, 4, 4, 4, 5, 5},
+		},
 	} {
 		output := CombineUnique(tc.inputA, tc.inputB)
 		require.Equal(t, tc.expected, output)
@@ -65,6 +75,11 @@ func TestCombinesUniqueStrings(t *testing.T) {
 			inputA:   []string{},
 			inputB:   []string{"a", "c"},
 			expected: []string{"a", "c"},
+		},
+		{
+			inputA:   []string{"a", "a", "a"},
+			inputB:   []string{"b", "b", "b"},
+			expected: []string{"a", "a", "a", "b", "b", "b"},
 		},
 	} {
 		output := CombineUnique(tc.inputA, tc.inputB)

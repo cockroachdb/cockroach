@@ -12,12 +12,16 @@ package util
 
 import "golang.org/x/exp/constraints"
 
-// CombineUnique combines two ordered slices and returns the result without
-// duplicates.
-// This function is used for combine slices where one of the slices is small or
-// has mostly the same elements as the other.
-// If the two slices are large and don't have many duplications, this function should be avoided,
-// because of the usage of `copy` that can increase CPU.
+// CombineUnique merges two ordered slices. If both slices have unique elements
+// then so does the resulting slice. More generally, each element is present
+// max(timesInA, timesInB) times.
+//
+// Takes ownership of both slices, and uses the longer one to store the result.
+//
+// This function is used to combine slices where one of the slices is small or
+// has mostly the same elements as the other. If the two slices are large and
+// don't have many duplicates, this function should be avoided, because of the
+// usage of `copy` that can increase CPU.
 func CombineUnique[T constraints.Ordered](a, b []T) []T {
 	// We want b to be the smaller slice, so there are fewer elements to be added.
 	if len(b) > len(a) {
