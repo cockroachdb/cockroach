@@ -6852,7 +6852,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			TenantTestingKnobs: &sql.TenantTestingKnobs{
+				// The tests expect specific tenant IDs to show up.
+				EnableTenantIDReuse: true,
+			},
+		},
 
 		// Disabled to probabilistically spin up a tenant in each server because the
 		// test explicitly sets up tenants to test on.
@@ -7165,6 +7171,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 				// system.tenants table. Disable the default test tenant because
 				// it's not necessary.
 				DefaultTestTenant: base.TestTenantDisabled,
+				Knobs: base.TestingKnobs{
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+					TenantTestingKnobs: &sql.TenantTestingKnobs{
+						// This test expects a specific tenant ID to be selected after DROP TENANT.
+						EnableTenantIDReuse: true,
+					},
+				},
 			}},
 		)
 
@@ -9586,7 +9599,13 @@ func TestProtectRestoreTargets(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Allow creating a different tenant if the default test tenant is not started.
 			DefaultTestTenant: base.TestTenantProbabilistic,
-			Knobs:             base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				TenantTestingKnobs: &sql.TenantTestingKnobs{
+					// The tests expect specific tenant IDs to show up.
+					EnableTenantIDReuse: true,
+				},
+			},
 		},
 	}
 	tc, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode,
