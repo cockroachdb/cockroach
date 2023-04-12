@@ -3863,7 +3863,7 @@ func (t *logicTest) validateAfterTestCompletion() error {
 		// If `useCockroachGoTestserver` is true and we do an upgrade,
 		// this may fail if we're in between migrations that
 		// upgrade the descriptors.
-		if !t.cfg.UseCockroachGoTestserver {
+		if !t.cfg.UseCockroachGoTestserver && !t.cfg.DisableUpgrade {
 			rows, err := t.db.Query(
 				`
 SELECT encode(descriptor, 'hex') AS descriptor
