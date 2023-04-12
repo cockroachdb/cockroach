@@ -472,7 +472,7 @@ func runDistinctBenchmarks(
 	isExternal bool,
 	shuffleInput bool,
 ) {
-	rng, _ := randutil.NewTestRand()
+	rng := randutil.NewTestRandWithSeed(41)
 	const nCols = 2
 	const bytesValueLength = 8
 	distinctCols := []uint32{0, 1}

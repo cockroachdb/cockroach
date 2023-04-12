@@ -553,6 +553,10 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //     build set=prefer_lookup_joins_for_fks=true
 //     DELETE FROM parent WHERE p = 3
 //     ----
+//
+//   - statement-bundle file=<path>
+//     Load the schema and stats from a statement bundle, file can be either a
+//     full path or a relative path to testdata.
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -812,6 +816,12 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%+v", err)
 		}
 		return result
+
+	case "statement-bundle":
+		if err := ot.StatementBundle(tb); err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return ""
 
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
@@ -2331,4 +2341,52 @@ func (ot *OptTester) ExecBuild(f exec.Factory, mem *memo.Memo, expr opt.Expr) (e
 		false, /* isANSIDML */
 	)
 	return bld.Build()
+}
+
+func (ot *OptTester) StatementBundle(tb testing.TB) error {
+	if ot.Flags.File == "" {
+		return errors.New("statement-bundle requires file argument")
+	}
+	dir := ot.Flags.File
+	f, err := os.Open(dir)
+	if err != nil {
+		// try relative path
+		dir = datapathutils.TestDataPath(tb, dir)
+		var err2 error
+		f, err2 = os.Open(dir)
+		if err2 != nil {
+			return errors.CombineErrors(err, err2)
+		}
+	}
+	s, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	// TODO(cucaroach): support direct from zip
+	if !s.IsDir() {
+		return errors.New("statement-bundle argument must be a directory")
+	}
+	schema, err := os.ReadFile(filepath.Join(dir, "schema.sql"))
+	if err != nil {
+		return err
+	}
+	testCatalog := ot.catalog.(*testcat.Catalog)
+	if err := testCatalog.ExecuteMultipleDDL(string(schema)); err != nil {
+		return err
+	}
+	pat := filepath.Join(dir, "stats-*.sql")
+	files, err := filepath.Glob(pat)
+	if err != nil {
+		return err
+	}
+	for _, sf := range files {
+		stats, err := os.ReadFile(sf)
+		if err != nil {
+			return err
+		}
+		if err := testCatalog.ExecuteMultipleDDL(string(stats)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
