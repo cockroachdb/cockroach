@@ -5850,6 +5850,10 @@ func TestBatchedInsertStats(t *testing.T) {
 			name:          "greater-than-batch-size",
 			numTableStats: 15,
 		},
+		{
+			name:          "greater-than-batch-size-times-concurrent-workers",
+			numTableStats: 100,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			dbName := fmt.Sprintf("foo%d", i)
