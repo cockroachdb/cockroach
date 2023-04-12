@@ -181,3 +181,31 @@ SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
 pscs2
 pscs4
 pscs5
+
+subtest param_type_hints_gt_params
+
+# DEALLOCATE existing prepared statements from other tests.
+exec
+DEALLOCATE ALL
+----
+
+# Prepare a statement with more parameter type hints than parameters.
+exec
+PREPARE p (int) AS SELECT 1
+----
+
+let $session_hex
+SELECT encode(crdb_internal.serialize_session(), 'hex')
+----
+
+# DEALLOCATE p because it will be added back by crdb_internal.deserialize_session.
+exec
+DEALLOCATE p
+----
+
+query
+SELECT crdb_internal.deserialize_session(decode('$session_hex', 'hex'))
+----
+true
+
+subtest end
