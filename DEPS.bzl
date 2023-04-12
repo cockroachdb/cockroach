@@ -1,6 +1,6 @@
 load("@bazel_gazelle//:deps.bzl", "go_repository")
 
-# PRO-TIP: You can inject temorary changes to any of these dependencies by
+# PRO-TIP: You can inject temporary changes to any of these dependencies by
 # by pointing to an alternate remote to clone from. Delete the `sha256`,
 # `strip_prefix`, and `urls` parameters, and add `vcs = "git"` as well as a
 # custom `remote` and `commit`. For example:
@@ -1556,6 +1556,12 @@ def go_deps():
     )
     go_repository(
         name = "com_github_cockroachdb_pebble",
+        # The patch below makes the necessary BUILD.bazel modifications to
+        # support other tag configurations (e.g. invariants off).
+        #
+        # Note that the pebble_nightly_build_test_binary.sh script does not use
+        # the patch and assumes that the "unpatched" configuration is with the
+        # invariants tag set.
         build_directives = [
             "gazelle:build_tags invariants",
         ],
