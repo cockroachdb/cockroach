@@ -17,37 +17,33 @@ import (
 )
 
 func TestCombinesUniqueInt64(t *testing.T) {
-	for _, tc := range []struct{ inputA, inputB, expected []int64 }{
-		{
-			inputA:   []int64{1, 2, 4},
-			inputB:   []int64{3, 5},
-			expected: []int64{1, 2, 3, 4, 5},
-		},
-		{
-			inputA:   []int64{1, 2, 4},
-			inputB:   []int64{1, 3, 4},
-			expected: []int64{1, 2, 3, 4},
-		},
-		{
-			inputA:   []int64{1, 2, 3},
-			inputB:   []int64{1, 2, 3},
-			expected: []int64{1, 2, 3},
-		},
-		{
-			inputA:   []int64{},
-			inputB:   []int64{1, 3},
-			expected: []int64{1, 3},
-		},
-		{
-			inputA:   []int64{4, 4},
-			inputB:   []int64{1, 1, 4, 4, 4, 5, 5},
-			expected: []int64{1, 1, 4, 4, 4, 5, 5},
-		},
-		{
-			inputA:   []int64{4, 4, 4},
-			inputB:   []int64{1, 1, 4, 4, 5, 5},
-			expected: []int64{1, 1, 4, 4, 4, 5, 5},
-		},
+	for _, tc := range []struct {
+		inputA, inputB, expected []int64
+	}{{
+		inputA:   []int64{1, 2, 4},
+		inputB:   []int64{3, 5},
+		expected: []int64{1, 2, 3, 4, 5},
+	}, {
+		inputA:   []int64{1, 2, 4},
+		inputB:   []int64{1, 3, 4},
+		expected: []int64{1, 2, 3, 4},
+	}, {
+		inputA:   []int64{1, 2, 3},
+		inputB:   []int64{1, 2, 3},
+		expected: []int64{1, 2, 3},
+	}, {
+		inputA:   []int64{},
+		inputB:   []int64{1, 3},
+		expected: []int64{1, 3},
+	}, {
+		inputA:   []int64{4, 4},
+		inputB:   []int64{1, 1, 4, 4, 4, 5, 5},
+		expected: []int64{1, 1, 4, 4, 4, 5, 5},
+	}, {
+		inputA:   []int64{4, 4, 4},
+		inputB:   []int64{1, 1, 4, 4, 5, 5},
+		expected: []int64{1, 1, 4, 4, 4, 5, 5},
+	},
 	} {
 		output := CombineUnique(tc.inputA, tc.inputB)
 		require.Equal(t, tc.expected, output)
@@ -55,32 +51,29 @@ func TestCombinesUniqueInt64(t *testing.T) {
 }
 
 func TestCombinesUniqueStrings(t *testing.T) {
-	for _, tc := range []struct{ inputA, inputB, expected []string }{
-		{
-			inputA:   []string{"a", "b", "d"},
-			inputB:   []string{"c", "e"},
-			expected: []string{"a", "b", "c", "d", "e"},
-		},
-		{
-			inputA:   []string{"a", "b", "d"},
-			inputB:   []string{"a", "c", "d"},
-			expected: []string{"a", "b", "c", "d"},
-		},
-		{
-			inputA:   []string{"a", "b", "c"},
-			inputB:   []string{"a", "b", "c"},
-			expected: []string{"a", "b", "c"},
-		},
-		{
-			inputA:   []string{},
-			inputB:   []string{"a", "c"},
-			expected: []string{"a", "c"},
-		},
-		{
-			inputA:   []string{"a", "a", "a"},
-			inputB:   []string{"b", "b", "b"},
-			expected: []string{"a", "a", "a", "b", "b", "b"},
-		},
+	for _, tc := range []struct {
+		inputA, inputB, expected []string
+	}{{
+		inputA:   []string{"a", "b", "d"},
+		inputB:   []string{"c", "e"},
+		expected: []string{"a", "b", "c", "d", "e"},
+	}, {
+		inputA:   []string{"a", "b", "d"},
+		inputB:   []string{"a", "c", "d"},
+		expected: []string{"a", "b", "c", "d"},
+	}, {
+		inputA:   []string{"a", "b", "c"},
+		inputB:   []string{"a", "b", "c"},
+		expected: []string{"a", "b", "c"},
+	}, {
+		inputA:   []string{},
+		inputB:   []string{"a", "c"},
+		expected: []string{"a", "c"},
+	}, {
+		inputA:   []string{"a", "a", "a"},
+		inputB:   []string{"b", "b", "b"},
+		expected: []string{"a", "a", "a", "b", "b", "b"},
+	},
 	} {
 		output := CombineUnique(tc.inputA, tc.inputB)
 		require.Equal(t, tc.expected, output)
