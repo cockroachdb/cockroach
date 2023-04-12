@@ -47,6 +47,7 @@ import {
   statisticsTableTitles,
   StatisticType,
 } from "../statsTableUtil/statsTableUtil";
+import { BarChartOptions } from "src/barCharts/barChartFactory";
 
 type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -100,6 +101,16 @@ export function shortStatement(
   }
 }
 
+function formatStringArray(databases: string): string {
+  try {
+    // Case where the database is returned as an array in a string form.
+    return JSON.parse(databases).join(", ");
+  } catch (e) {
+    // Case where the database is a single value as a string.
+    return databases;
+  }
+}
+
 export function makeStatementsColumns(
   statements: AggregateStatistics[],
   selectedApps: string[],
@@ -121,12 +132,14 @@ export function makeStatementsColumns(
       label: cx("statements-table__col--bar-chart__label"),
     },
   };
-  const sampledExecStatsBarChartOptions = {
-    classes: defaultBarChartOptions.classes,
-    displayNoSamples: (d: ICollectedStatementStatistics) => {
-      return longToInt(d.stats.exec_stats?.count) == 0;
-    },
-  };
+
+  const sampledExecStatsBarChartOptions: BarChartOptions<ICollectedStatementStatistics> =
+    {
+      classes: defaultBarChartOptions.classes,
+      displayNoSamples: (d: ICollectedStatementStatistics) => {
+        return longToInt(d.stats.exec_stats?.count) == 0;
+      },
+    };
 
   const countBar = countBarChart(statements, defaultBarChartOptions);
   const bytesReadBar = bytesReadBarChart(statements, defaultBarChartOptions);
@@ -170,7 +183,7 @@ export function makeStatementsColumns(
       name: "database",
       title: statisticsTableTitles.database(statType),
       className: cx("statements-table__col-database"),
-      cell: (stmt: AggregateStatistics) => stmt.database,
+      cell: (stmt: AggregateStatistics) => formatStringArray(stmt.database),
       sort: (stmt: AggregateStatistics) => stmt.database,
       showByDefault: false,
     },
@@ -181,7 +194,6 @@ export function makeStatementsColumns(
       cell: (stmt: AggregateStatistics) =>
         stmt.applicationName?.length > 0 ? stmt.applicationName : unset,
       sort: (stmt: AggregateStatistics) => stmt.applicationName,
-      showByDefault: false,
     },
     {
       name: "rowsProcessed",
