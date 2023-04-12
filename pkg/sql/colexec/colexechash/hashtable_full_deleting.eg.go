@@ -6067,3 +6067,15 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 	}
 	return nDiffers
 }
+
+// execgen:inline
+const _ = "inlined_findBuckets_true"
+
+// execgen:inline
+const _ = "inlined_findBuckets_false"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_true"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false"

@@ -634,10 +634,16 @@ func (ht *HashTable) DistinctBuild(batch coldata.Batch) {
 		))
 	}
 	ht.ComputeHashAndBuildChains(batch)
-	ht.RemoveDuplicates(batch, ht.Keys, ht.ProbeScratch.First, ht.ProbeScratch.Next, ht.CheckProbeForDistinct)
+	ht.RemoveDuplicates(
+		batch, ht.Keys, ht.ProbeScratch.First, ht.ProbeScratch.Next,
+		ht.CheckProbeForDistinct,
+	)
 	// We only check duplicates when there is at least one buffered tuple.
 	if ht.Vals.Length() > 0 {
-		ht.RemoveDuplicates(batch, ht.Keys, ht.BuildScratch.First, ht.BuildScratch.Next, ht.CheckBuildForDistinct)
+		ht.RemoveDuplicates(
+			batch, ht.Keys, ht.BuildScratch.First, ht.BuildScratch.Next,
+			ht.CheckBuildForDistinct,
+		)
 	}
 	if batch.Length() > 0 {
 		ht.AppendAllDistinct(batch)
@@ -689,7 +695,10 @@ func (ht *HashTable) RemoveDuplicates(
 	first, next []keyID,
 	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
 ) {
-	ht.FindBuckets(batch, keyCols, first, next, duplicatesChecker)
+	ht.FindBuckets(
+		batch, keyCols, first, next, duplicatesChecker,
+		false, /* zeroHeadIDForDistinctTuple */
+	)
 	ht.updateSel(batch)
 }
 
@@ -798,7 +807,7 @@ func (ht *HashTable) buildNextChains(first, next []keyID, offset, batchSize uint
 		// keyID in each equality chain. firstKeyID==0 means it is the first tuple
 		// that we have encountered with the given hash value.
 		if firstKeyID == 0 || id < firstKeyID {
-			next[id] = first[hash]
+			next[id] = firstKeyID
 			first[hash] = id
 		} else {
 			next[id] = next[firstKeyID]
