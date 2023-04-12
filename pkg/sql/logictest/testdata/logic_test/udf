@@ -3420,3 +3420,13 @@ statement ok
 USE test;
 DROP DATABASE d CASCADE;
 DROP FUNCTION fn;
+
+# Regression test for #100923. Do not attempt to inline an empty UDF and error.
+statement ok
+CREATE FUNCTION f100923() RETURNS BOOL STABLE LANGUAGE SQL AS ''
+
+query B
+SELECT f100923() FROM (VALUES (10), (20)) v(i)
+----
+NULL
+NULL
