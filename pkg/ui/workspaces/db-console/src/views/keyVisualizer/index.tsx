@@ -135,10 +135,10 @@ class KeyVisualizerContainer extends React.Component<
 > {
   interval: any;
 
-  state = { response: KeyVisSamplesResponse.create() };
+  state = { response: new KeyVisSamplesResponse() };
 
   fetchSamples() {
-    const req = KeyVisSamplesRequest.create({});
+    const req = new KeyVisSamplesRequest({});
     getKeyVisualizerSamples(req).then(res => this.setState({ response: res }));
   }
 

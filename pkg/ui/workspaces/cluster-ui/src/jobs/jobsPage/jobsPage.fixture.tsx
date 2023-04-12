@@ -329,7 +329,7 @@ const getJobsPageProps = (
 ): JobsPageProps => ({
   ...staticJobProps,
   jobsResponse: {
-    data: JobsResponse.create({
+    data: new JobsResponse({
       jobs: jobs,
       earliest_retained_time: earliestRetainedTime,
     }),
