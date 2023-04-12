@@ -238,6 +238,7 @@ func (c *serverController) startControlledServer(
 	// Ensure that if the surrounding server requests shutdown, we
 	// propagate it to the new server.
 	if err := c.stopper.RunAsyncTask(ctx, "propagate-close", func(ctx context.Context) {
+		defer log.Infof(ctx, "propagate-close task terminating")
 		select {
 		case <-stoppedCh:
 			// Server control loop is terminating prematurely before a
@@ -332,6 +333,7 @@ func (c *serverController) startControlledServer(
 
 			// Link the controller stopper to this tenant stopper.
 			if err := ctlStopper.RunAsyncTask(ctx, "propagate-close-tenant", func(ctx context.Context) {
+				defer log.Infof(ctx, "propagate-close-tenant task terminating")
 				select {
 				case <-tenantStopper.ShouldQuiesce():
 					// Tenant server shutting down on its own.
