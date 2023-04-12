@@ -11,6 +11,7 @@
 package sqlsmith
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -883,21 +884,47 @@ func makeCreateFunc(s *Smither) (tree.Statement, bool) {
 func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	fname := s.name("func")
 	name := tree.MakeFunctionNameFromPrefix(tree.ObjectNamePrefix{}, fname)
-	// Return a record, which means the UDF can return any number or type in its
-	// final SQL statement.
-	// TODO(harding): Return scalars, UDTs, and tables in addition to records.
+	// Return a record 50% of the time, which means the UDF can return any number
+	// or type in its final SQL statement. Otherwise, pick a random type from
+	// this smither's available types.
+	rtyp := types.AnyTuple
+	if s.coin() {
+		// Do not allow collated string types. These are not supported in UDFs.
+		rtyp = s.randType()
+		for rtyp.Family() == types.CollatedStringFamily {
+			rtyp = s.randType()
+		}
+	}
 	// Return multiple rows with the SETOF option about 33% of the time.
 	setof := false
 	if s.d6() < 3 {
 		setof = true
 	}
 	rtype := tree.FuncReturnType{
-		Type:  types.AnyTuple,
+		Type:  rtyp,
 		IsSet: setof,
 	}
-	// TODO(harding): Test with multiple input params.
+
 	// TODO(harding): Allow params to be referenced in the statement body.
-	var params tree.FuncParams
+	paramCnt := s.rnd.Intn(10)
+	if len(s.types.scalarTypes) == 0 {
+		paramCnt = 0
+	}
+	// TODO(100405): Add support for non-default param classes. Currently, only IN
+	// parameters are supported.
+	// TODO(100962): Set a param default value sometimes.
+	params := make(tree.FuncParams, paramCnt)
+	for i := 0; i < paramCnt; i++ {
+		// Do not allow collated string types. These are not supported in UDFs.
+		ptyp := s.randType()
+		for ptyp.Family() == types.CollatedStringFamily {
+			ptyp = s.randType()
+		}
+		params[i] = tree.FuncParam{
+			Name: tree.Name(fmt.Sprintf("p%d", i)),
+			Type: ptyp,
+		}
+	}
 
 	// There are up to 5 function options that may be applied to UDFs.
 	var opts tree.FunctionOptions
@@ -956,13 +983,27 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	// are formatted correctly.
 	stmtCnt := s.rnd.Intn(11)
 	stmts := make([]string, 0, stmtCnt)
-	// TODO(harding): Make the desired types of the final statement match the
-	// function return type.
+	// Disable CTEs temporarily, since they are not currently supported in UDFs.
+	// TODO(92961): Allow CTEs in generated statements in UDF bodies.
+	oldDisableWith := s.disableWith
+	defer func() {
+		s.disableWith = oldDisableWith
+	}()
+	s.disableWith = true
 	for i := 0; i < stmtCnt; i++ {
 		// UDFs currently only support SELECT statements.
-		stmt, _, ok := s.makeSelect(nil /* desiredTypes */, nil /* refs */)
-		if !ok {
-			continue
+		// TODO(87289): Add mutations to the generated statements.
+		var stmt tree.Statement
+		if i == stmtCnt-1 {
+			// The return type of the last statement should match the function return
+			// type.
+			if stmt, _, ok = s.makeSelect([]*types.T{rtyp}, nil /* refs */); !ok {
+				return nil, false
+			}
+		} else {
+			if stmt, _, ok = s.makeSelect(nil /* desiredTypes */, nil /* refs */); !ok {
+				continue
+			}
 		}
 		stmts = append(stmts, tree.AsStringWithFlags(stmt, tree.FmtParsable))
 	}
