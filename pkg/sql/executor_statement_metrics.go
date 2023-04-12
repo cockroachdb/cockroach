@@ -188,7 +188,7 @@ func (ex *connExecutor) recordStatementSummary(
 		log.Warningf(ctx, "failed to convert node ID to int: %s", err)
 	}
 
-	nodes := util.CombineUniqueInt64(getNodesFromPlanner(planner), []int64{nodeID})
+	nodes := util.CombineUnique(getNodesFromPlanner(planner), []int64{nodeID})
 	regions := getRegionsForNodes(ctx, nodes, planner.DistSQLPlanner().sqlAddressResolver)
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{

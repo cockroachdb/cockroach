@@ -4255,7 +4255,7 @@ value if you rely on the HLC for accuracy.`,
 					metadata.Query = statistics.Key.Query
 					metadata.QuerySummary = statistics.Key.QuerySummary
 					metadata.StmtType = statistics.Stats.SQLType
-					metadata.Databases = util.CombineUniqueString(metadata.Databases, []string{statistics.Key.Database})
+					metadata.Databases = util.CombineUnique(metadata.Databases, []string{statistics.Key.Database})
 
 					if statistics.Key.DistSQL {
 						metadata.DistSQLCount++
