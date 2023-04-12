@@ -1,0 +1,32 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+proto_library(
+    name = "usernamepb_proto",
+    srcs = ["user_identity_details.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "usernamepb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/usernamepb",
+    proto = ":usernamepb_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
+)
+
+go_library(
+    name = "usernamepb",
+    srcs = ["user_identity_details.go"],
+    embed = [":usernamepb_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/usernamepb",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/security/username"],
+)
+
+get_x_data(name = "get_x_data")

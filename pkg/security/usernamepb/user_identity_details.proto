@@ -1,0 +1,24 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.security.usernamepb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/security/usernamepb";
+
+import "gogoproto/gogo.proto";
+
+// UserIdentityDetails contains fields pertaining to a user's identity
+// that are tightly coupled and should not be modified independently.
+message UserIdentityDetails {
+  // UserName is the user's SQL username.
+  string user_name = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+  // UserID is the user's SQL user ID.
+  uint32 user_id = 2 [(gogoproto.customname) = "UserID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUserID", (gogoproto.nullable) = false];
+}
