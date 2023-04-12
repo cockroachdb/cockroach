@@ -372,10 +372,16 @@ func MakeSequenceKeyVal(
 func (p *planner) GetSequenceValue(
 	ctx context.Context, codec keys.SQLCodec, desc catalog.TableDescriptor,
 ) (int64, error) {
-	if desc.GetSequenceOpts() == nil {
+	if !desc.IsSequence() {
 		return 0, errors.New("descriptor is not a sequence")
 	}
-	keyValue, err := p.txn.Get(ctx, codec.SequenceKey(uint32(desc.GetID())))
+	return getSequenceValueFromDesc(ctx, p.txn, codec, desc)
+}
+
+func getSequenceValueFromDesc(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, desc catalog.TableDescriptor,
+) (int64, error) {
+	keyValue, err := txn.Get(ctx, codec.SequenceKey(uint32(desc.GetID())))
 	if err != nil {
 		return 0, err
 	}
