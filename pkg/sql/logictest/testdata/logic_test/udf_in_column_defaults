@@ -349,16 +349,23 @@ CREATE TABLE t1(
   b INT DEFAULT f1(),
   FAMILY fam_0 (a, b)
 );
+CREATE TABLE t2(
+  a INT PRIMARY KEY,
+  b INT DEFAULT f1(),
+  FAMILY fam_0 (a, b)
+);
 
-statement error cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
+statement error cannot drop function "f1" because other objects \(\[test.public.t1, test.public.t2\]\) still depend on it
 DROP FUNCTION f1;
 
 statement ok
 ALTER TABLE t1 ALTER COLUMN b SET DEFAULT NULL;
+ALTER TABLE t2 ALTER COLUMN b SET DEFAULT NULL;
 
 statement ok
 DROP FUNCTION f1;
 DROP TABLE t1;
+DROP TABLE t2;
 
 # Make sure that CREATE FUNCTION and CREATE TABLE works in one txn.
 statement ok
@@ -380,8 +387,8 @@ SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 query T
 SELECT get_col_fn_ids($tbl_id);
 ----
-(118,1,,)
-(118,2,"""[FUNCTION 100117]()""",[117])
+(119,1,,)
+(119,2,"""[FUNCTION 100118]()""",[118])
 
 query T
 SELECT get_fn_depended_on_by($fn_id);
@@ -391,7 +398,7 @@ SELECT get_fn_depended_on_by($fn_id);
         "columnIds": [
             2
         ],
-        "id": 118
+        "id": 119
     }
 ]
 
@@ -422,8 +429,8 @@ SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 query T
 SELECT get_col_fn_ids($tbl_id);
 ----
-(119,1,,)
-(119,2,"""[FUNCTION 100120]()""",[120])
+(120,1,,)
+(120,2,"""[FUNCTION 100121]()""",[121])
 
 query T
 SELECT get_fn_depended_on_by($fn_id);
@@ -433,7 +440,7 @@ SELECT get_fn_depended_on_by($fn_id);
         "columnIds": [
             2
         ],
-        "id": 119
+        "id": 120
     }
 ]
 

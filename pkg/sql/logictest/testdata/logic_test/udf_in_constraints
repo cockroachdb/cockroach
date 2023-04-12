@@ -209,6 +209,7 @@ SELECT get_fn_depended_on_by($fn_id)
 # Make sure that DROP TABLE remove references properly.
 statement ok
 DROP TABLE t1;
+DROP TABLE t2;
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -222,18 +223,25 @@ CREATE TABLE t1(
   b INT CHECK (f1(b) > 1),
   FAMILY fam_0 (a, b)
 );
+CREATE TABLE t2(
+  a INT PRIMARY KEY,
+  b INT CHECK (f1(b) > 1),
+  FAMILY fam_0 (a, b)
+);
 
-statement error cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
+statement error cannot drop function "f1" because other objects \(\[test.public.t1, test.public.t2\]\) still depend on it
 DROP FUNCTION f1;
 
 statement ok
 ALTER TABLE t1 DROP CONSTRAINT check_b;
+ALTER TABLE t2 DROP CONSTRAINT check_b;
 
 statement ok
 DROP FUNCTION f1;
 
 statement ok
 DROP TABLE t1;
+DROP TABLE t2;
 
 # Make sure that CREATE FUNCTION and CREATE TABLE works in one txn.
 statement ok
@@ -261,7 +269,7 @@ SELECT get_checks($tbl_id);
             2
         ],
         "constraintId": 2,
-        "expr": "[FUNCTION 100114](b) \u003e 1:::INT8",
+        "expr": "[FUNCTION 100115](b) \u003e 1:::INT8",
         "name": "check_b"
     }
 ]
@@ -274,7 +282,7 @@ SELECT get_fn_depended_on_by($fn_id);
         "constraintIds": [
             2
         ],
-        "id": 115
+        "id": 116
     }
 ]
 
@@ -313,7 +321,7 @@ SELECT get_checks($tbl_id);
             2
         ],
         "constraintId": 2,
-        "expr": "[FUNCTION 100117](b) \u003e 1:::INT8",
+        "expr": "[FUNCTION 100118](b) \u003e 1:::INT8",
         "name": "check_b"
     }
 ]
@@ -326,7 +334,7 @@ SELECT get_fn_depended_on_by($fn_id);
         "constraintIds": [
             2
         ],
-        "id": 116
+        "id": 117
     }
 ]
 
