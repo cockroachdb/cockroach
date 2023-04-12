@@ -1,12 +1,14 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package kvtenantccl
+package kvtenant
 
 import (
 	"context"
@@ -15,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -29,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestConnectorSettingOverrides tests Connector's role as a
+// TestConnectorSettingOverrides tests connector's role as a
 // settingswatcher.OverridesMonitor.
 func TestConnectorSettingOverrides(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -66,14 +67,14 @@ func TestConnectorSettingOverrides(t *testing.T) {
 	ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
 	require.NoError(t, err)
 
-	cfg := kvtenant.ConnectorConfig{
+	cfg := ConnectorConfig{
 		TenantID:        tenantID,
 		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
 	addrs := []string{ln.Addr().String()}
-	c := NewConnector(cfg, addrs)
+	c := newConnector(cfg, addrs)
 
 	// Start should block until the first TenantSettings response.
 	startedC := make(chan error)
@@ -168,7 +169,7 @@ func waitForSettings(t *testing.T, ch <-chan struct{}) {
 		t.Fatalf("waitForSettings timed out")
 	}
 }
-func expectSettings(t *testing.T, c *Connector, exp string) {
+func expectSettings(t *testing.T, c *connector, exp string) {
 	t.Helper()
 	vars := []string{"foo", "bar", "baz"}
 	values := make(map[string]string)
