@@ -225,6 +225,13 @@ func (o *channelOrchestrator) startControlledServer(
 	// useGracefulDrainDuringTenantShutdown defined whether a graceful
 	// drain is requested on the tenant server by orchestration.
 	useGracefulDrainDuringTenantShutdown := make(chan bool, 1)
+	markDrainMode := func(graceful bool) {
+		select {
+		case useGracefulDrainDuringTenantShutdown <- graceful:
+		default:
+			// Avoid blocking write.
+		}
+	}
 
 	// Ensure that if the surrounding server requests shutdown, we
 	// propagate it to the new server.
@@ -243,13 +250,13 @@ func (o *channelOrchestrator) startControlledServer(
 			// the RPC service in the surrounding server may already
 			// be unavailable.
 			log.Infof(ctx, "server terminating; telling tenant %q to terminate", tenantName)
-			useGracefulDrainDuringTenantShutdown <- false
+			markDrainMode(false)
 			ctlStopper.Stop(tenantCtx)
 
 		case <-stopRequestCh:
 			// Someone requested a graceful shutdown.
-			log.Infof(ctx, "received request for tenant %q to terminate", tenantName)
-			useGracefulDrainDuringTenantShutdown <- true
+			log.Infof(ctx, "received request for tenant %q to terminate gracefully", tenantName)
+			markDrainMode(true)
 			ctlStopper.Stop(tenantCtx)
 
 		case <-topCtx.Done():
@@ -258,7 +265,7 @@ func (o *channelOrchestrator) startControlledServer(
 			// the RPC service in the surrounding server may already
 			// be unavailable.
 			log.Infof(ctx, "startup context cancelled; telling tenant %q to terminate", tenantName)
-			useGracefulDrainDuringTenantShutdown <- false
+			markDrainMode(false)
 			ctlStopper.Stop(tenantCtx)
 		}
 	}); err != nil {
