@@ -299,9 +299,10 @@ type queryComparisonHelper struct {
 	statementsAndExplains []sqlAndOutput
 }
 
-// runQuery runs the given query and returns the output. As a side effect, it
-// also saves the query, the query plan, and the output of running the query so
-// they can be logged in case of failure.
+// runQuery runs the given query and returns the output. If the stmt doesn't
+// result in an error, as a side effect, it also saves the query, the query
+// plan, and the output of running the query so they can be logged in case of
+// failure.
 func (h *queryComparisonHelper) runQuery(stmt string) ([][]string, error) {
 	runQueryImpl := func(stmt string) ([][]string, error) {
 		rows, err := h.conn.Query(stmt)
@@ -323,11 +324,14 @@ func (h *queryComparisonHelper) runQuery(stmt string) ([][]string, error) {
 	}
 
 	// Now run the query and save the output.
-	h.statements = append(h.statements, stmt)
 	rows, err := runQueryImpl(stmt)
 	if err != nil {
 		return nil, err
 	}
+	// Only save the stmt on success - this makes it easier to reproduce the
+	// log. The caller still can include it into the statements later if
+	// necessary.
+	h.statements = append(h.statements, stmt)
 	h.statementsAndExplains = append(h.statementsAndExplains, sqlAndOutput{sql: stmt, output: rows})
 	return rows, nil
 }
