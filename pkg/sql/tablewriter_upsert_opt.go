@@ -105,7 +105,7 @@ func (tu *optTableUpserter) init(
 		return err
 	}
 
-	// rowsNeeded, set upon initialization, indicates pkg/sql/backfill.gowhether or not we want
+	// rowsNeeded, set upon initialization, indicates whether or not we want
 	// rows returned from the operation.
 	if tu.rowsNeeded {
 		tu.resultRow = make(tree.Datums, len(tu.returnCols))
