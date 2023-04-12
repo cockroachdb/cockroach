@@ -658,6 +658,7 @@ func TestRangeCount(t *testing.T) {
 		// sequences as well?
 		m[fmt.Sprintf("public.%s", catconstants.DescIDSequenceTableName)] = 1
 		m[fmt.Sprintf("public.%s", catconstants.RoleIDSequenceName)] = 1
+		m[fmt.Sprintf("public.%s", catconstants.TenantIDSequenceTableName)] = 1
 		return m
 	}
 
