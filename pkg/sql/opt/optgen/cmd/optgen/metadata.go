@@ -195,6 +195,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"SequenceID":           {fullName: "opt.SequenceID", passByVal: true},
 		"UniqueID":             {fullName: "opt.UniqueID", passByVal: true},
 		"WithID":               {fullName: "opt.WithID", passByVal: true},
+		"UDFDefinition":        {fullName: "memo.UDFDefinition", isPointer: true},
 		"Ordering":             {fullName: "opt.Ordering", passByVal: true},
 		"OrderingChoice":       {fullName: "props.OrderingChoice", passByVal: true},
 		"GroupingOrder":        {fullName: "memo.GroupingOrder", passByVal: true},
