@@ -33,6 +33,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/security/usernamepb:usernamepb_proto",
         "//pkg/sql/lex:lex_proto",
         "//pkg/util/duration:duration_proto",
         "//pkg/util/timeutil/pgdate:pgdate_proto",
@@ -49,6 +50,7 @@ go_proto_library(
     proto = ":sessiondatapb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/security/usernamepb",
         "//pkg/sql/lex",
         "//pkg/util/duration",
         "//pkg/util/timeutil/pgdate",

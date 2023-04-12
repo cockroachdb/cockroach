@@ -150,10 +150,10 @@ func (s *SessionData) GetDateStyle() pgdate.DateStyle {
 // If a user applies SET ROLE, the SessionUser remains the same whilst the
 // User() changes.
 func (s *SessionData) SessionUser() username.SQLUsername {
-	if s.SessionUserProto == "" {
+	if s.SessionUserDetails == nil {
 		return s.User()
 	}
-	return s.SessionUserProto.Decode()
+	return s.SessionUserDetails.UserName.Decode()
 }
 
 // LocalUnmigratableSessionData contains session parameters that cannot

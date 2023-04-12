@@ -1152,7 +1152,7 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/current/sql-set-role.html.
 	`role`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			if evalCtx.SessionData().SessionUserProto == "" {
+			if evalCtx.SessionData().SessionUserDetails == nil {
 				return username.NoneRole, nil
 			}
 			return evalCtx.SessionData().User().Normalized(), nil
