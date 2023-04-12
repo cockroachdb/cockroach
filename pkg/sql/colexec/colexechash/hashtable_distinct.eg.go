@@ -5190,17 +5190,23 @@ func (ht *HashTable) FindBuckets(
 			batchLength := batch.Length()
 			sel := batch.Selection()
 			// Early bounds checks.
+			hashBuffer := ht.ProbeScratch.HashBuffer
+			_ = hashBuffer[batchLength-1]
 			toCheckIDs := ht.ProbeScratch.ToCheckID
 			_ = toCheckIDs[batchLength-1]
+			toCheckSlice := ht.ProbeScratch.ToCheck
+			_ = toCheckSlice[batchLength-1]
 			var nToCheck uint64
-			for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-				toCheck := uint64(i)
+			for toCheck := uint64(0); toCheck < uint64(batchLength) && nToCheck < uint64(batchLength); toCheck++ {
+				//gcassert:bce
+				hash := hashBuffer[toCheck]
 				nextToCheckID := first[hash]
 				{
 					if nextToCheckID != 0 {
 						//gcassert:bce
 						toCheckIDs[toCheck] = nextToCheckID
-						ht.ProbeScratch.ToCheck[nToCheck] = toCheck
+						//gcassert:bce
+						toCheckSlice[nToCheck] = toCheck
 						nToCheck++
 					} else {
 						_ = true
@@ -5209,16 +5215,23 @@ func (ht *HashTable) FindBuckets(
 			}
 
 			for nToCheck > 0 {
-				nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
-				toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
+				numToCheck := duplicatesChecker(keyCols, nToCheck, sel)
+				if numToCheck == 0 {
+					break
+				}
+				toCheckSlice = ht.ProbeScratch.ToCheck[:numToCheck]
+				_ = toCheckSlice[numToCheck-1]
 				nToCheck = 0
-				for _, toCheck := range toCheckSlice {
+				for i := uint64(0); i < numToCheck && nToCheck < numToCheck; i++ {
+					//gcassert:bce
+					toCheck := toCheckSlice[i]
 					nextToCheckID := next[toCheckIDs[toCheck]]
 					{
 						if nextToCheckID != 0 {
 							//gcassert:bce
 							toCheckIDs[toCheck] = nextToCheckID
-							ht.ProbeScratch.ToCheck[nToCheck] = toCheck
+							//gcassert:bce
+							toCheckSlice[nToCheck] = toCheck
 							nToCheck++
 						} else {
 							_ = true
@@ -5232,40 +5245,58 @@ func (ht *HashTable) FindBuckets(
 			batchLength := batch.Length()
 			sel := batch.Selection()
 			// Early bounds checks.
+			hashBuffer := ht.ProbeScratch.HashBuffer
+			_ = hashBuffer[batchLength-1]
 			toCheckIDs := ht.ProbeScratch.ToCheckID
 			_ = toCheckIDs[batchLength-1]
+			toCheckSlice := ht.ProbeScratch.ToCheck
+			_ = toCheckSlice[batchLength-1]
+			headIDs := ht.ProbeScratch.HeadID
+			_ = headIDs[batchLength-1]
 			var nToCheck uint64
-			for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-				toCheck := uint64(i)
+			for toCheck := uint64(0); toCheck < uint64(batchLength) && nToCheck < uint64(batchLength); toCheck++ {
+				//gcassert:bce
+				hash := hashBuffer[toCheck]
 				nextToCheckID := first[hash]
 				{
 					if nextToCheckID != 0 {
 						//gcassert:bce
 						toCheckIDs[toCheck] = nextToCheckID
-						ht.ProbeScratch.ToCheck[nToCheck] = toCheck
+						//gcassert:bce
+						toCheckSlice[nToCheck] = toCheck
 						nToCheck++
 					} else {
 						_ = true
-						ht.ProbeScratch.HeadID[toCheck] = toCheck + 1
+						_ = true
+						//gcassert:gce
+						headIDs[toCheck] = toCheck + 1
 					}
 				}
 			}
 
 			for nToCheck > 0 {
-				nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
-				toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
+				numToCheck := duplicatesChecker(keyCols, nToCheck, sel)
+				if numToCheck == 0 {
+					break
+				}
+				toCheckSlice = ht.ProbeScratch.ToCheck[:numToCheck]
+				_ = toCheckSlice[numToCheck-1]
 				nToCheck = 0
-				for _, toCheck := range toCheckSlice {
+				for i := uint64(0); i < numToCheck && nToCheck < numToCheck; i++ {
+					//gcassert:bce
+					toCheck := toCheckSlice[i]
 					nextToCheckID := next[toCheckIDs[toCheck]]
 					{
 						if nextToCheckID != 0 {
 							//gcassert:bce
 							toCheckIDs[toCheck] = nextToCheckID
-							ht.ProbeScratch.ToCheck[nToCheck] = toCheck
+							//gcassert:bce
+							toCheckSlice[nToCheck] = toCheck
 							nToCheck++
 						} else {
 							_ = true
-							ht.ProbeScratch.HeadID[toCheck] = toCheck + 1
+							_ = true
+							headIDs[toCheck] = toCheck + 1
 						}
 					}
 				}
@@ -5287,7 +5318,13 @@ const _ = "inlined_findBuckets_true"
 const _ = "inlined_findBuckets_false"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_true"
+const _ = "inlined_handleNextToCheckID_true_true"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_false"
+const _ = "inlined_handleNextToCheckID_true_false"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_true"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_false"

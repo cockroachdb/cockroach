@@ -6075,7 +6075,13 @@ const _ = "inlined_findBuckets_true"
 const _ = "inlined_findBuckets_false"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_true"
+const _ = "inlined_handleNextToCheckID_true_true"
 
 // execgen:inline
-const _ = "inlined_handleNextToCheckID_false"
+const _ = "inlined_handleNextToCheckID_true_false"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_true"
+
+// execgen:inline
+const _ = "inlined_handleNextToCheckID_false_false"

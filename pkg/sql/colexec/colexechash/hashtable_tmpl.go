@@ -729,13 +729,22 @@ func findBuckets(
 	batchLength := batch.Length()
 	sel := batch.Selection()
 	// Early bounds checks.
+	hashBuffer := ht.ProbeScratch.HashBuffer
+	_ = hashBuffer[batchLength-1]
 	toCheckIDs := ht.ProbeScratch.ToCheckID
 	_ = toCheckIDs[batchLength-1]
+	toCheckSlice := ht.ProbeScratch.ToCheck
+	_ = toCheckSlice[batchLength-1]
+	if !zeroHeadIDForDistinctTuple {
+		headIDs := ht.ProbeScratch.HeadID
+		_ = headIDs[batchLength-1]
+	}
 	var nToCheck uint64
-	for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-		toCheck := uint64(i)
+	for toCheck := uint64(0); toCheck < uint64(batchLength) && nToCheck < uint64(batchLength); toCheck++ {
+		//gcassert:bce
+		hash := hashBuffer[toCheck]
 		nextToCheckID := first[hash]
-		handleNextToCheckID(ht, toCheck, nextToCheckID, toCheckIDs, zeroHeadIDForDistinctTuple)
+		handleNextToCheckID(ht, toCheck, toCheckSlice, nextToCheckID, toCheckIDs, zeroHeadIDForDistinctTuple, true)
 	}
 
 	for nToCheck > 0 {
@@ -743,24 +752,32 @@ func findBuckets(
 		//     Continue searching for the build table matching keys while the
 		//     ToCheck array is non-empty.
 		// */}}
-		nToCheck = duplicatesChecker(keyCols, nToCheck, sel)
-		toCheckSlice := ht.ProbeScratch.ToCheck[:nToCheck]
+		numToCheck := duplicatesChecker(keyCols, nToCheck, sel)
+		if numToCheck == 0 {
+			break
+		}
+		toCheckSlice = ht.ProbeScratch.ToCheck[:numToCheck]
+		_ = toCheckSlice[numToCheck-1]
 		nToCheck = 0
-		for _, toCheck := range toCheckSlice {
+		for i := uint64(0); i < numToCheck && nToCheck < numToCheck; i++ {
+			//gcassert:bce
+			toCheck := toCheckSlice[i]
 			nextToCheckID := next[toCheckIDs[toCheck]]
-			handleNextToCheckID(ht, toCheck, nextToCheckID, toCheckIDs, zeroHeadIDForDistinctTuple)
+			handleNextToCheckID(ht, toCheck, toCheckSlice, nextToCheckID, toCheckIDs, zeroHeadIDForDistinctTuple, false)
 		}
 	}
 }
 
 // execgen:inline
-// execgen:template<zeroHeadIDForDistinctTuple>
+// execgen:template<zeroHeadIDForDistinctTuple,headIDsBCE>
 func handleNextToCheckID(
 	ht *HashTable,
 	toCheck uint64,
+	toCheckSlice []uint64,
 	nextToCheckID uint64,
 	toCheckIDs []uint64,
 	zeroHeadIDForDistinctTuple bool,
+	headIDsBCE bool,
 ) {
 	if nextToCheckID != 0 {
 		// {{/*
@@ -772,7 +789,8 @@ func handleNextToCheckID(
 		// */}}
 		//gcassert:bce
 		toCheckIDs[toCheck] = nextToCheckID
-		ht.ProbeScratch.ToCheck[nToCheck] = toCheck
+		//gcassert:bce
+		toCheckSlice[nToCheck] = toCheck
 		nToCheck++
 	} else {
 		// {{/*
@@ -788,7 +806,10 @@ func handleNextToCheckID(
 			//     Set the HeadID of this tuple to point to itself since it is an
 			//     equality chain consisting only of a single element.
 			// */}}
-			ht.ProbeScratch.HeadID[toCheck] = toCheck + 1
+			if headIDsBCE {
+				//gcassert:gce
+			}
+			headIDs[toCheck] = toCheck + 1
 		}
 	}
 }
