@@ -43,7 +43,7 @@ describe("<LineGraph>", function() {
       subtitle: "Test Subtitle",
       legend: false,
       xAxis: true,
-      data: { results: [], toJSON: sinon.spy },
+      data: { results: [] },
       timeInfo: {
         start: new Long(12345),
         end: new Long(2346),
@@ -109,7 +109,7 @@ describe("<LineGraph>", function() {
     // test setup
     const wrapper = linegraph({
       ...mockProps,
-      data: { results: [{}], toJSON: sinon.spy },
+      data: { results: [{}] },
     });
     const instance = (wrapper.instance() as unknown) as LineGraph;
     const mockFn = sinon.spy();

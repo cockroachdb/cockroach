@@ -326,7 +326,7 @@ const getJobsTableProps = (jobs: Array<Job>): JobsTableProps => ({
     ),
     setAt: moment("Mon Oct 18 2021 14:01:50 GMT-0400 (Eastern Daylight Time)"),
     lastError: null,
-    data: JobsResponse.create({
+    data: new JobsResponse({
       jobs: jobs,
     }),
   },

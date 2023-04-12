@@ -17,14 +17,11 @@ import "src/enzymeInit";
 
 describe("<JobTable>", () => {
   it("should reset page to 1 after job list prop changes", () => {
-    const toJSON = () => {
-      return [""];
-    };
     const jobTableProps: JobTableProps = {
       sort: { columnTitle: null, ascending: true },
       setSort: () => {},
       jobs: {
-        data: { jobs: [{}, {}, {}, {}], toJSON },
+        data: { jobs: [{}, {}, {}, {}] },
         inFlight: false,
         valid: true,
       },
@@ -44,7 +41,7 @@ describe("<JobTable>", () => {
     );
     assert.equal(jobTable.state().pagination.current, 2);
     jobTable.setProps({
-      jobs: { data: { jobs: [{}, {}], toJSON }, inFlight: false, valid: true },
+      jobs: { data: { jobs: [{}, {}] }, inFlight: false, valid: true },
     });
     assert.equal(jobTable.state().pagination.current, 1);
   });
