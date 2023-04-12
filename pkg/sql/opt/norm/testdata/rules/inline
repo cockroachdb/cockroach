@@ -1343,3 +1343,23 @@ project
  ├── scan a
  └── projections
       └── multi_stmt() [as=multi_stmt:10, immutable, udf]
+
+exec-ddl
+CREATE FUNCTION empty() RETURNS BOOL STABLE LANGUAGE SQL AS ''
+----
+
+# Empty UDFs are not inlined.
+norm expect-not=InlineUDF
+SELECT empty() FROM (VALUES (10), (20)) v(i)
+----
+project
+ ├── columns: empty:2
+ ├── cardinality: [2 - 2]
+ ├── stable
+ ├── fd: ()-->(2)
+ ├── values
+ │    ├── cardinality: [2 - 2]
+ │    ├── ()
+ │    └── ()
+ └── projections
+      └── empty() [as=empty:2, stable, udf]
