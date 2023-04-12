@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/math"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -227,16 +228,9 @@ var senderConcurrencyLimit = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"kv.dist_sender.concurrency_limit",
 	"maximum number of asynchronous send requests",
-	max(defaultSenderConcurrency, int64(64*runtime.GOMAXPROCS(0))),
+	math.Max(defaultSenderConcurrency, int64(64*runtime.GOMAXPROCS(0))),
 	settings.NonNegativeInt,
 )
-
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {

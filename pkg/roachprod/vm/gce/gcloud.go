@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/util/math"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -835,7 +836,7 @@ func (p *Provider) Create(
 
 	nodeZones := vm.ZonePlacement(len(zones), len(names))
 	// N.B. when len(zones) > len(names), we don't need to map unused zones
-	zoneToHostNames := make(map[string][]string, min(len(zones), len(names)))
+	zoneToHostNames := make(map[string][]string, math.Min(len(zones), len(names)))
 	for i, name := range names {
 		zone := zones[nodeZones[i]]
 		zoneToHostNames[zone] = append(zoneToHostNames[zone], name)
@@ -915,13 +916,6 @@ func propagateDiskLabels(
 		}
 	}
 	return g.Wait()
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // Delete TODO(peter): document

@@ -15,6 +15,7 @@ package split
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"time"
 
@@ -424,7 +425,7 @@ type maxStatTracker struct {
 func (t *maxStatTracker) record(now time.Time, minRetention time.Duration, qps float64) {
 	t.maybeReset(now, minRetention)
 	t.maybeRotate(now)
-	t.windows[t.curIdx] = max(t.windows[t.curIdx], qps)
+	t.windows[t.curIdx] = math.Max(t.windows[t.curIdx], qps)
 }
 
 // reset clears the tracker. maxStatTracker will begin returning false until a full
@@ -487,7 +488,7 @@ func (t *maxStatTracker) max(now time.Time, minRetention time.Duration) (float64
 
 	qps := 0.0
 	for _, v := range t.windows {
-		qps = max(qps, v)
+		qps = math.Max(qps, v)
 	}
 	return qps, true
 }
@@ -495,11 +496,4 @@ func (t *maxStatTracker) max(now time.Time, minRetention time.Duration) (float64
 func (t *maxStatTracker) windowWidth() time.Duration {
 	// NB: -1 because during a rotation, only len(t.windows)-1 windows survive.
 	return t.minRetention / time.Duration(len(t.windows)-1)
-}
-
-func max(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/alessio/shellescape"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
+	"github.com/cockroachdb/cockroach/pkg/util/math"
 	"github.com/klauspost/pgzip"
 	"github.com/spf13/cobra"
 )
@@ -161,7 +162,7 @@ func (d *dev) testBinaries(cmd *cobra.Command, commandLine []string) error {
 	}
 	crossTargets := testTargets
 	for i := 0; i < len(crossTargets); i += batchSize {
-		targetBatch := crossTargets[i:min(i+batchSize, len(crossTargets))]
+		targetBatch := crossTargets[i:math.Min(i+batchSize, len(crossTargets))]
 		log.Printf("Building batch %v\n", targetBatch)
 
 		// Build packages.
@@ -315,13 +316,6 @@ func compressFile(filePath string) (err error) {
 	}
 	err = writer.Close()
 	return
-}
-
-func min(a, b int) int {
-	if a <= b {
-		return a
-	}
-	return b
 }
 
 func combineErrors(err error, otherErr error) error {

@@ -194,6 +194,7 @@ go_library(
         "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
+        "//pkg/util/math",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
         "//pkg/util/mon",

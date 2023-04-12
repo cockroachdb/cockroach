@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	maths "github.com/cockroachdb/cockroach/pkg/util/math"
 	"github.com/cockroachdb/redact"
 )
 
@@ -343,7 +344,7 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 	// occasional poor estimate of the per-request bytes. So we decide to give
 	// out at least 1 token. A single elastic request should not be too big for
 	// this to matter.
-	elasticTokens = max(1, elasticTokens)
+	elasticTokens = maths.Max(1, elasticTokens)
 	d.state = diskBandwidthLimiterState{
 		smoothedIncomingBytes:   smoothedIncomingBytes,
 		smoothedElasticFraction: smoothedElasticFraction,

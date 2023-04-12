@@ -10,7 +10,10 @@
 
 package admission
 
-import "github.com/cockroachdb/pebble"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util/math"
+	"github.com/cockroachdb/pebble"
+)
 
 // The logic in this file deals with token estimation for a store write in two
 // situations: (a) at admission time, (b) when the admitted work is done. At
@@ -207,7 +210,7 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		const alpha = 0.5
 		e.atAdmissionWorkTokens = int64(alpha*float64(intAtAdmissionWorkTokens) +
 			(1-alpha)*float64(e.atAdmissionWorkTokens))
-		e.atAdmissionWorkTokens = max(1, e.atAdmissionWorkTokens)
+		e.atAdmissionWorkTokens = math.Max(1, e.atAdmissionWorkTokens)
 	}
 	e.aux = perWorkTokensAux{
 		intWorkCount:              intWorkCount,
@@ -246,11 +249,4 @@ func (e *storePerWorkTokenEstimator) getModelsAtAdmittedDone() (
 	return e.atDoneL0WriteTokensLinearModel.smoothedLinearModel,
 		e.atDoneL0IngestTokensLinearModel.smoothedLinearModel,
 		e.atDoneIngestTokensLinearModel.smoothedLinearModel
-}
-
-func max(i, j int64) int64 {
-	if i < j {
-		return j
-	}
-	return i
 }

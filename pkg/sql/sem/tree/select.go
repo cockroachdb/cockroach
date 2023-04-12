@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
+	"github.com/cockroachdb/cockroach/pkg/util/math"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -1154,7 +1155,7 @@ func (s LockingStrength) Format(ctx *FmtCtx) {
 
 // Max returns the maximum of the two locking strengths.
 func (s LockingStrength) Max(s2 LockingStrength) LockingStrength {
-	return LockingStrength(max(byte(s), byte(s2)))
+	return math.Max(s, s2)
 }
 
 // LockingWaitPolicy represents the possible policies for handling conflicting
@@ -1196,12 +1197,5 @@ func (p LockingWaitPolicy) Format(ctx *FmtCtx) {
 
 // Max returns the maximum of the two locking wait policies.
 func (p LockingWaitPolicy) Max(p2 LockingWaitPolicy) LockingWaitPolicy {
-	return LockingWaitPolicy(max(byte(p), byte(p2)))
-}
-
-func max(a, b byte) byte {
-	if a > b {
-		return a
-	}
-	return b
+	return math.Max(p, p2)
 }

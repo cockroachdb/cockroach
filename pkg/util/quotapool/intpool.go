@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	maths "github.com/cockroachdb/cockroach/pkg/util/math"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -72,7 +73,7 @@ func (ia *IntAlloc) Merge(other *IntAlloc) {
 	if ia.p != other.p {
 		panic("cannot merge IntAllocs from two different pools")
 	}
-	ia.alloc = min(int64(ia.p.Capacity()), ia.alloc+other.alloc)
+	ia.alloc = maths.Min(int64(ia.p.Capacity()), ia.alloc+other.alloc)
 	ia.p.putIntAlloc(other)
 }
 
@@ -295,7 +296,7 @@ func (p *IntPool) Len() int {
 func (p *IntPool) ApproximateQuota() (q uint64) {
 	p.qp.Update(func(r Resource) (shouldNotify bool) {
 		if ia, ok := r.(*intAlloc); ok {
-			q = uint64(max(0, ia.alloc))
+			q = uint64(maths.Max(0, ia.alloc))
 		}
 		return false
 	})
@@ -454,7 +455,7 @@ func (r *intRequest) Acquire(
 	ctx context.Context, v Resource,
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	ia := v.(*intAlloc)
-	want := min(int64(r.want), int64(ia.p.Capacity()))
+	want := maths.Min(int64(r.want), int64(ia.p.Capacity()))
 	if ia.alloc < want {
 		return false, 0
 	}
@@ -490,7 +491,7 @@ func (r *intFuncRequest) Acquire(
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	ia := v.(*intAlloc)
 	pi := PoolInfo{
-		Available: uint64(max(0, ia.alloc)),
+		Available: uint64(maths.Max(0, ia.alloc)),
 		Capacity:  ia.p.Capacity(),
 	}
 	took, err := r.f(ctx, pi)
@@ -511,20 +512,6 @@ func (r *intFuncRequest) Acquire(
 	r.took = took
 	ia.alloc -= int64(took)
 	return true, 0
-}
-
-func min(a, b int64) (v int64) {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int64) (v int64) {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func (r *intFuncRequest) ShouldWait() bool { return true }

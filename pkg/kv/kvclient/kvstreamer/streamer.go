@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	maths "github.com/cockroachdb/cockroach/pkg/util/math"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -324,16 +325,9 @@ var streamerConcurrencyLimit = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"kv.streamer.concurrency_limit",
 	"maximum number of asynchronous requests by a single streamer",
-	max(128, int64(8*runtime.GOMAXPROCS(0))),
+	maths.Max(128, int64(8*runtime.GOMAXPROCS(0))),
 	settings.PositiveInt,
 )
-
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 // NewStreamer creates a new Streamer.
 //

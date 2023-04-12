@@ -28,6 +28,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
+        "//pkg/util/math",
         "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/stop",

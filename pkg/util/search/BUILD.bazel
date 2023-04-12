@@ -6,7 +6,10 @@ go_library(
     srcs = ["search.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/search",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "//pkg/util/math",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 go_test(

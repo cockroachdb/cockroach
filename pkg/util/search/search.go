@@ -10,7 +10,10 @@
 
 package search
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util/math"
+	"github.com/cockroachdb/errors"
+)
 
 // A Predicate is a funcation that returns whether a given search value "passes"
 // or not. It assumes that that within the search domain of [min, max) provided
@@ -208,25 +211,11 @@ func (ls *lineSearcher) step(pass bool) (found bool) {
 	// Don't exceed bounds.
 	minStep := ls.ss.min - ls.cur + 1
 	maxStep := ls.ss.max - ls.cur - 1
-	ls.stepSize = max(min(ls.stepSize, maxStep), minStep)
+	ls.stepSize = math.Max(math.Min(ls.stepSize, maxStep), minStep)
 	ls.cur = ls.cur + ls.stepSize
 	return false
 }
 
 func mid(a, b int) int {
 	return (a + b) / 2
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

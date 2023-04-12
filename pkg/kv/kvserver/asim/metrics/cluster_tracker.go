@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/math"
 )
 
 // ClusterMetricsTracker gathers metrics and prints those to stdout.
@@ -58,13 +59,6 @@ func (m *ClusterMetricsTracker) write(record []string) error {
 	return nil
 }
 
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // Listen implements the StoreMetricsListener interface.
 func (m *ClusterMetricsTracker) Listen(ctx context.Context, sms []StoreMetrics) {
 	var (
@@ -93,10 +87,10 @@ func (m *ClusterMetricsTracker) Listen(ctx context.Context, sms []StoreMetrics) 
 		totalWriteBytes += u.WriteBytes
 		totalReadKeys += u.ReadKeys
 		totalReadBytes += u.ReadBytes
-		maxWriteKeys = max(maxWriteKeys, u.WriteKeys)
-		maxWriteBytes = max(maxWriteBytes, u.WriteBytes)
-		maxReadKeys = max(maxReadKeys, u.ReadKeys)
-		maxReadBytes = max(maxReadBytes, u.ReadBytes)
+		maxWriteKeys = math.Max(maxWriteKeys, u.WriteKeys)
+		maxWriteBytes = math.Max(maxWriteBytes, u.WriteBytes)
+		maxReadKeys = math.Max(maxReadKeys, u.ReadKeys)
+		maxReadBytes = math.Max(maxReadBytes, u.ReadBytes)
 	}
 
 	record := make([]string, 0, 10)

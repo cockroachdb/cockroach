@@ -10,6 +10,8 @@
 
 package admission
 
+import "github.com/cockroachdb/cockroach/pkg/util/math"
+
 // tokensLinearModel represents a model y = multiplier.x + constant.
 type tokensLinearModel struct {
 	multiplier float64
@@ -102,7 +104,7 @@ func (f *tokensLinearModelFitter) updateModelUsingIntervalStats(
 		// model had a 0 value for the constant and the exponential smoothing
 		// alpha was 0.5, i.e., halve the constant.
 		f.intLinearModel = tokensLinearModel{}
-		f.smoothedLinearModel.constant = max(1, f.smoothedLinearModel.constant/2)
+		f.smoothedLinearModel.constant = math.Max(1, f.smoothedLinearModel.constant/2)
 		return
 	}
 	if actualBytes < 0 {
@@ -114,7 +116,7 @@ func (f *tokensLinearModelFitter) updateModelUsingIntervalStats(
 			// Anomaly. Assume that we will see smoothedPerWorkAccountedBytes in the
 			// future. This prevents us from blowing up the constant in the model due
 			// to this anomaly.
-			accountedBytes = workCount * max(1, f.smoothedPerWorkAccountedBytes)
+			accountedBytes = workCount * math.Max(1, f.smoothedPerWorkAccountedBytes)
 		} else {
 			// actualBytes is also 0.
 			accountedBytes = 1
@@ -130,7 +132,7 @@ func (f *tokensLinearModelFitter) updateModelUsingIntervalStats(
 	// to be fitted using the multiplier. So workCount tokens go into that.
 	constant := int64(1)
 	// Then compute the multiplier.
-	multiplier := float64(max(0, actualBytes-workCount*constant)) / float64(accountedBytes)
+	multiplier := float64(math.Max(0, actualBytes-workCount*constant)) / float64(accountedBytes)
 	// The multiplier may be too high or too low, so make it conform to
 	// [min,max].
 	if multiplier > f.multiplierMax {

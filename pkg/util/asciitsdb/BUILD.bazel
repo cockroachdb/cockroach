@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/log",
+        "//pkg/util/math",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "@com_github_guptarohit_asciigraph//:asciigraph",

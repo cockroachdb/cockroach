@@ -139,6 +139,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logutil",
+        "//pkg/util/math",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/protoutil",

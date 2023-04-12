@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	maths "github.com/cockroachdb/cockroach/pkg/util/math"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/guptarohit/asciigraph"
@@ -153,7 +154,7 @@ func (t *TSDB) Plot(metrics []string, options ...Option) string {
 		if c.divisor != 0 {
 			points = divide(points, c.divisor)
 		}
-		c.limit = min(c.limit, int64(len(points))-c.offset)
+		c.limit = maths.Min(c.limit, int64(len(points))-c.offset)
 		points = points[c.offset : c.offset+c.limit]
 		plots = append(plots, points)
 	}
@@ -301,11 +302,4 @@ func divide(input []float64, divisor float64) []float64 {
 type quantile struct {
 	suffix   string
 	quantile float64
-}
-
-func min(i, j int64) int64 {
-	if i < j {
-		return i
-	}
-	return j
 }

@@ -13,6 +13,7 @@ package split
 import (
 	"bytes"
 	"context"
+	"math"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -297,7 +298,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
 				left:      25 + deviationLeft,
 				right:     15 - deviationRight,
-				contained: int(max(float64(splitKeyMinCounter-40-deviationLeft+deviationRight), float64(40+deviationLeft-deviationRight))),
+				contained: int(math.Max(float64(splitKeyMinCounter-40-deviationLeft+deviationRight), float64(40+deviationLeft-deviationRight))),
 			}
 		} else if i < 13 {
 			// Imbalance counters.
@@ -307,7 +308,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
 				left:      50 + deviationLeft,
 				right:     30 - deviationRight,
-				contained: int(max(float64(splitKeyMinCounter-80-deviationLeft+deviationRight), 0)),
+				contained: int(math.Max(float64(splitKeyMinCounter-80-deviationLeft+deviationRight), 0)),
 			}
 		} else {
 			// Too many contained counters.

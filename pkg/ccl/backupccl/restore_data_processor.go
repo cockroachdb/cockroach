@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/math"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -83,13 +84,6 @@ const restoreDataProcName = "restoreDataProcessor"
 
 const maxConcurrentRestoreWorkers = 32
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
 	"restore-worker-concurrency",
 	func() int {
@@ -100,7 +94,7 @@ var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
 		if restoreWorkerCores < 1 {
 			restoreWorkerCores = 1
 		}
-		return min(4, restoreWorkerCores)
+		return math.Min(4, restoreWorkerCores)
 	}(), /* defaultValue */
 	1, /* metamorphic min */
 	8, /* metamorphic max */

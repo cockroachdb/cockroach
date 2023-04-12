@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	maths "github.com/cockroachdb/cockroach/pkg/util/math"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -122,7 +123,7 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	// contention in the Raft scheduler, so we cap the concurrency level at 96.
 	//
 	// As of November 2020, this default value could be re-tuned.
-	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 96))
+	"COCKROACH_SCHEDULER_CONCURRENCY", maths.Min(8*runtime.GOMAXPROCS(0), 96))
 
 // storeSchedulerShardSize specifies the maximum number of scheduler worker
 // goroutines per mutex shard. By default, we spin up 8 workers per CPU core,
@@ -3691,11 +3692,4 @@ func (s *storeForTruncatorImpl) getEngine() storage.Engine {
 
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

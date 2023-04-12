@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/math"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/errors"
 )
@@ -147,7 +148,7 @@ func (w *slidingWindowFunc) Compute(
 
 	// We need to add all values that just entered the frame and have not been
 	// added yet.
-	for idx := max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
+	for idx := math.Max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
 		if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
 			return nil, err
 		} else if skipped {
@@ -176,13 +177,6 @@ func (w *slidingWindowFunc) Compute(
 	// The datum with "highest priority" within the frame is at the very front
 	// of the deque.
 	return w.sw.values.GetFirst().value, nil
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 // Reset implements tree.WindowFunc interface.
@@ -306,7 +300,7 @@ func (w *slidingWindowSumFunc) Compute(
 
 	// We need to sum all values that just entered the frame and have not been
 	// added yet.
-	for idx := max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
+	for idx := math.Max(w.prevEnd, frameStartIdx); idx < frameEndIdx; idx++ {
 		if skipped, err := wfr.IsRowSkipped(ctx, idx); err != nil {
 			return nil, err
 		} else if skipped {
