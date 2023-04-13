@@ -35,6 +35,14 @@ const (
 // information for users or app developers.
 const EnforceHomeRegionFurtherInfo = "For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region"
 
+// NewSchemaChangeToLockedTableErr creates an error signaling schema
+// change statement is attempted on a table with locked schema.
+func NewSchemaChangeToLockedTableErr(tableName string) error {
+	return errors.WithHintf(pgerror.Newf(pgcode.OperatorIntervention,
+		`schema changes are disallowed on table %q because it is locked`, tableName),
+		"To unlock the table, try ALTER TABLE %v SET (schema_locked = false);", tableName)
+}
+
 // NewTransactionAbortedError creates an error for trying to run a command in
 // the context of transaction that's in the aborted state. Any statement other
 // than ROLLBACK TO SAVEPOINT will return this error.
