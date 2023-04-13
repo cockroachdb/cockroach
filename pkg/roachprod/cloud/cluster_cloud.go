@@ -132,6 +132,15 @@ func (c *Cluster) LifetimeRemaining() time.Duration {
 	return time.Until(c.GCAt())
 }
 
+// IsLive is true if last known lifetime is still greater than one minute.
+// One minute is arbitrary, we just want to give roachprod some time to run
+// actual command before cluster disappears.
+// If lifetime was not parsed, then we don't know so pretend it is live to
+// avoid making it unusable.
+func (c *Cluster) IsLive() bool {
+	return c.Lifetime == 0 || c.LifetimeRemaining() > time.Minute
+}
+
 func (c *Cluster) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s: %d", c.Name, len(c.VMs))
