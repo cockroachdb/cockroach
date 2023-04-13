@@ -165,6 +165,12 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 			// with the type hints that were serialized.
 			placeholderTypes = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
 			for i, t := range prepStmt.PlaceholderTypeHints {
+				// Postgres allows more parameter type hints than parameters. Ignore
+				// these if present. For example:
+				// PREPARE p (int) AS SELECT 1;
+				if i == stmt.NumPlaceholders {
+					break
+				}
 				// If the OID is user defined or unknown, then skip it and let the
 				// statementPreparer resolve the type.
 				if t == 0 || t == oid.T_unknown || types.IsOIDUserDefinedType(t) {
