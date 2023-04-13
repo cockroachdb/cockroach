@@ -34,6 +34,19 @@ type InternalExecutorOverride struct {
 	// used as long as that value has a QoSLevel defined
 	// (see QoSLevel.ValidateInternal).
 	QualityOfService *sessiondatapb.QoSLevel
+	// InjectRetryErrorsEnabled, if true, injects a transaction retry error
+	// _after_ the statement has been processed by the execution engine and
+	// _before_ the control flow is returned to the connExecutor state machine.
+	//
+	// The error will be injected (roughly speaking) three times (determined by
+	// the numTxnRetryErrors constant in conn_executor_exec.go).
+	//
+	// For testing only.
+	//
+	// NB: this override applies only to the "top" internal executor, i.e. it
+	// does **not** propagate further to "nested" executors that are spawned up
+	// by the "top" executor.
+	InjectRetryErrorsEnabled bool
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
