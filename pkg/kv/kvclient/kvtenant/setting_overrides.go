@@ -1,12 +1,14 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package kvtenantccl
+package kvtenant
 
 import (
 	"context"
@@ -22,7 +24,7 @@ import (
 // runTenantSettingsSubscription listens for tenant setting override changes.
 // It closes the given channel once the initial set of overrides were obtained.
 // Exits when the context is done.
-func (c *Connector) runTenantSettingsSubscription(ctx context.Context, startupCh chan struct{}) {
+func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh chan struct{}) {
 	for ctx.Err() == nil {
 		client, err := c.getClient(ctx)
 		if err != nil {
@@ -70,7 +72,7 @@ func (c *Connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 }
 
 // processSettingsEvent updates the setting overrides based on the event.
-func (c *Connector) processSettingsEvent(
+func (c *connector) processSettingsEvent(
 	e *kvpb.TenantSettingsEvent, firstEventInStream bool,
 ) error {
 	if firstEventInStream && e.Incremental {
@@ -118,7 +120,7 @@ func (c *Connector) processSettingsEvent(
 
 // RegisterOverridesChannel is part of the settingswatcher.OverridesMonitor
 // interface.
-func (c *Connector) RegisterOverridesChannel() <-chan struct{} {
+func (c *connector) RegisterOverridesChannel() <-chan struct{} {
 	c.settingsMu.Lock()
 	defer c.settingsMu.Unlock()
 	if c.settingsMu.notifyCh != nil {
@@ -132,7 +134,7 @@ func (c *Connector) RegisterOverridesChannel() <-chan struct{} {
 }
 
 // Overrides is part of the settingswatcher.OverridesMonitor interface.
-func (c *Connector) Overrides() map[string]settings.EncodedValue {
+func (c *connector) Overrides() map[string]settings.EncodedValue {
 	// We could be more efficient here, but we expect this function to be called
 	// only when there are changes (which should be rare).
 	res := make(map[string]settings.EncodedValue)
