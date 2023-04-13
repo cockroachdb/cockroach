@@ -76,7 +76,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 			v := p.newContainerValuesNode(showHistogramColumns, 0)
 			for _, b := range histogram.Buckets {
 				ed, _, err := rowenc.EncDatumFromBuffer(
-					histogram.ColumnType, catenumpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+					catenumpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {
 					v.Close(ctx)
