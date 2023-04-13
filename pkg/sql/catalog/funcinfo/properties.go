@@ -110,6 +110,8 @@ func FunctionLangToProto(v tree.FunctionLanguage) (catpb.Function_Language, erro
 		return catpb.Function_SQL, nil
 	case tree.FunctionLangPlPgSQL:
 		return -1, unimplemented.NewWithIssue(91569, "PL/pgSQL is not yet supported")
+	case tree.FunctionLangC:
+		return -1, unimplemented.NewWithIssue(91569, "C is not yet supported")
 	}
 
 	return -1, pgerror.Newf(pgcode.UndefinedObject, "language %q does not exist", v)
