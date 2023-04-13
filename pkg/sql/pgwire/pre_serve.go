@@ -80,8 +80,8 @@ var (
 // tenant-independent, and thus cannot rely on tenant-specific connection
 // or state.
 type PreServeConnHandler struct {
-	errWriter                errWriter
 	cfg                      *base.Config
+	st                       *cluster.Settings
 	tenantIndependentMetrics tenantIndependentMetrics
 
 	getTLSConfig func() (*tls.Config, error)
@@ -137,11 +137,8 @@ func NewPreServeConnHandler(
 	ctx := ambientCtx.AnnotateCtx(context.Background())
 	metrics := makeTenantIndependentMetrics(histogramWindow)
 	s := PreServeConnHandler{
-		errWriter: errWriter{
-			sv:         &st.SV,
-			msgBuilder: newWriteBuffer(metrics.PreServeBytesOutCount),
-		},
 		cfg:                      cfg,
+		st:                       st,
 		acceptTenantName:         acceptTenantName,
 		tenantIndependentMetrics: metrics,
 		getTLSConfig:             getTLSConfig,
@@ -219,19 +216,25 @@ func (s *PreServeConnHandler) SendRoutingError(
 			"service unavailable for target tenant (%v)", tenantName),
 		`Double check your "-ccluster=" connection option or your "cluster:" database name prefix.`)
 
-	_ = s.sendErr(ctx, conn, err)
+	_ = s.sendErr(ctx, s.st, conn, err)
 	_ = conn.Close()
 }
 
 // sendErr sends errors to the client during the connection startup
 // sequence. Later error sends during/after authentication are handled
 // in conn.go.
-func (s *PreServeConnHandler) sendErr(ctx context.Context, conn net.Conn, err error) error {
+func (s *PreServeConnHandler) sendErr(
+	ctx context.Context, st *cluster.Settings, conn net.Conn, err error,
+) error {
+	w := errWriter{
+		sv:         &st.SV,
+		msgBuilder: newWriteBuffer(s.tenantIndependentMetrics.PreServeBytesOutCount),
+	}
 	// We could, but do not, report server-side network errors while
 	// trying to send the client error. This is because clients that
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
-	_ /* err */ = s.errWriter.writeErr(ctx, err, conn)
+	_ /* err */ = w.writeErr(ctx, err, conn)
 	_ = conn.Close()
 	return err
 }
@@ -341,7 +344,7 @@ func (s *PreServeConnHandler) PreServe(
 		// telemetry counter to indicate an attempt was made
 		// to use this feature.
 		err = errors.WithTelemetry(err, "#52184")
-		return conn, st, s.sendErr(ctx, conn, err)
+		return conn, st, s.sendErr(ctx, s.st, conn, err)
 	}
 
 	// Compute the initial connType.
@@ -357,7 +360,7 @@ func (s *PreServeConnHandler) PreServe(
 		return conn, st, err
 	}
 	if clientErr != nil {
-		return conn, st, s.sendErr(ctx, conn, clientErr)
+		return conn, st, s.sendErr(ctx, s.st, conn, clientErr)
 	}
 
 	// What does the client want to do?
@@ -384,7 +387,7 @@ func (s *PreServeConnHandler) PreServe(
 		// We don't know this protocol.
 		err := pgerror.Newf(pgcode.ProtocolViolation, "unknown protocol version %d", version)
 		err = errors.WithTelemetry(err, fmt.Sprintf("protocol-version-%d", version))
-		return conn, st, s.sendErr(ctx, conn, err)
+		return conn, st, s.sendErr(ctx, s.st, conn, err)
 	}
 
 	// Reserve some memory for this connection using the server's monitor. This
@@ -402,7 +405,7 @@ func (s *PreServeConnHandler) PreServe(
 		ctx, &buf, conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get(), s.acceptTenantName, s.acceptSystemIdentityOption.Get())
 	if err != nil {
 		st.Reserved.Close(ctx)
-		return conn, st, s.sendErr(ctx, conn, err)
+		return conn, st, s.sendErr(ctx, s.st, conn, err)
 	}
 	st.clientParameters.IsSSL = st.ConnType == hba.ConnHostSSL
 
@@ -499,7 +502,7 @@ func (s *PreServeConnHandler) readVersion(
 ) (version uint32, buf pgwirebase.ReadBuffer, err error) {
 	var n int
 	buf = pgwirebase.MakeReadBuffer(
-		pgwirebase.ReadBufferOptionWithClusterSettings(s.errWriter.sv),
+		pgwirebase.ReadBufferOptionWithClusterSettings(&s.st.SV),
 	)
 	n, err = buf.ReadUntypedMsg(conn)
 	if err != nil {
