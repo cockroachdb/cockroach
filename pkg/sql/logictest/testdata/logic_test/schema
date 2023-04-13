@@ -1169,3 +1169,93 @@ query I
 SELECT abs(1);
 ----
 1
+
+subtest search_path
+
+# Verify that spaces are trimmed.
+statement ok
+SET search_path = public,      a,     "   b  ",   c
+
+query T
+SHOW search_path
+----
+public, a, "   b  ", c
+
+# When each identifier is enclosed in single quotes, the search_path should
+# have multiple elements.
+statement ok
+SET search_path = '$user', 'public'
+
+query T
+SHOW search_path
+----
+"$user", public
+
+# When the whole value is enclosed in single quotes, the search_path should
+# have contain one element.
+statement ok
+SET search_path = '$user, public'
+
+query T
+SHOW search_path
+----
+"$user, public"
+
+# With single quotes, the identifier case is preserved.
+statement ok
+SET search_path = 'Abc', 'public'
+
+query T
+SHOW search_path
+----
+"Abc", public
+
+# Without single quotes, the identifier is normalized to lower case.
+statement ok
+SET search_path = Abc, 'public'
+
+query T
+SHOW search_path
+----
+abc, public
+
+# An empty identifier is allowed.
+statement ok
+SET search_path = ''
+
+query T
+SHOW search_path
+----
+""
+
+# An empty identifier is allowed.
+statement ok
+SET search_path = ""
+
+query T
+SHOW search_path
+----
+""
+
+# A whitespace identifier is allowed.
+statement ok
+SET search_path = "  ", abc
+
+query T
+SHOW search_path
+----
+"  ", abc
+
+# Handle special characters.
+statement ok
+SET search_path = 'a\bc', "d\ef", 'g-hi', "j-kl"
+
+query T
+SHOW search_path
+----
+"a\bc", "d\ef", "g-hi", "j-kl"
+
+statement error syntax error
+SET search_path = abc, def,
+
+subtest end
