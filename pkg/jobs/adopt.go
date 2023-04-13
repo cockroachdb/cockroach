@@ -439,7 +439,7 @@ func (r *Registry) runJob(
 	defer r.unregister(job.ID())
 
 	// Bookkeeping.
-	execCtx, cleanup := r.execCtx("resume-"+taskName, username)
+	execCtx, cleanup := r.execCtx(ctx, "resume-"+taskName, username)
 	defer cleanup()
 
 	// Create a new root span to trace the execution of the current instance of

@@ -110,6 +110,7 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -339,6 +340,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -805,6 +807,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -1168,6 +1171,7 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -1504,6 +1508,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -1787,6 +1792,7 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 108
@@ -2194,6 +2200,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 109

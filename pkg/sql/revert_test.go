@@ -241,7 +241,7 @@ func TestRevertSpansFanout(t *testing.T) {
 	db.Exec(t, fmt.Sprintf("ALTER TABLE test SPLIT AT VALUES %s", splitPointsBuf.String()))
 	db.Exec(t, "ALTER TABLE test SCATTER")
 
-	rsCtx, close := sql.MakeJobExecContext("revert-spans", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg)
+	rsCtx, close := sql.MakeJobExecContext(ctx, "revert-spans", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg)
 	defer close()
 
 	verifyRevert := func() {

@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -77,13 +76,14 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 	// Plan a statement.
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	sd := NewFakeSessionData(ctx, execCfg.Settings, "test")
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, s.NodeID()),
 		username.RootUserName(),
 		&MemoryMetrics{},
 		&execCfg,
-		sessiondatapb.SessionData{},
+		sd,
 	)
 	defer cleanup()
 	p := internalPlanner.(*planner)
@@ -252,6 +252,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 
 	createPlannerAndRunQuery := func(ctx context.Context, txn *kv.Txn, query string) error {
 		execCfg := s.ExecutorConfig().(ExecutorConfig)
+		sd := NewFakeSessionData(ctx, execCfg.Settings, "test")
 		// Plan the statement.
 		internalPlanner, cleanup := NewInternalPlanner(
 			"test",
@@ -259,7 +260,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			username.RootUserName(),
 			&MemoryMetrics{},
 			&execCfg,
-			sessiondatapb.SessionData{},
+			sd,
 		)
 		defer cleanup()
 		p := internalPlanner.(*planner)
