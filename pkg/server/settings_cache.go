@@ -101,7 +101,7 @@ func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roach
 	defer batch.Close()
 
 	// Read all existing cached settings keys
-	existingKVs, _, err := storage.MVCCScan(ctx, eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{})
+	existingKVs, err := storage.MVCCScan(ctx, eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{})
 	if err != nil {
 		return err
 	}
@@ -113,9 +113,9 @@ func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roach
 	}
 
 	// Delete keys that are not in the provided set
-	for _, kv := range existingKVs {
+	for _, kv := range existingKVs.KVs {
 		if !providedKeys[string(kv.Key)] {
-			if err := storage.MVCCDelete(ctx, batch, nil, kv.Key, hlc.Timestamp{}, nil); err != nil {
+			if _, err := storage.MVCCDelete(ctx, batch, nil, kv.Key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil); err != nil {
 				return err
 			}
 		}
