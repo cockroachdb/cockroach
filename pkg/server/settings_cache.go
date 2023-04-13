@@ -99,6 +99,28 @@ var _ settingswatcher.Storage = (*settingsCacheWriter)(nil)
 func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roachpb.KeyValue) error {
 	batch := eng.NewBatch()
 	defer batch.Close()
+
+	// Read all existing cached settings keys
+	existingKVs, _, err := storage.MVCCScan(ctx, eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{})
+	if err != nil {
+		return err
+	}
+
+	// Create a map of provided keys for faster lookup
+	providedKeys := make(map[string]bool, len(kvs))
+	for _, kv := range kvs {
+		providedKeys[string(kv.Key)] = true
+	}
+
+	// Delete keys that are not in the provided set
+	for _, kv := range existingKVs {
+		if !providedKeys[string(kv.Key)] {
+			if err := storage.MVCCDelete(ctx, batch, nil, kv.Key, hlc.Timestamp{}, nil); err != nil {
+				return err
+			}
+		}
+	}
+
 	for _, kv := range kvs {
 		kv.Value.Timestamp = hlc.Timestamp{} // nb: Timestamp is not part of checksum
 		if err := storage.MVCCPut(
