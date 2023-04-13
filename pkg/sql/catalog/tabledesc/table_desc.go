@@ -613,3 +613,8 @@ func (desc *wrapper) ForEachUDTDependentForHydration(fn func(t *types.T) error) 
 	}
 	return nil
 }
+
+// IsSchemaLocked implements the TableDescriptor interface.
+func (desc *wrapper) IsSchemaLocked() bool {
+	return desc.SchemaLocked
+}
