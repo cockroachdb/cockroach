@@ -89,6 +89,12 @@ func newSpanEncoder(
 			default:
 				return &spanEncoderIntervalAsc{spanEncoderBase: base}
 			}
+		case types.JsonFamily:
+			switch typ.Width() {
+			case -1:
+			default:
+				return &spanEncoderJSONAsc{spanEncoderBase: base}
+			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch typ.Width() {
 			case -1:
@@ -143,6 +149,12 @@ func newSpanEncoder(
 			case -1:
 			default:
 				return &spanEncoderIntervalDesc{spanEncoderBase: base}
+			}
+		case types.JsonFamily:
+			switch typ.Width() {
+			case -1:
+			default:
+				return &spanEncoderJSONDesc{spanEncoderBase: base}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch typ.Width() {
@@ -947,6 +959,109 @@ func (op *spanEncoderIntervalAsc) next(batch coldata.Batch, startIdx, endIdx int
 
 					var err error
 					op.scratch, err = encoding.EncodeDurationAscending(op.scratch, val)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+
+					op.outputBytes.Set(outIdx, op.scratch)
+				}
+			}
+		}
+	}
+
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
+	return op.outputBytes
+}
+
+type spanEncoderJSONAsc struct {
+	spanEncoderBase
+}
+
+var _ spanEncoder = &spanEncoderJSONAsc{}
+
+// next implements the spanEncoder interface.
+func (op *spanEncoderJSONAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+	oldBytesSize := op.outputBytes.Size()
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
+		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
+	}
+
+	vec := batch.ColVec(op.encodeColIdx)
+	col := vec.JSON()
+
+	sel := batch.Selection()
+	if sel != nil {
+		sel = sel[startIdx:endIdx]
+		if vec.Nulls().MaybeHasNulls() {
+			nulls := vec.Nulls()
+			for outIdx, i := range sel {
+				{
+					op.scratch = op.scratch[:0]
+					if nulls.NullAt(i) {
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
+						continue
+					}
+					val := col.Get(i)
+
+					var err error
+					op.scratch, err = val.EncodeForwardIndex(op.scratch, encoding.Ascending)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+
+					op.outputBytes.Set(outIdx, op.scratch)
+				}
+			}
+		} else {
+			for outIdx, i := range sel {
+				{
+					op.scratch = op.scratch[:0]
+					val := col.Get(i)
+
+					var err error
+					op.scratch, err = val.EncodeForwardIndex(op.scratch, encoding.Ascending)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+
+					op.outputBytes.Set(outIdx, op.scratch)
+				}
+			}
+		}
+	} else {
+		_, _ = col.Get(startIdx), col.Get(endIdx-1)
+		if vec.Nulls().MaybeHasNulls() {
+			nulls := vec.Nulls()
+			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
+				{
+					op.scratch = op.scratch[:0]
+					if nulls.NullAt(i) {
+						op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
+						continue
+					}
+					val := col.Get(i)
+
+					var err error
+					op.scratch, err = val.EncodeForwardIndex(op.scratch, encoding.Ascending)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+
+					op.outputBytes.Set(outIdx, op.scratch)
+				}
+			}
+		} else {
+			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
+				{
+					op.scratch = op.scratch[:0]
+					val := col.Get(i)
+
+					var err error
+					op.scratch, err = val.EncodeForwardIndex(op.scratch, encoding.Ascending)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -1829,6 +1944,109 @@ func (op *spanEncoderIntervalDesc) next(batch coldata.Batch, startIdx, endIdx in
 
 					var err error
 					op.scratch, err = encoding.EncodeDurationDescending(op.scratch, val)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+
+					op.outputBytes.Set(outIdx, op.scratch)
+				}
+			}
+		}
+	}
+
+	op.allocator.AdjustMemoryUsageAfterAllocation(op.outputBytes.Size() - oldBytesSize)
+	return op.outputBytes
+}
+
+type spanEncoderJSONDesc struct {
+	spanEncoderBase
+}
+
+var _ spanEncoder = &spanEncoderJSONDesc{}
+
+// next implements the spanEncoder interface.
+func (op *spanEncoderJSONDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+	oldBytesSize := op.outputBytes.Size()
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
+		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		op.outputBytes.Reset()
+	}
+
+	vec := batch.ColVec(op.encodeColIdx)
+	col := vec.JSON()
+
+	sel := batch.Selection()
+	if sel != nil {
+		sel = sel[startIdx:endIdx]
+		if vec.Nulls().MaybeHasNulls() {
+			nulls := vec.Nulls()
+			for outIdx, i := range sel {
+				{
+					op.scratch = op.scratch[:0]
+					if nulls.NullAt(i) {
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
+						continue
+					}
+					val := col.Get(i)
+
+					var err error
+					op.scratch, err = val.EncodeForwardIndex(op.scratch, encoding.Descending)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+
+					op.outputBytes.Set(outIdx, op.scratch)
+				}
+			}
+		} else {
+			for outIdx, i := range sel {
+				{
+					op.scratch = op.scratch[:0]
+					val := col.Get(i)
+
+					var err error
+					op.scratch, err = val.EncodeForwardIndex(op.scratch, encoding.Descending)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+
+					op.outputBytes.Set(outIdx, op.scratch)
+				}
+			}
+		}
+	} else {
+		_, _ = col.Get(startIdx), col.Get(endIdx-1)
+		if vec.Nulls().MaybeHasNulls() {
+			nulls := vec.Nulls()
+			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
+				{
+					op.scratch = op.scratch[:0]
+					if nulls.NullAt(i) {
+						op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
+						continue
+					}
+					val := col.Get(i)
+
+					var err error
+					op.scratch, err = val.EncodeForwardIndex(op.scratch, encoding.Descending)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+
+					op.outputBytes.Set(outIdx, op.scratch)
+				}
+			}
+		} else {
+			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
+				{
+					op.scratch = op.scratch[:0]
+					val := col.Get(i)
+
+					var err error
+					op.scratch, err = val.EncodeForwardIndex(op.scratch, encoding.Descending)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
