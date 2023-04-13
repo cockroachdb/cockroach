@@ -82,7 +82,7 @@ CREATE TABLE foo (
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
-	sd := NewFakeSessionData(ctx, execCfg.Settings, "test")
+	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 	sd.Database = "defaultdb"
 
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
@@ -464,7 +464,7 @@ func TestChangefeedStreamsResults(t *testing.T) {
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
-	sd := NewFakeSessionData(ctx, execCfg.Settings, "test")
+	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 	sd.Database = "defaultdb"
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
 		username.RootUserName(), &MemoryMetrics{}, &execCfg, sd,
@@ -511,7 +511,7 @@ FAMILY extra (extra)
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
-	sd := NewFakeSessionData(ctx, execCfg.Settings, "test")
+	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 	sd.Database = "defaultdb"
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
 		username.RootUserName(), &MemoryMetrics{}, &execCfg, sd,
