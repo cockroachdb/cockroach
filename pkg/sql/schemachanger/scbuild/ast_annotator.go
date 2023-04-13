@@ -28,8 +28,10 @@ type astAnnotator struct {
 }
 
 func newAstAnnotator(original tree.Statement) (*astAnnotator, error) {
-	// Clone the original tree by re-parsing the input back into an AST.
-	statement, err := parser.ParseOne(original.String())
+	// Clone the original tree by re-parsing the input back into an AST. We need
+	// to keep tagged dollar quotes in case they're necessary to parse the
+	// original statement.
+	statement, err := parser.ParseOne(tree.AsStringWithFlags(original, tree.FmtTagDollarQuotes))
 	if err != nil {
 		return nil, err
 	}

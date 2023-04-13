@@ -184,7 +184,7 @@ func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
 }
 
 func (p *PrettyCfg) fmtFlags() FmtFlags {
-	prettyFlags := FmtShowPasswords | FmtParsable
+	prettyFlags := FmtShowPasswords | FmtParsable | FmtTagDollarQuotes
 	if p.ValueRedaction {
 		prettyFlags |= FmtMarkRedactionNode | FmtOmitNameRedaction
 	}
