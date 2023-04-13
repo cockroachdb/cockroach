@@ -8,6 +8,7 @@ DECLARE
 BEGIN
 FETCH FORWARD something1 INTO var1, var2
 END
+<NOT DONE YET>
 
 parse
 DECLARE
@@ -19,6 +20,7 @@ DECLARE
 BEGIN
 FETCH ALL something2 INTO var1
 END
+<NOT DONE YET>
 
 
 parse
@@ -31,6 +33,7 @@ DECLARE
 BEGIN
 FETCH LAST something3 INTO var1
 END
+<NOT DONE YET>
 
 parse
 DECLARE
@@ -42,6 +45,7 @@ DECLARE
 BEGIN
 FETCH ABSOLUTE 5 FROM cursor_name INTO var1
 END
+<NOT DONE YET>
 
 
 parse
@@ -54,3 +58,4 @@ DECLARE
 BEGIN
 FETCH RELATIVE 10 FROM cursor_name INTO var1
 END
+<NOT DONE YET>

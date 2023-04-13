@@ -14,12 +14,12 @@ END
 DECLARE
 BEGIN
 IF johnny gyro THEN
-	NULL
-	ASSIGN diego := 1 + 2
+NULL
+ASSIGN diego := 1 + 2
 ELSIF hi hot pants THEN
-	ASSIGN diego := 7 + 7
+ASSIGN diego := 7 + 7
 ELSE
-	ASSIGN diego := 0
+ASSIGN diego := 0
 END IF
 <NOT DONE YET>END
 <NOT DONE YET>

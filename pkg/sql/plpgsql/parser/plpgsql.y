@@ -77,8 +77,12 @@ func (u *plpgsqlSymUnion) plpgsqlDeclareheader() *declareHeader {
     return u.val.(*declareHeader)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlStatements() []plpgsqltree.PLpgSQLStatement {
-    return u.val.([]plpgsqltree.PLpgSQLStatement)
+func (u *plpgsqlSymUnion) plpgsqlStatements() plpgsqltree.PLpgSQLStatements {
+    return u.val.(plpgsqltree.PLpgSQLStatements)
+}
+
+func (u *plpgsqlSymUnion) plpgSQLStmtForLoop() plpgsqltree.PLpgSQLStmtForLoop {
+    return u.val.(plpgsqltree.PLpgSQLStmtForLoop)
 }
 
 func (u *plpgsqlSymUnion) int32() int32 {
@@ -91,6 +95,10 @@ func (u *plpgsqlSymUnion) uint32() uint32 {
 
 func (u *plpgsqlSymUnion) bool() bool {
     return u.val.(bool)
+}
+
+func (u *plpgsqlSymUnion) str() string {
+    return u.val.(string)
 }
 
 func (u *plpgsqlSymUnion) pLpgSQLGetDiagKind() plpgsqltree.PLpgSQLGetDiagKind {
@@ -275,16 +283,16 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtFetch() *plpgsqltree.PLpgSQLStmtFetch {
 
 %type <plpgsqltree.PLpgSQLScalarVar>		cursor_variable
 %type <plpgsqltree.PLpgSQLDatum>	decl_cursor_arg
-%type <forvariable>	for_variable
+%type <str>	for_variable
 %type <*tree.NumVal>	foreach_slice
-%type <plpgsqltree.PLpgSQLStatement>	for_control
+%type <plpgsqltree.PLpgSQLStmtForLoop>	for_control
 
 %type <str>		any_identifier opt_block_label opt_loop_label opt_label
 
-%type <[]plpgsqltree.PLpgSQLStatement> proc_sect
+%type <plpgsqltree.PLpgSQLStatements> proc_sect
 %type <[]*plpgsqltree.PLpgSQLStmtIfElseIfArm> stmt_elsifs
-%type <[]plpgsqltree.PLpgSQLStatement> stmt_else // TODO is this a list of statement?
-%type <loopBody> loop_body
+%type <plpgsqltree.PLpgSQLStatements> stmt_else // TODO is this a list of statement?
+%type <plpgsqltree.PLpgSQLStatements> loop_body
 %type <plpgsqltree.PLpgSQLStatement>  pl_block
 %type <plpgsqltree.PLpgSQLStatement>	proc_stmt
 %type <plpgsqltree.PLpgSQLStatement>	stmt_assign stmt_if stmt_loop stmt_while stmt_exit
@@ -300,7 +308,7 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtFetch() *plpgsqltree.PLpgSQLStmtFetch {
 
 %type <*plpgsqltree.PLpgSQLStmtCaseWhenArm>	case_when
 %type <[]*plpgsqltree.PLpgSQLStmtCaseWhenArm>	case_when_list
-%type <[]plpgsqltree.PLpgSQLStatement> opt_case_else
+%type <plpgsqltree.PLpgSQLStatements> opt_case_else
 
 %type <bool>	getdiag_area_opt
 %type <plpgsqltree.PLpgSQLStmtGetDiagItemList>	getdiag_list // TODO don't know what this is
@@ -362,7 +370,7 @@ decl_sect: opt_block_label
       // with only a nil element.
       initVars: make([]plpgsqltree.PLpgSQLVariable, 1),
     }
-    h.initVars = append(h.initVars, nil)
+    h.initVars = append(h.initVars, "")
     $$.val = h
   }
 ;
@@ -516,7 +524,7 @@ assign_operator: '='
 
 proc_sect:
   {
-    $$.val = []plpgsqltree.PLpgSQLStatement{}
+    $$.val = plpgsqltree.PLpgSQLStatements{}
   }
 | proc_sect proc_stmt
   {
@@ -734,7 +742,7 @@ stmt_elsifs:
 
 stmt_else:
   {
-    $$.val = []plpgsqltree.PLpgSQLStatement{};
+    $$.val = plpgsqltree.PLpgSQLStatements{};
   }
 | ELSE proc_sect
   {
@@ -813,12 +821,17 @@ stmt_while: opt_loop_label WHILE expr_until_loop loop_body
 
 stmt_for: opt_loop_label FOR for_control loop_body
   {
+    stmt := $3.plpgSQLStmtForLoop()
+    stmt.SetBody($4.plpgsqlStatements())
+    $$.val = stmt
   }
 ;
 
 for_control: for_variable IN
-  // TODO need to parse the sql expression here.
   {
+    forStmt := plpgsqllex.(*lexer).MakeForLoopControl()
+    forStmt.SetForVariable($1)
+    $$.val = forStmt
   }
 ;
 
@@ -842,6 +855,7 @@ for_control: for_variable IN
  */
 for_variable: any_identifier
   {
+    $$ = $1
   }
 ;
 
@@ -907,6 +921,7 @@ assert_cond:
 
 loop_body: proc_sect END LOOP opt_label ';'
   {
+    $$.val = $1.plpgsqlStatements()
   }
 ;
 
@@ -939,7 +954,7 @@ stmt_dynexecute: EXECUTE
 stmt_open: OPEN IDENT open_stmt_processor ';'
   {
     openCursorStmt := $3.pLpgSQLStmtOpen()
-    openCursorStmt.CursorName = $2
+    openCursorStmt.CurVar = $2
     $$.val = openCursorStmt
   }
 ;
@@ -1097,9 +1112,11 @@ opt_exitcond: ';'
 any_identifier:
 IDENT
   {
+    $$ = $1
   }
 | unreserved_keyword
   {
+    $$ = $1
   }
 ;
 

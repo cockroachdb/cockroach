@@ -201,7 +201,7 @@ func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.PLpgSQLStmtDynamicExecute 
 			ret.Params = make([]plpgsqltree.PLpgSQLExpr, 0)
 			for {
 				l.ReadSqlConstruct(',', ';', INTO)
-				ret.Params = append(ret.Params, nil)
+				ret.Params = append(ret.Params, "")
 				l.Lex(&lval)
 				if lval.id == ';' {
 					break
@@ -284,6 +284,9 @@ func (l *lexer) ReadSqlExpressionStr2(
 	return l.ReadSqlConstruct(terminator1, terminator2, 0)
 }
 
+// ReadSqlConstruct scans following tokens until it sees one of the terminator
+// tokens. Terminator token is not counted, so it will still be the next token
+// the lexer will see.
 func (l *lexer) ReadSqlConstruct(
 	terminator1 int, terminator2 int, terminator3 int,
 ) (sqlStr string, terminatorMet int) {
@@ -446,10 +449,94 @@ func (l *lexer) ReadFetchDirection() (fetchStmt *plpgsqltree.PLpgSQLStmtFetch) {
 	return res
 }
 
+func (l *lexer) MakeForLoopControl() (ret plpgsqltree.PLpgSQLStmtForLoop) {
+	nextToken := l.Peek()
+	nextNextToken := l.PeekNextNext()
+	if nextToken.id == EXECUTE {
+		l.lastPos++
+		stmt := &plpgsqltree.PLpgSQLStmtForDynamicLoop{}
+
+		query, terminator := l.ReadSqlExpressionStr2(LOOP, USING)
+		l.lastPos++
+		stmt.Query = query
+		if terminator == USING {
+			param, terminator := l.ReadSqlExpressionStr2(LOOP, ',')
+			l.lastPos++
+			stmt.Params = append(stmt.Params, param)
+			for terminator == ',' {
+				param, terminator = l.ReadSqlExpressionStr2(LOOP, ',')
+				l.lastPos++
+				stmt.Params = append(stmt.Params, param)
+			}
+		}
+		ret = stmt
+	} else if nextNextToken.id == LOOP {
+		// if the next token is followed by the LOOP keyword immediately, then we
+		// assume that it's a cursor variable name and it's considered as a for
+		// cursor loop.
+		// TODO (chengxiong): this is not nice because we won't be able to allow
+		// cursor parameters. But at the moment of this implementation, we don't
+		// have a good way to tell if a token is a cursor variable name or it's the
+		// start of a valid sql query which returns rows of results. Maybe 2 options:
+		// 1. maintain a cache of seen Cursor variable names in the lexer.
+		// 2. only allowed a small group of SQL queries in for loop control so that
+		// we'd know that it's likely a cursor variable.
+		stmt := &plpgsqltree.PLpgSQLStmtForQueryCursorLoop{}
+		stmt.CurVar = nextToken.str
+		ret = stmt
+		l.lastPos += 2
+	} else {
+		isReversed := false
+		if nextToken.id == REVERSE {
+			// If it's a keyword REVERSE, then it's a reversed integer loop. We
+			isReversed = true
+			l.lastPos++
+			nextToken = l.Peek()
+			nextNextToken = l.PeekNextNext()
+		}
+
+		expr1, terminator := l.ReadSqlExpressionStr2(DOT_DOT, LOOP)
+		l.lastPos++
+
+		if terminator == DOT_DOT {
+			// This is a hack to check if it's a FOR var IN a .. b loop. This idea is
+			// borrowed from postgres' implementation.
+			stmt := &plpgsqltree.PLpgSQLStmtForIntLoop{}
+			stmt.Reverse = isReversed
+			stmt.Lower = expr1
+			expr2, terminator := l.ReadSqlExpressionStr2(LOOP, BY)
+			l.lastPos++
+			stmt.Upper = expr2
+			if terminator == BY {
+				step := l.ReadSqlExpressionStr(LOOP)
+				l.lastPos++
+				stmt.Step = step
+			}
+			ret = stmt
+		} else {
+			if isReversed {
+				l.setErr(errors.AssertionFailedf("cannot use REVERSE in a for loop that is not integer loop"))
+			}
+			stmt := &plpgsqltree.PLpgSQLStmtForQuerySelectLoop{}
+			stmt.Query = expr1
+			ret = stmt
+		}
+	}
+
+	return ret
+}
+
 // Peek peeks
 func (l *lexer) Peek() plpgsqlSymType {
 	if l.lastPos+1 < len(l.tokens) {
 		return l.tokens[l.lastPos+1]
+	}
+	return plpgsqlSymType{}
+}
+
+func (l *lexer) PeekNextNext() plpgsqlSymType {
+	if l.lastPos+2 < len(l.tokens) {
+		return l.tokens[l.lastPos+2]
 	}
 	return plpgsqlSymType{}
 }
