@@ -1557,6 +1557,13 @@ func TestTenantLogic_schema_change_retry(
 	runLogicTest(t, "schema_change_retry")
 }
 
+func TestTenantLogic_schema_locked(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "schema_locked")
+}
+
 func TestTenantLogic_schema_repair(
 	t *testing.T,
 ) {

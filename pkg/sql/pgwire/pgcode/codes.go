@@ -370,6 +370,10 @@ var (
 	// does not have a primary key.
 	NoPrimaryKey = MakeCode("55C02")
 
+	// SchemaChangeOnSchemaLockedTable signals that a DDL is attempted on a table
+	// whose schema is locked.
+	SchemaChangeOnSchemaLockedTable = MakeCode("55C03")
+
 	// Class 58C - System errors related to CockroachDB node problems.
 
 	// RangeUnavailable signals that some data from the cluster cannot be

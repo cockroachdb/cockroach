@@ -104,6 +104,12 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 			tree.Name(tableDesc.GetName()), tree.Name(tableDesc.GetName()))
 	}
 
+	// Disallow schema changes if this table's schema is locked, unless it is to
+	// set/reset the "schema_locked" storage parameter.
+	if err = checkTableSchemaUnlocked(tableDesc); err != nil && !isSetOrResetSchemaLocked(n) {
+		return nil, err
+	}
+
 	n.HoistAddColumnConstraints(func() {
 		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
 	})
@@ -2021,4 +2027,29 @@ func (p *planner) tryRemoveFKBackReferences(
 	}
 	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
 	return nil
+}
+
+func checkTableSchemaUnlocked(desc catalog.TableDescriptor) (ret error) {
+	if desc != nil && desc.IsSchemaLocked() {
+		return sqlerrors.NewSchemaChangeToTableWithLockedSchema(desc.GetName())
+	}
+	return nil
+}
+
+// isSetOrResetSchemaLocked returns true if `n` contains a command to
+// set/reset "schema_locked" storage parameter.
+func isSetOrResetSchemaLocked(n *tree.AlterTable) bool {
+	for _, cmd := range n.Cmds {
+		switch cmd := cmd.(type) {
+		case *tree.AlterTableSetStorageParams:
+			if cmd.StorageParams.GetVal("schema_locked") != nil {
+				return true
+			}
+		case *tree.AlterTableResetStorageParams:
+			if cmd.Params.Contains("schema_locked") {
+				return true
+			}
+		}
+	}
+	return false
 }

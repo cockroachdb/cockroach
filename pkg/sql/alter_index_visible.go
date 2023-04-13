@@ -69,6 +69,11 @@ func (p *planner) AlterIndexVisible(
 		return nil, err
 	}
 
+	// Disallow schema changes if this table's schema is locked.
+	if err = checkTableSchemaUnlocked(tableDesc); err != nil {
+		return nil, err
+	}
+
 	return &alterIndexVisibleNode{n: n, tableDesc: tableDesc, index: idx}, nil
 }
 
