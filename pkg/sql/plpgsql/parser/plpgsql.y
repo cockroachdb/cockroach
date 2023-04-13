@@ -125,6 +125,14 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtFetch() *plpgsqltree.PLpgSQLStmtFetch {
     return u.val.(*plpgsqltree.PLpgSQLStmtFetch)
 }
 
+func (u *plpgsqlSymUnion) pLpgSQLStmtCommit() *plpgsqltree.PLpgSQLStmtCommit {
+    return u.val.(*plpgsqltree.PLpgSQLStmtCommit)
+}
+
+func (u *plpgsqlSymUnion) pLpgSQLStmtRollback() *plpgsqltree.PLpgSQLStmtRollback {
+    return u.val.(*plpgsqltree.PLpgSQLStmtRollback)
+}
+
 %}
 /*
  * Basic non-keyword token types.  These are hard-wired into the core lexer.
@@ -319,7 +327,7 @@ func (u *plpgsqlSymUnion) pLpgSQLStmtFetch() *plpgsqltree.PLpgSQLStmtFetch {
 
 %type <*plpgsqltree.PLpgSQLStmtFetch>	opt_fetch_direction
 
-%type <*tree.NumVal>	opt_transaction_chain
+%type <bool>	opt_transaction_chain
 
 %type <str>	unreserved_keyword
 %%
@@ -539,9 +547,13 @@ proc_stmt:pl_block ';'
     $$.val = $1.plpgsqlStmtBlock()
   }
 | stmt_assign
-  { }
+  {
+   $$.val = $1.plpgsqlStatement()
+  }
 | stmt_if
-  { }
+  {
+   $$.val = $1.plpgsqlStatement()
+  }
 | stmt_case
   {
     $$.val = $1.plpgsqlStatement()
@@ -551,7 +563,9 @@ proc_stmt:pl_block ';'
 | stmt_while
   { }
 | stmt_for
-  { }
+  {
+   $$.val = $1.plpgsqlStatement()
+  }
 | stmt_foreach_a
   { }
 | stmt_exit
@@ -583,23 +597,33 @@ proc_stmt:pl_block ';'
 | stmt_getdiag
   { }
 | stmt_open
-  { }
+  {
+   $$.val = $1.plpgsqlStatement()
+  }
 | stmt_fetch
   {
     $$.val = $1.plpgsqlStatement()
   }
 | stmt_move
-  { }
+  {
+   $$.val = $1.plpgsqlStatement()
+  }
 | stmt_close
   {
     $$.val = $1.plpgsqlStatement()
   }
 | stmt_null
-  { }
+  {
+   $$.val = $1.plpgsqlStatement()
+  }
 | stmt_commit
-  { }
+  {
+   $$.val = $1.plpgsqlStatement()
+   }
 | stmt_rollback
-  { }
+  {
+   $$.val = $1.plpgsqlStatement()
+  }
 ;
 
 stmt_perform: PERFORM
@@ -996,21 +1020,27 @@ stmt_null: NULL ';'
 
 stmt_commit: COMMIT opt_transaction_chain ';'
   {
+  $$.val = &plpgsqltree.PLpgSQLStmtCommit{
+    Chain: $2.bool(),
+  }
   }
 ;
 
 stmt_rollback: ROLLBACK opt_transaction_chain ';'
   {
+    $$.val = &plpgsqltree.PLpgSQLStmtRollback{
+      Chain: $2.bool(),
+    }
   }
 ;
 
 opt_transaction_chain:
 AND CHAIN
-  { }
+  { $$.val = true }
 | AND NO CHAIN
-  { }
+  { $$.val = false }
 | /* EMPTY */
-  { }
+  { $$.val = false }
 ;
 
 cursor_variable: any_identifier
