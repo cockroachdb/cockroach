@@ -32,7 +32,11 @@ import (
 func (b *Builder) buildMutationInput(
 	mutExpr, inputExpr memo.RelExpr, colList opt.ColList, p *memo.MutationPrivate,
 ) (execPlan, error) {
-	if b.shouldApplyImplicitLockingToMutationInput(mutExpr) {
+	shouldApplyImplicitLocking, err := b.shouldApplyImplicitLockingToMutationInput(mutExpr)
+	if err != nil {
+		return execPlan{}, err
+	}
+	if shouldApplyImplicitLocking {
 		// Re-entrance is not possible because mutations are never nested.
 		b.forceForUpdateLocking = true
 		defer func() { b.forceForUpdateLocking = false }()
@@ -198,19 +202,19 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 
 		out := &fkChecks[i]
 		out.InsertCols = make([]exec.TableColumnOrdinal, len(lookupJoin.KeyCols))
-		findCol := func(cols opt.OptionalColList, col opt.ColumnID) int {
-			res, ok := cols.Find(col)
-			if !ok {
-				panic(errors.AssertionFailedf("cannot find column %d", col))
-			}
-			return res
-		}
 		for i, keyCol := range lookupJoin.KeyCols {
 			// The keyCol comes from the WithScan operator. We must find the matching
 			// column in the mutation input.
-			withColOrd := findCol(opt.OptionalColList(withScan.OutCols), keyCol)
+			withColOrd, ok := withScan.OutCols.Find(keyCol)
+			if !ok {
+				return execPlan{}, false, errors.AssertionFailedf("cannot find column %d", keyCol)
+			}
 			inputCol := withScan.InCols[withColOrd]
-			out.InsertCols[i] = exec.TableColumnOrdinal(findCol(ins.InsertCols, inputCol))
+			inputColOrd, ok := ins.InsertCols.Find(inputCol)
+			if !ok {
+				return execPlan{}, false, errors.AssertionFailedf("cannot find column %d", inputCol)
+			}
+			out.InsertCols[i] = exec.TableColumnOrdinal(inputColOrd)
 		}
 
 		out.ReferencedTable = md.Table(lookupJoin.Table)
@@ -435,7 +439,10 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	tab := md.Table(ups.Table)
 	canaryCol := exec.NodeColumnOrdinal(-1)
 	if ups.CanaryCol != 0 {
-		canaryCol = input.getNodeColumnOrdinal(ups.CanaryCol)
+		canaryCol, err = input.getNodeColumnOrdinal(ups.CanaryCol)
+		if err != nil {
+			return execPlan{}, err
+		}
 	}
 	insertColOrds := ordinalSetFromColList(ups.InsertCols)
 	fetchColOrds := ordinalSetFromColList(ups.FetchCols)
@@ -714,7 +721,11 @@ func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
 		mkErr := func(row tree.Datums) error {
 			keyVals := make(tree.Datums, len(c.KeyCols))
 			for i, col := range c.KeyCols {
-				keyVals[i] = row[query.getNodeColumnOrdinal(col)]
+				ord, err := query.getNodeColumnOrdinal(col)
+				if err != nil {
+					return err
+				}
+				keyVals[i] = row[ord]
 			}
 			return mkUniqueCheckErr(md, c, keyVals)
 		}
@@ -740,7 +751,11 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 		mkErr := func(row tree.Datums) error {
 			keyVals := make(tree.Datums, len(c.KeyCols))
 			for i, col := range c.KeyCols {
-				keyVals[i] = row[query.getNodeColumnOrdinal(col)]
+				ord, err := query.getNodeColumnOrdinal(col)
+				if err != nil {
+					return err
+				}
+				keyVals[i] = row[ord]
 			}
 			return mkFKCheckErr(md, c, keyVals)
 		}
@@ -963,26 +978,26 @@ var forUpdateLocking = opt.Locking{Strength: tree.ForUpdate}
 // shouldApplyImplicitLockingToMutationInput determines whether or not the
 // builder should apply a FOR UPDATE row-level locking mode to the initial row
 // scan of a mutation expression.
-func (b *Builder) shouldApplyImplicitLockingToMutationInput(mutExpr memo.RelExpr) bool {
+func (b *Builder) shouldApplyImplicitLockingToMutationInput(mutExpr memo.RelExpr) (bool, error) {
 	switch t := mutExpr.(type) {
 	case *memo.InsertExpr:
 		// Unlike with the other three mutation expressions, it never makes
 		// sense to apply implicit row-level locking to the input of an INSERT
 		// expression because any contention results in unique constraint
 		// violations.
-		return false
+		return false, nil
 
 	case *memo.UpdateExpr:
-		return b.shouldApplyImplicitLockingToUpdateInput(t)
+		return b.shouldApplyImplicitLockingToUpdateInput(t), nil
 
 	case *memo.UpsertExpr:
-		return b.shouldApplyImplicitLockingToUpsertInput(t)
+		return b.shouldApplyImplicitLockingToUpsertInput(t), nil
 
 	case *memo.DeleteExpr:
-		return b.shouldApplyImplicitLockingToDeleteInput(t)
+		return b.shouldApplyImplicitLockingToDeleteInput(t), nil
 
 	default:
-		panic(errors.AssertionFailedf("unexpected mutation expression %T", t))
+		return false, errors.AssertionFailedf("unexpected mutation expression %T", t)
 	}
 }
 

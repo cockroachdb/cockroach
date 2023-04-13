@@ -138,7 +138,11 @@ func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 	// tell the exec factory what information it needs to fetch.
 	var envOpts exec.ExplainEnvData
 	if explain.Options.Flags[tree.ExplainFlagEnv] {
-		envOpts = b.getEnvData()
+		var err error
+		envOpts, err = b.getEnvData()
+		if err != nil {
+			return execPlan{}, err
+		}
 	}
 
 	node, err := b.factory.ConstructExplainOpt(planText.String(), envOpts)
@@ -397,7 +401,10 @@ func (b *Builder) buildExport(export *memo.ExportExpr) (execPlan, error) {
 			return execPlan{}, err
 		}
 	}
-	notNullColsSet := input.getNodeColumnOrdinalSet(export.Input.Relational().NotNullCols)
+	notNullColsSet, err := input.getNodeColumnOrdinalSet(export.Input.Relational().NotNullCols)
+	if err != nil {
+		return execPlan{}, err
+	}
 
 	node, err := b.factory.ConstructExport(
 		input.root,
