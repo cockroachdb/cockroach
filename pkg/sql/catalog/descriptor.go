@@ -737,6 +737,9 @@ type TableDescriptor interface {
 	// GetInProgressImportStartTime returns the start wall time of the in progress import,
 	// if it exists.
 	GetInProgressImportStartTime() int64
+	// IsSchemaLocked returns true if we don't allow performing schema changes
+	// on this table descriptor.
+	IsSchemaLocked() bool
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.
