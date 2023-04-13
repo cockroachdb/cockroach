@@ -456,7 +456,7 @@ func (r *diskRowIterator) EncRow() (rowenc.EncDatumRow, error) {
 		}
 		var err error
 		col := orderInfo.ColIdx
-		r.scratchEncRow[col], k, err = rowenc.EncDatumFromBuffer(r.rowContainer.types[col], r.rowContainer.encodings[i], k)
+		r.scratchEncRow[col], k, err = rowenc.EncDatumFromBuffer(r.rowContainer.encodings[i], k)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"unable to decode row, column idx %d", errors.Safe(col))
@@ -464,7 +464,7 @@ func (r *diskRowIterator) EncRow() (rowenc.EncDatumRow, error) {
 	}
 	for _, i := range r.rowContainer.valueIdxs {
 		var err error
-		r.scratchEncRow[i], v, err = rowenc.EncDatumFromBuffer(r.rowContainer.types[i], catenumpb.DatumEncoding_VALUE, v)
+		r.scratchEncRow[i], v, err = rowenc.EncDatumFromBuffer(catenumpb.DatumEncoding_VALUE, v)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"unable to decode row, value idx %d", errors.Safe(i))

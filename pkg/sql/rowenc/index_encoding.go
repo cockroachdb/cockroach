@@ -464,7 +464,7 @@ func DecodeKeyVals(
 			enc = catenumpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
-		vals[j], key, err = EncDatumFromBuffer(types[j], enc, key)
+		vals[j], key, err = EncDatumFromBuffer(enc, key)
 		if err != nil {
 			return nil, false, err
 		}
@@ -485,7 +485,7 @@ func DecodeKeyValsUsingSpec(
 			enc = catenumpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
-		vals[j], key, err = EncDatumFromBuffer(c.Type, enc, key)
+		vals[j], key, err = EncDatumFromBuffer(enc, key)
 		if err != nil {
 			return nil, false, err
 		}
