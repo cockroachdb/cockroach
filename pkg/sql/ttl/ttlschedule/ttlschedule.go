@@ -137,6 +137,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 	}
 
 	p, cleanup := cfg.PlanHookMaker(
+		ctx,
 		fmt.Sprintf("invoke-row-level-ttl-%d", args.TableID),
 		txn.KV(),
 		username.NodeUserName(),

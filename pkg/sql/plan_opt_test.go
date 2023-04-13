@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -657,13 +656,14 @@ func TestPlanGistControl(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	sd := NewFakeSessionData(ctx, execCfg.Settings, "test")
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, s.NodeID()),
 		username.RootUserName(),
 		&MemoryMetrics{},
 		&execCfg,
-		sessiondatapb.SessionData{},
+		sd,
 	)
 	defer cleanup()
 
@@ -691,7 +691,7 @@ func TestPlanGistControl(t *testing.T) {
 		username.RootUserName(),
 		&MemoryMetrics{},
 		&execCfg,
-		sessiondatapb.SessionData{},
+		sd,
 	)
 	defer cleanup()
 
