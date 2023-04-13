@@ -254,6 +254,7 @@ export class ScheduleTable extends React.Component<
           columns={schedulesTableColumns}
           renderNoResult={this.renderEmptyState()}
           pagination={pagination}
+          tableWrapperClassName={cx("sorted-table")}
         />
         <Pagination
           pageSize={pagination.pageSize}

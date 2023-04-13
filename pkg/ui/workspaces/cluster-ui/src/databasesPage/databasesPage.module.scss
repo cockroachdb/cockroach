@@ -16,19 +16,25 @@
       font-family: $font-family--semi-bold;
     }
 
-    &-size {
-      width: 10em;
-    }
-
+    &-size,
     &-table-count,
     &-range-count {
-      width: 7em;
+      width: 10em;
+      text-align: right;
+      padding-right: $spacing-x-large;
+    }
+    &-idx-rec {
+      width: 20em;
     }
   }
 
   &__no-result {
     @include text--body-strong;
   }
+}
+
+.sorted-table {
+  width: 100%;
 }
 
 .icon {
