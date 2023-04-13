@@ -119,7 +119,7 @@ const (
 var (
 	MetaConns = metric.Metadata{
 		Name:        "sql.conns",
-		Help:        "Number of active sql connections",
+		Help:        "Number of open SQL connections",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
