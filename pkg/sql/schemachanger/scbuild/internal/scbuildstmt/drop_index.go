@@ -111,6 +111,7 @@ func maybeDropIndex(
 			"use CASCADE if you really want to drop it.",
 		))
 	}
+	panicIfSchemaIsLocked(b.QueryByID(sie.TableID))
 	dropSecondaryIndex(b, indexName, dropBehavior, sie)
 	return sie
 }

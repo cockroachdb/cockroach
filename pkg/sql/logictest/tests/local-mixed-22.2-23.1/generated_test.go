@@ -1535,6 +1535,13 @@ func TestLogic_schema_change_retry(
 	runLogicTest(t, "schema_change_retry")
 }
 
+func TestLogic_schema_locked_in_cluster_before_23_1(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "schema_locked_in_cluster_before_23_1")
+}
+
 func TestLogic_schema_repair(
 	t *testing.T,
 ) {

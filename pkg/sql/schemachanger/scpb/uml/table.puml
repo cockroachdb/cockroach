@@ -166,6 +166,10 @@ object TablePartitioning
 
 TablePartitioning :  TableID
 
+object TableSchemaLocked
+
+TableSchemaLocked :  TableID
+
 object TableLocalityGlobal
 
 TableLocalityGlobal :  TableID
@@ -416,6 +420,7 @@ Table <|-- TableData
 View <|-- TableData
 Sequence <|-- TableData
 Table <|-- TablePartitioning
+Table <|-- TableSchemaLocked
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalitySecondaryRegion

@@ -1815,6 +1815,37 @@ func FindTablePartitioning(b ElementStatusIterator) (current Status, target Targ
 	return current, target, element
 }
 
+func (e TableSchemaLocked) element() {}
+
+// ForEachTableSchemaLocked iterates over elements of type TableSchemaLocked.
+func ForEachTableSchemaLocked(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableSchemaLocked),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*TableSchemaLocked); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindTableSchemaLocked finds the first element of type TableSchemaLocked.
+func FindTableSchemaLocked(b ElementStatusIterator) (current Status, target TargetStatus, element *TableSchemaLocked) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*TableSchemaLocked); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e TableZoneConfig) element() {}
 
 // ForEachTableZoneConfig iterates over elements of type TableZoneConfig.

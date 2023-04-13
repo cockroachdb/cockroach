@@ -88,6 +88,11 @@ func (p *planner) AlterTableSetSchema(
 		}
 	}
 
+	// Disallow schema changes if this table's schema is locked.
+	if err := checkTableSchemaUnlocked(tableDesc); err != nil {
+		return nil, err
+	}
+
 	return &alterTableSetSchemaNode{
 		newSchema: string(n.Schema),
 		prefix:    prefix,

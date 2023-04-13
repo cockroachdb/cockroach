@@ -137,6 +137,7 @@ var validationMap = []struct {
 			"ImportStartWallTime":           {status: thisFieldReferencesNoObjects},
 			"HistogramBuckets":              {status: thisFieldReferencesNoObjects},
 			"HistogramSamples":              {status: thisFieldReferencesNoObjects},
+			"SchemaLocked":                  {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
