@@ -204,6 +204,7 @@ func (bse *boundedStalenessEvents) validate(t *testing.T) {
 				require.True(
 					t,
 					ev.MinTimestampBound.Less(lastTxnRetry.MinTimestampBound),
+					"expected MinTimestampBound=%s to be less than previous retry's MinTimestampBound=%s",
 					ev.MinTimestampBound,
 					lastTxnRetry.MinTimestampBound,
 				)
