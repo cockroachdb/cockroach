@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -78,16 +79,18 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 				tDB.Exec(b, stmt)
 			}
 
-			var sessionData sessiondatapb.SessionData
-			{
-				var sessionSerialized []byte
-				tDB.QueryRow(b, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
-				require.NoError(b, protoutil.Unmarshal(sessionSerialized, &sessionData))
-			}
+			var m sessiondatapb.MigratableSession
+			var sessionSerialized []byte
+			tDB.QueryRow(b, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
+			require.NoError(b, protoutil.Unmarshal(sessionSerialized, &m))
+			sd, err := sessiondata.UnmarshalNonLocal(m.SessionData)
+			require.NoError(b, err)
+			sd.SessionData = m.SessionData
+			sd.LocalOnlySessionData = m.LocalOnlySessionData
 
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			txn := kvDB.NewTxn(ctx, "test")
-			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData)
+			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sd)
 			defer cleanup()
 
 			// The internal planner overrides the database to "system", here we
@@ -167,16 +170,18 @@ func BenchmarkResolveFunction(b *testing.B) {
 				tDB.Exec(b, stmt)
 			}
 
-			var sessionData sessiondatapb.SessionData
-			{
-				var sessionSerialized []byte
-				tDB.QueryRow(b, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
-				require.NoError(b, protoutil.Unmarshal(sessionSerialized, &sessionData))
-			}
+			var m sessiondatapb.MigratableSession
+			var sessionSerialized []byte
+			tDB.QueryRow(b, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
+			require.NoError(b, protoutil.Unmarshal(sessionSerialized, &m))
+			sd, err := sessiondata.UnmarshalNonLocal(m.SessionData)
+			require.NoError(b, err)
+			sd.SessionData = m.SessionData
+			sd.LocalOnlySessionData = m.LocalOnlySessionData
 
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			txn := kvDB.NewTxn(ctx, "test")
-			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData)
+			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sd)
 			defer cleanup()
 
 			// The internal planner overrides the database to "system", here we
