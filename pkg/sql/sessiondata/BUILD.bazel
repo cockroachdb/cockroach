@@ -5,6 +5,7 @@ go_library(
     name = "sessiondata",
     srcs = [
         "internal.go",
+        "parse_search_path.go",
         "search_path.go",
         "sequence_state.go",
         "session_data.go",
@@ -38,6 +39,7 @@ go_test(
     embed = [":sessiondata"],
     deps = [
         "//pkg/sql/sessiondatapb",
+        "//pkg/util/randutil",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

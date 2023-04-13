@@ -1619,6 +1619,112 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 	}
 }
 
+func TestParseSearchPathInConnectionString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		desc               string
+		query              string
+		expectedErr        string
+		expectedSearchPath string
+	}{
+		{
+			desc:               "mixed-case schemas require double quotes",
+			query:              `options=-c search_path="Abc",Def,Ghi`,
+			expectedSearchPath: `"Abc", def, ghi`,
+		},
+		{
+			desc:               "commas can be used in schemas in the search_path",
+			query:              `options=-c search_path="a,b",other_schema`,
+			expectedSearchPath: `"a,b", other_schema`,
+		},
+		{
+			desc:        "search_path cannot have an empty element",
+			query:       `options=-c search_path="Abc",Def,,`,
+			expectedErr: `invalid value for parameter "search_path": ""Abc",Def,,"`,
+		},
+		{
+			// Note: This is more permissive than Postgres. But this behaves the same
+			// as `SET search_path = "",Def;` so this is acceptable.
+			desc:               "search_path can have a quoted empty element",
+			query:              `options=-c search_path="",Def`,
+			expectedSearchPath: `"", def`,
+		},
+
+		{
+			desc:        "search_path cannot have a quoted whitespace element",
+			query:       `options=-c search_path="  ",Def`,
+			expectedErr: `option "\",Def" is invalid`,
+		},
+		{
+			desc:               "search_path can have a quoted whitespace element if not in the options param",
+			query:              `search_path="  ",Def`,
+			expectedSearchPath: `"  ", def`,
+		},
+		{
+			// This is a slight departure from Postgres. For some reason, Postgres
+			// will just ignore the backslashes, even though it doesn't ignore the
+			// hyphens.
+			desc:               "search_path can handle backslashes and other special characters",
+			query:              `search_path=a-b-c,d\ef,"g-hi","j\kl"`,
+			expectedSearchPath: `"a-b-c", "d\ef", "g-hi", "j\kl"`,
+		},
+		{
+			desc:        "search_path cannot end in a comma",
+			query:       `options=-c search_path="Abc",Def,`,
+			expectedErr: `invalid value for parameter "search_path": ""Abc",Def,"`,
+		},
+		{
+			desc:        "space cannot be in search_path",
+			query:       `options=-c search_path="Abc",Def,  Ghi`,
+			expectedErr: `option "Ghi" is invalid`,
+		},
+		{
+			desc:        "empty search_path is not allowed",
+			query:       `options=-c search_path=`,
+			expectedErr: `invalid value for parameter "search_path": ""`,
+		},
+		{
+			desc:        "unbalanced quotes in search_path are not allowed",
+			query:       `options=-c search_path="a,b","other_schema`,
+			expectedErr: `invalid value for parameter "search_path": ""a,b","other_schema"`,
+		},
+		{
+			desc:        "out-of-place quotes in search_path are not allowed",
+			query:       `options=-c search_path="a,b",""other_schema`,
+			expectedErr: `invalid value for parameter "search_path": ""a,b",""other_schema"`,
+		},
+	}
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			pgURL, cleanupFunc := sqlutils.PGUrl(
+				t, s.ServingSQLAddr(), "TestParseSearchPathInConnectionString" /* prefix */, url.User(username.RootUser),
+			)
+			defer cleanupFunc()
+
+			pgURL.RawQuery += "&" + tc.query
+			c, connErr := pgx.Connect(ctx, pgURL.String())
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, connErr, tc.expectedErr)
+				return
+			}
+			require.NoError(t, connErr)
+
+			var sp string
+			err := c.QueryRow(ctx, `SHOW search_path`).Scan(&sp)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedSearchPath, sp)
+		})
+	}
+}
+
 func TestSetSessionArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1632,7 +1738,7 @@ func TestSetSessionArguments(t *testing.T) {
 	)
 	defer cleanupFunc()
 
-	pgURL.RawQuery += `&options=` + "  --user=test -c    search_path=public,testsp %20 " +
+	pgURL.RawQuery += `&options=` + `  --user=test -c    search_path=public,testsp,"Abc",Def %20 ` +
 		"--default-transaction-isolation=read\\ uncommitted   " +
 		"-capplication_name=test  " +
 		"--DateStyle=ymd\\ ,\\ iso\\  " +
@@ -1661,7 +1767,7 @@ func TestSetSessionArguments(t *testing.T) {
 	}
 
 	expectedOptions := map[string]string{
-		"search_path": "public, testsp",
+		"search_path": "public, testsp, \"Abc\", def",
 		// setting an isolation level is a noop:
 		// all transactions execute with serializable isolation.
 		"default_transaction_isolation": "serializable",
