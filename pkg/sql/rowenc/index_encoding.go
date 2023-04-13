@@ -440,7 +440,7 @@ func DecodeIndexKey(
 	if err != nil {
 		return nil, false, err
 	}
-	remainingKey, foundNull, err = DecodeKeyVals(types, vals, colDirs, key)
+	remainingKey, foundNull, err = DecodeKeyVals(vals, colDirs, key)
 	if err != nil {
 		return nil, false, err
 	}
@@ -452,7 +452,7 @@ func DecodeIndexKey(
 // used will default to encoding.Ascending.
 // DecodeKeyVals returns whether or not NULL was encountered in the key.
 func DecodeKeyVals(
-	types []*types.T, vals []EncDatum, directions []catenumpb.IndexColumn_Direction, key []byte,
+	vals []EncDatum, directions []catenumpb.IndexColumn_Direction, key []byte,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, false, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
