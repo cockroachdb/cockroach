@@ -328,12 +328,12 @@ query T
 SELECT x FROM t@t_pkey ORDER BY x
 ----
 NULL
+[]
 null
 "crdb"
 1
 false
 true
-[]
 [1, 2, 3]
 {}
 {"a": "b", "c": "d"}
@@ -344,24 +344,24 @@ SELECT x FROM t@t_pkey ORDER BY x DESC
 {"a": "b", "c": "d"}
 {}
 [1, 2, 3]
-[]
 true
 false
 1
 "crdb"
 null
+[]
 NULL
 
 # Test to show JSON Null is different from NULL.
 query T
 SELECT x FROM t@t_pkey WHERE x IS NOT NULL ORDER BY x
 ----
+[]
 null
 "crdb"
 1
 false
 true
-[]
 [1, 2, 3]
 {}
 {"a": "b", "c": "d"}

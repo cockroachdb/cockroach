@@ -610,6 +610,25 @@ func (j *jsonEncoded) Compare(other JSON) (int, error) {
 	if other == nil {
 		return -1, nil
 	}
+	jDecoded, _ := j.decode()
+	jArray, done := jDecoded.(jsonArray)
+	otherDecoded := other.MaybeDecode()
+	otherArray, ok := otherDecoded.(jsonArray)
+	if ok && done {
+		if isJSONArrayEmpty(jArray) && isJSONArrayEmpty(otherArray) {
+			return 0, nil
+		}
+	}
+	if ok {
+		if isJSONArrayEmpty(otherArray) {
+			return 1, nil
+		}
+	}
+	if done {
+		if isJSONArrayEmpty(jArray) {
+			return -1, nil
+		}
+	}
 	if cmp := cmpJSONTypes(j.Type(), other.Type()); cmp != 0 {
 		return cmp, nil
 	}

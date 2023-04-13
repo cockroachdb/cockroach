@@ -1986,7 +1986,8 @@ func PeekLength(b []byte) (int, error) {
 		jsonEmptyArrayKeyMarker, jsonEmptyArrayKeyDescendingMarker:
 		dir := Ascending
 		if (m == jsonArrayKeyDescendingMarker) ||
-			(m == jsonObjectKeyDescendingMarker) {
+			(m == jsonObjectKeyDescendingMarker) ||
+			(m == jsonEmptyArrayKeyDescendingMarker) {
 			dir = Descending
 		}
 		// removing the starter tag

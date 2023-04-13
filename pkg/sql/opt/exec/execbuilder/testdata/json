@@ -205,7 +205,7 @@ vectorized: true
 • scan
   missing stats
   table: t@t_pkey
-  spans: [/'null' - /'null'] [/'""' - /'""'] [/'[]' - /'[]'] [/'{}' - /'{}']
+  spans: [/'[]' - /'[]'] [/'null' - /'null'] [/'""' - /'""'] [/'{}' - /'{}']
 
 # Multicolumn index, including JSONB
 
