@@ -110,4 +110,8 @@ const (
 	// UpgradedDeclarativeSchemaChangerState indicates the declarative schema changer
 	// state was modified.
 	UpgradedDeclarativeSchemaChangerState = 15
+
+	// SetIndexInvisibility indicates that the invisibility of at least one index
+	// descriptor was updated to a non-zero value.
+	SetIndexInvisibility
 )

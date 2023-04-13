@@ -116,7 +116,7 @@ world$$`, []int{SCONST}},
 		{`1e-1`, []int{FCONST}},
 	}
 	for i, d := range testData {
-		s := makeScanner(d.sql)
+		s := makeSQLScanner(d.sql)
 		var tokens []int
 		for {
 			var lval = &sqlSymType{}
@@ -153,7 +153,7 @@ foo`, "", "foo"},
 		{`/* /* */`, "unterminated comment", ""},
 	}
 	for i, d := range testData {
-		s := makeScanner(d.sql)
+		s := makeSQLScanner(d.sql)
 		var lval = &sqlSymType{}
 		present, ok := s.ScanComment(lval)
 		if d.err == "" && (!present || !ok) {
@@ -169,7 +169,7 @@ foo`, "", "foo"},
 
 func TestScanKeyword(t *testing.T) {
 	for _, kwName := range lexbase.KeywordNames {
-		s := makeScanner(kwName)
+		s := makeSQLScanner(kwName)
 		var lval = &sqlSymType{}
 		s.Scan(lval)
 		if id := lexbase.GetKeywordID(kwName); id != lval.ID() {
@@ -209,7 +209,7 @@ func TestScanNumber(t *testing.T) {
 		{`9223372036854775809`, `9223372036854775809`, ICONST},
 	}
 	for _, d := range testData {
-		s := makeScanner(d.sql)
+		s := makeSQLScanner(d.sql)
 		var lval = &sqlSymType{}
 		s.Scan(lval)
 		if d.id != int(lval.ID()) {
@@ -231,7 +231,7 @@ func TestScanPlaceholder(t *testing.T) {
 		{`$123`, "123"},
 	}
 	for _, d := range testData {
-		s := makeScanner(d.sql)
+		s := makeSQLScanner(d.sql)
 		var lval = &sqlSymType{}
 		s.Scan(lval)
 		if lval.ID() != PLACEHOLDER {
@@ -325,7 +325,7 @@ world`},
 		{`$a$a$$`, `unterminated string`},
 	}
 	for _, d := range testData {
-		s := makeScanner(d.sql)
+		s := makeSQLScanner(d.sql)
 		var lval = &sqlSymType{}
 		s.Scan(lval)
 		if d.expected != lval.Str() {
@@ -358,7 +358,7 @@ func TestScanError(t *testing.T) {
 		{`B'123'`, `"2" is not a valid binary digit`},
 	}
 	for _, d := range testData {
-		s := makeScanner(d.sql)
+		s := makeSQLScanner(d.sql)
 		var lval = &sqlSymType{}
 		s.Scan(lval)
 		if lval.ID() != ERROR {

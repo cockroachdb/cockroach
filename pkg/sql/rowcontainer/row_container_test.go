@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -824,6 +825,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	// ordering, sorts it and verifies that the rows are in the order we expect.
 	// Only in-memory containers should be used.
 	t.Run("ReorderingInMemory", func(t *testing.T) {
+		skip.WithIssue(t, 101326, "flaky test")
 		for i := 0; i < numTestRuns; i++ {
 			rows := make([]rowenc.EncDatumRow, numRows)
 			typs := randgen.RandSortingTypes(rng, numCols)

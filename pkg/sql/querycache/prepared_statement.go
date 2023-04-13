@@ -14,7 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
@@ -24,7 +24,7 @@ import (
 // during Prepare and is later used during Describe or Execute.
 type PrepareMetadata struct {
 	// Note that AST may be nil if the prepared statement is empty.
-	parser.Statement
+	statements.Statement[tree.Statement]
 
 	// StatementNoConstants is the statement string formatted without constants,
 	// suitable for recording in statement statistics.

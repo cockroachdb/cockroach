@@ -1626,7 +1626,7 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	//    [PARTITION BY ...]
 	//    [WITH ...]
 	//    [WHERE ...]
-	//    [NOT VISIBLE]
+	//    [NOT VISIBLE | VISIBILITY ...]
 	//
 	title := make([]pretty.Doc, 0, 7)
 	title = append(title, pretty.Keyword("CREATE"))
@@ -1676,8 +1676,12 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
 	}
-	if node.NotVisible {
-		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
+	if invisibility := node.Invisibility; invisibility != 0.0 {
+		if invisibility == 1.0 {
+			clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
+		} else {
+			clauses = append(clauses, pretty.Keyword(" VISIBILITY "+fmt.Sprintf("%.2f", 1-invisibility)))
+		}
 	}
 	return p.nestUnder(
 		pretty.Fold(pretty.ConcatSpace, title...),
@@ -1716,7 +1720,7 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//    [WHERE ...]
-	//    [NOT VISIBLE]
+	//    [NOT VISIBLE | VISIBILITY ...]
 	//
 	title := pretty.Keyword("INDEX")
 	if node.Name != "" {
@@ -1749,8 +1753,12 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
 	}
-	if node.NotVisible {
-		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
+	if invisibility := node.Invisibility; invisibility != 0.0 {
+		if invisibility == 1.0 {
+			clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
+		} else {
+			clauses = append(clauses, pretty.Keyword(" VISIBILITY "+fmt.Sprintf("%.2f", 1-invisibility)))
+		}
 	}
 
 	if len(clauses) == 0 {
@@ -1767,7 +1775,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//    [WHERE ...]
-	//    [NOT VISIBLE]
+	//    [NOT VISIBLE | VISIBILITY ...]
 	//
 	// or (no constraint name):
 	//
@@ -1776,7 +1784,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//    [WHERE ...]
-	//    [NOT VISIBLE]
+	//    [NOT VISIBLE | VISIBILITY ...]
 	//
 	clauses := make([]pretty.Doc, 0, 6)
 	var title pretty.Doc
@@ -1809,8 +1817,13 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
 	}
-	if node.NotVisible {
-		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
+
+	if invisibility := node.Invisibility; invisibility != 0.0 {
+		if invisibility == 1.0 {
+			clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
+		} else {
+			clauses = append(clauses, pretty.Keyword(" VISIBILITY "+fmt.Sprintf("%.2f", 1-invisibility)))
+		}
 	}
 
 	if len(clauses) == 0 {

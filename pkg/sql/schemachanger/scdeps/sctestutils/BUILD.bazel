@@ -16,7 +16,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/faketreeeval",
-        "//pkg/sql/parser",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scop",

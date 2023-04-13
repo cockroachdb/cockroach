@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -589,7 +590,7 @@ func (b *Builder) buildScan(
 
 	// Scanning tables in databases that don't use the SURVIVE ZONE FAILURE option
 	// is disallowed when EnforceHomeRegion is true.
-	if b.evalCtx.SessionData().EnforceHomeRegion && parser.IsANSIDML(b.stmt) {
+	if b.evalCtx.SessionData().EnforceHomeRegion && statements.IsANSIDML(b.stmt) {
 		errorOnInvalidMultiregionDB(b.ctx, b.evalCtx, tabMeta)
 		// Populate the remote regions touched by the multiregion database used in
 		// this query. If a query dynamically errors out as having no home region,

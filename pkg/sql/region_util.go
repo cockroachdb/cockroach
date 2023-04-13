@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -2375,12 +2376,12 @@ func (p *planner) GetMultiregionConfig(
 
 // IsANSIDML is part of the eval.Planner interface.
 func (p *planner) IsANSIDML() bool {
-	return p.stmt.IsANSIDML()
+	return statements.IsANSIDML(p.stmt.AST)
 }
 
 // EnforceHomeRegion is part of the eval.Planner interface.
 func (p *planner) EnforceHomeRegion() bool {
-	return p.EvalContext().SessionData().EnforceHomeRegion && p.stmt.IsANSIDML()
+	return p.EvalContext().SessionData().EnforceHomeRegion && statements.IsANSIDML(p.stmt.AST)
 }
 
 // GetRangeDescIterator is part of the eval.Planner interface.

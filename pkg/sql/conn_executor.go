@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -2878,7 +2879,7 @@ func (ex *connExecutor) execCopyOut(
 	return nil, nil
 }
 
-func (ex *connExecutor) setCopyLoggingFields(stmt parser.Statement) {
+func (ex *connExecutor) setCopyLoggingFields(stmt statements.Statement[tree.Statement]) {
 	// These fields need to be set for logging purposes.
 	ex.planner.stmt = Statement{
 		Statement: stmt,

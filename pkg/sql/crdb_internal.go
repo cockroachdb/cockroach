@@ -3543,6 +3543,7 @@ CREATE TABLE crdb_internal.table_indexes (
 						if idx.IsSharded() {
 							shardBucketCnt = tree.NewDInt(tree.DInt(idx.GetSharded().ShardBuckets))
 						}
+						idxInvisibility := idx.GetInvisibility()
 						namePrefix := tree.ObjectNamePrefix{SchemaName: tree.Name(sc.GetName()), ExplicitSchema: true}
 						fullTableName := tree.MakeTableNameFromPrefix(namePrefix, tree.Name(table.GetName()))
 						var partitionBuf bytes.Buffer
@@ -3582,7 +3583,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							tree.MakeDBool(tree.DBool(idx.IsUnique())),
 							tree.MakeDBool(idx.GetType() == descpb.IndexDescriptor_INVERTED),
 							tree.MakeDBool(tree.DBool(idx.IsSharded())),
-							tree.MakeDBool(tree.DBool(!idx.IsNotVisible())),
+							tree.MakeDBool(idxInvisibility == 0.0),
 							shardBucketCnt,
 							createdAt,
 							tree.NewDString(createIndexStmt),

@@ -1,0 +1,11 @@
+parse
+DECLARE
+BEGIN
+  CLOSE some_cursor;
+END
+----
+DECLARE
+BEGIN
+CLOSE a cursor
+<NOT DONE YET>END
+<NOT DONE YET>

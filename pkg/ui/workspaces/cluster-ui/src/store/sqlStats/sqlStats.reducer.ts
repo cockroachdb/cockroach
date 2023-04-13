@@ -14,24 +14,13 @@ import { DOMAIN_NAME } from "../utils";
 import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../../timeScaleDropdown";
 import moment from "moment-timezone";
+import { createInitialState, RequestState } from "src/api/types";
 
 export type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
 
-export type SQLStatsState = {
-  data: StatementsResponse;
-  lastError: Error;
-  valid: boolean;
-  lastUpdated: moment.Moment | null;
-  inFlight: boolean;
-};
+export type SQLStatsState = RequestState<StatementsResponse>;
 
-const initialState: SQLStatsState = {
-  data: null,
-  lastError: null,
-  valid: false,
-  lastUpdated: null,
-  inFlight: false,
-};
+const initialState = createInitialState<StatementsResponse>();
 
 export type UpdateTimeScalePayload = {
   ts: TimeScale;
@@ -47,13 +36,13 @@ const sqlStatsSlice = createSlice({
       state.inFlight = false;
       state.data = action.payload;
       state.valid = true;
-      state.lastError = null;
+      state.error = null;
       state.lastUpdated = moment.utc();
       state.inFlight = false;
     },
     failed: (state, action: PayloadAction<Error>) => {
       state.valid = false;
-      state.lastError = action.payload;
+      state.error = action.payload;
       state.lastUpdated = moment.utc();
       state.inFlight = false;
     },

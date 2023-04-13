@@ -3877,7 +3877,15 @@ func (t *logicTest) validateAfterTestCompletion() error {
 		// If `useCockroachGoTestserver` is true and we do an upgrade,
 		// this may fail if we're in between migrations that
 		// upgrade the descriptors.
-		if !t.cfg.UseCockroachGoTestserver {
+		//
+		// We also want to skip this check for mixed-version configurations (which
+		// have DisableUpgrade=true and an old BootstrapVersion) in case new
+		// fields are added to the descriptor in the newer version. In mixed-version
+		// test configs, nodes are bootstraped with the older version of the system
+		// tables which don't include the new fields in the protobuf, so they will
+		// fail to round-trip.
+		if !t.cfg.UseCockroachGoTestserver &&
+			!(t.cfg.DisableUpgrade && t.cfg.BootstrapVersion != clusterversion.Key(0)) {
 			rows, err := t.db.Query(
 				`
 SELECT encode(descriptor, 'hex') AS descriptor

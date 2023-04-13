@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -869,7 +870,7 @@ func (c *conn) handleSimpleQuery(
 	if len(stmts) == 0 {
 		return c.stmtBuf.Push(
 			ctx, sql.ExecStmt{
-				Statement:    parser.Statement{},
+				Statement:    statements.Statement[tree.Statement]{},
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
 				ParseEnd:     endParse,
@@ -945,7 +946,7 @@ func (c *conn) handleSimpleQuery(
 		// were the last statement in the batch.
 		lastBeforeShowCommitTimestamp := func() bool {
 			n := len(stmts)
-			isShowCommitTimestamp := func(s parser.Statement) bool {
+			isShowCommitTimestamp := func(s statements.Statement[tree.Statement]) bool {
 				_, ok := s.AST.(*tree.ShowCommitTimestamp)
 				return ok
 			}
@@ -1006,7 +1007,7 @@ func (c *conn) handleParse(
 		err := pgerror.WrongNumberOfPreparedStatements(len(stmts))
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	var stmt parser.Statement
+	var stmt statements.Statement[tree.Statement]
 	if len(stmts) == 1 {
 		stmt = stmts[0]
 	}

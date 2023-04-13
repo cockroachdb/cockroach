@@ -142,10 +142,12 @@ var validationMap = []struct {
 	{
 		obj: descpb.IndexDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
-			"Name":                {status: thisFieldReferencesNoObjects},
-			"ID":                  {status: thisFieldReferencesNoObjects},
-			"Unique":              {status: thisFieldReferencesNoObjects},
+			"Name":   {status: thisFieldReferencesNoObjects},
+			"ID":     {status: thisFieldReferencesNoObjects},
+			"Unique": {status: thisFieldReferencesNoObjects},
+			// NotVisible is deprecated in favor of Invisibility.
 			"NotVisible":          {status: thisFieldReferencesNoObjects},
+			"Invisibility":        {status: iSolemnlySwearThisFieldIsValidated},
 			"Version":             {status: thisFieldReferencesNoObjects},
 			"KeyColumnNames":      {status: iSolemnlySwearThisFieldIsValidated},
 			"KeyColumnDirections": {status: iSolemnlySwearThisFieldIsValidated},
@@ -708,6 +710,7 @@ func TestValidateTableDesc(t *testing.T) {
 					EncodingType:        catenumpb.PrimaryIndexEncoding,
 					ConstraintID:        1,
 					NotVisible:          true,
+					Invisibility:        1.0,
 				},
 				Families: []descpb.ColumnFamilyDescriptor{
 					{ID: 0, Name: "primary",
@@ -2414,6 +2417,37 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 				NextFamilyID: 1,
+			}},
+		{`invisibility is incompatible with value for not_visible`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "bar", ConstraintID: 1,
+					KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+					EncodingType:        catenumpb.PrimaryIndexEncoding,
+					Version:             descpb.LatestIndexDescriptorVersion,
+				},
+				Indexes: []descpb.IndexDescriptor{
+					{ID: 2, Name: "invisible", KeyColumnIDs: []descpb.ColumnID{1},
+						KeyColumnNames:      []string{"bar"},
+						KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+						NotVisible:          false,
+						Invisibility:        1,
+					},
+				},
+				NextColumnID:     2,
+				NextFamilyID:     1,
+				NextIndexID:      3,
+				NextConstraintID: 2,
 			}},
 	}
 	for i, d := range testData {

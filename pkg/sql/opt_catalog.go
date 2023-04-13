@@ -1550,9 +1550,9 @@ func (oi *optIndex) IsInverted() bool {
 	return oi.idx.GetType() == descpb.IndexDescriptor_INVERTED
 }
 
-// IsNotVisible is part of the cat.Index interface.
-func (oi *optIndex) IsNotVisible() bool {
-	return oi.idx.IsNotVisible()
+// GetInvisibility is part of the cat.Index interface.
+func (oi *optIndex) GetInvisibility() float64 {
+	return oi.idx.GetInvisibility()
 }
 
 // ColumnCount is part of the cat.Index interface.
@@ -2385,9 +2385,9 @@ func (oi *optVirtualIndex) IsInverted() bool {
 	return false
 }
 
-// IsNotVisible is part of the cat.Index interface.
-func (oi *optVirtualIndex) IsNotVisible() bool {
-	return false
+// GetInvisibility is part of the cat.Index interface.
+func (oi *optVirtualIndex) GetInvisibility() float64 {
+	return 0.0
 }
 
 // ExplicitColumnCount is part of the cat.Index interface.

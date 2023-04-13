@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -127,7 +127,7 @@ type ExecStmt struct {
 	// Information returned from parsing: AST, SQL, NumPlaceholders.
 	// Note that AST can be nil, in which case executing it should produce an
 	// "empty query response" message.
-	parser.Statement
+	statements.Statement[tree.Statement]
 
 	// TimeReceived is the time at which the exec message was received
 	// from the client. Used to compute the service latency.
@@ -198,7 +198,7 @@ type PrepareStmt struct {
 	// Information returned from parsing: AST, SQL, NumPlaceholders.
 	// Note that AST can be nil, in which case executing it should produce an
 	// "empty query response" message.
-	parser.Statement
+	statements.Statement[tree.Statement]
 
 	TypeHints tree.PlaceholderTypes
 	// RawTypeHints is the representation of type hints exactly as specified by
@@ -330,7 +330,7 @@ var _ Command = Flush{}
 
 // CopyIn is the command for execution of the Copy-in pgwire subprotocol.
 type CopyIn struct {
-	ParsedStmt parser.Statement
+	ParsedStmt statements.Statement[tree.Statement]
 	Stmt       *tree.CopyFrom
 	// Conn is the network connection. Execution of the CopyFrom statement takes
 	// control of the connection.
@@ -362,7 +362,7 @@ var _ Command = CopyIn{}
 
 // CopyOut is the command for execution of the Copy-out pgwire subprotocol.
 type CopyOut struct {
-	ParsedStmt parser.Statement
+	ParsedStmt statements.Statement[tree.Statement]
 	Stmt       *tree.CopyTo
 	// TimeReceived is the time at which the message was received
 	// from the client. Used to compute the service latency.

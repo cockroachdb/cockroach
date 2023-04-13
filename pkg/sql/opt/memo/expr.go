@@ -759,11 +759,11 @@ func (s *ScanPrivate) IsVirtualTable(md *opt.Metadata) bool {
 	return tab.IsVirtualTable()
 }
 
-// IsNotVisibleIndexScan returns true if the index being scanned is a not
-// visible index.
+// IsNotVisibleIndexScan returns true if the index being scanned is not fully
+// visible.
 func (s *ScanPrivate) IsNotVisibleIndexScan(md *opt.Metadata) bool {
 	index := md.Table(s.Table).Index(s.Index)
-	return index.IsNotVisible()
+	return index.GetInvisibility() != 0.0
 }
 
 // showNotVisibleIndexInfo is a helper function that checks if we want to show

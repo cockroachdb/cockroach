@@ -70,6 +70,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/storage",
+        "//pkg/testutils/skip",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

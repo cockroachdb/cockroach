@@ -89,4 +89,11 @@ genrule(
     ],
 )
 
+exports_files(
+    [
+        "sql-gen.sh",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 get_x_data(name = "get_x_data")
