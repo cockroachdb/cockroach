@@ -47,12 +47,11 @@ func keyToDatums(
 	}
 	encDatums := make([]rowenc.EncDatum, 0, len(pkTypes))
 	for len(partialKey) > 0 && len(encDatums) < len(pkTypes) {
-		i := len(encDatums)
 		// We currently assume all PRIMARY KEY columns are ascending, and block
 		// creation otherwise.
 		enc := catenumpb.DatumEncoding_ASCENDING_KEY
 		var val rowenc.EncDatum
-		val, partialKey, err = rowenc.EncDatumFromBuffer(pkTypes[i], enc, partialKey)
+		val, partialKey, err = rowenc.EncDatumFromBuffer(enc, partialKey)
 		if err != nil {
 			// Convert key to []byte to prevent hex encoding output of Key.String().
 			return nil, errors.Wrapf(err, encDatumFromBufferFmt, []byte(key))
