@@ -268,21 +268,22 @@ var (
 
 	// defaultRaftMaxInflightBytes specifies the maximum aggregate byte size of
 	// Raft log entries that a leader will send to a follower without hearing
-	// responses.
+	// responses. As such, it also bounds the amount of replication data buffered
+	// in memory on the receiver. Individual messages can still exceed this limit
+	// (consider the default command size limit at 64 MB).
 	//
-	// Previously it was assumed that RaftMaxInflightMsgs * RaftMaxSizePerMsg is a
-	// proxy for the actual max inflight traffic. However, RaftMaxSizePerMsg is
-	// not a hard limit, it's rather a "target" size for the message, so the
-	// actual inflight bytes could exceed this product by a large factor.
-	// RaftMaxInflightBytes is a more accurate limit, and should be used in
-	// conjunction with the two.
+	// Normally, RaftMaxInflightMsgs * RaftMaxSizePerMsg will bound this at 4 MB
+	// (128 messages at 32 KB each). However, individual messages are allowed to
+	// exceed the 32 KB limit, typically large AddSSTable commands that can be
+	// around 10 MB each. To prevent followers running out of memory, we place an
+	// additional total byte limit of 32 MB, which is 8 times more than normal.
+	// This was found to significantly reduce OOM incidence during RESTORE with
+	// overloaded disks.
 	//
-	// TODO(#90314): lower this limit to something close to max rates observed in
-	// healthy clusters. Currently, this is a conservatively large multiple of
-	// defaultRaftMaxInflightMsgs * defaultRaftMaxSizePerMsg, so that we don't
-	// abruptly break the previous assumption and cut off traffic.
+	// Per the bandwidth-delay product, this will limit per-range throughput to
+	// 64 MB/s at 500 ms RTT, 320 MB/s at 100 ms RTT, and 3.2 GB/s at 10 ms RTT.
 	defaultRaftMaxInflightBytes = envutil.EnvOrDefaultBytes(
-		"COCKROACH_RAFT_MAX_INFLIGHT_BYTES", 256<<20 /* 256 MB */)
+		"COCKROACH_RAFT_MAX_INFLIGHT_BYTES", 32<<20 /* 32 MB */)
 )
 
 // Config is embedded by server.Config. A base config is not meant to be used
@@ -531,6 +532,8 @@ type RaftConfig struct {
 
 	// RaftMaxInflightBytes controls the maximum aggregate byte size of Raft log
 	// entries that a leader will send to a follower without hearing responses.
+	// As such, it also bounds the amount of replication data buffered in memory
+	// on the receiver.
 	//
 	// Normally RaftMaxSizePerMsg * RaftMaxInflightMsgs is the actual limit. But
 	// the RaftMaxSizePerMsg is soft, and Raft may send individual messages
