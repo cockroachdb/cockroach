@@ -700,6 +700,7 @@ export class DatabaseTablePage extends React.Component<
                     sortSetting={this.state.grantSortSetting}
                     onChangeSortSetting={this.changeGrantSortSetting.bind(this)}
                     loading={this.props.details.loading}
+                    tableWrapperClassName={cx("sorted-table")}
                   />
                 )}
                 renderError={() =>

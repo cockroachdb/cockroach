@@ -272,6 +272,7 @@ export const JobsTable: React.FC<JobsTableProps> = props => {
       columns={props.visibleColumns}
       className={cx("jobs-table")}
       rowClass={job => cx("jobs-table__row--" + job.status)}
+      tableWrapperClassName={cx("sorted-table")}
       renderNoResult={
         <EmptyTable
           title="No jobs found."

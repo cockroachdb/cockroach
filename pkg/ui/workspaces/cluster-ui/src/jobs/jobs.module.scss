@@ -104,8 +104,6 @@
   &__cell--description {
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 500px;
     word-wrap: break-word;
   }
 
@@ -113,6 +111,10 @@
     display: inline-block;
     margin-right: 7px;
   }
+}
+
+.sorted-table {
+  width: 100%;
 }
 
 .job-details {
