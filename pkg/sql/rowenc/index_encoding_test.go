@@ -669,7 +669,7 @@ func ExtractIndexKey(
 	}
 	values := make([]EncDatum, index.NumKeyColumns())
 	dirs := index.IndexDesc().KeyColumnDirections
-	key, _, err = DecodeKeyVals(indexTypes, values, dirs, key)
+	key, _, err = DecodeKeyVals(values, dirs, key)
 	if err != nil {
 		return nil, err
 	}
@@ -692,7 +692,7 @@ func ExtractIndexKey(
 			return nil, err
 		}
 	}
-	_, _, err = DecodeKeyVals(extraTypes, extraValues, dirs, extraKey)
+	_, _, err = DecodeKeyVals(extraValues, dirs, extraKey)
 	if err != nil {
 		return nil, err
 	}
