@@ -1662,6 +1662,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <*tree.RoutineBody> opt_routine_body
 %type <tree.FuncObj> function_with_paramtypes
 %type <tree.FuncObjs> function_with_paramtypes_list
+%type <empty> opt_link_sym
 
 %type <*tree.LabelSpec> label_spec
 
@@ -4651,7 +4652,7 @@ create_func_opt_list:
   }
 
 create_func_opt_item:
-  AS func_as
+  AS func_as opt_link_sym
   {
     $$.val = tree.FunctionBodyStr($2)
   }
@@ -4779,6 +4780,14 @@ opt_routine_body:
 | /* Empty */
   {
     $$.val = (*tree.RoutineBody)(nil)
+  }
+
+opt_link_sym:
+  ',' SCONST
+  {
+  }
+| /* Empty */
+  {
   }
 
 // %Help: DROP FUNCTION - remove a function
