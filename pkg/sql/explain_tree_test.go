@@ -60,7 +60,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			sd := NewFakeSessionData(ctx, execCfg.Settings, "test")
+			sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 			internalPlanner, cleanup := NewInternalPlanner(
 				"test",
 				kv.NewTxn(ctx, db, s.NodeID()),
