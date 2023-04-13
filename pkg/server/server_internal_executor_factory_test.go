@@ -33,7 +33,7 @@ func TestInternalExecutorClearsMonitorMemory(t *testing.T) {
 
 	mon := s.(*TestServer).sqlServer.internalDBMemMonitor
 	ief := s.ExecutorConfig().(sql.ExecutorConfig).InternalDB
-	sessionData := sql.NewFakeSessionData(&s.ClusterSettings().SV, "TestInternalExecutorClearsMonitorMemory")
+	sessionData := sql.NewFakeSessionData(ctx, s.ClusterSettings(), "TestInternalExecutorClearsMonitorMemory")
 	ie := ief.NewInternalExecutor(sessionData)
 	rows, err := ie.QueryIteratorEx(ctx, "test", nil, sessiondata.NodeUserSessionDataOverride, `SELECT 1`)
 	require.NoError(t, err)
