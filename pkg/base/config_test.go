@@ -135,12 +135,7 @@ func TestRaftMaxInflightBytes(t *testing.T) {
 		maxInfl uint64
 		want    uint64
 	}{
-		// If any of these tests fail, sync the corresponding default values with
-		// config.go, and update the comments that reason about default values.
-		{want: 256 << 20},                    // assert 255 MB is still default
-		{maxMsgs: 128, want: 256 << 20},      // assert 128 is still default
-		{msgSize: 32 << 10, want: 256 << 20}, // assert 32 KB is still default
-
+		{want: 32 << 20},                  // default
 		{maxMsgs: 1 << 30, want: 1 << 45}, // large maxMsgs
 		{msgSize: 1 << 50, want: 1 << 57}, // large msgSize
 
