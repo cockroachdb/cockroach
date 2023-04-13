@@ -16,6 +16,7 @@ go_library(
         "data.go",
         "errors.go",
         "method.go",
+        "range_unavailable_error.go",
         "replica_unavailable_error.go",
         ":gen-batch-generated",  # keep
         ":gen-errordetailtype-stringer",  # keep
@@ -54,6 +55,7 @@ go_test(
         "api_test.go",
         "batch_test.go",
         "errors_test.go",
+        "range_unavailable_error_test.go",
         "replica_unavailable_error_test.go",
         "string_test.go",
     ],

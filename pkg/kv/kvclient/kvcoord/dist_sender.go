@@ -1633,6 +1633,8 @@ func (ds *DistSender) sendPartialBatch(
 	tBegin, attempts := timeutil.Now(), int64(0) // for slow log message
 	// prevTok maintains the EvictionToken used on the previous iteration.
 	var prevTok rangecache.EvictionToken
+	var failedSendCounter int
+	var maxFailedSends int = 2
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
 		attempts++
 		pErr = nil
@@ -1730,6 +1732,12 @@ func (ds *DistSender) sendPartialBatch(
 				// reloading (r4,r5,r6) from the cache on the next iteration.
 				log.VEventf(ctx, 1, "evicting range desc %s after %s", routingTok, err)
 				routingTok.Evict(ctx)
+				failedSendCounter++
+				// Prevents infinite retry loops when all replicas are unreachable past two retries.
+				if failedSendCounter > maxFailedSends {
+					pErr = kvpb.NewError(kvpb.NewRangeUnavailableError(err, routingTok.Desc()))
+					return response{pErr: pErr}
+				}
 				continue
 			}
 			break

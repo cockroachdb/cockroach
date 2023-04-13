@@ -407,6 +407,11 @@ message ReplicaUnavailableError {
   optional errorspb.EncodedError cause = 5 [(gogoproto.nullable) = false];
 }
 
+message RangeUnavailableError {
+  optional roachpb.RangeDescriptor desc = 2 [(gogoproto.nullable) = false];
+  optional errorspb.EncodedError cause = 5 [(gogoproto.nullable) = false];
+}
+
 // A RaftGroupDeletedError indicates a raft group has been deleted for
 // the replica.
 message RaftGroupDeletedError {
@@ -720,7 +725,6 @@ message Error {
 
   reserved 1, 2, 3, 6 ;
 }
-
 
 // InsufficientSpaceError is an error due to insufficient space remaining.
 message InsufficientSpaceError {
