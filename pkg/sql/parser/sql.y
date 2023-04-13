@@ -897,7 +897,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
-%token <str> CACHE CALLED CANCEL CANCELQUERY CAPABILITIES CAPABILITY CASCADE CASE CAST CBRT CHANGEFEED CHAR
+%token <str> CACHE CALL CALLED CANCEL CANCELQUERY CAPABILITIES CAPABILITY CASCADE CASE CAST CBRT CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CHECK_FILES CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
@@ -965,7 +965,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
-%token <str> PROCEDURAL PUBLIC PUBLICATION
+%token <str> PROCEDURAL PROCEDURE PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY QUOTE
 
@@ -1140,6 +1140,8 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
+
+%type <tree.Statement> call_stmt
 
 %type <tree.Statement> cancel_stmt
 %type <tree.Statement> cancel_jobs_stmt
@@ -1753,6 +1755,7 @@ stmt:
 stmt_without_legacy_transaction:
   preparable_stmt            // help texts in sub-rule
 | analyze_stmt               // EXTEND WITH HELP: ANALYZE
+| call_stmt
 | copy_stmt
 | comment_stmt
 | execute_stmt               // EXTEND WITH HELP: EXECUTE
@@ -3957,6 +3960,10 @@ opt_with_options:
     $$.val = nil
   }
 
+// CALL invokes a stored procedure. It is not currently supported in CRDB.
+call_stmt:
+  CALL error { return unimplementedWithIssueDetail(sqllex, 17511, "call procedure") }
+
 // The COPY grammar in postgres has 3 different versions, all of which are supported by postgres:
 // 1) The "really old" syntax from v7.2 and prior
 // 2) Pre 9.0 using hard-wired, space-separated options
@@ -4924,6 +4931,7 @@ create_unsupported:
 | CREATE FOREIGN DATA error { return unimplemented(sqllex, "create fdw") }
 | CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
 | CREATE OPERATOR error { return unimplementedWithIssue(sqllex, 65017) }
+| CREATE opt_or_replace PROCEDURE error { return unimplementedWithIssueDetail(sqllex, 17511, "create procedure") }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
 | CREATE opt_or_replace RULE error { return unimplemented(sqllex, "create rule") }
 | CREATE SERVER error { return unimplemented(sqllex, "create server") }
@@ -16336,6 +16344,7 @@ unreserved_keyword:
 | BUNDLE
 | BY
 | CACHE
+| CALL
 | CALLED
 | CANCEL
 | CANCELQUERY
@@ -16592,6 +16601,7 @@ unreserved_keyword:
 | PRIOR
 | PRIORITY
 | PRIVILEGES
+| PROCEDURE
 | PUBLIC
 | PUBLICATION
 | QUERIES
@@ -16804,6 +16814,7 @@ bare_label_keywords:
 | BUNDLE
 | BY
 | CACHE
+| CALL
 | CALLED
 | CANCEL
 | CANCELQUERY
@@ -17133,6 +17144,7 @@ bare_label_keywords:
 | PRIOR
 | PRIORITY
 | PRIVILEGES
+| PROCEDURE
 | PUBLIC
 | PUBLICATION
 | QUERIES
