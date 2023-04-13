@@ -2025,6 +2025,13 @@ func TestLogic_stats(
 	runLogicTest(t, "stats")
 }
 
+func TestLogic_stored_procedures(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "stored_procedures")
+}
+
 func TestLogic_storing(
 	t *testing.T,
 ) {
