@@ -49,6 +49,46 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
+// NewInternalSessionData returns a session data for use in internal queries
+// that are not run on behalf of a user session, such as those run during the
+// steps of background jobs and schema changes. Each session variable is
+// initialized using the correct default value.
+func NewInternalSessionData(
+	ctx context.Context, settings *cluster.Settings, opName string,
+) *sessiondata.SessionData {
+	appName := catconstants.InternalAppNamePrefix
+	if opName != "" {
+		appName = catconstants.InternalAppNamePrefix + "-" + opName
+	}
+
+	sd := &sessiondata.SessionData{}
+	sds := sessiondata.NewStack(sd)
+	defaults := SessionDefaults(map[string]string{
+		"application_name": appName,
+	})
+	sdMutIterator := makeSessionDataMutatorIterator(sds, defaults, settings)
+
+	sdMutIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		for varName, v := range varGen {
+			if v.Set != nil {
+				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
+				if hasDefault {
+					if err := v.Set(ctx, m, defVal); err != nil {
+						panic(err)
+					}
+				}
+			}
+		}
+	})
+
+	sd.UserProto = username.NodeUserName().EncodeProto()
+	sd.Internal = true
+	sd.SearchPath = sessiondata.DefaultSearchPathForUser(username.NodeUserName())
+	sd.SequenceState = sessiondata.NewSequenceState()
+	sd.Location = time.UTC
+	return sd
+}
+
 var _ isql.Executor = &InternalExecutor{}
 
 // InternalExecutor can be used internally by code modules to execute SQL
@@ -1384,7 +1424,7 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 	// than the actual user, a security boundary should be added to the error
 	// handling of internal executor.
 	if sd == nil {
-		sd = NewFakeSessionData(ctx, settings, "" /* opName */)
+		sd = NewInternalSessionData(ctx, settings, "" /* opName */)
 		sd.UserProto = username.RootUserName().EncodeProto()
 	}
 

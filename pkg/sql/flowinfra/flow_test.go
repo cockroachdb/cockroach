@@ -56,7 +56,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 				if vectorize {
 					vectorizeMode = sessiondatapb.VectorizeOn
 				}
-				sd := sql.NewFakeSessionData(ctx, execCfg.Settings, "test")
+				sd := sql.NewInternalSessionData(ctx, execCfg.Settings, "test")
 				sd.VectorizeMode = vectorizeMode
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
