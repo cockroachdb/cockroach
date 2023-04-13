@@ -1114,6 +1114,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Create a server controller.
 	sc := newServerController(ctx,
+		cfg.BaseConfig.AmbientCtx,
 		node, cfg.BaseConfig.IDContainer,
 		stopper, st,
 		lateBoundServer,
