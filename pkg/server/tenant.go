@@ -86,6 +86,7 @@ type SQLServerWrapper struct {
 	// TODO(knz): Find a way to merge these two togethers so there is just
 	// one implementation.
 
+	cfg        *BaseConfig
 	clock      *hlc.Clock
 	rpcContext *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
@@ -192,13 +193,13 @@ func NewSeparateProcessTenantServer(
 	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps)
 }
 
-// NewSharedProcessTenantServer creates a tenant-specific, SQL-only
+// newSharedProcessTenantServer creates a tenant-specific, SQL-only
 // server against a KV backend, with defaults appropriate for a
 // SQLServer that is not located in the same process as a KVServer.
 //
 // The caller is responsible for listening to the server's ShutdownRequested()
 // channel and stopping cfg.stopper when signaled.
-func NewSharedProcessTenantServer(
+func newSharedProcessTenantServer(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	baseCfg BaseConfig,
@@ -418,6 +419,8 @@ func newTenantServer(
 	)
 
 	return &SQLServerWrapper{
+		cfg: args.BaseConfig,
+
 		clock:      args.clock,
 		rpcContext: args.rpcContext,
 
