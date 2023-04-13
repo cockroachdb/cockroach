@@ -298,7 +298,7 @@ func registerRestore(r registry.Registry) {
 				nodes: 9,
 				zones: []string{"us-east-2b", "us-west-2b", "eu-west-1b"}}), // These zones are AWS-specific.
 			backup:  makeBackupSpecs(backupSpecs{}),
-			timeout: 1 * time.Hour,
+			timeout: 90 * time.Minute,
 			tags:    registry.Tags("aws"),
 		},
 		{
