@@ -34,7 +34,7 @@ import (
 func TestCachedSettingsStoreAndLoad(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var testSettings []roachpb.KeyValue
+	var testSettings, additionalSettings, expectedSettings[]roachpb.KeyValue
 	for i := 0; i < 5; i++ {
 		testKey := fmt.Sprintf("key_%d", i)
 		testVal := fmt.Sprintf("val_%d", i)
@@ -43,6 +43,24 @@ func TestCachedSettingsStoreAndLoad(t *testing.T) {
 			Value: roachpb.MakeValueFromString(testVal),
 		})
 	}
+
+	// Added an additionalSettings slice that contains overlapping keys with new values.
+	// After storing the testSettings and checking the original functionality, 
+	// the test calls storeCachedSettingsKVs with additionalSettings.
+	// Finally, it checks if the actual settings match the expectedSettings,
+	// which should include both the non-overlapping original settings and the
+	// additional settings.
+
+	for i := 3; i < 6; i++ {
+		testKey := fmt.Sprintf("key_%d", i)
+		testVal := fmt.Sprintf("new_val_%d", i)
+		additionalSettings = append(additionalSettings, roachpb.KeyValue{
+			Key:   []byte(testKey),
+			Value: roachpb.MakeValueFromString(testVal),
+		})
+	}
+
+	expectedSettings = append(testSettings[:3], additionalSettings...)
 
 	ctx := context.Background()
 	engine, err := storage.Open(ctx, storage.InMemory(),
@@ -57,6 +75,13 @@ func TestCachedSettingsStoreAndLoad(t *testing.T) {
 	actualSettings, err := loadCachedSettingsKVs(ctx, engine)
 	require.NoError(t, err)
 	require.Equal(t, testSettings, actualSettings)
+
+	// Test new functionality - key deletion and updating
+	require.NoError(t, storeCachedSettingsKVs(ctx, engine, additionalSettings))
+
+	actualSettings, err = loadCachedSettingsKVs(ctx, engine)
+	require.NoError(t, err)
+	require.ElementsMatch(t, expectedSettings, actualSettings)
 }
 
 func TestCachedSettingsServerRestart(t *testing.T) {
