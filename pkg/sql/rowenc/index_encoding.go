@@ -426,11 +426,7 @@ func DecodeIndexKeyPrefix(
 // non-unique secondary indexes or unique secondary indexes containing NULL or
 // empty.
 func DecodeIndexKey(
-	codec keys.SQLCodec,
-	types []*types.T,
-	vals []EncDatum,
-	colDirs []catenumpb.IndexColumn_Direction,
-	key []byte,
+	codec keys.SQLCodec, vals []EncDatum, colDirs []catenumpb.IndexColumn_Direction, key []byte,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	key, err := codec.StripTenantPrefix(key)
 	if err != nil {
