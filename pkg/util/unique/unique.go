@@ -14,7 +14,82 @@ import (
 	"bytes"
 	"reflect"
 	"sort"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+// ProcessUniqueID is an ID which is unique to this process in the cluster.
+// It is used to generate unique integer keys via GenerateUniqueInt. Generally
+// it is the node ID of a system tenant or the sql instance ID of a secondary
+// tenant.
+//
+// Note that for its uniqueness property to hold, the value must use no more
+// than 15 bits. Nothing enforces this for node IDs, but, in practice, they
+// do not generally get to be more than 16k unless nodes are being added and
+// removed frequently. In order to eliminate this bug, we ought to use the
+// leased SQLInstanceID instead of the NodeID to generate these unique integers
+// in all cases.
+type ProcessUniqueID int32
+
+// NodeIDBits is the number of bits stored in the lower portion of
+// GenerateUniqueInt.
+const NodeIDBits = 15
+
+var uniqueIntState struct {
+	syncutil.Mutex
+	timestamp uint64
+}
+
+var uniqueIntEpoch = time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
+
+// GenerateUniqueInt creates a unique int composed of the current time at a
+// 10-microsecond granularity and the instance-id. The instance-id is stored in the
+// lower 15 bits of the returned value and the timestamp is stored in the upper
+// 48 bits. The top-bit is left empty so that negative values are not returned.
+// The 48-bit timestamp field provides for 89 years of timestamps. We use a
+// custom epoch (Jan 1, 2015) in order to utilize the entire timestamp range.
+//
+// Note that GenerateUniqueInt() imposes a limit on instance IDs while
+// generateUniqueBytes() does not.
+//
+// TODO(pmattis): Do we have to worry about persisting the milliseconds value
+// periodically to avoid the clock ever going backwards (e.g. due to NTP
+// adjustment)?
+func GenerateUniqueInt(instanceID ProcessUniqueID) uint64 {
+	const precision = uint64(10 * time.Microsecond)
+
+	// TODO(andrei): For tenants we need to validate that the current time is
+	// within the validity of the sqlliveness session to which the instanceID is
+	// bound. Without this validation, two different nodes might be calling this
+	// function with the same instanceID at the same time, and both would generate
+	// the same unique int. See #90459.
+	nowNanos := timeutil.Now().UnixNano()
+	// Paranoia: nowNanos should never be less than uniqueIntEpoch.
+	if nowNanos < uniqueIntEpoch {
+		nowNanos = uniqueIntEpoch
+	}
+	timestamp := uint64(nowNanos-uniqueIntEpoch) / precision
+
+	uniqueIntState.Lock()
+	if timestamp <= uniqueIntState.timestamp {
+		timestamp = uniqueIntState.timestamp + 1
+	}
+	uniqueIntState.timestamp = timestamp
+	uniqueIntState.Unlock()
+
+	return GenerateUniqueID(int32(instanceID), timestamp)
+}
+
+// GenerateUniqueID encapsulates the logic to generate a unique number from
+// a nodeID and timestamp.
+func GenerateUniqueID(instanceID int32, timestamp uint64) uint64 {
+	// We xor in the instanceID so that instanceIDs larger than 32K will flip bits
+	// in the timestamp portion of the final value instead of always setting them.
+	id := (timestamp << NodeIDBits) ^ uint64(instanceID)
+	return id
+}
 
 // UniquifyByteSlices takes as input a slice of slices of bytes, and
 // deduplicates them using a sort and unique. The output will not contain any

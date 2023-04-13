@@ -6,6 +6,10 @@ go_library(
     srcs = ["unique.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/unique",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
 )
 
 go_test(
@@ -14,6 +18,7 @@ go_test(
     srcs = ["unique_test.go"],
     args = ["-test.timeout=55s"],
     embed = [":unique"],
+    deps = ["//pkg/util/leaktest"],
 )
 
 get_x_data(name = "get_x_data")

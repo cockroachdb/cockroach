@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/kr/pretty"
@@ -288,5 +288,5 @@ func generateUniqueSSTName(nodeID base.SQLInstanceID) string {
 	// The data/ prefix, including a /, is intended to group SSTs in most of the
 	// common file/bucket browse UIs.
 	return fmt.Sprintf("data/%d.sst",
-		builtins.GenerateUniqueInt(builtins.ProcessUniqueID(nodeID)))
+		unique.GenerateUniqueInt(unique.ProcessUniqueID(nodeID)))
 }

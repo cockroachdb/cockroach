@@ -97,6 +97,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -2074,9 +2075,9 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDInt(GenerateUniqueInt(
-					ProcessUniqueID(evalCtx.NodeID.SQLInstanceID()),
-				)), nil
+				return tree.NewDInt(tree.DInt(unique.GenerateUniqueInt(
+					unique.ProcessUniqueID(evalCtx.NodeID.SQLInstanceID()),
+				))), nil
 			},
 			Info: "Returns a unique ID used by CockroachDB to generate unique row IDs if a " +
 				"Primary Key isn't defined for the table. The value is a combination of the " +
@@ -9330,7 +9331,7 @@ func overlay(s, to string, pos, size int) (tree.Datum, error) {
 // empty so that negative values are not returned. The 48 bits following after
 // represent the reversed timestamp and then 15 bits of the node id.
 func GenerateUniqueUnorderedID(instanceID base.SQLInstanceID) tree.DInt {
-	orig := uint64(GenerateUniqueInt(ProcessUniqueID(instanceID)))
+	orig := unique.GenerateUniqueInt(unique.ProcessUniqueID(instanceID))
 	uniqueUnorderedID := mapToUnorderedUniqueInt(orig)
 	return tree.DInt(uniqueUnorderedID)
 }
@@ -9343,66 +9344,6 @@ func mapToUnorderedUniqueInt(val uint64) uint64 {
 	ts := (val & ((uint64(math.MaxUint64) >> 16) << 15)) >> 15
 	v := (bits.Reverse64(ts) >> 1) | (val & (1<<15 - 1))
 	return v
-}
-
-// ProcessUniqueID is an ID which is unique to this process in the cluster.
-// It is used to generate unique integer keys via GenerateUniqueInt. Generally
-// it is the node ID of a system tenant or the sql instance ID of a secondary
-// tenant.
-//
-// Note that for its uniqueness property to hold, the value must use no more
-// than 15 bits. Nothing enforces this for node IDs, but, in practice, they
-// do not generally get to be more than 16k unless nodes are being added and
-// removed frequently. In order to eliminate this bug, we ought to use the
-// leased SQLInstanceID instead of the NodeID to generate these unique integers
-// in all cases.
-type ProcessUniqueID int32
-
-// GenerateUniqueInt creates a unique int composed of the current time at a
-// 10-microsecond granularity and the instance-id. The instance-id is stored in the
-// lower 15 bits of the returned value and the timestamp is stored in the upper
-// 48 bits. The top-bit is left empty so that negative values are not returned.
-// The 48-bit timestamp field provides for 89 years of timestamps. We use a
-// custom epoch (Jan 1, 2015) in order to utilize the entire timestamp range.
-//
-// Note that GenerateUniqueInt() imposes a limit on instance IDs while
-// generateUniqueBytes() does not.
-//
-// TODO(pmattis): Do we have to worry about persisting the milliseconds value
-// periodically to avoid the clock ever going backwards (e.g. due to NTP
-// adjustment)?
-func GenerateUniqueInt(instanceID ProcessUniqueID) tree.DInt {
-	const precision = uint64(10 * time.Microsecond)
-
-	// TODO(andrei): For tenants we need to validate that the current time is
-	// within the validity of the sqlliveness session to which the instanceID is
-	// bound. Without this validation, two different nodes might be calling this
-	// function with the same instanceID at the same time, and both would generate
-	// the same unique int. See #90459.
-	nowNanos := timeutil.Now().UnixNano()
-	// Paranoia: nowNanos should never be less than uniqueIntEpoch.
-	if nowNanos < uniqueIntEpoch {
-		nowNanos = uniqueIntEpoch
-	}
-	timestamp := uint64(nowNanos-uniqueIntEpoch) / precision
-
-	uniqueIntState.Lock()
-	if timestamp <= uniqueIntState.timestamp {
-		timestamp = uniqueIntState.timestamp + 1
-	}
-	uniqueIntState.timestamp = timestamp
-	uniqueIntState.Unlock()
-
-	return GenerateUniqueID(int32(instanceID), timestamp)
-}
-
-// GenerateUniqueID encapsulates the logic to generate a unique number from
-// a nodeID and timestamp.
-func GenerateUniqueID(instanceID int32, timestamp uint64) tree.DInt {
-	// We xor in the instanceID so that instanceIDs larger than 32K will flip bits
-	// in the timestamp portion of the final value instead of always setting them.
-	id := (timestamp << builtinconstants.NodeIDBits) ^ uint64(instanceID)
-	return tree.DInt(id)
 }
 
 func cardinality(arr *tree.DArray) tree.Datum {

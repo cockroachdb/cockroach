@@ -74,7 +74,3 @@ const (
 	// creates a job that logs SQL schema telemetry.
 	CreateSchemaTelemetryJobBuiltinName = "crdb_internal.create_sql_schema_telemetry_job"
 )
-
-// NodeIDBits is the number of bits stored in the lower portion of
-// GenerateUniqueInt.
-const NodeIDBits = 15

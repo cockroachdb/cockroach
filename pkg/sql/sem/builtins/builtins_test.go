@@ -57,26 +57,6 @@ func TestCategory(t *testing.T) {
 	}
 }
 
-// TestGenerateUniqueIDOrder verifies the expected ordering of
-// GenerateUniqueID.
-func TestGenerateUniqueIDOrder(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tests := []tree.DInt{
-		GenerateUniqueID(0, 0),
-		GenerateUniqueID(1, 0),
-		GenerateUniqueID(2<<15, 0),
-		GenerateUniqueID(0, 1),
-		GenerateUniqueID(0, 10000),
-		GenerateUniqueInt(0),
-	}
-	prev := tests[0]
-	for _, tc := range tests[1:] {
-		if tc <= prev {
-			t.Fatalf("%d > %d", tc, prev)
-		}
-	}
-}
-
 // TestMapToUniqueUnorderedID verifies that the mapping preserves the ones count.
 func TestMapToUniqueUnorderedID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
