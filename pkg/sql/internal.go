@@ -161,7 +161,7 @@ func (ie *InternalExecutor) runWithEx(
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
 	wg *sync.WaitGroup,
-	syncCallback func([]resWithPos),
+	syncCallback func([]*streamingCommandResult),
 	errCallback func(error),
 ) error {
 	ex, err := ie.initConnEx(ctx, txn, w, sd, stmtBuf, syncCallback)
@@ -202,7 +202,7 @@ func (ie *InternalExecutor) initConnEx(
 	w ieResultWriter,
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
-	syncCallback func([]resWithPos),
+	syncCallback func([]*streamingCommandResult),
 ) (*connExecutor, error) {
 	clientComm := &internalClientComm{
 		w: w,
@@ -893,7 +893,7 @@ func (ie *InternalExecutor) execInternal(
 	// statement we care about before that command is sent for execution.
 	var resPos CmdPos
 
-	syncCallback := func(results []resWithPos) {
+	syncCallback := func(results []*streamingCommandResult) {
 		// Close the stmtBuf so that the connExecutor exits its run() loop.
 		stmtBuf.Close()
 		for _, res := range results {
@@ -931,7 +931,6 @@ func (ie *InternalExecutor) execInternal(
 	}
 	typeHints := make(tree.PlaceholderTypes, numParams)
 	for i, d := range datums {
-		// Arg numbers start from 1.
 		typeHints[tree.PlaceholderIdx(i)] = d.ResolvedType()
 	}
 	if len(qargs) == 0 {
@@ -1096,7 +1095,7 @@ func (ie *InternalExecutor) checkIfTxnIsConsistent(txn *kv.Txn) error {
 type internalClientComm struct {
 	// results will contain the results of the commands executed by an
 	// InternalExecutor.
-	results []resWithPos
+	results []*streamingCommandResult
 
 	// The results of the query execution will be written into w.
 	w ieResultWriter
@@ -1104,15 +1103,10 @@ type internalClientComm struct {
 	lastDelivered CmdPos
 
 	// sync, if set, is called whenever a Sync is executed.
-	sync func([]resWithPos)
+	sync func([]*streamingCommandResult)
 }
 
 var _ ClientComm = &internalClientComm{}
-
-type resWithPos struct {
-	*streamingCommandResult
-	pos CmdPos
-}
 
 // CreateStatementResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateStatementResult(
@@ -1132,17 +1126,15 @@ func (icc *internalClientComm) CreateStatementResult(
 // createRes creates a result. onClose, if not nil, is called when the result is
 // closed.
 func (icc *internalClientComm) createRes(pos CmdPos, onClose func()) *streamingCommandResult {
-	res := &streamingCommandResult{
-		w: icc.w,
-		closeCallback: func(res *streamingCommandResult, typ resCloseType) {
-			if typ == discarded {
-				return
-			}
-			icc.results = append(icc.results, resWithPos{streamingCommandResult: res, pos: pos})
-			if onClose != nil {
-				onClose()
-			}
-		},
+	res := &streamingCommandResult{pos: pos, w: icc.w}
+	res.closeCallback = func(typ resCloseType) {
+		if typ == discarded {
+			return
+		}
+		icc.results = append(icc.results, res)
+		if onClose != nil {
+			onClose()
+		}
 	}
 	return res
 }
@@ -1162,7 +1154,7 @@ func (icc *internalClientComm) CreateBindResult(pos CmdPos) BindResult {
 // The returned SyncResult will call the sync callback when its closed.
 func (icc *internalClientComm) CreateSyncResult(pos CmdPos) SyncResult {
 	return icc.createRes(pos, func() {
-		results := make([]resWithPos, len(icc.results))
+		results := make([]*streamingCommandResult, len(icc.results))
 		copy(results, icc.results)
 		icc.results = icc.results[:0]
 		icc.sync(results)
@@ -1230,7 +1222,7 @@ func (ncl *noopClientLock) ClientPos() CmdPos {
 // RTrim is part of the ClientLock interface.
 func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {
 	var i int
-	var r resWithPos
+	var r *streamingCommandResult
 	for i, r = range ncl.results {
 		if r.pos >= pos {
 			break
