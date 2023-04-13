@@ -486,7 +486,7 @@ func (u Updater) PauseRequestedWithFunc(
 			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
 		}
 		if fn != nil {
-			execCtx, cleanup := u.j.registry.execCtx("pause request", md.Payload.UsernameProto.Decode())
+			execCtx, cleanup := u.j.registry.execCtx(ctx, "pause request", md.Payload.UsernameProto.Decode())
 			defer cleanup()
 			if err := fn(ctx, execCtx, txn, md.Progress); err != nil {
 				return err
