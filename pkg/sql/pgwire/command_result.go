@@ -386,7 +386,7 @@ func (r *commandResult) ResetStmtType(stmt tree.Statement) {
 	r.cmdCompleteTag = stmt.StatementTag()
 }
 
-// GetEntryFromExtraInfo is part of the sql.RestrictedCommandResult interface.
+// GetBulkJobId is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) GetBulkJobId() uint64 {
 	return r.bulkJobId
 }
