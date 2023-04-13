@@ -2582,36 +2582,39 @@ func createSchemaChangeEvalCtx(
 // NewFakeSessionData returns "fake" session data for use in internal queries
 // that are not run on behalf of a user session, such as those run during the
 // steps of background jobs and schema changes.
-func NewFakeSessionData(sv *settings.Values, opName string) *sessiondata.SessionData {
-	sd := &sessiondata.SessionData{
-		SessionData: sessiondatapb.SessionData{
-			// The database is not supposed to be needed in schema changes, as there
-			// shouldn't be unqualified identifiers in backfills, and the pure functions
-			// that need it should have already been evaluated.
-			//
-			// TODO(andrei): find a way to assert that this field is indeed not used.
-			// And in fact it is used by `current_schemas()`, which, although is a pure
-			// function, takes arguments which might be impure (so it can't always be
-			// pre-evaluated).
-			Database:      "",
-			UserProto:     username.NodeUserName().EncodeProto(),
-			VectorizeMode: sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(sv)),
-			Internal:      true,
-		},
-		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-			DistSQLMode:              sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
-			OptimizerFKCascadesLimit: optDrivenFKCascadesClusterLimit.Get(sv),
-		},
-		SearchPath:    sessiondata.DefaultSearchPathForUser(username.NodeUserName()),
-		SequenceState: sessiondata.NewSequenceState(),
-		Location:      time.UTC,
-	}
-
-	sd.ApplicationName = catconstants.InternalAppNamePrefix
+func NewFakeSessionData(
+	ctx context.Context, settings *cluster.Settings, opName string,
+) *sessiondata.SessionData {
+	appName := catconstants.InternalAppNamePrefix
 	if opName != "" {
-		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
+		appName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 
+	sd := &sessiondata.SessionData{}
+	sds := sessiondata.NewStack(sd)
+	defaults := SessionDefaults(map[string]string{
+		"application_name": appName,
+	})
+	sdMutIterator := makeSessionDataMutatorIterator(sds, defaults, settings)
+
+	sdMutIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		for varName, v := range varGen {
+			if v.Set != nil {
+				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
+				if hasDefault {
+					if err := v.Set(ctx, m, defVal); err != nil {
+						panic(err)
+					}
+				}
+			}
+		}
+	})
+
+	sd.UserProto = username.NodeUserName().EncodeProto()
+	sd.Internal = true
+	sd.SearchPath = sessiondata.DefaultSearchPathForUser(username.NodeUserName())
+	sd.SequenceState = sessiondata.NewSequenceState()
+	sd.Location = time.UTC
 	return sd
 }
 

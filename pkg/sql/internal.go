@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -224,7 +223,10 @@ func (ie *InternalExecutor) initConnEx(
 
 	applicationStats := ie.s.sqlStats.GetApplicationStats(sd.ApplicationName, true /* internal */)
 	sds := sessiondata.NewStack(sd)
-	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
+	defaults := SessionDefaults(map[string]string{
+		"application_name": sd.ApplicationName,
+	})
+	sdMutIterator := makeSessionDataMutatorIterator(sds, defaults, ie.s.cfg.Settings)
 	var ex *connExecutor
 	var err error
 	if txn == nil {
@@ -1541,7 +1543,11 @@ type internalExecutorCommitTxnFunc func(ctx context.Context) error
 // the internal executor infrastructure with a single conn executor for all
 // sql statement executions within a txn.
 func (ief *InternalDB) newInternalExecutorWithTxn(
-	sd *sessiondata.SessionData, sv *settings.Values, txn *kv.Txn, descCol *descs.Collection,
+	ctx context.Context,
+	sd *sessiondata.SessionData,
+	settings *cluster.Settings,
+	txn *kv.Txn,
+	descCol *descs.Collection,
 ) (InternalExecutor, internalExecutorCommitTxnFunc) {
 	// By default, if not given session data, we initialize a sessionData that
 	// would be the same as what would be created if root logged in.
@@ -1551,7 +1557,7 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 	// than the actual user, a security boundary should be added to the error
 	// handling of internal executor.
 	if sd == nil {
-		sd = NewFakeSessionData(sv, "" /* opName */)
+		sd = NewFakeSessionData(ctx, settings, "" /* opName */)
 		sd.UserProto = username.RootUserName().EncodeProto()
 	}
 
@@ -1688,8 +1694,9 @@ func (ief *InternalDB) txn(
 			descsCol := cf.NewCollection(ctx, descs.WithMonitor(ief.monitor))
 			defer descsCol.ReleaseAll(ctx)
 			ie, commitTxnFn := ief.newInternalExecutorWithTxn(
+				ctx,
 				cfg.GetSessionData(),
-				&cf.GetClusterSettings().SV,
+				cf.GetClusterSettings(),
 				kvTxn,
 				descsCol,
 			)

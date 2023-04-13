@@ -2959,6 +2959,19 @@ type sessionDataMutatorIterator struct {
 	sessionDataMutatorCallbacks
 }
 
+func makeSessionDataMutatorIterator(
+	sds *sessiondata.Stack, defaults SessionDefaults, settings *cluster.Settings,
+) *sessionDataMutatorIterator {
+	return &sessionDataMutatorIterator{
+		sds: sds,
+		sessionDataMutatorBase: sessionDataMutatorBase{
+			defaults: defaults,
+			settings: settings,
+		},
+		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
+	}
+}
+
 // mutator returns a mutator for the given sessionData.
 func (it *sessionDataMutatorIterator) mutator(
 	applyCallbacks bool, sd *sessiondata.SessionData,
