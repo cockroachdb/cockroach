@@ -551,10 +551,15 @@ func runStartInternal(
 				)
 			}
 		} else {
-			if _, envVarSet := os.LookupEnv("GOMEMLIMIT"); envVarSet {
+			if envVarLimitString, envVarSet := envutil.ExternalEnvString("GOMEMLIMIT", 1); envVarSet {
 				// When --max-go-memory is not specified, but the env var is
-				// set, we don't change it.
-				if envVarLimit := envutil.EnvOrDefaultInt64("GOMEMLIMIT", -1); envVarLimit < defaultGoMemLimitMinValue {
+				// set, we don't change it, so we just log a warning if the
+				// value is too small.
+				envVarLimit, err := humanizeutil.ParseBytes(envVarLimitString)
+				if err != nil {
+					return errors.Wrapf(err, "couldn't parse GOMEMLIMIT value %s", envVarLimitString)
+				}
+				if envVarLimit < defaultGoMemLimitMinValue {
 					log.Ops.Shoutf(
 						ctx, severity.WARNING, "GOMEMLIMIT (%s) is smaller "+
 							"than the recommended minimum (%s), consider increasing it",

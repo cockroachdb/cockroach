@@ -152,5 +152,15 @@ end_test
 
 stop_server $argv
 
+start_test "Check that set GOMEMLIMIT env var without specifying --max-go-memory works"
+send "export GOMEMLIMIT=1GiB;\r"
+eexpect ":/# "
+send "$argv start-single-node --insecure --store=path=logs/mystore\r"
+eexpect "node starting"
+interrupt
+eexpect ":/# "
+stop_server $argv
+end_test
+
 send "exit 0\r"
 eexpect eof
