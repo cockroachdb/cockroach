@@ -784,8 +784,12 @@ func newEvaluatorWithNormCheck(
 		defaultDBSessionData, hlc.Timestamp{}, withDiff), nil
 }
 
-var defaultDBSessionData = sessiondatapb.SessionData{
-	Database:                   "defaultdb",
-	SearchPath:                 sessiondata.DefaultSearchPath.GetPathArray(),
-	TrigramSimilarityThreshold: 0.3,
+var defaultDBSessionData = &sessiondata.SessionData{
+	SessionData: sessiondatapb.SessionData{
+		Database:                   "defaultdb",
+		TrigramSimilarityThreshold: 0.3,
+		UserProto:                  username.RootUserName().EncodeProto(),
+	},
+	SequenceState: sessiondata.NewSequenceState(),
+	SearchPath:    sessiondata.DefaultSearchPathForUser(username.RootUserName()),
 }

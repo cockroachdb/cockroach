@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -207,9 +206,9 @@ func fetchSpansForTables(
 
 	// SessionData is nil if the changefeed was created prior to
 	// clusterversion.V23_1_ChangefeedExpressionProductionReady
-	var sd sessiondatapb.SessionData
+	sd := sql.NewInternalSessionData(ctx, execCtx.ExecCfg().Settings, "changefeed-fetchSpansForTables")
 	if details.SessionData != nil {
-		sd = *details.SessionData
+		sd.SessionData = *details.SessionData
 	}
 	return cdceval.SpansForExpression(ctx, execCtx.ExecCfg(), execCtx.User(),
 		sd, tableDescs[0], initialHighwater, target, sc)

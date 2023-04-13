@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -274,7 +273,7 @@ func newEvaluator(
 		return nil, err
 	}
 
-	var sd sessiondatapb.SessionData
+	sd := sql.NewInternalSessionData(ctx, cfg.Settings, "changefeed-evaluator")
 	if spec.Feed.SessionData == nil {
 		// This changefeed was created prior to
 		// clusterversion.V23_1_ChangefeedExpressionProductionReady; thus we must
@@ -294,7 +293,7 @@ func newEvaluator(
 			sc = newExpr
 		}
 	} else {
-		sd = *spec.Feed.SessionData
+		sd.SessionData = *spec.Feed.SessionData
 	}
 
 	return cdceval.NewEvaluator(sc, cfg, spec.User(), sd, spec.Feed.StatementTime, withDiff), nil
