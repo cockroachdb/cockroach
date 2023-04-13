@@ -1451,7 +1451,7 @@ func BenchmarkFuncExprTypeCheck(b *testing.B) {
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	sd := sql.NewFakeSessionData(ctx, execCfg.Settings, "type-check-benchmark")
+	sd := sql.NewInternalSessionData(ctx, execCfg.Settings, "type-check-benchmark")
 	sd.Database = "defaultdb"
 	p, cleanup := sql.NewInternalPlanner(
 		"type-check-benchmark",

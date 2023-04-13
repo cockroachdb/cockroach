@@ -50,7 +50,7 @@ func WithBuilderDependenciesFromTestServer(
 ) {
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	sd := sql.NewFakeSessionData(ctx, execCfg.Settings, "test")
+	sd := sql.NewInternalSessionData(ctx, execCfg.Settings, "test")
 	sd.Database = "defaultdb"
 	ip, cleanup := sql.NewInternalPlanner(
 		"test",

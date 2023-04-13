@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -314,7 +313,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			username.RootUserName(),
 			&MemoryMetrics{},
 			sc.execCfg,
-			NewFakeSessionData(ctx, sc.execCfg.Settings, "backfillQueryIntoTable"),
+			NewInternalSessionData(ctx, sc.execCfg.Settings, "backfillQueryIntoTable"),
 		)
 
 		defer cleanup()
@@ -2576,45 +2575,6 @@ func createSchemaChangeEvalCtx(
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, ts.WallTime))
 
 	return evalCtx
-}
-
-// NewFakeSessionData returns "fake" session data for use in internal queries
-// that are not run on behalf of a user session, such as those run during the
-// steps of background jobs and schema changes.
-func NewFakeSessionData(
-	ctx context.Context, settings *cluster.Settings, opName string,
-) *sessiondata.SessionData {
-	appName := catconstants.InternalAppNamePrefix
-	if opName != "" {
-		appName = catconstants.InternalAppNamePrefix + "-" + opName
-	}
-
-	sd := &sessiondata.SessionData{}
-	sds := sessiondata.NewStack(sd)
-	defaults := SessionDefaults(map[string]string{
-		"application_name": appName,
-	})
-	sdMutIterator := makeSessionDataMutatorIterator(sds, defaults, settings)
-
-	sdMutIterator.applyOnEachMutator(func(m sessionDataMutator) {
-		for varName, v := range varGen {
-			if v.Set != nil {
-				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
-				if hasDefault {
-					if err := v.Set(ctx, m, defVal); err != nil {
-						panic(err)
-					}
-				}
-			}
-		}
-	})
-
-	sd.UserProto = username.NodeUserName().EncodeProto()
-	sd.Internal = true
-	sd.SearchPath = sessiondata.DefaultSearchPathForUser(username.NodeUserName())
-	sd.SequenceState = sessiondata.NewSequenceState()
-	sd.Location = time.UTC
-	return sd
 }
 
 type schemaChangeResumer struct {

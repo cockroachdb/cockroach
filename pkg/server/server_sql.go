@@ -1197,7 +1197,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
 		sql.ValidateConstraint,
-		sql.NewFakeSessionData,
+		sql.NewInternalSessionData,
 	)
 
 	jobsInternalDB := sql.NewInternalDBWithSessionDataOverrides(internalDB, func(sd *sessiondata.SessionData) {
@@ -1670,7 +1670,7 @@ func (s *SQLServer) preStart(
 					user,
 					&sql.MemoryMetrics{},
 					s.execCfg,
-					sql.NewFakeSessionData(ctx, s.execCfg.Settings, opName),
+					sql.NewInternalSessionData(ctx, s.execCfg.Settings, opName),
 				)
 			},
 		},

@@ -707,7 +707,7 @@ func TestCheckScheduleAlreadyExists(t *testing.T) {
 
 	ctx := context.Background()
 
-	sd := sql.NewFakeSessionData(ctx, execCfg.Settings, "test")
+	sd := sql.NewInternalSessionData(ctx, execCfg.Settings, "test")
 	sd.Database = "d"
 	p, cleanup := sql.NewInternalPlanner("test",
 		execCfg.DB.NewTxn(ctx, "test-planner"),
@@ -742,7 +742,7 @@ func TestFullyQualifyTables(t *testing.T) {
 	require.NoError(t, err)
 	createChangeFeedStmt := stmt.AST.(*tree.CreateChangefeed)
 
-	sd := sql.NewFakeSessionData(ctx, execCfg.Settings, "test")
+	sd := sql.NewInternalSessionData(ctx, execCfg.Settings, "test")
 	sd.Database = "ocean"
 	p, cleanupPlanHook := sql.NewInternalPlanner("test",
 		execCfg.DB.NewTxn(ctx, "test-planner"),

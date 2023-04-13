@@ -3240,7 +3240,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			username.RootUserName(),
 			&sql.MemoryMetrics{},
 			&execCfg,
-			sql.NewFakeSessionData(ctx, execCfg.Settings, opName),
+			sql.NewInternalSessionData(ctx, execCfg.Settings, opName),
 		)
 	}
 

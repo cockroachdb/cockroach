@@ -656,7 +656,7 @@ func TestPlanGistControl(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
-	sd := NewFakeSessionData(ctx, execCfg.Settings, "test")
+	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, s.NodeID()),
