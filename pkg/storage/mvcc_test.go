@@ -1971,11 +1971,10 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 			}
 
 			// Attempt to delete non-inline key at zero timestamp; should fail.
-			const writeTooOldErrString = "WriteTooOldError"
 			if _, _, _, err := MVCCDeleteRange(
 				ctx, engine, nil, testKey6, keyMax, 1, hlc.Timestamp{Logical: 0}, nil, true,
-			); !testutils.IsError(err, writeTooOldErrString) {
-				t.Fatalf("got error %v, expected error with text '%s'", err, writeTooOldErrString)
+			); !testutils.IsError(err, inlineMismatchErrString) {
+				t.Fatalf("got error %v, expected error with text '%s'", err, inlineMismatchErrString)
 			}
 
 			// Attempt to delete inline keys in a transaction; should fail.
@@ -2797,7 +2796,9 @@ func TestMVCCReverseScanSeeksOverRepeatedKeys(t *testing.T) {
 // The bug happened in this scenario.
 // (1) reverse scan is positioned at the range's smallest key and calls `prevKey()`
 // (2) `prevKey()` peeks and sees newer versions of the same logical key
-//	   `iters_before_seek_-1` times, moving the iterator backwards each time
+//
+//	`iters_before_seek_-1` times, moving the iterator backwards each time
+//
 // (3) on the `iters_before_seek_`th peek, there are no previous keys found
 //
 // Then, the problem was `prevKey()` treated finding no previous key as if it had found a
