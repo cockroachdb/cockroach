@@ -2479,6 +2479,9 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	// This is deprecated; the only allowable setting is "off".
 	`allow_ordinal_column_references`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`allow_ordinal_column_references`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
@@ -2486,11 +2489,13 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
-			m.SetAllowOrdinalColumnReference(b)
+			if b {
+				return newVarValueError(`allow_ordinal_column_references`, s, "off")
+			}
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowOrdinalColumnReferences), nil
+			return formatBoolAsPostgresSetting(false), nil
 		},
 		GlobalDefault: globalFalse,
 	},

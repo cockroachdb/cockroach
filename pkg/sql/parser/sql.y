@@ -14580,15 +14580,6 @@ d_expr:
   {
     $$.val = tree.Expr($1.unresolvedName())
   }
-| '@' iconst64
-  {
-    colNum := $2.int64()
-    if colNum < 1 || colNum > int64(MaxInt) {
-      sqllex.Error(fmt.Sprintf("invalid column ordinal: @%d", colNum))
-      return 1
-    }
-    $$.val = tree.NewOrdinalReference(int(colNum-1))
-  }
 | PLACEHOLDER
   {
     p := $1.placeholder()

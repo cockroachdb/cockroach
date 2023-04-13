@@ -316,16 +316,6 @@ limit
  └── 25
 
 build
-SELECT * FROM t LIMIT @1
-----
-error (42703): column reference @1 not allowed in this context
-
-build
-SELECT * FROM t OFFSET @1
-----
-error (42703): column reference @1 not allowed in this context
-
-build
 SELECT * FROM t LIMIT count(*)
 ----
 error (42803): count_rows(): aggregate functions are not allowed in LIMIT

@@ -97,22 +97,6 @@ SELECT * FROM x@foobar
 sequence-select x
  └── columns: last_value:1!null log_cnt:2!null is_called:3!null
 
-# Ordinal refs with a sequence.
-build
-SELECT @1 FROM x
-----
-error (01P01): invalid syntax @1
-
-build set=allow_ordinal_column_references=true
-SELECT @1 FROM x
-----
-project
- ├── columns: "?column?":4!null
- ├── sequence-select x
- │    └── columns: last_value:1!null log_cnt:2!null is_called:3!null
- └── projections
-      └── last_value:1 [as="?column?":4]
-
 # Check a query with an extra operator.
 build
 SELECT * FROM x WHERE last_value = 0

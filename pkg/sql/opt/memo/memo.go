@@ -158,7 +158,6 @@ type Memo struct {
 	testingOptimizerDisableRuleProbability float64
 	enforceHomeRegion                      bool
 	variableInequalityLookupJoinEnabled    bool
-	allowOrdinalColumnReferences           bool
 	useImprovedDisjunctionStats            bool
 	useLimitOrderingForStreamingGroupBy    bool
 	useImprovedSplitDisjunctionForJoins    bool
@@ -216,7 +215,6 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		testingOptimizerDisableRuleProbability: evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
 		enforceHomeRegion:                      evalCtx.SessionData().EnforceHomeRegion,
 		variableInequalityLookupJoinEnabled:    evalCtx.SessionData().VariableInequalityLookupJoinEnabled,
-		allowOrdinalColumnReferences:           evalCtx.SessionData().AllowOrdinalColumnReferences,
 		useImprovedDisjunctionStats:            evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats,
 		useLimitOrderingForStreamingGroupBy:    evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy,
 		useImprovedSplitDisjunctionForJoins:    evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins,
@@ -358,7 +356,6 @@ func (m *Memo) IsStale(
 		m.testingOptimizerDisableRuleProbability != evalCtx.SessionData().TestingOptimizerDisableRuleProbability ||
 		m.enforceHomeRegion != evalCtx.SessionData().EnforceHomeRegion ||
 		m.variableInequalityLookupJoinEnabled != evalCtx.SessionData().VariableInequalityLookupJoinEnabled ||
-		m.allowOrdinalColumnReferences != evalCtx.SessionData().AllowOrdinalColumnReferences ||
 		m.useImprovedDisjunctionStats != evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats ||
 		m.useLimitOrderingForStreamingGroupBy != evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy ||
 		m.useImprovedSplitDisjunctionForJoins != evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins ||

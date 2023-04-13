@@ -1027,22 +1027,6 @@ project
       └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
 
 build
-SELECT @1 AS r, @2 AS s FROM a
-----
-error (01P01): invalid syntax @1
-
-build set=allow_ordinal_column_references=true
-SELECT @1 AS r, @2 AS s FROM a
-----
-project
- ├── columns: r:5!null s:6
- ├── scan a
- │    └── columns: x:1!null y:2 crdb_internal_mvcc_timestamp:3 tableoid:4
- └── projections
-      ├── x:1 [as=r:5]
-      └── y:2 [as=s:6]
-
-build
 SELECT * FROM a WHERE (x > 10)::bool
 ----
 project
