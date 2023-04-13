@@ -652,7 +652,7 @@ const (
 //
 // ClientComm is implemented by the pgwire connection.
 type ClientComm interface {
-	// createStatementResult creates a StatementResult for stmt.
+	// CreateStatementResult creates a StatementResult for stmt.
 	//
 	// descOpt specifies if result needs to inform the client about row schema. If
 	// it doesn't, a SetColumns call becomes a no-op.
@@ -698,7 +698,7 @@ type ClientComm interface {
 	// CreateDrainResult creates a result for a Drain command.
 	CreateDrainResult(pos CmdPos) DrainResult
 
-	// lockCommunication ensures that no further results are delivered to the
+	// LockCommunication ensures that no further results are delivered to the
 	// client. The returned ClientLock can be queried to see what results have
 	// been already delivered to the client and to discard results that haven't
 	// been delivered.
@@ -912,10 +912,11 @@ type ClientLock interface {
 	// connection.
 	ClientPos() CmdPos
 
-	// RTrim iterates backwards through the results and drops all results with
-	// position >= pos.
-	// It is illegal to call rtrim with a position <= clientPos(). In other words,
-	// results can
+	// RTrim drops all results with position >= pos.
+	//
+	// It is illegal to call RTrim with a position <= ClientPos(). In other
+	// words, results can only be trimmed if they haven't been sent to the
+	// client.
 	RTrim(ctx context.Context, pos CmdPos)
 }
 
@@ -956,6 +957,8 @@ const discarded resCloseType = false
 // streamingCommandResult is a CommandResult that streams rows on the channel
 // and can call a provided callback when closed.
 type streamingCommandResult struct {
+	pos CmdPos
+
 	// All the data (the rows and the metadata) are written into w. The
 	// goroutine writing into this streamingCommandResult might block depending
 	// on the synchronization strategy.
@@ -965,7 +968,7 @@ type streamingCommandResult struct {
 	rowsAffected int
 
 	// closeCallback, if set, is called when Close()/Discard() is called.
-	closeCallback func(*streamingCommandResult, resCloseType)
+	closeCallback func(resCloseType)
 }
 
 var _ RestrictedCommandResult = &streamingCommandResult{}
@@ -1031,7 +1034,7 @@ func (r *streamingCommandResult) SetError(err error) {
 	// in execStmtInOpenState().
 }
 
-// GetEntryFromExtraInfo is part of the sql.RestrictedCommandResult interface.
+// GetBulkJobID is part of the sql.RestrictedCommandResult interface.
 func (r *streamingCommandResult) GetBulkJobID() uint64 {
 	return 0
 }
@@ -1059,14 +1062,14 @@ func (r *streamingCommandResult) RowsAffected() int {
 // Close is part of the CommandResultClose interface.
 func (r *streamingCommandResult) Close(context.Context, TransactionStatusIndicator) {
 	if r.closeCallback != nil {
-		r.closeCallback(r, closed)
+		r.closeCallback(closed)
 	}
 }
 
 // Discard is part of the CommandResult interface.
 func (r *streamingCommandResult) Discard() {
 	if r.closeCallback != nil {
-		r.closeCallback(r, discarded)
+		r.closeCallback(discarded)
 	}
 }
 

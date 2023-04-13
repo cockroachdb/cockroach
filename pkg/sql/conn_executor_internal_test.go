@@ -260,7 +260,14 @@ func mustParseOne(s string) parser.Statement {
 // need to read from it.
 func startConnExecutor(
 	ctx context.Context,
-) (*StmtBuf, <-chan []resWithPos, <-chan error, *stop.Stopper, ieResultReader, error) {
+) (
+	*StmtBuf,
+	<-chan []*streamingCommandResult,
+	<-chan error,
+	*stop.Stopper,
+	ieResultReader,
+	error,
+) {
 	// A lot of boilerplate for creating a connExecutor.
 	stopper := stop.NewStopper()
 	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
@@ -337,10 +344,10 @@ func startConnExecutor(
 
 	s := NewServer(cfg, pool)
 	buf := NewStmtBuf()
-	syncResults := make(chan []resWithPos, 1)
+	syncResults := make(chan []*streamingCommandResult, 1)
 	resultChannel := newAsyncIEResultChannel()
 	var cc ClientComm = &internalClientComm{
-		sync: func(res []resWithPos) {
+		sync: func(res []*streamingCommandResult) {
 			syncResults <- res
 		},
 		w: resultChannel,
@@ -377,9 +384,9 @@ func TestSessionCloseWithPendingTempTableInTxn(t *testing.T) {
 
 	srv := s.SQLServer().(*Server)
 	stmtBuf := NewStmtBuf()
-	flushed := make(chan []resWithPos)
+	flushed := make(chan []*streamingCommandResult)
 	clientComm := &internalClientComm{
-		sync: func(res []resWithPos) {
+		sync: func(res []*streamingCommandResult) {
 			flushed <- res
 		},
 	}
