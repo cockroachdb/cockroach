@@ -82,7 +82,6 @@ func Start(
 		tenantIDRow := make([]rowenc.EncDatum, 1)
 		if _, _, err := rowenc.DecodeIndexKey(
 			keys.SystemSQLCodec,
-			colTypes,
 			tenantIDRow,
 			nil, /* colDirs */
 			kv.Key,
