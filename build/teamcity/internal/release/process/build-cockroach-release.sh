@@ -22,7 +22,7 @@ fi
 
 if [[ -z "${DRY_RUN}" ]] ; then
   gcs_bucket="cockroach-release-artifacts-staged-prod"
-  gcr_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
+  gcr_credentials="$GCS_CREDENTIALS_PROD"
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_PROD"
   gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/cockroach"
@@ -116,7 +116,7 @@ docker build \
   --pull \
   --platform="linux/amd64" \
   --tag="${gcr_tag_fips}" \
-  --build-arg fips_enabeld=1 \
+  --build-arg fips_enabled=1 \
   "build/deploy-${platform_name}"
 docker push "$gcr_tag_fips"
 tc_end_block "Make and push FIPS docker image"
