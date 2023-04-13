@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -315,7 +314,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			username.RootUserName(),
 			&MemoryMetrics{},
 			sc.execCfg,
-			sessiondatapb.SessionData{},
+			NewFakeSessionData(ctx, sc.execCfg.Settings, "backfillQueryIntoTable"),
 		)
 
 		defer cleanup()

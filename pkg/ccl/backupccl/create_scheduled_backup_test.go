@@ -1487,6 +1487,7 @@ WITH SCHEDULE OPTIONS on_execution_failure = 'pause', ignore_existing_backups, f
 		CommonEventDetails: logpb.CommonEventDetails{
 			EventType: "recovery_event",
 		},
+		ApplicationName:         "$ internal-exec-backup",
 		RecoveryType:            scheduledBackupEventType,
 		TargetScope:             clusterScope.String(),
 		TargetCount:             1,

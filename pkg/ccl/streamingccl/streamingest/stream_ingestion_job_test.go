@@ -327,7 +327,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	// Create a mock replication job with the `foo` table span so that on cut over
 	// we can revert the table's ranges.
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	jobExecCtx, ctxClose := sql.MakeJobExecContext("test-cutover-fraction-progressed", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg)
+	jobExecCtx, ctxClose := sql.MakeJobExecContext(ctx, "test-cutover-fraction-progressed", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg)
 	defer ctxClose()
 
 	mockReplicationJobDetails := jobspb.StreamIngestionDetails{

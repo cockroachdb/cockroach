@@ -328,7 +328,7 @@ func NewInternalPlanner(
 	user username.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
-	sessionData sessiondatapb.SessionData,
+	sessionData *sessiondata.SessionData,
 	opts ...InternalPlannerParamsOption,
 ) (interface{}, func()) {
 	return newInternalPlanner(opName, txn, user, memMetrics, execCfg, sessionData, opts...)
@@ -349,7 +349,7 @@ func newInternalPlanner(
 	user username.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
-	sessionData sessiondatapb.SessionData,
+	sd *sessiondata.SessionData,
 	opts ...InternalPlannerParamsOption,
 ) (*planner, func()) {
 	// Default parameters which may be override by the supplied options.
@@ -368,19 +368,14 @@ func newInternalPlanner(
 	// suitable contexts.
 	ctx := logtags.AddTag(context.Background(), opName, "")
 
-	sd := &sessiondata.SessionData{
-		SessionData:   sessionData,
-		SearchPath:    sessiondata.DefaultSearchPathForUser(user),
-		SequenceState: sessiondata.NewSequenceState(),
-		Location:      time.UTC,
-	}
+	sd = sd.Clone()
 	if sd.SessionData.Database == "" {
 		sd.SessionData.Database = "system"
 	}
 	sd.SessionData.UserProto = user.EncodeProto()
 	sd.SessionData.Internal = true
+	sd.SearchPath = sessiondata.DefaultSearchPathForUser(user)
 	sds := sessiondata.NewStack(sd)
-
 	if params.collection == nil {
 		dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sds)
 		params.collection = execCfg.CollectionFactory.NewCollection(

@@ -96,6 +96,7 @@ go_test(
         "//pkg/sql/distsql",
         "//pkg/sql/isql",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",

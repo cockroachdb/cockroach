@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -3241,7 +3240,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			username.RootUserName(),
 			&sql.MemoryMetrics{},
 			&execCfg,
-			sessiondatapb.SessionData{},
+			sql.NewFakeSessionData(ctx, execCfg.Settings, opName),
 		)
 	}
 

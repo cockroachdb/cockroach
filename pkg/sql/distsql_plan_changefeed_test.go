@@ -32,8 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -84,12 +82,11 @@ CREATE TABLE foo (
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	sd := NewFakeSessionData(ctx, execCfg.Settings, "test")
+	sd.Database = "defaultdb"
 
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
-		username.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
-			Database:   "defaultdb",
-			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
-		},
+		username.RootUserName(), &MemoryMetrics{}, &execCfg, sd,
 	)
 	defer cleanup()
 
@@ -467,11 +464,10 @@ func TestChangefeedStreamsResults(t *testing.T) {
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	sd := NewFakeSessionData(ctx, execCfg.Settings, "test")
+	sd.Database = "defaultdb"
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
-		username.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
-			Database:   "defaultdb",
-			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
-		},
+		username.RootUserName(), &MemoryMetrics{}, &execCfg, sd,
 	)
 	defer cleanup()
 	stmt, err := parser.ParseOne("SELECT * FROM foo WHERE a < 10")
@@ -515,11 +511,10 @@ FAMILY extra (extra)
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	sd := NewFakeSessionData(ctx, execCfg.Settings, "test")
+	sd.Database = "defaultdb"
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
-		username.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
-			Database:   "defaultdb",
-			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
-		},
+		username.RootUserName(), &MemoryMetrics{}, &execCfg, sd,
 	)
 	defer cleanup()
 	planner := p.(*planner)

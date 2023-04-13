@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -165,7 +166,7 @@ func withPlanner(
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 	schemaTS hlc.Timestamp,
-	sd sessiondatapb.SessionData,
+	sd *sessiondata.SessionData,
 	fn func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error,
 ) error {
 	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {

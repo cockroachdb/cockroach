@@ -48,7 +48,7 @@ func newDatabaseRegionChangeFinalizer(
 		username.RootUserName(),
 		&MemoryMetrics{},
 		execCfg,
-		txn.SessionData().SessionData,
+		txn.SessionData(),
 		WithDescCollection(txn.Descriptors()),
 	)
 	localPlanner := p.(*planner)

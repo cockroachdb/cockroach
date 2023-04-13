@@ -26,7 +26,7 @@ CREATE STATISTICS s1 ON id FROM a
 # Check explicitly for table id 106. System tables could trigger autostats
 # collections at any time.
 query IT
-SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID' - 'ApplicationName'
 FROM system.eventlog
 WHERE "eventType" = 'create_statistics' AND ("info"::JSONB ->> 'DescriptorID')::INT = 106
 ORDER BY "timestamp", info

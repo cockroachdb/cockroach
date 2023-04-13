@@ -47,7 +47,6 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

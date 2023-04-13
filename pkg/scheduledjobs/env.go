@@ -53,7 +53,7 @@ type JobExecutionConfig struct {
 	// be cast to that type in the sql package when it is used. Returns a cleanup
 	// function that must be called once the caller is done with the planner.
 	// This is the same mechanism used in jobs.Registry.
-	PlanHookMaker func(opName string, tnx *kv.Txn, user username.SQLUsername) (interface{}, func())
+	PlanHookMaker func(ctx context.Context, opName string, tnx *kv.Txn, user username.SQLUsername) (interface{}, func())
 	// ShouldRunScheduler, if set, returns true if the job scheduler should run
 	// schedules.  This callback should be re-checked periodically.
 	ShouldRunScheduler func(ctx context.Context, ts hlc.ClockTimestamp) (bool, error)

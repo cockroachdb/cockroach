@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -1452,14 +1451,15 @@ func BenchmarkFuncExprTypeCheck(b *testing.B) {
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	p, cleanup := sql.NewInternalPlanner("type-check-benchmark",
+	sd := sql.NewFakeSessionData(ctx, execCfg.Settings, "type-check-benchmark")
+	sd.Database = "defaultdb"
+	p, cleanup := sql.NewInternalPlanner(
+		"type-check-benchmark",
 		kvDB.NewTxn(ctx, "type-check-benchmark-planner"),
 		username.RootUserName(),
 		&sql.MemoryMetrics{},
 		&execCfg,
-		sessiondatapb.SessionData{
-			Database: "defaultdb",
-		},
+		sd,
 	)
 
 	defer cleanup()

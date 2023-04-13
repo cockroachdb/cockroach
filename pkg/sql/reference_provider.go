@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
 type tableDescReferences []descpb.TableDescriptor_Reference
@@ -154,9 +153,15 @@ func NewReferenceProviderFactory(p *planner) scbuild.ReferenceProviderFactory {
 // only for test. A cleanup function is returned as well, which should be called
 // after test is done.
 func NewReferenceProviderFactoryForTest(
-	opName string, txn *kv.Txn, user username.SQLUsername, execCfg *ExecutorConfig, curDB string,
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	user username.SQLUsername,
+	execCfg *ExecutorConfig,
+	curDB string,
 ) (scbuild.ReferenceProviderFactory, func()) {
-	ip, cleanup := newInternalPlanner(opName, txn, user, &MemoryMetrics{}, execCfg, sessiondatapb.SessionData{})
-	ip.SessionData().Database = "defaultdb"
+	sd := NewFakeSessionData(ctx, execCfg.Settings, opName)
+	sd.Database = curDB
+	ip, cleanup := newInternalPlanner(opName, txn, user, &MemoryMetrics{}, execCfg, sd)
 	return &referenceProviderFactory{p: ip}, cleanup
 }

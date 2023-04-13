@@ -48,16 +48,17 @@ import (
 func WithBuilderDependenciesFromTestServer(
 	s serverutils.TestServerInterface, fn func(scbuild.Dependencies),
 ) {
+	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	sd := sql.NewFakeSessionData(ctx, execCfg.Settings, "test")
+	sd.Database = "defaultdb"
 	ip, cleanup := sql.NewInternalPlanner(
 		"test",
-		kv.NewTxn(context.Background(), s.DB(), s.NodeID()),
+		kv.NewTxn(ctx, s.DB(), s.NodeID()),
 		username.RootUserName(),
 		&sql.MemoryMetrics{},
 		&execCfg,
-		// Setting the database on the session data to "defaultdb" in the obvious
-		// way doesn't seem to do what we want.
-		sessiondatapb.SessionData{},
+		sd,
 	)
 	defer cleanup()
 	planner := ip.(interface {
@@ -71,7 +72,7 @@ func WithBuilderDependenciesFromTestServer(
 	})
 
 	refProviderFactory, refCleanup := sql.NewReferenceProviderFactoryForTest(
-		"test", planner.InternalSQLTxn().KV(), username.RootUserName(), &execCfg, "defaultdb",
+		ctx, "test", planner.InternalSQLTxn().KV(), username.RootUserName(), &execCfg, "defaultdb",
 	)
 	defer refCleanup()
 
