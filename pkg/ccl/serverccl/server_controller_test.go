@@ -469,6 +469,8 @@ func TestServerStartStop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "test sensitive to low timeout")
+
 	ctx := context.Background()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -517,6 +519,36 @@ func TestServerStartStop(t *testing.T) {
 		}
 		return errors.New("server still alive")
 	})
+
+	log.Infof(ctx, "end of test - test server will now shut down ungracefully")
+
+	// Monitor the state of the test server stopper. We use this logging
+	// to troubleshoot slow drains.
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-time.After(200 * time.Millisecond):
+				select {
+				case <-s.Stopper().ShouldQuiesce():
+					log.Infof(ctx, "test server is quiescing")
+				case <-s.Stopper().IsStopped():
+					log.Infof(ctx, "test server is stopped")
+					return
+				default:
+				}
+			}
+		}
+	}()
+	defer func() { close(done) }()
+
+	defer time.AfterFunc(10*time.Second, func() {
+		log.DumpStacks(ctx, "slow quiesce")
+		log.Fatalf(ctx, "test took too long to shut down")
+	}).Stop()
+	s.Stopper().Stop(ctx)
 }
 
 func TestServerControllerLoginLogout(t *testing.T) {

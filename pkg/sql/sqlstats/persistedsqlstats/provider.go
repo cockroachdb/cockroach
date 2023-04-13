@@ -109,7 +109,11 @@ func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.startSQLStatsFlushLoop(ctx, stopper)
 	s.jobMonitor.start(ctx, stopper, s.drain, &s.tasksDoneWG)
 	stopper.AddCloser(stop.CloserFn(func() {
-		s.cfg.InternalExecutorMonitor.Stop(ctx)
+		// TODO(knz,yahor): This really should be just Stop(), but there
+		// is a leak somewhere and would cause a panic when a hard stop
+		// catches up with a graceful drain.
+		// See: https://github.com/cockroachdb/cockroach/issues/101297
+		s.cfg.InternalExecutorMonitor.EmergencyStop(ctx)
 	}))
 }
 

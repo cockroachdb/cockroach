@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
@@ -29,18 +30,7 @@ import (
 
 // onDemandServer represents a server that can be started on demand.
 type onDemandServer interface {
-	// preStart activates background tasks and initializes subsystems
-	// but does not yet accept incoming connections.
-	preStart(context.Context) error
-
-	// acceptClients starts accepting incoming connections.
-	acceptClients(context.Context) error
-
-	// stop stops this server.
-	stop(context.Context)
-
-	// annotateCtx annotates the context with server-specific logging tags.
-	annotateCtx(context.Context) context.Context
+	orchestratedServer
 
 	// getHTTPHandlerFn retrieves the function that can serve HTTP
 	// requests for this server.
@@ -57,36 +47,6 @@ type onDemandServer interface {
 
 	// getRPCAddr() returns the RPC address for this server.
 	getRPCAddr() string
-
-	// getTenantID returns the TenantID for this server.
-	getTenantID() roachpb.TenantID
-
-	// getInstanceID returns the SQLInstanceID for this server.
-	getInstanceID() base.SQLInstanceID
-
-	// shutdownRequested returns the shutdown request channel.
-	shutdownRequested() <-chan ShutdownRequest
-
-	// gracefulDrain drains the server.
-	gracefulDrain(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
-}
-
-type serverEntry struct {
-	// server is the actual server.
-	// This is only defined once state.started is true.
-	server onDemandServer
-
-	// nameContainer holds a shared reference to the current
-	// name of the tenant within this serverEntry. If the
-	// tenant's name is updated, the `Set` method on
-	// nameContainer should be called in order to update
-	// any subscribers within the tenant. These are typically
-	// observability-related features that label data with
-	// the current tenant name.
-	nameContainer *roachpb.TenantNameContainer
-
-	// state coordinates the server's lifecycle.
-	state serverState
 }
 
 // serverController manages a fleet of multiple servers side-by-side.
@@ -94,6 +54,8 @@ type serverEntry struct {
 // Instantiation can fail, e.g. if the target tenant doesn't exist or
 // is not active.
 type serverController struct {
+	log.AmbientContext
+
 	// nodeID is the node ID of the server where the controller
 	// is running. This is used for logging only.
 	nodeID *base.NodeIDContainer
@@ -121,6 +83,9 @@ type serverController struct {
 	// prevents further creation of new tenant servers.
 	draining syncutil.AtomicBool
 
+	// orchestrator is the orchestration method to use.
+	orchestrator serverOrchestrator
+
 	mu struct {
 		syncutil.Mutex
 
@@ -128,7 +93,7 @@ type serverController struct {
 		//
 		// TODO(knz): Detect when the mapping of name to tenant ID has
 		// changed, and invalidate the entry.
-		servers map[roachpb.TenantName]*serverEntry
+		servers map[roachpb.TenantName]serverState
 
 		// nextServerIdx is the index to provide to the next call to
 		// newServerFn.
@@ -138,6 +103,7 @@ type serverController struct {
 
 func newServerController(
 	ctx context.Context,
+	ambientCtx log.AmbientContext,
 	logger nodeEventLogger,
 	parentNodeID *base.NodeIDContainer,
 	parentStopper *stop.Stopper,
@@ -148,6 +114,7 @@ func newServerController(
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName),
 ) *serverController {
 	c := &serverController{
+		AmbientContext:      ambientCtx,
 		nodeID:              parentNodeID,
 		logger:              logger,
 		st:                  st,
@@ -156,27 +123,9 @@ func newServerController(
 		tenantServerCreator: tenantServerCreator,
 		sendSQLRoutingError: sendSQLRoutingError,
 	}
-
-	// We make the serverState for the system mock the regular
-	// lifecycle. It starts with an already-closed `startedOrStopped`
-	// channel; and it properly reacts to a call to requestStop()
-	// by closing its stopped channel -- albeit with no other side effects.
-	closedChan := make(chan struct{})
-	close(closedChan)
-	closeCtx, cancelFn := context.WithCancel(context.Background())
-	entry := &serverEntry{
-		server:        systemServer,
-		nameContainer: systemTenantNameContainer,
-		state: serverState{
-			startedOrStopped: closedChan,
-			requestStop:      cancelFn,
-			stopped:          closeCtx.Done(),
-		},
-	}
-	entry.state.started.Set(true)
-
-	c.mu.servers = map[roachpb.TenantName]*serverEntry{
-		catconstants.SystemTenantName: entry,
+	c.orchestrator = newServerOrchestrator(parentStopper, c)
+	c.mu.servers = map[roachpb.TenantName]serverState{
+		catconstants.SystemTenantName: c.orchestrator.makeServerStateForSystemTenant(systemTenantNameContainer, systemServer),
 	}
 	parentStopper.AddCloser(c)
 	return c
@@ -217,11 +166,6 @@ func (t *tenantServerWrapper) acceptClients(ctx context.Context) error {
 	// Show the tenant details in logs.
 	// TODO(knz): Remove this once we can use a single listener.
 	return t.server.reportTenantInfo(ctx)
-}
-
-func (t *tenantServerWrapper) stop(ctx context.Context) {
-	ctx = t.server.AnnotateCtx(ctx)
-	t.stopper.Stop(ctx)
 }
 
 func (t *tenantServerWrapper) getHTTPHandlerFn() http.HandlerFunc {
@@ -282,10 +226,6 @@ func (s *systemServerWrapper) preStart(ctx context.Context) error {
 func (s *systemServerWrapper) acceptClients(ctx context.Context) error {
 	// No-op: the SQL service for the system tenant is started elsewhere.
 	return nil
-}
-
-func (s *systemServerWrapper) stop(ctx context.Context) {
-	// No-op: the SQL service for the system tenant never shuts down.
 }
 
 func (t *systemServerWrapper) getHTTPHandlerFn() http.HandlerFunc {
