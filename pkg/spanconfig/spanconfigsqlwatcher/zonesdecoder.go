@@ -45,7 +45,7 @@ func (zd *zonesDecoder) DecodePrimaryKey(key roachpb.Key) (descpb.ID, error) {
 	types := []*types.T{tbl.PublicColumns()[0].GetType()}
 	startKeyRow := make([]rowenc.EncDatum, 1)
 	_, _, err := rowenc.DecodeIndexKey(
-		zd.codec, types, startKeyRow, nil /* colDirs */, key,
+		zd.codec, startKeyRow, nil /* colDirs */, key,
 	)
 	if err != nil {
 		return descpb.InvalidID, errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode key in system.zones %v %v", key, string(debug.Stack()))
