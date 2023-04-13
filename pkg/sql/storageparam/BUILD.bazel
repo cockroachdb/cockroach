@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

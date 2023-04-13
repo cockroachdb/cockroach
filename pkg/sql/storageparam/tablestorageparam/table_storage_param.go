@@ -522,6 +522,20 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`schema_locked`: {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			boolVal, err := boolFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			po.TableDesc.SchemaLocked = boolVal
+			return nil
+		},
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			po.TableDesc.SchemaLocked = false
+			return nil
+		},
+	},
 }
 
 func init() {

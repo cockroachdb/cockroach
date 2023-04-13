@@ -69,6 +69,11 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 			return nil, err
 		}
 
+		// Disallow schema changes if this table's schema is locked.
+		if err = checkTableSchemaUnlocked(tableDesc); err != nil {
+			return nil, err
+		}
+
 		idxNames = append(idxNames, fullIndexName{tn: tn, idxName: index.Index})
 	}
 	return &dropIndexNode{n: n, idxNames: idxNames}, nil
