@@ -97,7 +97,7 @@ func decodeIndex(
 	}
 	values := make([]EncDatum, index.NumKeyColumns())
 	colDirs := index.IndexDesc().KeyColumnDirections
-	if _, _, err := DecodeIndexKey(codec, types, values, colDirs, key); err != nil {
+	if _, _, err := DecodeIndexKey(codec, values, colDirs, key); err != nil {
 		return nil, err
 	}
 

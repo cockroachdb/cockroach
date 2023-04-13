@@ -51,7 +51,7 @@ func (d *RowDecoder) DecodeRow(
 	{
 		types := []*types.T{d.columns[0].GetType()}
 		nameRow := make([]rowenc.EncDatum, 1)
-		_, _, err := rowenc.DecodeIndexKey(d.codec, types, nameRow, nil, kv.Key)
+		_, _, err := rowenc.DecodeIndexKey(d.codec, nameRow, nil, kv.Key)
 		if err != nil {
 			return "", settings.EncodedValue{}, false, errors.Wrap(err, "failed to decode key")
 		}
