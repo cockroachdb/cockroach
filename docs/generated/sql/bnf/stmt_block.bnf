@@ -3469,7 +3469,7 @@ func_param_with_default ::=
 	| func_param '=' a_expr
 
 create_func_opt_item ::=
-	'AS' func_as
+	'AS' func_as opt_link_sym
 	| 'LANGUAGE' non_reserved_word_or_sconst
 	| common_func_opt_item
 
@@ -4349,6 +4349,10 @@ create_as_constraint_elem ::=
 
 func_as ::=
 	'SCONST'
+
+opt_link_sym ::=
+	',' 'SCONST'
+	| 
 
 col_def_list_no_types ::=
 	( name ) ( ( ',' name ) )*
