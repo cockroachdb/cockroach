@@ -21,4 +21,4 @@ build/teamcity-roachtest-invoke.sh \
   --cockroach-short="${PWD}/bin/cockroach-short-ea" \
   --artifacts=/artifacts \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
-  costfuzz/workload-replay
+  "${TESTS}"
