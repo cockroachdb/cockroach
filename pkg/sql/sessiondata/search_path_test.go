@@ -15,7 +15,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Tests the implied search path when no temporary schema has been created
@@ -372,7 +374,21 @@ func TestSearchPathSpecialChar(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(strings.Join(testCase.searchPath, ", "), func(t *testing.T) {
 			sp := MakeSearchPath(testCase.searchPath)
-			assert.True(t, sp.SQLIdentifiers() == testCase.expectedSearchPathString)
+			assert.Equal(t, testCase.expectedSearchPathString, sp.String())
 		})
+	}
+}
+
+func TestRandomSearchPathRoundTrip(t *testing.T) {
+	rng, _ := randutil.NewTestRand()
+	for i := 0; i < 10000; i++ {
+		searchPath := make([]string, 1+rng.Intn(10))
+		for j := range searchPath {
+			searchPath[j] = randutil.RandString(rng, rng.Intn(10), `ABCabcdef123_-,"\+$`)
+		}
+		formatted := FormatSearchPaths(searchPath)
+		newSearchPath, err := ParseSearchPath(formatted)
+		require.NoError(t, err)
+		require.Equal(t, searchPath, newSearchPath)
 	}
 }
