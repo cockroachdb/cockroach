@@ -2662,13 +2662,15 @@ func TestOnlyOnceDialer(t *testing.T) {
 
 type trackingListener struct {
 	net.Listener
-	mu          syncutil.Mutex
-	connections []net.Conn
-	closed      bool
+	mu             syncutil.Mutex
+	connections    []net.Conn
+	closed         bool
+	decommissioned atomic.Value
 }
 
 func (d *trackingListener) Accept() (net.Conn, error) {
 	c, err := d.Listener.Accept()
+	d.decommissioned.Store(false)
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -2687,6 +2689,7 @@ func (d *trackingListener) Close() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.closed = true
+	d.decommissioned.Store(true)
 	for _, c := range d.connections {
 		_ = c.Close()
 	}
@@ -2740,6 +2743,15 @@ func newRegisteredServer(
 	ln, err := net.Listen("tcp", util.TestAddr.String())
 	require.Nil(t, err)
 	tracker := trackingListener{Listener: ln}
+	tracker.decommissioned.Store(false)
+
+	rpcCtx.OnOutgoingPing = func(ctx context.Context, req *PingRequest) (bool, error) {
+		if tracker.decommissioned.Load().(bool) {
+			return true, errors.Errorf("node is decommissioned")
+		}
+		return false, nil
+	}
+
 	_ = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		closeReason := s.Serve(&tracker)
 		log.Infof(ctx, "Closed listener with reason %v", closeReason)
@@ -2828,7 +2840,6 @@ func TestHeartbeatDialback(t *testing.T) {
 	// Test the reverse connection also closes within ~RPCHeartbeatTimeout.
 	log.Info(ctx, "Closing node 2 listener")
 	_ = ln2.Close()
-	_ = ln1.Close()
 
 	// Wait for a few more pings to go through to make sure it has a chance to
 	// shut down the reverse connection. Normally the connect attempt times out
