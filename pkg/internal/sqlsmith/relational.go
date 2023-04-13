@@ -907,7 +907,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 
 	// TODO(harding): Allow params to be referenced in the statement body.
 	paramCnt := s.rnd.Intn(10)
-	if len(s.types.scalarTypes) == 0 {
+	if s.types == nil || len(s.types.scalarTypes) == 0 {
 		paramCnt = 0
 	}
 	// TODO(100405): Add support for non-default param classes. Currently, only IN
