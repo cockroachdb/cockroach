@@ -368,7 +368,7 @@ func newTenantServer(
 			username.RootUserName(),
 			&sql.MemoryMetrics{},
 			sqlServer.execCfg,
-			sql.NewFakeSessionData(ctx, sqlServer.execCfg.Settings, opName),
+			sql.NewInternalSessionData(ctx, sqlServer.execCfg.Settings, opName),
 		)
 	}
 

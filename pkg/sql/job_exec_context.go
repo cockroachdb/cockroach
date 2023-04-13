@@ -44,7 +44,7 @@ func MakeJobExecContext(
 		user,
 		memMetrics,
 		execCfg,
-		NewFakeSessionData(ctx, execCfg.Settings, opName),
+		NewInternalSessionData(ctx, execCfg.Settings, opName),
 	)
 	p := plannerInterface.(*planner)
 	return &plannerJobExecContext{p: p}, close
