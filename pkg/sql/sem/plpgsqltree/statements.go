@@ -80,7 +80,7 @@ func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("BEGIN\n")
 	s.Body.Format(ctx)
 	ctx.WriteString("END\n")
-	ctx.WriteString("<NOT DONE YET>")
+	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 // stmt_assign
@@ -114,7 +114,7 @@ func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
 	}
 	s.ElseBody.Format(ctx)
 	ctx.WriteString("END IF\n")
-	ctx.WriteString("<NOT DONE YET>")
+	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 type PLpgSQLStmtIfElseIfArm struct {
@@ -154,8 +154,7 @@ func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
 		s.ElseStmts.Format(ctx)
 	}
 	ctx.WriteString("END CASE\n")
-	ctx.WriteString("<NOT DONE YET>")
-
+	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 type PLpgSQLStmtCaseWhenArm struct {
@@ -333,7 +332,7 @@ type PLpgSQLStmtExit struct {
 func (s *PLpgSQLStmtExit) Format(ctx *tree.FmtCtx) {
 	// TODO: Pretty print the exit label
 	ctx.WriteString("EXIT\n")
-	ctx.WriteString("<NOT DONE YET>")
+	ctx.WriteString("<NOT DONE YET>\n")
 
 }
 
@@ -418,7 +417,7 @@ func (s *PLpgSQLStmtExecSql) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString(" STRICT")
 	}
 	ctx.WriteString("\n")
-	ctx.WriteString("<NOT DONE YET>")
+	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 // stmt_dynexecute
@@ -445,7 +444,7 @@ func (s *PLpgSQLStmtDynamicExecute) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString(" WITH USING")
 	}
 	ctx.WriteString("\n")
-	ctx.WriteString("<NOT DONE YET>")
+	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 // stmt_perform
@@ -618,7 +617,7 @@ type PLpgSQLStmtClose struct {
 func (s *PLpgSQLStmtClose) Format(ctx *tree.FmtCtx) {
 	// TODO: Pretty- Print the cursor identifier
 	ctx.WriteString("CLOSE a cursor\n")
-	ctx.WriteString("<NOT DONE YET>")
+	ctx.WriteString("<NOT DONE YET>\n")
 
 }
 
@@ -629,6 +628,11 @@ type PLpgSQLStmtCommit struct {
 }
 
 func (s *PLpgSQLStmtCommit) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("COMMIT")
+	if s.Chain {
+		ctx.WriteString(" AND CHAIN")
+	}
+	ctx.WriteString("\n")
 }
 
 // stmt_rollback
@@ -638,6 +642,11 @@ type PLpgSQLStmtRollback struct {
 }
 
 func (s *PLpgSQLStmtRollback) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("ROLLBACK")
+	if s.Chain {
+		ctx.WriteString(" AND CHAIN")
+	}
+	ctx.WriteString("\n")
 }
 
 // stmt_null
