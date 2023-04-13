@@ -249,7 +249,7 @@ var (
 	}
 	metaReplicateQueueRemoveDeadReplicaSuccessCount = metric.Metadata{
 		Name:        "queue.replicate.removedeadreplica.success",
-		Help:        "Number of successful dead replica replica removals processed by the replicate queue",
+		Help:        "Number of successful dead replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
