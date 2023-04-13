@@ -138,6 +138,10 @@ type TestingKnobs struct {
 	// RequireGracefulDrain, if set, causes a shutdown to fail with a log.Fatal
 	// if the server is not gracefully drained prior to its stopper shutting down.
 	RequireGracefulDrain bool
+
+	// DrainReportCh, if set, is a channel that will be notified when
+	// the SQL service shuts down.
+	DrainReportCh chan struct{}
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
