@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -3494,6 +3495,49 @@ func TestSenderTransport(t *testing.T) {
 	if !transport.IsExhausted() {
 		t.Fatalf("transport is not exhausted")
 	}
+}
+
+// TestPProfLabelsAppliedToBatchRequestHeader tests that pprof labels on the
+// sender's context are copied to the BatchRequest.Header.
+func TestPProfLabelsAppliedToBatchRequestHeader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+
+	var observedLabels []string
+	testFn := func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		observedLabels = ba.Header.ProfileLabels
+		return ba.CreateReply(), nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:      clock,
+		NodeDescs:  g,
+		RPCContext: rpcContext,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
+	}
+	ds := NewDistSender(cfg)
+	ba := &kvpb.BatchRequest{}
+	ba.Add(kvpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value")))
+	expectedLabels := []string{"key", "value", "key2", "value2"}
+	var undo func()
+	ctx, undo = pprofutil.SetProfilerLabels(ctx, expectedLabels...)
+	defer undo()
+	if _, err := ds.Send(ctx, ba); err != nil {
+		t.Fatalf("put encountered error: %s", err)
+	}
+	require.Equal(t, expectedLabels, observedLabels)
 }
 
 func TestGatewayNodeID(t *testing.T) {
