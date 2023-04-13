@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -739,6 +740,15 @@ func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequ
 	default:
 		return kvpb.NewErrorf("unknown wait policy %s", ba.WaitPolicy)
 	}
+
+	//  If the context has any pprof labels, attach them to the BatchRequest.
+	//  These labels will be applied to the root context processing the request
+	//  server-side, if the node processing the request is collecting a CPU
+	//  profile with labels.
+	pprof.ForLabels(ctx, func(key, value string) bool {
+		ba.ProfileLabels = append(ba.ProfileLabels, key, value)
+		return true
+	})
 
 	return nil
 }

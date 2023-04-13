@@ -1250,6 +1250,16 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		ctx = logtags.AddTag(ctx, "tenant", tenantID.String())
 	}
 
+	// If the node is collecting a CPU profile with labels, and the sender has set
+	// pprof labels in the BatchRequest, then we apply them to the context that is
+	// going to execute the BatchRequest. These labels will help correlate server
+	// side CPU profile samples to the sender.
+	if n.execCfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels && len(args.ProfileLabels) != 0 {
+		var undo func()
+		ctx, undo = pprofutil.SetProfilerLabels(ctx, args.ProfileLabels...)
+		defer undo()
+	}
+
 	// Requests from tenants don't have gateway node id set but are required for
 	// the QPS based rebalancing to work. The GatewayNodeID is used as a proxy
 	// for the locality of the origin of the request. The replica stats aggregate

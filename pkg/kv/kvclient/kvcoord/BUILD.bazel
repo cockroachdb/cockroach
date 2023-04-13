@@ -208,6 +208,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/netutil",
+        "//pkg/util/pprofutil",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/retry",

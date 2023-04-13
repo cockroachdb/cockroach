@@ -2697,7 +2697,19 @@ message Header {
   // RESUME_ELASTIC_CPU_LIMIT.
   bool return_elastic_cpu_resume_spans = 30 [(gogoproto.customname) = "ReturnElasticCPUResumeSpans"];
 
+  // ProfileLabels are the pprof labels set on the context that is sending the
+  // BatchRequest.
+  //
+  // If the node processing the BatchRequest is collecting a CPU profile with
+  // labels, then these profile labels will be applied to the root context
+  // processing the BatchRequest on the server-side. Propagating these labels
+  // across RPC boundaries will help correlate server CPU profile samples to the
+  // sender.
+  repeated string profile_labels = 31 [(gogoproto.customname) = "ProfileLabels"];
+
   reserved 7, 10, 12, 14, 20;
+
+  // Next ID: 32
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded
