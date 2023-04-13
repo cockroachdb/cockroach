@@ -232,20 +232,35 @@ func (s SearchPath) Equals(other *SearchPath) bool {
 	return true
 }
 
-// SQLIdentifiers returns quotes for string starting with special characters.
-func (s SearchPath) SQLIdentifiers() string {
-	var buf bytes.Buffer
-	for i, path := range s.paths {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		lexbase.EncodeRestrictedSQLIdent(&buf, path, lexbase.EncNoFlags)
-	}
-	return buf.String()
+func (s SearchPath) String() string {
+	return FormatSearchPaths(s.paths)
 }
 
-func (s SearchPath) String() string {
-	return strings.Join(s.paths, ",")
+// FormatSearchPaths formats a search path for display. Each element in the
+// array is treated as a SQL identifier and quoted if necessary.
+func FormatSearchPaths(paths []string) string {
+	builder := &strings.Builder{}
+	delimiter := ""
+	for _, v := range paths {
+		builder.WriteString(delimiter)
+		var buf bytes.Buffer
+		lexbase.EncodeRestrictedSQLIdent(&buf, v, lexbase.EncNoFlags)
+		builder.WriteString(buf.String())
+		delimiter = ", "
+	}
+	return builder.String()
+}
+
+// ParseSearchPath parses a string into a list of schema names. In the output,
+// each schema name is a bare SQL identifier. In the input, the schema names
+// are comma separated and may be quoted. This function is meant to roundtrip
+// with FormatSearchPaths.
+func ParseSearchPath(s string) ([]string, error) {
+	paths, ok := doParseSearchPathFromString(s)
+	if !ok {
+		return nil, pgerror.Newf(pgcode.InvalidTextRepresentation, `invalid value for parameter "search_path": "%s"`, s)
+	}
+	return paths, nil
 }
 
 // SearchPathIter enables iteration over the search paths without triggering an

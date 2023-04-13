@@ -50,6 +50,7 @@ go_test(
         "repair_test.go",
         "rsg_test.go",
         "schema_changes_in_parallel_test.go",
+        "search_path_test.go",
         "show_commit_timestamp_test.go",
         "split_test.go",
         "system_table_test.go",
