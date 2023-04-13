@@ -434,19 +434,19 @@ func DecodeIndexKey(
 	if err != nil {
 		return err
 	}
-	_, _, err = DecodeKeyVals(vals, colDirs, key)
+	_, err = DecodeKeyVals(vals, colDirs, key)
 	return err
 }
 
 // DecodeKeyVals decodes the values that are part of the key. The decoded
 // values are stored in the vals. If this slice is nil, the direction
 // used will default to encoding.Ascending.
-// DecodeKeyVals returns whether or not NULL was encountered in the key.
+// remainingKey returns any bytes leftover after populating vals.
 func DecodeKeyVals(
 	vals []EncDatum, directions []catpb.IndexColumn_Direction, key []byte,
-) (remainingKey []byte, foundNull bool, _ error) {
+) (remainingKey []byte, _ error) {
 	if directions != nil && len(directions) != len(vals) {
-		return nil, false, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
+		return nil, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
 			len(directions), len(vals))
 	}
 	for j := range vals {
@@ -457,11 +457,10 @@ func DecodeKeyVals(
 		var err error
 		vals[j], key, err = EncDatumFromBuffer(enc, key)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
-		foundNull = foundNull || vals[j].IsNull()
 	}
-	return key, foundNull, nil
+	return key, nil
 }
 
 // DecodeKeyValsUsingSpec is a variant of DecodeKeyVals which uses
