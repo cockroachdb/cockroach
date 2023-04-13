@@ -11,16 +11,14 @@
 import React from "react";
 import classNames from "classnames/bind";
 import styles from "./searchCriteria.module.scss";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { Button } from "src/button";
+import { commonStyles, selectCustomStyles } from "src/common";
 import {
-  Button,
-  commonStyles,
-  PageConfig,
-  PageConfigItem,
-  selectCustomStyles,
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
-} from "src";
+} from "src/timeScaleDropdown";
 import { applyBtn } from "../queryFilter/filterClasses";
 import Select from "react-select";
 import { limitOptions } from "../util/sqlActivityConstants";

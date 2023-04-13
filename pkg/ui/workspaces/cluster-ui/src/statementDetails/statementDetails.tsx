@@ -89,6 +89,7 @@ import {
   makeInsightsColumns,
 } from "../insightsTable/insightsTable";
 import { CockroachCloudContext } from "../contexts";
+import { filterByTimeScale } from "./diagnostics/diagnosticsUtils";
 
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
@@ -463,7 +464,12 @@ export class StatementDetails extends React.Component<
           <TabPane
             tab={`Diagnostics${
               this.hasDiagnosticReports()
-                ? ` (${this.props.diagnosticsReports.length})`
+                ? ` (${
+                    filterByTimeScale(
+                      this.props.diagnosticsReports,
+                      this.props.timeScale,
+                    ).length
+                  })`
                 : ""
             }`}
             key="diagnostics"
@@ -476,9 +482,20 @@ export class StatementDetails extends React.Component<
   };
 
   renderNoDataTabContent = (): React.ReactElement => (
-    <section className={cx("section")}>
-      <InlineAlert intent="info" title="No data available." />
-    </section>
+    <>
+      <PageConfig>
+        <PageConfigItem>
+          <TimeScaleDropdown
+            options={timeScale1hMinOptions}
+            currentScale={this.props.timeScale}
+            setTimeScale={this.props.onTimeScaleChange}
+          />
+        </PageConfigItem>
+      </PageConfig>
+      <section className={cx("section")}>
+        <InlineAlert intent="info" title="No data available." />
+      </section>
+    </>
   );
 
   renderNoDataWithTimeScaleAndSqlBoxTabContent = (
@@ -870,15 +887,17 @@ export class StatementDetails extends React.Component<
       return this.renderNoDataTabContent();
     }
 
+    const fingerprint =
+      this.props.statementDetails?.statement?.metadata?.query.length === 0
+        ? this.state.formattedQuery
+        : this.props.statementDetails?.statement?.metadata?.query;
     return (
       <DiagnosticsView
         activateDiagnosticsRef={this.activateDiagnosticsRef}
         diagnosticsReports={this.props.diagnosticsReports}
         dismissAlertMessage={this.props.dismissStatementDiagnosticsAlertMessage}
         hasData={this.hasDiagnosticReports()}
-        statementFingerprint={
-          this.props.statementDetails?.statement?.metadata?.query
-        }
+        statementFingerprint={fingerprint}
         onDownloadDiagnosticBundleClick={this.props.onDiagnosticBundleDownload}
         onDiagnosticCancelRequestClick={report =>
           this.props.onDiagnosticCancelRequest(report)
@@ -887,6 +906,8 @@ export class StatementDetails extends React.Component<
           this.props.uiConfig?.showStatementDiagnosticsLink
         }
         onSortingChange={this.props.onSortingChange}
+        currentScale={this.props.timeScale}
+        onChangeTimeScale={this.props.onTimeScaleChange}
       />
     );
   };
