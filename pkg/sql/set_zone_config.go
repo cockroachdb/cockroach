@@ -465,6 +465,11 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return pgerror.Newf(pgcode.WrongObjectType, "cannot set a zone configuration on non-physical object %s", table.GetName())
 	}
 
+	// Disallow schema changes if it's a table and its schema is locked.
+	if err = checkTableSchemaUnlocked(table); err != nil {
+		return err
+	}
+
 	if n.zoneSpecifier.TargetsPartition() && len(n.zoneSpecifier.TableOrIndex.Index) == 0 && !n.allIndexes {
 		// Backward compatibility for ALTER PARTITION ... OF TABLE. Determine which
 		// index has the specified partition.

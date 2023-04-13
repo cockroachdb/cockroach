@@ -155,3 +155,10 @@ func TestLogic_gc_job_mixed(
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "gc_job_mixed")
 }
+
+func TestLogic_schema_locked_in_cluster_before_23_1(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "schema_locked_in_cluster_before_23_1")
+}
