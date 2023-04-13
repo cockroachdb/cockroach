@@ -353,10 +353,10 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 
 type ieIteratorResult struct {
 	// Exactly one of these 4 fields will be set.
-	row                   tree.Datums
-	rowsAffectedIncrement *int
-	cols                  colinfo.ResultColumns
-	err                   error
+	row          tree.Datums
+	rowsAffected *int
+	cols         colinfo.ResultColumns
+	err          error
 }
 
 type rowsIterator struct {
@@ -429,8 +429,8 @@ func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 			r.lastRow = data.row
 			return true, nil
 		}
-		if data.rowsAffectedIncrement != nil {
-			r.rowsAffected += *data.rowsAffectedIncrement
+		if data.rowsAffected != nil {
+			r.rowsAffected = *data.rowsAffected
 			return r.Next(ctx)
 		}
 		if data.cols != nil {

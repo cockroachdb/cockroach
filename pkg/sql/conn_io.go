@@ -791,12 +791,13 @@ type RestrictedCommandResult interface {
 	// AddBatch is undefined.
 	SupportsAddBatch() bool
 
-	// IncrementRowsAffected increments a counter by n. This is used for all
+	// SetRowsAffected sets RowsAffected counter to n. This is used for all
 	// result types other than tree.Rows.
-	IncrementRowsAffected(ctx context.Context, n int)
+	SetRowsAffected(ctx context.Context, n int)
 
-	// RowsAffected returns either the number of times AddRow was called, or the
-	// sum of all n passed into IncrementRowsAffected.
+	// RowsAffected returns either the number of times AddRow was called, total
+	// number of rows pushed via AddBatch, or the last value of n passed into
+	// SetRowsAffected.
 	RowsAffected() int
 
 	// DisableBuffering can be called during execution to ensure that
@@ -1026,7 +1027,7 @@ func (r *streamingCommandResult) ResetStmtType(stmt tree.Statement) {
 
 // AddRow is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
-	// AddRow() and IncrementRowsAffected() are never called on the same command
+	// AddRow() and SetRowsAffected() are never called on the same command
 	// result, so we will not double count the affected rows by an increment
 	// here.
 	r.rowsAffected++
@@ -1069,13 +1070,13 @@ func (r *streamingCommandResult) Err() error {
 	return r.err
 }
 
-// IncrementRowsAffected is part of the RestrictedCommandResult interface.
-func (r *streamingCommandResult) IncrementRowsAffected(ctx context.Context, n int) {
-	r.rowsAffected += n
+// SetRowsAffected is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) SetRowsAffected(ctx context.Context, n int) {
+	r.rowsAffected = n
 	// streamingCommandResult might be used outside of the internal executor
 	// (i.e. not by rowsIterator) in which case the channel is not set.
 	if r.w != nil {
-		_ = r.w.addResult(ctx, ieIteratorResult{rowsAffectedIncrement: &n})
+		_ = r.w.addResult(ctx, ieIteratorResult{rowsAffected: &n})
 	}
 }
 
@@ -1111,11 +1112,6 @@ func (r *streamingCommandResult) SetPrepStmtOutput(context.Context, colinfo.Resu
 func (r *streamingCommandResult) SetPortalOutput(
 	context.Context, colinfo.ResultColumns, []pgwirebase.FormatCode,
 ) {
-}
-
-// SetRowsAffected is part of the sql.CopyInResult interface.
-func (r *streamingCommandResult) SetRowsAffected(ctx context.Context, rows int) {
-	r.rowsAffected = rows
 }
 
 // SendCopyOut is part of the sql.CopyOutResult interface.
