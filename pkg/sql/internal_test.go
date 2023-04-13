@@ -685,6 +685,37 @@ func TestInternalDBWithOverrides(t *testing.T) {
 	assert.Equal(t, "'off'", drow[0].String())
 }
 
+// TestInternalExecutorRetryAfterRows verifies that if the internal executor
+// encounters a retry error after some rows have been communicated to the
+// client, the query results in a retry error rather than duplicated rows
+// (#98558).
+func TestInternalExecutorRetryAfterRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := db.Exec("CREATE DATABASE test; CREATE TABLE test.t (c) AS SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	_, err := ie.QueryBufferedEx(
+		ctx, "read rows", nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User:                     username.MakeSQLUsernameFromPreNormalizedString(username.RootUser),
+			InjectRetryErrorsEnabled: true,
+		},
+		"SELECT * FROM test.t",
+	)
+	if !testutils.IsError(err, "inject_retry_errors_enabled") {
+		t.Fatalf("expected to see injected retry error, got %v", err)
+	}
+}
+
 // TODO(andrei): Test that descriptor leases are released by the
 // Executor, with and without a higher-level txn. When there is no
 // higher-level txn, the leases are released normally by the txn finishing. When
