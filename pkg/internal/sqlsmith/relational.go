@@ -906,7 +906,6 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 		IsSet: setof,
 	}
 
-	// TODO(harding): Allow params to be referenced in the statement body.
 	paramCnt := s.rnd.Intn(10)
 	if s.types == nil || len(s.types.scalarTypes) == 0 {
 		paramCnt = 0
@@ -916,6 +915,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	// TODO(100962): Set a param default value sometimes.
 	params := make(tree.FuncParams, paramCnt)
 	paramTypes := make(tree.ParamTypes, paramCnt)
+	refs := make(colRefs, paramCnt)
 	for i := 0; i < paramCnt; i++ {
 		// Do not allow collated string types. These are not supported in UDFs.
 		ptyp := s.randType()
@@ -930,6 +930,12 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 		paramTypes[i] = tree.ParamType{
 			Name: pname,
 			Typ:  ptyp,
+		}
+		refs[i] = &colRef{
+			typ: ptyp,
+			item: &tree.ColumnItem{
+				ColumnName: tree.Name(pname),
+			},
 		}
 	}
 
@@ -1013,11 +1019,11 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 		if i == stmtCnt-1 {
 			// The return type of the last statement should match the function return
 			// type.
-			if stmt, _, ok = s.makeSelect([]*types.T{rtyp}, nil /* refs */); !ok {
+			if stmt, _, ok = s.makeSelect([]*types.T{rtyp}, refs); !ok {
 				return nil, false
 			}
 		} else {
-			if stmt, _, ok = s.makeSelect(nil /* desiredTypes */, nil /* refs */); !ok {
+			if stmt, _, ok = s.makeSelect(nil /* desiredTypes */, refs); !ok {
 				continue
 			}
 		}
