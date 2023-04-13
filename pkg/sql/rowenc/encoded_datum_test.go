@@ -306,7 +306,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 				t.Fatal("buffer ended early")
 			}
 			var decoded rowenc.EncDatum
-			decoded, b, err = rowenc.EncDatumFromBuffer(typs[i], enc[i], b)
+			decoded, b, err = rowenc.EncDatumFromBuffer(enc[i], b)
 			if err != nil {
 				t.Fatalf("%+v: encdatum from %+v: %+v (%+v)", ed[i].Datum, enc[i], err, typs[i])
 			}
