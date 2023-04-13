@@ -503,10 +503,8 @@ func (reg *registry) Disconnect(span roachpb.Span) {
 // DisconnectWithErr disconnects all registrations that overlap the specified
 // span with the provided error.
 func (reg *registry) DisconnectWithErr(span roachpb.Span, pErr *kvpb.Error) {
-	err := pErr.GoError()
 	reg.forOverlappingRegs(span, func(r *registration) (bool, *kvpb.Error) {
-		r.done.Set(err)
-		return true, pErr
+		return true /* disconned */, pErr
 	})
 }
 
