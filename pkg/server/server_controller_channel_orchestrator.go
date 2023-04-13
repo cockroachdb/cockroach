@@ -345,63 +345,7 @@ func (o *channelOrchestrator) startControlledServer(
 			tenantStopper = stop.NewStopper()
 
 			// Task that is solely responsible for propagating ungraceful exits.
-			if err := ctlStopper.RunAsyncTask(ctx, "propagate-ungraceful-stop", func(ctx context.Context) {
-				select {
-				case <-tenantStopper.ShouldQuiesce():
-					// Tenant server shutting down on its own.
-					return
-				case <-immediateStopRequestCh:
-					// An immediate stop request is catching up with the
-					// graceful drain above.
-					tenantStopper.Stop(ctx)
-				case <-o.parentStopper.ShouldQuiesce():
-					// Expedited shutdown of the surrounding KV node.
-					tenantStopper.Stop(ctx)
-				}
-				log.Infof(ctx, "propagate-ungraceful-stop task terminating")
-			}); err != nil {
-				tenantStopper.Stop(ctx)
-				return
-			}
-
-			// Task that propagates graceful shutdowns.
-			if err := ctlStopper.RunAsyncTask(ctx, "propagate-close-tenant", func(ctx context.Context) {
-				defer log.Infof(ctx, "propagate-close-tenant task terminating")
-				select {
-				case <-tenantStopper.ShouldQuiesce():
-					// Tenant server shutting down on its own.
-					return
-				case <-ctlStopper.ShouldQuiesce():
-					gracefulDrainRequested := <-useGracefulDrainDuringTenantShutdown
-					if gracefulDrainRequested {
-						// Ensure that the graceful drain for the tenant server aborts
-						// early if the Stopper for the surrounding server is
-						// prematurely shutting down. This is because once the surrounding node
-						// starts quiescing tasks, it won't be able to process KV requests
-						// by the tenant server any more.
-						//
-						// Beware: we use tenantCtx here, not ctx, because the
-						// latter has been linked to ctlStopper.Quiesce already
-						// -- and in this select branch that context has been
-						// canceled already.
-						drainCtx, cancel := o.parentStopper.WithCancelOnQuiesce(tenantCtx)
-						defer cancel()
-						// If an immediate drain catches up with the graceful drain, make
-						// the former cancel the ctx too.
-						var cancel2 func()
-						drainCtx, cancel2 = tenantStopper.WithCancelOnQuiesce(drainCtx)
-						defer cancel2()
-
-						log.Infof(drainCtx, "starting graceful drain")
-						// Call the drain service on that tenant's server. This may take a
-						// while as it needs to wait for clients to disconnect and SQL
-						// activity to clear up, possibly waiting for various configurable
-						// timeouts.
-						CallDrainServerSide(drainCtx, tenantServer.gracefulDrain)
-					}
-					tenantStopper.Stop(ctx)
-				}
-			}); err != nil {
+			if err := o.propagateUngracefulStopAsync(ctx, ctlStopper, tenantStopper, immediateStopRequestCh); err != nil {
 				tenantStopper.Stop(ctx)
 				return
 			}
@@ -422,6 +366,15 @@ func (o *channelOrchestrator) startControlledServer(
 				if err := s.preStart(startCtx); err != nil {
 					return nil, errors.Wrap(err, "while starting server")
 				}
+
+				// Task that propagates graceful shutdowns.
+				// This can only start after the server has started successfully.
+				if err := o.propagateGracefulDrainAsync(ctx,
+					tenantCtx, ctlStopper, tenantStopper,
+					useGracefulDrainDuringTenantShutdown, s); err != nil {
+					return nil, errors.Wrap(err, "while starting graceful drain propagation task")
+				}
+
 				return s, errors.Wrap(s.acceptClients(startCtx), "while accepting clients")
 			}()
 			if err != nil {
@@ -483,4 +436,75 @@ func (o *channelOrchestrator) startControlledServer(
 	}
 
 	return state, nil
+}
+
+// propagateUngracefulStopAsync propagates ungraceful stop requests
+// from the surrounding KV node into the tenant server.
+func (o *channelOrchestrator) propagateUngracefulStopAsync(
+	ctx context.Context,
+	ctlStopper, tenantStopper *stop.Stopper,
+	immediateStopRequestCh <-chan struct{},
+) error {
+	return ctlStopper.RunAsyncTask(ctx, "propagate-ungraceful-stop", func(ctx context.Context) {
+		defer log.Infof(ctx, "propagate-ungraceful-stop task terminating")
+		select {
+		case <-tenantStopper.ShouldQuiesce():
+			// Tenant server shutting down on its own.
+			return
+		case <-immediateStopRequestCh:
+			// An immediate stop request is catching up with the
+			// graceful drain above.
+			tenantStopper.Stop(ctx)
+		case <-o.parentStopper.ShouldQuiesce():
+			// Expedited shutdown of the surrounding KV node.
+			tenantStopper.Stop(ctx)
+		}
+	})
+}
+
+// propagateGracefulDrainAsync propagates graceful drain requests
+// from the surrounding KV node into the tenant server.
+func (o *channelOrchestrator) propagateGracefulDrainAsync(
+	ctx, tenantCtx context.Context,
+	ctlStopper, tenantStopper *stop.Stopper,
+	gracefulDrainRequestCh <-chan bool,
+	tenantServer orchestratedServer,
+) error {
+	return ctlStopper.RunAsyncTask(ctx, "propagate-graceful-drain", func(ctx context.Context) {
+		defer log.Infof(ctx, "propagate-graceful-drain task terminating")
+		select {
+		case <-tenantStopper.ShouldQuiesce():
+			// Tenant server shutting down on its own.
+			return
+		case <-ctlStopper.ShouldQuiesce():
+			gracefulDrainRequested := <-gracefulDrainRequestCh
+			if gracefulDrainRequested {
+				// Ensure that the graceful drain for the tenant server aborts
+				// early if the Stopper for the surrounding server is
+				// prematurely shutting down. This is because once the surrounding node
+				// starts quiescing tasks, it won't be able to process KV requests
+				// by the tenant server any more.
+				//
+				// Beware: we use tenantCtx here, not ctx, because the
+				// latter has been linked to ctlStopper.Quiesce already
+				// -- and in this select branch that context has been
+				// canceled already.
+				drainCtx, cancel := o.parentStopper.WithCancelOnQuiesce(tenantCtx)
+				defer cancel()
+				// If an immediate drain catches up with the graceful drain, make
+				// the former cancel the ctx too.
+				var cancel2 func()
+				drainCtx, cancel2 = tenantStopper.WithCancelOnQuiesce(drainCtx)
+				defer cancel2()
+
+				log.Infof(drainCtx, "starting graceful drain")
+				// Call the drain service on that tenant's server. This may take a
+				// while as it needs to wait for clients to disconnect and SQL
+				// activity to clear up, possibly waiting for various configurable
+				// timeouts.
+				CallDrainServerSide(drainCtx, tenantServer.gracefulDrain)
+			}
+			tenantStopper.Stop(ctx)
+		}
+	})
 }
