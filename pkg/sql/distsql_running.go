@@ -869,7 +869,7 @@ type rowResultWriter interface {
 	// AddRow writes a result row.
 	// Note that the caller owns the row slice and might reuse it.
 	AddRow(ctx context.Context, row tree.Datums) error
-	IncrementRowsAffected(ctx context.Context, n int)
+	SetRowsAffected(ctx context.Context, n int)
 	SetError(error)
 	Err() error
 }
@@ -960,8 +960,8 @@ func (w *errOnlyResultWriter) AddBatch(ctx context.Context, batch coldata.Batch)
 	panic("AddBatch not supported by errOnlyResultWriter")
 }
 
-func (w *errOnlyResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
-	panic("IncrementRowsAffected not supported by errOnlyResultWriter")
+func (w *errOnlyResultWriter) SetRowsAffected(ctx context.Context, n int) {
+	panic("SetRowsAffected not supported by errOnlyResultWriter")
 }
 
 // RowResultWriter is a thin wrapper around a RowContainer.
@@ -978,9 +978,9 @@ func NewRowResultWriter(rowContainer *rowContainerHelper) *RowResultWriter {
 	return &RowResultWriter{rowContainer: rowContainer}
 }
 
-// IncrementRowsAffected implements the rowResultWriter interface.
-func (b *RowResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
-	b.rowsAffected += n
+// SetRowsAffected implements the rowResultWriter interface.
+func (b *RowResultWriter) SetRowsAffected(ctx context.Context, n int) {
+	b.rowsAffected = n
 }
 
 // AddRow implements the rowResultWriter interface.
@@ -1018,9 +1018,9 @@ func NewCallbackResultWriter(
 	return &CallbackResultWriter{fn: fn}
 }
 
-// IncrementRowsAffected is part of the rowResultWriter interface.
-func (c *CallbackResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
-	c.rowsAffected += n
+// SetRowsAffected is part of the rowResultWriter interface.
+func (c *CallbackResultWriter) SetRowsAffected(ctx context.Context, n int) {
+	c.rowsAffected = n
 }
 
 // AddRow is part of the rowResultWriter interface.
@@ -1288,7 +1288,7 @@ func (r *DistSQLReceiver) Push(
 		// We only need the row count. planNodeToRowSource is set up to handle
 		// ensuring that the last stage in the pipeline will return a single-column
 		// row with the row count in it, so just grab that and exit.
-		r.resultWriter.IncrementRowsAffected(r.ctx, n)
+		r.resultWriter.SetRowsAffected(r.ctx, n)
 		return r.status
 	}
 
@@ -1368,7 +1368,7 @@ func (r *DistSQLReceiver) PushBatch(
 		// We only need the row count. planNodeToRowSource is set up to handle
 		// ensuring that the last stage in the pipeline will return a single-column
 		// row with the row count in it, so just grab that and exit.
-		r.resultWriter.IncrementRowsAffected(r.ctx, int(batch.ColVec(0).Int64()[0]))
+		r.resultWriter.SetRowsAffected(r.ctx, int(batch.ColVec(0).Int64()[0]))
 		return r.status
 	}
 

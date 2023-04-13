@@ -369,10 +369,10 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 
 type ieIteratorResult struct {
 	// Exactly one of these 4 fields will be set.
-	row                   tree.Datums
-	rowsAffectedIncrement *int
-	cols                  colinfo.ResultColumns
-	err                   error
+	row          tree.Datums
+	rowsAffected *int
+	cols         colinfo.ResultColumns
+	err          error
 }
 
 type rowsIterator struct {
@@ -445,8 +445,8 @@ func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 			r.lastRow = data.row
 			return true, nil
 		}
-		if data.rowsAffectedIncrement != nil {
-			r.rowsAffected += *data.rowsAffectedIncrement
+		if data.rowsAffected != nil {
+			r.rowsAffected = *data.rowsAffected
 			return r.Next(ctx)
 		}
 		if data.cols != nil {
@@ -752,6 +752,8 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	// executor to avoid possible concurrency with the "outer" query (which
 	// might be using the RootTxn).
 	sd.LocalOnlySessionData.StreamerEnabled = false
+	// We always override the injection knob based on the override struct.
+	sd.InjectRetryErrorsEnabled = o.InjectRetryErrorsEnabled
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(
@@ -834,9 +836,10 @@ var rowsAffectedResultColumns = colinfo.ResultColumns{
 // occurs.
 //
 // An additional responsibility of the internalClientComm is handling the retry
-// errors. At the moment of writing, this is done incorrectly - namely, the
-// internalClientComm implements the ClientLock interface in such a fashion as
-// if any command can be transparently retried.
+// errors. At the moment of writing, this is done incorrectly (except for stmts
+// of "RowsAffected" type) - namely, the internalClientComm implements the
+// ClientLock interface in such a fashion as if any command can be transparently
+// retried.
 // TODO(yuzefovich): fix this.
 //
 // Note that only implicit txns can be retried internally. If an explicit txn is
@@ -852,6 +855,13 @@ var rowsAffectedResultColumns = colinfo.ResultColumns{
 //   zeroth result - the error is sent on the ieResultChannel
 // - the rowsIterator receives the error and returns it to the caller of
 //   execInternal.
+//
+// Retries for implicit txns and statements of "RowsAffected" type are achieved
+// by overriding the "rows affected" number, stored in the rowsIterator, with
+// the latest information. With such setup, even if the stmt execution before
+// the retry communicated its incorrect "rows affected" information, that info
+// is overridden accordingly after the connExecutor re-executes the
+// corresponding command.
 
 // execInternal executes a statement.
 //

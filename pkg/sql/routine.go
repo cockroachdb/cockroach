@@ -134,8 +134,8 @@ func (d *droppingResultWriter) AddRow(ctx context.Context, row tree.Datums) erro
 	return nil
 }
 
-// IncrementRowsAffected is part of the rowResultWriter interface.
-func (d *droppingResultWriter) IncrementRowsAffected(ctx context.Context, n int) {}
+// SetRowsAffected is part of the rowResultWriter interface.
+func (d *droppingResultWriter) SetRowsAffected(ctx context.Context, n int) {}
 
 // SetError is part of the rowResultWriter interface.
 func (d *droppingResultWriter) SetError(err error) {

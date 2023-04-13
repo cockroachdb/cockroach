@@ -618,6 +618,49 @@ func TestInternalExecutorWithUndefinedQoSOverridePanics(t *testing.T) {
 	})
 }
 
+// TestInternalExecutorEncountersRetry verifies that if the internal executor
+// encounters a retry error after some data (rows or metadata) have been
+// communicated to the client, the query either results in a retry error (when
+// rows have been sent) or correctly transparently retries (#98558).
+func TestInternalExecutorEncountersRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+
+	// This test case verifies that if we execute the stmt of the RowsAffected
+	// type, it is transparently retried and the correct number of "rows
+	// affected" is reported.
+	t.Run("RowsAffected stmt", func(t *testing.T) {
+		// We will use PAUSE SCHEDULES statement which is of RowsAffected type.
+		//
+		// Notably, internally this statement will run some other queries via
+		// the "nested" internal executor, but those "nested" queries don't hit
+		// the injected retry error since this knob only applies to the "top"
+		// IE.
+		const stmt = `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR SQL STATISTICS];`
+		paused, err := ie.ExecEx(
+			ctx, "pause schedule", nil, /* txn */
+			sessiondata.InternalExecutorOverride{
+				User:                     username.RootUserName(),
+				InjectRetryErrorsEnabled: true,
+			},
+			stmt,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if paused != 1 {
+			t.Fatalf("expected 1 schedule to be paused, got %d", paused)
+		}
+	})
+}
+
 // TODO(andrei): Test that descriptor leases are released by the
 // InternalExecutor, with and without a higher-level txn. When there is no
 // higher-level txn, the leases are released normally by the txn finishing. When
