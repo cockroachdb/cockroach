@@ -1199,7 +1199,10 @@ message TableDescriptor {
   // This field is non zero if this table is offline during an import.
   optional int64 import_start_wall_time = 54 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportStartWallTime"];
 
-  // Next ID: 58
+  // SchemaLocked, if set, disallows schema change to this table.
+  optional bool schema_locked = 58 [(gogoproto.nullable) = false, (gogoproto.customname) = "SchemaLocked"];
+
+  // Next ID: 59
 }
 
 // SurvivalGoal is the survival goal for a database.
