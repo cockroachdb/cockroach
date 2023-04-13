@@ -11,7 +11,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -1170,35 +1169,26 @@ var varGen = map[string]sessionVar{
 		GetStringVal: func(
 			ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn,
 		) (string, error) {
-			comma := ""
-			var buf bytes.Buffer
-			for _, v := range values {
+			paths := make([]string, len(values))
+			for i, v := range values {
 				s, err := paramparse.DatumAsString(ctx, &evalCtx.Context, "search_path", v)
 				if err != nil {
 					return "", err
 				}
-				if strings.Contains(s, ",") {
-					// TODO(knz): if/when we want to support this, we'll need to change
-					// the interface between GetStringVal() and Set() to take string
-					// arrays instead of a single string.
-					return "",
-						errors.WithHintf(unimplemented.NewWithIssuef(53971,
-							`schema name %q has commas so is not supported in search_path.`, s),
-							`Did you mean to omit quotes? SET search_path = %s`, s)
-				}
-				buf.WriteString(comma)
-				buf.WriteString(s)
-				comma = ","
+				paths[i] = s
 			}
-			return buf.String(), nil
+			return sessiondata.FormatSearchPaths(paths), nil
 		},
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			paths := strings.Split(s, ",")
+			paths, err := sessiondata.ParseSearchPath(s)
+			if err != nil {
+				return err
+			}
 			m.UpdateSearchPath(paths)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return evalCtx.SessionData().SearchPath.SQLIdentifiers(), nil
+			return evalCtx.SessionData().SearchPath.String(), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondata.DefaultSearchPath.String()
