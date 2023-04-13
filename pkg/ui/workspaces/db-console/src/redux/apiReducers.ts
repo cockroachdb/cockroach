@@ -32,6 +32,8 @@ import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 import * as protos from "src/js/protos";
 import Long from "long";
+import { createSelector } from "reselect";
+import { AdminUIState } from "./state";
 
 const { generateStmtDetailsToID, HexStringToInt64String } = util;
 
@@ -642,3 +644,61 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };
+
+// This mapped type assigns keys in object type T where the key value
+// is of type V to the key value. Otherwise, it assigns it 'never'.
+// This enables one to extract keys in an object T of type V.
+// Example:
+// type MyObject = {
+//   a: string;
+//   b: string;
+// . c: number;
+// }
+// type KeysThatHaveStringsInMyObject = KeysMatching<MyObject, string>;
+// KeysThatHaveStringsInMyObject maps to the following type:
+// Result = {
+//    a: 'a';
+// .  b: 'b';
+// .  c: never;
+// }
+//
+type KeysMatchingType<T, V> = {
+  [K in keyof T]: T[K] extends V ? K : never;
+}[keyof T];
+
+type CachedDataTypesInState = {
+  [K in keyof APIReducersState]: APIReducersState[K] extends CachedDataReducerState<unknown>
+    ? APIReducersState[K]["data"]
+    : never;
+}[keyof APIReducersState];
+
+// These selector creators are used to create selectors that will map the
+// cached data reducer state to the expected  'clusterUiApi.RequestState'
+// type. It also prevents passing a new object when the underlying cached
+// data reducer hasn't changed.
+export function createSelectorForCachedDataField<
+  RespType extends CachedDataTypesInState,
+>(
+  fieldName: KeysMatchingType<
+    APIReducersState,
+    CachedDataReducerState<RespType>
+  >,
+) {
+  return createSelector<
+    AdminUIState,
+    CachedDataReducerState<RespType>,
+    clusterUiApi.RequestState<RespType>
+  >(
+    (state: AdminUIState): CachedDataReducerState<RespType> =>
+      state.cachedData[fieldName] as CachedDataReducerState<RespType>,
+    (response): clusterUiApi.RequestState<RespType> => {
+      return {
+        data: response?.data,
+        error: response?.lastError,
+        valid: response?.valid ?? false,
+        inFlight: response?.inFlight ?? false,
+        lastUpdated: response?.setAt,
+      };
+    },
+  );
+}

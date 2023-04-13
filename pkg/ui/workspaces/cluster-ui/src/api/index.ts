@@ -25,3 +25,4 @@ export * from "./databasesApi";
 export * from "./eventsApi";
 export * from "./databaseDetailsApi";
 export * from "./tableDetailsApi";
+export * from "./types";

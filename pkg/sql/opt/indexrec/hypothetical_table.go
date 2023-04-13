@@ -161,7 +161,7 @@ func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) ca
 		existingIndex := ht.Table.Index(i)
 		indexExists := index.hasSameExplicitCols(existingIndex, index.IsInverted())
 		_, isPartialIndex := existingIndex.Predicate()
-		if indexExists && !isPartialIndex && !existingIndex.IsNotVisible() {
+		if indexExists && !isPartialIndex && existingIndex.GetInvisibility() == 0.0 {
 			return existingIndex
 		}
 	}

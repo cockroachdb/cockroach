@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -155,7 +156,7 @@ func (p *planner) DeserializeSessionState(
 			// The pgwire protocol only allows at most 1 statement here.
 			return nil, pgerror.WrongNumberOfPreparedStatements(len(stmts))
 		}
-		var parserStmt parser.Statement
+		var parserStmt statements.Statement[tree.Statement]
 		if len(stmts) == 1 {
 			parserStmt = stmts[0]
 		}

@@ -522,7 +522,8 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			IsInverted:          idx.GetType() == descpb.IndexDescriptor_INVERTED,
 			IsCreatedExplicitly: idx.IsCreatedExplicitly(),
 			ConstraintID:        idx.GetConstraintID(),
-			IsNotVisible:        idx.IsNotVisible(),
+			IsNotVisible:        idx.GetInvisibility() != 0.0,
+			Invisibility:        idx.GetInvisibility(),
 		}
 		if geoConfig := idx.GetGeoConfig(); !geoConfig.IsEmpty() {
 			index.GeoConfig = protoutil.Clone(&geoConfig).(*geoindex.Config)

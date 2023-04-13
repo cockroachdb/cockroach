@@ -26,6 +26,7 @@ go_library(
         "//pkg/geo/geopb",  # keep
         "//pkg/security/username",  # keep
         "//pkg/sql/lexbase",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",  # keep
@@ -81,7 +82,7 @@ go_test(
 
 sh_binary(
     name = "sql-gen",
-    srcs = ["sql-gen.sh"],
+    srcs = ["//pkg/sql/lexbase:sql-gen.sh"],
 )
 
 # Define the target to auto-generate sql.go from the grammar file.
@@ -99,9 +100,9 @@ export PATH=$$GO_ABS_PATH:$$PATH
 export HOME=$(GENDIR)
 export GOPATH=/nonexist-gopath
 export GOROOT=
-$(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
+$(location :sql-gen) $(location sql.y) sql $(location replace_help_rules.awk) \
     $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
-    $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
+    $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
 """,
     exec_tools = [
         ":sql-gen",
