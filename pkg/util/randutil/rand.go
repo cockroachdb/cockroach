@@ -227,11 +227,12 @@ const PrintableKeyAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX
 // be printable without further escaping if alphabet is restricted to
 // alphanumeric chars.
 func RandString(rng *rand.Rand, length int, alphabet string) string {
-	buf := make([]byte, length)
-	for i := range buf {
-		buf[i] = alphabet[rng.Intn(len(alphabet))]
+	runes := []rune(alphabet)
+	buf := &strings.Builder{}
+	for i := 0; i < length; i++ {
+		buf.WriteRune(runes[rng.Intn(len(runes))])
 	}
-	return string(buf)
+	return buf.String()
 }
 
 // SeedForTests seeds the random number generator and prints the seed
