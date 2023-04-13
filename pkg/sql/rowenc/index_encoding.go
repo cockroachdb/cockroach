@@ -425,20 +425,17 @@ func DecodeIndexKeyPrefix(
 // empty.
 func DecodeIndexKey(
 	codec keys.SQLCodec, vals []EncDatum, colDirs []catpb.IndexColumn_Direction, key []byte,
-) (remainingKey []byte, foundNull bool, _ error) {
+) error {
 	key, err := codec.StripTenantPrefix(key)
 	if err != nil {
-		return nil, false, err
+		return err
 	}
 	key, _, _, err = DecodePartialTableIDIndexID(key)
 	if err != nil {
-		return nil, false, err
+		return err
 	}
-	remainingKey, foundNull, err = DecodeKeyVals(vals, colDirs, key)
-	if err != nil {
-		return nil, false, err
-	}
-	return remainingKey, foundNull, nil
+	_, _, err = DecodeKeyVals(vals, colDirs, key)
+	return err
 }
 
 // DecodeKeyVals decodes the values that are part of the key. The decoded
