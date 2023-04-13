@@ -63,6 +63,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
 		))
 	}
+	panicIfSchemaIsLocked(relationElements)
 
 	// Inverted indexes do not support hash sharding or unique.
 	if n.Inverted {
