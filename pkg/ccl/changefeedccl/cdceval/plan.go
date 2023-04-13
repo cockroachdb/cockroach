@@ -46,7 +46,7 @@ func NormalizeExpression(
 	// Even though we have a job exec context, we shouldn't muck with it.
 	// Make our own copy of the planner instead.
 	if err := withPlanner(
-		ctx, execCtx.ExecCfg(), execCtx.User(), schemaTS, execCtx.SessionData().SessionData,
+		ctx, execCtx.ExecCfg(), execCtx.User(), schemaTS, execCtx.SessionData(),
 		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) (err error) {
 			defer cleanup()
 			norm, withDiff, err = normalizeExpression(ctx, execCtx, descr, schemaTS, target, sc, splitFams)
@@ -107,7 +107,7 @@ func SpansForExpression(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
-	sd sessiondatapb.SessionData,
+	sd *sessiondata.SessionData,
 	descr catalog.TableDescriptor,
 	schemaTS hlc.Timestamp,
 	target jobspb.ChangefeedTargetSpecification,
