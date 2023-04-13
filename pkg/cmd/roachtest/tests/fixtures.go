@@ -12,8 +12,8 @@ package tests
 
 import (
 	"context"
+	"os"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -28,20 +28,15 @@ func registerFixtures(r registry.Registry) {
 	// 20.1; run the test (on 20.1). Check it in (instructions will be logged
 	// below) and off we go.
 	//
-	// The version to create/update the fixture for. Must be released (i.e.
-	// can download it from the homepage); if that is not the case use the
-	// empty string which uses the local cockroach binary. Make sure that
-	// this binary then has the correct version. For example, to make a
+	// The version to create/update the fixture for must be released
+	// (i.e.  can download it from the homepage). For example, to make a
 	// "v20.2" fixture, you will need a binary that has "v20.2" in the
 	// output of `./cockroach version`, and this process will end up
 	// creating fixtures that have "v20.2" in them. This would be part
 	// of tagging the master branch as v21.1 in the process of going
 	// through the major release for v20.2. The version is passed in as
-	// FIXTURE_VERSION environment variable.
-	//
-	// In the common case, one should populate this with the version (instead of
-	// using the empty string) as this is the most straightforward and least
-	// error-prone way to generate the fixtures.
+	// FIXTURE_VERSION environment variable. The contents of this
+	// environment variable must match a released cockroach binary.
 	//
 	// Please note that you do *NOT* need to update the fixtures in a patch
 	// release. This only happens as part of preparing the master branch for the
@@ -49,8 +44,7 @@ func registerFixtures(r registry.Registry) {
 	// this.
 	//
 	// Example invocation:
-	// roachtest --local run generate-fixtures --debug --cockroach ./cockroach \
-	//   --build-tag v22.1.0-beta.3 tag:fixtures
+	// FIXTURE_VERSION=v20.2.0-beta.1 roachtest --local run generate-fixtures --debug --cockroach ./cockroach tag:fixtures
 	runFixtures := func(
 		ctx context.Context,
 		t test.Test,
@@ -59,7 +53,10 @@ func registerFixtures(r registry.Registry) {
 		if c.IsLocal() && runtime.GOARCH == "arm64" {
 			t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 		}
-		fixtureVersion := strings.TrimPrefix(t.BuildVersion().String(), "v")
+		fixtureVersion := os.Getenv("FIXTURE_VERSION")
+		if fixtureVersion == "" {
+			t.Fatal("FIXTURE_VERSION must be set")
+		}
 		makeVersionFixtureAndFatal(ctx, t, c, fixtureVersion)
 	}
 	spec := registry.TestSpec{

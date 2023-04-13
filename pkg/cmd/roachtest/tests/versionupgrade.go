@@ -26,12 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
-	"github.com/stretchr/testify/require"
 )
 
 type versionFeatureTest struct {
@@ -350,30 +348,13 @@ func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 func makeVersionFixtureAndFatal(
 	ctx context.Context, t test.Test, c cluster.Cluster, makeFixtureVersion string,
 ) {
-	var useLocalBinary bool
-	if makeFixtureVersion == "" {
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
-		require.NoError(t, c.Conn(ctx, t.L(), 1).QueryRowContext(
-			ctx,
-			`select regexp_extract(value, '^v([0-9]+\.[0-9]+\.[0-9]+)') from crdb_internal.node_build_info where field = 'Version';`,
-		).Scan(&makeFixtureVersion))
-		c.Wipe(ctx, c.Node(1))
-		useLocalBinary = true
-	}
-
-	predecessorVersion, err := version.PredecessorVersion(*version.MustParse("v" + makeFixtureVersion))
+	predecessorVersion, err := version.PredecessorVersion(*version.MustParse(makeFixtureVersion))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.L().Printf("making fixture for %s (starting at %s)", makeFixtureVersion, predecessorVersion)
-
-	if useLocalBinary {
-		// Make steps below use the main cockroach binary (in particular, don't try
-		// to download the released version for makeFixtureVersion which may not yet
-		// exist)
-		makeFixtureVersion = ""
-	}
+	fixtureVersion := makeFixtureVersion[1:] // drop the leading v
 
 	newVersionUpgradeTest(c,
 		// Start the cluster from a fixture. That fixture's cluster version may
@@ -389,7 +370,7 @@ func makeVersionFixtureAndFatal(
 		// NB: at this point, cluster and binary version equal predecessorVersion,
 		// and auto-upgrades are on.
 
-		binaryUpgradeStep(c.All(), makeFixtureVersion),
+		binaryUpgradeStep(c.All(), fixtureVersion),
 		waitForUpgradeStep(c.All()),
 
 		func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
@@ -412,7 +393,7 @@ func makeVersionFixtureAndFatal(
 			name := clusterupgrade.CheckpointName(u.binaryVersion(ctx, t, 1).String())
 			u.c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
-			binaryPath := clusterupgrade.BinaryPathFromVersion(makeFixtureVersion)
+			binaryPath := clusterupgrade.BinaryPathFromVersion(fixtureVersion)
 			c.Run(ctx, c.All(), binaryPath, "debug", "pebble", "db", "checkpoint",
 				"{store-dir}", "{store-dir}/"+name)
 			// The `cluster-bootstrapped` marker can already be found within
