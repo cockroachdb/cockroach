@@ -47,6 +47,8 @@ export function livenessNomenclature(liveness: LivenessStatus) {
       return "decommissioning";
     case LivenessStatus.NODE_STATUS_DECOMMISSIONED:
       return "decommissioned";
+    case LivenessStatus.NODE_STATUS_DRAINING:
+      return "draining";
     default:
       return "dead";
   }
@@ -188,6 +190,7 @@ export type NodeSummaryStats = {
     suspect: number;
     dead: number;
     decommissioned: number;
+    draining: number;
   };
   capacityUsed: number;
   capacityAvailable: number;
@@ -227,6 +230,7 @@ export function sumNodeStats(
       suspect: 0,
       dead: 0,
       decommissioned: 0,
+      draining: 0,
     },
     capacityUsed: 0,
     capacityAvailable: 0,
@@ -255,6 +259,9 @@ export function sumNodeStats(
           break;
         case LivenessStatus.NODE_STATUS_DECOMMISSIONED:
           result.nodeCounts.decommissioned++;
+          break;
+        case LivenessStatus.NODE_STATUS_DRAINING:
+          result.nodeCounts.draining++;
           break;
         case LivenessStatus.NODE_STATUS_DEAD:
         default:
