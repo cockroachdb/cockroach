@@ -254,6 +254,7 @@ func runBackupProcessor(
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	memAcc *mon.BoundAccount,
 ) error {
+	log.Infof(ctx, "WHY IN THE WORLD ARE WE RUNNING A 23.1 BACKUP PROCESSOR??")
 	backupProcessorSpan := tracing.SpanFromContext(ctx)
 	clusterSettings := flowCtx.Cfg.Settings
 

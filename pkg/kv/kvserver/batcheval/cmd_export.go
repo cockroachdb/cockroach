@@ -243,6 +243,17 @@ func evalExport(
 		//    early exit and thus have a resume key despite
 		//    not having data.
 		if summary.DataSize == 0 {
+			// if start key is different than resume key,
+			log.Infof(ctx, "no data returned: key span (%s,%s], "+
+				"timestamp %s; og start key %s and timestamp %s; returned resume key %s and resume ts %s"+
+				"; cpu limit %t",
+				start,
+				args.EndKey,
+				resumeKeyTS,
+				args.Key,
+				args.StartTime,
+				resumeInfo.ResumeKey.Key,
+				resumeInfo.ResumeKey.Timestamp, resumeInfo.CPUOverlimit)
 			hasResumeKey := resumeInfo.ResumeKey.Key != nil
 
 			// If we have a resumeKey, it means that we must have hit a resource
@@ -254,6 +265,8 @@ func evalExport(
 				// progress. The client is responsible for handling pagination of
 				// ExportRequests.
 				if resumeInfo.CPUOverlimit && h.ReturnElasticCPUResumeSpans {
+					log.Infof(ctx, "We really do not expect this to happen: Has Resume key and"+
+						" ElasticCPUResumeSpans handling-- i.e. a 23.1 client sent this to us")
 					// Note, since we have not exported any data we do not populate the
 					// `Files` field of the ExportResponse.
 					reply.ResumeSpan = &roachpb.Span{
@@ -329,11 +342,20 @@ func evalExport(
 					EndKey: args.EndKey,
 				}
 				reply.ResumeReason = kvpb.RESUME_ELASTIC_CPU_LIMIT
+				log.Infof(ctx, "NO WAY WE SHOULD HAVE ReturnElastCPUResumedSpans")
+				// NOTE: WE DO NOT SEND BACKUP THE RESUME KEY TS,
+				// which is a small bug that causes us to reingest some dat in this branch.
 			}
 			break
 		}
 
 		if h.TargetBytes > 0 {
+			if resumeInfo.CPUOverlimit {
+				log.Infof(ctx, "MIGHT RETURN: CPU limited pagination with some data returned, "+
+					"Data Size %d, "+
+					"og span (%s,%s], resume key %s", summary.DataSize, args.Key, args.EndKey,
+					resumeInfo.ResumeKey.Key)
+			}
 			curSizeOfExportedSSTs += summary.DataSize
 			// There could be a situation where the size of exported SSTs is larger
 			// than the TargetBytes. In such a scenario, we want to report back
@@ -353,15 +375,24 @@ func evalExport(
 			// issuing the request, and that contains accurate information about what
 			// is left to be exported.
 			targetSize := h.TargetBytes
+
 			if curSizeOfExportedSSTs < targetSize {
 				targetSize = curSizeOfExportedSSTs
 			}
+
 			reply.NumBytes = targetSize
 			// NB: This condition means that we will allow another SST to be created
 			// even if we have less room in our TargetBytes than the target size of
 			// the next SST. In the worst case this could lead to us exceeding our
 			// TargetBytes by SST target size + overage.
+
+			// we get here if there's some data in curSizeOf
 			if reply.NumBytes == h.TargetBytes {
+				if resumeInfo.CPUOverlimit {
+					log.Infof(ctx, "CPU limited pagination with some data returned, Data Size %d, og span (%s,"+
+						"%s], resume key %s", summary.DataSize, args.Key, args.EndKey, resumeInfo.ResumeKey.Key)
+				}
+
 				if resumeInfo.ResumeKey.Key != nil {
 					reply.ResumeSpan = &roachpb.Span{
 						Key:    resumeInfo.ResumeKey.Key,
