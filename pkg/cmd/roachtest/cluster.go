@@ -1287,7 +1287,9 @@ COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob cockroach start-single-node --insecure
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
 // The logs will be placed in the test's artifacts dir.
-func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error {
+func (c *clusterImpl) FetchDebugZip(
+	ctx context.Context, l *logger.Logger, zipName string, includeLogs bool,
+) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
@@ -1298,7 +1300,6 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 
 	// Don't hang forever if we can't fetch the debug zip.
 	return contextutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
-		const zipName = "debug.zip"
 		path := filepath.Join(c.t.ArtifactsDir(), zipName)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
@@ -1311,9 +1312,13 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 			//
 			// Ignore the files in the the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
-			excludeFiles := "*.log,*.txt,*.pprof"
+			var excludeFiles string
+			if !includeLogs {
+				excludeFilesGlob := "*.log,*.txt,*.pprof"
+				excludeFiles = fmt.Sprintf(" --exclude-files='%s'", excludeFilesGlob)
+			}
 			cmd := fmt.Sprintf(
-				"%s debug zip --exclude-files='%s' --url {pgurl:%d} %s",
+				"%s debug zip%s --url {pgurl:%d} %s",
 				defaultCockroachPath, excludeFiles, i, zipName,
 			)
 			if err := c.RunE(ctx, c.Node(i), cmd); err != nil {

@@ -902,8 +902,8 @@ func newMixedVersionBackup(
 // cluster) with equal probability.
 func (mvb *mixedVersionBackup) newBackupType(rng *rand.Rand) backupType {
 	possibleTypes := []backupType{
-		newTableBackup(rng, mvb.dbs, mvb.tables),
-		newDatabaseBackup(rng, mvb.dbs, mvb.tables),
+		// newTableBackup(rng, mvb.dbs, mvb.tables),
+		// newDatabaseBackup(rng, mvb.dbs, mvb.tables),
 		newClusterBackup(rng, mvb.dbs, mvb.tables),
 	}
 
@@ -1303,15 +1303,22 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 	}
 
 	// Create incremental backup.
-	if err := mvb.runJobOnOneOf(ctx, l, incBackupSpec.Execute.Nodes, h, func() error {
+	/* if err := mvb.runJobOnOneOf(ctx, l, incBackupSpec.Execute.Nodes, h, func() error {
 		var err error
 		collection, timestamp, err = mvb.runBackup(ctx, l, incrementalBackup{collection}, rng, incBackupSpec.Plan.Nodes, h)
 		return err
 	}); err != nil {
 		return err
+	}*/
+
+	err := mvb.saveContents(ctx, l, rng, &collection, timestamp, h)
+	if err != nil {
+		return err
 	}
 
-	return mvb.saveContents(ctx, l, rng, &collection, timestamp, h)
+	zipName := fmt.Sprintf("debug_%s.zip", collection.name)
+	l.Printf("fetching debug.zip for backup %s", collection.name)
+	return mvb.cluster.FetchDebugZip(ctx, l, zipName, true /* include logs */)
 }
 
 // sentinelFilePath returns the path to the file that prevents job
@@ -1423,6 +1430,16 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 		}
 	}
 
+	if tc.FromVersion == clusterupgrade.MainVersion {
+		l.Printf("performing downgrade -- skipping")
+		return nil
+	}
+
+	if len(mvb.collections) > 0 {
+		l.Printf("only taking one backup -- skipping")
+		return nil
+	}
+
 	onPrevious := labeledNodes{
 		Nodes: tc.FromVersionNodes, Version: sanitizeVersionForBackup(tc.FromVersion),
 	}
@@ -1433,17 +1450,17 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 	if len(tc.FromVersionNodes) > 0 {
 		// Case 1: plan backups    -> previous node
 		//         execute backups -> next node
-		fullSpec := backupSpec{Plan: onPrevious, Execute: onNext}
+		/*fullSpec := backupSpec{Plan: onPrevious, Execute: onNext}
 		incSpec := fullSpec
 		l.Printf("planning backup: %s", backupCollectionDesc(fullSpec, incSpec))
 		if err := mvb.createBackupCollection(ctx, l, rng, fullSpec, incSpec, h); err != nil {
 			return err
-		}
+		}*/
 
 		// Case 2: plan backups   -> next node
 		//         execute backups -> previous node
-		fullSpec = backupSpec{Plan: onNext, Execute: onPrevious}
-		incSpec = fullSpec
+		fullSpec := backupSpec{Plan: onNext, Execute: onPrevious}
+		incSpec := fullSpec
 		l.Printf("planning backup: %s", backupCollectionDesc(fullSpec, incSpec))
 		if err := mvb.createBackupCollection(ctx, l, rng, fullSpec, incSpec, h); err != nil {
 			return err
@@ -1451,7 +1468,7 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 
 		// Case 3: plan & execute full backup        -> previous node
 		//         plan & execute incremental backup -> next node
-		fullSpec = backupSpec{Plan: onPrevious, Execute: onPrevious}
+		/*fullSpec = backupSpec{Plan: onPrevious, Execute: onPrevious}
 		incSpec = backupSpec{Plan: onNext, Execute: onNext}
 		l.Printf("planning backup: %s", backupCollectionDesc(fullSpec, incSpec))
 		if err := mvb.createBackupCollection(ctx, l, rng, fullSpec, incSpec, h); err != nil {
@@ -1465,7 +1482,7 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 		l.Printf("planning backup: %s", backupCollectionDesc(fullSpec, incSpec))
 		if err := mvb.createBackupCollection(ctx, l, rng, fullSpec, incSpec, h); err != nil {
 			return err
-		}
+		}*/
 		return nil
 	}
 
