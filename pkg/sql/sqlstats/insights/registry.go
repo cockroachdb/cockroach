@@ -100,7 +100,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	// Mark statements which are detected as slow or have a failed status.
 	var slowOrFailedStatements intsets.Fast
 	for i, s := range *statements {
-		if r.detector.isSlow(s) || isFailed(s) {
+		if !shouldIgnoreStatement(s) && (r.detector.isSlow(s) || isFailed(s)) {
 			slowOrFailedStatements.Add(i)
 		}
 	}
