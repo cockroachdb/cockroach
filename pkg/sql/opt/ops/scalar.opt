@@ -93,7 +93,7 @@ define Exists {
 
 # Variable is the typed scalar value of a column in the query. The Col field is
 # a metadata ColumnID value that references the column by index.
-[Scalar, CompositeInsensitive]
+[Scalar, CompositeInsensitive, Variable]
 define Variable {
     Col ColumnID
 }

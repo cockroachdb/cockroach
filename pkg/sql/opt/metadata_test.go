@@ -82,7 +82,7 @@ func TestMetadata(t *testing.T) {
 	}
 	tabMeta := md.TableMeta(tabID)
 	tabMeta.SetConstraints(scalar)
-	tabMeta.AddComputedCol(cmpID, scalar)
+	tabMeta.AddComputedCol(cmpID, scalar, f.Replace)
 	tabMeta.AddPartialIndexPredicate(0, scalar)
 	if md.AddSequence(&testcat.Sequence{SeqID: 100}) != seqID {
 		t.Fatalf("unexpected sequence id")
@@ -115,7 +115,7 @@ func TestMetadata(t *testing.T) {
 	expr := &memo.ProjectExpr{}
 	md.AddWithBinding(1, expr)
 	var mdNew opt.Metadata
-	mdNew.CopyFrom(md, f.CopyWithoutAssigningPlaceholders)
+	mdNew.CopyFrom(md, f.CopyWithoutAssigningPlaceholders, f.Replace)
 
 	if mdNew.Schema(schID) != testCat.Schema() {
 		t.Fatalf("unexpected schema")
@@ -141,6 +141,10 @@ func TestMetadata(t *testing.T) {
 
 	if tabMetaNew.ComputedCols[cmpID] == scalar {
 		t.Fatalf("expected computed column expression to be copied")
+	}
+
+	if !tabMeta.ColsInComputedColsExpressions.Equals(tabMetaNew.ColsInComputedColsExpressions) {
+		t.Fatalf("expected computed column expression referenced columns to be copied")
 	}
 
 	partialIdxPredPtr := reflect.ValueOf(tabMeta.PartialIndexPredicatesUnsafe()).Pointer()
@@ -388,7 +392,10 @@ func TestDuplicateTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var md opt.Metadata
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var f norm.Factory
+	f.Init(context.Background(), &evalCtx, nil /* catalog */)
+	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("a")
 	a := md.AddTable(cat.Table(tn), tn)
 	b := a.ColumnID(0)
@@ -396,7 +403,7 @@ func TestDuplicateTable(t *testing.T) {
 
 	tabMeta := md.TableMeta(a)
 	tabMeta.SetConstraints(&memo.VariableExpr{Col: b})
-	tabMeta.AddComputedCol(b2, &memo.VariableExpr{Col: b})
+	tabMeta.AddComputedCol(b2, &memo.VariableExpr{Col: b}, f.Replace)
 	tabMeta.AddPartialIndexPredicate(1, &memo.VariableExpr{Col: b})
 
 	// remap is a simple function that can only remap column IDs in a
@@ -411,7 +418,7 @@ func TestDuplicateTable(t *testing.T) {
 	}
 
 	// Duplicate the table.
-	dupA := md.DuplicateTable(a, remap)
+	dupA := md.DuplicateTable(a, remap, f.Replace)
 	dupTabMeta := md.TableMeta(dupA)
 	dupB := dupA.ColumnID(0)
 	dupB2 := dupA.ColumnID(1)
@@ -432,6 +439,18 @@ func TestDuplicateTable(t *testing.T) {
 	col = dupTabMeta.ComputedCols[dupB2].(*memo.VariableExpr).Col
 	if col == b {
 		t.Errorf("expected computed column to reference new column ID %d, got %d", dupB, col)
+	}
+
+	if tabMeta.ColsInComputedColsExpressions.Equals(dupTabMeta.ColsInComputedColsExpressions) {
+		t.Fatalf("expected computed column expression referenced columns to hold new column ids")
+	}
+
+	if dupTabMeta.ColsInComputedColsExpressions.Empty() {
+		t.Fatalf("expected computed column expression referenced columns to not be empty")
+	}
+
+	if tabMeta.ColsInComputedColsExpressions.Len() != dupTabMeta.ColsInComputedColsExpressions.Len() {
+		t.Fatalf("expected same number of computed column expression referenced columns")
 	}
 
 	pred, isPartialIndex := dupTabMeta.PartialIndexPredicate(1)

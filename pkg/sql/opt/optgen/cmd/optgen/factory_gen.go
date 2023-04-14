@@ -188,7 +188,7 @@ func (g *factoryGen) genReplace() {
 	g.w.writeIndent("// in a pre-order traversal of the tree. Post-order traversal is trivially\n")
 	g.w.writeIndent("// achieved by moving the factory.Replace call to the top of the replace\n")
 	g.w.writeIndent("// function rather than bottom.\n")
-	g.w.nestIndent("func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {\n")
+	g.w.nestIndent("func (f *Factory) Replace(e opt.Expr, replace func(e opt.Expr) opt.Expr) opt.Expr {\n")
 	g.w.writeIndent("switch t := e.(type) {\n")
 
 	defines := g.compiled.Defines.WithoutTag("Enforcer").WithoutTag("ListItem").WithoutTag("Private")

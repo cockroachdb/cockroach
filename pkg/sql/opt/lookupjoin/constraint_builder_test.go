@@ -106,7 +106,7 @@ func TestLookupConstraints(t *testing.T) {
 							return 0, opt.ColSet{}, err
 						}
 						compExpr := f.Memo().RootExpr().(opt.ScalarExpr)
-						md.TableMeta(tableID).AddComputedCol(colID, compExpr)
+						md.TableMeta(tableID).AddComputedCol(colID, compExpr, f.Replace)
 					}
 				}
 				return tableID, cols, nil

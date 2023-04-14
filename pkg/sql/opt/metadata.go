@@ -233,7 +233,9 @@ func (md *Metadata) Init() {
 //
 // copyScalarFn must be a function that returns a copy of the given scalar
 // expression.
-func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
+func (md *Metadata) CopyFrom(
+	from *Metadata, copyScalarFn func(Expr) Expr, visit func(Expr, func(Expr) Expr) Expr,
+) {
 	if len(md.schemas) != 0 || len(md.cols) != 0 || len(md.tables) != 0 ||
 		len(md.sequences) != 0 || len(md.views) != 0 || len(md.userDefinedTypes) != 0 ||
 		len(md.userDefinedTypesSlice) != 0 || len(md.dataSourceDeps) != 0 ||
@@ -262,7 +264,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	}
 	for i := range from.tables {
 		// Note: annotations inside TableMeta are not retained...
-		md.tables[i].copyFrom(&from.tables[i], copyScalarFn)
+		md.tables[i].copyFrom(&from.tables[i], copyScalarFn, visit)
 
 		// ...except for the regionConfig annotation.
 		tabID := from.tables[i].MetaID
@@ -618,7 +620,9 @@ func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
 // that its original formatting is preserved for error messages,
 // pretty-printing, etc.
 func (md *Metadata) DuplicateTable(
-	tabID TableID, remapColumnIDs func(e ScalarExpr, colMap ColMap) ScalarExpr,
+	tabID TableID,
+	remapColumnIDs func(e ScalarExpr, colMap ColMap) ScalarExpr,
+	visit func(Expr, func(Expr) Expr) Expr,
 ) TableID {
 	if md.tables == nil || tabID.index() >= len(md.tables) {
 		panic(errors.AssertionFailedf("table with ID %d does not exist", tabID))
@@ -649,14 +653,28 @@ func (md *Metadata) DuplicateTable(
 	// Create new computed column expressions by remapping the column IDs in
 	// each ScalarExpr.
 	var computedCols map[ColumnID]ScalarExpr
+	var referencedColsInComputedExpressions ColSet
 	if len(tabMeta.ComputedCols) > 0 {
+		collectColsFunc := func(e Expr) Expr {
+			if colID, ok := getColumnID(e); ok {
+				referencedColsInComputedExpressions.Add(colID)
+			}
+			return e
+		}
 		computedCols = make(map[ColumnID]ScalarExpr, len(tabMeta.ComputedCols))
 		for colID, e := range tabMeta.ComputedCols {
 			newColID, ok := colMap.Get(int(colID))
 			if !ok {
 				panic(errors.AssertionFailedf("column with ID %d does not exist in map", colID))
 			}
-			computedCols[ColumnID(newColID)] = remapColumnIDs(e, colMap)
+			newScalarExpr := remapColumnIDs(e, colMap)
+			// Add columns present in newScalarExpr to referencedColsInComputedExpressions.
+			if variable, ok := newScalarExpr.(VariableExpr); ok {
+				referencedColsInComputedExpressions.Add(variable.ColID())
+			} else {
+				visit(newScalarExpr, collectColsFunc)
+			}
+			computedCols[ColumnID(newColID)] = newScalarExpr
 		}
 	}
 
@@ -690,15 +708,16 @@ func (md *Metadata) DuplicateTable(
 	}
 
 	newTabMeta := TableMeta{
-		MetaID:                   newTabID,
-		Table:                    tabMeta.Table,
-		Alias:                    tabMeta.Alias,
-		IgnoreForeignKeys:        tabMeta.IgnoreForeignKeys,
-		Constraints:              constraints,
-		ComputedCols:             computedCols,
-		partialIndexPredicates:   partialIndexPredicates,
-		indexPartitionLocalities: tabMeta.indexPartitionLocalities,
-		checkConstraintsStats:    checkConstraintsStats,
+		MetaID:                        newTabID,
+		Table:                         tabMeta.Table,
+		Alias:                         tabMeta.Alias,
+		IgnoreForeignKeys:             tabMeta.IgnoreForeignKeys,
+		Constraints:                   constraints,
+		ComputedCols:                  computedCols,
+		ColsInComputedColsExpressions: referencedColsInComputedExpressions,
+		partialIndexPredicates:        partialIndexPredicates,
+		indexPartitionLocalities:      tabMeta.indexPartitionLocalities,
+		checkConstraintsStats:         checkConstraintsStats,
 	}
 	md.tables = append(md.tables, newTabMeta)
 	regionConfig, ok := md.TableAnnotation(tabID, regionConfigAnnID).(*multiregion.RegionConfig)

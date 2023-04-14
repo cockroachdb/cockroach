@@ -286,7 +286,7 @@ func (c *CustomFuncs) DuplicateColumnIDs(
 	table opt.TableID, cols opt.ColSet,
 ) (opt.TableID, opt.ColSet) {
 	md := c.mem.Metadata()
-	newTableID := md.DuplicateTable(table, c.f.RemapCols)
+	newTableID := md.DuplicateTable(table, c.f.RemapCols, c.f.Replace)
 
 	// Build a new set of column IDs from the new TableMeta.
 	var newColIDs opt.ColSet

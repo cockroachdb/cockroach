@@ -874,7 +874,7 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			var sharedProps props.Shared
 			memo.BuildSharedProps(scalar, &sharedProps, b.evalCtx)
 			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
-				tabMeta.AddComputedCol(colID, scalar)
+				tabMeta.AddComputedCol(colID, scalar, b.factory.Replace)
 			}
 		}
 	}

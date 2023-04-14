@@ -547,6 +547,8 @@ type VariableExpr struct {
 
 var _ opt.ScalarExpr = &VariableExpr{}
 
+var _ opt.VariableExpr = &VariableExpr{}
+
 func (e *VariableExpr) Rank() opt.ScalarRank {
 	return e.rank
 }

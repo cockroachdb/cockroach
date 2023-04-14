@@ -310,7 +310,7 @@ func (f *Factory) CopyAndReplace(
 	// columns can keep the same ids they had in the "from" memo. Scalar
 	// expressions in the metadata cannot have placeholders, so we simply copy
 	// the expressions without replacement.
-	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyWithoutAssigningPlaceholders)
+	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyWithoutAssigningPlaceholders, f.Replace)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.

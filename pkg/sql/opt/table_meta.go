@@ -174,6 +174,10 @@ type TableMeta struct {
 	// Computed columns with non-immutable operators are omitted.
 	ComputedCols map[ColumnID]ScalarExpr
 
+	// ColsInComputedColsExpressions is the set of all columns referenced in the
+	// expressions used to build the column data of computed columns.
+	ColsInComputedColsExpressions ColSet
+
 	// partialIndexPredicates is a map from index ordinals on the table to
 	// *FiltersExprs representing the predicate on the corresponding partial
 	// index. If an index is not a partial index, it will not have an entry in
@@ -230,7 +234,9 @@ func (tm *TableMeta) SetTableAnnotation(tabAnnID TableAnnID, ann interface{}) {
 //
 // Scalar expressions are reconstructed using copyScalarFn, which returns a copy
 // of the given scalar expression.
-func (tm *TableMeta) copyFrom(from *TableMeta, copyScalarFn func(Expr) Expr) {
+func (tm *TableMeta) copyFrom(
+	from *TableMeta, copyScalarFn func(Expr) Expr, visit func(Expr, func(Expr) Expr) Expr,
+) {
 	*tm = TableMeta{
 		MetaID:                       from.MetaID,
 		Table:                        from.Table,
@@ -245,10 +251,24 @@ func (tm *TableMeta) copyFrom(from *TableMeta, copyScalarFn func(Expr) Expr) {
 	}
 
 	if from.ComputedCols != nil {
+		var referencedColsInComputedExpressions ColSet
+		collectColsFunc := func(e Expr) Expr {
+			if colID, ok := getColumnID(e); ok {
+				referencedColsInComputedExpressions.Add(colID)
+			}
+			return e
+		}
 		tm.ComputedCols = make(map[ColumnID]ScalarExpr, len(from.ComputedCols))
 		for col, e := range from.ComputedCols {
-			tm.ComputedCols[col] = copyScalarFn(e).(ScalarExpr)
+			newScalarExpr := copyScalarFn(e).(ScalarExpr)
+			if variable, ok := newScalarExpr.(VariableExpr); ok {
+				referencedColsInComputedExpressions.Add(variable.ColID())
+			} else {
+				visit(newScalarExpr, collectColsFunc)
+			}
+			tm.ComputedCols[col] = newScalarExpr
 		}
+		tm.ColsInComputedColsExpressions = referencedColsInComputedExpressions
 	}
 
 	if from.partialIndexPredicates != nil {
@@ -335,12 +355,39 @@ func (tm *TableMeta) SetConstraints(constraints ScalarExpr) {
 	tm.Constraints = constraints
 }
 
-// AddComputedCol adds a computed column expression to the table's metadata.
-func (tm *TableMeta) AddComputedCol(colID ColumnID, computedCol ScalarExpr) {
+// AddComputedCol adds a computed column expression to the table's metadata and
+// also adds any referenced columns in the `computedCol` expression to the
+// table's metadata.
+func (tm *TableMeta) AddComputedCol(
+	colID ColumnID, computedCol ScalarExpr, visit func(Expr, func(Expr) Expr) Expr,
+) {
 	if tm.ComputedCols == nil {
 		tm.ComputedCols = make(map[ColumnID]ScalarExpr)
 	}
 	tm.ComputedCols[colID] = computedCol
+
+	var referencedCols ColSet
+	collectColsFunc := func(e Expr) Expr {
+		if colID, ok := getColumnID(e); ok {
+			referencedCols.Add(colID)
+		}
+		return e
+	}
+	if variable, ok := computedCol.(VariableExpr); ok {
+		referencedCols.Add(variable.ColID())
+	} else {
+		visit(computedCol, collectColsFunc)
+	}
+	tm.ColsInComputedColsExpressions.UnionWith(referencedCols)
+}
+
+// getColumnID returns colID, ok=true if expr is a column reference.
+func getColumnID(expr Expr) (colID ColumnID, ok bool) {
+	switch t := expr.(type) {
+	case VariableExpr:
+		return t.ColID(), true
+	}
+	return ColumnID(0), false
 }
 
 // ComputedColExpr returns the computed expression for the given column, if it

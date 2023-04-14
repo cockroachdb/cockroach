@@ -242,6 +242,15 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		fmt.Fprintf(g.w, "var _ RelExpr = &%s{}\n\n", opTyp.name)
 	}
 
+	if define.Tags.Contains("Variable") {
+		fmt.Fprintf(g.w, "var _ opt.VariableExpr = &%s{}\n\n", opTyp.name)
+
+		// Generate the ColID method.
+		fmt.Fprintf(g.w, "func (e *%s) ColID() opt.ColumnID {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return e.Col\n")
+		fmt.Fprintf(g.w, "}\n\n")
+	}
+
 	// Generate the Op method.
 	fmt.Fprintf(g.w, "func (e *%s) Op() opt.Operator {\n", opTyp.name)
 	fmt.Fprintf(g.w, "  return opt.%sOp\n", define.Name)
