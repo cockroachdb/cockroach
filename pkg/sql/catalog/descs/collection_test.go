@@ -857,7 +857,7 @@ parent schema name   id  kind     version dropped public
 `, formatCatalog(allDescs.OrderedDescriptors()))
 		return nil
 	}
-	sd := sql.NewInternalSessionData(&s0.ClusterSettings().SV, "TestGetAllDescriptorsInDatabase")
+	sd := sql.NewInternalSessionData(ctx, s0.ClusterSettings(), "TestGetAllDescriptorsInDatabase")
 	sd.Database = "db"
 	require.NoError(t, tm.DescsTxn(ctx, run, isql.WithSessionData(sd)))
 }

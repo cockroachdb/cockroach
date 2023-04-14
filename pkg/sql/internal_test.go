@@ -623,23 +623,23 @@ func TestInternalDBWithOverrides(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	idb1 := s.InternalDB().(isql.DB)
+	idb1 := s.InternalDB().(*sql.InternalDB)
 
 	_ = idb1.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		assert.Equal(t, 0, int(txn.SessionData().DefaultIntSize))
+		assert.Equal(t, 8, int(txn.SessionData().DefaultIntSize))
 		assert.Equal(t, sessiondatapb.DistSQLAuto, txn.SessionData().DistSQLMode)
 		assert.Equal(t, "root", string(txn.SessionData().UserProto))
 
 		row, err := txn.QueryRow(ctx, "test", txn.KV(), "show default_int_size")
 		require.NoError(t, err)
-		assert.Equal(t, "'0'", row[0].String())
+		assert.Equal(t, "'8'", row[0].String())
 
 		return nil
 	})
 
 	drow, err := idb1.Executor().QueryRow(ctx, "test", nil, "show default_int_size")
 	require.NoError(t, err)
-	assert.Equal(t, "'0'", drow[0].String())
+	assert.Equal(t, "'8'", drow[0].String())
 
 	idb2 := sql.NewInternalDBWithSessionDataOverrides(idb1,
 		func(sd *sessiondata.SessionData) {

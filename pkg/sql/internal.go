@@ -960,7 +960,7 @@ func (ie *InternalExecutor) execInternal(
 		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
 		sd = ie.sessionDataStack.Top().Clone()
 	} else {
-		sd = newSessionData(SessionArgs{})
+		sd = NewInternalSessionData(context.Background(), ie.s.cfg.Settings, "" /* opName */)
 	}
 
 	applyInternalExecutorSessionExceptions(sd)
@@ -1192,7 +1192,7 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	if ie.sessionDataStack != nil {
 		sd = ie.sessionDataStack.Top().Clone()
 	} else {
-		sd = newSessionData(SessionArgs{})
+		sd = NewInternalSessionData(ctx, ie.s.cfg.Settings, "" /* opName */)
 	}
 
 	rw := newAsyncIEResultChannel()
@@ -1777,7 +1777,7 @@ func (ief *InternalDB) txn(
 type SessionDataOverride = func(sd *sessiondata.SessionData)
 
 type internalDBWithOverrides struct {
-	baseDB               isql.DB
+	baseDB               *InternalDB
 	sessionDataOverrides []SessionDataOverride
 }
 
@@ -1789,7 +1789,7 @@ var _ isql.DB = (*internalDBWithOverrides)(nil)
 // sessiondata.InternalExecutorOverride parameter to the "*Ex()"
 // methods of Executor.
 func NewInternalDBWithSessionDataOverrides(
-	baseDB isql.DB, sessionDataOverrides ...SessionDataOverride,
+	baseDB *InternalDB, sessionDataOverrides ...SessionDataOverride,
 ) isql.DB {
 	return &internalDBWithOverrides{
 		baseDB:               baseDB,
@@ -1820,9 +1820,9 @@ func (db *internalDBWithOverrides) Executor(opts ...isql.ExecutorOption) isql.Ex
 	cfg.Init(opts...)
 	sd := cfg.GetSessionData()
 	if sd == nil {
-		// newSessionData is the default value used by InternalExecutor
+		// NewInternalSessionData is the default value used by InternalExecutor
 		// when no session data is provided otherwise.
-		sd = newSessionData(SessionArgs{})
+		sd = NewInternalSessionData(context.Background(), db.baseDB.server.cfg.Settings, "" /* opName */)
 	}
 	for _, o := range db.sessionDataOverrides {
 		o(sd)
