@@ -100,6 +100,7 @@ SELECT
     count(*)
 FROM
     system.statement_statistics
+AS OF SYSTEM TIME follower_read_timestamp()
 `
 
 	row, err := s.cfg.DB.Executor().QueryRowEx(
@@ -125,6 +126,7 @@ SELECT
     count(*)
 FROM
     system.transaction_statistics
+AS OF SYSTEM TIME follower_read_timestamp()
 `
 
 	row, err := s.cfg.DB.Executor().QueryRowEx(
