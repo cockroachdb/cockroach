@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -294,6 +295,54 @@ func TestPlannerMakesPlansCoveringAllRanges(t *testing.T) {
 	}
 	for i := 0; i < 20; i++ {
 		test(i)
+	}
+}
+
+func TestProberOpsValidatesProbeKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _, cleanup := initTestProber(t, base.TestingKnobs{})
+	defer cleanup()
+
+	var ops kvprober.ProberOps
+	probeOps := []struct {
+		name string
+		op   func(roachpb.Key) func(context.Context, *kv.Txn) error
+	}{
+		{"Read", ops.Read},
+		{"Write", ops.Write},
+	}
+
+	probeKeys := []struct {
+		key   roachpb.Key
+		valid bool
+	}{
+		// Global key.
+		{roachpb.Key("a"), false},
+		// Incorrect range local key.
+		{keys.RangeDescriptorKey(roachpb.RKey("a")), false},
+		// Incorrect range-ID local key.
+		{keys.RangeLeaseKey(1), false},
+		// Correct range local probe key.
+		{keys.RangeProbeKey(roachpb.RKey("a")), true},
+	}
+
+	for _, op := range probeOps {
+		t.Run(op.name, func(t *testing.T) {
+			for _, key := range probeKeys {
+				t.Run(key.key.String(), func(t *testing.T) {
+					err := s.DB().Txn(ctx, op.op(key.key))
+					if key.valid {
+						require.NoError(t, err)
+					} else {
+						require.Error(t, err)
+						require.True(t, errors.IsAssertionFailure(err))
+					}
+				})
+			}
+		})
 	}
 }
 
