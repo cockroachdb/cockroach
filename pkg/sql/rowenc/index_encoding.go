@@ -437,6 +437,30 @@ func DecodeIndexKey(
 	return numVals, err
 }
 
+// DecodeIndexKeyToDatums decodes a key to tree.Datums. It is similar to
+// DecodeIndexKey, but eagerly decodes the []EncDatum to tree.Datums.
+func DecodeIndexKeyToDatums(
+	codec keys.SQLCodec,
+	types []*types.T,
+	colDirs []catenumpb.IndexColumn_Direction,
+	key []byte,
+	a *tree.DatumAlloc,
+) (tree.Datums, error) {
+	vals := make([]EncDatum, len(types))
+	numVals, err := DecodeIndexKey(codec, vals, colDirs, key)
+	if err != nil {
+		return nil, err
+	}
+	datums := make(tree.Datums, 0, numVals)
+	for i, encDatum := range vals[:numVals] {
+		if err := encDatum.EnsureDecoded(types[i], a); err != nil {
+			return nil, err
+		}
+		datums = append(datums, encDatum.Datum)
+	}
+	return datums, nil
+}
+
 // DecodeKeyVals decodes the values that are part of the key. The decoded
 // values are stored in the vals. If this slice is nil, the direction
 // used will default to encoding.Ascending.
