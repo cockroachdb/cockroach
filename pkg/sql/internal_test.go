@@ -628,7 +628,7 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := db.Exec("CREATE DATABASE test; CREATE TABLE test.t (c) AS SELECT 1"); err != nil {
@@ -661,12 +661,35 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 		}
 	})
 
+	const rowsStmt = `SELECT * FROM test.t`
+
 	// This test case verifies that if the retry error occurs after some rows
 	// have been communicated to the client, then the stmt results in the retry
 	// error too - the IE cannot transparently retry it.
 	t.Run("Rows stmt", func(t *testing.T) {
-		const stmt = `SELECT * FROM test.t`
-		_, err := ie.QueryBufferedEx(ctx, "read rows", nil /* txn */, ieo, stmt)
+		_, err := ie.QueryBufferedEx(ctx, "read rows", nil /* txn */, ieo, rowsStmt)
+		if !testutils.IsError(err, "inject_retry_errors_enabled") {
+			t.Fatalf("expected to see injected retry error, got %v", err)
+		}
+	})
+
+	// This test case verifies that ExecEx of a stmt of Rows type correctly and
+	// transparently to us retries the stmt.
+	t.Run("ExecEx retries in implicit txn", func(t *testing.T) {
+		numRows, err := ie.ExecEx(ctx, "read rows", nil /* txn */, ieo, rowsStmt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if numRows != 1 {
+			t.Fatalf("expected 1 rowsAffected, got %d", numRows)
+		}
+	})
+
+	// This test case verifies that ExecEx doesn't retry when it's provided with
+	// an explicit txn.
+	t.Run("ExecEx doesn't retry in explicit txn", func(t *testing.T) {
+		txn := kvDB.NewTxn(ctx, "explicit")
+		_, err := ie.ExecEx(ctx, "read rows", txn, ieo, rowsStmt)
 		if !testutils.IsError(err, "inject_retry_errors_enabled") {
 			t.Fatalf("expected to see injected retry error, got %v", err)
 		}
