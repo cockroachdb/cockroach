@@ -254,24 +254,28 @@ func getNMeta2KVsImpl(
 func meta2KVsToPlanImpl(kvs []kv.KeyValue) ([]Step, error) {
 	plans := make([]Step, len(kvs))
 
-	var rangeDesc roachpb.RangeDescriptor
+	var desc roachpb.RangeDescriptor
 	for i, kv := range kvs {
-		if err := kv.ValueProto(&rangeDesc); err != nil {
+		if err := kv.ValueProto(&desc); err != nil {
 			return nil, err
 		}
 		plans[i] = Step{
-			RangeID: rangeDesc.RangeID,
-		}
-		// r1's start key (/Min) can't be queried. kvprober gets back this
-		// error if it's attempted: "attempted access to empty key". LocalMax
-		// is the first key that doesn't have special casing associated
-		// with it, and it lives in r1.
-		if rangeDesc.RangeID == 1 {
-			plans[i].Key = keys.RangeProbeKey(keys.MustAddr(keys.LocalMax))
-		} else {
-			plans[i].Key = keys.RangeProbeKey(rangeDesc.StartKey)
+			RangeID: desc.RangeID,
+			Key:     ProbeKeyForRange(&desc),
 		}
 	}
 
 	return plans, nil
+}
+
+// ProbeKeyForRange return the key to probe for a given range.
+func ProbeKeyForRange(desc *roachpb.RangeDescriptor) roachpb.Key {
+	// r1's start key (/Min) can't be queried. kvprober gets back this
+	// error if it's attempted: "attempted access to empty key". LocalMax
+	// is the first key that doesn't have special casing associated
+	// with it, and it lives in r1.
+	if desc.RangeID == 1 {
+		return keys.RangeProbeKey(keys.MustAddr(keys.LocalMax))
+	}
+	return keys.RangeProbeKey(desc.StartKey)
 }
