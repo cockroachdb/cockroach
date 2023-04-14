@@ -64,7 +64,6 @@ upsert descriptor #104
   -    hidden: true
   -    id: 3
   -    name: crdb_internal_j_shard_16
-  -    pgAttributeNum: 3
   -    type:
   -      family: IntFamily
   -      oid: 20
@@ -173,7 +172,6 @@ upsert descriptor #104
   +      id: 3
   +      name: crdb_internal_column_3_name_placeholder
   +      nullable: true
-  +      pgAttributeNum: 3
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -221,7 +219,6 @@ upsert descriptor #104
   -    hidden: true
   -    id: 3
   -    name: crdb_internal_j_shard_16
-  -    pgAttributeNum: 3
   -    type:
   -      family: IntFamily
   -      oid: 20
@@ -344,7 +341,6 @@ upsert descriptor #104
   +      id: 3
   +      name: crdb_internal_column_3_name_placeholder
   +      nullable: true
-  +      pgAttributeNum: 3
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -517,7 +513,6 @@ upsert descriptor #104
   -      id: 3
   -      name: crdb_internal_column_3_name_placeholder
   -      nullable: true
-  -      pgAttributeNum: 3
   -      type:
   -        family: IntFamily
   -        oid: 20

@@ -89,7 +89,7 @@ CREATE INDEX id4
 	ON defaultdb.t1 (id, name) USING HASH STORING (money) WITH (bucket_count=8)
 ----
 - [[Column:{DescID: 104, ColumnID: 4}, PUBLIC], ABSENT]
-  {columnId: 4, isHidden: true, pgAttributeNum: 4, tableId: 104}
+  {columnId: 4, isHidden: true, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: crdb_internal_id_name_shard_8, ColumnID: 4}, PUBLIC], ABSENT]
   {columnId: 4, name: crdb_internal_id_name_shard_8, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, PUBLIC], ABSENT]
