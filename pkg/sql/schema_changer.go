@@ -2539,6 +2539,7 @@ func NewFakeSessionData(sv *settings.Values, opName string) *sessiondata.Session
 			// pre-evaluated).
 			Database:      "",
 			UserProto:     username.NodeUserName().EncodeProto(),
+			UserID:        username.NodeUserID,
 			VectorizeMode: sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(sv)),
 			Internal:      true,
 		},

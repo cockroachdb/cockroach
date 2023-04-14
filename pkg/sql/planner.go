@@ -375,6 +375,7 @@ func newInternalPlanner(
 	if sd.SessionData.Database == "" {
 		sd.SessionData.Database = "system"
 	}
+	// TODO(yang): Query the user ID and set it here.
 	sd.SessionData.UserProto = user.EncodeProto()
 	sd.SessionData.Internal = true
 	sds := sessiondata.NewStack(sd)

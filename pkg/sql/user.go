@@ -626,7 +626,11 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 				}
 				m.data.SetSessionUser(user, userID)
 			}
-			m.data.UserProto = becomeUser.EncodeProto()
+			becomeUserID, err := p.GetUserID(ctx, becomeUser)
+			if err != nil {
+				return err
+			}
+			m.data.SetUser(becomeUser, becomeUserID)
 			m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
 			return nil
 		},

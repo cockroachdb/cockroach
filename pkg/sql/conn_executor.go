@@ -902,6 +902,7 @@ func newSessionData(args SessionArgs) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
 		SessionData: sessiondatapb.SessionData{
 			UserProto: args.User.EncodeProto(),
+			UserID:    args.UserID,
 		},
 		LocalUnmigratableSessionData: sessiondata.LocalUnmigratableSessionData{
 			RemoteAddr: args.RemoteAddr,

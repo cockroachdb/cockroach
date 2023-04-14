@@ -481,6 +481,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 						SessionData: &sessiondata.SessionData{
 							SessionData: sessiondatapb.SessionData{
 								UserProto:       username.RootUserName().EncodeProto(),
+								UserID:          username.RootUserID,
 								Database:        "defaultdb",
 								ApplicationName: "appname_findme",
 							},
@@ -609,6 +610,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 				SessionData: &sessiondata.SessionData{
 					SessionData: sessiondatapb.SessionData{
 						UserProto:       username.RootUserName().EncodeProto(),
+						UserID:          username.RootUserID,
 						Database:        "defaultdb",
 						ApplicationName: "appname_findme",
 					},

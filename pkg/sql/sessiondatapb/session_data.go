@@ -88,3 +88,11 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 func (s *SessionData) User() username.SQLUsername {
 	return s.UserProto.Decode()
 }
+
+// SetUser sets the user identity fields to the given values.
+// It should always be used instead of setting the fields directly to defend
+// against forgetting to set any of the tightly coupled fields.
+func (s *SessionData) SetUser(user username.SQLUsername, userID username.SQLUserID) {
+	s.UserProto = user.EncodeProto()
+	s.UserID = userID
+}

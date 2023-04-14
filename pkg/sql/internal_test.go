@@ -162,6 +162,7 @@ func TestInternalFullTableScan(t *testing.T) {
 			SessionData: sessiondatapb.SessionData{
 				Database:  "db",
 				UserProto: username.RootUserName().EncodeProto(),
+				UserID:    username.RootUserID,
 			},
 			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 				DisallowFullTableScans: true,
@@ -332,6 +333,7 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 			SessionData: sessiondatapb.SessionData{
 				Database:  expDB,
 				UserProto: username.RootUserName().EncodeProto(),
+				UserID:    username.RootUserID,
 			},
 			SequenceState: &sessiondata.SequenceState{},
 		})
@@ -398,6 +400,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 			&sessiondata.SessionData{
 				SessionData: sessiondatapb.SessionData{
 					UserProto:       username.RootUserName().EncodeProto(),
+					UserID:          username.RootUserID,
 					Database:        "defaultdb",
 					ApplicationName: "appname_findme",
 				},
@@ -629,7 +632,8 @@ func TestInternalDBWithOverrides(t *testing.T) {
 	_ = idb1.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		assert.Equal(t, 0, int(txn.SessionData().DefaultIntSize))
 		assert.Equal(t, sessiondatapb.DistSQLAuto, txn.SessionData().DistSQLMode)
-		assert.Equal(t, "root", string(txn.SessionData().UserProto))
+		assert.Equal(t, username.RootUser, string(txn.SessionData().UserProto))
+		assert.Equal(t, username.RootUserID, txn.SessionData().UserID)
 
 		row, err := txn.QueryRow(ctx, "test", txn.KV(), "show default_int_size")
 		require.NoError(t, err)

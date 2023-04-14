@@ -1203,7 +1203,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sd.DistSQLMode = sessiondatapb.DistSQLOff
 
 		// Job internal operations use the node principal.
-		sd.UserProto = username.NodeUserName().EncodeProto()
+		sd.SetUser(username.NodeUserName(), username.NodeUserID)
 	})
 	jobRegistry.SetInternalDB(jobsInternalDB)
 
