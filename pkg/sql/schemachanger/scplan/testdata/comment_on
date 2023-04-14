@@ -90,7 +90,6 @@ StatementPhase stage 1 of 1 with 1 MutationType op
     *scop.UpsertColumnComment
       ColumnID: 1
       Comment: id is important
-      PGAttributeNum: 1
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
@@ -105,7 +104,6 @@ PreCommitPhase stage 2 of 2 with 1 MutationType op
     *scop.UpsertColumnComment
       ColumnID: 1
       Comment: id is important
-      PGAttributeNum: 1
       TableID: 107
 
 ops

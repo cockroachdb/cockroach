@@ -105,7 +105,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			txn *kv.Txn, descriptors *descs.Collection, currDb string,
 		) (resolver.SchemaResolver, func(), error) {
 			opName := "internal-planner-for-upgrades"
-			sd := sql.NewInternalSessionData(ctx, execCtx.ExecCfg().Settings, opName)
+			sd := execCtx.SessionData().Clone()
 			sd.Database = currDb
 			internalPlanner, cleanup := sql.NewInternalPlanner(
 				opName,

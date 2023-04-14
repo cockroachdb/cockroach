@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -123,10 +124,13 @@ func alterTableAddColumn(
 			IsHidden:                desc.Hidden,
 			IsInaccessible:          desc.Inaccessible,
 			GeneratedAsIdentityType: desc.GeneratedAsIdentityType,
-			PgAttributeNum:          desc.GetPGAttributeNum(),
 		},
 		unique:  d.Unique.IsUnique,
 		notNull: !desc.Nullable,
+	}
+	// Only set PgAttributeNum if it differs from ColumnID.
+	if pgAttNum := desc.GetPGAttributeNum(); pgAttNum != catid.PGAttributeNum(desc.ID) {
+		spec.col.PgAttributeNum = pgAttNum
 	}
 	if ptr := desc.GeneratedAsIdentitySequenceOption; ptr != nil {
 		spec.col.GeneratedAsIdentitySequenceOption = *ptr
