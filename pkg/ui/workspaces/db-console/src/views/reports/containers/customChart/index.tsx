@@ -44,6 +44,7 @@ import {
   selectTimeScale,
   setTimeScale,
 } from "src/redux/timeScale";
+import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -289,6 +290,7 @@ export class CustomChart extends React.Component<
     return (
       <>
         <Helmet title="Custom Chart | Debug" />
+        <BackToAdvanceDebug history={this.props.history} />
         <section className="section">
           <h1 className="base-heading">Custom Chart</h1>
         </section>
