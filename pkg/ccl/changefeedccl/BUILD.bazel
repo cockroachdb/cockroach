@@ -206,7 +206,6 @@ go_test(
     args = ["-test.timeout=3595s"],
     embed = [":changefeedccl"],
     shard_count = 16,
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/blobs",

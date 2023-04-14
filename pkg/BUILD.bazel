@@ -3439,20 +3439,9 @@ test_suite(
 )
 
 test_suite(
-    name = "ccl_tests",
+    name = "small_tests",
     tags = [
         "-broken_in_bazel",
-        "-integration",
-        "ccl_test",
-    ],
-    tests = ALL_TESTS,
-)
-
-test_suite(
-    name = "small_non_ccl_tests",
-    tags = [
-        "-broken_in_bazel",
-        "-ccl_test",
         "-flaky",
         "-integration",
         "small",
@@ -3461,10 +3450,9 @@ test_suite(
 )
 
 test_suite(
-    name = "medium_non_ccl_tests",
+    name = "medium_tests",
     tags = [
         "-broken_in_bazel",
-        "-ccl_test",
         "-flaky",
         "-integration",
         "medium",
@@ -3473,10 +3461,9 @@ test_suite(
 )
 
 test_suite(
-    name = "large_non_ccl_tests",
+    name = "large_tests",
     tags = [
         "-broken_in_bazel",
-        "-ccl_test",
         "-flaky",
         "-integration",
         "large",
@@ -3485,10 +3472,9 @@ test_suite(
 )
 
 test_suite(
-    name = "enormous_non_ccl_tests",
+    name = "enormous_tests",
     tags = [
         "-broken_in_bazel",
-        "-ccl_test",
         "-flaky",
         "-integration",
         "enormous",

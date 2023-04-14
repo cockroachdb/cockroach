@@ -232,24 +232,12 @@ test_suite(
     tests = ALL_TESTS,
 )`)
 
-	fmt.Fprintln(w, `
-test_suite(
-    name = "ccl_tests",
-    tags = [
-        "-broken_in_bazel",
-        "-integration",
-        "ccl_test",
-    ],
-    tests = ALL_TESTS,
-)`)
-
 	for _, size := range []string{"small", "medium", "large", "enormous"} {
 		fmt.Fprintf(w, `
 test_suite(
-    name = "%[1]s_non_ccl_tests",
+    name = "%[1]s_tests",
     tags = [
         "-broken_in_bazel",
-        "-ccl_test",
         "-flaky",
         "-integration",
         "%[1]s",
@@ -354,15 +342,6 @@ func generateTestsTimeouts() {
 			targets[size]...,
 		))
 	}
-	var ccl_targets []string
-	for _, targetsForSize := range targets {
-		for _, target := range targetsForSize {
-			if strings.HasPrefix(target, "//pkg/ccl") {
-				ccl_targets = append(ccl_targets, target)
-			}
-		}
-	}
-	runBuildozer(append([]string{`add tags "ccl_test"`}, ccl_targets...))
 }
 
 func main() {

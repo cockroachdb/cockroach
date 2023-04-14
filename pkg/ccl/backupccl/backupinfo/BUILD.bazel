@@ -65,7 +65,6 @@ go_test(
         "manifest_handling_test.go",
     ],
     args = ["-test.timeout=295s"],
-    tags = ["ccl_test"],
     deps = [
         ":backupinfo",
         "//pkg/base",
