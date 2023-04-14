@@ -337,32 +337,7 @@ func (s *Store) maybeThrottleBatch(
 		return nil, nil
 	}
 
-	switch t := ba.Requests[0].GetInner().(type) {
-	case *kvpb.AddSSTableRequest:
-		limiter := s.limiters.ConcurrentAddSSTableRequests
-		if t.IngestAsWrites {
-			limiter = s.limiters.ConcurrentAddSSTableAsWritesRequests
-		}
-		before := timeutil.Now()
-		res, err := limiter.Begin(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		beforeEngineDelay := timeutil.Now()
-		// TODO(sep-raft-log): can we get rid of this?
-		s.TODOEngine().PreIngestDelay(ctx)
-		after := timeutil.Now()
-
-		waited, waitedEngine := after.Sub(before), after.Sub(beforeEngineDelay)
-		s.metrics.AddSSTableProposalTotalDelay.Inc(waited.Nanoseconds())
-		s.metrics.AddSSTableProposalEngineDelay.Inc(waitedEngine.Nanoseconds())
-		if waited > time.Second {
-			log.Infof(ctx, "SST ingestion was delayed by %v (%v for storage engine back-pressure)",
-				waited, waitedEngine)
-		}
-		return res, nil
-
+	switch ba.Requests[0].GetInner().(type) {
 	case *kvpb.ExportRequest:
 		// Limit the number of concurrent Export requests, as these often scan and
 		// entire Range at a time and place significant read load on a Store.

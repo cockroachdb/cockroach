@@ -149,26 +149,38 @@ var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 ).WithPublic()
 
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
-var addSSTableRequestLimit = settings.RegisterIntSetting(
-	settings.SystemOnly,
-	"kv.bulk_io_write.concurrent_addsstable_requests",
-	"number of concurrent AddSSTable requests per store before queueing",
-	1,
-	settings.PositiveInt,
-)
+// This is deprecated: we no longer slow down AddSST in (*Store).Send.
+// Instead, it's admission control's job to pace ingestions.
+var _ = func() *settings.IntSetting {
+	s := settings.RegisterIntSetting(
+		settings.SystemOnly,
+		"kv.bulk_io_write.concurrent_addsstable_requests",
+		"number of concurrent AddSSTable requests per store before queueing",
+		1,
+		settings.PositiveInt,
+	)
+	s.SetRetired()
+	return s
+}()
 
 // addSSTableAsWritesRequestLimit limits concurrent AddSSTable requests with
 // IngestAsWrites set. These are smaller (kv.bulk_io_write.small_write_size),
 // and will end up in the Pebble memtable (default 64 MB) before flushing to
 // disk, so we can allow a greater amount of concurrency than regular AddSSTable
 // requests. Applied independently of concurrent_addsstable_requests.
-var addSSTableAsWritesRequestLimit = settings.RegisterIntSetting(
-	settings.SystemOnly,
-	"kv.bulk_io_write.concurrent_addsstable_as_writes_requests",
-	"number of concurrent AddSSTable requests ingested as writes per store before queueing",
-	10,
-	settings.PositiveInt,
-)
+//
+// This is deprecated and no longer has an effect, see above.
+var _ = func() *settings.IntSetting {
+	s := settings.RegisterIntSetting(
+		settings.SystemOnly,
+		"kv.bulk_io_write.concurrent_addsstable_as_writes_requests",
+		"number of concurrent AddSSTable requests ingested as writes per store before queueing",
+		10,
+		settings.PositiveInt,
+	)
+	s.SetRetired()
+	return s
+}()
 
 // concurrentRangefeedItersLimit limits concurrent rangefeed catchup iterators.
 var concurrentRangefeedItersLimit = settings.RegisterIntSetting(
@@ -1390,20 +1402,6 @@ func NewStore(
 			limit = exportCores
 		}
 		s.limiters.ConcurrentExportRequests.SetLimit(limit)
-	})
-	s.limiters.ConcurrentAddSSTableRequests = limit.MakeConcurrentRequestLimiter(
-		"addSSTableRequestLimiter", int(addSSTableRequestLimit.Get(&cfg.Settings.SV)),
-	)
-	addSSTableRequestLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
-		s.limiters.ConcurrentAddSSTableRequests.SetLimit(
-			int(addSSTableRequestLimit.Get(&cfg.Settings.SV)))
-	})
-	s.limiters.ConcurrentAddSSTableAsWritesRequests = limit.MakeConcurrentRequestLimiter(
-		"addSSTableAsWritesRequestLimiter", int(addSSTableAsWritesRequestLimit.Get(&cfg.Settings.SV)),
-	)
-	addSSTableAsWritesRequestLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
-		s.limiters.ConcurrentAddSSTableAsWritesRequests.SetLimit(
-			int(addSSTableAsWritesRequestLimit.Get(&cfg.Settings.SV)))
 	})
 	s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
 		"rangefeedIterLimiter", int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)),
