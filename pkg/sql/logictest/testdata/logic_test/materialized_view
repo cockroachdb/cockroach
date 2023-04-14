@@ -122,7 +122,7 @@ CREATE UNIQUE INDEX i ON v_dup (x);
 statement ok
 INSERT INTO dup VALUES (1), (1);
 
-statement error pq: duplicate key value violates unique constraint "i"\nDETAIL: Key \(x\)=\(1\) already exists\.
+statement error (duplicate key value violates unique constraint "i"\nDETAIL: Key \(x\)=\(1\) already exists\.|ingested key collides with an existing one)
 REFRESH MATERIALIZED VIEW v_dup
 
 # We shouldn't be able to mix materialized and non materialized views in DDLs.

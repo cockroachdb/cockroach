@@ -15,7 +15,7 @@ build
 ALTER TABLE defaultdb.t DROP COLUMN j
 ----
 - [[Column:{DescID: 104, ColumnID: 2}, ABSENT], PUBLIC]
-  {columnId: 2, pgAttributeNum: 2, tableId: 104}
+  {columnId: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: j, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
@@ -89,7 +89,7 @@ build
 ALTER TABLE defaultdb.t DROP COLUMN k, DROP COLUMN l
 ----
 - [[Column:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC]
-  {columnId: 3, pgAttributeNum: 3, tableId: 104}
+  {columnId: 3, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, name: k, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
@@ -97,7 +97,7 @@ ALTER TABLE defaultdb.t DROP COLUMN k, DROP COLUMN l
 - [[ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT], PUBLIC]
   {columnId: 3, tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 4}, ABSENT], PUBLIC]
-  {columnId: 4, pgAttributeNum: 4, tableId: 104}
+  {columnId: 4, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: l, ColumnID: 4}, ABSENT], PUBLIC]
   {columnId: 4, name: l, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, ABSENT], PUBLIC]
@@ -171,7 +171,7 @@ build
 ALTER TABLE defaultdb.t DROP COLUMN l
 ----
 - [[Column:{DescID: 104, ColumnID: 4}, ABSENT], PUBLIC]
-  {columnId: 4, pgAttributeNum: 4, tableId: 104}
+  {columnId: 4, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: l, ColumnID: 4}, ABSENT], PUBLIC]
   {columnId: 4, name: l, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, ABSENT], PUBLIC]

@@ -110,7 +110,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL AS (k
 │           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
 │           │       ColumnID: 3
-│           │       PgAttributeNum: 3
 │           │       TableID: 106
 │           │
 │           ├── • AddColumnFamily
@@ -345,7 +344,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL AS (k
 │           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
 │           │       ColumnID: 3
-│           │       PgAttributeNum: 3
 │           │       TableID: 106
 │           │
 │           ├── • AddColumnFamily

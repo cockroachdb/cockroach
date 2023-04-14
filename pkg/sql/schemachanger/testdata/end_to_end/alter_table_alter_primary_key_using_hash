@@ -42,7 +42,6 @@ upsert descriptor #104
   +      id: 3
   +      name: crdb_internal_j_shard_3
   +      nullable: true
-  +      pgAttributeNum: 3
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -246,7 +245,6 @@ upsert descriptor #104
   +      id: 3
   +      name: crdb_internal_j_shard_3
   +      nullable: true
-  +      pgAttributeNum: 3
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -586,7 +584,6 @@ upsert descriptor #104
   +    hidden: true
   +    id: 3
   +    name: crdb_internal_j_shard_3
-  +    pgAttributeNum: 3
   +    type:
   +      family: IntFamily
   +      oid: 20
@@ -634,7 +631,6 @@ upsert descriptor #104
   -      id: 3
   -      name: crdb_internal_j_shard_3
   -      nullable: true
-  -      pgAttributeNum: 3
   -      type:
   -        family: IntFamily
   -        oid: 20

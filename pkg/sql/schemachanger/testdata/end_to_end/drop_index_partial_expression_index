@@ -36,7 +36,6 @@ upsert descriptor #104
   -    inaccessible: true
   -    name: crdb_internal_idx_expr
   -    nullable: true
-  -    pgAttributeNum: 3
   -    type:
   -      family: StringFamily
   -      oid: 25
@@ -98,7 +97,6 @@ upsert descriptor #104
   +      inaccessible: true
   +      name: crdb_internal_column_3_name_placeholder
   +      nullable: true
-  +      pgAttributeNum: 3
   +      type:
   +        family: StringFamily
   +        oid: 25
@@ -128,7 +126,6 @@ upsert descriptor #104
   -    inaccessible: true
   -    name: crdb_internal_idx_expr
   -    nullable: true
-  -    pgAttributeNum: 3
   -    type:
   -      family: StringFamily
   -      oid: 25
@@ -204,7 +201,6 @@ upsert descriptor #104
   +      inaccessible: true
   +      name: crdb_internal_column_3_name_placeholder
   +      nullable: true
-  +      pgAttributeNum: 3
   +      type:
   +        family: StringFamily
   +        oid: 25
@@ -312,7 +308,6 @@ upsert descriptor #104
   -      inaccessible: true
   -      name: crdb_internal_column_3_name_placeholder
   -      nullable: true
-  -      pgAttributeNum: 3
   -      type:
   -        family: StringFamily
   -        oid: 25

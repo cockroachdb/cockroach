@@ -120,7 +120,6 @@ upsert descriptor #106
   +      id: 2
   +      name: j
   +      nullable: true
-  +      pgAttributeNum: 2
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -239,7 +238,6 @@ upsert descriptor #106
   +      id: 2
   +      name: j
   +      nullable: true
-  +      pgAttributeNum: 2
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -655,7 +653,6 @@ upsert descriptor #106
   +    id: 2
   +    name: j
   +    nullable: true
-  +    pgAttributeNum: 2
   +    type:
   +      family: IntFamily
   +      oid: 20
@@ -700,7 +697,6 @@ upsert descriptor #106
   -      id: 2
   -      name: j
   -      nullable: true
-  -      pgAttributeNum: 2
   -      type:
   -        family: IntFamily
   -        oid: 20

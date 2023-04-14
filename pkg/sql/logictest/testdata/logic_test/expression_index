@@ -272,7 +272,7 @@ SELECT * FROM (
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
 ) AS cols WHERE cols.desc->'name' = '"crdb_internal_idx_expr_2"'
 ----
-{"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "pgAttributeNum": 9, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 
 statement ok
 DROP INDEX t_lower_c_a_plus_b_idx
@@ -288,8 +288,8 @@ SELECT * FROM (
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
 ) AS cols WHERE cols.desc->>'name' IN ('crdb_internal_idx_expr', 'crdb_internal_idx_expr_1')
 ----
-{"computeExpr": "a + b", "id": 7, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "pgAttributeNum": 7, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
-{"computeExpr": "lower(c)", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "pgAttributeNum": 8, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
+{"computeExpr": "a + b", "id": 7, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "lower(c)", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
 
 onlyif config local-legacy-schema-changer
 query T

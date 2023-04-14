@@ -84,7 +84,6 @@ upsert descriptor #106
   +      id: 3
   +      name: j
   +      nullable: true
-  +      pgAttributeNum: 3
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -208,7 +207,6 @@ upsert descriptor #106
   +      id: 3
   +      name: j
   +      nullable: true
-  +      pgAttributeNum: 3
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -435,7 +433,6 @@ upsert descriptor #106
   +  - defaultExpr: 42:::INT8
   +    id: 3
   +    name: j
-  +    pgAttributeNum: 3
   +    type:
   +      family: IntFamily
   +      oid: 20
@@ -456,7 +453,6 @@ upsert descriptor #106
   -      id: 3
   -      name: j
   -      nullable: true
-  -      pgAttributeNum: 3
   -      type:
   -        family: IntFamily
   -        oid: 20
