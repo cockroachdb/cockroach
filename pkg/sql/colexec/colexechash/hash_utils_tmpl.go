@@ -65,7 +65,7 @@ func _ASSIGN_HASH(_, _, _, _ interface{}) uint64 {
 
 // {{/*
 func _REHASH_BODY(
-	buckets []uint64,
+	buckets []uint32,
 	keys _GOTYPESLICE,
 	nulls *coldata.Nulls,
 	nKeys int,
@@ -108,7 +108,7 @@ func _REHASH_BODY(
 		p := uintptr(buckets[i])
 		_ASSIGN_HASH(p, v, keys, selIdx)
 		//gcassert:bce
-		buckets[i] = uint64(p)
+		buckets[i] = uint32(p)
 	}
 	// {{end}}
 
@@ -121,7 +121,7 @@ func _REHASH_BODY(
 // column values) at a given column and computes a new hash by applying a
 // transformation to the existing hash.
 func rehash(
-	buckets []uint64,
+	buckets []uint32,
 	col coldata.Vec,
 	nKeys int,
 	sel []int,

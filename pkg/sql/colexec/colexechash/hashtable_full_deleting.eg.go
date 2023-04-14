@@ -38,7 +38,7 @@ var (
 // bucket has reached the end, the key is rejected. If the HashTable disallows
 // null equality, then if any element in the key is null, there is no match.
 func (ht *HashTable) checkColDeleting(
-	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int,
+	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint32, probeSel []int,
 ) {
 	switch probeVec.CanonicalTypeFamily() {
 	case types.BoolFamily:
@@ -5984,15 +5984,15 @@ func (ht *HashTable) checkColDeleting(
 // key is removed from ToCheck if it has already been visited in a previous
 // probe, or the bucket has reached the end (key not found in build table). The
 // new length of ToCheck is returned by this function.
-func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []int) uint64 {
+func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint32, probeSel []int) uint32 {
 	ht.checkCols(probeVecs, nToCheck, probeSel)
-	nDiffers := uint64(0)
+	nDiffers := uint32(0)
 	switch ht.probeMode {
 	case HashTableDefaultProbeMode:
 		if ht.Same != nil {
 			toCheckSlice := ht.ProbeScratch.ToCheck
 			_ = toCheckSlice[nToCheck-1]
-			for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+			for toCheckPos := uint32(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 				//gcassert:bce
 				toCheck := toCheckSlice[toCheckPos]
 				if !ht.ProbeScratch.differs[toCheck] {
@@ -6021,7 +6021,7 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 		} else {
 			toCheckSlice := ht.ProbeScratch.ToCheck
 			_ = toCheckSlice[nToCheck-1]
-			for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+			for toCheckPos := uint32(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 				//gcassert:bce
 				toCheck := toCheckSlice[toCheckPos]
 				if !ht.ProbeScratch.differs[toCheck] {
@@ -6040,7 +6040,7 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 	case HashTableDeletingProbeMode:
 		toCheckSlice := ht.ProbeScratch.ToCheck
 		_ = toCheckSlice[nToCheck-1]
-		for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		for toCheckPos := uint32(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 			//gcassert:bce
 			toCheck := toCheckSlice[toCheckPos]
 			if !ht.ProbeScratch.differs[toCheck] {

@@ -42,7 +42,7 @@ var (
 // column values) at a given column and computes a new hash by applying a
 // transformation to the existing hash.
 func rehash(
-	buckets []uint64,
+	buckets []uint32,
 	col coldata.Vec,
 	nKeys int,
 	sel []int,
@@ -78,7 +78,7 @@ func rehash(
 						p = p*31 + uintptr(x)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -102,7 +102,7 @@ func rehash(
 						p = p*31 + uintptr(x)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			} else {
@@ -125,7 +125,7 @@ func rehash(
 						p = p*31 + uintptr(x)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -146,7 +146,7 @@ func rehash(
 						p = p*31 + uintptr(x)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			}
@@ -176,7 +176,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -195,7 +195,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			} else {
@@ -215,7 +215,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -231,7 +231,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			}
@@ -266,7 +266,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -292,7 +292,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			} else {
@@ -317,7 +317,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -340,7 +340,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			}
@@ -370,7 +370,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -392,7 +392,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			} else {
@@ -413,7 +413,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -432,7 +432,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			}
@@ -459,7 +459,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -481,7 +481,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			} else {
@@ -502,7 +502,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -521,7 +521,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			}
@@ -549,7 +549,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -571,7 +571,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			} else {
@@ -592,7 +592,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -611,7 +611,7 @@ func rehash(
 						asInt64 := int64(v)
 						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			}
@@ -644,7 +644,7 @@ func rehash(
 						p = f64hash(noescape(unsafe.Pointer(&f)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -668,7 +668,7 @@ func rehash(
 						p = f64hash(noescape(unsafe.Pointer(&f)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			} else {
@@ -691,7 +691,7 @@ func rehash(
 						p = f64hash(noescape(unsafe.Pointer(&f)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -712,7 +712,7 @@ func rehash(
 						p = f64hash(noescape(unsafe.Pointer(&f)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			}
@@ -742,7 +742,7 @@ func rehash(
 						p = memhash64(noescape(unsafe.Pointer(&s)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -763,7 +763,7 @@ func rehash(
 						p = memhash64(noescape(unsafe.Pointer(&s)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			} else {
@@ -783,7 +783,7 @@ func rehash(
 						p = memhash64(noescape(unsafe.Pointer(&s)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -801,7 +801,7 @@ func rehash(
 						p = memhash64(noescape(unsafe.Pointer(&s)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			}
@@ -833,7 +833,7 @@ func rehash(
 						p = memhash64(noescape(unsafe.Pointer(&nanos)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -856,7 +856,7 @@ func rehash(
 						p = memhash64(noescape(unsafe.Pointer(&nanos)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			} else {
@@ -878,7 +878,7 @@ func rehash(
 						p = memhash64(noescape(unsafe.Pointer(&nanos)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -898,7 +898,7 @@ func rehash(
 						p = memhash64(noescape(unsafe.Pointer(&nanos)), p)
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			}
@@ -931,7 +931,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -953,7 +953,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			} else {
@@ -976,7 +976,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -995,7 +995,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			}
@@ -1025,7 +1025,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -1044,7 +1044,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			} else {
@@ -1064,7 +1064,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				} else {
 					// Early bounds checks.
@@ -1080,7 +1080,7 @@ func rehash(
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
 
 						//gcassert:bce
-						buckets[i] = uint64(p)
+						buckets[i] = uint32(p)
 					}
 				}
 			}

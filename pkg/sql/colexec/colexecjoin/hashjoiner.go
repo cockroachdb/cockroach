@@ -184,7 +184,7 @@ type hashJoiner struct {
 	spec HashJoinerSpec
 	// state stores the current state of the hash joiner.
 	state                      hashJoinerState
-	hashTableInitialNumBuckets uint64
+	hashTableInitialNumBuckets uint32
 	// ht holds the HashTable that is populated during the build phase and used
 	// during the probe phase.
 	ht *colexechash.HashTable
@@ -213,7 +213,7 @@ type hashJoiner struct {
 
 		// buckets is used to store the computed hash value of each key in a single
 		// probe batch.
-		buckets []uint64
+		buckets []uint32
 		// prevBatch, if not nil, indicates that the previous probe input batch has
 		// not been fully processed.
 		prevBatch coldata.Batch
@@ -337,12 +337,12 @@ func (hj *hashJoiner) build() {
 		default:
 			// We don't need Same with LEFT ANTI, EXCEPT ALL, and INTERSECT ALL
 			// joins because they have a separate collectSingleMatch method.
-			hj.ht.Same = colexecutils.MaybeAllocateUint64Array(hj.ht.Same, hj.ht.Vals.Length()+1)
+			hj.ht.Same = colexecutils.MaybeAllocateUint32Array(hj.ht.Same, hj.ht.Vals.Length()+1)
 			// At this point, we have fully built the hash table on the right
 			// side (meaning we have fully consumed the right input), so it'd be
 			// a shame to fallback to disk, thus, we use the unlimited
 			// allocator.
-			newAccountedFor := memsize.Uint64 * int64(cap(hj.ht.Same))
+			newAccountedFor := memsize.Uint32 * int64(cap(hj.ht.Same))
 			// hj.ht.Same will never shrink, so the delta is non-negative.
 			hj.outputUnlimitedAllocator.AdjustMemoryUsageAfterAllocation(newAccountedFor - hj.accountedFor.hashtableSame)
 			hj.accountedFor.hashtableSame = newAccountedFor
@@ -517,7 +517,7 @@ func (hj *hashJoiner) exec() coldata.Batch {
 
 		// First, we compute the hash values for all tuples in the batch.
 		if cap(hj.probeState.buckets) < batchSize {
-			hj.probeState.buckets = make([]uint64, batchSize)
+			hj.probeState.buckets = make([]uint32, batchSize)
 		} else {
 			// Note that we don't need to clear old values from buckets
 			// because the correct values will be populated in
@@ -532,7 +532,7 @@ func (hj *hashJoiner) exec() coldata.Batch {
 		// Early bounds checks.
 		toCheckIDs := hj.ht.ProbeScratch.ToCheckID
 		_ = toCheckIDs[batchSize-1]
-		var nToCheck uint64
+		var nToCheck uint32
 		switch hj.spec.JoinType {
 		case descpb.LeftAntiJoin, descpb.RightAntiJoin, descpb.ExceptAllJoin:
 			// The setup of probing for LEFT/RIGHT ANTI and EXCEPT ALL joins
@@ -546,7 +546,7 @@ func (hj *hashJoiner) exec() coldata.Batch {
 					// Non-zero "first" key indicates that there is a match of hashes
 					// and we need to include the current tuple to check whether it is
 					// an actual match.
-					hj.ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
+					hj.ht.ProbeScratch.ToCheck[nToCheck] = uint32(i)
 					nToCheck++
 				}
 			}
@@ -557,7 +557,7 @@ func (hj *hashJoiner) exec() coldata.Batch {
 				toCheckIDs[i] = f
 			}
 			copy(hj.ht.ProbeScratch.ToCheck, colexechash.HashTableInitialToCheck[:batchSize])
-			nToCheck = uint64(batchSize)
+			nToCheck = uint32(batchSize)
 		}
 
 		// Now we collect all matches that we can emit in the probing phase
@@ -866,7 +866,7 @@ type NewHashJoinerArgs struct {
 	Spec                     HashJoinerSpec
 	LeftSource               colexecop.Operator
 	RightSource              colexecop.Operator
-	InitialNumBuckets        uint64
+	InitialNumBuckets        uint32
 }
 
 // NewHashJoiner creates a new equality hash join operator on the left and

@@ -340,7 +340,7 @@ func _CHECK_COL_FUNCTION_TEMPLATE(
 // the HashTable disallows null equality, then if any element in the key is
 // null, there is no match.
 func (ht *HashTable) checkCol(
-	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int,
+	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint32, probeSel []int,
 ) {
 	// {{with .Overloads}}
 	_CHECK_COL_FUNCTION_TEMPLATE(false, false, false)
@@ -354,7 +354,7 @@ func (ht *HashTable) checkCol(
 // checkColAgainstItselfForDistinct is similar to checkCol, but it probes the
 // vector against itself for the purposes of finding matches to unordered
 // distinct columns.
-func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck uint64, sel []int) {
+func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck uint32, sel []int) {
 	// {{/*
 	// In order to reuse the same template function as checkCol uses, we use
 	// the same variable names.
@@ -375,7 +375,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 // bucket has reached the end, the key is rejected. If the HashTable disallows
 // null equality, then if any element in the key is null, there is no match.
 func (ht *HashTable) checkColDeleting(
-	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int,
+	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint32, probeSel []int,
 ) {
 	// {{with .Overloads}}
 	_CHECK_COL_FUNCTION_TEMPLATE(false, false, true)
@@ -388,7 +388,7 @@ func (ht *HashTable) checkColDeleting(
 // {{with .Overloads}}
 
 func (ht *HashTable) checkColForDistinctTuples(
-	probeVec, buildVec coldata.Vec, nToCheck uint64, probeSel []int,
+	probeVec, buildVec coldata.Vec, nToCheck uint32, probeSel []int,
 ) {
 	switch probeVec.CanonicalTypeFamily() {
 	// {{range .LeftFamilies}}
@@ -457,7 +457,7 @@ func _CHECK_BODY(
 	// {{define "checkBody" -}}
 	toCheckSlice := ht.ProbeScratch.ToCheck
 	_ = toCheckSlice[nToCheck-1]
-	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+	for toCheckPos := uint32(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
 		// {{if and (.SelectDistinct) (not .AllowNullEquality)}}
@@ -587,9 +587,9 @@ func _CHECK_BODY(
 // key is removed from ToCheck if it has already been visited in a previous
 // probe, or the bucket has reached the end (key not found in build table). The
 // new length of ToCheck is returned by this function.
-func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []int) uint64 {
+func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint32, probeSel []int) uint32 {
 	ht.checkCols(probeVecs, nToCheck, probeSel)
-	nDiffers := uint64(0)
+	nDiffers := uint32(0)
 	switch ht.probeMode {
 	case HashTableDefaultProbeMode:
 		if ht.Same != nil {
@@ -611,11 +611,11 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 
 // CheckProbeForDistinct performs a column by column check for duplicated tuples
 // in the probe table.
-func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, sel []int) uint64 {
+func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint32, sel []int) uint32 {
 	for i := range ht.keyCols {
 		ht.checkColAgainstItselfForDistinct(vecs[i], nToCheck, sel)
 	}
-	nDiffers := uint64(0)
+	nDiffers := uint32(0)
 	if ht.allowNullEquality {
 		_CHECK_BODY(false, false, true, true)
 	} else {
@@ -707,7 +707,7 @@ func (ht *HashTable) FindBuckets(
 	batch coldata.Batch,
 	keyCols []coldata.Vec,
 	first, next []keyID,
-	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
+	duplicatesChecker func([]coldata.Vec, uint32, []int) uint32,
 	zeroHeadIDForDistinctTuple bool,
 	probingAgainstItself bool,
 ) {
@@ -733,9 +733,9 @@ func findBuckets(
 	ht *HashTable,
 	batch coldata.Batch,
 	keyCols []coldata.Vec,
-	first []uint64,
-	next []uint64,
-	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
+	first []keyID,
+	next []keyID,
+	duplicatesChecker func([]coldata.Vec, uint32, []int) uint32,
 	zeroHeadIDForDistinctTuple bool,
 	probingAgainstItself bool,
 ) {
@@ -748,9 +748,9 @@ func findBuckets(
 		headIDs := ht.ProbeScratch.HeadID
 		_ = headIDs[batchLength-1]
 	}
-	var nToCheck uint64
+	var nToCheck uint32
 	for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-		toCheck := uint64(i)
+		toCheck := uint32(i)
 		nextToCheckID := first[hash]
 		handleNextToCheckID(ht, toCheck, nextToCheckID, toCheckIDs, zeroHeadIDForDistinctTuple, probingAgainstItself, true)
 	}
@@ -774,9 +774,9 @@ func findBuckets(
 // execgen:template<zeroHeadIDForDistinctTuple,probingAgainstItself,headIDsBCE>
 func handleNextToCheckID(
 	ht *HashTable,
-	toCheck uint64,
-	nextToCheckID uint64,
-	toCheckIDs []uint64,
+	toCheck uint32,
+	nextToCheckID keyID,
+	toCheckIDs []keyID,
 	zeroHeadIDForDistinctTuple bool,
 	probingAgainstItself bool,
 	headIDsBCE bool,
@@ -787,7 +787,7 @@ func handleNextToCheckID(
 		//      has at least one hash match (with itself), so nextToCheckID will
 		//      never be zero, so we skip the non-zero conditional.
 		// */}}
-		if uint64(toCheck+1) == nextToCheckID {
+		if toCheck+1 == nextToCheckID {
 			// {{/*
 			//     When our "match candidate" tuple is the tuple itself, we know
 			//     for sure they will be equal, so we can just mark this tuple
@@ -827,7 +827,7 @@ func handleNextToCheckID(
 }
 
 // execgen:inline
-func includeTupleToCheck(ht *HashTable, toCheck uint64, nextToCheckID uint64, toCheckIDs []uint64) {
+func includeTupleToCheck(ht *HashTable, toCheck uint32, nextToCheckID uint32, toCheckIDs []uint32) {
 	// {{/*
 	//     We should always get BCE on toCheckIDs slice because:
 	//     - for the first call site of handleNextToCheckID, we access

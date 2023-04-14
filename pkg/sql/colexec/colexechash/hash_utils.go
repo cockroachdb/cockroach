@@ -37,16 +37,16 @@ import (
 const DefaultInitHashValue = 1
 
 var (
-	uint64OneColumn []uint64
-	uint64TwoColumn []uint64
+	uint32OneColumn []uint32
+	uint32TwoColumn []uint32
 )
 
 func init() {
-	uint64OneColumn = make([]uint64, coldata.MaxBatchSize)
-	uint64TwoColumn = make([]uint64, coldata.MaxBatchSize)
-	for i := range uint64OneColumn {
-		uint64OneColumn[i] = 1
-		uint64TwoColumn[i] = 2
+	uint32OneColumn = make([]uint32, coldata.MaxBatchSize)
+	uint32TwoColumn = make([]uint32, coldata.MaxBatchSize)
+	for i := range uint32OneColumn {
+		uint32OneColumn[i] = 1
+		uint32TwoColumn[i] = 2
 	}
 }
 
@@ -59,13 +59,13 @@ func init() {
 // initHash initializes the hash value of each key to its initial state for
 // rehashing purposes.
 // NOTE: initValue *must* be non-zero and nKeys is assumed to be positive.
-func initHash(buckets []uint64, nKeys int, initValue uint64) {
+func initHash(buckets []uint32, nKeys int, initValue uint32) {
 	switch initValue {
 	case 1:
-		for n := 0; n < nKeys; n += copy(buckets[n:], uint64OneColumn) {
+		for n := 0; n < nKeys; n += copy(buckets[n:], uint32OneColumn) {
 		}
 	case 2:
-		for n := 0; n < nKeys; n += copy(buckets[n:], uint64TwoColumn) {
+		for n := 0; n < nKeys; n += copy(buckets[n:], uint32TwoColumn) {
 		}
 	default:
 		// Early bounds checks.
@@ -80,7 +80,7 @@ func initHash(buckets []uint64, nKeys int, initValue uint64) {
 // finalizeHash takes each key's hash value and applies a final transformation
 // onto it so that it fits within numBuckets buckets.
 // NOTE: nKeys is assumed to be positive.
-func finalizeHash(buckets []uint64, nKeys int, numBuckets uint64) {
+func finalizeHash(buckets []uint32, nKeys int, numBuckets uint32) {
 	// Early bounds checks.
 	_ = buckets[nKeys-1]
 	isPowerOfTwo := numBuckets&(numBuckets-1) == 0
@@ -107,10 +107,10 @@ func finalizeHash(buckets []uint64, nKeys int, numBuckets uint64) {
 type TupleHashDistributor struct {
 	// InitHashValue is the value used to initialize the hash buckets. Different
 	// values can be used to define different hash functions.
-	InitHashValue uint64
+	InitHashValue uint32
 	// buckets will contain the computed hash value of a group of columns with
 	// the same index in the current batch.
-	buckets []uint64
+	buckets []uint32
 	// selections stores the selection vectors that actually define how to
 	// distribute the tuples from the batch.
 	selections [][]int
@@ -121,7 +121,7 @@ type TupleHashDistributor struct {
 }
 
 // NewTupleHashDistributor returns a new TupleHashDistributor.
-func NewTupleHashDistributor(initHashValue uint64, numOutputs int) *TupleHashDistributor {
+func NewTupleHashDistributor(initHashValue uint32, numOutputs int) *TupleHashDistributor {
 	return &TupleHashDistributor{
 		InitHashValue: initHashValue,
 		selections:    make([][]int, numOutputs),
@@ -142,7 +142,7 @@ func (d *TupleHashDistributor) Init(ctx context.Context) {
 func (d *TupleHashDistributor) Distribute(b coldata.Batch, hashCols []uint32) [][]int {
 	n := b.Length()
 	if cap(d.buckets) < n {
-		d.buckets = make([]uint64, n)
+		d.buckets = make([]uint32, n)
 	} else {
 		d.buckets = d.buckets[:n]
 	}
@@ -158,7 +158,7 @@ func (d *TupleHashDistributor) Distribute(b coldata.Batch, hashCols []uint32) []
 		rehash(d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, &d.datumAlloc)
 	}
 
-	finalizeHash(d.buckets, n, uint64(len(d.selections)))
+	finalizeHash(d.buckets, n, uint32(len(d.selections)))
 
 	// Reset selections.
 	for i := 0; i < len(d.selections); i++ {
