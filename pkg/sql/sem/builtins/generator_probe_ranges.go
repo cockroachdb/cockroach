@@ -197,17 +197,12 @@ func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
 		}
 		p.curr.rangeID = int64(desc.RangeID)
 
+		key := kvprober.ProbeKeyForRange(&desc)
 		op := p.ops.Read
 		if p.isWrite {
 			op = p.ops.Write
 		}
 
-		key := desc.StartKey.AsRawKey()
-		if desc.RangeID == 1 {
-			// The first range starts at KeyMin, but the replicated keyspace starts only at keys.LocalMax,
-			// so there is a special case here.
-			key = keys.LocalMax
-		}
 		// NB: intentionally using a separate txn per probe to avoid undesirable cross-probe effects.
 		return p.db.Txn(ctx, op(key))
 	})

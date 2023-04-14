@@ -22,7 +22,9 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -152,8 +155,8 @@ type Metrics struct {
 // proberOpsI is an interface that the prober will use to run ops against some
 // system. This interface exists so that ops can be mocked for tests.
 type proberOpsI interface {
-	Read(key interface{}) func(context.Context, *kv.Txn) error
-	Write(key interface{}) func(context.Context, *kv.Txn) error
+	Read(key roachpb.Key) func(context.Context, *kv.Txn) error
+	Write(key roachpb.Key) func(context.Context, *kv.Txn) error
 }
 
 // proberTxn is an interface that the prober will use to run txns. This
@@ -173,8 +176,11 @@ type proberTxn interface {
 type ProberOps struct{}
 
 // We attempt to commit a txn that reads some data at the key.
-func (p *ProberOps) Read(key interface{}) func(context.Context, *kv.Txn) error {
+func (p *ProberOps) Read(key roachpb.Key) func(context.Context, *kv.Txn) error {
 	return func(ctx context.Context, txn *kv.Txn) error {
+		if err := p.validateKey(key); err != nil {
+			return err
+		}
 		_, err := txn.Get(ctx, key)
 		return err
 	}
@@ -187,13 +193,32 @@ func (p *ProberOps) Read(key interface{}) func(context.Context, *kv.Txn) error {
 // there is no need to clean up data at the key post range split / merge.
 // Note that MVCC tombstones may be left by the probe, but this is okay, as
 // GC will clean it up.
-func (p *ProberOps) Write(key interface{}) func(context.Context, *kv.Txn) error {
+func (p *ProberOps) Write(key roachpb.Key) func(context.Context, *kv.Txn) error {
 	return func(ctx context.Context, txn *kv.Txn) error {
+		if err := p.validateKey(key); err != nil {
+			return err
+		}
 		if err := txn.Put(ctx, key, putValue); err != nil {
 			return err
 		}
 		return txn.Del(ctx, key)
 	}
+}
+
+// validateKey returns an error if the key is not valid for use by the kvprober.
+// This is a sanity check to ensure that the kvprober does not corrupt user data
+// in the global keyspace or other system data in the local keyspace.
+func (p *ProberOps) validateKey(key roachpb.Key) error {
+	_, suffix, _, err := keys.DecodeRangeKey(key)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err,
+			"key %q is not a valid probe key; could not decode range key", key)
+	}
+	if !suffix.Equal(keys.LocalRangeProbeSuffix.AsRawKey()) {
+		return errors.AssertionFailedf(
+			"key %q is not a valid probe key; incorrect range key suffix", key)
+	}
+	return nil
 }
 
 // proberTxnImpl is used to run transactions.
