@@ -3000,6 +3000,31 @@ func MVCCDeleteRange(
 	txn *roachpb.Transaction,
 	returnKeys bool,
 ) ([]roachpb.Key, *roachpb.Span, int64, error) {
+	// Scan to find the keys to delete.
+	//
+	// For a versioned delete range, scan at the request timestamp and with the
+	// FailOnMoreRecent option set to true. Doing so returns all non-tombstoned
+	// keys at or below the request timestamp and throws a WriteTooOld error on
+	// any key (mvcc tombstone or otherwise) above the request timestamp. This is
+	// different from scanning at MaxTimestamp and deferring write-write conflict
+	// checking to mvccPutInternal below. That approach ignores mvcc tombstones
+	// above the request timestamp, which could lead to serializability anomalies
+	// (see #56458).
+	//
+	// For an inline delete range, scan at MaxTimestamp. Doing so is not needed to
+	// retrieve inline values, but it ensures that all non-inline values are also
+	// returned. It is incompatible to mix an inline delete range with mvcc
+	// versions, so we want to pass these incompatible keys to mvccPutInternal to
+	// detect the condition and return an error. We also scan with the
+	// FailOnMoreRecent set to false. This is not strictly necessary (nothing is
+	// more recent than MaxTimestamp), but it provides added protection against
+	// the scan returning a WriteTooOld error.
+	scanTs := timestamp
+	failOnMoreRecent := true
+	if timestamp.IsEmpty() /* inline */ {
+		scanTs = hlc.MaxTimestamp
+		failOnMoreRecent = false
+	}
 	// In order for this operation to be idempotent when run transactionally, we
 	// need to perform the initial scan at the previous sequence number so that
 	// we don't see the result from equal or later sequences.
@@ -3009,8 +3034,8 @@ func MVCCDeleteRange(
 		prevSeqTxn.Sequence--
 		scanTxn = prevSeqTxn
 	}
-	res, err := MVCCScan(ctx, rw, key, endKey, timestamp, MVCCScanOptions{
-		FailOnMoreRecent: true, Txn: scanTxn, MaxKeys: max,
+	res, err := MVCCScan(ctx, rw, key, endKey, scanTs, MVCCScanOptions{
+		FailOnMoreRecent: failOnMoreRecent, Txn: scanTxn, MaxKeys: max,
 	})
 	if err != nil {
 		return nil, nil, 0, err
