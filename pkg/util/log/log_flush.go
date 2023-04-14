@@ -26,13 +26,29 @@ type flushSyncWriter interface {
 	io.Writer
 }
 
-// Flush explicitly flushes all pending log file I/O.
+// FlushFileSinks explicitly flushes all pending log file I/O.
 // See also flushDaemon() that manages background (asynchronous)
 // flushes, and signalFlusher() that manages flushes in reaction to a
 // user signal.
-func Flush() {
+func FlushFileSinks() {
 	_ = logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
 		l.lockAndFlushAndMaybeSync(true /*doSync*/)
+		return nil
+	})
+}
+
+// FlushAll explicitly flushes all asynchronous buffered logging sinks,
+// including pending log file I/O and buffered network sinks.
+//
+// NB: This is a synchronous operation, and will block until all flushes
+// have completed. Generally only recommended for use in crash reporting
+// scenarios.
+func FlushAll() {
+	FlushFileSinks()
+	_ = logging.allSinkInfos.iterBufferedSinks(func(bs *bufferedSink) error {
+		// Trigger a synchronous flush by calling output on the bufferedSink
+		// with a `forceSync` option.
+		_ = bs.output([]byte{}, sinkOutputOptions{forceSync: true})
 		return nil
 	})
 }
@@ -61,7 +77,7 @@ const syncWarnDuration = 10 * time.Second
 // flushDaemon periodically flushes and syncs the log file buffers.
 // This manages both the primary and secondary loggers.
 //
-// Flush propagates the in-memory buffer inside CockroachDB to the
+// FlushFileSinks propagates the in-memory buffer inside CockroachDB to the
 // in-memory buffer(s) of the OS. The flush is relatively frequent so
 // that a human operator can see "up to date" logging data in the log
 // file.
@@ -97,7 +113,7 @@ func signalFlusher() {
 	ch := sysutil.RefreshSignaledChan()
 	for sig := range ch {
 		Ops.Infof(context.Background(), "%s received, flushing logs", sig)
-		Flush()
+		FlushFileSinks()
 	}
 }
 
@@ -109,5 +125,5 @@ func signalFlusher() {
 func StartAlwaysFlush() {
 	logging.flushWrites.Set(true)
 	// There may be something in the buffers already; flush it.
-	Flush()
+	FlushFileSinks()
 }

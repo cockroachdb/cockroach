@@ -36,7 +36,7 @@ func CheckEmittedEvents(
 ) {
 	// Check that the structured event was logged.
 	testutils.SucceedsSoon(t, func() error {
-		log.Flush()
+		log.FlushFileSinks()
 		entries, err := log.FetchEntriesFromFiles(startTime,
 			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
 		if err != nil {
