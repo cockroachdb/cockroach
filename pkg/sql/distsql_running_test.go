@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -252,7 +254,14 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 
 	createPlannerAndRunQuery := func(ctx context.Context, txn *kv.Txn, query string) error {
 		execCfg := s.ExecutorConfig().(ExecutorConfig)
-		sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
+		// TODO(sql-queries): This sessiondata contains zero-values for most fields,
+		// meaning DistSQLMode is DistSQLOff. Is this correct?
+		sd := &sessiondata.SessionData{
+			SessionData:   sessiondatapb.SessionData{},
+			SearchPath:    sessiondata.DefaultSearchPathForUser(username.RootUserName()),
+			SequenceState: sessiondata.NewSequenceState(),
+			Location:      time.UTC,
+		}
 		// Plan the statement.
 		internalPlanner, cleanup := NewInternalPlanner(
 			"test",
