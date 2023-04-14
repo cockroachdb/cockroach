@@ -3035,9 +3035,8 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 				iter := tc.engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
 				defer iter.Close()
 				mvccKey := storage.MakeMVCCMetadataKey(key)
-				iter.SeekGE(mvccKey)
 				var keyMeta enginepb.MVCCMetadata
-				if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {
+				if ok, err := iter.SeekGE(mvccKey); !ok || !iter.UnsafeKey().Equal(mvccKey) {
 					t.Fatalf("missing mvcc metadata for %q: %+v", mvccKey, err)
 				} else if err := iter.ValueProto(&keyMeta); err != nil {
 					t.Fatalf("failed to unmarshal metadata for %q", mvccKey)

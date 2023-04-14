@@ -339,7 +339,8 @@ func TestIterateMVCCReplicaKeySpansSpansSet(t *testing.T) {
 		err := IterateMVCCReplicaKeySpans(&desc, readWriter, IterateOptions{
 			CombineRangesAndPoints: false,
 			Reverse:                reverse,
-		}, func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+		}, func(mvccIter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+			iter := storage.DeprecatedMVCCIterator{MVCCIterator: mvccIter}
 			for {
 				ok, err := iter.Valid()
 				require.NoError(t, err)
@@ -665,9 +666,9 @@ func TestIterateMVCCReplicaKeySpans(t *testing.T) {
 				}
 				advance := func(iter storage.MVCCIterator) {
 					if reverse {
-						iter.Prev()
+						_, _ = iter.Prev()
 					} else {
-						iter.Next()
+						_, _ = iter.Next()
 					}
 				}
 				t.Run("sequential", func(t *testing.T) {

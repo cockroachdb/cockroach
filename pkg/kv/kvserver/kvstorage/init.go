@@ -161,9 +161,8 @@ func IterateIDPrefixKeys(
 ) error {
 	rangeID := roachpb.RangeID(1)
 	// NB: Range-ID local keys have no versions and no intents.
-	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		UpperBound: keys.LocalRangeIDPrefix.PrefixEnd().AsRawKey(),
-	})
+	iter := storage.DeprecatedMVCCIterator{MVCCIterator: reader.NewMVCCIterator(storage.MVCCKeyIterKind,
+		storage.IterOptions{UpperBound: keys.LocalRangeIDPrefix.PrefixEnd().AsRawKey()})}
 	defer iter.Close()
 
 	for {

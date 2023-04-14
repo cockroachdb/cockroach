@@ -2444,11 +2444,11 @@ func fetchDescVersionModificationTime(
 		t.Fatal(pErr.GoError())
 	}
 	for _, file := range res.(*kvpb.ExportResponse).Files {
-		it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
+		it, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsAndRanges,
 			LowerBound: keys.MinKey,
 			UpperBound: keys.MaxKey,
-		})
+		}))
 		if err != nil {
 			t.Fatal(err)
 		}

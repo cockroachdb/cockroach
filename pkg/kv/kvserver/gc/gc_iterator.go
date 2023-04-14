@@ -131,11 +131,11 @@ func (it *gcIterator) peekAt(i int) (*mvccKeyValue, hlc.Timestamp, bool) {
 }
 
 func (it *gcIterator) fillTo(targetLen int) (ok bool) {
+	if ok, err := it.it.Valid(); !ok {
+		it.err = err
+		return false
+	}
 	for it.buf.len < targetLen {
-		if ok, err := it.it.Valid(); !ok {
-			it.err = err
-			return false
-		}
 		if hasPoint, hasRange := it.it.HasPointAndRange(); hasPoint {
 			ts := hlc.Timestamp{}
 			if hasRange {
@@ -162,7 +162,10 @@ func (it *gcIterator) fillTo(targetLen int) (ok bool) {
 			}
 			it.buf.pushBack(key, mvccValueLen, mvccValueIsTombstone, metaValue, ts)
 		}
-		it.it.Prev()
+		if ok, err := it.it.Prev(); !ok {
+			it.err = err
+			return false
+		}
 	}
 	return true
 }

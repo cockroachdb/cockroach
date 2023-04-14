@@ -36,9 +36,10 @@ func newVerifyingMVCCIterator(iter *pebbleIterator) MVCCIterator {
 
 // saveAndVerify fetches the current key and value, saves them in the iterator,
 // and verifies the value.
-func (i *verifyingMVCCIterator) saveAndVerify() {
-	if i.valid, i.err = i.pebbleIterator.Valid(); !i.valid || i.err != nil {
-		return
+func (i *verifyingMVCCIterator) saveAndVerify(valid bool, err error) (bool, error) {
+	i.valid, i.err = valid, err
+	if !valid || err != nil {
+		return false, err
 	}
 	i.key = i.pebbleIterator.UnsafeKey()
 	i.hasPoint, i.hasRange = i.pebbleIterator.HasPointAndRange()
@@ -55,46 +56,43 @@ func (i *verifyingMVCCIterator) saveAndVerify() {
 			if err != nil {
 				i.err = err
 				i.valid = false
-				return
+				return false, i.err
 			}
 		}
 	}
+	return i.valid, i.err
 }
 
 // Next implements MVCCIterator.
-func (i *verifyingMVCCIterator) Next() {
-	i.pebbleIterator.Next()
-	i.saveAndVerify()
+func (i *verifyingMVCCIterator) Next() (valid bool, err error) {
+	return i.saveAndVerify(i.pebbleIterator.Next())
 }
 
 // NextKey implements MVCCIterator.
-func (i *verifyingMVCCIterator) NextKey() {
-	i.pebbleIterator.NextKey()
-	i.saveAndVerify()
+func (i *verifyingMVCCIterator) NextKey() (valid bool, err error) {
+	return i.saveAndVerify(i.pebbleIterator.NextKey())
 }
 
 // Prev implements MVCCIterator.
-func (i *verifyingMVCCIterator) Prev() {
-	i.pebbleIterator.Prev()
-	i.saveAndVerify()
+func (i *verifyingMVCCIterator) Prev() (valid bool, err error) {
+	return i.saveAndVerify(i.pebbleIterator.Prev())
 }
 
 // SeekGE implements MVCCIterator.
-func (i *verifyingMVCCIterator) SeekGE(key MVCCKey) {
-	i.pebbleIterator.SeekGE(key)
-	i.saveAndVerify()
+func (i *verifyingMVCCIterator) SeekGE(key MVCCKey) (valid bool, err error) {
+	return i.saveAndVerify(i.pebbleIterator.SeekGE(key))
 }
 
 // SeekIntentGE implements MVCCIterator.
-func (i *verifyingMVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
-	i.pebbleIterator.SeekIntentGE(key, txnUUID)
-	i.saveAndVerify()
+func (i *verifyingMVCCIterator) SeekIntentGE(
+	key roachpb.Key, txnUUID uuid.UUID,
+) (valid bool, err error) {
+	return i.saveAndVerify(i.pebbleIterator.SeekIntentGE(key, txnUUID))
 }
 
 // SeekLT implements MVCCIterator.
-func (i *verifyingMVCCIterator) SeekLT(key MVCCKey) {
-	i.pebbleIterator.SeekLT(key)
-	i.saveAndVerify()
+func (i *verifyingMVCCIterator) SeekLT(key MVCCKey) (valid bool, err error) {
+	return i.saveAndVerify(i.pebbleIterator.SeekLT(key))
 }
 
 // UnsafeKey implements MVCCIterator.

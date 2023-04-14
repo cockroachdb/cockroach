@@ -19,9 +19,8 @@ import (
 )
 
 type storageIter interface {
-	SeekGE(key storage.MVCCKey)
-	Valid() (bool, error)
-	Next()
+	SeekGE(key storage.MVCCKey) (bool, error)
+	Next() (bool, error)
 	Close()
 	UnsafeValue() ([]byte, error)
 }
@@ -90,8 +89,8 @@ func (it *Iterator) Close() {
 	it.iter.Close()
 }
 
-func (it *Iterator) load() (bool, error) {
-	if ok, err := it.iter.Valid(); err != nil || !ok {
+func (it *Iterator) load(ok bool, err error) (bool, error) {
+	if err != nil || !ok {
 		return false, err
 	}
 	v, err := it.iter.UnsafeValue()
@@ -108,8 +107,7 @@ func (it *Iterator) load() (bool, error) {
 // or equal to idx. Returns (true, nil) on success, (false, nil) if no such
 // entry exists.
 func (it *Iterator) SeekGE(idx uint64) (bool, error) {
-	it.iter.SeekGE(storage.MakeMVCCMetadataKey(it.prefixBuf.RaftLogKey(idx)))
-	return it.load()
+	return it.load(it.iter.SeekGE(storage.MakeMVCCMetadataKey(it.prefixBuf.RaftLogKey(idx))))
 }
 
 // Next returns (true, nil) when the (in ascending index order) next entry is
@@ -117,8 +115,7 @@ func (it *Iterator) SeekGE(idx uint64) (bool, error) {
 //
 // NB: a valid raft log has no gaps, but the Iterator does not validate that.
 func (it *Iterator) Next() (bool, error) {
-	it.iter.Next()
-	return it.load()
+	return it.load(it.iter.Next())
 }
 
 // Entry returns the raft entry the iterator is currently positioned at. This

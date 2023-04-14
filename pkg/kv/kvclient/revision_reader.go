@@ -60,12 +60,12 @@ func GetAllRevisions(
 				LowerBound: file.Span.Key,
 				UpperBound: file.Span.EndKey,
 			}
-			iter, err := storage.NewMemSSTIterator(file.SST, true, iterOpts)
+			iter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(file.SST, true, iterOpts))
 			if err != nil {
 				return err
 			}
 			defer func() {
-				if iter != nil {
+				if iter.MVCCIterator != nil {
 					iter.Close()
 				}
 			}()
@@ -98,7 +98,7 @@ func GetAllRevisions(
 
 			// Close and nil out the iter to release the underlying resources.
 			iter.Close()
-			iter = nil
+			iter.MVCCIterator = nil
 		}
 
 		select {

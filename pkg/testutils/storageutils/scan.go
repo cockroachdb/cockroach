@@ -36,12 +36,8 @@ func ScanIter(t *testing.T, iter storage.SimpleMVCCIterator) KVs {
 
 	var kvs []interface{}
 	var prevRangeStart roachpb.Key
-	for iter.SeekGE(storage.MVCCKey{Key: keys.LocalMax}); ; iter.Next() {
-		ok, err := iter.Valid()
-		require.NoError(t, err)
-		if !ok {
-			break
-		}
+	ok, err := iter.SeekGE(storage.MVCCKey{Key: keys.LocalMax})
+	for ; ok; ok, err = iter.Next() {
 		hasPoint, hasRange := iter.HasPointAndRange()
 		if hasRange {
 			if bounds := iter.RangeBounds(); !bounds.Key.Equal(prevRangeStart) {
@@ -79,6 +75,7 @@ func ScanIter(t *testing.T, iter storage.SimpleMVCCIterator) KVs {
 			})
 		}
 	}
+	require.NoError(t, err)
 	return kvs
 }
 

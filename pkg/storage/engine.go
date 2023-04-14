@@ -128,27 +128,33 @@ func init() {
 type SimpleMVCCIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
-	// SeekGE advances the iterator to the first key in the engine which is >= the
-	// provided key. This may be in the middle of a bare range key straddling the
-	// seek key.
-	SeekGE(key MVCCKey)
-	// Valid must be called after any call to Seek(), Next(), Prev(), or
-	// similar methods. It returns (true, nil) if the iterator points to
-	// a valid key (it is undefined to call Key(), Value(), or similar
-	// methods unless Valid() has returned (true, nil)). It returns
-	// (false, nil) if the iterator has moved past the end of the valid
-	// range, or (false, err) if an error has occurred. Valid() will
-	// never return true with a non-nil error.
+	// SeekGE advances the iterator to the first key in the engine which is >=
+	// the provided key. This may be in the middle of a bare range key
+	// straddling the seek key. SeekGE returns true if repositioning was
+	// successful and found a valid key.
+	SeekGE(key MVCCKey) (valid bool, err error)
+	// Valid may be called after any call to Seek(), Next(), Prev(), or similar
+	// methods. Valid returns the same return values returned by the positioning
+	// method, so it should be considered redundant. Valid may be removed once
+	// all callers are updated to make use of the positioning methods' return
+	// values.
+	//
+	// Valid() returns (true, nil) if the iterator points to a valid key (it is
+	// undefined to call Key(), Value(), or similar methods unless Valid() has
+	// returned (true, nil)). It returns (false, nil) if the iterator has moved
+	// past the end of the valid range, or (false, err) if an error has
+	// occurred. Valid() will never return true with a non-nil error.
 	Valid() (bool, error)
-	// Next advances the iterator to the next key in the iteration. After this
-	// call, Valid() will be true if the iterator was not positioned at the last
-	// key.
-	Next()
+	// Next advances the iterator to the next key in the iteration. Returns true
+	// if the iterator was not positioned at the last key and no error is
+	// encountered while progressing to the next key.
+	Next() (valid bool, err error)
 	// NextKey advances the iterator to the next MVCC key. This operation is
 	// distinct from Next which advances to the next version of the current key
 	// or the next key if the iterator is currently located at the last version
 	// for a key. NextKey must not be used to switch iteration direction from
-	// reverse iteration to forward iteration.
+	// reverse iteration to forward iteration. NextKey returns true if the
+	// positioning operation succeeded and repositioned to a new key.
 	//
 	// If NextKey() lands on a bare range key, it is possible that there exists a
 	// versioned point key at the start key too. Calling NextKey() again would
@@ -157,7 +163,7 @@ type SimpleMVCCIterator interface {
 	// this is not the case with intents: they don't have a timestamp, so the
 	// encoded key is identical to the range key's start bound, and they will
 	// be emitted together at that position.
-	NextKey()
+	NextKey() (valid bool, err error)
 	// UnsafeKey returns the current key position. This may be a point key, or
 	// the current position inside a range key (typically the start key
 	// or the seek key when using SeekGE within its bounds).
@@ -244,22 +250,27 @@ type IteratorStats struct {
 type MVCCIterator interface {
 	SimpleMVCCIterator
 
-	// SeekLT advances the iterator to the first key in the engine which is < the
-	// provided key. Unlike SeekGE, when calling SeekLT within range key bounds
-	// this will not land on the seek key, but rather on the closest point key
-	// overlapping the range key or the range key's start bound.
-	SeekLT(key MVCCKey)
+	// SeekLT advances the iterator to the first key in the engine which is <
+	// the provided key. Unlike SeekGE, when calling SeekLT within range key
+	// bounds this will not land on the seek key, but rather on the closest
+	// point key overlapping the range key or the range key's start bound.
+	// SeekLT returns true if repositioning was successful and found a valid
+	// key.
+	SeekLT(key MVCCKey) (valid bool, err error)
 	// Prev moves the iterator backward to the previous key in the iteration.
-	// After this call, Valid() will be true if the iterator was not positioned at
-	// the first key.
-	Prev()
+	// After this call, Valid() will be true if the iterator was not positioned
+	// at the first key and no error is encountered while progressing to the
+	// previous key.
+	Prev() (valid bool, err error)
 
 	// SeekIntentGE is a specialized version of SeekGE(MVCCKey{Key: key}), when
 	// the caller expects to find an intent, and additionally has the txnUUID
 	// for the intent it is looking for. When running with separated intents,
 	// this can optimize the behavior of the underlying Engine for write heavy
 	// keys by avoiding the need to iterate over many deleted intents.
-	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID)
+	// SeekIntentGE returns true if repositioning was successful and found a
+	// valid key.
+	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) (valid bool, err error)
 
 	// UnsafeRawKey returns the current raw key which could be an encoded
 	// MVCCKey, or the more general EngineKey (for a lock table key).
@@ -1562,11 +1573,11 @@ func iterateOnReader(
 		return nil
 	}
 
-	it := reader.NewMVCCIterator(iterKind, IterOptions{
+	it := DeprecatedMVCCIterator{reader.NewMVCCIterator(iterKind, IterOptions{
 		KeyTypes:   keyTypes,
 		LowerBound: start,
 		UpperBound: end,
-	})
+	})}
 	defer it.Close()
 
 	var rangeKeys MVCCRangeKeyStack // cached during iteration
@@ -1892,4 +1903,26 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		return false, err
 	}
 	return needIntentHistory, nil /* err */
+}
+
+// Iterate iterates over the provided SimpleMVCCIterator from the provided start
+// key to iterator exhaustion, invoking iterateFn for every valid iterator
+// position. If iterateFn returns an error, iteration stops and returns the
+// provided error. If an iterator positioning method returns an error, it stops
+// and returns the error.
+func Iterate(iter SimpleMVCCIterator, startKey MVCCKey, iterateFn func(IteratorPos) error) error {
+	ok, err := iter.SeekGE(startKey)
+	for ok {
+		if err := iterateFn(iter); err != nil {
+			return err
+		}
+		ok, err = iter.Next()
+	}
+	return err
+}
+
+// IteratorPos provides access to an iterator's current position.
+type IteratorPos interface {
+	UnsafeKey() MVCCKey
+	UnsafeValue() ([]byte, error)
 }

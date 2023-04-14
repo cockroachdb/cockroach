@@ -126,11 +126,9 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 		return
 	}
 
-	it.SeekGE(NilKey)
-	valid, err := it.Valid()
+	valid, err := it.SeekGE(NilKey)
 	for valid {
-		it.Next()
-		valid, err = it.Valid()
+		valid, err = it.Next()
 	}
 	// Or we may error during iteration.
 	if err != nil {

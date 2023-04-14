@@ -56,12 +56,12 @@ func ScanSST(
 
 	// We iterate points and ranges separately on the SST for clarity
 	// and simplicity.
-	pointIter, err := storage.NewMemSSTIterator(sst.Data, true,
+	pointIter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(sst.Data, true,
 		storage.IterOptions{
 			KeyTypes: storage.IterKeyTypePointsOnly,
 			// Only care about upper bound as we are iterating forward.
 			UpperBound: scanWithin.EndKey,
-		})
+		}))
 	if err != nil {
 		return err
 	}
@@ -85,11 +85,11 @@ func ScanSST(
 		}
 	}
 
-	rangeIter, err := storage.NewMemSSTIterator(sst.Data, true,
+	rangeIter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(sst.Data, true,
 		storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypeRangesOnly,
 			UpperBound: scanWithin.EndKey,
-		})
+		}))
 	if err != nil {
 		return err
 	}

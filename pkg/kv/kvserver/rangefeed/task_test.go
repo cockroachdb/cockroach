@@ -135,7 +135,7 @@ func (s *testIterator) Close() {
 	close(s.done)
 }
 
-func (s *testIterator) SeekGE(key storage.MVCCKey) {
+func (s *testIterator) SeekGE(key storage.MVCCKey) (bool, error) {
 	if s.closed {
 		panic("testIterator closed")
 	}
@@ -143,7 +143,7 @@ func (s *testIterator) SeekGE(key storage.MVCCKey) {
 		<-s.block
 	}
 	if s.err != nil {
-		return
+		return false, s.err
 	}
 	if s.cur == -1 {
 		s.cur++
@@ -153,6 +153,7 @@ func (s *testIterator) SeekGE(key storage.MVCCKey) {
 			break
 		}
 	}
+	return s.Valid()
 }
 
 func (s *testIterator) Valid() (bool, error) {
@@ -168,12 +169,15 @@ func (s *testIterator) Valid() (bool, error) {
 	return true, nil
 }
 
-func (s *testIterator) Next() { s.cur++ }
+func (s *testIterator) Next() (bool, error) {
+	s.cur++
+	return s.Valid()
+}
 
-func (s *testIterator) NextKey() {
+func (s *testIterator) NextKey() (bool, error) {
 	if s.cur == -1 {
 		s.cur = 0
-		return
+		return s.Valid()
 	}
 	origKey := s.curKV().Key.Key
 	for s.cur++; s.cur < len(s.kvs); s.cur++ {
@@ -181,6 +185,7 @@ func (s *testIterator) NextKey() {
 			break
 		}
 	}
+	return s.Valid()
 }
 
 func (s *testIterator) UnsafeKey() storage.MVCCKey {

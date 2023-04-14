@@ -972,11 +972,11 @@ func splitRangeKeySSTAtKey(
 		return nil
 	}
 
-	iter, err := storage.NewMemSSTIterator(data, true, storage.IterOptions{
+	iter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(data, true, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
 		LowerBound: start,
 		UpperBound: end,
-	})
+	}))
 	if err != nil {
 		return nil, nil, err
 	}

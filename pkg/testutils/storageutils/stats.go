@@ -40,7 +40,7 @@ func SSTStats(t *testing.T, sst []byte, nowNanos int64) *enginepb.MVCCStats {
 	})
 	require.NoError(t, err)
 	defer iter.Close()
-	iter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+	_, _ = iter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 	stats, err := storage.ComputeStatsForIter(iter, nowNanos)
 	require.NoError(t, err)
 	return &stats

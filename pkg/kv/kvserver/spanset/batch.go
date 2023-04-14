@@ -79,41 +79,47 @@ func (i *MVCCIterator) Valid() (bool, error) {
 }
 
 // SeekGE is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SeekGE(key storage.MVCCKey) {
-	i.i.SeekGE(key)
+func (i *MVCCIterator) SeekGE(key storage.MVCCKey) (valid bool, err error) {
+	valid, err = i.i.SeekGE(key)
 	i.checkAllowed(roachpb.Span{Key: key.Key}, true)
+	return valid, err
 }
 
 // SeekIntentGE is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
-	i.i.SeekIntentGE(key, txnUUID)
+func (i *MVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) (valid bool, err error) {
+	valid, err = i.i.SeekIntentGE(key, txnUUID)
 	i.checkAllowed(roachpb.Span{Key: key}, true)
+	return valid, err
 }
 
 // SeekLT is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SeekLT(key storage.MVCCKey) {
-	i.i.SeekLT(key)
+func (i *MVCCIterator) SeekLT(key storage.MVCCKey) (valid bool, err error) {
+	valid, err = i.i.SeekLT(key)
 	// CheckAllowed{At} supports the span representation of [,key), which
 	// corresponds to the span [key.Prev(),).
 	i.checkAllowed(roachpb.Span{EndKey: key.Key}, true)
+	return valid, err
 }
 
 // Next is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) Next() {
-	i.i.Next()
+func (i *MVCCIterator) Next() (valid bool, err error) {
+	valid, err = i.i.Next()
 	i.checkAllowedCurrPosForward(false)
+	return valid, err
 }
 
 // Prev is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) Prev() {
-	i.i.Prev()
+func (i *MVCCIterator) Prev() (valid bool, err error) {
+	valid, err = i.i.Prev()
 	i.checkAllowedCurrPosForward(false)
+	return valid, err
 }
 
 // NextKey is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) NextKey() {
-	i.i.NextKey()
+func (i *MVCCIterator) NextKey() (valid bool, err error) {
+	valid, err = i.i.NextKey()
 	i.checkAllowedCurrPosForward(false)
+	return valid, err
 }
 
 // checkAllowedCurrPosForward checks the span starting at the current iterator

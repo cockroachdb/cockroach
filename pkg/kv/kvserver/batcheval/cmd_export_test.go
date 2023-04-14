@@ -93,22 +93,19 @@ func TestExportCmd(t *testing.T) {
 			}
 			defer sst.Close()
 
-			sst.SeekGE(storage.MVCCKey{Key: keys.MinKey})
-			for {
-				if valid, err := sst.Valid(); !valid || err != nil {
-					if err != nil {
-						t.Fatalf("%+v", err)
-					}
-					break
-				}
+			valid, err := sst.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+			for valid {
 				newKv := storage.MVCCKeyValue{}
 				newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
 				newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
-				v, err := sst.UnsafeValue()
-				require.NoError(t, err)
+				v, verr := sst.UnsafeValue()
+				require.NoError(t, verr)
 				newKv.Value = append(newKv.Value, v...)
 				kvs = append(kvs, newKv)
-				sst.Next()
+				valid, err = sst.Next()
+			}
+			if err != nil {
+				t.Fatalf("%+v", err)
 			}
 		}
 
@@ -518,7 +515,7 @@ func exportUsingGoIterator(
 	defer sst.Close()
 
 	var skipTombstones bool
-	var iterFn func(*storage.MVCCIncrementalIterator)
+	var iterFn func(*storage.MVCCIncrementalIterator) (bool, error)
 	switch filter {
 	case kvpb.MVCCFilter_Latest:
 		skipTombstones = true
@@ -536,17 +533,8 @@ func exportUsingGoIterator(
 		EndTime:   endTime,
 	})
 	defer iter.Close()
-	for iter.SeekGE(storage.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
-		ok, err := iter.Valid()
-		if err != nil {
-			// The error may be a WriteIntentError. In which case, returning it will
-			// cause this command to be retried.
-			return nil, err
-		}
-		if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
-			break
-		}
-
+	ok, err := iter.SeekGE(storage.MakeMVCCMetadataKey(startKey))
+	for ; ok && iter.UnsafeKey().Key.Compare(endKey) < 0; ok, err = iterFn(iter) {
 		// Skip tombstone (len=0) records when startTime is zero
 		// (non-incremental) and we're not exporting all versions.
 		v, err := iter.UnsafeValue()
@@ -560,6 +548,11 @@ func exportUsingGoIterator(
 		if err := sst.Put(iter.UnsafeKey(), v); err != nil {
 			return nil, err
 		}
+	}
+	if err != nil {
+		// The error may be a WriteIntentError. In which case, returning it will
+		// cause this command to be retried.
+		return nil, err
 	}
 	if err := sst.Finish(); err != nil {
 		return nil, err
@@ -591,29 +584,18 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKe
 	defer sst.Close()
 
 	var kvs []storage.MVCCKeyValue
-	sst.SeekGE(storage.MVCCKey{Key: start})
-	for {
-		if valid, err := sst.Valid(); !valid || err != nil {
-			if err != nil {
-				t.Fatal(err)
-			}
-			break
-		}
-		if !sst.UnsafeKey().Less(storage.MVCCKey{Key: end}) {
-			break
-		}
+	valid, err := sst.SeekGE(storage.MVCCKey{Key: start})
+	for valid && sst.UnsafeKey().Less(storage.MVCCKey{Key: end}) {
 		newKv := storage.MVCCKeyValue{}
 		newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
 		newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
-		v, err := sst.UnsafeValue()
-		if err != nil {
-			t.Fatal(err)
-		}
+		v, verr := sst.UnsafeValue()
+		require.NoError(t, err)
 		newKv.Value = append(newKv.Value, v...)
 		kvs = append(kvs, newKv)
-		sst.Next()
+		valid, err = sst.Next()
 	}
-
+	require.NoError(t, err)
 	return kvs
 }
 

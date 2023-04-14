@@ -284,18 +284,18 @@ func getDescriptorsFromStoreForInterval(
 		exportResp := res.(*kvpb.ExportResponse)
 		for _, file := range exportResp.Files {
 			if err := func() error {
-				it, err := kvstorage.NewMemSSTIterator(file.SST, false, /* verify */
+				it, err := kvstorage.WithDeprecatedAPI(kvstorage.NewMemSSTIterator(file.SST, false, /* verify */
 					kvstorage.IterOptions{
 						// NB: We assume there will be no MVCC range tombstones here.
 						KeyTypes:   kvstorage.IterKeyTypePointsOnly,
 						LowerBound: keys.MinKey,
 						UpperBound: keys.MaxKey,
-					})
+					}))
 				if err != nil {
 					return err
 				}
 				defer func() {
-					if it != nil {
+					if it.MVCCIterator != nil {
 						it.Close()
 					}
 				}()
@@ -308,7 +308,7 @@ func getDescriptorsFromStoreForInterval(
 					} else if !ok {
 						// Close and nil out the iter to release the underlying resources.
 						it.Close()
-						it = nil
+						it.MVCCIterator = nil
 						return nil
 					}
 

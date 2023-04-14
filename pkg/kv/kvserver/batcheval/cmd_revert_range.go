@@ -84,8 +84,7 @@ func isEmptyKeyTimeRange(
 		MaxTimestampHint: until,
 	})
 	defer iter.Close()
-	iter.SeekGE(storage.MVCCKey{Key: from})
-	ok, err := iter.Valid()
+	ok, err := iter.SeekGE(storage.MVCCKey{Key: from})
 	return !ok, err
 }
 

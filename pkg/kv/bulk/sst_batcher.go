@@ -750,7 +750,7 @@ func (b *SSTBatcher) addSSTable(
 	defer iter.Close()
 
 	if (stats == enginepb.MVCCStats{}) {
-		iter.SeekGE(storage.MVCCKey{Key: start})
+		_, _ = iter.SeekGE(storage.MVCCKey{Key: start})
 		stats, err = storage.ComputeStatsForIter(iter, sendStart.UnixNano())
 		if err != nil {
 			return errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
@@ -876,7 +876,7 @@ func (b *SSTBatcher) addSSTable(
 					if err != nil {
 						return err
 					}
-					statsIter.SeekGE(storage.MVCCKey{Key: right.start})
+					_, _ = statsIter.SeekGE(storage.MVCCKey{Key: right.start})
 					right.stats, err = storage.ComputeStatsForIter(statsIter, sendStart.Unix())
 					statsIter.Close()
 					if err != nil {
@@ -920,14 +920,8 @@ func createSplitSSTable(
 	var first, last roachpb.Key
 	var left, right *sstSpan
 
-	iter.SeekGE(storage.MVCCKey{Key: start})
-	for {
-		if ok, err := iter.Valid(); err != nil {
-			return nil, nil, err
-		} else if !ok {
-			break
-		}
-
+	ok, err := iter.SeekGE(storage.MVCCKey{Key: start})
+	for ; ok; ok, err = iter.Next() {
 		key := iter.UnsafeKey()
 
 		if !split && key.Key.Compare(splitKey) >= 0 {
@@ -956,12 +950,11 @@ func createSplitSSTable(
 		if err := w.Put(key, v); err != nil {
 			return nil, nil, err
 		}
-
-		iter.Next()
 	}
-
-	err := w.Finish()
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := w.Finish(); err != nil {
 		return nil, nil, err
 	}
 	right = &sstSpan{start: first, end: last.Next(), sstBytes: sstFile.Data()}

@@ -48,14 +48,15 @@ func (f *ReadAsOfIterator) Close() {
 
 // SeekGE advances the iterator to the first key in the engine which is >= the
 // provided key that obeys the ReadAsOfIterator key constraints.
-func (f *ReadAsOfIterator) SeekGE(originalKey MVCCKey) {
+func (f *ReadAsOfIterator) SeekGE(originalKey MVCCKey) (valid bool, err error) {
 	// To ensure SeekGE seeks to a key that isn't shadowed by a tombstone that the
 	// ReadAsOfIterator would have skipped (i.e. a tombstone below asOf), seek to
 	// the key with the latest possible timestamp that the iterator could surface
 	// (i.e. asOf, if set) and iterate to the next valid key at or below the caller's
 	// key that also obeys the iterator's constraints.
 	synthetic := MVCCKey{Key: originalKey.Key, Timestamp: f.asOf}
-	f.iter.SeekGE(synthetic)
+	// TODO(jackson): Make use of f.iter.SeekGE's return values.
+	_, _ = f.iter.SeekGE(synthetic)
 
 	if f.advance(true /* seeked */); f.valid && f.UnsafeKey().Less(originalKey) {
 		// The following is true:
@@ -65,8 +66,9 @@ func (f *ReadAsOfIterator) SeekGE(originalKey MVCCKey) {
 		// This implies the caller is seeking to a key that is shadowed by a valid
 		// key that obeys the iterator 's constraints. The caller's key is NOT the
 		// latest key of the given MVCC key; therefore, skip to the next MVCC key.
-		f.NextKey()
+		return f.NextKey()
 	}
+	return f.valid, f.err
 }
 
 // Valid implements the simpleMVCCIterator.
@@ -83,8 +85,8 @@ func (f *ReadAsOfIterator) Valid() (bool, error) {
 // constraints. Note that Next and NextKey have the same implementation because
 // the iterator only surfaces the latest valid key of a given MVCC key below the
 // asOf timestamp.
-func (f *ReadAsOfIterator) Next() {
-	f.NextKey()
+func (f *ReadAsOfIterator) Next() (valid bool, err error) {
+	return f.NextKey()
 }
 
 // NextKey advances the iterator to the next valid MVCC key obeying the
@@ -92,9 +94,11 @@ func (f *ReadAsOfIterator) Next() {
 // obeys the iterator's constraints if the iterator was already on a key that
 // obeys the constraints. To ensure this, initialize the iterator with a SeekGE
 // call before any calls to NextKey().
-func (f *ReadAsOfIterator) NextKey() {
-	f.iter.NextKey()
+func (f *ReadAsOfIterator) NextKey() (valid bool, err error) {
+	f.valid, f.err = f.iter.NextKey()
+	// TODO(jackson): Make use of f.iter.NextKey's return values.
 	f.advance(false /* seeked */)
+	return f.valid, f.err
 }
 
 // UnsafeKey returns the current key, but the memory is invalidated on the next
@@ -168,7 +172,7 @@ func (f *ReadAsOfIterator) advance(seeked bool) {
 				}
 			}
 			if !hasPoint {
-				f.iter.Next()
+				f.valid, f.err = f.iter.Next()
 				continue
 			}
 		}
@@ -176,7 +180,7 @@ func (f *ReadAsOfIterator) advance(seeked bool) {
 		// Process point keys.
 		if key := f.iter.UnsafeKey(); f.asOf.Less(key.Timestamp) {
 			// Skip keys above the asOf timestamp.
-			f.iter.Next()
+			f.valid, f.err = f.iter.Next()
 		} else {
 			v, err := f.iter.UnsafeValue()
 			if err != nil {
@@ -188,11 +192,11 @@ func (f *ReadAsOfIterator) advance(seeked bool) {
 				return
 			} else if isTombstone {
 				// Skip to the next MVCC key if we find a point tombstone.
-				f.iter.NextKey()
+				f.valid, f.err = f.iter.NextKey()
 			} else if key.Timestamp.LessEq(f.newestRangeTombstone) {
 				// The latest range key, as of system time, shadows the latest point key.
 				// This key is therefore deleted as of system time.
-				f.iter.NextKey()
+				f.valid, f.err = f.iter.NextKey()
 			} else {
 				// On a valid key that potentially shadows range key(s).
 				return

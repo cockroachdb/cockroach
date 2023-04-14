@@ -209,8 +209,7 @@ func TestCmdClearRange(t *testing.T) {
 					UpperBound: endKey,
 				})
 				defer iter.Close()
-				iter.SeekGE(storage.MVCCKey{Key: keys.LocalMax})
-				ok, err := iter.Valid()
+				ok, err := iter.SeekGE(storage.MVCCKey{Key: keys.LocalMax})
 				require.NoError(t, err)
 				require.False(t, ok, "expected empty span, found key %s", iter.UnsafeKey())
 

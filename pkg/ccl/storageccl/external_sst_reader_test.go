@@ -162,11 +162,9 @@ func TestNewExternalSSTReader(t *testing.T) {
 
 	iter, err := ExternalSSTReader(ctx, fileStores, nil, iterOpts)
 	require.NoError(t, err)
-	for iter.SeekGE(storage.MVCCKey{Key: keys.LocalMax}); ; iter.Next() {
-		ok, err := iter.Valid()
-		require.NoError(t, err)
-		if !ok {
-			break
-		}
+	ok, err := iter.SeekGE(storage.MVCCKey{Key: keys.LocalMax})
+	for ok {
+		ok, err = iter.Next()
 	}
+	require.NoError(t, err)
 }

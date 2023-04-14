@@ -151,14 +151,12 @@ func runIterate(
 		}
 		it := makeIterator(eng, startTime, endTime)
 		defer it.Close()
-		for it.SeekGE(storage.MVCCKey{Key: keys.LocalMax}); ; it.Next() {
-			if ok, err := it.Valid(); !ok {
-				if err != nil {
-					b.Fatal(err)
-				}
-				break
-			}
+		ok, err := it.SeekGE(storage.MVCCKey{Key: keys.LocalMax})
+		for ; ok; ok, err = it.Next() {
 			n++
+		}
+		if err != nil {
+			b.Fatal(err)
 		}
 		if e := int(loadFactor * numKeys); n < e {
 			b.Fatalf("expected at least %d keys, but got %d\n", e, n)

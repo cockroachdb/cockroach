@@ -263,11 +263,11 @@ func (op AddSSTableOperation) format(w *strings.Builder, fctx formatCtx) {
 		fmt.Fprintf(w, ` (as writes)`)
 	}
 
-	iter, err := storage.NewMemSSTIterator(op.Data, false /* verify */, storage.IterOptions{
+	iter, err := storage.WithDeprecatedAPI(storage.NewMemSSTIterator(op.Data, false /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
-	})
+	}))
 	if err != nil {
 		panic(err)
 	}

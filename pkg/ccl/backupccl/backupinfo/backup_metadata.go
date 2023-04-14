@@ -760,7 +760,7 @@ func debugDumpFileSST(
 		}
 		encOpts = &kvpb.FileEncryptionOptions{Key: key}
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: store, FilePath: fileInfoPath}}, encOpts, iterOpts)
+	iter, err := storage.WithDeprecatedSimpleAPI(storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: store, FilePath: fileInfoPath}}, encOpts, iterOpts))
 	if err != nil {
 		return err
 	}
@@ -811,8 +811,8 @@ func DebugDumpMetadataSST(
 		}
 		encOpts = &kvpb.FileEncryptionOptions{Key: key}
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: store,
-		FilePath: path}}, encOpts, iterOpts)
+	iter, err := storage.WithDeprecatedSimpleAPI(storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: store,
+		FilePath: path}}, encOpts, iterOpts))
 	if err != nil {
 		return err
 	}
@@ -981,8 +981,7 @@ func NewBackupMetadata(
 	defer iter.Close()
 
 	var sstManifest backuppb.BackupManifest
-	iter.SeekGE(storage.MakeMVCCMetadataKey([]byte(sstBackupKey)))
-	ok, err := iter.Valid()
+	ok, err := iter.SeekGE(storage.MakeMVCCMetadataKey([]byte(sstBackupKey)))
 	if err != nil {
 		return nil, err
 	}
@@ -1133,7 +1132,7 @@ func newFileSSTIter(
 	if err != nil {
 		return nil, err
 	}
-	iter.SeekGE(storage.MVCCKey{})
+	_, _ = iter.SeekGE(storage.MVCCKey{})
 	fi := &FileIterator{mergedIterator: iter}
 	fi.Next()
 	return fi, nil
@@ -1186,7 +1185,10 @@ func (fi *FileIterator) Next() {
 	}
 
 	fi.file = file
-	fi.mergedIterator.Next()
+	if _, err := fi.mergedIterator.Next(); err != nil {
+		fi.err = err
+		return
+	}
 }
 
 // DescIterator is a simple iterator to iterate over descpb.Descriptors.
@@ -1512,7 +1514,7 @@ func makeBytesIter(
 		return bytesIter{iterError: err}
 	}
 
-	iter.SeekGE(storage.MakeMVCCMetadataKey(prefix))
+	_, _ = iter.SeekGE(storage.MakeMVCCMetadataKey(prefix))
 	return bytesIter{
 		Iter:        iter,
 		prefix:      prefix,
@@ -1544,9 +1546,9 @@ func (bi *bytesIter) next(resWrapper *resultWrapper) bool {
 	resWrapper.value = append(resWrapper.value, v...)
 
 	if bi.useMVCCNext {
-		bi.Iter.NextKey()
+		_, _ = bi.Iter.NextKey()
 	} else {
-		bi.Iter.Next()
+		_, _ = bi.Iter.Next()
 	}
 	return true
 }

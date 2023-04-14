@@ -1260,8 +1260,7 @@ func mvccGetMetadata(
 	if iter == nil {
 		return false, 0, 0, hlc.Timestamp{}, nil
 	}
-	iter.SeekGE(metaKey)
-	if ok, err = iter.Valid(); !ok {
+	if ok, err = iter.SeekGE(metaKey); !ok {
 		return false, 0, 0, hlc.Timestamp{}, err
 	}
 	unsafeKey := iter.UnsafeKey()
@@ -1291,8 +1290,7 @@ func mvccGetMetadata(
 	if hasRange && !hasPoint {
 		rkTimestamp := iter.RangeKeys().Versions[0].Timestamp
 
-		iter.Next()
-		if ok, err = iter.Valid(); err != nil {
+		if ok, err = iter.Next(); err != nil {
 			return false, 0, 0, hlc.Timestamp{}, err
 		} else if ok {
 			// NB: For !ok, hasPoint is already false.
@@ -1906,9 +1904,8 @@ func mvccPutInternal(
 			if txn.Epoch == meta.Txn.Epoch /* last write inside txn */ {
 				if !enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, txn.IgnoredSeqNums) {
 					// Seqnum of last write is not ignored. Retrieve the value.
-					iter.SeekGE(oldVersionKey)
 					var hasPoint bool
-					if valid, err := iter.Valid(); err != nil {
+					if valid, err := iter.SeekGE(oldVersionKey); err != nil {
 						return false, err
 					} else if valid {
 						hasPoint, _ = iter.HasPointAndRange()
@@ -1984,16 +1981,14 @@ func mvccPutInternal(
 					// TODO(erikgrinaker): Consider using mvccGet() here instead, but
 					// needs benchmarking.
 					prevKey := oldVersionKey.Next()
-					iter.SeekGE(prevKey)
-					valid, err := iter.Valid()
+					valid, err := iter.SeekGE(prevKey)
 					if err != nil {
 						return false, err
 					} else if valid {
 						// If we land on a bare range key, step onto the next key. This may
 						// be a point key at the same key position, or a different key.
 						if hasPoint, hasRange := iter.HasPointAndRange(); hasRange && !hasPoint {
-							iter.Next()
-							if valid, err = iter.Valid(); err != nil {
+							if valid, err = iter.Next(); err != nil {
 								return false, err
 							}
 						}
@@ -2812,14 +2807,8 @@ func MVCCClearTimeRange(
 	// restoredMeta becomes the latest version of this MVCC key.
 	var restoredMeta enginepb.MVCCMetadata
 
-	iter.SeekGE(MVCCKey{Key: key})
-	for {
-		if ok, err := iter.Valid(); err != nil {
-			return nil, err
-		} else if !ok {
-			break
-		}
-
+	valid, err := iter.SeekGE(MVCCKey{Key: key})
+	for valid {
 		k := iter.UnsafeKey()
 
 		// If we encounter a new range key stack, flush the previous range keys (if
@@ -2829,7 +2818,7 @@ func MVCCClearTimeRange(
 		// of the time bounds, because of NextIgnoringTime(), in which case
 		// HasPointAndRange() will return false,false.
 		if iter.RangeKeyChangedIgnoringTime() {
-			if err := flushRangeKeys(nil); err != nil { // empties clearRangeKeys
+			if err = flushRangeKeys(nil); err != nil { // empties clearRangeKeys
 				return nil, err
 			}
 			if batchSize >= maxBatchSize || batchByteSize >= maxBatchByteSize {
@@ -2844,13 +2833,15 @@ func MVCCClearTimeRange(
 			if !hasPoint {
 				// If we landed on a bare range tombstone, we need to check if it revealed
 				// anything below the time bounds as well.
-				iter.NextIgnoringTime()
+				valid, err = iter.NextIgnoringTime()
 				continue
 			}
 		}
 
 		// Process point keys.
-		valueLen, valueIsTombstone, err := iter.MVCCValueLenAndIsTombstone()
+		var valueLen int
+		var valueIsTombstone bool
+		valueLen, valueIsTombstone, err = iter.MVCCValueLenAndIsTombstone()
 		if err != nil {
 			return nil, err
 		}
@@ -2946,7 +2937,7 @@ func MVCCClearTimeRange(
 			// If iter lands on the next key, it will either add to the current run of
 			// keys to be cleared, or trigger a flush depending on whether or not it
 			// lies in our time bounds respectively.
-			iter.NextIgnoringTime()
+			valid, err = iter.NextIgnoringTime()
 		} else {
 			// This key does not match, so we need to flush our run of matching keys.
 			if err := flushClearedKeys(k); err != nil {
@@ -2959,11 +2950,14 @@ func MVCCClearTimeRange(
 			// skip to the next key ignoring time, because it may not have been
 			// revealed.
 			if !clearRangeKeys.IsEmpty() {
-				iter.NextKeyIgnoringTime()
+				valid, err = iter.NextKeyIgnoringTime()
 			} else {
-				iter.Next()
+				valid, err = iter.Next()
 			}
 		}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	if len(clearedMetaKey.Key) > 0 && ms != nil {
@@ -3248,15 +3242,11 @@ func MVCCPredicateDeleteRange(
 	})
 	defer iter.Close()
 
-	iter.SeekGE(MVCCKey{Key: startKey})
-	for {
-		if ok, err := iter.Valid(); err != nil {
-			return nil, err
-		} else if !ok {
-			break
-		}
+	ok, err := iter.SeekGE(MVCCKey{Key: startKey})
+	for ok {
 		k := iter.UnsafeKey()
-		toContinue, isPointTombstone, isRangeTombstone, err := continueRun(k, iter)
+		var toContinue, isPointTombstone, isRangeTombstone bool
+		toContinue, isPointTombstone, isRangeTombstone, err = continueRun(k, iter)
 		if err != nil {
 			return nil, err
 		}
@@ -3281,13 +3271,13 @@ func MVCCPredicateDeleteRange(
 			//
 			// Note that the range key gets surfaced before the point key,
 			// even though the point key shadows it.
-			iter.NextIgnoringTime()
+			ok, err = iter.NextIgnoringTime()
 		} else if isPointTombstone {
 			// Since the latest version of this key is a point tombstone, skip over
 			// older versions of this key, and move the iterator to the next key
 			// even if it lies outside (startTime, endTime), to see if there's a
 			// need to flush.
-			iter.NextKeyIgnoringTime()
+			ok, err = iter.NextKeyIgnoringTime()
 		} else if toContinue {
 			// The latest version of the key is live, matches the predicate filters
 			// -- e.g. has a timestamp between (predicates.startTime, Endtime);
@@ -3320,7 +3310,7 @@ func MVCCPredicateDeleteRange(
 			// outside (startTime, endTime), to see if there's a need to flush. We can
 			// skip to the next key, as we don't care about older versions of the
 			// current key we're about to delete.
-			iter.NextKeyIgnoringTime()
+			ok, err = iter.NextKeyIgnoringTime()
 		} else {
 			// This key does not match. Flush the run of matching keys,
 			// to prevent issuing tombstones on keys that do not match the predicates.
@@ -3331,8 +3321,11 @@ func MVCCPredicateDeleteRange(
 			// deleted. If TBI was enabled when initializing the incremental iterator,
 			// this step could jump over large swaths of keys that do not qualify for
 			// clearing.
-			iter.NextKey()
+			ok, err = iter.NextKey()
 		}
+	}
+	if err != nil {
+		return nil, err
 	}
 	return nil, flushDeleteKeys()
 }
@@ -3421,19 +3414,15 @@ func MVCCDeleteRangeUsingTombstone(
 				RangeKeyMaskingBelow: timestamp,
 			})
 			defer iter.Close()
-			for iter.SeekGE(MVCCKey{Key: startKey}); ; iter.Next() {
-				if ok, err := iter.Valid(); err != nil {
-					return false, err
-				} else if !ok {
-					break
-				}
+			ok, err := iter.SeekGE(MVCCKey{Key: startKey})
+			for ; ok; ok, err = iter.Next() {
 				if hasPoint, _ := iter.HasPointAndRange(); hasPoint {
 					return false, nil
 				} else if newest := iter.RangeKeys().Newest(); timestamp.LessEq(newest) {
 					return false, kvpb.NewWriteTooOldError(timestamp, newest.Next(), iter.RangeBounds().Key)
 				}
 			}
-			return true, nil
+			return true, err
 		}(); err != nil || noPointKeys {
 			return err
 		}
@@ -3450,14 +3439,13 @@ func MVCCDeleteRangeUsingTombstone(
 				StartTime: timestamp.Prev(), // make inclusive
 			})
 			defer iter.Close()
-			iter.SeekGE(MVCCKey{Key: startKey})
-			if ok, err := iter.Valid(); err != nil {
+			if ok, err := iter.SeekGE(MVCCKey{Key: startKey}); err != nil {
 				return err
-			} else if ok {
-				key := iter.UnsafeKey()
-				return kvpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key)
+			} else if !ok {
+				return nil
 			}
-			return nil
+			key := iter.UnsafeKey()
+			return kvpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key)
 		}(); err != nil {
 			return err
 		}
@@ -3475,7 +3463,7 @@ func MVCCDeleteRangeUsingTombstone(
 		iterOpts.KeyTypes = IterKeyTypeRangesOnly
 		iterOpts.RangeKeyMaskingBelow = hlc.Timestamp{}
 	}
-	iter := rw.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
+	iter := DeprecatedMVCCIterator{rw.NewMVCCIterator(MVCCKeyIterKind, iterOpts)}
 	defer iter.Close()
 
 	iter.SeekGE(MVCCKey{Key: startKey})
@@ -4237,7 +4225,10 @@ func MVCCResolveWriteIntent(
 		KeyTypes: IterKeyTypePointsAndRanges,
 		Prefix:   true,
 	}))
-	iterAndBuf.iter.SeekIntentGE(intent.Key, intent.Txn.ID)
+	if valid, err := iterAndBuf.iter.SeekIntentGE(intent.Key, intent.Txn.ID); !valid {
+		iterAndBuf.Cleanup()
+		return false, 0, nil, err
+	}
 	// Production code will use a buffered writer, which makes the numBytes
 	// calculation accurate. Note that an inaccurate numBytes (e.g. 0 in the
 	// case of an unbuffered writer) does not affect any safety properties of
@@ -4262,8 +4253,8 @@ func MVCCResolveWriteIntent(
 type iterForKeyVersions interface {
 	Valid() (bool, error)
 	HasPointAndRange() (bool, bool)
-	SeekGE(key MVCCKey)
-	Next()
+	SeekGE(key MVCCKey) (bool, error)
+	Next() (bool, error)
 	UnsafeKey() MVCCKey
 	UnsafeValue() ([]byte, error)
 	MVCCValueLenAndIsTombstone() (int, bool, error)
@@ -4348,19 +4339,19 @@ func (s *separatedIntentAndVersionIter) RangeKeys() MVCCRangeKeyStack {
 	return s.mvccIter.RangeKeys()
 }
 
-func (s *separatedIntentAndVersionIter) SeekGE(key MVCCKey) {
+func (s *separatedIntentAndVersionIter) SeekGE(key MVCCKey) (bool, error) {
 	if !key.IsValue() {
 		panic(errors.AssertionFailedf("SeekGE only permitted for values"))
 	}
-	s.mvccIter.SeekGE(key)
 	s.atMVCCIter = true
+	return s.mvccIter.SeekGE(key)
 }
 
-func (s *separatedIntentAndVersionIter) Next() {
+func (s *separatedIntentAndVersionIter) Next() (bool, error) {
 	if !s.atMVCCIter {
 		panic(errors.AssertionFailedf("Next not preceded by SeekGE"))
 	}
-	s.mvccIter.Next()
+	return s.mvccIter.Next()
 }
 
 func (s *separatedIntentAndVersionIter) UnsafeKey() MVCCKey {
@@ -4400,17 +4391,14 @@ func (s *separatedIntentAndVersionIter) ValueProto(msg protoutil.Message) error 
 	return protoutil.Unmarshal(v, msg)
 }
 
-// mvccGetIntent uses an iterForKeyVersions that has been seeked to
-// metaKey.Key for a potential intent, and tries to retrieve an intent if it
-// is present. ok returns true iff an intent for that key is found. In that
-// case, keyBytes and valBytes are set to non-zero and the deserialized intent
-// is placed in meta.
+// mvccGetIntent uses an iterForKeyVersions that has been seeked to metaKey.Key
+// and found a valid key that may potentially be an intent, and tries to
+// retrieve an intent if it is present. ok returns true iff an intent for that
+// key is found. In that case, keyBytes and valBytes are set to non-zero and the
+// deserialized intent is placed in meta.
 func mvccGetIntent(
 	iter iterForKeyVersions, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
 ) (ok bool, keyBytes, valBytes int64, err error) {
-	if ok, err := iter.Valid(); !ok {
-		return false, 0, 0, err
-	}
 	if hasPoint, _ := iter.HasPointAndRange(); !hasPoint {
 		return false, 0, 0, nil
 	}
@@ -4529,6 +4517,7 @@ func (h singleDelOptimizationHelper) onAbortIntent() bool {
 
 // mvccResolveWriteIntent is the core logic for resolving an intent.
 // REQUIRES: iter is already seeked to intent.Key.
+// REQUIRES: iter is at a valid position.
 // REQUIRES: iter surfaces range keys via IterKeyTypePointsAndRanges.
 // Returns whether an intent was found and resolved, false otherwise.
 func mvccResolveWriteIntent(
@@ -4539,6 +4528,11 @@ func mvccResolveWriteIntent(
 	intent roachpb.LockUpdate,
 	buf *putBuffer,
 ) (bool, error) {
+	if util.RaceEnabled {
+		if ok, _ := iter.Valid(); !ok {
+			return false, errors.AssertionFailedf("mvccResolveWriteIntent invoked with !valid iterator")
+		}
+	}
 	metaKey := MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
 	ok, origMetaKeySize, origMetaValSize, err :=
@@ -4692,15 +4686,13 @@ func mvccResolveWriteIntent(
 			newKey.Timestamp = newTimestamp
 
 			// Rewrite the versioned value at the new timestamp.
-			iter.SeekGE(oldKey)
-			valid, err := iter.Valid()
+			valid, err := iter.SeekGE(oldKey)
 			if err != nil {
 				return false, err
 			} else if valid {
 				if hasPoint, hasRange := iter.HasPointAndRange(); hasRange && !hasPoint {
 					// If the seek lands on a bare range key, attempt to step to a point.
-					iter.Next()
-					if valid, err = iter.Valid(); err != nil {
+					if valid, err = iter.Next(); err != nil {
 						return false, err
 					} else if valid {
 						valid, _ = iter.HasPointAndRange()
@@ -4761,8 +4753,7 @@ func mvccResolveWriteIntent(
 			//
 			// Look for the first real versioned key, i.e. the key just below
 			// the (old) meta's timestamp, and for any MVCC range tombstones.
-			iter.Next()
-			if valid, err := iter.Valid(); err != nil {
+			if valid, err = iter.Next(); err != nil {
 				return false, err
 			} else if valid {
 				if hasPoint, hasRange := iter.HasPointAndRange(); hasPoint {
@@ -4854,14 +4845,12 @@ func mvccResolveWriteIntent(
 		// Logical: 1}. Practically, this is the only case that will occur in
 		// production.
 		var hasPoint, hasRange bool
-		iter.SeekGE(nextKey)
-		if ok, err = iter.Valid(); err != nil {
+		if ok, err = iter.SeekGE(nextKey); err != nil {
 			return false, err
 		} else if ok {
 			// If the seek lands on a bare range key, attempt to step to a point.
 			if hasPoint, hasRange = iter.HasPointAndRange(); hasRange && !hasPoint {
-				iter.Next()
-				if ok, err = iter.Valid(); err != nil {
+				if ok, err = iter.Next(); err != nil {
 					return false, err
 				} else if ok {
 					hasPoint, hasRange = iter.HasPointAndRange()
@@ -5166,11 +5155,11 @@ func MVCCGarbageCollect(
 
 	// Bound the iterator appropriately for the set of keys we'll be garbage
 	// collecting.
-	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+	iter := DeprecatedMVCCIterator{rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		LowerBound: keys[0].Key,
 		UpperBound: keys[len(keys)-1].Key.Next(),
 		KeyTypes:   IterKeyTypePointsAndRanges,
-	})
+	})}
 	defer iter.Close()
 
 	// Cached stack of range tombstones covering current point. Used to determine
@@ -5185,7 +5174,7 @@ func MVCCGarbageCollect(
 		// TODO(oleg): Results of this call are not obvious and logic to handle
 		// stats updates for different real and synthesized metadata becomes
 		// unnecessary complicated. Revisit this to make it cleaner.
-		ok, metaKeySize, metaValSize, realKeyChanged, err := mvccGetMetadata(iter, encKey, meta)
+		ok, metaKeySize, metaValSize, realKeyChanged, err := mvccGetMetadata(iter.MVCCIterator, encKey, meta)
 		if err != nil {
 			return err
 		}
@@ -5491,13 +5480,8 @@ func MVCCGarbageCollectRangeKeys(
 		})
 		defer iter.Close()
 
-		for iter.SeekGE(MVCCKey{Key: gcKey.LatchSpan.Key}); ; iter.Next() {
-			if ok, err := iter.Valid(); err != nil {
-				return err
-			} else if !ok {
-				break
-			}
-
+		iterValid, err := iter.SeekGE(MVCCKey{Key: gcKey.LatchSpan.Key})
+		for ; iterValid; iterValid, err = iter.Next() {
 			rangeKeys := iter.RangeKeys()
 
 			// Check if preceding range tombstone is adjacent to GC'd one. If we
@@ -5579,12 +5563,8 @@ func MVCCGarbageCollectRangeKeys(
 			})
 			defer ptIter.Close()
 
-			for ptIter.SeekGE(MVCCKey{Key: rangeKeys.Bounds.Key}); ; ptIter.Next() {
-				if ok, err := ptIter.Valid(); err != nil {
-					return err
-				} else if !ok {
-					break
-				}
+			ptIterValid, ptErr := ptIter.SeekGE(MVCCKey{Key: rangeKeys.Bounds.Key})
+			for ; ptIterValid; ptIterValid, ptErr = ptIter.Next() {
 				// Disallow any value under the range key. We only skip intents as they
 				// must have a provisional value with appropriate timestamp.
 				if pointKey := ptIter.UnsafeKey(); pointKey.IsValue() {
@@ -5592,8 +5572,11 @@ func MVCCGarbageCollectRangeKeys(
 						gcKey, pointKey)
 				}
 			}
+			if ptErr != nil {
+				return ptErr
+			}
 		}
-		return nil
+		return err
 	}
 
 	for _, gcKey := range rks {
@@ -5668,13 +5651,8 @@ func CanGCEntireRange(
 		RangeKeyMaskingBelow: gcThreshold,
 	})
 	defer iter.Close()
-	iter.SeekGE(MVCCKey{Key: start})
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
-			return coveredByRangeTombstones, err
-		} else if !ok {
-			break
-		}
+	ok, err := iter.SeekGE(MVCCKey{Key: start})
+	for ; ok; ok, err = iter.Next() {
 		hasPoint, hasRange := iter.HasPointAndRange()
 		if hasPoint {
 			return coveredByRangeTombstones, errors.Errorf("found key not covered by range tombstone %s",
@@ -5689,7 +5667,7 @@ func CanGCEntireRange(
 			}
 		}
 	}
-	return coveredByRangeTombstones, nil
+	return coveredByRangeTombstones, err
 }
 
 // MVCCGarbageCollectPointsWithClearRange removes garbage collected points data
@@ -5723,8 +5701,6 @@ func MVCCGarbageCollectPointsWithClearRange(
 	})
 	defer iter.Close()
 
-	iter.SeekGE(MVCCKey{Key: start})
-
 	var (
 		// prevPointKey is a newer version (with higher timestamp) of current key.
 		// Its key component is updated when key is first seen at the beginning of
@@ -5738,13 +5714,11 @@ func MVCCGarbageCollectPointsWithClearRange(
 		firstKey        = true
 	)
 
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
-			return err
-		} else if !ok {
-			break
-		}
-
+	iterValid, err := iter.SeekGE(MVCCKey{Key: start})
+	if err != nil {
+		return err
+	}
+	for ; iterValid; iterValid, err = iter.Next() {
 		if iter.RangeKeyChanged() {
 			iter.RangeKeys().CloneInto(&rangeTombstones)
 			if hasPoint, _ := iter.HasPointAndRange(); !hasPoint {
@@ -5820,6 +5794,9 @@ func MVCCGarbageCollectPointsWithClearRange(
 		prevPointKey.Timestamp = unsafeKey.Timestamp
 		removedEntries++
 	}
+	if err != nil {
+		return err
+	}
 
 	// If timestamp is not empty we delete subset of versions (this may be first
 	// key of requested range or full extent).
@@ -5886,8 +5863,7 @@ func MVCCFindSplitKey(
 	// was dangerous because partitioning can split off ranges that do not start
 	// at valid row keys. The keys that are present in the range, by contrast, are
 	// necessarily valid row keys.
-	it.SeekGE(MakeMVCCMetadataKey(key.AsRawKey()))
-	if ok, err := it.Valid(); err != nil {
+	if ok, err := it.SeekGE(MakeMVCCMetadataKey(key.AsRawKey())); err != nil {
 		return nil, err
 	} else if !ok {
 		return nil, nil
@@ -5958,7 +5934,9 @@ func ComputeStatsWithVisitors(
 		UpperBound: end,
 	})
 	defer iter.Close()
-	iter.SeekGE(MVCCKey{Key: start})
+	if _, err := iter.SeekGE(MVCCKey{Key: start}); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
 	return computeStatsForIterWithVisitors(iter, nowNanos, pointKeyVisitor, rangeKeyVisitor)
 }
 
@@ -6007,13 +5985,8 @@ func computeStatsForIterWithVisitors(
 	var accrueGCAgeNanos int64
 	var rangeTombstones MVCCRangeKeyVersions
 
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
-			return ms, err
-		} else if !ok {
-			break
-		}
-
+	iterValid, err := iter.Valid()
+	for ; iterValid; iterValid, err = iter.Next() {
 		// Process MVCC range tombstones, and buffer them in rangeTombstones
 		// for all overlapping point keys.
 		if iter.RangeKeyChanged() {
@@ -6233,6 +6206,9 @@ func computeStatsForIterWithVisitors(
 			ms.ValCount++
 		}
 	}
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	}
 
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
@@ -6264,8 +6240,7 @@ func MVCCIsSpanEmpty(
 		})
 	}
 	defer iter.Close()
-	iter.SeekGE(MVCCKey{Key: opts.StartKey})
-	valid, err := iter.Valid()
+	valid, err := iter.SeekGE(MVCCKey{Key: opts.StartKey})
 	if err != nil {
 		return false, err
 	}
@@ -6491,13 +6466,9 @@ func mvccExportToWriter(
 		return maxSize
 	}
 
-	iter.SeekGE(opts.StartKey)
-	for {
-		if ok, err := iter.Valid(); err != nil {
-			return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
-		} else if !ok {
-			break
-		} else if iter.NumCollectedIntents() > 0 {
+	ok, err := iter.SeekGE(opts.StartKey)
+	for ok {
+		if iter.NumCollectedIntents() > 0 {
 			break
 		}
 
@@ -6540,7 +6511,8 @@ func mvccExportToWriter(
 		if iter.RangeKeyChanged() {
 			// Flush any pending range tombstones.
 			for _, v := range rangeKeys.Versions {
-				mvccValue, ok, err := tryDecodeSimpleMVCCValue(v.Value)
+				var mvccValue MVCCValue
+				mvccValue, ok, err = tryDecodeSimpleMVCCValue(v.Value)
 				if !ok && err == nil {
 					mvccValue, err = decodeExtendedMVCCValue(v.Value)
 				}
@@ -6604,19 +6576,21 @@ func mvccExportToWriter(
 			// If we're on a bare range key, step forward. We can't use NextKey()
 			// because there may be a point key at the range key's start bound.
 			if !hasPoint {
-				iter.Next()
+				ok, err = iter.Next()
 				continue
 			}
 		}
 
 		// Process point keys.
-		unsafeValue, err := iter.UnsafeValue()
+		var unsafeValue []byte
+		unsafeValue, err = iter.UnsafeValue()
 		if err != nil {
 			return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
 		}
 		skip := false
 		if unsafeKey.IsValue() {
-			mvccValue, ok, err := tryDecodeSimpleMVCCValue(unsafeValue)
+			var mvccValue MVCCValue
+			mvccValue, ok, err = tryDecodeSimpleMVCCValue(unsafeValue)
 			if !ok && err == nil {
 				mvccValue, err = decodeExtendedMVCCValue(unsafeValue)
 			}
@@ -6680,10 +6654,13 @@ func mvccExportToWriter(
 		}
 
 		if opts.ExportAllRevisions {
-			iter.Next()
+			ok, err = iter.Next()
 		} else {
-			iter.NextKey()
+			ok, err = iter.NextKey()
 		}
+	}
+	if err != nil {
+		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
 	}
 
 	// First check if we encountered an intent while iterating the data.
@@ -6691,11 +6668,10 @@ func mvccExportToWriter(
 	// to collect all matching intents before returning them in an error to the caller.
 	if iter.NumCollectedIntents() > 0 {
 		for uint64(iter.NumCollectedIntents()) < opts.MaxIntents {
-			iter.NextKey()
-			// If we encounter other errors during intent collection, we return our original write intent failure.
-			// We would find this new error again upon retry.
-			ok, _ := iter.Valid()
-			if !ok {
+			if ok, _ := iter.NextKey(); !ok {
+				// If we encounter other errors during intent collection, we return
+				// our original write intent failure. We would find this new error
+				// again upon retry.
 				break
 			}
 		}
@@ -6824,8 +6800,7 @@ type MVCCIsSpanEmptyOptions struct {
 //
 // +1: range key to the left overlaps with the peek key, extending to the right.
 func PeekRangeKeysLeft(iter MVCCIterator, peekKey roachpb.Key) (int, MVCCRangeKeyStack, error) {
-	iter.SeekLT(MVCCKey{Key: peekKey})
-	if ok, err := iter.Valid(); err != nil {
+	if ok, err := iter.SeekLT(MVCCKey{Key: peekKey}); err != nil {
 		return 0, MVCCRangeKeyStack{}, err
 	} else if !ok {
 		return -1, MVCCRangeKeyStack{}, nil
@@ -6846,8 +6821,7 @@ func PeekRangeKeysLeft(iter MVCCIterator, peekKey roachpb.Key) (int, MVCCRangeKe
 //
 // +1: range key to the right not touching the peek key, or no range key found.
 func PeekRangeKeysRight(iter MVCCIterator, peekKey roachpb.Key) (int, MVCCRangeKeyStack, error) {
-	iter.SeekGE(MVCCKey{Key: peekKey})
-	if ok, err := iter.Valid(); err != nil {
+	if ok, err := iter.SeekGE(MVCCKey{Key: peekKey}); err != nil {
 		return 0, MVCCRangeKeyStack{}, err
 	} else if !ok {
 		return 1, MVCCRangeKeyStack{}, nil
@@ -6880,12 +6854,12 @@ func ReplacePointTombstonesWithRangeTombstones(
 		end = start.Next()
 	}
 
-	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+	iter := DeprecatedMVCCIterator{rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		Prefix:     end.Equal(start.Next()),
 		LowerBound: start,
 		UpperBound: end,
-	})
+	})}
 	defer iter.Close()
 
 	var clearedKey MVCCKey
@@ -7040,11 +7014,11 @@ func isWatchedSystemTable(key roachpb.Key) bool {
 func MVCCLookupRangeKeyValue(
 	reader Reader, key, endKey roachpb.Key, ts hlc.Timestamp,
 ) ([]byte, error) {
-	it := reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+	it := DeprecatedMVCCIterator{reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 		LowerBound: key,
 		UpperBound: endKey,
 		KeyTypes:   IterKeyTypeRangesOnly,
-	})
+	})}
 	defer it.Close()
 
 	it.SeekGE(MVCCKey{Key: key})
