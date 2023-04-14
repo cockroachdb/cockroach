@@ -365,7 +365,7 @@ func TestTelemetryLogging(t *testing.T) {
 		}
 	}
 
-	log.Flush()
+	log.FlushFileSinks()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -672,7 +672,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.Flush()
+	log.FlushFileSinks()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -876,7 +876,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.Flush()
+	log.FlushFileSinks()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -1131,7 +1131,7 @@ func TestTelemetryScanCounts(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.Flush()
+	log.FlushFileSinks()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -1245,7 +1245,7 @@ $$`
 
 	db.Exec(t, stmt)
 
-	log.Flush()
+	log.FlushFileSinks()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,

@@ -201,7 +201,7 @@ func TestRotateCerts(t *testing.T) {
 	// the moment the structured logging event is actually
 	// written to the log file.
 	testutils.SucceedsSoon(t, func() error {
-		log.Flush()
+		log.FlushFileSinks()
 		entries, err := log.FetchEntriesFromFiles(beforeReload.UnixNano(),
 			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
 		if err != nil {

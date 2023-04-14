@@ -884,7 +884,7 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 
 	// Flush logs and get log messages from replicate_queue.go since just
 	// before calling store.Enqueue(..).
-	log.Flush()
+	log.FlushFileSinks()
 	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
 		math.MaxInt64, 100, regexp.MustCompile(`replicate_queue\.go`), log.WithMarkedSensitiveData)
 	require.NoError(t, err)
