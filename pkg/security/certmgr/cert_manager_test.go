@@ -57,7 +57,7 @@ var cmLogRe = regexp.MustCompile(`event_log\.go`)
 
 // Check that the structured event was logged.
 func checkLogStructEntry(t *testing.T, expectSuccess bool, beforeReload time.Time) error {
-	log.Flush()
+	log.FlushFileSinks()
 	entries, err := log.FetchEntriesFromFiles(beforeReload.UnixNano(),
 		math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
 	if err != nil {
