@@ -427,42 +427,44 @@ func DecodeIndexKeyPrefix(
 // empty.
 func DecodeIndexKey(
 	codec keys.SQLCodec, vals []EncDatum, colDirs []catenumpb.IndexColumn_Direction, key []byte,
-) error {
+) (numVals int, _ error) {
 	key, err := codec.StripTenantPrefix(key)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	key, _, _, err = DecodePartialTableIDIndexID(key)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	_, err = DecodeKeyVals(vals, colDirs, key)
-	return err
+	_, numVals, err = DecodeKeyVals(vals, colDirs, key)
+	return numVals, err
 }
 
 // DecodeKeyVals decodes the values that are part of the key. The decoded
 // values are stored in the vals. If this slice is nil, the direction
 // used will default to encoding.Ascending.
 // remainingKey returns any bytes leftover after populating vals.
+// numVals returns the number of vals populated - this can be less than
+// len(vals) if key ran out of bytes while populating vals.
 func DecodeKeyVals(
 	vals []EncDatum, directions []catenumpb.IndexColumn_Direction, key []byte,
-) (remainingKey []byte, _ error) {
+) (remainingKey []byte, numVals int, _ error) {
 	if directions != nil && len(directions) != len(vals) {
-		return nil, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
+		return nil, 0, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
 			len(directions), len(vals))
 	}
-	for j := range vals {
+	for ; numVals < len(vals) && len(key) > 0; numVals++ {
 		enc := catenumpb.DatumEncoding_ASCENDING_KEY
-		if directions != nil && (directions[j] == catenumpb.IndexColumn_DESC) {
+		if directions != nil && (directions[numVals] == catenumpb.IndexColumn_DESC) {
 			enc = catenumpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
-		vals[j], key, err = EncDatumFromBuffer(enc, key)
+		vals[numVals], key, err = EncDatumFromBuffer(enc, key)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
-	return key, nil
+	return key, numVals, nil
 }
 
 // DecodeKeyValsUsingSpec is a variant of DecodeKeyVals which uses
