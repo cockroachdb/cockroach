@@ -3236,6 +3236,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			opName,
 			txn,
 			username.RootUserName(),
+			username.RootUserID,
 			&sql.MemoryMetrics{},
 			&execCfg,
 			sessiondatapb.SessionData{},

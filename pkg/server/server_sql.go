@@ -1660,6 +1660,8 @@ func (s *SQLServer) preStart(
 					opName,
 					txn,
 					user,
+					// TODO(yang): Figure out how to set the user ID here.
+					0,
 					&sql.MemoryMetrics{},
 					s.execCfg,
 					sessiondatapb.SessionData{},

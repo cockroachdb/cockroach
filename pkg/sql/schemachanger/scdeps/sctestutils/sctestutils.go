@@ -53,6 +53,7 @@ func WithBuilderDependenciesFromTestServer(
 		"test",
 		kv.NewTxn(context.Background(), s.DB(), s.NodeID()),
 		username.RootUserName(),
+		username.RootUserID,
 		&sql.MemoryMetrics{},
 		&execCfg,
 		// Setting the database on the session data to "defaultdb" in the obvious
@@ -71,7 +72,7 @@ func WithBuilderDependenciesFromTestServer(
 	})
 
 	refProviderFactory, refCleanup := sql.NewReferenceProviderFactoryForTest(
-		"test", planner.InternalSQLTxn().KV(), username.RootUserName(), &execCfg, "defaultdb",
+		"test", planner.InternalSQLTxn().KV(), username.RootUserName(), username.RootUserID, &execCfg, "defaultdb",
 	)
 	defer refCleanup()
 

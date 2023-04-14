@@ -86,7 +86,7 @@ CREATE TABLE foo (
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
-		username.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
+		username.RootUserName(), username.RootUserID, &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
 			Database:   "defaultdb",
 			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
 		},
@@ -468,7 +468,7 @@ func TestChangefeedStreamsResults(t *testing.T) {
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
-		username.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
+		username.RootUserName(), username.RootUserID, &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
 			Database:   "defaultdb",
 			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
 		},
@@ -516,7 +516,7 @@ FAMILY extra (extra)
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
-		username.RootUserName(), &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
+		username.RootUserName(), username.RootUserID, &MemoryMetrics{}, &execCfg, sessiondatapb.SessionData{
 			Database:   "defaultdb",
 			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
 		},

@@ -37,6 +37,8 @@ func MakeJobExecContext(
 		opName,
 		nil, /*txn*/
 		user,
+		// TODO(yang): Figure out how to add user ID here.
+		0,
 		memMetrics,
 		execCfg,
 		sessiondatapb.SessionData{},

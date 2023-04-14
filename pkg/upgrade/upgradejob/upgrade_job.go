@@ -108,6 +108,8 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			internalPlanner, cleanup := sql.NewInternalPlanner("internal planner for upgrades",
 				txn,
 				execCtx.User(),
+				// TODO(yang): Figure out how to add user ID here.
+				0,
 				&sql.MemoryMetrics{},
 				execCtx.ExecCfg(),
 				sessiondatapb.SessionData{Database: currDb},

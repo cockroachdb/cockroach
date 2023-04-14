@@ -366,6 +366,7 @@ func newTenantServer(
 			opName,
 			txn,
 			username.RootUserName(),
+			username.RootUserID,
 			&sql.MemoryMetrics{},
 			sqlServer.execCfg,
 			sessiondatapb.SessionData{},

@@ -79,7 +79,7 @@ func TestBuildDataDriven(t *testing.T) {
 					// dependency resolution.
 					execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 					refFactory, cleanup := sql.NewReferenceProviderFactoryForTest(
-						"test" /* opName */, kv.NewTxn(context.Background(), s.DB(), s.NodeID()), username.RootUserName(), &execCfg, "defaultdb",
+						"test" /* opName */, kv.NewTxn(context.Background(), s.DB(), s.NodeID()), username.RootUserName(), username.RootUserID, &execCfg, "defaultdb",
 					)
 					defer cleanup()
 

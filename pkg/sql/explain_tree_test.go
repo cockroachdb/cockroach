@@ -65,6 +65,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 				"test",
 				kv.NewTxn(ctx, db, s.NodeID()),
 				username.RootUserName(),
+				username.RootUserID,
 				&MemoryMetrics{},
 				&execCfg,
 				sessiondatapb.SessionData{},

@@ -324,12 +324,13 @@ func NewInternalPlanner(
 	opName string,
 	txn *kv.Txn,
 	user username.SQLUsername,
+	userID username.SQLUserID,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
 	sessionData sessiondatapb.SessionData,
 	opts ...InternalPlannerParamsOption,
 ) (interface{}, func()) {
-	return newInternalPlanner(opName, txn, user, memMetrics, execCfg, sessionData, opts...)
+	return newInternalPlanner(opName, txn, user, userID, memMetrics, execCfg, sessionData, opts...)
 }
 
 // newInternalPlanner creates a new planner instance for internal usage. This
@@ -345,6 +346,7 @@ func newInternalPlanner(
 	opName string,
 	txn *kv.Txn,
 	user username.SQLUsername,
+	userID username.SQLUserID,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
 	sessionData sessiondatapb.SessionData,
@@ -375,8 +377,8 @@ func newInternalPlanner(
 	if sd.SessionData.Database == "" {
 		sd.SessionData.Database = "system"
 	}
-	// TODO(yang): Query the user ID and set it here.
 	sd.SessionData.UserProto = user.EncodeProto()
+	sd.SessionData.UserID = userID
 	sd.SessionData.Internal = true
 	sds := sessiondata.NewStack(sd)
 

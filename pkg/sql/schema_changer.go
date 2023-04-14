@@ -287,6 +287,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			desc,
 			txn.KV(),
 			username.RootUserName(),
+			username.RootUserID,
 			&MemoryMetrics{},
 			sc.execCfg,
 			sessiondatapb.SessionData{},
