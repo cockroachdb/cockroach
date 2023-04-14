@@ -1041,7 +1041,7 @@ var cmLogRe = regexp.MustCompile(`event_log\.go`)
 func checkStructuredLogs(t *testing.T, eventType string, startTime int64) []string {
 	var matchingEntries []string
 	testutils.SucceedsSoon(t, func() error {
-		log.Flush()
+		log.FlushFileSinks()
 		entries, err := log.FetchEntriesFromFiles(startTime,
 			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
 		if err != nil {
