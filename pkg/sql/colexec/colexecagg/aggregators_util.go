@@ -35,6 +35,13 @@ type NewAggregatorArgs struct {
 	Constructors   []execagg.AggregateConstructor
 	ConstArguments []tree.Datums
 	OutputTypes    []*types.T
+
+	TestingKnobs struct {
+		// HashTableNumBuckets if positive will override the initial number of
+		// buckets to be used by the hash table (if this struct is passed to the
+		// hash aggregator).
+		HashTableNumBuckets uint64
+	}
 }
 
 // NewHashAggregatorArgs encompasses all mandatory arguments necessary to
