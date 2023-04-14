@@ -89,7 +89,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 1
+    pgAttributeNum: 0
     tableId: 108
   Status: PUBLIC
 - Column:
@@ -99,7 +99,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 2
+    pgAttributeNum: 0
     tableId: 108
   Status: PUBLIC
 - Column:
@@ -109,7 +109,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 3
+    pgAttributeNum: 0
     tableId: 108
   Status: PUBLIC
 - Column:
@@ -119,7 +119,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 4
+    pgAttributeNum: 0
     tableId: 108
   Status: PUBLIC
 - Column:
@@ -129,7 +129,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 4.294967294e+09
+    pgAttributeNum: 0
     tableId: 108
   Status: PUBLIC
 - Column:
@@ -139,7 +139,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 4.294967295e+09
+    pgAttributeNum: 0
     tableId: 108
   Status: PUBLIC
 - Column:
@@ -149,7 +149,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 5
+    pgAttributeNum: 0
     tableId: 108
   Status: PUBLIC
 - PrimaryIndex:
@@ -736,7 +736,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 1
+    pgAttributeNum: 0
     tableId: 111
   Status: PUBLIC
 - Column:
@@ -746,7 +746,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 2
+    pgAttributeNum: 0
     tableId: 111
   Status: PUBLIC
 - Column:
@@ -756,7 +756,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 3
+    pgAttributeNum: 0
     tableId: 111
   Status: PUBLIC
 - Column:
@@ -766,7 +766,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 4
+    pgAttributeNum: 0
     tableId: 111
   Status: PUBLIC
 - Column:
@@ -776,7 +776,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 4.294967294e+09
+    pgAttributeNum: 0
     tableId: 111
   Status: PUBLIC
 - Column:
@@ -786,7 +786,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 4.294967295e+09
+    pgAttributeNum: 0
     tableId: 111
   Status: PUBLIC
 - Column:
@@ -796,7 +796,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 5
+    pgAttributeNum: 0
     tableId: 111
   Status: PUBLIC
 - Column:
@@ -806,7 +806,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 6
+    pgAttributeNum: 0
     tableId: 111
   Status: PUBLIC
 - Column:
@@ -816,7 +816,7 @@ ElementState:
     isHidden: false
     isInaccessible: true
     isSystemColumn: false
-    pgAttributeNum: 7
+    pgAttributeNum: 0
     tableId: 111
   Status: PUBLIC
 - PrimaryIndex:
