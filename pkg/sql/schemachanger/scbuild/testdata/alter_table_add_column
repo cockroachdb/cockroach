@@ -6,7 +6,7 @@ build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, pgAttributeNum: 2, tableId: 104}
+  {columnId: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
   {columnId: 2, name: j, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
@@ -26,7 +26,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT NOT NULL DEFAULT 123
 - [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, pgAttributeNum: 2, tableId: 104}
+  {columnId: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
   {columnId: 2, name: j, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
@@ -67,7 +67,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 - [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, pgAttributeNum: 2, tableId: 104}
+  {columnId: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
   {columnId: 2, name: j, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
@@ -93,7 +93,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
-  {columnId: 3, pgAttributeNum: 3, tableId: 104}
+  {columnId: 3, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, PUBLIC], ABSENT]
   {columnId: 3, name: k, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT]
@@ -117,7 +117,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 - [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, pgAttributeNum: 2, tableId: 104}
+  {columnId: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT]
   {columnId: 2, name: a, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
@@ -150,7 +150,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, pgAttributeNum: 2, tableId: 104}
+  {columnId: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT]
   {columnId: 2, name: a, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
@@ -158,7 +158,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC], ABSENT]
   {columnId: 2, indexId: 1, kind: STORED, tableId: 104}
 - [[Column:{DescID: 105, ColumnID: 3}, PUBLIC], ABSENT]
-  {columnId: 3, pgAttributeNum: 3, tableId: 105}
+  {columnId: 3, tableId: 105}
 - [[ColumnName:{DescID: 105, Name: b, ColumnID: 3}, PUBLIC], ABSENT]
   {columnId: 3, name: b, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT]

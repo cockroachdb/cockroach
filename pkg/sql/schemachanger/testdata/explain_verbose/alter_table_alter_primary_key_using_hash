@@ -190,7 +190,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │           │     Column:
 │           │       ColumnID: 3
 │           │       IsHidden: true
-│           │       PgAttributeNum: 3
 │           │       TableID: 104
 │           │
 │           ├── • SetColumnName
@@ -617,7 +616,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │           │     Column:
 │           │       ColumnID: 3
 │           │       IsHidden: true
-│           │       PgAttributeNum: 3
 │           │       TableID: 104
 │           │
 │           ├── • SetColumnName

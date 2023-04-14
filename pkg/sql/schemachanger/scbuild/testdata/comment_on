@@ -86,7 +86,7 @@ build
 COMMENT ON COLUMN customer.name IS 'some comment for name';
 ----
 - [[ColumnComment:{DescID: 104, ColumnID: 2, Comment: some comment for name}, PUBLIC], ABSENT]
-  {columnId: 2, comment: some comment for name, pgAttributeNum: 2, tableId: 104}
+  {columnId: 2, comment: some comment for name, tableId: 104}
 
 setup
 COMMENT ON COLUMN customer.name IS 'real comment for name';
@@ -96,7 +96,7 @@ build
 COMMENT ON COLUMN customer.name IS 'some better comment for name';
 ----
 - [[ColumnComment:{DescID: 104, ColumnID: 2, Comment: some better comment for name}, PUBLIC], ABSENT]
-  {columnId: 2, comment: some better comment for name, pgAttributeNum: 2, tableId: 104}
+  {columnId: 2, comment: some better comment for name, tableId: 104}
 
 build
 COMMENT ON COLUMN customer.name IS NULL;
