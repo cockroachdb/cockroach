@@ -917,11 +917,20 @@ type Engine interface {
 	// underlying Engine. The batch accumulates all mutations and applies them
 	// atomically on a call to Commit().
 	NewWriteBatch() WriteBatch
-	// NewSnapshot returns a new instance of a read-only snapshot
-	// engine. Snapshots are instantaneous and, as long as they're
-	// released relatively quickly, inexpensive. Snapshots are released
-	// by invoking Close(). Note that snapshots must not be used after the
-	// original engine has been stopped.
+	// NewSnapshot returns a new instance of a read-only snapshot engine. A
+	// snapshot provides a consistent view of the database across multiple
+	// iterators. If a caller only needs a single consistent iterator, they
+	// should create an iterator directly off the engine instead.
+	//
+	// Acquiring a snapshot is instantaneous and is inexpensive if quickly
+	// released. Snapshots are released by invoking Close(). Open snapshots
+	// prevent compactions from reclaiming space or removing tombstones for any
+	// keys written after the snapshot is acquired. This can be problematic
+	// during rebalancing or large ingestions, so they should be used sparingly
+	// and briefly.
+	//
+	// Note that snapshots must not be used after the original engine has been
+	// stopped.
 	NewSnapshot() Reader
 	// Type returns engine type.
 	Type() enginepb.EngineType
