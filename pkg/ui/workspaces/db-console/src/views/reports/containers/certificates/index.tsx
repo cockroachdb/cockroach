@@ -23,6 +23,7 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { Loading, util } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
+import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
 interface CertificatesOwnProps {
   certificates: protos.cockroach.server.serverpb.CertificatesResponse;
@@ -207,6 +208,7 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     return (
       <div className="section">
         <Helmet title="Certificates | Debug" />
+        <BackToAdvanceDebug history={this.props.history} />
         <h1 className="base-heading">Certificates</h1>
 
         <section className="section">

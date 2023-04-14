@@ -22,6 +22,7 @@ import { nodeIDAttr } from "src/util/constants";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
 import { Loading } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
+import { BackToAdvanceDebug } from "../util";
 
 interface StoresOwnProps {
   stores: protos.cockroach.server.serverpb.IStoreDetails[];
@@ -111,6 +112,7 @@ export class Stores extends React.Component<StoresProps, {}> {
     return (
       <div className="section">
         <Helmet title="Stores | Debug" />
+        <BackToAdvanceDebug history={this.props.history} />
         <h1 className="base-heading">Stores</h1>
         <h2 className="base-heading">{header} stores</h2>
         <Loading
