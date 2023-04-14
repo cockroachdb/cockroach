@@ -171,6 +171,7 @@ message LocalOnlySessionData {
   // is the same as the UserProto in SessionData.
   // Postgres allows the SessionUser to be changed with SET SESSION AUTHORIZATION
   // but CockroachDB doesn't allow that at the time of this writing.
+  // Do not update this field directly: use SetSessionUser instead.
   string session_user_proto = 46 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
   // TxnRowsWrittenLog is the threshold for the number of rows written by a SQL
   // transaction which - once exceeded - will trigger a logging event to SQL_PERF
@@ -384,6 +385,9 @@ message LocalOnlySessionData {
   // expression with a column reference, which can produce more efficient query
   // plans.
   bool optimizer_hoist_uncorrelated_equality_subqueries = 102;
+  // SessionUserID is the user ID for the user specified by SessionUserProto.
+  // Do not update this field directly: use SetSessionUser instead.
+  uint32 session_user_id = 103 [(gogoproto.customname) = "SessionUserID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUserID", (gogoproto.nullable) = false];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

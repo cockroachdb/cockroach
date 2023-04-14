@@ -610,7 +610,7 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 			if becomeUser.IsNoneRole() {
 				if m.data.SessionUserProto.Decode().Normalized() != "" {
 					m.data.UserProto = m.data.SessionUserProto
-					m.data.SessionUserProto = ""
+					m.data.ResetSessionUser()
 				}
 				m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
 				return nil
@@ -619,14 +619,18 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 			// Only update session_user when we are transitioning from the current_user
 			// being the session_user.
 			if m.data.SessionUserProto == "" {
-				m.data.SessionUserProto = m.data.UserProto
+				user := m.data.UserProto.Decode()
+				userID, err := p.GetUserID(ctx, user)
+				if err != nil {
+					return err
+				}
+				m.data.SetSessionUser(user, userID)
 			}
 			m.data.UserProto = becomeUser.EncodeProto()
 			m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
 			return nil
 		},
 	)
-
 }
 
 // checkCanBecomeUser returns an error if the SessionUser cannot become the
