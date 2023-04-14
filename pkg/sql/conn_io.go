@@ -897,11 +897,6 @@ func (rc *rewindCapability) close() {
 	rc.cl.Close()
 }
 
-type resCloseType bool
-
-const closed resCloseType = true
-const discarded resCloseType = false
-
 // streamingCommandResult is a CommandResult that streams rows on the channel
 // and can call a provided callback when closed.
 type streamingCommandResult struct {
@@ -912,11 +907,17 @@ type streamingCommandResult struct {
 	// on the synchronization strategy.
 	w ieResultWriter
 
+	// cannotRewind indicates whether this result has communicated some data
+	// (rows or metadata) such that the corresponding command cannot be rewound.
+	cannotRewind bool
+
 	err          error
 	rowsAffected int
 
-	// closeCallback, if set, is called when Close()/Discard() is called.
-	closeCallback func(resCloseType)
+	// closeCallback, if set, is called when Close() is called.
+	closeCallback func()
+	// discardCallback, if set, is called when Discard() is called.
+	discardCallback func()
 }
 
 var _ RestrictedCommandResult = &streamingCommandResult{}
@@ -929,6 +930,8 @@ func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.Re
 	if cols == nil {
 		cols = colinfo.ResultColumns{}
 	}
+	// NB: we do not set r.cannotRewind here because the correct columns will be
+	// set in rowsIterator.Next.
 	_ = r.w.addResult(ctx, ieIteratorResult{cols: cols})
 }
 
@@ -955,6 +958,9 @@ func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) er
 	r.rowsAffected++
 	rowCopy := make(tree.Datums, len(row))
 	copy(rowCopy, row)
+	// Once we add this row to the writer, it can be immediately consumed by the
+	// reader, so this result can no longer be rewound.
+	r.cannotRewind = true
 	return r.w.addResult(ctx, ieIteratorResult{row: rowCopy})
 }
 
@@ -998,6 +1004,8 @@ func (r *streamingCommandResult) SetRowsAffected(ctx context.Context, n int) {
 	// streamingCommandResult might be used outside of the internal executor
 	// (i.e. not by rowsIterator) in which case the channel is not set.
 	if r.w != nil {
+		// NB: we do not set r.cannotRewind here because rowsAffected value will
+		// be overwritten in rowsIterator.Next correctly if necessary.
 		_ = r.w.addResult(ctx, ieIteratorResult{rowsAffected: &n})
 	}
 }
@@ -1010,14 +1018,14 @@ func (r *streamingCommandResult) RowsAffected() int {
 // Close is part of the CommandResultClose interface.
 func (r *streamingCommandResult) Close(context.Context, TransactionStatusIndicator) {
 	if r.closeCallback != nil {
-		r.closeCallback(closed)
+		r.closeCallback()
 	}
 }
 
 // Discard is part of the CommandResult interface.
 func (r *streamingCommandResult) Discard() {
-	if r.closeCallback != nil {
-		r.closeCallback(discarded)
+	if r.discardCallback != nil {
+		r.discardCallback()
 	}
 }
 
