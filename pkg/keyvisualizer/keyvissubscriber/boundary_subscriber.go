@@ -80,7 +80,7 @@ func Start(
 		// First, decode the tenant_id column.
 		colTypes := []*types.T{columns[0].GetType()}
 		tenantIDRow := make([]rowenc.EncDatum, 1)
-		if err := rowenc.DecodeIndexKey(
+		if _, err := rowenc.DecodeIndexKey(
 			keys.SystemSQLCodec,
 			tenantIDRow,
 			nil, /* colDirs */
