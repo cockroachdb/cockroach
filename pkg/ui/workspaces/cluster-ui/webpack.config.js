@@ -180,7 +180,11 @@ module.exports = (env, argv) => {
         // We have to tell the plugin where to store the pruned file
         // otherwise webpack can't find it.
         cacheDir: path.resolve(__dirname, "timezones"),
-      })
+      }),
+      new webpack.SourceMapDevToolPlugin({
+        noSources: false,
+        filename: '[file].map'
+      }),
     ],
 
     // When importing a module whose path matches one of the following, just

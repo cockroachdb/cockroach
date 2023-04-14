@@ -61,6 +61,10 @@ module.exports = (env, argv) => {
       // otherwise webpack can't find it.
       cacheDir: path.resolve(__dirname, "timezones"),
     }),
+    new webpack.SourceMapDevToolPlugin({
+      noSources: false,
+      filename: '[file].map'
+    }),
   ];
 
   // First check for local modules, then for third-party modules from

@@ -13,7 +13,7 @@
     "outDir": "./dist/types",
     "target": "es6",
     "skipLibCheck": true,
-    "sourceMap": false,
+    "sourceMap": true,
     "baseUrl": ".",
     "paths": {
       "@cockroachlabs/crdb-protobuf-client": [
