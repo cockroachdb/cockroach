@@ -714,6 +714,23 @@ func TestInternalExecutorRetryAfterRows(t *testing.T) {
 	if !testutils.IsError(err, "inject_retry_errors_enabled") {
 		t.Fatalf("expected to see injected retry error, got %v", err)
 	}
+
+	// Now verify that ExecEx correctly and transparently to us retries the
+	// stmt.
+	numRows, err := ie.ExecEx(
+		ctx, "read rows", nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User:                     username.MakeSQLUsernameFromPreNormalizedString(username.RootUser),
+			InjectRetryErrorsEnabled: true,
+		},
+		"SELECT * FROM test.t",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if numRows != 1 {
+		t.Fatalf("expected 1 rowsAffected, got %d", numRows)
+	}
 }
 
 // TODO(andrei): Test that descriptor leases are released by the
