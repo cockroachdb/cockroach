@@ -136,7 +136,7 @@ func (s *Receiver) onRecvErr(ctx context.Context, nodeID roachpb.NodeID, err err
 	defer s.mu.Unlock()
 
 	if err != io.EOF {
-		log.Warningf(ctx, "closed timestamps side-transport connection dropped from node: %d", nodeID)
+		log.Warningf(ctx, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
 	} else {
 		log.VEventf(ctx, 2, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
 	}
