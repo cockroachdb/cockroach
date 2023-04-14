@@ -180,7 +180,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("sibling statements without problems", func(t *testing.T) {
-		siblingStatment := &Statement{
+		siblingStatement := &Statement{
 			ID:            clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd")),
 			FingerprintID: roachpb.StmtFingerprintID(101),
 		}
@@ -189,7 +189,7 @@ func TestRegistry(t *testing.T) {
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st})
 		registry.ObserveStatement(session.ID, statement)
-		registry.ObserveStatement(session.ID, siblingStatment)
+		registry.ObserveStatement(session.ID, siblingStatement)
 		registry.ObserveTransaction(session.ID, transaction)
 
 		expected := []*Insight{{
@@ -200,7 +200,7 @@ func TestRegistry(t *testing.T) {
 		}, {
 			Session:     session,
 			Transaction: transaction,
-			Statement:   siblingStatment,
+			Statement:   siblingStatement,
 			Problem:     Problem_None,
 		}}
 		var actual []*Insight
@@ -238,6 +238,50 @@ func TestRegistry(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		registry := newRegistry(st, &latencyThresholdDetector{st: st})
 		require.NotPanics(t, func() { registry.ObserveTransaction(session.ID, transaction) })
+	})
+
+	t.Run("statement that is slow but should be ignored", func(t *testing.T) {
+		statementNotIgnored := &Statement{
+			Status:           Statement_Completed,
+			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
+			FingerprintID:    roachpb.StmtFingerprintID(100),
+			LatencyInSeconds: 2,
+			Query:            "SELECT * FROM users",
+		}
+		statementIgnored := &Statement{
+			ID:               clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd")),
+			FingerprintID:    roachpb.StmtFingerprintID(101),
+			LatencyInSeconds: 2,
+			Query:            "SET vectorize = '_'",
+		}
+
+		st := cluster.MakeTestingClusterSettings()
+		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		registry.ObserveStatement(session.ID, statementNotIgnored)
+		registry.ObserveStatement(session.ID, statementIgnored)
+		registry.ObserveTransaction(session.ID, transaction)
+
+		expected := []*Insight{{
+			Session:     session,
+			Transaction: transaction,
+			Statement:   statementNotIgnored,
+			Problem:     Problem_SlowExecution,
+		}, {
+			Session:     session,
+			Transaction: transaction,
+			Statement:   statementIgnored,
+			Problem:     Problem_None,
+		}}
+		var actual []*Insight
+		registry.IterateInsights(
+			context.Background(),
+			func(ctx context.Context, o *Insight) {
+				actual = append(actual, o)
+			},
+		)
+
+		require.Equal(t, expected, actual)
 	})
 }
 
