@@ -1209,7 +1209,7 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 
 	// The txn should not be able to commit since its commit timestamp was pushed
 	// and it has observed its timestamp.
-	require.Regexp(t, "TransactionRetryError: retry txn", tx1.Commit())
+	require.Regexp(t, "TransactionRetryWithProtoRefreshError", tx1.Commit())
 
 	// Make sure the RangeFeed hasn't errored yet.
 	select {
