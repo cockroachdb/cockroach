@@ -37,23 +37,31 @@ var (
 		Measurement: "Hits",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaEntryCacheReadBytes = metric.Metadata{
+		Name:        "raft.entrycache.read_bytes",
+		Help:        "Counter of bytes in entries returned from the Raft entry cache",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 // Metrics is the set of metrics for the raft entry cache.
 type Metrics struct {
 	// NB: the values in the gauges are updated asynchronously and may hold stale
 	// values in the face of concurrent updates.
-	Size     *metric.Gauge
-	Bytes    *metric.Gauge
-	Accesses *metric.Counter
-	Hits     *metric.Counter
+	Size      *metric.Gauge
+	Bytes     *metric.Gauge
+	Accesses  *metric.Counter
+	Hits      *metric.Counter
+	ReadBytes *metric.Counter
 }
 
 func makeMetrics() Metrics {
 	return Metrics{
-		Size:     metric.NewGauge(metaEntryCacheSize),
-		Bytes:    metric.NewGauge(metaEntryCacheBytes),
-		Accesses: metric.NewCounter(metaEntryCacheAccesses),
-		Hits:     metric.NewCounter(metaEntryCacheHits),
+		Size:      metric.NewGauge(metaEntryCacheSize),
+		Bytes:     metric.NewGauge(metaEntryCacheBytes),
+		Accesses:  metric.NewCounter(metaEntryCacheAccesses),
+		Hits:      metric.NewCounter(metaEntryCacheHits),
+		ReadBytes: metric.NewCounter(metaEntryCacheReadBytes),
 	}
 }
