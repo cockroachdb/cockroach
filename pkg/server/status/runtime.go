@@ -142,6 +142,12 @@ var (
 		Measurement: "RSS",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaTotalMemBytes = metric.Metadata{
+		Name:        "sys.totalmem",
+		Help:        "Total memory (both free and used)",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaFDOpen = metric.Metadata{
 		Name:        "sys.fd.open",
 		Help:        "Process open file descriptors",
@@ -309,7 +315,8 @@ type RuntimeStatSampler struct {
 	// CPU stats for the CRDB process usage.
 	HostCPUCombinedPercentNorm *metric.GaugeFloat64
 	// Memory stats.
-	RSSBytes *metric.Gauge
+	RSSBytes      *metric.Gauge
+	TotalMemBytes *metric.Gauge
 	// File descriptor stats.
 	FDOpen      *metric.Gauge
 	FDSoftLimit *metric.Gauge
@@ -391,6 +398,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		HostCPUCombinedPercentNorm: metric.NewGaugeFloat64(metaHostCPUCombinedPercentNorm),
 
 		RSSBytes:               metric.NewGauge(metaRSSBytes),
+		TotalMemBytes:          metric.NewGauge(metaTotalMemBytes),
 		HostDiskReadBytes:      metric.NewGauge(metaHostDiskReadBytes),
 		HostDiskReadCount:      metric.NewGauge(metaHostDiskReadCount),
 		HostDiskReadTime:       metric.NewGauge(metaHostDiskReadTime),
@@ -629,6 +637,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	rsr.FDOpen.Update(int64(fds.Open))
 	rsr.FDSoftLimit.Update(int64(fds.SoftLimit))
 	rsr.RSSBytes.Update(int64(mem.Resident))
+	totalMem, _, _ := GetTotalMemoryWithoutLogging()
+	rsr.TotalMemBytes.Update(totalMem)
 	rsr.Uptime.Update((now - rsr.startTimeNanos) / 1e9)
 }
 
