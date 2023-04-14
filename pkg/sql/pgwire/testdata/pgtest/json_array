@@ -20,7 +20,7 @@ Execute
 Sync
 ----
 
-until
+until ignore=BindComplete
 ErrorResponse
 ReadyForQuery
 ----
