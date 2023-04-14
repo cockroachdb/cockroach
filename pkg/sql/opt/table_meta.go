@@ -175,6 +175,10 @@ type TableMeta struct {
 	// Computed columns with non-immutable operators are omitted.
 	ComputedCols map[ColumnID]ScalarExpr
 
+	// ColsInComputedColsExpressions is the set of all columns referenced in the
+	// expressions used to build the column data of computed columns.
+	ColsInComputedColsExpressions ColSet
+
 	// partialIndexPredicates is a map from index ordinals on the table to
 	// *FiltersExprs representing the predicate on the corresponding partial
 	// index. If an index is not a partial index, it will not have an entry in
@@ -287,10 +291,14 @@ func (tm *TableMeta) copyFrom(from *TableMeta, copyScalarFn func(Expr) Expr) {
 	}
 
 	if from.ComputedCols != nil {
+		var referencedColsInComputedExpressions ColSet
 		tm.ComputedCols = make(map[ColumnID]ScalarExpr, len(from.ComputedCols))
 		for col, e := range from.ComputedCols {
-			tm.ComputedCols[col] = copyScalarFn(e).(ScalarExpr)
+			newScalarExpr := copyScalarFn(e).(ScalarExpr)
+			referencedColsInComputedExpressions.UnionWith(collectReferencedColIDs(newScalarExpr))
+			tm.ComputedCols[col] = newScalarExpr
 		}
+		tm.ColsInComputedColsExpressions = referencedColsInComputedExpressions
 	}
 
 	if from.partialIndexPredicates != nil {
@@ -377,12 +385,41 @@ func (tm *TableMeta) SetConstraints(constraints ScalarExpr) {
 	tm.Constraints = constraints
 }
 
-// AddComputedCol adds a computed column expression to the table's metadata.
+// AddComputedCol adds a computed column expression to the table's metadata and
+// also adds any referenced columns in the `computedCol` expression to the
+// table's metadata.
 func (tm *TableMeta) AddComputedCol(colID ColumnID, computedCol ScalarExpr) {
 	if tm.ComputedCols == nil {
 		tm.ComputedCols = make(map[ColumnID]ScalarExpr)
 	}
 	tm.ComputedCols[colID] = computedCol
+	tm.ColsInComputedColsExpressions.UnionWith(collectReferencedColIDs(computedCol))
+}
+
+// getColumnID returns colID, ok=true if expr is a column reference.
+func getColumnID(expr Expr) (colID ColumnID, ok bool) {
+	switch t := expr.(type) {
+	case VariableExpr:
+		return t.ColID(), true
+	}
+	return ColumnID(0), false
+}
+
+// collectReferencedColIDs walks a memo expression tree and collects the column
+// IDs of all referenced columns (VariableExprs).
+func collectReferencedColIDs(e Expr) ColSet {
+	var referencedCols ColSet
+	var collectColsFunc func(e Expr)
+	collectColsFunc = func(e Expr) {
+		for i := 0; i < e.ChildCount(); i++ {
+			collectColsFunc(e.Child(i))
+		}
+		if colID, ok := getColumnID(e); ok {
+			referencedCols.Add(colID)
+		}
+	}
+	collectColsFunc(e)
+	return referencedCols
 }
 
 // ComputedColExpr returns the computed expression for the given column, if it

@@ -389,6 +389,11 @@ func (c *CustomFuncs) combineComputedColFilters(
 		for j, n := 0, props.Constraints.Length(); j < n; j++ {
 			var orOp opt.ScalarExpr
 			cons := props.Constraints.Constraint(j)
+			if !cons.Columns.ColSet().Intersects(tabMeta.ColsInComputedColsExpressions) {
+				// If this constraint doesn't involve any columns used to construct a
+				// computed column value, skip it.
+				continue
+			}
 
 			for k := 0; k < cons.Spans.Count(); k++ {
 				filterAdded := false

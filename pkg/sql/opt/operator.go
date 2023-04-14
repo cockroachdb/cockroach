@@ -102,6 +102,15 @@ type ScalarExpr interface {
 	DataType() *types.T
 }
 
+// VariableExpr is a variable expression, which is an expression that represents
+// a column reference.
+type VariableExpr interface {
+	Expr
+
+	// ColID returns the ID of the column.
+	ColID() ColumnID
+}
+
 // MutableExpr is implemented by expressions that allow their children to be
 // updated.
 type MutableExpr interface {

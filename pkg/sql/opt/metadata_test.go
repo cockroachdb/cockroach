@@ -143,6 +143,10 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("expected computed column expression to be copied")
 	}
 
+	if !tabMeta.ColsInComputedColsExpressions.Equals(tabMetaNew.ColsInComputedColsExpressions) {
+		t.Fatalf("expected computed column expression referenced columns to be copied")
+	}
+
 	partialIdxPredPtr := reflect.ValueOf(tabMeta.PartialIndexPredicatesUnsafe()).Pointer()
 	newPartialIdxPredPtr := reflect.ValueOf(tabMetaNew.PartialIndexPredicatesUnsafe()).Pointer()
 	if newPartialIdxPredPtr == partialIdxPredPtr {
@@ -432,6 +436,18 @@ func TestDuplicateTable(t *testing.T) {
 	col = dupTabMeta.ComputedCols[dupB2].(*memo.VariableExpr).Col
 	if col == b {
 		t.Errorf("expected computed column to reference new column ID %d, got %d", dupB, col)
+	}
+
+	if tabMeta.ColsInComputedColsExpressions.Equals(dupTabMeta.ColsInComputedColsExpressions) {
+		t.Fatalf("expected computed column expression referenced columns to hold new column ids")
+	}
+
+	if dupTabMeta.ColsInComputedColsExpressions.Empty() {
+		t.Fatalf("expected computed column expression referenced columns to not be empty")
+	}
+
+	if tabMeta.ColsInComputedColsExpressions.Len() != dupTabMeta.ColsInComputedColsExpressions.Len() {
+		t.Fatalf("expected same number of computed column expression referenced columns")
 	}
 
 	pred, isPartialIndex := dupTabMeta.PartialIndexPredicate(1)
