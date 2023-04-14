@@ -647,6 +647,7 @@ func (md *Metadata) DuplicateTable(
 	// Create new computed column expressions by remapping the column IDs in
 	// each ScalarExpr.
 	var computedCols map[ColumnID]ScalarExpr
+	var referencedColsInComputedExpressions ColSet
 	if len(tabMeta.ComputedCols) > 0 {
 		computedCols = make(map[ColumnID]ScalarExpr, len(tabMeta.ComputedCols))
 		for colID, e := range tabMeta.ComputedCols {
@@ -654,7 +655,12 @@ func (md *Metadata) DuplicateTable(
 			if !ok {
 				panic(errors.AssertionFailedf("column with ID %d does not exist in map", colID))
 			}
-			computedCols[ColumnID(newColID)] = remapColumnIDs(e, colMap)
+			newScalarExpr := remapColumnIDs(e, colMap)
+			// Add columns present in newScalarExpr to referencedColsInComputedExpressions.
+			mappedColsInComputedColsExpressions :=
+				tabMeta.ColsInComputedColsExpressions.CopyAndMaybeRemap(colMap)
+			referencedColsInComputedExpressions.UnionWith(mappedColsInComputedColsExpressions)
+			computedCols[ColumnID(newColID)] = newScalarExpr
 		}
 	}
 
@@ -688,16 +694,17 @@ func (md *Metadata) DuplicateTable(
 	}
 
 	newTabMeta := TableMeta{
-		MetaID:                   newTabID,
-		Table:                    tabMeta.Table,
-		Alias:                    tabMeta.Alias,
-		IgnoreForeignKeys:        tabMeta.IgnoreForeignKeys,
-		Constraints:              constraints,
-		ComputedCols:             computedCols,
-		partialIndexPredicates:   partialIndexPredicates,
-		indexPartitionLocalities: tabMeta.indexPartitionLocalities,
-		checkConstraintsStats:    checkConstraintsStats,
-		notVisibleIndexMap:       tabMeta.notVisibleIndexMap,
+		MetaID:                        newTabID,
+		Table:                         tabMeta.Table,
+		Alias:                         tabMeta.Alias,
+		IgnoreForeignKeys:             tabMeta.IgnoreForeignKeys,
+		Constraints:                   constraints,
+		ComputedCols:                  computedCols,
+		ColsInComputedColsExpressions: referencedColsInComputedExpressions,
+		partialIndexPredicates:        partialIndexPredicates,
+		indexPartitionLocalities:      tabMeta.indexPartitionLocalities,
+		checkConstraintsStats:         checkConstraintsStats,
+		notVisibleIndexMap:            tabMeta.notVisibleIndexMap,
 	}
 	md.tables = append(md.tables, newTabMeta)
 	regionConfig, ok := md.TableAnnotation(tabID, regionConfigAnnID).(*multiregion.RegionConfig)
