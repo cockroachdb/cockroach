@@ -206,10 +206,8 @@ func (ie *InternalExecutor) initConnEx(
 	syncCallback func([]*streamingCommandResult),
 ) (*connExecutor, error) {
 	clientComm := &internalClientComm{
-		w: w,
-		// init lastDelivered below the position of the first result (0).
-		lastDelivered: -1,
-		sync:          syncCallback,
+		w:    w,
+		sync: syncCallback,
 	}
 
 	applicationStats := ie.s.sqlStats.GetApplicationStats(sd.ApplicationName, true /* internal */)
@@ -434,16 +432,10 @@ func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 			return r.Next(ctx)
 		}
 		if data.cols != nil {
-			// Ignore the result columns if they are already set on the
-			// iterator: it is possible for ROWS statement type to be executed
-			// in a 'rows affected' mode, in such case the correct columns are
-			// set manually when instantiating the iterator, but the result
-			// columns of the statement are also sent by SetColumns() (we need
-			// to keep the former).
-			if r.resultCols == nil {
-				r.resultCols = data.cols
-			}
-			return r.Next(ctx)
+			// At this point we don't expect to see the columns - we should only
+			// return the rowsIterator to the caller of execInternal after the
+			// columns have been determined.
+			data.err = errors.AssertionFailedf("unexpectedly received non-nil cols in Next: %v", data)
 		}
 		if data.err == nil {
 			data.err = errors.AssertionFailedf("unexpectedly empty ieIteratorResult object")
@@ -888,10 +880,6 @@ func (ie *InternalExecutor) execInternal(
 		return nil, err
 	}
 
-	// resPos will be set to the position of the command that represents the
-	// statement we care about before that command is sent for execution.
-	var resPos CmdPos
-
 	syncCallback := func(results []*streamingCommandResult) {
 		// Close the stmtBuf so that the connExecutor exits its run() loop.
 		stmtBuf.Close()
@@ -903,15 +891,7 @@ func (ie *InternalExecutor) execInternal(
 				_ = rw.addResult(ctx, ieIteratorResult{err: res.Err()})
 				return
 			}
-			if res.pos == resPos {
-				return
-			}
 		}
-		_ = rw.addResult(ctx, ieIteratorResult{
-			err: errors.AssertionFailedf(
-				"missing result for pos: %d and no previous error", resPos,
-			),
-		})
 	}
 	// errCallback is called if an error is returned from the connExecutor's
 	// run() loop.
@@ -934,7 +914,6 @@ func (ie *InternalExecutor) execInternal(
 		typeHints[tree.PlaceholderIdx(i)] = d.ResolvedType()
 	}
 	if len(qargs) == 0 {
-		resPos = 0
 		if err := stmtBuf.Push(
 			ctx,
 			ExecStmt{
@@ -949,7 +928,6 @@ func (ie *InternalExecutor) execInternal(
 			return nil, err
 		}
 	} else {
-		resPos = 2
 		if err := stmtBuf.Push(
 			ctx,
 			PrepareStmt{
@@ -999,15 +977,22 @@ func (ie *InternalExecutor) execInternal(
 			r.first = &first
 		}
 	}
-	if !r.done && r.first.cols != nil {
+	for !r.done && r.first.cols != nil {
 		// If the query is of ROWS statement type, the very first thing sent on
 		// the channel will be the column schema. This will occur before the
 		// query is given to the execution engine, so we actually need to get
 		// the next piece from the data channel.
 		//
+		// We also need to keep on looping until we get the first actual result
+		// with rows. In theory, it is possible for a stmt of ROWS type to
+		// encounter a retry error after sending the column schema but before
+		// going into the execution engine. In such a scenario we want to keep
+		// the latest column schema (in case there was a schema change
+		// in-between retries).
+		//
 		// Note that only statements of ROWS type should send the cols, but we
 		// choose to be defensive and don't assert that.
-		if r.resultCols == nil {
+		if parsed.AST.StatementReturnType() == tree.Rows {
 			r.resultCols = r.first.cols
 		}
 		var first ieIteratorResult
@@ -1094,22 +1079,30 @@ func (ie *InternalExecutor) checkIfTxnIsConsistent(txn *kv.Txn) error {
 }
 
 // internalClientComm is an implementation of ClientComm used by the
-// InternalExecutor. Result rows are buffered in memory.
+// InternalExecutor. Result rows are streamed on the channel to the
+// ieResultWriter.
 type internalClientComm struct {
-	// results will contain the results of the commands executed by an
+	// results contains the results of the commands executed by the
 	// InternalExecutor.
+	//
+	// In production setting we expect either two (ExecStmt, Sync) or four
+	// (PrepareStmt, BindStmt, ExecPortal, Sync) commands pushed to the StmtBuf,
+	// after which point the internalClientComm is no longer used. We also take
+	// advantage of the invariant that only a single command is being evaluated
+	// at any point in time (i.e. any command is created, evaluated, and then
+	// closed / discarded, and only after that a new command can be processed).
 	results []*streamingCommandResult
 
 	// The results of the query execution will be written into w.
 	w ieResultWriter
 
-	lastDelivered CmdPos
-
-	// sync, if set, is called whenever a Sync is executed.
+	// sync, if set, is called whenever a Sync is executed with all accumulated
+	// results since the last Sync.
 	sync func([]*streamingCommandResult)
 }
 
 var _ ClientComm = &internalClientComm{}
+var _ ClientLock = &internalClientComm{}
 
 // CreateStatementResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateStatementResult(
@@ -1124,51 +1117,65 @@ func (icc *internalClientComm) CreateStatementResult(
 	_ bool,
 	_ PortalPausablity,
 ) CommandResult {
-	return icc.createRes(pos, nil /* onClose */)
+	return icc.createRes(pos)
 }
 
-// createRes creates a result. onClose, if not nil, is called when the result is
-// closed.
-func (icc *internalClientComm) createRes(pos CmdPos, onClose func()) *streamingCommandResult {
-	res := &streamingCommandResult{pos: pos, w: icc.w}
-	res.closeCallback = func(typ resCloseType) {
-		if typ == discarded {
-			return
-		}
-		icc.results = append(icc.results, res)
-		if onClose != nil {
-			onClose()
-		}
+// createRes creates a result.
+func (icc *internalClientComm) createRes(pos CmdPos) *streamingCommandResult {
+	res := &streamingCommandResult{
+		pos: pos,
+		w:   icc.w,
+		discardCallback: func() {
+			// If this result is being discarded, then we can simply remove the
+			// last item from the slice. Such behavior is valid since we don't
+			// create a new result until the previous one is either closed or
+			// discarded (i.e. we are always processing the last entry in the
+			// results slice at the moment and all previous results have been
+			// "finalized").
+			icc.results = icc.results[:len(icc.results)-1]
+		},
 	}
+	icc.results = append(icc.results, res)
 	return res
 }
 
 // CreatePrepareResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreatePrepareResult(pos CmdPos) ParseResult {
-	return icc.createRes(pos, nil /* onClose */)
+	return icc.createRes(pos)
 }
 
 // CreateBindResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateBindResult(pos CmdPos) BindResult {
-	return icc.createRes(pos, nil /* onClose */)
+	return icc.createRes(pos)
 }
 
 // CreateSyncResult is part of the ClientComm interface.
 //
-// The returned SyncResult will call the sync callback when its closed.
+// The returned SyncResult will call the sync callback when it's closed.
 func (icc *internalClientComm) CreateSyncResult(pos CmdPos) SyncResult {
-	return icc.createRes(pos, func() {
-		results := make([]*streamingCommandResult, len(icc.results))
-		copy(results, icc.results)
-		icc.results = icc.results[:0]
-		icc.sync(results)
-		icc.lastDelivered = pos
-	} /* onClose */)
+	res := icc.createRes(pos)
+	if icc.sync != nil {
+		res.closeCallback = func() {
+			// sync might communicate with the reader, so we defensively mark
+			// this result as no longer being able to rewind. This shouldn't be
+			// that important though - we shouldn't be trying to rewind the Sync
+			// command anyway, so we're being conservative here.
+			icc.results[len(icc.results)-1].cannotRewind = true
+			icc.sync(icc.results)
+			icc.results = icc.results[:0]
+		}
+	}
+	return res
 }
 
 // LockCommunication is part of the ClientComm interface.
+//
+// The current implementation writes results from the same goroutine as the one
+// calling LockCommunication (main connExecutor's goroutine). Therefore, there's
+// nothing to "lock" - communication is naturally blocked as the command
+// processor won't write any more results.
 func (icc *internalClientComm) LockCommunication() ClientLock {
-	return (*noopClientLock)(icc)
+	return icc
 }
 
 // Flush is part of the ClientComm interface.
@@ -1178,7 +1185,7 @@ func (icc *internalClientComm) Flush(pos CmdPos) error {
 
 // CreateDescribeResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateDescribeResult(pos CmdPos) DescribeResult {
-	return icc.createRes(pos, nil /* onClose */)
+	return icc.createRes(pos)
 }
 
 // CreateDeleteResult is part of the ClientComm interface.
@@ -1216,28 +1223,29 @@ func (icc *internalClientComm) CreateDrainResult(pos CmdPos) DrainResult {
 	panic("unimplemented")
 }
 
-// noopClientLock is an implementation of ClientLock that says that no results
-// have been communicated to the client.
-type noopClientLock internalClientComm
-
 // Close is part of the ClientLock interface.
-func (ncl *noopClientLock) Close() {}
+func (icc *internalClientComm) Close() {}
 
 // ClientPos is part of the ClientLock interface.
-func (ncl *noopClientLock) ClientPos() CmdPos {
-	return ncl.lastDelivered
+func (icc *internalClientComm) ClientPos() CmdPos {
+	// Find the latest result that cannot be rewound.
+	lastDelivered := CmdPos(-1)
+	for _, r := range icc.results {
+		if r.cannotRewind {
+			lastDelivered = r.pos
+		}
+	}
+	return lastDelivered
 }
 
 // RTrim is part of the ClientLock interface.
-func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {
-	var i int
-	var r *streamingCommandResult
-	for i, r = range ncl.results {
+func (icc *internalClientComm) RTrim(_ context.Context, pos CmdPos) {
+	for i, r := range icc.results {
 		if r.pos >= pos {
-			break
+			icc.results = icc.results[:i]
+			return
 		}
 	}
-	ncl.results = ncl.results[:i]
 }
 
 // extraTxnState is to store extra transaction state info that
