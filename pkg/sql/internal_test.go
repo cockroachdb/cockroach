@@ -695,10 +695,18 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
+	if _, err := db.Exec("CREATE DATABASE test; CREATE TABLE test.t (c) AS SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	ieo := sessiondata.InternalExecutorOverride{
+		User:                     username.MakeSQLUsernameFromPreNormalizedString(username.RootUser),
+		InjectRetryErrorsEnabled: true,
+	}
 
 	// This test case verifies that if we execute the stmt of the RowsAffected
 	// type, it is transparently retried and the correct number of "rows
@@ -711,19 +719,23 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 		// the injected retry error since this knob only applies to the "top"
 		// IE.
 		const stmt = `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR SQL STATISTICS];`
-		paused, err := ie.ExecEx(
-			ctx, "pause schedule", nil, /* txn */
-			sessiondata.InternalExecutorOverride{
-				User:                     username.MakeSQLUsernameFromPreNormalizedString(username.RootUser),
-				InjectRetryErrorsEnabled: true,
-			},
-			stmt,
-		)
+		paused, err := ie.ExecEx(ctx, "pause schedule", nil /* txn */, ieo, stmt)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if paused != 1 {
 			t.Fatalf("expected 1 schedule to be paused, got %d", paused)
+		}
+	})
+
+	// This test case verifies that if the retry error occurs after some rows
+	// have been communicated to the client, then the stmt results in the retry
+	// error too - the IE cannot transparently retry it.
+	t.Run("Rows stmt", func(t *testing.T) {
+		const stmt = `SELECT * FROM test.t`
+		_, err := ie.QueryBufferedEx(ctx, "read rows", nil /* txn */, ieo, stmt)
+		if !testutils.IsError(err, "inject_retry_errors_enabled") {
+			t.Fatalf("expected to see injected retry error, got %v", err)
 		}
 	})
 }
