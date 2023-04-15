@@ -229,7 +229,12 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Compare(evalCtx, d) != 0 {
+	// Arrays are decoded into strings by DecodeDatum, then will be converted into
+	// DArrays later during execution.
+	gotString := tree.MustBeDString(got)
+	gotArray, _, err := tree.ParseDArrayFromString(evalCtx, string(gotString), types.Int)
+	require.NoError(t, err)
+	if gotArray.Compare(evalCtx, d) != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
 	}
 }
