@@ -1725,9 +1725,10 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	ctx context.Context, planCtx *PlanningCtx, p *PhysicalPlan, info *tableReaderPlanningInfo,
 ) error {
 	var (
-		spanPartitions   []SpanPartition
-		parallelizeLocal bool
-		err              error
+		spanPartitions         []SpanPartition
+		parallelizeLocal       bool
+		ignoreMisplannedRanges bool
+		err                    error
 	)
 	if planCtx.isLocal {
 		spanPartitions, parallelizeLocal = dsp.maybeParallelizeLocalScans(ctx, planCtx, info)
@@ -1749,6 +1750,10 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			return err
 		}
 		spanPartitions = []SpanPartition{{sqlInstanceID, info.spans}}
+		// The spans to scan might actually live on different nodes, so we don't
+		// want to create "misplanned ranges" metadata since it can result in
+		// false positives.
+		ignoreMisplannedRanges = true
 	}
 
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
@@ -1772,6 +1777,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		if !tr.Parallelize {
 			tr.BatchBytesLimit = dsp.distSQLSrv.TestingKnobs.TableReaderBatchBytesLimit
 		}
+		tr.IgnoreMisplannedRanges = ignoreMisplannedRanges
 		p.TotalEstimatedScannedRows += info.estimatedRowCount
 
 		corePlacement[i].SQLInstanceID = sp.SQLInstanceID

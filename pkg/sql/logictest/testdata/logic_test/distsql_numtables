@@ -202,3 +202,20 @@ query I
 SELECT count(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)
 ----
 10
+
+# Regression test for incorrectly propagating "misplanned ranges" metadata when
+# only a single TableReader is created in a distributed plan (#101471). The
+# query is constructed in such a manner so that the TableReader is placed on
+# node 2 and then it needs to perform remote reads since the range with y >=
+# 4000 lives on node 3.
+statement ok
+SET TRACING = ON;
+SELECT * FROM NumToStr WHERE y >= 3999 LIMIT 2;
+SET TRACING = OFF;
+
+# Ensure that we didn't create the "misplanned ranges" metadata for the range
+# with y >= 4000.
+query I
+SELECT count(*) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%misplanned ranges%' AND location LIKE '%readerbase%'
+----
+0
