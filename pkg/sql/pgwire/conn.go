@@ -228,13 +228,37 @@ func (c *conn) sendError(ctx context.Context, execCfg *sql.ExecutorConfig, err e
 }
 
 func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) error {
+	// Root user is not affected by connection limits.
+	if c.sessionArgs.User.IsRootUser() {
+		sqlServer.IncrementRootConnectionCount()
+		return nil
+	}
+
+	// First check maxNumNonRootConnections.
+	// Note(alyshan): maxNumNonRootConnections is used by Cockroach Cloud for limiting connections to
+	// serverless clusters.
+	maxNonRootConnectionsValue := maxNumNonRootConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
+	if maxNonRootConnectionsValue >= 0 && sqlServer.GetNonRootConnectionCount() >= maxNonRootConnectionsValue {
+		// Check if there is a reason to use in the error message.
+		msg := "cluster connections are limited"
+		if reason := maxNumNonRootConnectionsReason.Get(&sqlServer.GetExecutorConfig().Settings.SV); reason != "" {
+			msg = reason
+		}
+		return c.sendError(ctx, sqlServer.GetExecutorConfig(), errors.WithHintf(
+			pgerror.Newf(pgcode.TooManyConnections, "%s", msg),
+			"the maximum number of allowed connections is %d",
+			maxNonRootConnectionsValue,
+		))
+	}
+
+	// Then check maxNumNonAdminConnections.
 	if c.sessionArgs.IsSuperuser {
-		// This user is a super user and is therefore not affected by connection limits.
+		// This user is a super user and is therefore not affected by maxNumNonAdminConnections.
 		sqlServer.IncrementConnectionCount()
 		return nil
 	}
 
-	maxNumConnectionsValue := maxNumConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
+	maxNumConnectionsValue := maxNumNonAdminConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
 	if maxNumConnectionsValue < 0 {
 		// Unlimited connections are allowed.
 		sqlServer.IncrementConnectionCount()
@@ -245,7 +269,7 @@ func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) e
 			pgerror.New(pgcode.TooManyConnections, "sorry, too many clients already"),
 			"the maximum number of allowed connections is %d and can be modified using the %s config key",
 			maxNumConnectionsValue,
-			maxNumConnections.Key(),
+			maxNumNonAdminConnections.Key(),
 		))
 	}
 	return nil
@@ -699,7 +723,11 @@ func (c *conn) processCommandsAsync(
 		if retErr = c.checkMaxConnections(ctx, sqlServer); retErr != nil {
 			return
 		}
-		defer sqlServer.DecrementConnectionCount()
+		if c.sessionArgs.User.IsRootUser() {
+			defer sqlServer.DecrementRootConnectionCount()
+		} else {
+			defer sqlServer.DecrementConnectionCount()
+		}
 
 		if retErr = c.authOKMessage(); retErr != nil {
 			return
