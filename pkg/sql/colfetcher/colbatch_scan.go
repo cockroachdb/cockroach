@@ -50,12 +50,13 @@ type ColBatchScan struct {
 	colexecop.InitHelper
 	execinfra.SpansWithCopy
 
-	flowCtx         *execinfra.FlowCtx
-	bsHeader        *roachpb.BoundedStalenessHeader
-	cf              *cFetcher
-	limitHint       rowinfra.RowLimit
-	batchBytesLimit rowinfra.BytesLimit
-	parallelize     bool
+	flowCtx                *execinfra.FlowCtx
+	bsHeader               *roachpb.BoundedStalenessHeader
+	cf                     *cFetcher
+	limitHint              rowinfra.RowLimit
+	batchBytesLimit        rowinfra.BytesLimit
+	parallelize            bool
+	ignoreMisplannedRanges bool
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
 	tracingSpan *tracing.Span
@@ -121,7 +122,7 @@ func (s *ColBatchScan) Next() coldata.Batch {
 // DrainMeta is part of the colexecop.MetadataSource interface.
 func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
-	if !s.flowCtx.Local {
+	if !s.ignoreMisplannedRanges {
 		nodeID, ok := s.flowCtx.NodeID.OptionalNodeID()
 		if ok {
 			ranges := execinfra.MisplannedRanges(s.Ctx, s.SpansCopy, nodeID, s.flowCtx.Cfg.RangeCache)
@@ -268,14 +269,15 @@ func NewColBatchScan(
 	}
 
 	*s = ColBatchScan{
-		SpansWithCopy:   s.SpansWithCopy,
-		flowCtx:         flowCtx,
-		bsHeader:        bsHeader,
-		cf:              fetcher,
-		limitHint:       limitHint,
-		batchBytesLimit: batchBytesLimit,
-		parallelize:     spec.Parallelize,
-		ResultTypes:     tableArgs.typs,
+		SpansWithCopy:          s.SpansWithCopy,
+		flowCtx:                flowCtx,
+		bsHeader:               bsHeader,
+		cf:                     fetcher,
+		limitHint:              limitHint,
+		batchBytesLimit:        batchBytesLimit,
+		parallelize:            spec.Parallelize,
+		ignoreMisplannedRanges: flowCtx.Local || spec.IgnoreMisplannedRanges,
+		ResultTypes:            tableArgs.typs,
 	}
 	return s, nil
 }
