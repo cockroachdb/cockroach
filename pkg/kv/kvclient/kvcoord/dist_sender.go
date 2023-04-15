@@ -823,7 +823,6 @@ func (ds *DistSender) Send(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
 	defer sp.Finish()
 
-	splitET := false
 	var require1PC bool
 	lastReq := ba.Requests[len(ba.Requests)-1].GetInner()
 	if et, ok := lastReq.(*kvpb.EndTxnRequest); ok && et.Require1PC {
@@ -832,9 +831,7 @@ func (ds *DistSender) Send(
 	// To ensure that we lay down intents to prevent starvation, always
 	// split the end transaction request into its own batch on retries.
 	// Txns requiring 1PC are an exception and should never be split.
-	if ba.Txn != nil && ba.Txn.Epoch > 0 && !require1PC {
-		splitET = true
-	}
+	splitET := ba.Txn != nil && ba.Txn.Epoch > 0 && !require1PC
 	parts := splitBatchAndCheckForRefreshSpans(ba, splitET)
 	if len(parts) > 1 && (ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0) {
 		// We already verified above that the batch contains only scan requests of the same type.
