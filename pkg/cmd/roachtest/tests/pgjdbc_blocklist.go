@@ -687,7 +687,6 @@ var pgjdbcBlockList = blocklist{
 	"org.postgresql.test.jdbc4.jdbc41.GetObjectTest.testGetTimestampWithTimeZone":                                                                                              "26097",
 	"org.postgresql.test.jdbc4.jdbc41.GetObjectTest.testGetUuid":                                                                                                               "26097",
 	"org.postgresql.test.jdbc4.jdbc41.GetObjectTest.testGetXml":                                                                                                                "26097",
-	"org.postgresql.test.jdbc4.jdbc41.SchemaTest.testMultipleSearchPath":                                                                                                       "53971",
 	"org.postgresql.test.jdbc4.jdbc41.SchemaTest.testSearchPathPreparedStatement":                                                                                              "unknown",
 	"org.postgresql.test.jdbc4.jdbc41.SchemaTest.testSearchPathPreparedStatementAutoCommitFalse":                                                                               "unknown",
 	"org.postgresql.test.jdbc4.jdbc41.SchemaTest.testSearchPathPreparedStatementAutoCommitTrue":                                                                                "unknown",
