@@ -1970,6 +1970,18 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		} else {
 			return errors.AssertionFailedf("no tenantID for initialized replica %s", rep)
 		}
+
+		// For replicas that use expiration-based leases, eagerly initialize the
+		// Raft group and unquiesce it. We don't quiesce ranges with expiration
+		// leases, and we want to eagerly acquire leases for them, which happens
+		// during Raft ticks. We rely on Raft pre-vote to avoid disturbing
+		// established Raft leaders.
+		//
+		// NB: cluster settings haven't propagated yet, so we have to check the last
+		// known lease instead of relying on shouldUseExpirationLeaseRLocked().
+		if l, _ := rep.GetLease(); l.Type() == roachpb.LeaseExpiration && l.Sequence > 0 {
+			rep.maybeInitializeRaftGroup(ctx)
+		}
 	}
 
 	// Start Raft processing goroutines.
