@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -150,8 +151,9 @@ func RunJob(
 func BulkOpResponseFilter(allowProgressIota *chan struct{}) kvserverbase.ReplicaResponseFilter {
 	return func(_ context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
 		for _, ru := range br.Responses {
-			switch ru.GetInner().(type) {
+			switch r := ru.GetInner().(type) {
 			case *kvpb.ExportResponse, *kvpb.AddSSTableResponse:
+				log.Infof(context.Background(), "received a response %s", r.String())
 				<-*allowProgressIota
 			}
 		}

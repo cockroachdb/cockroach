@@ -1615,6 +1615,10 @@ type ExecutorTestingKnobs struct {
 	// ForceSQLLivenessSession will force the use of a sqlliveness session for
 	// transaction deadlines even in the system tenant.
 	ForceSQLLivenessSession bool
+
+	// AfterStorePlanDiagram is invoked after a backup or restore job has stored
+	// its DistSQL plan diagram in the job_info table.
+	AfterStorePlanDiagram func()
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

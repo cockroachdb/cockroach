@@ -213,6 +213,9 @@ func distBackup(
 	defer close(progCh)
 	execCfg := execCtx.ExecCfg()
 	jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
+	if execCfg.TestingKnobs.AfterStorePlanDiagram != nil {
+		execCfg.TestingKnobs.AfterStorePlanDiagram()
+	}
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx

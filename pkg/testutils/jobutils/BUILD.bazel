@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/testutils",
         "//pkg/testutils/sqlutils",
+        "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//:pq",
