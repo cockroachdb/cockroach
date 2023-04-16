@@ -1158,6 +1158,7 @@ func TestLintClusterSettingNames(t *testing.T) {
 				"sql.defaults.lock_timeout":                        `sql.defaults.lock_timeout: use ".timeout" instead of "_timeout"`,
 				"sql.defaults.idle_in_session_timeout":             `sql.defaults.idle_in_session_timeout: use ".timeout" instead of "_timeout"`,
 				"sql.defaults.idle_in_transaction_session_timeout": `sql.defaults.idle_in_transaction_session_timeout: use ".timeout" instead of "_timeout"`,
+				"cloudstorage.gs.chunking.retry_timeout":           `cloudstorage.gs.chunking.retry_timeout: use ".timeout" instead of "_timeout"`,
 			}
 			expectedErr, found := grandFathered[varName]
 			if !found || expectedErr != nameErr.Error() {

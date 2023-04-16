@@ -263,6 +263,18 @@ type Context struct {
 	// database which owns a table accessed by the current SQL request.
 	// This slice is only populated during the optbuild stage.
 	RemoteRegions catpb.RegionNames
+
+	// JobsProfiler is the interface for builtins to extract job specific
+	// execution details that may have been aggregated during a job's lifetime.
+	JobsProfiler JobsProfiler
+}
+
+// JobsProfiler is the interface used to fetch job specific execution details
+// that may have been aggregated during a job's lifetime.
+type JobsProfiler interface {
+	// GenerateExecutionDetailsJSON generates a JSON blob of the job specific
+	// execution details.
+	GenerateExecutionDetailsJSON(ctx context.Context, evalCtx *Context, jobID jobspb.JobID) ([]byte, error)
 }
 
 // DescIDGenerator generates unique descriptor IDs.

@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"

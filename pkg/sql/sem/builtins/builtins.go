@@ -4100,6 +4100,29 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Immutable,
 		}),
 
+	"crdb_internal.job_execution_details": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "job_id", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "argument cannot be NULL")
+				}
+				jobID := tree.MustBeDInt(args[0])
+				json, err := evalCtx.JobsProfiler.GenerateExecutionDetailsJSON(ctx, evalCtx, jobspb.JobID(jobID))
+				if err != nil {
+					return nil, err
+				}
+				return tree.ParseDJSON(string(json))
+			},
+			Info: "Output a JSONB version of the specified job's execution details. The execution details are collected" +
+				"and persisted during the lifetime of the job and provide more observability into the job's execution",
+			Volatility: volatility.Volatile,
+		}),
+
 	"crdb_internal.read_file": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{

@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/jobs/jobsprofiler/profilerconstants",
         "//pkg/sql",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",

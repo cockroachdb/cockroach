@@ -20,25 +20,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
-func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
-	if n.Schedules != nil {
-		// Limit the jobs displayed to the ones started by specified schedules.
-		return d.parse(fmt.Sprintf(`
-SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_id IN (%s)
-`, jobs.CreatedByScheduledJobs, n.Schedules.String()),
-		)
-	}
-
-	sqltelemetry.IncrementShowCounter(sqltelemetry.Jobs)
-
-	const (
-		selectClause = `
+func constructSelectQuery(n *tree.ShowJobs) string {
+	var baseQuery strings.Builder
+	baseQuery.WriteString(`
 SELECT job_id, job_type, description, statement, user_name, status,
        running_status, created, started, finished, modified,
        fraction_completed, error, coordinator_id, trace_id, last_run,
        next_run, num_runs, execution_errors
-  FROM crdb_internal.jobs`
-	)
+`)
+
+	// Check if there are any SHOW JOBS options that we need to add columns for.
+	if n.Options != nil {
+		if n.Options.ExecutionDetails {
+			baseQuery.WriteString(`, NULLIF(crdb_internal.job_execution_details(job_id)->>'plan_diagram'::STRING, '') AS plan_diagram`)
+		}
+	}
+
+	baseQuery.WriteString("\nFROM crdb_internal.jobs")
+
+	// Now add the predicates and ORDER BY clauses.
 	var typePredicate, whereClause, orderbyClause string
 	if n.Jobs == nil {
 		// Display all [only automatic] jobs without selecting specific jobs.
@@ -74,10 +74,23 @@ SELECT job_id, job_type, description, statement, user_name, status,
 		// Limit the jobs displayed to the select statement in n.Jobs.
 		whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
 	}
+	return fmt.Sprintf("%s %s %s", baseQuery.String(), whereClause, orderbyClause)
+}
 
-	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
+func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
+	if n.Schedules != nil {
+		// Limit the jobs displayed to the ones started by specified schedules.
+		return d.parse(fmt.Sprintf(`
+SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_id IN (%s)
+`, jobs.CreatedByScheduledJobs, n.Schedules.String()),
+		)
+	}
+
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Jobs)
+
+	stmt := constructSelectQuery(n)
 	if n.Block {
-		sqlStmt = fmt.Sprintf(
+		stmt = fmt.Sprintf(
 			`
     WITH jobs AS (SELECT * FROM [%s]),
        sleep_and_restart_if_unfinished AS (
@@ -92,7 +105,7 @@ SELECT job_id, job_type, description, statement, user_name, status,
               )
 SELECT *
   FROM jobs
- WHERE NOT EXISTS(SELECT * FROM fail_if_slept_too_long)`, sqlStmt)
+ WHERE NOT EXISTS(SELECT * FROM fail_if_slept_too_long)`, stmt)
 	}
-	return d.parse(sqlStmt)
+	return d.parse(stmt)
 }
