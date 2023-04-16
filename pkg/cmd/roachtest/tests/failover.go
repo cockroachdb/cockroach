@@ -43,6 +43,7 @@ func registerFailover(r registry.Registry) {
 		failureModeBlackholeSend,
 		failureModeCrash,
 		failureModeDiskStall,
+		failureModePause,
 	} {
 		failureMode := failureMode // pin loop variable
 		makeSpec := func(nNodes, nCPU int) spec.ClusterSpec {
@@ -607,6 +608,7 @@ const (
 	failureModeBlackholeSend failureMode = "blackhole-send"
 	failureModeCrash         failureMode = "crash"
 	failureModeDiskStall     failureMode = "disk-stall"
+	failureModePause         failureMode = "pause"
 )
 
 // makeFailer creates a new failer for the given failureMode.
@@ -656,6 +658,11 @@ func makeFailer(
 			startOpts:     opts,
 			startSettings: settings,
 			staller:       &dmsetupDiskStaller{t: t, c: c},
+		}
+	case failureModePause:
+		return &pauseFailer{
+			t: t,
+			c: c,
 		}
 	default:
 		t.Fatalf("unknown failure mode %s", failureMode)
@@ -832,6 +839,25 @@ func (f *diskStallFailer) Recover(ctx context.Context, nodeID int) {
 	// it didn't, we explicitly stop it first.
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))
 	f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
+}
+
+// pauseFailer pauses the process, but keeps the OS (and thus network
+// connections) alive.
+type pauseFailer struct {
+	t test.Test
+	c cluster.Cluster
+}
+
+func (f *pauseFailer) Setup(ctx context.Context)                    {}
+func (f *pauseFailer) Ready(ctx context.Context, m cluster.Monitor) {}
+func (f *pauseFailer) Cleanup(ctx context.Context)                  {}
+
+func (f *pauseFailer) Fail(ctx context.Context, nodeID int) {
+	f.c.Signal(ctx, f.t.L(), 19, f.c.Node(nodeID)) // SIGSTOP
+}
+
+func (f *pauseFailer) Recover(ctx context.Context, nodeID int) {
+	f.c.Signal(ctx, f.t.L(), 18, f.c.Node(nodeID)) // SIGCONT
 }
 
 // relocateRanges relocates all ranges matching the given predicate from a set
