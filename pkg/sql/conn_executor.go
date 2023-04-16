@@ -3397,6 +3397,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			QueryCancelKey:                 ex.queryCancelKey,
 			DescIDGenerator:                ex.getDescIDGenerator(),
 			RangeStatsFetcher:              p.execCfg.RangeStatsFetcher,
+			JobsProfiler:                   p,
 		},
 		Tracing:           &ex.sessionTracing,
 		MemMetrics:        &ex.memMetrics,
