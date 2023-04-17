@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -68,6 +69,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	var relationName string
 	var pkColumns []string
 	var pkTypes []*types.T
+	var colDirs []catenumpb.IndexColumn_Direction
 	var labelMetrics bool
 	if err := serverCfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		desc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
@@ -77,6 +79,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 
 		primaryIndexDesc := desc.GetPrimaryIndex().IndexDesc()
 		pkColumns = primaryIndexDesc.KeyColumnNames
+		pkTypes = make([]*types.T, 0, len(primaryIndexDesc.KeyColumnIDs))
 		for _, id := range primaryIndexDesc.KeyColumnIDs {
 			col, err := catalog.MustFindColumnByID(desc, id)
 			if err != nil {
@@ -84,6 +87,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			}
 			pkTypes = append(pkTypes, col.GetType())
 		}
+		colDirs = primaryIndexDesc.KeyColumnDirections
 
 		if !desc.HasRowLevelTTL() {
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
@@ -148,13 +152,15 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		// Iterate over every span to feed work for the goroutine processors.
 		var alloc tree.DatumAlloc
 		for _, span := range ttlSpec.Spans {
-			startPK, err := keyToDatums(span.Key, codec, pkTypes, &alloc)
+			startKey := span.Key
+			startPK, err := rowenc.DecodeIndexKeyToDatums(codec, pkTypes, colDirs, startKey, &alloc)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "decode startKey error pkTypes=%s colDirs=%s key=%x", pkTypes, colDirs, []byte(startKey))
 			}
-			endPK, err := keyToDatums(span.EndKey, codec, pkTypes, &alloc)
+			endKey := span.EndKey
+			endPK, err := rowenc.DecodeIndexKeyToDatums(codec, pkTypes, colDirs, endKey, &alloc)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "decode endKey error pkTypes=%s colDirs=%s key=%x", pkTypes, colDirs, []byte(startKey))
 			}
 			spanChan <- spanToProcess{
 				startPK: startPK,

@@ -107,7 +107,7 @@ func (v *valuesOp) Next() coldata.Batch {
 		for i := 0; i < len(v.typs); i++ {
 			var err error
 			v.row[i], rowData, err = rowenc.EncDatumFromBuffer(
-				v.typs[i], catenumpb.DatumEncoding_VALUE, rowData,
+				catenumpb.DatumEncoding_VALUE, rowData,
 			)
 			if err != nil {
 				colexecerror.InternalError(err)

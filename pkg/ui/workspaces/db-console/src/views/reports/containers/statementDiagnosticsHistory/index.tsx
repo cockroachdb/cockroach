@@ -247,6 +247,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
         {this.renderTableTitle()}
         <StatementDiagnosticsHistoryTable
           className="statements-table"
+          tableWrapperClassName="sorted-table"
           data={dataSource}
           columns={this.columns}
           loading={loading}

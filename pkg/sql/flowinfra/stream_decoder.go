@@ -154,7 +154,7 @@ func (sd *StreamDecoder) GetRow(
 	for i := range rowBuf {
 		var err error
 		rowBuf[i], sd.data, err = rowenc.EncDatumFromBuffer(
-			sd.types[i], sd.encoding[i], sd.data,
+			sd.encoding[i], sd.data,
 		)
 		if err != nil {
 			// Reset sd because it is no longer usable.

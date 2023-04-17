@@ -809,6 +809,7 @@ export class DatabaseDetailsPage extends React.Component<
             render={() => (
               <DatabaseSortedTable
                 className={cx("database-table")}
+                tableWrapperClassName={cx("sorted-table")}
                 data={tablesToDisplay}
                 columns={this.columns()}
                 sortSetting={sortSetting}
