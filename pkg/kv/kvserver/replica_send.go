@@ -127,7 +127,7 @@ func (r *Replica) SendWithWriteBytes(
 	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 		defer pprof.SetGoroutineLabels(ctx)
 		// Note: the defer statement captured the previous context.
-		ctx = pprof.WithLabels(ctx, pprof.Labels("range_str", r.rangeStr.String()))
+		ctx = pprof.WithLabels(ctx, pprof.Labels("range_str", r.rangeStr.ID()))
 		pprof.SetGoroutineLabels(ctx)
 	}
 	// Add the range log tag.
