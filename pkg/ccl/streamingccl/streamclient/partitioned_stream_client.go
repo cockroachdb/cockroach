@@ -15,6 +15,7 @@ import (
 	"encoding/pem"
 	"net"
 	"net/url"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -54,6 +55,12 @@ func NewPartitionedStreamClient(
 		return nil, err
 	}
 	tlsInfo.addTLSCertsToConfig(config.TLSConfig)
+
+	// The default pgx dialer uses a KeepAlive of 5 minutes. Set a lower KeepAlive
+	// threshold, so if two nodes disconnect, we eagerly replan the job with
+	// potentially new node pairings.
+	dialer := &net.Dialer{KeepAlive: time.Second * 15}
+	config.DialFunc = dialer.DialContext
 
 	conn, err := pgx.ConnectConfig(ctx, config)
 	if err != nil {
