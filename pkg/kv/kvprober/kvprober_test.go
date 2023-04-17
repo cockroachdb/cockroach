@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
@@ -238,7 +239,7 @@ func (m *mock) next(ctx context.Context) (Step, error) {
 	return step, m.planErr
 }
 
-func (m *mock) Read(key interface{}) func(context.Context, *kv.Txn) error {
+func (m *mock) Read(key roachpb.Key) func(context.Context, *kv.Txn) error {
 	return func(context.Context, *kv.Txn) error {
 		if !m.read {
 			m.t.Error("read call made but not expected")
@@ -247,7 +248,7 @@ func (m *mock) Read(key interface{}) func(context.Context, *kv.Txn) error {
 	}
 }
 
-func (m *mock) Write(key interface{}) func(context.Context, *kv.Txn) error {
+func (m *mock) Write(key roachpb.Key) func(context.Context, *kv.Txn) error {
 	return func(context.Context, *kv.Txn) error {
 		if !m.write {
 			m.t.Error("write call made but not expected")
