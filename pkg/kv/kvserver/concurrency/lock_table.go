@@ -96,11 +96,6 @@ type waitingState struct {
 	// Represents the action that the request was trying to perform when
 	// it hit the conflict. E.g. was it trying to read or write?
 	guardAccess spanset.SpanAccess
-
-	// lockWaitStart represents the timestamp when the request started waiting on
-	// the lock that this waitingState refers to. If multiple consecutive states
-	// refer to the same lock, they share the same lockWaitStart.
-	lockWaitStart time.Time
 }
 
 // String implements the fmt.Stringer interface.
@@ -533,12 +528,6 @@ func (g *lockTableGuardImpl) CurState() waitingState {
 
 func (g *lockTableGuardImpl) updateStateLocked(newState waitingState) {
 	g.mu.state = newState
-	switch newState.kind {
-	case waitFor, waitForDistinguished, waitSelf, waitElsewhere:
-		g.mu.state.lockWaitStart = g.mu.curLockWaitStart
-	default:
-		g.mu.state.lockWaitStart = time.Time{}
-	}
 }
 
 func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(spanSet *spanset.SpanSet) (ok bool) {

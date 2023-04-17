@@ -930,7 +930,11 @@ func TestContentionEventTracer(t *testing.T) {
 	tr := tracing.NewTracer()
 	ctx, sp := tr.StartSpanCtx(context.Background(), "foo", tracing.WithRecording(tracing.RecordingVerbose))
 	defer sp.Finish()
-	clock := hlc.NewClock(hlc.UnixNano, 0 /* maxOffset */)
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, 0 /* maxOffset */)
+
+	txn1 := makeTxnProto("foo")
+	txn2 := makeTxnProto("bar")
 
 	var events []*roachpb.ContentionEvent
 
@@ -938,11 +942,10 @@ func TestContentionEventTracer(t *testing.T) {
 	h.SetOnContentionEvent(func(ev *roachpb.ContentionEvent) {
 		events = append(events, ev)
 	})
-	txn := makeTxnProto("foo")
 	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("a"),
-		txn:  &txn.TxnMeta,
+		txn:  &txn1.TxnMeta,
 	})
 	require.Zero(t, h.tag.mu.lockWait)
 	require.NotZero(t, h.tag.mu.waitStart)
@@ -950,51 +953,76 @@ func TestContentionEventTracer(t *testing.T) {
 	rec := sp.GetRecording(tracing.RecordingVerbose)
 	require.Contains(t, rec[0].Tags, tagNumLocks)
 	require.Equal(t, "1", rec[0].Tags[tagNumLocks])
-	require.Contains(t, rec[0].Tags, tagWaited)
+	require.NotContains(t, rec[0].Tags, tagWaited)
 	require.Contains(t, rec[0].Tags, tagWaitKey)
+	require.Equal(t, "\"a\"", rec[0].Tags[tagWaitKey])
 	require.Contains(t, rec[0].Tags, tagWaitStart)
+	require.Equal(t, "00:00:00.1112", rec[0].Tags[tagWaitStart])
 	require.Contains(t, rec[0].Tags, tagLockHolderTxn)
+	require.Equal(t, txn1.ID.String(), rec[0].Tags[tagLockHolderTxn])
 
 	// Another event for the same txn/key should not mutate
-	// or emitLocked an event.
+	// or emit an event.
 	prevNumLocks := h.tag.mu.numLocks
+	manual.Increment(10)
 	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("a"),
-		txn:  &txn.TxnMeta,
+		txn:  &txn1.TxnMeta,
 	})
 	require.Empty(t, events)
 	require.Zero(t, h.tag.mu.lockWait)
 	require.Equal(t, prevNumLocks, h.tag.mu.numLocks)
 
+	// Another event for the same key but different txn should
+	// emitLocked an event.
+	manual.Increment(11)
+	h.notify(ctx, waitingState{
+		kind: waitFor,
+		key:  roachpb.Key("a"),
+		txn:  &txn2.TxnMeta,
+	})
+	require.Equal(t, time.Duration(21) /* 10+11 */, h.tag.mu.lockWait)
+	require.Len(t, events, 1)
+	ev := events[0]
+	require.Equal(t, txn1.TxnMeta, ev.TxnMeta)
+	require.Equal(t, roachpb.Key("a"), ev.Key)
+	require.Equal(t, time.Duration(21) /* 10+11 */, ev.Duration)
+
+	// Another event for the same txn but different key should
+	// emit an event.
+	manual.Increment(12)
 	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("b"),
-		txn:  &txn.TxnMeta,
+		txn:  &txn2.TxnMeta,
 	})
-	require.Zero(t, h.tag.mu.lockWait)
-	require.Len(t, events, 1)
-	require.Equal(t, txn.TxnMeta, events[0].TxnMeta)
-	require.Equal(t, roachpb.Key("a"), events[0].Key)
-	require.NotZero(t, events[0].Duration)
-
-	h.notify(ctx, waitingState{kind: doneWaiting})
-	require.NotZero(t, h.tag.mu.lockWait)
+	require.Equal(t, time.Duration(33) /* 10+11+12 */, h.tag.mu.lockWait)
 	require.Len(t, events, 2)
+	ev = events[1]
+	require.Equal(t, txn2.TxnMeta, ev.TxnMeta)
+	require.Equal(t, roachpb.Key("a"), ev.Key)
+	require.Equal(t, time.Duration(12), ev.Duration)
 
-	lockWaitBefore := h.tag.mu.lockWait
+	manual.Increment(13)
+	h.notify(ctx, waitingState{kind: doneWaiting})
+	require.Equal(t, time.Duration(46) /* 10+11+12+13 */, h.tag.mu.lockWait)
+	require.Len(t, events, 3)
+
 	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("b"),
-		txn:  &txn.TxnMeta,
+		txn:  &txn1.TxnMeta,
 	})
+	manual.Increment(14)
 	h.notify(ctx, waitingState{
 		kind: doneWaiting,
 	})
-	require.Len(t, events, 3)
-	require.Less(t, lockWaitBefore, h.tag.mu.lockWait)
+	require.Equal(t, time.Duration(60) /* 10+11+12+13+14 */, h.tag.mu.lockWait)
+	require.Len(t, events, 4)
 	rec = sp.GetRecording(tracing.RecordingVerbose)
-	require.Equal(t, "3", rec[0].Tags[tagNumLocks])
+	require.Contains(t, rec[0].Tags, tagNumLocks)
+	require.Equal(t, "4", rec[0].Tags[tagNumLocks])
 	require.Contains(t, rec[0].Tags, tagWaited)
 	require.NotContains(t, rec[0].Tags, tagWaitKey)
 	require.NotContains(t, rec[0].Tags, tagWaitStart)
