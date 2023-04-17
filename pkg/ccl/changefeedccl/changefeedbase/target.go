@@ -11,6 +11,7 @@ package changefeedbase
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
 // Target provides a version-agnostic wrapper around jobspb.ChangefeedTargetSpecification.
@@ -106,7 +107,7 @@ func (ts *Targets) GetSpecifiedColumnFamilies(tableID descpb.ID) map[string]stru
 func (ts *Targets) EachTableID(f func(descpb.ID) error) error {
 	for id := range ts.m {
 		if err := f(id); err != nil {
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
