@@ -193,7 +193,7 @@ export function addStatementStats(
       a.last_exec_timestamp.seconds > b.last_exec_timestamp.seconds
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
-    nodes: uniqueLong([...a.nodes, ...b.nodes]),
+    nodes: uniqueLong([...(a?.nodes ?? []), ...(b?.nodes ?? [])]),
     plan_gists: planGists,
     index_recommendations: indexRec,
   };

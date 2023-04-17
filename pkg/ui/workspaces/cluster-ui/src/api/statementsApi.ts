@@ -134,9 +134,6 @@ export function sortAndTruncateStmtsResponse(
     return;
   }
 
-  // Aggregate on only stmt fingerprint id and app name.
-  res.statements = aggregateOnStmtFingerprintAndAppName(res.statements);
-
   switch (sort) {
     case SqlStatsSortOptions.SERVICE_LAT:
       res.statements.sort((stmtA: Stmt, stmtB: Stmt): number => {
@@ -190,11 +187,14 @@ export const getCombinedStatements = (
     null,
     "10M",
   ).then(res => {
+    // Data from older server versions may be aggregated on more criteria.
+    // As of 23.1, we should now only aggregate on only stmt fingerprint id and app name.
+    res.statements = aggregateOnStmtFingerprintAndAppName(res.statements);
+
     // We may fall into the scenario of a newer UI version talking to an older server
     // version that does not support the fetch_mode and limit request params. In that
     // case We will have to manually sort and truncate the data to align the UI with
     // the data returned.
-
     const isOldServer =
       res?.transactions?.length || res?.statements?.length > limit;
 

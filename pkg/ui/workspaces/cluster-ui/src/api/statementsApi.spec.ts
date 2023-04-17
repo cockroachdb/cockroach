@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 import Long from "long";
 import {
+  aggregateOnStmtFingerprintAndAppName,
   createCombinedStmtsRequest,
   getCombinedStatements,
   getFlushedTxnStatsApi,
@@ -432,4 +433,96 @@ describe("getFlushedTxnStatsApi", () => {
       );
     },
   );
+});
+
+describe("aggregateOnStmtFingerprintAndAppName", () => {
+  it("should aggregate stmts on stmt fingerprint ID and app name only", () => {
+    const stmts = [
+      {
+        id: 1,
+        appName: "cockroach",
+        count: 3,
+      },
+      {
+        id: 1,
+        appName: "cockroach",
+        count: 1,
+      },
+      {
+        id: 1,
+        appName: "not_cockroach",
+        count: 1,
+      },
+      {
+        id: 2,
+        appName: "cockroach",
+        count: 2,
+      },
+      {
+        id: 2,
+        appName: "cockroach",
+        count: 1,
+      },
+      {
+        id: 2,
+        appName: "cockroach",
+        count: 1,
+      },
+      {
+        id: 3,
+        appName: "myApp",
+        count: 1,
+      },
+    ].map(stmt =>
+      mockStmtStats({
+        id: Long.fromInt(stmt.id),
+        key: {
+          key_data: {
+            app: stmt.appName,
+          },
+        },
+        stats: {
+          count: Long.fromInt(stmt.count),
+        },
+      }),
+    );
+
+    const aggregatedStmts = aggregateOnStmtFingerprintAndAppName(stmts)
+      .sort((stmtA, stmtB) => {
+        const comp = stmtA.id.compare(stmtB.id);
+        if (comp === 0)
+          return stmtA.key.key_data.app.localeCompare(stmtB.key.key_data.app);
+        return comp;
+      })
+      .map(stmt => ({
+        id: stmt.id.toInt(),
+        appName: stmt.key.key_data.app,
+        count: stmt.stats.count.toInt(),
+      }));
+
+    const expectedSortedRes = [
+      {
+        id: 1,
+        appName: "cockroach",
+        count: 4,
+      },
+      {
+        id: 1,
+        appName: "not_cockroach",
+        count: 1,
+      },
+      {
+        id: 2,
+        appName: "cockroach",
+        count: 4,
+      },
+      {
+        id: 3,
+        appName: "myApp",
+        count: 1,
+      },
+    ];
+
+    expect(aggregatedStmts).toEqual(expectedSortedRes);
+  });
 });
