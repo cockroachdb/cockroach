@@ -108,6 +108,7 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_btree//:btree",
+        "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_kr_pretty//:pretty",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//assert",
