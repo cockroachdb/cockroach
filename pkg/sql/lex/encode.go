@@ -142,27 +142,38 @@ func EncodeByteArrayToRawBytes(data string, be BytesEncodeFormat, skipHexPrefix 
 // according to the encoding specification in "be".
 // When using the Hex format, the caller is responsible for skipping the
 // "\x" prefix, if any. See DecodeRawBytesToByteArrayAuto() below for
-// an alternative.
-func DecodeRawBytesToByteArray(data string, be BytesEncodeFormat) ([]byte, error) {
+// an alternative. If no conversion is necessary the input is returned,
+// callers should not assume a copy is made.
+func DecodeRawBytesToByteArray(data []byte, be BytesEncodeFormat) ([]byte, error) {
 	switch be {
 	case BytesEncodeHex:
-		return hex.DecodeString(data)
+		res := make([]byte, hex.DecodedLen(len(data)))
+		n, err := hex.Decode(res, data)
+		return res[:n], err
 
 	case BytesEncodeEscape:
 		// PostgreSQL does not allow all the escapes formats recognized by
 		// CockroachDB's scanner. It only recognizes octal and \\ for the
 		// backslash itself.
 		// See https://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
-		res := make([]byte, 0, len(data))
+		res := data
+		copied := false
 		for i := 0; i < len(data); i++ {
 			ch := data[i]
 			if ch != '\\' {
-				res = append(res, ch)
+				if copied {
+					res = append(res, ch)
+				}
 				continue
 			}
 			if i >= len(data)-1 {
 				return nil, pgerror.New(pgcode.InvalidEscapeSequence,
 					"bytea encoded value ends with escape character")
+			}
+			if !copied {
+				res = make([]byte, 0, len(data))
+				res = append(res, data[:i]...)
+				copied = true
 			}
 			if data[i+1] == '\\' {
 				res = append(res, '\\')
@@ -188,7 +199,9 @@ func DecodeRawBytesToByteArray(data string, be BytesEncodeFormat) ([]byte, error
 		return res, nil
 
 	case BytesEncodeBase64:
-		return base64.StdEncoding.DecodeString(data)
+		res := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
+		n, err := base64.StdEncoding.Decode(res, data)
+		return res[:n], err
 
 	default:
 		return nil, errors.AssertionFailedf("unhandled format: %s", be)
@@ -200,9 +213,9 @@ func DecodeRawBytesToByteArray(data string, be BytesEncodeFormat) ([]byte, error
 // and escape.
 func DecodeRawBytesToByteArrayAuto(data []byte) ([]byte, error) {
 	if len(data) >= 2 && data[0] == '\\' && (data[1] == 'x' || data[1] == 'X') {
-		return DecodeRawBytesToByteArray(string(data[2:]), BytesEncodeHex)
+		return DecodeRawBytesToByteArray(data[2:], BytesEncodeHex)
 	}
-	return DecodeRawBytesToByteArray(string(data), BytesEncodeEscape)
+	return DecodeRawBytesToByteArray(data, BytesEncodeEscape)
 }
 
 func (f BytesEncodeFormat) String() string {
