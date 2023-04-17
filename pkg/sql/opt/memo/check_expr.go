@@ -512,8 +512,10 @@ func checkOutputCols(e opt.Expr) {
 		}
 		cols := rel.Relational().OutputCols
 		if set.Intersects(cols) {
+			intersectingCols := set.Intersection(cols)
 			panic(errors.AssertionFailedf(
-				"%s RelExpr children have intersecting columns", redact.Safe(e.Op()),
+				"%s RelExpr children have intersecting columns: %s",
+				redact.Safe(e.Op()), redact.Safe(intersectingCols),
 			))
 		}
 
