@@ -11,22 +11,15 @@
 import { cockroach } from "src/js/protos";
 import { resetSQLStats } from "src/util/api";
 import { all, call, put, takeEvery } from "redux-saga/effects";
-import {
-  RESET_SQL_STATS,
-  resetSQLStatsCompleteAction,
-  resetSQLStatsFailedAction,
-} from "./sqlStatsActions";
+import { RESET_SQL_STATS, resetSQLStatsFailedAction } from "./sqlStatsActions";
 import {
   invalidateAllStatementDetails,
   invalidateStatements,
-  refreshStatements,
 } from "src/redux/apiReducers";
 
 import ResetSQLStatsRequest = cockroach.server.serverpb.ResetSQLStatsRequest;
-import StatementsRequest = cockroach.server.serverpb.StatementsRequest;
-import { PayloadAction } from "@reduxjs/toolkit";
 
-export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
+export function* resetSQLStatsSaga() {
   const resetSQLStatsRequest = new ResetSQLStatsRequest({
     // reset_persisted_stats is set to true in order to clear both
     // in-memory stats as well as persisted stats.
@@ -34,10 +27,10 @@ export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
   });
   try {
     yield call(resetSQLStats, resetSQLStatsRequest);
-    yield put(resetSQLStatsCompleteAction());
-    yield put(invalidateStatements());
-    yield put(invalidateAllStatementDetails());
-    yield put(refreshStatements(action.payload) as any);
+    yield all([
+      put(invalidateStatements()),
+      put(invalidateAllStatementDetails()),
+    ]);
   } catch (e) {
     yield put(resetSQLStatsFailedAction());
   }

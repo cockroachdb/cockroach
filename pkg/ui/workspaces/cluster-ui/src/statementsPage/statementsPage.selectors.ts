@@ -25,6 +25,7 @@ import {
 } from "src/util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RouteComponentProps } from "react-router-dom";
+import { Moment } from "moment";
 
 import { AppState } from "src/store";
 import { selectDiagnosticsReportsPerStatement } from "../store/statementDiagnostics";
@@ -93,13 +94,13 @@ export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
 // in the data.
 export const selectDatabases = createSelector(
   sqlStatsSelector,
-  sqlStatsState => {
+  (sqlStatsState): string[] => {
     if (!sqlStatsState.data) {
       return [];
     }
 
     return Array.from(
-      new Set(
+      new Set<string>(
         sqlStatsState.data.statements.map(s =>
           s.key.key_data.database ? s.key.key_data.database : unset,
         ),
@@ -132,6 +133,27 @@ export const selectLastReset = createSelector(sqlStatsSelector, state => {
 
   return formatDate(TimestampToMoment(state.data.last_reset));
 });
+
+export const selectStatementsDataValid = createSelector(
+  sqlStatsSelector,
+  (state: SQLStatsState): boolean => {
+    return state.valid;
+  },
+);
+
+export const selectStatementsDataInFlight = createSelector(
+  sqlStatsSelector,
+  (state: SQLStatsState): boolean => {
+    return state.inFlight;
+  },
+);
+
+export const selectStatementsLastUpdated = createSelector(
+  sqlStatsSelector,
+  (state: SQLStatsState): Moment => {
+    return state.lastUpdated;
+  },
+);
 
 export const selectStatements = createSelector(
   sqlStatsSelector,

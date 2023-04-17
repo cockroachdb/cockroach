@@ -92,6 +92,9 @@ const TransactionsPageConnected = withRouter(
     (state: AdminUIState) => ({
       columns: transactionColumnsLocalSetting.selectorToArray(state),
       data: selectData(state),
+      isDataValid: state?.cachedData?.statements?.valid ?? false,
+      isReqInFlight: state?.cachedData?.statements?.inFlight ?? false,
+      lastUpdated: state?.cachedData?.statements?.setAt,
       timeScale: selectTimeScale(state),
       error: selectLastError(state),
       filters: filtersLocalSetting.selector(state),

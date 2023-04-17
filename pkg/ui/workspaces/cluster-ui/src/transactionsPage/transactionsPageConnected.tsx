@@ -30,7 +30,12 @@ import {
 } from "./transactionsPage.selectors";
 import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectTimeScale } from "src/statementsPage/statementsPage.selectors";
+import {
+  selectStatementsLastUpdated,
+  selectStatementsDataValid,
+  selectStatementsDataInFlight,
+} from "src/statementsPage/statementsPage.selectors";
+import { selectTimeScale } from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { actions as localStorageActions } from "../store/localStorage";
 import { Filters } from "../queryFilter";
@@ -46,6 +51,9 @@ export const TransactionsPageConnected = withRouter(
     (state: AppState) => ({
       columns: selectTxnColumns(state),
       data: selectTransactionsData(state),
+      isDataValid: selectStatementsDataValid(state),
+      isReqInFlight: selectStatementsDataInFlight(state),
+      lastUpdated: selectStatementsLastUpdated(state),
       timeScale: selectTimeScale(state),
       error: selectTransactionsLastError(state),
       filters: selectFilters(state),
@@ -61,8 +69,7 @@ export const TransactionsPageConnected = withRouter(
       refreshNodes: () => dispatch(nodesActions.refresh()),
       refreshUserSQLRoles: () =>
         dispatch(uiConfigActions.refreshUserSQLRoles()),
-      resetSQLStats: (req: StatementsRequest) =>
-        dispatch(sqlStatsActions.reset(req)),
+      resetSQLStats: () => dispatch(sqlStatsActions.reset()),
       onTimeScaleChange: (ts: TimeScale) => {
         dispatch(
           sqlStatsActions.updateTimeScale({

@@ -9,8 +9,12 @@
 // licenses/APL.txt.
 
 import { AnyAction } from "redux";
-import { all, call, takeEvery } from "redux-saga/effects";
-import { actions } from "./localStorage.reducer";
+import { all, call, takeEvery, takeLatest, put } from "redux-saga/effects";
+import { actions, LocalStorageKeys } from "./localStorage.reducer";
+import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { PayloadAction } from "@reduxjs/toolkit";
+import { TypedPayload } from "./localStorage.reducer";
+import { TimeScale } from "../../timeScaleDropdown";
 
 export function* updateLocalStorageItemSaga(action: AnyAction) {
   const { key, value } = action.payload;
@@ -21,6 +25,21 @@ export function* updateLocalStorageItemSaga(action: AnyAction) {
   );
 }
 
+export function* updateTimeScale(
+  action: PayloadAction<TypedPayload<TimeScale>>,
+) {
+  yield all([put(sqlStatsActions.invalidated())]);
+  const { value } = action.payload;
+  yield call(
+    { context: localStorage, fn: localStorage.setItem },
+    LocalStorageKeys.GLOBAL_TIME_SCALE,
+    JSON.stringify(value),
+  );
+}
+
 export function* localStorageSaga() {
-  yield all([takeEvery(actions.update, updateLocalStorageItemSaga)]);
+  yield all([
+    takeEvery(actions.update, updateLocalStorageItemSaga),
+    takeLatest(actions.updateTimeScale, updateTimeScale),
+  ]);
 }

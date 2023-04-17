@@ -14,6 +14,7 @@ import classNames from "classnames/bind";
 import _ from "lodash";
 import { RouteComponentProps } from "react-router-dom";
 import { Helmet } from "react-helmet";
+import moment from "moment";
 
 import statementsStyles from "../statementsPage/statementsPage.module.scss";
 import {
@@ -31,7 +32,6 @@ import { tableClasses } from "../transactionsTable/transactionsTableClasses";
 import { SqlBox } from "../sql";
 import {
   aggregateStatements,
-  getStatementsByFingerprintId,
   statementFingerprintIdsToText,
 } from "../transactionsPage/utils";
 import { Loading } from "../loading";
@@ -65,7 +65,7 @@ import {
   timeScale1hMinOptions,
   TimeScaleDropdown,
   timeScaleToString,
-  toDateRange,
+  toRoundedDateRange,
 } from "../timeScaleDropdown";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
@@ -88,6 +88,8 @@ export interface TransactionDetailsStateProps {
   transaction: Transaction;
   transactionFingerprintId: string;
   isLoading: boolean;
+  lastUpdated: moment.Moment | null;
+  isDataValid: boolean;
 }
 
 export interface TransactionDetailsDispatchProps {
@@ -109,10 +111,9 @@ interface TState {
 
 function statementsRequestFromProps(
   props: TransactionDetailsProps,
-): protos.cockroach.server.serverpb.StatementsRequest {
-  const [start, end] = toDateRange(props.timeScale);
-  return new protos.cockroach.server.serverpb.StatementsRequest({
-    combined: true,
+): protos.cockroach.server.serverpb.CombinedStatementsStatsRequest {
+  const [start, end] = toRoundedDateRange(props.timeScale);
+  return new protos.cockroach.server.serverpb.CombinedStatementsStatsRequest({
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });
@@ -134,7 +135,7 @@ export class TransactionDetails extends React.Component<
         pageSize: 10,
         current: 1,
       },
-      latestTransactionText: "",
+      latestTransactionText: this.getTxnQueryString(),
     };
 
     // In case the user selected a option not available on this page,
@@ -146,47 +147,53 @@ export class TransactionDetails extends React.Component<
     }
   }
 
-  getTransactionStateInfo = (prevTransactionFingerprintId: string): void => {
-    const { transaction, transactionFingerprintId } = this.props;
+  getTxnQueryString = (): string => {
+    const { transaction } = this.props;
 
     const statementFingerprintIds =
       transaction?.stats_data?.statement_fingerprint_ids;
 
-    const transactionText =
+    return (
       (statementFingerprintIds &&
         statementFingerprintIdsToText(
           statementFingerprintIds,
           this.getStatementsForTransaction(),
-        )) ||
-      "";
+        )) ??
+      ""
+    );
+  };
+
+  setTxnQueryString = (): void => {
+    const transactionText = this.getTxnQueryString();
 
     // If a new, non-empty-string transaction text is available (derived from the time-frame-specific endpoint
     // response), cache the text.
     if (
       transactionText &&
-      transactionText != this.state.latestTransactionText
+      transactionText !== this.state.latestTransactionText
     ) {
       this.setState({
         latestTransactionText: transactionText,
       });
     }
+  };
 
-    // If the transactionFingerprintId (derived from the URL) changes, invalidate the cached transaction text
-    if (prevTransactionFingerprintId != transactionFingerprintId) {
-      this.setState({
-        latestTransactionText: "",
-      });
+  changeTimeScale = (ts: TimeScale): void => {
+    if (this.props.onTimeScaleChange) {
+      this.props.onTimeScaleChange(ts);
     }
   };
 
-  refreshData = (prevTransactionFingerprintId: string): void => {
+  refreshData = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
-    this.getTransactionStateInfo(prevTransactionFingerprintId);
   };
 
   componentDidMount(): void {
-    this.refreshData("");
+    if (!this.props.transaction || !this.props.isDataValid) {
+      this.refreshData();
+    }
+
     this.props.refreshUserSQLRoles();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
@@ -194,9 +201,21 @@ export class TransactionDetails extends React.Component<
   }
 
   componentDidUpdate(prevProps: TransactionDetailsProps): void {
-    this.getTransactionStateInfo(prevProps.transactionFingerprintId);
     if (!this.props.isTenant) {
       this.props.refreshNodes();
+    }
+
+    if (
+      prevProps.transactionFingerprintId !==
+        this.props.transactionFingerprintId ||
+      prevProps.statements !== this.props.statements
+    ) {
+      this.setTxnQueryString();
+    }
+
+    if (this.props.timeScale !== prevProps.timeScale) {
+      // Refresh the data if the time range changes.
+      this.refreshData();
     }
   }
 
@@ -220,23 +239,17 @@ export class TransactionDetails extends React.Component<
 
     const statementFingerprintIds =
       transaction?.stats_data?.statement_fingerprint_ids;
-
     if (!statementFingerprintIds) {
       return [];
     }
 
-    // Get all the stmts matching the transaction's fingerprint ID. Then we filter
-    // by those statements actually associated with the current transaction.
-    const stmts = getStatementsByFingerprintId(
-      statementFingerprintIds,
-      statements,
-    ).filter(
-      s =>
-        s.key.key_data.transaction_fingerprint_id.toString() ===
-        this.props.transactionFingerprintId,
+    return (
+      statements?.filter(
+        s =>
+          s.key.key_data.transaction_fingerprint_id.toString() ===
+          this.props.transactionFingerprintId,
+      ) ?? []
     );
-
-    return stmts;
   };
 
   render(): React.ReactElement {
@@ -267,7 +280,7 @@ export class TransactionDetails extends React.Component<
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
-              setTimeScale={this.props.onTimeScaleChange}
+              setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
         </PageConfig>

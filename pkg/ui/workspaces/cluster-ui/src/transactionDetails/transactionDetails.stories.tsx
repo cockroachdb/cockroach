@@ -25,6 +25,8 @@ import {
 import { TransactionDetails } from ".";
 import moment from "moment";
 
+const lastUpdated = moment.utc();
+
 storiesOf("Transactions Details", module)
   .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
   .addDecorator(storyFn => (
@@ -45,6 +47,8 @@ storiesOf("Transactions Details", module)
       refreshUserSQLRoles={noop}
       onTimeScaleChange={noop}
       refreshNodes={noop}
+      lastUpdated={lastUpdated}
+      isDataValid={true}
     />
   ))
   .add("with loading indicator", () => (
@@ -62,6 +66,8 @@ storiesOf("Transactions Details", module)
       refreshUserSQLRoles={noop}
       onTimeScaleChange={noop}
       refreshNodes={noop}
+      lastUpdated={lastUpdated}
+      isDataValid={true}
     />
   ))
   .add("with error alert", () => (
@@ -80,6 +86,8 @@ storiesOf("Transactions Details", module)
       refreshUserSQLRoles={noop}
       onTimeScaleChange={noop}
       refreshNodes={noop}
+      lastUpdated={lastUpdated}
+      isDataValid={false}
     />
   ))
   .add("No data for this time frame; no cached transaction text", () => {
@@ -98,6 +106,8 @@ storiesOf("Transactions Details", module)
         refreshUserSQLRoles={noop}
         onTimeScaleChange={noop}
         refreshNodes={noop}
+        lastUpdated={lastUpdated}
+        isDataValid={true}
       />
     );
   });

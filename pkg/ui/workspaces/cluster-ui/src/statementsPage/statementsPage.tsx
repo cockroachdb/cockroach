@@ -10,7 +10,7 @@
 
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
-import { isNil, merge } from "lodash";
+import { merge } from "lodash";
 import classNames from "classnames/bind";
 import { getValidErrorsList, Loading } from "src/loading";
 import { Delayed } from "src/delayed";
@@ -74,14 +74,16 @@ import LoadingError from "../sqlActivity/errorComponent";
 import {
   TimeScaleDropdown,
   TimeScale,
-  toDateRange,
   timeScaleToString,
   timeScale1hMinOptions,
   getValidOption,
+  toRoundedDateRange,
 } from "../timeScaleDropdown";
 
 import { commonStyles } from "../common";
 import moment from "moment";
+
+import { STATS_LONG_LOADING_DURATION } from "src/util/constants";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -96,7 +98,7 @@ export interface StatementsPageDispatchProps {
   refreshStatementDiagnosticsRequests: () => void;
   refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
-  resetSQLStats: (req: StatementsRequest) => void;
+  resetSQLStats: () => void;
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (
     statement: string,
@@ -122,6 +124,9 @@ export interface StatementsPageDispatchProps {
 
 export interface StatementsPageStateProps {
   statements: AggregateStatistics[];
+  isDataValid: boolean;
+  isReqInFlight: boolean;
+  lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   statementsError: Error | null;
   apps: string[];
@@ -142,19 +147,15 @@ export interface StatementsPageState {
   pagination: ISortedTablePagination;
   filters?: Filters;
   activeFilters?: number;
-  startRequest?: Date;
 }
 
 export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
 
-function statementsRequestFromProps(
-  props: StatementsPageProps,
-): cockroach.server.serverpb.StatementsRequest {
-  const [start, end] = toDateRange(props.timeScale);
-  return new cockroach.server.serverpb.StatementsRequest({
-    combined: true,
+function stmtsRequestFromTimeScale(ts: TimeScale): StatementsRequest {
+  const [start, end] = toRoundedDateRange(ts);
+  return new cockroach.server.serverpb.CombinedStatementsStatsRequest({
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });
@@ -188,6 +189,7 @@ export class StatementsPage extends React.Component<
   StatementsPageState
 > {
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
+
   constructor(props: StatementsPageProps) {
     super(props);
     const defaultState = {
@@ -195,19 +197,10 @@ export class StatementsPage extends React.Component<
         pageSize: 20,
         current: 1,
       },
-      startRequest: new Date(),
     };
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(defaultState, stateFromHistory);
     this.activateDiagnosticsRef = React.createRef();
-
-    // In case the user selected a option not available on this page,
-    // force a selection of a valid option. This is necessary for the case
-    // where the value 10/30 min is selected on the Metrics page.
-    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
-    if (ts !== this.props.timeScale) {
-      this.changeTimeScale(ts);
-    }
   }
 
   getStateFromHistory = (): Partial<StatementsPageState> => {
@@ -266,9 +259,6 @@ export class StatementsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-    this.setState({
-      startRequest: new Date(),
-    });
   };
 
   resetPagination = (): void => {
@@ -283,22 +273,29 @@ export class StatementsPage extends React.Component<
   };
 
   refreshStatements = (): void => {
-    const req = statementsRequestFromProps(this.props);
+    const req = stmtsRequestFromTimeScale(this.props.timeScale);
     this.props.refreshStatements(req);
   };
+
   resetSQLStats = (): void => {
-    const req = statementsRequestFromProps(this.props);
-    this.props.resetSQLStats(req);
-    this.setState({
-      startRequest: new Date(),
-    });
+    this.props.resetSQLStats();
   };
 
   componentDidMount(): void {
-    this.setState({
-      startRequest: new Date(),
-    });
-    this.refreshStatements();
+    // In case the user selected a option not available on this page,
+    // force a selection of a valid option. This is necessary for the case
+    // where the value 10/30 min is selected on the Metrics page.
+    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
+    if (ts !== this.props.timeScale) {
+      this.changeTimeScale(ts);
+    } else if (
+      !this.props.isDataValid ||
+      !this.props.lastUpdated ||
+      !this.props.statements
+    ) {
+      this.refreshStatements();
+    }
+
     this.props.refreshUserSQLRoles();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
@@ -340,13 +337,20 @@ export class StatementsPage extends React.Component<
     );
   }
 
-  componentDidUpdate = (): void => {
+  componentDidUpdate = (prevProps: StatementsPageProps): void => {
     this.updateQueryParams();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
       if (!this.props.hasViewActivityRedactedRole) {
         this.props.refreshStatementDiagnosticsRequests();
       }
+    }
+
+    if (
+      prevProps.timeScale !== this.props.timeScale ||
+      (prevProps.isDataValid && !this.props.isDataValid)
+    ) {
+      this.refreshStatements();
     }
   };
 
@@ -438,8 +442,12 @@ export class StatementsPage extends React.Component<
   };
 
   filteredStatementsData = (): AggregateStatistics[] => {
-    const { filters } = this.state;
-    const { search, statements, nodeRegions, isTenant } = this.props;
+    const { search, statements, nodeRegions, isTenant, filters } = this.props;
+
+    if (!statements) {
+      return [];
+    }
+
     const timeValue = getTimeValueInSeconds(filters);
     const sqlTypes =
       filters.sqlType.length > 0
@@ -517,7 +525,6 @@ export class StatementsPage extends React.Component<
   renderStatements = (regions: string[]): React.ReactElement => {
     const { pagination, filters, activeFilters } = this.state;
     const {
-      statements,
       onSelectDiagnosticsReportDropdownOption,
       onStatementClick,
       columns: userSelectedColumnsToShow,
@@ -530,6 +537,8 @@ export class StatementsPage extends React.Component<
     } = this.props;
     const data = this.filteredStatementsData();
     const totalWorkload = calculateTotalWorkload(data);
+    const statements = this.props.statements ?? [];
+
     const totalCount = data.length;
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
     // If the cluster is a tenant cluster we don't show info
@@ -647,15 +656,14 @@ export class StatementsPage extends React.Component<
       : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
     const { filters, activeFilters } = this.state;
 
-    const longLoadingMessage = isNil(this.props.statements) &&
-      isNil(getValidErrorsList(this.props.statementsError)) && (
-        <Delayed delay={moment.duration(2, "s")}>
-          <InlineAlert
-            intent="info"
-            title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
-          />
-        </Delayed>
-      );
+    const longLoadingMessage = (
+      <Delayed delay={STATS_LONG_LOADING_DURATION}>
+        <InlineAlert
+          intent="info"
+          title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
+        />
+      </Delayed>
+    );
 
     return (
       <div className={cx("root", "table-area")}>
@@ -704,7 +712,7 @@ export class StatementsPage extends React.Component<
           )}
         </PageConfig>
         <Loading
-          loading={isNil(this.props.statements)}
+          loading={this.props.isReqInFlight}
           page={"statements"}
           error={this.props.statementsError}
           render={() => this.renderStatements(regions)}
@@ -717,7 +725,9 @@ export class StatementsPage extends React.Component<
             })
           }
         />
-        {longLoadingMessage}
+        {this.props.isReqInFlight &&
+          getValidErrorsList(this.props.statementsError) == null &&
+          longLoadingMessage}
         <ActivateStatementDiagnosticsModal
           ref={this.activateDiagnosticsRef}
           activate={onActivateStatementDiagnostics}

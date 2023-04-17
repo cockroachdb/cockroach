@@ -21,7 +21,6 @@ import { actions as nodesActions } from "../store/nodes";
 import {
   StatementsPage,
   StatementsPageDispatchProps,
-  StatementsPageProps,
   StatementsPageStateProps,
 } from "./statementsPage";
 import {
@@ -29,6 +28,8 @@ import {
   selectDatabases,
   selectLastReset,
   selectStatements,
+  selectStatementsDataValid,
+  selectStatementsDataInFlight,
   selectStatementsLastError,
   selectTotalFingerprints,
   selectColumns,
@@ -36,6 +37,7 @@ import {
   selectSortSetting,
   selectFilters,
   selectSearch,
+  selectStatementsLastUpdated,
 } from "./statementsPage.selectors";
 import {
   selectIsTenant,
@@ -62,7 +64,7 @@ export const ConnectedStatementsPage = withRouter(
     StatementsPageDispatchProps,
     RouteComponentProps
   >(
-    (state: AppState, props: StatementsPageProps) => ({
+    (state: AppState, props): StatementsPageStateProps => ({
       apps: selectApps(state),
       columns: selectColumns(state),
       databases: selectDatabases(state),
@@ -72,10 +74,13 @@ export const ConnectedStatementsPage = withRouter(
       hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
       hasAdminRole: selectHasAdminRole(state),
       lastReset: selectLastReset(state),
-      nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
       search: selectSearch(state),
       sortSetting: selectSortSetting(state),
       statements: selectStatements(state, props),
+      isDataValid: selectStatementsDataValid(state),
+      isReqInFlight: selectStatementsDataInFlight(state),
+      lastUpdated: selectStatementsLastUpdated(state),
       statementsError: selectStatementsLastError(state),
       totalFingerprints: selectTotalFingerprints(state),
     }),
@@ -94,8 +99,7 @@ export const ConnectedStatementsPage = withRouter(
       refreshNodes: () => dispatch(nodesActions.refresh()),
       refreshUserSQLRoles: () =>
         dispatch(uiConfigActions.refreshUserSQLRoles()),
-      resetSQLStats: (req: StatementsRequest) =>
-        dispatch(sqlStatsActions.reset(req)),
+      resetSQLStats: () => dispatch(sqlStatsActions.reset()),
       dismissAlertMessage: () =>
         dispatch(
           localStorageActions.update({
