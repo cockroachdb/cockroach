@@ -32,7 +32,10 @@ func NewRangeProber(db *kv.DB) *RangeProber {
 }
 
 // RunProbe implements the eval.RangeProber interface.
-func (r *RangeProber) RunProbe(ctx context.Context, key roachpb.Key, isWrite bool) error {
+func (r *RangeProber) RunProbe(
+	ctx context.Context, desc *roachpb.RangeDescriptor, isWrite bool,
+) error {
+	key := kvprober.ProbeKeyForRange(desc)
 	op := r.ops.Read
 	if isWrite {
 		op = r.ops.Write
