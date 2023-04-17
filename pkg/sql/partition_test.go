@@ -94,7 +94,8 @@ func TestRemovePartitioningOSS(t *testing.T) {
 ) PARTITION BY RANGE (k) (
 	PARTITION p1 VALUES FROM (1) TO (2)
 )
--- Warning: Partitioned table with no zone configurations.`
+-- Warning: Partitioned table with no zone configurations.
+`
 	if a := sqlDB.QueryStr(t, "SHOW CREATE t.kv")[0][1]; exp != a {
 		t.Fatalf("expected:\n%s\n\ngot:\n%s\n\n", exp, a)
 	}
