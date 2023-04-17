@@ -1164,11 +1164,11 @@ var regularBuiltins = map[string]builtinDefinition{
 					return nil, pgerror.New(pgcode.InvalidParameterValue,
 						"only 'hex', 'escape', and 'base64' formats are supported for decode()")
 				}
-				res, err := lex.DecodeRawBytesToByteArray(data, be)
+				res, err := lex.DecodeRawBytesToByteArray(encoding.UnsafeConvertStringToBytes(data), be)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDBytes(tree.DBytes(res)), nil
+				return tree.NewDBytes(tree.DBytes(encoding.UnsafeConvertBytesToString(res))), nil
 			},
 			Info:       "Decodes `data` using `format` (`hex` / `escape` / `base64`).",
 			Volatility: volatility.Immutable,
