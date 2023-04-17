@@ -126,6 +126,9 @@ func (b *Builder) analyzeReturningList(
 func (b *Builder) analyzeSelectList(
 	selects *tree.SelectExprs, desiredTypes []*types.T, inScope, outScope *scope,
 ) {
+	if b.insideFuncDef {
+		b.insideFuncDef = b.insideFuncDef
+	}
 	var expansions tree.SelectExprs
 	for i, e := range *selects {
 		expanded := false
