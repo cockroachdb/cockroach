@@ -158,6 +158,7 @@ type connector struct {
 	rpcDialTimeout  time.Duration // for testing
 	rpcDial         *singleflight.Group
 	defaultZoneCfg  *zonepb.ZoneConfig
+	internalClient  rpc.RestrictedInternalClient
 	addrs           []string
 
 	mu struct {
@@ -185,6 +186,38 @@ type client struct {
 	serverpb.StatusClient
 	serverpb.AdminClient
 	tspb.TimeSeriesClient
+}
+
+type detourClient struct {
+	kvpb.InternalClient
+	detour rpc.RestrictedInternalClient
+}
+
+func (d *detourClient) Batch(
+	ctx context.Context, in *kvpb.BatchRequest, opts ...grpc.CallOption,
+) (*kvpb.BatchResponse, error) {
+	return d.detour.Batch(ctx, in, opts...)
+}
+
+func (d *detourClient) RangeFeed(
+	ctx context.Context, in *kvpb.RangeFeedRequest, opts ...grpc.CallOption,
+) (kvpb.Internal_RangeFeedClient, error) {
+	return d.detour.RangeFeed(ctx, in, opts...)
+}
+
+func (d *detourClient) MuxRangeFeed(
+	ctx context.Context, opts ...grpc.CallOption,
+) (kvpb.Internal_MuxRangeFeedClient, error) {
+	return d.detour.MuxRangeFeed(ctx, opts...)
+}
+
+func makeDetourClient(
+	internalClient kvpb.InternalClient, detour rpc.RestrictedInternalClient,
+) kvpb.InternalClient {
+	if detour == nil {
+		return internalClient
+	}
+	return &detourClient{InternalClient: internalClient, detour: detour}
 }
 
 // connector is capable of providing information on each of the KV nodes in the
@@ -232,6 +265,8 @@ func NewConnector(cfg ConnectorConfig, addrs []string) Connector {
 	if cfg.TenantID.IsSystem() {
 		panic("TenantID not set")
 	}
+	rpcContext := cfg.RPCContext
+	internalClient := rpcContext.GetLocalInternalClientForAddr(rpcContext.NodeID.Get())
 	c := &connector{
 		tenantID:        cfg.TenantID,
 		AmbientContext:  cfg.AmbientCtx,
@@ -239,6 +274,7 @@ func NewConnector(cfg ConnectorConfig, addrs []string) Connector {
 		rpcDial:         singleflight.NewGroup("dial tenant connector", singleflight.NoTags),
 		rpcRetryOptions: cfg.RPCRetryOptions,
 		defaultZoneCfg:  cfg.DefaultZoneConfig,
+		internalClient:  internalClient,
 		addrs:           addrs,
 	}
 
@@ -882,7 +918,7 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 				continue
 			}
 			return &client{
-				InternalClient:   kvpb.NewInternalClient(conn),
+				InternalClient:   makeDetourClient(kvpb.NewInternalClient(conn), c.internalClient),
 				StatusClient:     serverpb.NewStatusClient(conn),
 				AdminClient:      serverpb.NewAdminClient(conn),
 				TimeSeriesClient: tspb.NewTimeSeriesClient(conn),
