@@ -161,17 +161,17 @@ func init() {
 // Resolve returns true and the AST node describing the virtual table referenced.
 // TODO(justin): make this complete for all virtual tables.
 func resolveVTable(name *tree.TableName) (*tree.CreateTable, bool) {
-	switch name.SchemaName {
-	case "information_schema":
+	switch {
+	case name.CatalogName == "system" || (name.CatalogName == "" && name.SchemaName == "system"):
+		schema, ok := systemMap[name.ObjectName.String()]
+		return schema, ok
+
+	case name.SchemaName == "information_schema":
 		schema, ok := informationSchemaMap[name.ObjectName.String()]
 		return schema, ok
 
-	case "pg_catalog":
+	case name.SchemaName == "pg_catalog":
 		schema, ok := pgCatalogMap[name.ObjectName.String()]
-		return schema, ok
-
-	case "system":
-		schema, ok := systemMap[name.ObjectName.String()]
 		return schema, ok
 	}
 
