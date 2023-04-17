@@ -194,8 +194,9 @@ func (b *Builder) buildDistinctOn(
 // analyzeDistinctOnArgs analyzes the DISTINCT ON columns and adds the
 // resulting typed expressions to distinctOnScope.
 func (b *Builder) analyzeDistinctOnArgs(
-	distinctOn tree.DistinctOn, inScope, projectionsScope *scope,
+	oriDistinctOn *tree.DistinctOn, inScope, projectionsScope *scope,
 ) (distinctOnScope *scope) {
+	distinctOn := *oriDistinctOn
 	if len(distinctOn) == 0 {
 		return nil
 	}
@@ -210,14 +211,21 @@ func (b *Builder) analyzeDistinctOnArgs(
 	b.semaCtx.Properties.Require(exprKindDistinctOn.String(), tree.RejectGenerators)
 	inScope.context = exprKindDistinctOn
 
+	var expanded tree.DistinctOn
 	for i := range distinctOn {
-		b.analyzeExtraArgument(
+		expandedExpr := b.analyzeExtraArgument(
 			distinctOn[i],
 			inScope,
 			projectionsScope,
 			distinctOnScope,
 			true, /* nullsDefaultOrder */
 		)
+		if b.insideFuncDef {
+			expanded = append(expanded, expandedExpr...)
+		}
+	}
+	if b.insideFuncDef {
+		*oriDistinctOn = expanded
 	}
 	return distinctOnScope
 }

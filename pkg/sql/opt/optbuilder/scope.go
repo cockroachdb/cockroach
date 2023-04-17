@@ -932,6 +932,28 @@ func (s *scope) FindSourceMatchingName(
 	return colinfo.NoResults, nil, s, nil
 }
 
+func (s *scope) FindSourceWithID(
+	ctx context.Context, id int64,
+) (prefix *tree.TableName, srcMeta colinfo.ColumnSourceMeta, err error) {
+	var flags cat.Flags
+	if s.builder.insideViewDef || s.builder.insideFuncDef {
+		// Avoid taking descriptor leases when we're creating a view or a
+		// function.
+		flags.AvoidDescriptorCaches = true
+	}
+	ds, _, err := s.builder.catalog.ResolveDataSourceByID(ctx, flags, cat.StableID(id))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resName, err := s.builder.catalog.FullyQualifiedName(ctx, ds)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &resName, s, nil
+}
+
 // sourceNameMatches checks whether a request for table name toFind
 // can be satisfied by the FROM source name srcName.
 //
@@ -1041,7 +1063,12 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			panic(resolveErr)
 		}
 		return false, colI.(*scopeColumn)
-
+	case *tree.ColumnNameRef:
+		colI, resolveErr := colinfo.ResolveColumnNameRef(s.builder.ctx, s, t)
+		if resolveErr != nil {
+			panic(resolveErr)
+		}
+		return false, colI.(*scopeColumn)
 	case *tree.Placeholder:
 		// Replace placeholders that are references to function arguments with
 		// scope columns that represent those arguments.

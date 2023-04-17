@@ -126,9 +126,6 @@ func (b *Builder) analyzeReturningList(
 func (b *Builder) analyzeSelectList(
 	selects *tree.SelectExprs, desiredTypes []*types.T, inScope, outScope *scope,
 ) {
-	if b.insideFuncDef {
-		b.insideFuncDef = b.insideFuncDef
-	}
 	var expansions tree.SelectExprs
 	for i, e := range *selects {
 		expanded := false
@@ -182,6 +179,11 @@ func (b *Builder) analyzeSelectList(
 			texpr = inScope.resolveType(e.Expr, desired)
 		}
 
+		if b.insideFuncDef {
+			rewrittenExpr := b.maybeRewriteColumnPrefix(texpr)
+			e.Expr = rewrittenExpr
+		}
+
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
 		// checking.
@@ -208,6 +210,36 @@ func (b *Builder) buildProjectionList(inScope *scope, projectionsScope *scope) {
 		col := &projectionsScope.cols[i]
 		b.buildScalar(col.getExpr(), inScope, projectionsScope, col, nil)
 	}
+}
+
+func (b *Builder) maybeRewriteColumnPrefix(expr tree.Expr) tree.Expr {
+	ret, err := tree.SimpleVisit(expr, func(colExpr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if scopeCol, ok := colExpr.(*scopeColumn); ok {
+			md := b.factory.Metadata()
+			tblID := md.ColumnMeta(scopeCol.id).Table
+			tbl := md.Table(tblID)
+			// If a column is a reference from a real table.
+			if scopeCol.table.CatalogName != "" && scopeCol.table.SchemaName != "" {
+				return false, &tree.ColumnNameRef{
+					Table:      &tree.TableIDRef{ID: int64(tbl.ID())},
+					ColumnName: string(scopeCol.name.ReferenceName()),
+				}, nil
+			} else {
+				// If the table is not fully qualified, which means that the table name
+				// can be an table alias or a subquery alias, then we don't need to
+				// rewrite it.
+				return false, &tree.ColumnItem{
+					TableName:  scopeCol.table.ToUnresolvedObjectName(),
+					ColumnName: scopeCol.name.ReferenceName(),
+				}, nil
+			}
+		}
+		return true, colExpr, nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	return ret
 }
 
 // resolveColRef looks for the common case of a standalone column reference

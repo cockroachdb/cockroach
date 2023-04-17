@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // ProcessTargetColumns returns the column descriptors identified by the
@@ -132,6 +133,12 @@ func (r *ColumnResolver) FindSourceProvidingColumn(
 	}
 	r.ResolverState.ColIdx = colIdx
 	return prefix, nil, colIdx, nil
+}
+
+func (r *ColumnResolver) FindSourceWithID(
+	ctx context.Context, id int64,
+) (prefix *tree.TableName, srcMeta ColumnSourceMeta, err error) {
+	return nil, nil, errors.AssertionFailedf("FindSourceWithID not implemented")
 }
 
 // Resolve is part of the tree.ColumnItemResolver interface.
