@@ -3445,3 +3445,42 @@ distribute
       │    └── filters
       │         └── t1.b = regional_by_row_table_virt_partial.pk
       └── 1
+
+subtest groupByUnique
+
+# GROUP BY unique column v doesn't allow non-aggregate expressions in the
+# SELECT list because v is not marked as NOT NULL.
+statement error pq: column "pk" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT pk, a, b FROM regional_by_row_table_virt GROUP BY v;
+
+statement ok
+ALTER TABLE regional_by_row_table_virt ALTER COLUMN v SET NOT NULL
+
+# GROUP BY unique column v allows non-aggregate expressions in the
+# SELECT list because v is marked as NOT NULL.
+query III
+SELECT pk, a, b FROM regional_by_row_table_virt GROUP BY v;
+----
+1  1  1
+
+# GROUP BY unique index column "a" doesn't allow non-aggregate expressions in
+# the SELECT list because "a" is not marked as NOT NULL.
+statement error pq: column "pk" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT pk FROM regional_by_row_table_virt GROUP BY a;
+
+statement ok
+ALTER TABLE regional_by_row_table_virt ALTER COLUMN v SET NOT NULL
+
+# GROUP BY unique index column a allows non-aggregate expressions in the
+# SELECT list because v is marked as NOT NULL.
+query I
+SELECT pk FROM regional_by_row_table_virt GROUP BY v;
+----
+1
+
+# GROUP BY unique expression index (a+10) doesn't currently allow non-aggregate
+# expressions in the SELECT list. This could potentially be supported in the
+# future. The index need not be an expression index if the GROUP BY expression
+# can be proven to be monotonically increasing or decreasing.
+statement error pq: column "pk" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT pk FROM regional_by_row_table_virt GROUP BY (a+10);
