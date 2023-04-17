@@ -1510,7 +1510,7 @@ func (*RecomputeStatsRequest) flags() flag   { return isWrite | isAlone }
 func (*ComputeChecksumRequest) flags() flag  { return isWrite }
 func (*CheckConsistencyRequest) flags() flag { return isAdmin | isRange | isAlone }
 func (*ExportRequest) flags() flag {
-	return isRead | isRange | updatesTSCache | bypassesReplicaCircuitBreaker
+	return isRead | isRange | updatesTSCache | bypassesReplicaCircuitBreaker | updatesTSCacheOnErr
 }
 func (*AdminScatterRequest) flags() flag                  { return isAdmin | isRange | isAlone }
 func (*AdminVerifyProtectedTimestampRequest) flags() flag { return isAdmin | isRange | isAlone }

@@ -95,6 +95,7 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 	ok, stillNeedsInterleavedIntents, pErr := r.canDropLatchesBeforeEval(ctx, rw, ba, g, st)
 	if pErr != nil {
+		r.updateTimestampCache(ctx, &st, ba, nil /* br */, nil /* pErr */)
 		return nil, g, nil, pErr
 	}
 	evalPath := readOnlyDefault
