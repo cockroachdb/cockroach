@@ -44,7 +44,6 @@ type partitionedStreamClient struct {
 func NewPartitionedStreamClient(
 	ctx context.Context, remote *url.URL,
 ) (*partitionedStreamClient, error) {
-
 	noInlineCertURI, tlsInfo, err := uriWithInlineTLSCertsRemoved(remote)
 	if err != nil {
 		return nil, err
