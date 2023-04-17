@@ -24,5 +24,6 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
+    - run: git config --system core.longpaths true
     - uses: actions/checkout@v3
     - run: cd build/release/bincheck && bash test-windows ${{ github.ref_name }} ${{ github.sha }}
