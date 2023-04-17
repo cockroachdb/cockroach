@@ -34,6 +34,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
+        "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
