@@ -357,6 +357,17 @@ func filterCheckpointSpans(spans []roachpb.Span, completed []roachpb.Span) []roa
 	return sg.Slice()
 }
 
+// scanIfShould performs a scan of KV paris in watched span if
+// - this is the initial scan, or
+// - table schema is changed (a column is added/dropped) and a re-scan is needed.
+// It returns spans it has scanned, the timestamp at which the scan happened, and error if any.
+//
+// This function is responsible for emitting rows from either the initial reporting
+// or from a table descriptor change. It is *not* responsible for capturing data changes
+// from DMLs (INSERT, UPDATE, etc.). That is handled elsewhere from the underlying rangefeed.
+//
+// `highWater` is the largest timestamp at or below which we know all events in
+// watched span have been seen (i.e. frontier.smallestTS).
 func (f *kvFeed) scanIfShould(
 	ctx context.Context, initialScan bool, initialScanOnly bool, highWater hlc.Timestamp,
 ) ([]roachpb.Span, hlc.Timestamp, error) {
@@ -484,6 +495,13 @@ func (f *kvFeed) runUntilTableEvent(
 		UseMux:   f.useMux,
 	}
 
+	// The following two synchronous calls works as follows:
+	// - `f.physicalFeed.Run` establish a rangefeed on the watched spans at the
+	// high watermark ts (i.e. frontier.smallestTS), which we know we have scanned,
+	// and it will detect and send any changed data (from DML operations) to `membuf`.
+	// - `copyFromSourceToDestUntilTableEvent` consumes `membuf` into `f.writer`
+	// until a table event (i.e. a column is added/dropped) has occurred, which
+	// signals another possible scan.
 	g.GoCtx(func(ctx context.Context) error {
 		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, resumeFrontier, f.tableFeed, f.endTime, f.knobs)
 	})
@@ -561,7 +579,14 @@ func copyFromSourceToDestUntilTableEvent(
 	knobs TestingKnobs,
 ) error {
 	var (
-		scanBoundary         errBoundaryReached
+		scanBoundary errBoundaryReached
+
+		// checkForScanBoundary takes in a new event's timestamp (event generated
+		// from rangefeed), and asks "Is some type of 'boundary' reached
+		// at 'ts'?"
+		// Here a boundary is reached either
+		// - table event(s) occurred at timestamp at or before `ts`, or
+		// - endTime reached at or before `ts`.
 		checkForScanBoundary = func(ts hlc.Timestamp) error {
 			// If the scanBoundary is not nil, it either means that there is a table
 			// event boundary set or a boundary for the end time. If the boundary is
@@ -588,6 +613,14 @@ func copyFromSourceToDestUntilTableEvent(
 			}
 			return nil
 		}
+
+		// applyScanBoundary apply the boundary that we set above.
+		// In most cases, a boundary isn't reached, and thus we do nothing.
+		// If a boundary is reached but event `e` happens before that boundary,
+		// then we let the event proceed.
+		// Otherwise (if `e.ts` >= `boundary.ts`), we will act as follows:
+		//  - KV event: do nothing (we shouldn't emit this event)
+		//  - Resolved event: advance this span to `boundary.ts` in the frontier
 		applyScanBoundary = func(e kvevent.Event) (skipEvent, reachedBoundary bool, err error) {
 			if scanBoundary == nil {
 				return false, false, nil
@@ -621,6 +654,8 @@ func copyFromSourceToDestUntilTableEvent(
 				return false, false, &errUnknownEvent{e}
 			}
 		}
+
+		// addEntry simply writes to `dest`.
 		addEntry = func(e kvevent.Event) error {
 			switch e.Type() {
 			case kvevent.TypeKV, kvevent.TypeFlush:
@@ -639,6 +674,11 @@ func copyFromSourceToDestUntilTableEvent(
 				return &errUnknownEvent{e}
 			}
 		}
+
+		// copyEvent copies `e` (read from rangefeed) and writes to `dest`,
+		// until a boundary is detected and reached (meaning all watched spans
+		// in the frontier have advanced to `boundary.ts.Prev()`, and it's ready for
+		// either EXIT or another SCAN.
 		copyEvent = func(e kvevent.Event) error {
 			if err := checkForScanBoundary(e.Timestamp()); err != nil {
 				return err
