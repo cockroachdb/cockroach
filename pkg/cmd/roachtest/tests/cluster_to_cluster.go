@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,6 +79,8 @@ type c2cSetup struct {
 	gatewayNodes option.NodeListOption
 	promCfg      *prometheus.Config
 }
+
+const maxExpectedLatencyDefault = 2 * time.Minute
 
 var c2cPromMetrics = map[string]clusterstats.ClusterStat{
 	"LogicalMegabytes": {
@@ -319,6 +322,9 @@ type replicationSpec struct {
 
 	expectedNodeDeaths int32
 
+	// maxLatency override the maxAcceptedLatencyDefault.
+	maxAcceptedLatency time.Duration
+
 	// If non-empty, the test will be skipped with the supplied reason.
 	skip string
 
@@ -343,10 +349,10 @@ type replicationDriver struct {
 	rng     *rand.Rand
 }
 
-func makeReplicationDriver(t test.Test, c cluster.Cluster, rs replicationSpec) replicationDriver {
+func makeReplicationDriver(t test.Test, c cluster.Cluster, rs replicationSpec) *replicationDriver {
 	rng, seed := randutil.NewTestRand()
 	t.L().Printf(`Random Seed is %d`, seed)
-	return replicationDriver{
+	return &replicationDriver{
 		t:   t,
 		c:   c,
 		rs:  rs,
@@ -646,7 +652,11 @@ func (rd *replicationDriver) main(ctx context.Context) {
 
 	// latency verifier queries may error during a node shutdown event; therefore
 	// tolerate errors if we anticipate node deaths.
-	lv := makeLatencyVerifier("stream-ingestion", 0, 2*time.Minute, rd.t.L(),
+	maxExpectedLatency := maxExpectedLatencyDefault
+	if rd.rs.maxAcceptedLatency != 0 {
+		maxExpectedLatency = rd.rs.maxAcceptedLatency
+	}
+	lv := makeLatencyVerifier("stream-ingestion", 0, maxExpectedLatency, rd.t.L(),
 		getStreamIngestionJobInfo, rd.t.Status, rd.rs.expectedNodeDeaths > 0)
 	defer lv.maybeLogLatencyHist()
 
@@ -850,17 +860,17 @@ func (c c2cPhase) String() string {
 	}
 }
 
-// replResilienceSpec defines inputs to the replication resilience tests, set
+// replShutdownSpec defines inputs to the replication node shutdown tests, set
 // during roachtest registration. This can not be modified during roachtest
 // execution.
-type replResilienceSpec struct {
+type replShutdownSpec struct {
 	replicationSpec
 
 	onSrc         bool
 	onCoordinator bool
 }
 
-func (rsp *replResilienceSpec) name() string {
+func (rsp *replShutdownSpec) name() string {
 	var builder strings.Builder
 	builder.WriteString("c2c/shutdown")
 	if rsp.onSrc {
@@ -876,10 +886,10 @@ func (rsp *replResilienceSpec) name() string {
 	return builder.String()
 }
 
-// replResilienceDriver manages the execution of the replication resilience tests.
-type replResilienceDriver struct {
-	replicationDriver
-	rsp replResilienceSpec
+// replShutdownDriver manages the execution of the replication node shutdown tests.
+type replShutdownDriver struct {
+	*replicationDriver
+	rsp replShutdownSpec
 
 	// phase indicates the c2c phase a node shutdown will occur.
 	phase c2cPhase
@@ -891,18 +901,18 @@ type replResilienceDriver struct {
 	watcherNode  int
 }
 
-func makeReplResilienceDriver(
-	t test.Test, c cluster.Cluster, rsp replResilienceSpec,
-) replResilienceDriver {
+func makeReplShutdownDriver(
+	t test.Test, c cluster.Cluster, rsp replShutdownSpec,
+) replShutdownDriver {
 	rd := makeReplicationDriver(t, c, rsp.replicationSpec)
-	return replResilienceDriver{
+	return replShutdownDriver{
 		replicationDriver: rd,
 		phase:             c2cPhase(rd.rng.Intn(int(phaseCutover) + 1)),
 		rsp:               rsp,
 	}
 }
 
-func (rrd *replResilienceDriver) getJobIDs(ctx context.Context) {
+func (rrd *replShutdownDriver) getJobIDs(ctx context.Context) {
 	jobIDQuery := `SELECT job_id FROM [SHOW JOBS] WHERE job_type = '%s'`
 	testutils.SucceedsWithin(rrd.t, func() error {
 		if err := rrd.setup.dst.db.QueryRowContext(ctx, fmt.Sprintf(jobIDQuery,
@@ -917,18 +927,14 @@ func (rrd *replResilienceDriver) getJobIDs(ctx context.Context) {
 	}, time.Minute)
 }
 
-func (rrd *replResilienceDriver) getTargetInfo() (
-	*clusterInfo,
-	jobspb.JobID,
-	option.NodeListOption,
-) {
+func (rrd *replShutdownDriver) getTargetInfo() (*clusterInfo, jobspb.JobID, option.NodeListOption) {
 	if rrd.rsp.onSrc {
 		return rrd.setup.src, rrd.srcJobID, rrd.setup.src.nodes
 	}
 	return rrd.setup.dst, rrd.dstJobID, rrd.setup.dst.nodes
 }
 
-func (rrd *replResilienceDriver) getTargetAndWatcherNodes(ctx context.Context) {
+func (rrd *replShutdownDriver) getTargetAndWatcherNodes(ctx context.Context) {
 	var coordinatorNode int
 	info, jobID, nodes := rrd.getTargetInfo()
 
@@ -967,13 +973,13 @@ func (rrd *replResilienceDriver) getTargetAndWatcherNodes(ctx context.Context) {
 	rrd.watcherNode = findAnotherNode(targetNode)
 }
 
-func (rrd *replResilienceDriver) getPhase() c2cPhase {
+func getPhase(rd *replicationDriver, dstJobID jobspb.JobID) c2cPhase {
 	var jobStatus string
-	rrd.setup.dst.sysSQL.QueryRow(rrd.t, `SELECT status FROM [SHOW JOBS] WHERE job_id=$1`,
-		rrd.dstJobID).Scan(&jobStatus)
-	require.Equal(rrd.t, jobs.StatusRunning, jobs.Status(jobStatus))
+	rd.setup.dst.sysSQL.QueryRow(rd.t, `SELECT status FROM [SHOW JOBS] WHERE job_id=$1`,
+		dstJobID).Scan(&jobStatus)
+	require.Equal(rd.t, jobs.StatusRunning, jobs.Status(jobStatus))
 
-	progress := getJobProgress(rrd.t, rrd.setup.dst.sysSQL, rrd.dstJobID)
+	progress := getJobProgress(rd.t, rd.setup.dst.sysSQL, dstJobID)
 	streamIngestProgress := progress.GetStreamIngest()
 	highWater := progress.GetHighWater()
 
@@ -986,15 +992,15 @@ func (rrd *replResilienceDriver) getPhase() c2cPhase {
 	return phaseCutover
 }
 
-func (rrd *replResilienceDriver) waitForTargetPhase() error {
+func waitForTargetPhase(rd *replicationDriver, dstJobID jobspb.JobID, targetPhase c2cPhase) error {
 	for {
-		currentPhase := rrd.getPhase()
-		rrd.t.L().Printf("Current Phase %s", currentPhase.String())
+		currentPhase := getPhase(rd, dstJobID)
+		rd.t.L().Printf("Current Phase %s", currentPhase.String())
 		switch {
-		case currentPhase < rrd.phase:
+		case currentPhase < targetPhase:
 			time.Sleep(5 * time.Second)
-		case currentPhase == rrd.phase:
-			rrd.t.L().Printf("In target phase %s", currentPhase.String())
+		case currentPhase == targetPhase:
+			rd.t.L().Printf("In target phase %s", currentPhase.String())
 			return nil
 		default:
 			return errors.New("c2c job past target phase")
@@ -1002,18 +1008,35 @@ func (rrd *replResilienceDriver) waitForTargetPhase() error {
 	}
 }
 
-func (rrd *replResilienceDriver) sleepBeforeResiliencyEvent() {
-	// Assuming every C2C phase lasts at least 5 seconds, introduce some waiting
+func sleepBeforeResiliencyEvent(rd *replicationDriver) {
+	// Assuming every C2C phase lasts at least 10 seconds, introduce some waiting
 	// before a resiliency event (e.g. a node shutdown) to ensure the event occurs
 	// once we're fully settled into the target phase (e.g. the stream ingestion
 	// processors have observed the cutover signal).
-	randomSleep := time.Duration(1+rrd.rng.Intn(2)) * time.Second
-	rrd.t.L().Printf("Take a %s power nap", randomSleep)
+	randomSleep := time.Duration(1+rd.rng.Intn(2)) * time.Second
+	rd.t.L().Printf("Take a %s power nap", randomSleep)
 	time.Sleep(randomSleep)
 }
 
+// getSrcDestNodePairs return list of src-dest node pairs that are directly connected to each
+// other for the replication stream.
+func getSrcDestNodePairs(rd *replicationDriver, progress *jobspb.StreamIngestionProgress) [][]int {
+	nodePairs := make([][]int, 0)
+	for srcID, progress := range progress.PartitionProgress {
+		srcNode, err := strconv.Atoi(srcID)
+		require.NoError(rd.t, err)
+
+		// The destination cluster indexes nodes starting at 1,
+		// but we need to record the roachprod node.
+		dstNode := int(progress.DestSQLInstanceID) + rd.rs.srcNodes
+		rd.t.L().Printf("Node Pair: Src %d; Dst %d ", srcNode, dstNode)
+		nodePairs = append(nodePairs, []int{srcNode, dstNode})
+	}
+	return nodePairs
+}
+
 func registerClusterReplicationResilience(r registry.Registry) {
-	for _, rsp := range []replResilienceSpec{
+	for _, rsp := range []replShutdownSpec{
 		{
 			onSrc:         true,
 			onCoordinator: true,
@@ -1048,7 +1071,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 		c2cRegisterWrapper(r, rsp.replicationSpec,
 			func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
-				rrd := makeReplResilienceDriver(t, c, rsp)
+				rrd := makeReplShutdownDriver(t, c, rsp)
 				rrd.t.L().Printf("Planning to shut down node during %s phase", rrd.phase)
 				rrd.setupC2C(ctx, t, c)
 
@@ -1104,8 +1127,8 @@ func registerClusterReplicationResilience(r registry.Registry) {
 				// successful c2c replication execution.
 				shutdownStarter := func() jobStarter {
 					return func(c cluster.Cluster, t test.Test) (string, error) {
-						require.NoError(t, rrd.waitForTargetPhase())
-						rrd.sleepBeforeResiliencyEvent()
+						require.NoError(t, waitForTargetPhase(rrd.replicationDriver, rrd.dstJobID, rrd.phase))
+						sleepBeforeResiliencyEvent(rrd.replicationDriver)
 						return fmt.Sprintf("%d", rrd.dstJobID), nil
 					}
 				}
@@ -1123,6 +1146,69 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			},
 		)
 	}
+}
+
+// registerClusterReplicationDisconnect tests that a physical replication stream
+// succeeds if a source and destination node pair disconnects. When the pair
+// disconnects, we expect its pg connection to time out, causing the job to
+// retry. The job will recreate a topology, potentially with different src-node
+// pairings. If the disconnected nodes no longer match in the new topology, the
+// physical replication stream will make progress in the face of network
+// partition. In the unlikely event that the two disconnected nodes continue to
+// get paired together, the stream should catch up once the test driver
+// reconnects the nodes.
+func registerClusterReplicationDisconnect(r registry.Registry) {
+	sp := replicationSpec{
+		name:               "c2c/disconnect",
+		srcNodes:           3,
+		dstNodes:           3,
+		cpus:               4,
+		workload:           replicateKV{readPercent: 0, initRows: 1000000, maxBlockBytes: 1024},
+		timeout:            20 * time.Minute,
+		additionalDuration: 10 * time.Minute,
+		cutover:            2 * time.Minute,
+		maxAcceptedLatency: 12 * time.Minute,
+	}
+	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
+		rd := makeReplicationDriver(t, c, sp)
+		rd.setupC2C(ctx, t, c)
+
+		shutdownSetupDone := make(chan struct{})
+
+		rd.replicationStartHook = func(ctx context.Context, rd *replicationDriver) {
+			defer close(shutdownSetupDone)
+		}
+		m := rd.newMonitor(ctx)
+		m.Go(func(ctx context.Context) error {
+			rd.main(ctx)
+			return nil
+		})
+
+		// Dont begin node disconnecion until c2c job is setup.
+		<-shutdownSetupDone
+		dstJobID := jobspb.JobID(getIngestionJobID(t, rd.setup.dst.sysSQL, rd.setup.dst.name))
+
+		// TODO(msbutler): disconnect nodes during a random phase
+		require.NoError(t, waitForTargetPhase(rd, dstJobID, phaseSteadyState))
+		sleepBeforeResiliencyEvent(rd)
+		ingestionProgress := getJobProgress(t, rd.setup.dst.sysSQL, dstJobID).GetStreamIngest()
+
+		srcDestConnections := getSrcDestNodePairs(rd, ingestionProgress)
+		randomNodePair := srcDestConnections[rand.Intn(len(srcDestConnections))]
+		disconnectDuration := sp.additionalDuration
+		rd.t.L().Printf("Disconnecting Src %d, Dest %d for %.2f minutes", randomNodePair[0],
+			randomNodePair[1], disconnectDuration.Minutes())
+
+		roachtestutil.Disconnect(t, c, ctx, randomNodePair)
+		time.Sleep(disconnectDuration)
+		ingestionProgressUpdate := getJobProgress(t, rd.setup.dst.sysSQL, dstJobID).GetStreamIngest()
+
+		// Calling this will log the latest topology.
+		getSrcDestNodePairs(rd, ingestionProgressUpdate)
+		roachtestutil.Cleanup(t, c, ctx)
+		rd.t.L().Printf("Nodes reconnected. C2C Job should eventually complete")
+		m.Wait()
+	})
 }
 
 func getIngestionJobID(t test.Test, dstSQL *sqlutils.SQLRunner, dstTenantName string) int {

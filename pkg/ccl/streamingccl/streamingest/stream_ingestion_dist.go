@@ -197,6 +197,11 @@ func makePlan(
 			execinfrapb.ProcessorCoreUnion{StreamIngestionFrontier: streamIngestionFrontierSpec},
 			execinfrapb.PostProcessSpec{}, streamIngestionResultTypes)
 
+		for src, dst := range streamIngestionFrontierSpec.SubscribingSQLInstances {
+			log.Infof(ctx, "Physical Replication Src-Dst Pair: Node Pair List: %s:%d",
+				src, dst)
+		}
+
 		p.PlanToStreamColMap = []int{0}
 		sql.FinalizePlan(ctx, planCtx, p)
 		return p, planCtx, nil
