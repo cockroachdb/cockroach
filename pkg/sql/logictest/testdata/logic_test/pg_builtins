@@ -832,3 +832,32 @@ SELECT k, pg_get_indexdef('expr_idx'::regclass::oid, k, true) FROM generate_seri
 2  (json->>'bar'::STRING)
 3  (length(id))
 4  ·
+
+# Regression test for #101357. The SQL implementations of pg_get_indexdef and
+# col_description should not have unqualified table names that can conflict with
+# a user tables.
+statement ok
+CREATE TABLE pg_indexes (i INT PRIMARY KEY);
+CREATE TABLE pg_attribute (i INT PRIMARY KEY)
+
+statement ok
+SET search_path TO public,pg_catalog
+
+statement ok
+SELECT i, pg_get_indexdef(0, 1, true) FROM pg_indexes
+
+statement ok
+DROP TABLE pg_indexes;
+DROP TABLE pg_attribute;
+RESET search_path
+
+statement ok
+CREATE SCHEMA system;
+CREATE TABLE system.comments (i INT)
+
+statement ok
+SELECT col_description(0, 0)
+
+statement
+DROP TABLE system.comments;
+DROP SCHEMA system
