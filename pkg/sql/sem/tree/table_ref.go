@@ -75,3 +75,16 @@ func (expr *TableIDRef) Format(ctx *FmtCtx) {
 func (expr *TableIDRef) WalkTableExpr(visitor Visitor) TableExpr {
 	return expr
 }
+
+type ColumnNameRef struct {
+	Table      *TableIDRef
+	ColumnName string
+}
+
+func (expr *ColumnNameRef) Format(ctx *FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("{TABLE:%d}.%s", expr.Table.ID, expr.ColumnName))
+}
+
+func (expr *ColumnNameRef) String() string {
+	return AsString(expr)
+}

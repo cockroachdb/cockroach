@@ -28,8 +28,9 @@ import (
 // analyzeOrderBy analyzes an Ordering physical property from the ORDER BY
 // clause and adds the resulting typed expressions to orderByScope.
 func (b *Builder) analyzeOrderBy(
-	orderBy tree.OrderBy, inScope, projectionsScope *scope, rejectFlags tree.SemaRejectFlags,
+	oriOrderBy *tree.OrderBy, inScope, projectionsScope *scope, rejectFlags tree.SemaRejectFlags,
 ) (orderByScope *scope) {
+	orderBy := *oriOrderBy
 	if orderBy == nil {
 		return nil
 	}
@@ -44,8 +45,15 @@ func (b *Builder) analyzeOrderBy(
 	b.semaCtx.Properties.Require(exprKindOrderBy.String(), rejectFlags)
 	inScope.context = exprKindOrderBy
 
+	var rewrittenOrderBy tree.OrderBy
 	for i := range orderBy {
-		b.analyzeOrderByArg(orderBy[i], inScope, projectionsScope, orderByScope)
+		expanded := b.analyzeOrderByArg(orderBy[i], inScope, projectionsScope, orderByScope)
+		if b.insideFuncDef {
+			rewrittenOrderBy = append(rewrittenOrderBy, expanded...)
+		}
+	}
+	if b.insideFuncDef {
+		*oriOrderBy = rewrittenOrderBy
 	}
 	return orderByScope
 }
@@ -162,7 +170,7 @@ func (b *Builder) analyzeOrderByIndex(order *tree.Order, inScope, orderByScope *
 // typed expression(s) are added to orderByScope.
 func (b *Builder) analyzeOrderByArg(
 	order *tree.Order, inScope, projectionsScope, orderByScope *scope,
-) {
+) (expandedOrder []*tree.Order) {
 	if order.OrderType == tree.OrderByIndex {
 		b.analyzeOrderByIndex(order, inScope, orderByScope)
 		return
@@ -174,11 +182,19 @@ func (b *Builder) analyzeOrderByArg(
 
 	// Analyze the ORDER BY column(s).
 	start := len(orderByScope.cols)
-	b.analyzeExtraArgument(order.Expr, inScope, projectionsScope, orderByScope, nullsDefaultOrder)
+	expandedExpr := b.analyzeExtraArgument(order.Expr, inScope, projectionsScope, orderByScope, nullsDefaultOrder)
 	for i := start; i < len(orderByScope.cols); i++ {
 		col := &orderByScope.cols[i]
 		col.descending = order.Direction == tree.Descending
 	}
+	if b.insideFuncDef {
+		for i := range expandedExpr {
+			o := *order
+			o.Expr = expandedExpr[i]
+			expandedOrder = append(expandedOrder, &o)
+		}
+	}
+	return expandedOrder
 }
 
 // buildOrderByArg sets up the projection of a single ORDER BY argument.
@@ -204,7 +220,7 @@ func (b *Builder) buildOrderByArg(
 // nullsDefaultOrder is false).
 func (b *Builder) analyzeExtraArgument(
 	expr tree.Expr, inScope, projectionsScope, extraColsScope *scope, nullsDefaultOrder bool,
-) {
+) (expandedExpr []tree.Expr) {
 	// Unwrap parenthesized expressions like "((a))" to "a".
 	expr = tree.StripParens(expr)
 
@@ -274,6 +290,13 @@ func (b *Builder) analyzeExtraArgument(
 		}
 		extraColsScope.addColumn(scopeColName(""), e)
 	}
+
+	if b.insideFuncDef {
+		for i := range exprs {
+			expandedExpr = append(expandedExpr, b.maybeRewriteColumnPrefix(exprs[i]))
+		}
+	}
+	return expandedExpr
 }
 
 // hasDefaultNullsOrder returns whether the provided ordering uses the default
