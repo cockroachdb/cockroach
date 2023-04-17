@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -410,34 +409,37 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 //  1. It must be labeled as non-volatile, i.e., immutable, stable, or
 //     leak-proof.
 //  2. It has a single statement.
-//  3. Its arguments are non-volatile expressions.
-//  4. It is not a set-returning function.
+//  3. It is not a set-returning function.
+//  4. Its arguments are only Variable or Const expressions.
 //
 // UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
 // we do not need an explicit check for this because immutable UDFs cannot
 // contain mutations.
 //
-// TODO(mgartner): We may be able to loosen (1) and (3). Subqueries are always
+// TODO(mgartner): We may be able to loosen (1). Subqueries are always
 // evaluated just once, so by converting a UDF to a subquery we effectively make
 // it and it's arguments non-volatile. So, if UDFs can be inlined in some other
 // way, or the subquery can be eliminated with normalization rules, we may be
-// able to inline volatile UDFs. We must take care not to inline UDFs with
-// volatile arguments used more than once in the function body.
+// able to inline volatile UDFs.
 //
-// TODO(mgarnter): We may be able to loosen (4), but we need a way to inline a
+// TODO(mgarnter): We may be able to loosen (3), but we need a way to inline a
 // strict UDF that is not called when an argument is NULL. This presents a
 // challenge because we cannot wrap a set-returning function in a CASE
 // expression, like we do for strict, non-set-returning functions.
+//
+// TODO(mgartner): We may be able to loosen (4), but there are several
+// difficulties to overcome. We must take care not to inline UDFs with volatile
+// arguments used more than once in the function body. We should also be sure
+// not to inline when the arguments are computationally expensive and are
+// referenced in the UDF body more than once. Any argument that contains a
+// subquery and is referenced multiple times cannot be inlined, unless new
+// columns IDs for the entire subquery are generated (see #100915).
 func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
 	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 || udfp.SetReturning {
 		return false
 	}
-	for i := range args {
-		var p props.Shared
-		memo.BuildSharedProps(args[i], &p, c.f.EvalContext())
-		if p.VolatilitySet.HasVolatile() {
-			return false
-		}
+	if !args.IsConstantsAndPlaceholdersAndVariables() {
+		return false
 	}
 	return true
 }
