@@ -904,6 +904,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		updatedRegionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
+		true, /* validateLocalities */
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -1277,6 +1278,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		regionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
+		true, /* validateLocalities */
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -1405,6 +1407,7 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		regionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
+		true, /* validateLocalities */
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -1946,6 +1949,7 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		updatedRegionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
+		true, /* validateLocalities */
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -2051,6 +2055,7 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		updatedRegionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
+		true, /* validateLocalities */
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -2327,7 +2332,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 
 	// Validate if the zone config extension is compatible with the database.
 	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(
-		params.ctx, params.p.InternalSQLTxn().Regions(), params.ExecCfg(), updatedRegionConfig,
+		params.ctx, params.p.InternalSQLTxn().Regions(), params.ExecCfg(), updatedRegionConfig, true, /* validateLocalities */
 	)
 	if err != nil {
 		return err

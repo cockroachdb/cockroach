@@ -461,7 +461,10 @@ message RestoreDetails {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
 
-  // NEXT ID: 29.
+  // Disables loacality checking for zone configs.
+  bool SkipLocalitiesCheck = 29;
+
+  // NEXT ID: 30.
 }
 
 

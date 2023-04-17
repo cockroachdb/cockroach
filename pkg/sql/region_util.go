@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -877,6 +878,7 @@ func generateAndValidateZoneConfigForMultiRegionDatabase(
 	regionProvider descs.RegionProvider,
 	execConfig *ExecutorConfig,
 	regionConfig multiregion.RegionConfig,
+	validateLocalities bool,
 ) (zonepb.ZoneConfig, error) {
 	// Build a zone config based on the RegionConfig information.
 	dbZoneConfig := zonepb.ZoneConfig{}
@@ -897,7 +899,13 @@ func generateAndValidateZoneConfigForMultiRegionDatabase(
 	}
 
 	if err := validateZoneAttrsAndLocalities(ctx, regionProvider, execConfig, &dbZoneConfig); err != nil {
-		return zonepb.ZoneConfig{}, err
+		// If we are validating localities this is fatal, otherwise let's log any
+		// errors as warnings.
+		if validateLocalities {
+			return zonepb.ZoneConfig{}, err
+		}
+		log.Warningf(ctx, "ignoring locality validation error for DB zone config %v", err)
+		err = nil
 	}
 
 	return dbZoneConfig, nil
@@ -911,10 +919,11 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 	regionConfig multiregion.RegionConfig,
 	txn descs.Txn,
 	execConfig *ExecutorConfig,
+	validateLocalities bool,
 	kvTrace bool,
 ) error {
 	// Build a zone config based on the RegionConfig information.
-	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(ctx, txn.Regions(), execConfig, regionConfig)
+	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(ctx, txn.Regions(), execConfig, regionConfig, validateLocalities)
 	if err != nil {
 		return err
 	}
@@ -1152,6 +1161,7 @@ func (p *planner) maybeInitializeMultiRegionDatabase(
 		*regionConfig,
 		p.InternalSQLTxn(),
 		p.execCfg,
+		true, /* validateLocalities */
 		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -1259,6 +1269,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id
 		regionConfig,
 		p.InternalSQLTxn(),
 		p.execCfg,
+		true, /* validateLocalities */
 		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err

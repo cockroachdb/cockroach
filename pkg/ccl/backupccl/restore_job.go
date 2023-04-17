@@ -1044,6 +1044,7 @@ func createImportingDescriptors(
 							regionConfig,
 							txn,
 							p.ExecCfg(),
+							!details.SkipLocalitiesCheck,
 							p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 						); err != nil {
 							return err
