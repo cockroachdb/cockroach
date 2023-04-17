@@ -1556,27 +1556,28 @@ project
  ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_phone:5!null total_revenue:29!null
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2,3,5,29)
- ├── ordering: +1
+ ├── fd: ()-->(29), (1)-->(2,3,5)
+ ├── ordering: +1 opt(29) [actual: +1]
  └── inner-join (lookup supplier)
-      ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_phone:5!null l_suppkey:12!null sum:29!null
+      ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_phone:5!null l_suppkey:12!null sum:29!null max:50!null
       ├── key columns: [12] = [1]
       ├── lookup columns are key
       ├── immutable
       ├── key: (12)
-      ├── fd: (1)-->(2,3,5), (12)-->(29), (1)==(12), (12)==(1)
-      ├── ordering: +(1|12) [actual: +12]
+      ├── fd: ()-->(29,50), (1)-->(2,3,5), (29)==(50), (50)==(29), (1)==(12), (12)==(1)
+      ├── ordering: +(1|12) opt(29,50) [actual: +12]
       ├── sort
-      │    ├── columns: l_suppkey:12!null sum:29!null
+      │    ├── columns: l_suppkey:12!null sum:29!null max:50!null
       │    ├── immutable
       │    ├── key: (12)
-      │    ├── fd: (12)-->(29)
-      │    ├── ordering: +12
-      │    └── select
-      │         ├── columns: l_suppkey:12!null sum:29!null
+      │    ├── fd: ()-->(29,50), (29)==(50), (50)==(29)
+      │    ├── ordering: +12 opt(29,50) [actual: +12]
+      │    └── inner-join (hash)
+      │         ├── columns: l_suppkey:12!null sum:29!null max:50!null
+      │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │         ├── immutable
       │         ├── key: (12)
-      │         ├── fd: (12)-->(29)
+      │         ├── fd: ()-->(29,50), (29)==(50), (50)==(29)
       │         ├── group-by (hash)
       │         │    ├── columns: l_suppkey:12!null sum:29!null
       │         │    ├── grouping columns: l_suppkey:12!null
@@ -1597,39 +1598,37 @@ project
       │         │    └── aggregations
       │         │         └── sum [as=sum:29, outer=(28)]
       │         │              └── column28:28
+      │         ├── scalar-group-by
+      │         │    ├── columns: max:50
+      │         │    ├── cardinality: [1 - 1]
+      │         │    ├── immutable
+      │         │    ├── key: ()
+      │         │    ├── fd: ()-->(50)
+      │         │    ├── group-by (hash)
+      │         │    │    ├── columns: l_suppkey:32!null sum:49!null
+      │         │    │    ├── grouping columns: l_suppkey:32!null
+      │         │    │    ├── immutable
+      │         │    │    ├── key: (32)
+      │         │    │    ├── fd: (32)-->(49)
+      │         │    │    ├── project
+      │         │    │    │    ├── columns: column48:48!null l_suppkey:32!null
+      │         │    │    │    ├── immutable
+      │         │    │    │    ├── select
+      │         │    │    │    │    ├── columns: l_suppkey:32!null l_extendedprice:35!null l_discount:36!null l_shipdate:40!null
+      │         │    │    │    │    ├── scan lineitem
+      │         │    │    │    │    │    └── columns: l_suppkey:32!null l_extendedprice:35!null l_discount:36!null l_shipdate:40!null
+      │         │    │    │    │    └── filters
+      │         │    │    │    │         └── (l_shipdate:40 >= '1996-01-01') AND (l_shipdate:40 < '1996-04-01') [outer=(40), constraints=(/40: [/'1996-01-01' - /'1996-03-31']; tight)]
+      │         │    │    │    └── projections
+      │         │    │    │         └── l_extendedprice:35 * (1.0 - l_discount:36) [as=column48:48, outer=(35,36), immutable]
+      │         │    │    └── aggregations
+      │         │    │         └── sum [as=sum:49, outer=(48)]
+      │         │    │              └── column48:48
+      │         │    └── aggregations
+      │         │         └── max [as=max:50, outer=(49)]
+      │         │              └── sum:49
       │         └── filters
-      │              └── eq [outer=(29), immutable, subquery, constraints=(/29: (/NULL - ])]
-      │                   ├── sum:29
-      │                   └── subquery
-      │                        └── scalar-group-by
-      │                             ├── columns: max:50
-      │                             ├── cardinality: [1 - 1]
-      │                             ├── immutable
-      │                             ├── key: ()
-      │                             ├── fd: ()-->(50)
-      │                             ├── group-by (hash)
-      │                             │    ├── columns: l_suppkey:32!null sum:49!null
-      │                             │    ├── grouping columns: l_suppkey:32!null
-      │                             │    ├── immutable
-      │                             │    ├── key: (32)
-      │                             │    ├── fd: (32)-->(49)
-      │                             │    ├── project
-      │                             │    │    ├── columns: column48:48!null l_suppkey:32!null
-      │                             │    │    ├── immutable
-      │                             │    │    ├── select
-      │                             │    │    │    ├── columns: l_suppkey:32!null l_extendedprice:35!null l_discount:36!null l_shipdate:40!null
-      │                             │    │    │    ├── scan lineitem
-      │                             │    │    │    │    └── columns: l_suppkey:32!null l_extendedprice:35!null l_discount:36!null l_shipdate:40!null
-      │                             │    │    │    └── filters
-      │                             │    │    │         └── (l_shipdate:40 >= '1996-01-01') AND (l_shipdate:40 < '1996-04-01') [outer=(40), constraints=(/40: [/'1996-01-01' - /'1996-03-31']; tight)]
-      │                             │    │    └── projections
-      │                             │    │         └── l_extendedprice:35 * (1.0 - l_discount:36) [as=column48:48, outer=(35,36), immutable]
-      │                             │    └── aggregations
-      │                             │         └── sum [as=sum:49, outer=(48)]
-      │                             │              └── column48:48
-      │                             └── aggregations
-      │                                  └── max [as=max:50, outer=(49)]
-      │                                       └── sum:49
+      │              └── sum:29 = max:50 [outer=(29,50), constraints=(/29: (/NULL - ]; /50: (/NULL - ]), fd=(29)==(50), (50)==(29)]
       └── filters (true)
 
 # --------------------------------------------------
