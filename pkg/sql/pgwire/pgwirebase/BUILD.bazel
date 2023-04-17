@@ -32,6 +32,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
+        "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/ipaddr",
         "//pkg/util/timeofday",
