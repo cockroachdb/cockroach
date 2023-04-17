@@ -50,12 +50,15 @@ func TestKVFeed(t *testing.T) {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
 
+	// mkKey returns an encoded key of `/tableID/k`
 	mkKey := func(codec keys.SQLCodec, tableID uint32, k string) roachpb.Key {
 		vDatum := tree.DString(k)
 		key, err := keyside.Encode(codec.TablePrefix(tableID), &vDatum, encoding.Ascending)
 		require.NoError(t, err)
 		return key
 	}
+
+	// kv returns a kv pair (key=/tableID/k, value=v,ts)
 	kv := func(codec keys.SQLCodec, tableID uint32, k, v string, ts hlc.Timestamp) roachpb.KeyValue {
 		return roachpb.KeyValue{
 			Key: mkKey(codec, tableID, k),
@@ -65,6 +68,8 @@ func TestKVFeed(t *testing.T) {
 			},
 		}
 	}
+
+	// kvEvent returns a RangeFeedEvent with 'Val = (key=/tableID/k, value=[v,ts])`
 	kvEvent := func(codec keys.SQLCodec, tableID uint32, k, v string, ts hlc.Timestamp) kvpb.RangeFeedEvent {
 		keyVal := kv(codec, tableID, k, v, ts)
 		return kvpb.RangeFeedEvent{
@@ -76,6 +81,8 @@ func TestKVFeed(t *testing.T) {
 			Error:      nil,
 		}
 	}
+
+	// checkpointEvent returns a RangeFeedEvent with `Checkpoint=(span, ts)`
 	checkpointEvent := func(span roachpb.Span, ts hlc.Timestamp) kvpb.RangeFeedEvent {
 		return kvpb.RangeFeedEvent{
 			Checkpoint: &kvpb.RangeFeedCheckpoint{
@@ -84,6 +91,7 @@ func TestKVFeed(t *testing.T) {
 			},
 		}
 	}
+
 	type testCase struct {
 		name               string
 		needsInitialScan   bool
@@ -111,10 +119,15 @@ func TestKVFeed(t *testing.T) {
 			nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
 		)
 		metrics := kvevent.MakeMetrics(time.Minute)
+
+		// bufferFactory, when called, gives you a memory-monitored
+		// in-memory "buffer" to write to and read from.
 		bufferFactory := func() kvevent.Buffer {
 			return kvevent.NewMemBuffer(mm.MakeBoundAccount(), &st.SV, &metrics)
 		}
 		scans := make(chan scanConfig)
+
+		// `sf`, when called, attempts to push `cfg` onto the a channel `scans`.
 		sf := scannerFunc(func(ctx context.Context, sink kvevent.Writer, cfg scanConfig) error {
 			select {
 			case scans <- cfg:
@@ -139,6 +152,9 @@ func TestKVFeed(t *testing.T) {
 		g.GoCtx(func(ctx context.Context) error {
 			return f.run(ctx)
 		})
+
+		// Assert that each scanConfig pushed to the channel `scans` by `f.run()`
+		// is what we expected (as specified in the test case).
 		spansToScan := filterCheckpointSpans(tc.spans, tc.checkpoint)
 		testG := ctxgroup.WithContext(ctx)
 		testG.GoCtx(func(ctx context.Context) error {
@@ -150,6 +166,9 @@ func TestKVFeed(t *testing.T) {
 			}
 			return nil
 		})
+
+		// Assert that number of events emitted from the kvfeed matches what we
+		// specified in the testcase.
 		testG.GoCtx(func(ctx context.Context) error {
 			for events := 0; events < tc.expEvents; events++ {
 				_, err := buf.Get(ctx)
@@ -157,6 +176,7 @@ func TestKVFeed(t *testing.T) {
 			}
 			return nil
 		})
+
 		// Wait for the feed to fail rather than canceling it.
 		if tc.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyStop {
 			testG.Go(func() error {
@@ -164,8 +184,16 @@ func TestKVFeed(t *testing.T) {
 				return nil
 			})
 		}
+
+		// Wait for all goroutines in `testG` (tc.ExpScans check and tc.ExpEvents check)
+		// to finish, and then cancel the kvfeed (i.e. `f.run()`).
+		// If the test case has OPTION SCHEMA_CHANGE_POLICY='stop', then testG has one
+		// additional goroutine that waits for the finish of the kvfeed.
 		require.NoError(t, testG.Wait())
 		cancel()
+
+		// Finally, assert that kvfeed is either cancelled, or is terminated with the
+		// expected error.
 		if runErr := g.Wait(); tc.expErrRE != "" {
 			require.Regexp(t, tc.expErrRE, runErr)
 		} else {
@@ -175,6 +203,7 @@ func TestKVFeed(t *testing.T) {
 	makeTableDesc := schematestutils.MakeTableDesc
 	addColumnDropBackfillMutation := schematestutils.AddColumnDropBackfillMutation
 
+	// makeSpan returns a span (start=/tableID/start, end=/tableID/end)
 	makeSpan := func(codec keys.SQLCodec, tableID uint32, start, end string) (s roachpb.Span) {
 		s.Key = mkKey(codec, tableID, start)
 		s.EndKey = mkKey(codec, tableID, end)
@@ -236,7 +265,7 @@ func TestKVFeed(t *testing.T) {
 			expScans: []hlc.Timestamp{
 				ts(2),
 			},
-			expEvents: 1,
+			expEvents: 2,
 		},
 		{
 			name:               "one table event - backfill",
@@ -262,7 +291,7 @@ func TestKVFeed(t *testing.T) {
 				makeTableDesc(42, 1, ts(1), 2, 1),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1, 1)),
 			},
-			expEvents: 2,
+			expEvents: 5,
 		},
 		{
 			name:               "one table event - skip",
@@ -417,7 +446,6 @@ func (f rawEventFeed) run(
 			ev.Checkpoint != nil && startAfter.LessEq(ev.Checkpoint.ResolvedTS) {
 			break
 		}
-
 	}
 	f = f[i:]
 	for i := range f {
@@ -432,6 +460,7 @@ func (f rawEventFeed) run(
 
 var _ schemafeed.SchemaFeed = (*rawTableFeed)(nil)
 
+// tableSpan returns a span that covers all keys under this tableID.
 func tableSpan(codec keys.SQLCodec, tableID uint32) roachpb.Span {
 	return roachpb.Span{
 		Key:    codec.TablePrefix(tableID),
