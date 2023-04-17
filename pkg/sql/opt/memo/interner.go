@@ -361,7 +361,7 @@ func (h *hasher) HashDatum(val tree.Datum) {
 	case *tree.DString:
 		h.HashString(string(*t))
 	case *tree.DBytes:
-		h.HashBytes([]byte(*t))
+		h.HashBytes(t.UnsafeBytes())
 	case *tree.DDate:
 		h.HashUint64(uint64(t.PGEpochDays()))
 	case *tree.DTime:
@@ -843,7 +843,7 @@ func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {
 		return lt.Locale == rt.Locale && h.IsStringEqual(lt.Contents, rt.Contents)
 	case *tree.DBytes:
 		rt := r.(*tree.DBytes)
-		return bytes.Equal([]byte(*lt), []byte(*rt))
+		return bytes.Equal(lt.UnsafeBytes(), rt.UnsafeBytes())
 	case *tree.DDate:
 		rt := r.(*tree.DDate)
 		return lt.Date == rt.Date
