@@ -35,6 +35,7 @@ func RegisterTests(r registry.Registry) {
 	registerClockMonotonicTests(r)
 	registerClusterToCluster(r)
 	registerClusterReplicationResilience(r)
+	registerClusterReplicationDisconnect(r)
 	registerConnectionLatencyTest(r)
 	registerCopy(r)
 	registerCopyFrom(r)
