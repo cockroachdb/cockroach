@@ -2,7 +2,7 @@
 
 set -euxo pipefail
 
-dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
+dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
 source "$dir/teamcity-support.sh"  # For log_into_gcloud
 source "$dir/release/teamcity-support.sh"
 source "$dir/teamcity-bazel-support.sh"  # for run_bazel
