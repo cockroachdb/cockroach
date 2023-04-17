@@ -12,6 +12,7 @@ package insights
 
 import (
 	"container/list"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -169,4 +170,16 @@ func (d *latencyThresholdDetector) isSlow(s *Statement) bool {
 
 func isFailed(s *Statement) bool {
 	return s.Status == Statement_Failed
+}
+
+var prefixesToIgnore = []string{"SET "}
+
+// shouldIgnoreStatement returns true if we don't want to analyze the statement.
+func shouldIgnoreStatement(s *Statement) bool {
+	for _, start := range prefixesToIgnore {
+		if strings.HasPrefix(s.Query, start) {
+			return true
+		}
+	}
+	return false
 }
