@@ -304,6 +304,35 @@ func runBenchmarkInsert(b *testing.B, db *sqlutils.SQLRunner, count int) {
 
 }
 
+// runBenchmarkInsert benchmarks inserting count rows into a table.
+func runBenchmarkInsertLarge(b *testing.B, db *sqlutils.SQLRunner, count int) {
+	defer func() {
+		db.Exec(b, `DROP TABLE IF EXISTS bench.insert`)
+	}()
+
+	db.Exec(b, `CREATE TABLE bench.insert (k INT PRIMARY KEY, s STRING, b BYTES)`)
+	bigstr := strings.Repeat("x", 1<<10)
+	bigbytes := bytes.Repeat([]byte("x"), 1<<10)
+
+	b.ResetTimer()
+	var buf bytes.Buffer
+	val := 0
+	for i := 0; i < b.N; i++ {
+		buf.Reset()
+		buf.WriteString(`INSERT INTO bench.insert VALUES `)
+		for j := 0; j < count; j++ {
+			if j > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, "(%d, '%s', '%s')", val, bigstr, bigbytes)
+			val++
+		}
+		db.Exec(b, buf.String())
+	}
+	b.StopTimer()
+
+}
+
 // runBenchmarkInsertFK benchmarks inserting count rows into a table with a
 // present foreign key into another table.
 func runBenchmarkInsertFK(b *testing.B, db *sqlutils.SQLRunner, count int) {
@@ -419,6 +448,7 @@ func BenchmarkSQL(b *testing.B) {
 		for _, runFn := range []func(*testing.B, *sqlutils.SQLRunner, int){
 			runBenchmarkDelete,
 			runBenchmarkInsert,
+			runBenchmarkInsertLarge,
 			runBenchmarkInsertDistinct,
 			runBenchmarkInsertFK,
 			runBenchmarkInsertSecondaryIndex,
