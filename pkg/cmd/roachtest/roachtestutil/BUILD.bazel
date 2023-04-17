@@ -5,6 +5,7 @@ go_library(
     name = "roachtestutil",
     srcs = [
         "commandbuilder.go",
+        "disconnect.go",
         "disk_usage.go",
         "health_checker.go",
         "jaeger.go",
@@ -22,6 +23,7 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
