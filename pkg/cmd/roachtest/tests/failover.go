@@ -848,9 +848,15 @@ type pauseFailer struct {
 	c cluster.Cluster
 }
 
-func (f *pauseFailer) Setup(ctx context.Context)                    {}
-func (f *pauseFailer) Ready(ctx context.Context, m cluster.Monitor) {}
-func (f *pauseFailer) Cleanup(ctx context.Context)                  {}
+func (f *pauseFailer) Setup(ctx context.Context)   {}
+func (f *pauseFailer) Cleanup(ctx context.Context) {}
+
+func (f *pauseFailer) Ready(ctx context.Context, m cluster.Monitor) {
+	// The process pause can trip the disk stall detector, so we disable it.
+	conn := f.c.Conn(ctx, f.t.L(), 1)
+	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING storage.max_sync_duration.fatal.enabled = false`)
+	require.NoError(f.t, err)
+}
 
 func (f *pauseFailer) Fail(ctx context.Context, nodeID int) {
 	f.c.Signal(ctx, f.t.L(), 19, f.c.Node(nodeID)) // SIGSTOP
