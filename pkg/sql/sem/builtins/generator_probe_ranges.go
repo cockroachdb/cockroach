@@ -206,13 +206,7 @@ func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
 			return err
 		}
 		p.curr.rangeID = int64(desc.RangeID)
-		key := desc.StartKey.AsRawKey()
-		if desc.RangeID == 1 {
-			// The first range starts at KeyMin, but the replicated keyspace starts only at keys.LocalMax,
-			// so there is a special case here.
-			key = keys.LocalMax
-		}
-		return p.rangeProber.RunProbe(ctx, key, p.isWrite)
+		return p.rangeProber.RunProbe(ctx, &desc, p.isWrite)
 	})
 
 	p.curr.latency = timeutil.Since(tBegin)

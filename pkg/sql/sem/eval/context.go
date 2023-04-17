@@ -265,7 +265,7 @@ type ConsistencyCheckRunner interface {
 // crdb_internal.probe_ranges.
 type RangeProber interface {
 	RunProbe(
-		ctx context.Context, key roachpb.Key, isWrite bool,
+		ctx context.Context, desc *roachpb.RangeDescriptor, isWrite bool,
 	) error
 }
 
