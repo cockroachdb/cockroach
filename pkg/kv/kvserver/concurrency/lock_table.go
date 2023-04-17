@@ -12,6 +12,7 @@ package concurrency
 
 import (
 	"container/list"
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1750,9 +1752,11 @@ func (l *lockState) tryActiveWait(
 			// non-transactional.
 			qg.active = false
 			wait = false
+			log.Infof(context.TODO(), "!!! HERE 1")
 		}
 	} else {
 		if replicatedLockFinalizedTxn != nil {
+			log.Infof(context.TODO(), "!!! HERE 2")
 			// Don't add to waitingReaders since all readers in waitingReaders are
 			// active waiters, and this request is not an active waiter here.
 			wait = false
@@ -1763,6 +1767,7 @@ func (l *lockState) tryActiveWait(
 		}
 	}
 	if !wait {
+		log.Infof(context.TODO(), "!!! decided not to wait for finalized txn %v", replicatedLockFinalizedTxn.ID)
 		g.toResolve = append(
 			g.toResolve, roachpb.MakeLockUpdate(replicatedLockFinalizedTxn, roachpb.Span{Key: l.key}))
 		return false, false
@@ -2653,6 +2658,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	if consultFinalizedTxnCache {
 		finalizedTxn, ok := t.finalizedTxnCache.get(intent.Txn.ID)
 		if ok {
+			log.Infof(context.TODO(), "!!! found finalized transaction %v", intent.Txn.ID)
 			g.toResolve = append(
 				g.toResolve, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: key}))
 			return true, nil

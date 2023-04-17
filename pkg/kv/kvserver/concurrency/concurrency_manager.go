@@ -326,11 +326,13 @@ func (m *managerImpl) sequenceReqWithGuard(
 		if g.ltg.ShouldWait() {
 			m.lm.Release(g.moveLatchGuard())
 
-			log.Event(ctx, "waiting in lock wait-queues")
+			log.Infof(ctx, "waiting in lock wait-queues %v", g.Req)
 			if err := m.ltw.WaitOn(ctx, g.Req, g.ltg); err != nil {
 				return nil, err
 			}
 			continue
+		} else {
+			log.Info(ctx, "do not need to wait in lock wait queues")
 		}
 		return nil, nil
 	}
@@ -443,6 +445,8 @@ func (m *managerImpl) HandleWriterIntentError(
 			"lockTableGuard; were lock spans declared for this request?", t)
 	}
 
+	log.Infof(ctx, "!!! %s with received write intent error with %d intents", g.Req.Txn, len(t.Intents))
+
 	// Add a discovered lock to lock-table for each intent and enter each lock's
 	// wait-queue.
 	//
@@ -487,6 +491,7 @@ func (m *managerImpl) HandleWriterIntentError(
 	// If the discovery process collected a set of intents to resolve before the
 	// next evaluation attempt, do so.
 	if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
+		log.Infof(ctx, "!!!! Resolving %d deferred intents for write intent error", len(toResolve))
 		if err := m.ltw.ResolveDeferredIntents(ctx, toResolve); err != nil {
 			m.FinishReq(g)
 			return nil, err

@@ -65,6 +65,8 @@ const (
 	// WriteIntentError is set to half of the maximum lock table size.
 	// This value is subject to tuning in real environment as we have more data
 	// available.
+	// TODO(arul, aditya): Play around with the value of this and see how things
+	// go.
 	MaxIntentsPerWriteIntentErrorDefault = 5000
 )
 

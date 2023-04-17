@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -940,6 +941,9 @@ func (ir *IntentResolver) resolveIntents(
 	defer cancel()
 
 	respChan := make(chan requestbatcher.Response, intents.Len())
+	tBegin := timeutil.Now()
+	defer func() { ir.Metrics.IntentResolutionTimeSpent.RecordValue(timeutil.Since(tBegin).Nanoseconds()) }()
+
 	for i := 0; i < intents.Len(); i++ {
 		intent := intents.Index(i)
 		rangeID := ir.lookupRangeID(ctx, intent.Key)

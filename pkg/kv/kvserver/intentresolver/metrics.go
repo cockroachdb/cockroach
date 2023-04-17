@@ -10,7 +10,12 @@
 
 package intentresolver
 
-import "github.com/cockroachdb/cockroach/pkg/util/metric"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+)
 
 var (
 	// Intent resolver metrics.
@@ -36,6 +41,18 @@ var (
 		Measurement: "Intent Resolutions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaIntentResolutionTimeSpent = metric.HistogramOptions{
+		Metadata: metric.Metadata{
+			Name:        "intentresolver.intents.time_spent",
+			Help:        "amount of time taken to resolve intents",
+			Measurement: "Nonoseconds",
+			Unit:        metric.Unit_NANOSECONDS,
+		},
+		MaxVal:   10 * time.Minute.Nanoseconds(),
+		SigFigs:  1,
+		Duration: base.DefaultHistogramWindowInterval(),
+		Buckets:  metric.BatchProcessLatencyBuckets,
+	}
 )
 
 // Metrics contains the metrics for the IntentResolver.
@@ -47,6 +64,9 @@ type Metrics struct {
 
 	// Counter tracking intent cleanup failures.
 	IntentResolutionFailed *metric.Counter
+
+	// Counter tracking amount of time spent resolving intents.
+	IntentResolutionTimeSpent metric.IHistogram
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -57,5 +77,6 @@ func makeMetrics() Metrics {
 		IntentResolverAsyncThrottled: metric.NewCounter(metaIntentResolverAsyncThrottled),
 		FinalizedTxnCleanupFailed:    metric.NewCounter(metaFinalizedTxnCleanupFailed),
 		IntentResolutionFailed:       metric.NewCounter(metaIntentCleanupFailed),
+		IntentResolutionTimeSpent:    metric.NewHistogram(metaIntentResolutionTimeSpent),
 	}
 }

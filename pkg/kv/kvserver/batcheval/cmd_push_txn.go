@@ -252,6 +252,7 @@ func PushTxn(
 		pushType = kvpb.PUSH_ABORT
 		pusherWins = true
 	case pushType == kvpb.PUSH_TOUCH:
+		log.Infof(ctx, "!!! push touch")
 		// If just attempting to cleanup old or already-committed txns,
 		// pusher always fails.
 		pusherWins = false
@@ -263,7 +264,7 @@ func PushTxn(
 		pusherWins = true
 	}
 
-	if log.V(1) && reason != "" {
+	if reason != "" {
 		s := "pushed"
 		if !pusherWins {
 			s = "failed to push"

@@ -424,8 +424,8 @@ func runBackupProcessor(
 						Source:                   kvpb.AdmissionHeader_FROM_SQL,
 						NoMemoryReservedAtSource: true,
 					}
-					log.VEventf(ctx, 1, "sending ExportRequest for span %s (attempt %d, priority %s)",
-						span.span, span.attempts+1, header.UserPriority.String())
+					log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %s, wait policy %s)",
+						span.span, span.attempts+1, header.UserPriority.String(), header.WaitPolicy.String())
 					var rawResp kvpb.Response
 					var pErr *kvpb.Error
 					requestSentAt := timeutil.Now()
@@ -440,13 +440,14 @@ func runBackupProcessor(
 							return nil
 						})
 					if exportRequestErr != nil {
+						log.Infof(ctx, "!!!!! received export request error %v for span %s", exportRequestErr, span.span)
 						if intentErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok {
 							span.lastTried = timeutil.Now()
 							span.attempts++
 							todo <- span
 							// TODO(dt): send a progress update to update job progress to note
 							// the intents being hit.
-							log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, intentErr.Error())
+							log.Infof(ctx, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, intentErr.Error())
 							span = spanAndTime{}
 							continue
 						}
@@ -469,6 +470,7 @@ func runBackupProcessor(
 						}
 						return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 					}
+					log.Infof(ctx, "!!!!! did not receive export req error for span %s", span.span)
 
 					resp := rawResp.(*kvpb.ExportResponse)
 

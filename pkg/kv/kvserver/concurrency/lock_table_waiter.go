@@ -136,6 +136,7 @@ type IntentResolver interface {
 func (w *lockTableWaiterImpl) WaitOn(
 	ctx context.Context, req Request, guard lockTableGuard,
 ) (err *Error) {
+	log.Infof(ctx, "!!!!! req %v WaitOn", req)
 	newStateC := guard.NewStateChan()
 	ctxDoneC := ctx.Done()
 	shouldQuiesceC := w.stopper.ShouldQuiesce()
@@ -173,6 +174,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 					// raise an error immediately, we know the reservation holder is
 					// active.
 					if state.held {
+						log.Infof(ctx, "!!!!! request %v pushing lock txn %s with wait policy error", req, state.txn)
 						err = w.pushLockTxn(ctx, req, state)
 					} else {
 						err = newWriteIntentErr(req, state, reasonWaitPolicy)
@@ -338,6 +340,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// the comment in lockTableImpl.tryActiveWait for the proper way to
 				// remove this and other evaluation races.
 				toResolve := guard.ResolveBeforeScanning()
+				log.Infof(ctx, "!!!!!!! %v resolving %d intents before scanning lock table again", req, len(toResolve))
 				return w.ResolveDeferredIntents(ctx, toResolve)
 
 			default:
@@ -511,7 +514,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// lock, but we push using a PUSH_TOUCH to immediately return an error
 		// if the lock hold is still active.
 		pushType = kvpb.PUSH_TOUCH
-		log.VEventf(ctx, 2, "pushing txn %s to check if abandoned", ws.txn.ID.Short())
+		log.Infof(ctx, "pushing txn %s to check if abandoned", ws.txn.ID.Short())
 
 	default:
 		log.Fatalf(ctx, "unexpected WaitPolicy: %v", req.WaitPolicy)
@@ -522,8 +525,10 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// If pushing with an Error WaitPolicy and the push fails, then the lock
 		// holder is still active. Transform the error into a WriteIntentError.
 		if _, ok := err.GetDetail().(*kvpb.TransactionPushError); ok && req.WaitPolicy == lock.WaitPolicy_Error {
+			log.Info(ctx, "!!!!! transforming to a write intent error")
 			err = newWriteIntentErr(req, ws, reasonWaitPolicy)
 		}
+		log.Info(ctx, "!!!!! not transforming to a WriteIntentError")
 		return err
 	}
 
@@ -531,6 +536,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// avoids needing to push it again if we find another one of its locks and
 	// allows for batching of intent resolution.
 	if pusheeTxn.Status.IsFinalized() {
+		log.Infof(ctx, "!!!!!!! adding txn to the finalized cache %s", pusheeTxn)
 		w.lt.TransactionIsFinalized(pusheeTxn)
 	}
 
