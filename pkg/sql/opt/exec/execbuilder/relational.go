@@ -2155,7 +2155,20 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	inputTableName := ""
 	// ScanExprs from global tables will have filled in a provided distribution
 	// of the gateway region by now.
-	queryHomeRegion, queryHasHomeRegion := input.(memo.RelExpr).ProvidedPhysical().Distribution.GetSingleRegion()
+	var queryHomeRegion string
+	var queryHasHomeRegion bool
+	if rel, ok := input.(memo.RelExpr); ok {
+		queryHomeRegion, queryHasHomeRegion = rel.ProvidedPhysical().Distribution.GetSingleRegion()
+	} else if _, ok = input.(*memo.ScalarListExpr); ok {
+		// A list of scalar constants doesn't access remote regions.
+		// If these aren't constants, such as scalar subqueries, checks for a home
+		// region are done elsewhere.
+		queryHasHomeRegion = true
+		queryHomeRegion = gatewayRegion
+	} else {
+		return errors.AssertionFailedf("unexpected expression kind while checking home region of input to lookup join: %v", input)
+	}
+
 	var inputTableMeta *opt.TableMeta
 	var inputTable cat.Table
 	var inputIndexOrdinal cat.IndexOrdinal
