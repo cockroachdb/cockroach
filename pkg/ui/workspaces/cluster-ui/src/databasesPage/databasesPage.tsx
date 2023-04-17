@@ -574,14 +574,15 @@ export class DatabasesPage extends React.Component<
       title: (
         <Tooltip
           placement="bottom"
-          title="Index recommendations will appear if the system detects improper index usage, such as the occurrence of unused indexes. Following index recommendations may help improve query performance."
+          title="Index recommendations will appear if the system detects improper index usage, such as the
+          occurrence of unused indexes. Following index recommendations may help improve query performance."
         >
           Index Recommendations
         </Tooltip>
       ),
       cell: this.renderIndexRecommendations,
       sort: database => database.numIndexRecommendations,
-      className: cx("databases-table__col-node-regions"),
+      className: cx("databases-table__col-idx-rec"),
       name: "numIndexRecommendations",
     },
   ];
@@ -679,6 +680,7 @@ export class DatabasesPage extends React.Component<
             render={() => (
               <DatabasesSortedTable
                 className={cx("databases-table")}
+                tableWrapperClassName={cx("sorted-table")}
                 data={databasesToDisplay}
                 columns={displayColumns}
                 sortSetting={this.props.sortSetting}
