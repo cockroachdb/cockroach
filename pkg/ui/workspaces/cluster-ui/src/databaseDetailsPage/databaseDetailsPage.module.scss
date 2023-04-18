@@ -16,21 +16,24 @@
       font-family: $font-family--semi-bold;
     }
 
-    &-size {
-      width: 10em;
-    }
-
+    &-size,
     &-range-count,
     &-column-count,
     &-index-count,
     &-user-count {
-      width: 7em;
+      width: 8em;
+      text-align: right;
+      padding-right: $spacing-x-large;
     }
   }
 
   &__no-result {
     @include text--body-strong;
   }
+}
+
+.sorted-table {
+  width: 100%;
 }
 
 .icon {
