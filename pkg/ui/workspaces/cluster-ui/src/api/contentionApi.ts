@@ -60,9 +60,15 @@ export async function getContentionDetailsApi(
   const result = await executeInternalSql<ContentionResponseColumns>(request);
 
   if (sqlResultsAreEmpty(result)) {
+    if (result.error) {
+      // We don't return an error if it failed to retrieve the contention information.
+      console.error(
+        `Insights encounter an error while retrieving contention information: ${result.error}`,
+      );
+    }
     return formatApiResult<ContentionDetails[]>(
       [],
-      result.error,
+      null,
       "retrieving contention information",
     );
   }
