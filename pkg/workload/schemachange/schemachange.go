@@ -161,6 +161,10 @@ func (s *schemaChange) Ops(
 		return workload.QueryLoad{}, err
 	}
 	cfg := workload.NewMultiConnPoolCfgFromFlags(s.connFlags)
+	// We will need double the concurrency, since we need watch
+	// dog connections. There is a danger of the pool emptying on
+	// termination (since we will cancel schema changes).
+	cfg.MaxConnsPerPool *= 2
 	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
