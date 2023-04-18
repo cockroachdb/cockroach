@@ -370,7 +370,7 @@ func (ep encryptionPassphrase) String() string {
 func newBackupOptions(rng *rand.Rand) []backupOption {
 	possibleOpts := []backupOption{
 		revisionHistory{},
-		newEncryptionPassphrase(rng),
+		// newEncryptionPassphrase(rng),
 	}
 
 	var options []backupOption
