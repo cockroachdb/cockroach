@@ -3978,12 +3978,8 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 		UserProto:   planCtx.planner.User().EncodeProto(),
 	}
 
-	resTypes := make([]*types.T, len(colinfo.ExportColumns))
-	for i := range colinfo.ExportColumns {
-		resTypes[i] = colinfo.ExportColumns[i].Typ
-	}
 	plan.AddNoGroupingStage(
-		core, execinfrapb.PostProcessSpec{}, resTypes, execinfrapb.Ordering{},
+		core, execinfrapb.PostProcessSpec{}, colinfo.ExportColumnTypes, execinfrapb.Ordering{},
 	)
 
 	// The CSVWriter produces the same columns as the EXPORT statement.

@@ -520,3 +520,20 @@ func TestExportTargetFileSizeSetting(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(zipFiles), 6)
 }
+
+// TestExportProjection verifies that putting projection on top of EXPORT
+// doesn't crash the server (#101733)
+func TestExportProjection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE TABLE t (k PRIMARY KEY) AS SELECT 1;`)
+	sqlDB.Exec(t, `WITH cte AS (EXPORT INTO CSV 'nodelocal://0/export1/' FROM SELECT * FROM t) SELECT filename FROM cte;`)
+	sqlDB.Exec(t, `WITH cte AS (EXPORT INTO PARQUET 'nodelocal://0/export1/' FROM SELECT * FROM t) SELECT filename FROM cte;`)
+}
