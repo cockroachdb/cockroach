@@ -786,8 +786,8 @@ var pgBuiltins = map[string]builtinDefinition{
 						ELSE a.attname
 					END as pg_get_indexdef
 					FROM pg_catalog.pg_index i
-					LEFT JOIN pg_attribute a ON (a.attrelid = i.indexrelid AND a.attnum = $2)
-					LEFT JOIN pg_indexes defs ON ($2 = 0 AND defs.crdb_oid = i.indexrelid)
+					LEFT JOIN pg_catalog.pg_attribute a ON (a.attrelid = i.indexrelid AND a.attnum = $2)
+					LEFT JOIN pg_catalog.pg_indexes defs ON ($2 = 0 AND defs.crdb_oid = i.indexrelid)
 					WHERE i.indexrelid = $1`,
 			Info:       "Gets the CREATE INDEX command for index, or definition of just one index column when given a non-zero column number",
 			Volatility: volatility.Stable,
@@ -1029,7 +1029,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			// on pg_description and let predicate push-down do its job.
 			Body: fmt.Sprintf(
 				`SELECT comment
-         FROM system.comments c
+				 FROM system.public.comments c
 				 WHERE c.type=%[1]d
 				 AND c.object_id=$1::int
 				 AND c.sub_id=$2::int
