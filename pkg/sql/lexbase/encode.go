@@ -20,7 +20,7 @@
 package lexbase
 
 import (
-	"bytes"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
@@ -55,9 +55,9 @@ const (
 // identifier is quoted if either the flags ask for it, the identifier
 // contains special characters, or the identifier is a reserved SQL
 // keyword.
-func EncodeRestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
+func EncodeRestrictedSQLIdent(buf stringencoding.Buffer, s string, flags EncodeFlags) {
 	if flags.HasFlags(EncBareIdentifiers) || (!isReservedKeyword(s) && IsBareIdentifier(s)) {
-		buf.WriteString(s)
+		_, _ = buf.WriteString(s)
 		return
 	}
 	EncodeEscapedSQLIdent(buf, s)
@@ -66,9 +66,9 @@ func EncodeRestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
 // EncodeUnrestrictedSQLIdent writes the identifier in s to buf.
 // The identifier is only quoted if the flags don't tell otherwise and
 // the identifier contains special characters.
-func EncodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
+func EncodeUnrestrictedSQLIdent(buf stringencoding.Buffer, s string, flags EncodeFlags) {
 	if flags.HasFlags(EncBareIdentifiers) || IsBareIdentifier(s) {
-		buf.WriteString(s)
+		_, _ = buf.WriteString(s)
 		return
 	}
 	EncodeEscapedSQLIdent(buf, s)
@@ -78,7 +78,7 @@ func EncodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) 
 // quoted, so that any special character it contains is not at risk
 // of "spilling" in the surrounding syntax.
 func EscapeSQLIdent(s string) string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	EncodeEscapedSQLIdent(&buf, s)
 	return buf.String()
 }
@@ -86,25 +86,25 @@ func EscapeSQLIdent(s string) string {
 // EncodeEscapedSQLIdent writes the identifier in s to buf. The
 // identifier is always quoted. Double quotes inside the identifier
 // are escaped.
-func EncodeEscapedSQLIdent(buf *bytes.Buffer, s string) {
-	buf.WriteByte('"')
+func EncodeEscapedSQLIdent(buf stringencoding.Buffer, s string) {
+	_ = buf.WriteByte('"')
 	start := 0
 	for i, n := 0, len(s); i < n; i++ {
 		ch := s[i]
 		// The only character that requires escaping is a double quote.
 		if ch == '"' {
 			if start != i {
-				buf.WriteString(s[start:i])
+				_, _ = buf.WriteString(s[start:i])
 			}
 			start = i + 1
-			buf.WriteByte(ch)
-			buf.WriteByte(ch) // add extra copy of ch
+			_ = buf.WriteByte(ch)
+			_ = buf.WriteByte(ch) // add extra copy of ch
 		}
 	}
 	if start < len(s) {
-		buf.WriteString(s[start:])
+		_, _ = buf.WriteString(s[start:])
 	}
-	buf.WriteByte('"')
+	_ = buf.WriteByte('"')
 }
 
 var mustQuoteMap = map[byte]bool{
@@ -116,7 +116,7 @@ var mustQuoteMap = map[byte]bool{
 
 // EncodeSQLString writes a string literal to buf. All unicode and
 // non-printable characters are escaped.
-func EncodeSQLString(buf *bytes.Buffer, in string) {
+func EncodeSQLString(buf stringencoding.Buffer, in string) {
 	EncodeSQLStringWithFlags(buf, in, EncNoFlags)
 }
 
@@ -124,7 +124,7 @@ func EncodeSQLString(buf *bytes.Buffer, in string) {
 // string. This is suitable for safely producing a SQL string valid
 // for input to the parser.
 func EscapeSQLString(in string) string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	EncodeSQLString(&buf, in)
 	return buf.String()
 }
@@ -134,7 +134,7 @@ func EscapeSQLString(in string) string {
 // the output format: if encodeBareString is set, the output string
 // will not be wrapped in quotes if the strings contains no special
 // characters.
-func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
+func EncodeSQLStringWithFlags(buf stringencoding.Buffer, in string, flags EncodeFlags) {
 	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
 	start := 0
 	escapedString := false
@@ -156,10 +156,10 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 		}
 
 		if !escapedString {
-			buf.WriteString("e'") // begin e'xxx' string
+			_, _ = buf.WriteString("e'") // begin e'xxx' string
 			escapedString = true
 		}
-		buf.WriteString(in[start:i])
+		_, _ = buf.WriteString(in[start:i])
 		ln := utf8.RuneLen(r)
 		if ln < 0 {
 			start = i + 1
@@ -171,13 +171,13 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 
 	quote := !escapedString && !bareStrings
 	if quote {
-		buf.WriteByte('\'') // begin 'xxx' string if nothing was escaped
+		_ = buf.WriteByte('\'') // begin 'xxx' string if nothing was escaped
 	}
 	if start < len(in) {
-		buf.WriteString(in[start:])
+		_, _ = buf.WriteString(in[start:])
 	}
 	if escapedString || quote {
-		buf.WriteByte('\'')
+		_ = buf.WriteByte('\'')
 	}
 }
 
@@ -186,39 +186,39 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 // encoding here with x'...'  because the result would be less
 // compact. We are trading a little more time during the encoding to
 // have a little less bytes on the wire.
-func EncodeSQLBytes(buf *bytes.Buffer, in string) {
-	buf.WriteString("b'")
+func EncodeSQLBytes(buf stringencoding.Buffer, in string) {
+	_, _ = buf.WriteString("b'")
 	EncodeSQLBytesInner(buf, in)
-	buf.WriteByte('\'')
+	_ = buf.WriteByte('\'')
 }
 
 // EncodeSQLBytesInner is like EncodeSQLBytes but does not include the
 // outer quote delimiter and the 'b' prefix.
-func EncodeSQLBytesInner(buf *bytes.Buffer, in string) {
+func EncodeSQLBytesInner(buf stringencoding.Buffer, in string) {
 	start := 0
 	// Loop over the bytes of the string (i.e., don't use range over unicode
 	// code points).
 	for i, n := 0, len(in); i < n; i++ {
 		ch := in[i]
 		if encodedChar := stringencoding.EncodeMap[ch]; encodedChar != stringencoding.DontEscape {
-			buf.WriteString(in[start:i])
-			buf.WriteByte('\\')
-			buf.WriteByte(encodedChar)
+			_, _ = buf.WriteString(in[start:i])
+			_ = buf.WriteByte('\\')
+			_ = buf.WriteByte(encodedChar)
 			start = i + 1
 		} else if ch == '\'' {
 			// We can't just fold this into stringencoding.EncodeMap because
 			// stringencoding.EncodeMap is also used for strings which
 			// aren't quoted with single-quotes
-			buf.WriteString(in[start:i])
-			buf.WriteByte('\\')
-			buf.WriteByte(ch)
+			_, _ = buf.WriteString(in[start:i])
+			_ = buf.WriteByte('\\')
+			_ = buf.WriteByte(ch)
 			start = i + 1
 		} else if ch < 0x20 || ch >= 0x7F {
-			buf.WriteString(in[start:i])
+			_, _ = buf.WriteString(in[start:i])
 			// Escape non-printable characters.
-			buf.Write(stringencoding.HexMap[ch])
+			_, _ = buf.Write(stringencoding.HexMap[ch])
 			start = i + 1
 		}
 	}
-	buf.WriteString(in[start:])
+	_, _ = buf.WriteString(in[start:])
 }
