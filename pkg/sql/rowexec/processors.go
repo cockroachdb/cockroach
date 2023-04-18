@@ -291,9 +291,9 @@ func NewProcessor(
 		}
 
 		if core.Exporter.Format.Format == roachpb.IOFileFormat_Parquet {
-			return NewParquetWriterProcessor(flowCtx, processorID, *core.Exporter, inputs[0], outputs[0])
+			return NewParquetWriterProcessor(flowCtx, processorID, *core.Exporter, post, inputs[0], outputs[0])
 		}
-		return NewCSVWriterProcessor(flowCtx, processorID, *core.Exporter, inputs[0], outputs[0])
+		return NewCSVWriterProcessor(flowCtx, processorID, *core.Exporter, post, inputs[0], outputs[0])
 	}
 
 	if core.BulkRowWriter != nil {
@@ -396,10 +396,10 @@ var NewRestoreDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.RestoreD
 var NewStreamIngestionDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.StreamIngestionDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewCSVWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ExportSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ExportSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewParquetWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewParquetWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ExportSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewParquetWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ExportSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewChangeAggregatorProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewChangeAggregatorProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)

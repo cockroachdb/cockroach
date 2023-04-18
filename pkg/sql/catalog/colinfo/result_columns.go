@@ -257,3 +257,13 @@ var ExportColumns = ResultColumns{
 	{Name: "rows", Typ: types.Int},
 	{Name: "bytes", Typ: types.Int},
 }
+
+// ExportColumnTypes is the type schema of the EXPORT statement.
+var ExportColumnTypes []*types.T
+
+func init() {
+	ExportColumnTypes = make([]*types.T, len(ExportColumns))
+	for i, c := range ExportColumns {
+		ExportColumnTypes[i] = c.Typ
+	}
+}
