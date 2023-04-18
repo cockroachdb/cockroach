@@ -46,7 +46,10 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":tenantcostclient"],
-    tags = ["ccl_test"],
+    tags = [
+        "ccl_test",
+        "no-remote-exec",
+    ],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"golang.org/x/time/rate"
@@ -536,38 +537,56 @@ func addSSTablePreApply(
 	}
 
 	tBegin := timeutil.Now()
-	var tEndDelayed time.Time
 	defer func() {
 		if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
 			log.Infof(ctx,
-				"ingesting SST of size %s at index %d took %.2fs (%.2fs on which in PreIngestDelay)",
-				humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(), tEndDelayed.Sub(tBegin).Seconds(),
+				"ingesting SST of size %s at index %d took %.2fs",
+				humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(),
 			)
 		}
 	}()
 
-	eng.PreIngestDelay(ctx)
-	tEndDelayed = timeutil.Now()
-
 	ingestPath := path + ".ingested"
 
-	// The SST may already be on disk, thanks to the sideloading mechanism.  If
+	// The SST may already be on disk, thanks to the sideloading mechanism. If
 	// so we can try to add that file directly, via a new hardlink if the
-	// filesystem supports it, rather than writing a new copy of it.  We cannot
+	// filesystem supports it, rather than writing a new copy of it. We cannot
 	// pass it the path in the sideload store as the engine deletes the passed
 	// path on success.
-	if linkErr := eng.Link(path, ingestPath); linkErr == nil {
-		ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
-		if ingestErr != nil {
-			log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
+	if linkErr := eng.Link(path, ingestPath); linkErr != nil {
+		// We're on a weird file system that doesn't support Link. This is unlikely
+		// to happen in any "normal" deployment but we have a fallback path anyway.
+		log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, ingestPath)
+		if err := ingestViaCopy(ctx, st, eng, ingestPath, term, index, sst, limiter); err != nil {
+			log.Fatalf(ctx, "%v", err)
 		}
-		// Adding without modification succeeded, no copy necessary.
-		log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
-		return false /* copied */
+		return true /* copied */
 	}
 
-	log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, ingestPath)
+	// Regular path - we made a hard link, so we can ingest the hard link now.
+	ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
+	if ingestErr != nil {
+		log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
+	}
+	// Adding without modification succeeded, no copy necessary.
+	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
 
+	return false /* copied */
+}
+
+// ingestViaCopy writes the SST to ingestPath (with rate limiting) and then ingests it
+// into the Engine.
+//
+// This is not normally called, as we prefer to make a hard-link and ingest that instead.
+func ingestViaCopy(
+	ctx context.Context,
+	st *cluster.Settings,
+	eng storage.Engine,
+	ingestPath string,
+	term, index uint64,
+	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
+	limiter *rate.Limiter,
+) error {
 	// TODO(tschottdorf): remove this once sideloaded storage guarantees its
 	// existence.
 	if err := eng.MkdirAll(filepath.Dir(ingestPath), os.ModePerm); err != nil {
@@ -579,17 +598,17 @@ func addSSTablePreApply(
 		// command as committed). Just unlink the file (the storage engine
 		// created a hard link); after that we're free to write it again.
 		if err := eng.Remove(ingestPath); err != nil {
-			log.Fatalf(ctx, "while removing existing file during ingestion of %s: %+v", ingestPath, err)
+			return errors.Wrapf(err, "while removing existing file during ingestion of %s", ingestPath)
 		}
 	}
 	if err := kvserverbase.WriteFileSyncing(ctx, ingestPath, sst.Data, eng, 0600, st, limiter); err != nil {
-		log.Fatalf(ctx, "while ingesting %s: %+v", ingestPath, err)
+		return errors.Wrapf(err, "while ingesting %s", ingestPath)
 	}
 	if err := eng.IngestExternalFiles(ctx, []string{ingestPath}); err != nil {
-		log.Fatalf(ctx, "while ingesting %s: %+v", ingestPath, err)
+		return errors.Wrapf(err, "while ingesting %s", ingestPath)
 	}
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
-	return true /* copied */
+	return nil
 }
 
 func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult result.LocalResult) {
