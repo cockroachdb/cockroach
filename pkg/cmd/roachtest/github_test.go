@@ -105,17 +105,17 @@ func TestShouldPost(t *testing.T) {
 
 func TestCreatePostRequest(t *testing.T) {
 	testCases := []struct {
-		nonReleaseBlocker     bool
-		clusterCreationFailed bool
-		loadTeamsFailed       bool
-		localSSD              bool
-		arch                  vm.CPUArch
-		category              issueCategory
-		expectedPost          bool
-		expectedParams        map[string]string
+		nonReleaseBlocker      bool
+		clusterCreationFailed  bool
+		loadTeamsFailed        bool
+		localSSD               bool
+		arch                   vm.CPUArch
+		category               issueCategory
+		expectedPost           bool
+		expectedReleaseBlocker bool
+		expectedParams         map[string]string
 	}{
-		{true, false, false, false, "", otherErr, true,
-
+		{true, false, false, false, "", otherErr, true, false, // non release-blocker
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
@@ -126,8 +126,18 @@ func TestCreatePostRequest(t *testing.T) {
 				"localSSD":  "false",
 			}),
 		},
-		{true, false, false, true, vm.ArchARM64, clusterCreationErr, true,
-
+		{false, false, false, false, "", otherErr, true, true,
+			prefixAll(map[string]string{
+				"cloud":     "gce",
+				"encrypted": "false",
+				"fs":        "ext4",
+				"ssd":       "0",
+				"cpu":       "4",
+				"arch":      "amd64",
+				"localSSD":  "false",
+			}),
+		},
+		{false, false, false, true, vm.ArchARM64, clusterCreationErr, true, false,
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
@@ -141,8 +151,7 @@ func TestCreatePostRequest(t *testing.T) {
 		// Assert that release-blocker label exists when !nonReleaseBlocker
 		// Also ensure that in the event of a failed cluster creation,
 		// nil `vmOptions` and `clusterImpl` are not dereferenced
-		{false, true, false, false, "", sshErr, true,
-
+		{false, true, false, false, "", sshErr, true, false,
 			prefixAll(map[string]string{
 				"cloud": "gce",
 				"ssd":   "0",
@@ -150,7 +159,7 @@ func TestCreatePostRequest(t *testing.T) {
 			}),
 		},
 		//Simulate failure loading TEAMS.yaml
-		{true, false, true, false, "", otherErr, false, nil},
+		{true, false, true, false, "", otherErr, false, false, nil},
 	}
 
 	reg, err := makeTestRegistry(spec.GCE, "", "", false, false)
@@ -207,10 +216,7 @@ func TestCreatePostRequest(t *testing.T) {
 			}
 
 			require.True(t, contains(req.ExtraLabels, nil, "O-roachtest"))
-
-			if !c.nonReleaseBlocker {
-				require.True(t, contains(req.ExtraLabels, nil, "release-blocker"))
-			}
+			require.Equal(t, c.expectedReleaseBlocker, contains(req.ExtraLabels, nil, "release-blocker"))
 
 			expectedTeam := "@cockroachdb/unowned"
 			expectedName := "github_test"
