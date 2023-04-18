@@ -287,9 +287,9 @@ export class IndexDetailsPage extends React.Component<
       );
       getStatementsUsingIndex(req)
         .then(res => {
-          populateRegionNodeForStatements(res, this.props.nodeRegions);
+          populateRegionNodeForStatements(res.results, this.props.nodeRegions);
           this.setState({
-            statements: res,
+            statements: res.results,
             lastStatementsUpdated: moment(),
             lastStatementsError: null,
           });
