@@ -94,7 +94,7 @@ func MisplannedRanges(
 			}
 			fmt.Fprintf(&b, "%+v", misplannedRanges[i])
 		}
-		log.VEventf(ctx, 2, "misplanned ranges: %s", b.String())
+		log.VEventf(ctx, 2, "%d misplanned ranges: %s", len(misplannedRanges), b.String())
 	}
 
 	return misplannedRanges
