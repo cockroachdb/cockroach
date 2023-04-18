@@ -523,7 +523,8 @@ type distResolver struct {
 func (r *distResolver) getRangesForSpans(
 	ctx context.Context, spans []roachpb.Span,
 ) ([]roachpb.Span, error) {
-	return kvfeed.AllRangeSpans(ctx, r.DistSender, spans)
+	spans, _, err := kvfeed.AllRangeSpans(ctx, r.DistSender, spans)
+	return spans, err
 }
 
 func rebalanceSpanPartitions(
