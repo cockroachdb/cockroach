@@ -190,7 +190,8 @@ func (d *directoryCache) LookupTenantPods(
 			"cluster name %s doesn't match expected %s", clusterName, entry.ClusterName)
 	}
 
-	ctx, _ = d.stopper.WithCancelOnQuiesce(ctx)
+	ctx, cancel := d.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
 	tenantPods := entry.GetPods()
 
 	// Trigger resumption if there are no RUNNING pods.
@@ -365,7 +366,8 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 		var client Directory_WatchPodsClient
 		var err error
 		firstRun := true
-		ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 
 		watchPodsErr := log.Every(10 * time.Second)
 		recvErr := log.Every(10 * time.Second)
