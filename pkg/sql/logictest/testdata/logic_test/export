@@ -1,0 +1,10 @@
+# Regression test for incorrectly handling projection on top of the EXPORT
+# (#101733).
+statement ok
+CREATE TABLE t (k PRIMARY KEY) AS SELECT 1;
+
+statement ok
+WITH cte AS (EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM t) SELECT filename FROM cte;
+
+statement ok
+WITH cte AS (EXPORT INTO PARQUET 'nodelocal://1/export1/' FROM SELECT * FROM t) SELECT filename FROM cte;
