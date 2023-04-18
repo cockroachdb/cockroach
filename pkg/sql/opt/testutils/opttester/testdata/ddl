@@ -1,0 +1,103 @@
+exec-ddl
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi')
+----
+
+exec-ddl
+CREATE TABLE t (x INT, g greeting)
+----
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": [
+            "g"
+        ],
+        "created_at": "2023-03-14 14:05:25.635783",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hello"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 2,
+                "num_range": 0,
+                "upper_bound": "howdy"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 3,
+                "num_range": 0,
+                "upper_bound": "hi"
+            }
+        ],
+        "histo_col_type": "greeting",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 6
+    },
+    {
+        "avg_size": 4,
+        "columns": [
+            "x"
+        ],
+        "created_at": "2023-03-14 14:05:25.635783",
+        "distinct_count": 10,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 5,
+                "num_eq": 1,
+                "num_range": 5,
+                "upper_bound": "10"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 6
+    }
+    ]'
+----
+
+opt format=show-stats
+SELECT * FROM t WHERE x > 0 AND g = 'howdy'
+----
+select
+ ├── columns: x:1(int!null) g:2(greeting!null)
+ ├── immutable
+ ├── stats: [rows=2, distinct(1)=2, null(1)=0, distinct(2)=1, null(2)=0]
+ │   histogram(1)=  0  0  1.6667 0.33333
+ │                <--- 0 --------- 10 --
+ │   histogram(2)=  0     2
+ │                <--- 'howdy'
+ ├── fd: ()-->(2)
+ ├── scan t
+ │    ├── columns: x:1(int) g:2(greeting)
+ │    └── stats: [rows=6, distinct(1)=6, null(1)=0, distinct(2)=3, null(2)=0]
+ │        histogram(1)=  0  0  5  1
+ │                     <--- 0 --- 10
+ │        histogram(2)=  0     1     0     2     0   3
+ │                     <--- 'hello' --- 'howdy' --- 'hi'
+ └── filters
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+      │    ├── variable: x:1 [type=int]
+      │    └── const: 0 [type=int]
+      └── eq [type=bool, outer=(2), immutable, constraints=(/2: [/'howdy' - /'howdy']; tight), fd=()-->(2)]
+           ├── variable: g:2 [type=greeting]
+           └── const: 'howdy' [type=greeting]
+
+exec-ddl
+CREATE MATERIALIZED VIEW v AS SELECT x FROM t
+----
