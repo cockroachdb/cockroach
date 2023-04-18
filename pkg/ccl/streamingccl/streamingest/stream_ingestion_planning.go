@@ -166,16 +166,6 @@ func ingestionPlanHook(
 		if err != nil {
 			return err
 		}
-		q := streamURL.Query()
-
-		// Operator should specify a postgres scheme address with cert authentication.
-		if hasPostgresAuthentication := (q.Get("sslmode") == "verify-full") &&
-			q.Has("sslrootcert") && q.Has("sslkey") && q.Has("sslcert"); (streamURL.Scheme == "postgres") &&
-			!hasPostgresAuthentication {
-			return errors.Errorf(
-				"stream replication address should have cert authentication if in postgres scheme: %s", streamAddress)
-		}
-
 		streamAddress = streamingccl.StreamAddress(streamURL.String())
 
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
