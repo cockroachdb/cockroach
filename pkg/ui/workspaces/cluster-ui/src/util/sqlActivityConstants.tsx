@@ -8,12 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import React from "react";
 import { duration } from "moment-timezone";
 import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
 import {
   getLabel,
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
+import classNames from "classnames/bind";
+import styles from "src/sqlActivity/sqlActivity.module.scss";
+
+const cx = classNames.bind(styles);
 
 export const limitOptions = [
   { value: 25, label: "25" },
@@ -63,6 +68,25 @@ export function getSortColumn(sort: SqlStatsSortType): string {
   }
 }
 
+export function getReqSortColumn(sort: string): SqlStatsSortType {
+  switch (sort) {
+    case "time":
+      return SqlStatsSortOptions.SERVICE_LAT;
+    case "executionCount":
+      return SqlStatsSortOptions.EXECUTION_COUNT;
+    case "cpu":
+      return SqlStatsSortOptions.CPU_TIME;
+    case "latencyP99":
+      return SqlStatsSortOptions.P99_STMTS_ONLY;
+    case "contention":
+      return SqlStatsSortOptions.CONTENTION_TIME;
+    case "workloadPct":
+      return SqlStatsSortOptions.PCT_RUNTIME;
+    default:
+      return SqlStatsSortOptions.SERVICE_LAT;
+  }
+}
+
 export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions)
   .map(sortVal => ({
     value: sortVal as SqlStatsSortType,
@@ -96,13 +120,21 @@ export function getSubsetWarning(
   type: "statement" | "transaction",
   limit: number,
   sortLabel: string,
-  showSuggestion: boolean,
   columnTitle: StatisticTableColumnKeys,
-): string {
-  const warningSuggestion = showSuggestion
-    ? `Update the search criteria to see the ${type} fingerprints 
-    sorted on ${getLabel(columnTitle, type)}.`
-    : "";
-  return `You are viewing a subset (Top ${limit}) of fingerprints by ${sortLabel}.
-    ${warningSuggestion}`;
+  onUpdateSortSettingAndApply: () => void,
+): React.ReactElement {
+  return (
+    <span className={cx("row")}>
+      {`You are viewing a subset (Top ${limit}) of fingerprints by ${sortLabel}.`}
+      &nbsp;
+      <a onClick={onUpdateSortSettingAndApply} className={cx("action")}>
+        Update the search criteria
+      </a>
+      &nbsp;
+      {`to see the ${type} fingerprints sorted on ${getLabel(
+        columnTitle,
+        type,
+      )}.`}
+    </span>
+  );
 }
