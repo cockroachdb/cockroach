@@ -21,6 +21,7 @@ package stringencoding
 
 import (
 	"bytes"
+	"io"
 	"unicode/utf8"
 )
 
@@ -76,10 +77,16 @@ func init() {
 	}
 }
 
+type Buffer interface {
+	io.ByteWriter
+	io.StringWriter
+	io.Writer
+}
+
 // EncodeEscapedChar is used internally to write out a character from a larger
 // string that needs to be escaped to a buffer.
 func EncodeEscapedChar(
-	buf *bytes.Buffer,
+	buf Buffer,
 	entireString string,
 	currentRune rune,
 	currentByte byte,
@@ -118,17 +125,21 @@ const uppercaseHex = `0123456789ABCDEF`
 // writeMultibyteRuneAsHex is equivalent to either
 // fmt.FPrintf(`\u%04X`) or fmt.FPrintf(`\U%08X`).
 // We can't quite just use strconv since we need uppercase hex.
-func writeMultibyteRuneAsHex(buf *bytes.Buffer, r rune, ln int) {
+func writeMultibyteRuneAsHex(buf Buffer, r rune, ln int) {
+	const mask = 0x0f
 	if ln == 2 {
-		buf.WriteString(`\u0000`)
+		buf.WriteString(`\u`)
 	} else {
-		buf.WriteString(`\U00000000`)
+		buf.WriteString(`\U`)
+		buf.WriteByte(uppercaseHex[r>>28&mask])
+		buf.WriteByte(uppercaseHex[r>>24&mask])
+		buf.WriteByte(uppercaseHex[r>>20&mask])
+		buf.WriteByte(uppercaseHex[r>>16&mask])
 	}
-	for i := 1; r > 0; r >>= 4 {
-		buf.Bytes()[buf.Len()-i] = uppercaseHex[r&0x0f]
-		i++
-	}
-
+	buf.WriteByte(uppercaseHex[r>>12&mask])
+	buf.WriteByte(uppercaseHex[r>>8&mask])
+	buf.WriteByte(uppercaseHex[r>>4&mask])
+	buf.WriteByte(uppercaseHex[r&mask])
 }
 
 func writeHexDigit(buf *bytes.Buffer, v int) {

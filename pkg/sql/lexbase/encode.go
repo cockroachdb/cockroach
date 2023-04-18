@@ -20,7 +20,7 @@
 package lexbase
 
 import (
-	"bytes"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
@@ -55,7 +55,7 @@ const (
 // identifier is quoted if either the flags ask for it, the identifier
 // contains special characters, or the identifier is a reserved SQL
 // keyword.
-func EncodeRestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
+func EncodeRestrictedSQLIdent(buf stringencoding.Buffer, s string, flags EncodeFlags) {
 	if flags.HasFlags(EncBareIdentifiers) || (!isReservedKeyword(s) && IsBareIdentifier(s)) {
 		buf.WriteString(s)
 		return
@@ -66,7 +66,7 @@ func EncodeRestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
 // EncodeUnrestrictedSQLIdent writes the identifier in s to buf.
 // The identifier is only quoted if the flags don't tell otherwise and
 // the identifier contains special characters.
-func EncodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
+func EncodeUnrestrictedSQLIdent(buf stringencoding.Buffer, s string, flags EncodeFlags) {
 	if flags.HasFlags(EncBareIdentifiers) || IsBareIdentifier(s) {
 		buf.WriteString(s)
 		return
@@ -78,7 +78,7 @@ func EncodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) 
 // quoted, so that any special character it contains is not at risk
 // of "spilling" in the surrounding syntax.
 func EscapeSQLIdent(s string) string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	EncodeEscapedSQLIdent(&buf, s)
 	return buf.String()
 }
@@ -86,7 +86,7 @@ func EscapeSQLIdent(s string) string {
 // EncodeEscapedSQLIdent writes the identifier in s to buf. The
 // identifier is always quoted. Double quotes inside the identifier
 // are escaped.
-func EncodeEscapedSQLIdent(buf *bytes.Buffer, s string) {
+func EncodeEscapedSQLIdent(buf stringencoding.Buffer, s string) {
 	buf.WriteByte('"')
 	start := 0
 	for i, n := 0, len(s); i < n; i++ {
@@ -116,7 +116,7 @@ var mustQuoteMap = map[byte]bool{
 
 // EncodeSQLString writes a string literal to buf. All unicode and
 // non-printable characters are escaped.
-func EncodeSQLString(buf *bytes.Buffer, in string) {
+func EncodeSQLString(buf stringencoding.Buffer, in string) {
 	EncodeSQLStringWithFlags(buf, in, EncNoFlags)
 }
 
@@ -124,7 +124,7 @@ func EncodeSQLString(buf *bytes.Buffer, in string) {
 // string. This is suitable for safely producing a SQL string valid
 // for input to the parser.
 func EscapeSQLString(in string) string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	EncodeSQLString(&buf, in)
 	return buf.String()
 }
@@ -134,7 +134,7 @@ func EscapeSQLString(in string) string {
 // the output format: if encodeBareString is set, the output string
 // will not be wrapped in quotes if the strings contains no special
 // characters.
-func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
+func EncodeSQLStringWithFlags(buf stringencoding.Buffer, in string, flags EncodeFlags) {
 	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
 	start := 0
 	escapedString := false
@@ -186,7 +186,7 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 // encoding here with x'...'  because the result would be less
 // compact. We are trading a little more time during the encoding to
 // have a little less bytes on the wire.
-func EncodeSQLBytes(buf *bytes.Buffer, in string) {
+func EncodeSQLBytes(buf stringencoding.Buffer, in string) {
 	buf.WriteString("b'")
 	EncodeSQLBytesInner(buf, in)
 	buf.WriteByte('\'')
@@ -194,7 +194,7 @@ func EncodeSQLBytes(buf *bytes.Buffer, in string) {
 
 // EncodeSQLBytesInner is like EncodeSQLBytes but does not include the
 // outer quote delimiter and the 'b' prefix.
-func EncodeSQLBytesInner(buf *bytes.Buffer, in string) {
+func EncodeSQLBytesInner(buf stringencoding.Buffer, in string) {
 	start := 0
 	// Loop over the bytes of the string (i.e., don't use range over unicode
 	// code points).
