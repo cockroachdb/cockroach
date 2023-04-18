@@ -58,7 +58,7 @@ type UnorderedDistinct struct {
 	nullsAreDistinct   bool
 
 	Ht                  *colexechash.HashTable
-	hashTableNumBuckets uint64
+	hashTableNumBuckets uint32
 	// lastInputBatch tracks the last input batch read from the input and not
 	// emitted into the output. It is the only batch that we need to export when
 	// spilling to disk, and it will contain only the distinct tuples that need

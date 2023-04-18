@@ -42,6 +42,1066 @@ var (
 // column values) at a given column and computes a new hash by applying a
 // transformation to the existing hash.
 func rehash(
+	buckets []uint32,
+	col coldata.Vec,
+	nKeys int,
+	sel []int,
+	cancelChecker colexecutils.CancelChecker,
+	datumAlloc *tree.DatumAlloc,
+) {
+	switch col.CanonicalTypeFamily() {
+	case types.BoolFamily:
+		switch col.Type().Width() {
+		case -1:
+		default:
+			keys, nulls := col.Bool(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						x := 0
+						if v {
+							x = 1
+						}
+						p = p*31 + uintptr(x)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						x := 0
+						if v {
+							x = 1
+						}
+						p = p*31 + uintptr(x)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						x := 0
+						if v {
+							x = 1
+						}
+						p = p*31 + uintptr(x)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						x := 0
+						if v {
+							x = 1
+						}
+						p = p*31 + uintptr(x)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			}
+		}
+	case types.BytesFamily:
+		switch col.Type().Width() {
+		case -1:
+		default:
+			keys, nulls := col.Bytes(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(v)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			}
+		}
+	case types.DecimalFamily:
+		switch col.Type().Width() {
+		case -1:
+		default:
+			keys, nulls := col.Decimal(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for equal decimals to hash to the same value we need to
+						// remove the trailing zeroes if there are any.
+						var tmpDec apd.Decimal //gcassert:noescape
+						tmpDec.Reduce(&v)
+						b := []byte(tmpDec.String())
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for equal decimals to hash to the same value we need to
+						// remove the trailing zeroes if there are any.
+						var tmpDec apd.Decimal //gcassert:noescape
+						tmpDec.Reduce(&v)
+						b := []byte(tmpDec.String())
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for equal decimals to hash to the same value we need to
+						// remove the trailing zeroes if there are any.
+						var tmpDec apd.Decimal //gcassert:noescape
+						tmpDec.Reduce(&v)
+						b := []byte(tmpDec.String())
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for equal decimals to hash to the same value we need to
+						// remove the trailing zeroes if there are any.
+						var tmpDec apd.Decimal //gcassert:noescape
+						tmpDec.Reduce(&v)
+						b := []byte(tmpDec.String())
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			}
+		}
+	case types.IntFamily:
+		switch col.Type().Width() {
+		case 16:
+			keys, nulls := col.Int16(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			}
+		case 32:
+			keys, nulls := col.Int32(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			}
+		case -1:
+		default:
+			keys, nulls := col.Int64(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// In order for integers with different widths but of the same value to
+						// to hash to the same value, we upcast all of them to int64.
+						asInt64 := int64(v)
+						p = memhash64(noescape(unsafe.Pointer(&asInt64)), p)
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			}
+		}
+	case types.FloatFamily:
+		switch col.Type().Width() {
+		case -1:
+		default:
+			keys, nulls := col.Float64(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						f := v
+						if math.IsNaN(float64(f)) {
+							f = 0
+						}
+						p = f64hash(noescape(unsafe.Pointer(&f)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						f := v
+						if math.IsNaN(float64(f)) {
+							f = 0
+						}
+						p = f64hash(noescape(unsafe.Pointer(&f)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						f := v
+						if math.IsNaN(float64(f)) {
+							f = 0
+						}
+						p = f64hash(noescape(unsafe.Pointer(&f)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						f := v
+						if math.IsNaN(float64(f)) {
+							f = 0
+						}
+						p = f64hash(noescape(unsafe.Pointer(&f)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			}
+		}
+	case types.TimestampTZFamily:
+		switch col.Type().Width() {
+		case -1:
+		default:
+			keys, nulls := col.Timestamp(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						s := v.UnixNano()
+						p = memhash64(noescape(unsafe.Pointer(&s)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						s := v.UnixNano()
+						p = memhash64(noescape(unsafe.Pointer(&s)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						s := v.UnixNano()
+						p = memhash64(noescape(unsafe.Pointer(&s)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						s := v.UnixNano()
+						p = memhash64(noescape(unsafe.Pointer(&s)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			}
+		}
+	case types.IntervalFamily:
+		switch col.Type().Width() {
+		case -1:
+		default:
+			keys, nulls := col.Interval(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						months, days, nanos := v.Months, v.Days, v.Nanos()
+						p = memhash64(noescape(unsafe.Pointer(&months)), p)
+						p = memhash64(noescape(unsafe.Pointer(&days)), p)
+						p = memhash64(noescape(unsafe.Pointer(&nanos)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						months, days, nanos := v.Months, v.Days, v.Nanos()
+						p = memhash64(noescape(unsafe.Pointer(&months)), p)
+						p = memhash64(noescape(unsafe.Pointer(&days)), p)
+						p = memhash64(noescape(unsafe.Pointer(&nanos)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						months, days, nanos := v.Months, v.Days, v.Nanos()
+						p = memhash64(noescape(unsafe.Pointer(&months)), p)
+						p = memhash64(noescape(unsafe.Pointer(&days)), p)
+						p = memhash64(noescape(unsafe.Pointer(&nanos)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						//gcassert:bce
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						months, days, nanos := v.Months, v.Days, v.Nanos()
+						p = memhash64(noescape(unsafe.Pointer(&months)), p)
+						p = memhash64(noescape(unsafe.Pointer(&days)), p)
+						p = memhash64(noescape(unsafe.Pointer(&nanos)), p)
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			}
+		}
+	case types.JsonFamily:
+		switch col.Type().Width() {
+		case -1:
+		default:
+			keys, nulls := col.JSON(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// Access the underlying []byte directly which allows us to skip
+						// decoding-encoding of the JSON object.
+						_b := keys.Bytes.Get(selIdx)
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// Access the underlying []byte directly which allows us to skip
+						// decoding-encoding of the JSON object.
+						_b := keys.Bytes.Get(selIdx)
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// Access the underlying []byte directly which allows us to skip
+						// decoding-encoding of the JSON object.
+						_b := keys.Bytes.Get(selIdx)
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						// Access the underlying []byte directly which allows us to skip
+						// decoding-encoding of the JSON object.
+						_b := keys.Bytes.Get(selIdx)
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			}
+		}
+	case typeconv.DatumVecCanonicalTypeFamily:
+		switch col.Type().Width() {
+		case -1:
+		default:
+			keys, nulls := col.Datum(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+						b := coldataext.Hash(v.(tree.Datum), datumAlloc)
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+						b := coldataext.Hash(v.(tree.Datum), datumAlloc)
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+						b := coldataext.Hash(v.(tree.Datum), datumAlloc)
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+						b := coldataext.Hash(v.(tree.Datum), datumAlloc)
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
+
+						//gcassert:bce
+						buckets[i] = uint32(p)
+					}
+				}
+			}
+		}
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", col.Type()))
+	}
+	cancelChecker.CheckEveryCall()
+}
+
+// rehash64 takes an element of a key (tuple representing a row of equality
+// column values) at a given column and computes a new hash by applying a
+// transformation to the existing hash.
+//
+// Note that this function is a duplicate of rehash except that it works on
+// uint64s instead of uint32s. The function could be made generic, but that
+// incurs a small performance penalty because one of the arguments is an
+// interface.
+// TODO(yuzefovich): if / when we make coldata.Vec to no longer be an interface,
+// then we should remove the code duplication here.
+func rehash64(
 	buckets []uint64,
 	col coldata.Vec,
 	nKeys int,

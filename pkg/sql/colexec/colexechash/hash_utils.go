@@ -37,11 +37,19 @@ import (
 const DefaultInitHashValue = 1
 
 var (
+	uint32OneColumn []uint32
+	uint32TwoColumn []uint32
 	uint64OneColumn []uint64
 	uint64TwoColumn []uint64
 )
 
 func init() {
+	uint32OneColumn = make([]uint32, coldata.MaxBatchSize)
+	uint32TwoColumn = make([]uint32, coldata.MaxBatchSize)
+	for i := range uint32OneColumn {
+		uint32OneColumn[i] = 1
+		uint32TwoColumn[i] = 2
+	}
 	uint64OneColumn = make([]uint64, coldata.MaxBatchSize)
 	uint64TwoColumn = make([]uint64, coldata.MaxBatchSize)
 	for i := range uint64OneColumn {
@@ -59,7 +67,25 @@ func init() {
 // initHash initializes the hash value of each key to its initial state for
 // rehashing purposes.
 // NOTE: initValue *must* be non-zero and nKeys is assumed to be positive.
-func initHash(buckets []uint64, nKeys int, initValue uint64) {
+func initHash(buckets []uint32, nKeys int, initValue uint32) {
+	switch initValue {
+	case 1:
+		for n := 0; n < nKeys; n += copy(buckets[n:], uint32OneColumn) {
+		}
+	case 2:
+		for n := 0; n < nKeys; n += copy(buckets[n:], uint32TwoColumn) {
+		}
+	default:
+		// Early bounds checks.
+		_ = buckets[nKeys-1]
+		for i := 0; i < nKeys; i++ {
+			//gcassert:bce
+			buckets[i] = initValue
+		}
+	}
+}
+
+func initHash64(buckets []uint64, nKeys int, initValue uint64) {
 	switch initValue {
 	case 1:
 		for n := 0; n < nKeys; n += copy(buckets[n:], uint64OneColumn) {
@@ -80,7 +106,7 @@ func initHash(buckets []uint64, nKeys int, initValue uint64) {
 // finalizeHash takes each key's hash value and applies a final transformation
 // onto it so that it fits within numBuckets buckets.
 // NOTE: nKeys is assumed to be positive.
-func finalizeHash(buckets []uint64, nKeys int, numBuckets uint64) {
+func finalizeHash[T uint32 | uint64](buckets []T, nKeys int, numBuckets T) {
 	// Early bounds checks.
 	_ = buckets[nKeys-1]
 	isPowerOfTwo := numBuckets&(numBuckets-1) == 0
@@ -146,7 +172,7 @@ func (d *TupleHashDistributor) Distribute(b coldata.Batch, hashCols []uint32) []
 	} else {
 		d.buckets = d.buckets[:n]
 	}
-	initHash(d.buckets, n, d.InitHashValue)
+	initHash64(d.buckets, n, d.InitHashValue)
 
 	// Check if we received a batch with more tuples than the current
 	// allocation size and increase it if so.
@@ -155,7 +181,7 @@ func (d *TupleHashDistributor) Distribute(b coldata.Batch, hashCols []uint32) []
 	}
 
 	for _, i := range hashCols {
-		rehash(d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, &d.datumAlloc)
+		rehash64(d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, &d.datumAlloc)
 	}
 
 	finalizeHash(d.buckets, n, uint64(len(d.selections)))
