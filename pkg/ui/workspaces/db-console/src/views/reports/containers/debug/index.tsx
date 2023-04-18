@@ -260,7 +260,7 @@ export default function Debug() {
   return (
     <div className="section">
       <Helmet title="Debug" />
-      <h3 className="base-heading">Advanced Debugging</h3>
+      <h3 className="base-heading">Advanced Debug</h3>
       {disable_kv_level_advanced_debug && (
         <section className="section">
           <InlineAlert

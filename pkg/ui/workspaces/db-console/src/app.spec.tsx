@@ -65,7 +65,7 @@ const LOADING_CLUSTER_STATUS = /Loading cluster status.*/;
 const NODE_LOG_HEADER = /Logs Node.*/;
 const JOBS_HEADER = "Jobs";
 const SQL_ACTIVITY_HEADER = "SQL Activity";
-const ADVANCED_DEBUG_HEADER = "Advanced Debugging";
+const ADVANCED_DEBUG_HEADER = "Advanced Debug";
 const REDUX_DEBUG_HEADER = "Redux State";
 const CUSTOM_METRICS_CHART_HEADER = "Custom Chart";
 const ENQUEUE_RANGE_HEADER = "Manually enqueue range in a replica queue";
@@ -75,7 +75,7 @@ const PROBLEM_RANGES_HEADER = "Problem Ranges Report";
 const LOCALITIES_REPORT_HEADER = "Localities";
 const NODE_DIAGNOSTICS_REPORT_HEADER = "Node Diagnostics";
 const DECOMMISSIONED_HISTORY_REPORT = "Decommissioned Node History";
-const NETWORK_DIAGNOSTICS_REPORT_HEADER = "Network Diagnostics";
+const NETWORK_DIAGNOSTICS_REPORT_HEADER = "Network";
 const CLUSTER_SETTINGS_REPORT = "Cluster Settings";
 const CERTIFICATES_REPORT_HEADER = "Certificates";
 const RANGE_REPORT_HEADER = /Range Report for.*/;
@@ -471,7 +471,9 @@ describe("Routing to", () => {
   describe("'/debug' path", () => {
     test("routes to <Debug> component", () => {
       navigateToPath("/debug");
-      screen.getByText(ADVANCED_DEBUG_HEADER);
+      screen.getByText(ADVANCED_DEBUG_HEADER, {
+        selector: "h3",
+      });
     });
   });
 
@@ -580,14 +582,18 @@ describe("Routing to", () => {
   describe("'/reports/network' path", () => {
     test("routes to <Network> component", () => {
       navigateToPath("/reports/network");
-      screen.getByText(NETWORK_DIAGNOSTICS_REPORT_HEADER);
+      screen.getByText(NETWORK_DIAGNOSTICS_REPORT_HEADER, {
+        selector: "h3",
+      });
     });
   });
 
   describe("'/reports/network/:nodeIDAttr' path", () => {
     test("routes to <Network> component", () => {
       navigateToPath("/reports/network/1");
-      screen.getByText(NETWORK_DIAGNOSTICS_REPORT_HEADER);
+      screen.getByText(NETWORK_DIAGNOSTICS_REPORT_HEADER, {
+        selector: "h3",
+      });
     });
   });
 

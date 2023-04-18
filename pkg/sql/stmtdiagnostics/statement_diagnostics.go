@@ -297,7 +297,7 @@ func (r *Registry) insertRequestInternal(
 		if minExecutionLatency == 0 {
 			return 0, errors.Newf(
 				"got non-zero sampling probability %f and empty min exec latency",
-				minExecutionLatency)
+				samplingProbability)
 		}
 	}
 
