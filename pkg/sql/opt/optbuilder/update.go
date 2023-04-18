@@ -340,7 +340,7 @@ func (mb *mutationBuilder) buildUpdate(returning *tree.ReturningExprs) {
 	mb.b.addPartialIndexPredicatesForTable(mb.md.TableMeta(mb.tabID), nil /* scan */)
 
 	// Project partial index PUT and DEL boolean columns.
-	mb.projectPartialIndexPutAndDelCols()
+	mb.projectPartialIndexCols(true /* includePutCols */, true /* includeDelCols */)
 
 	mb.buildUniqueChecksForUpdate()
 

@@ -677,8 +677,11 @@ func (mb *mutationBuilder) buildInsert(returning *tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols(false /* isUpdate */)
 
+	// Add the partial index predicate expressions to the table metadata.
+	mb.b.addPartialIndexPredicatesForTable(mb.md.TableMeta(mb.tabID), nil /* scan */)
+
 	// Project partial index PUT boolean columns.
-	mb.projectPartialIndexPutCols()
+	mb.projectPartialIndexCols(true /* includePutCols */, false /* includeDelCols */)
 
 	mb.buildUniqueChecksForInsert()
 
@@ -893,14 +896,14 @@ func (mb *mutationBuilder) buildUpsert(returning *tree.ReturningExprs) {
 	// Project partial index PUT and DEL boolean columns.
 	//
 	// In some cases existing rows may not be fetched for an UPSERT (see
-	// mutationBuilder.needExistingRows for more details). In theses cases
+	// mutationBuilder.needExistingRows for more details). In these cases
 	// there is no need to project partial index DEL columns and
 	// mb.fetchScope will be nil. Therefore, we only project partial index
 	// PUT columns.
 	if mb.needExistingRows() {
-		mb.projectPartialIndexPutAndDelCols()
+		mb.projectPartialIndexCols(true /* includePutCols */, true /* includeDelCols */)
 	} else {
-		mb.projectPartialIndexPutCols()
+		mb.projectPartialIndexCols(true /* includePutCols */, false /* includeDelCols */)
 	}
 
 	mb.buildUniqueChecksForUpsert()

@@ -45,6 +45,20 @@ CREATE TABLE ambig (
 )
 ----
 
+exec-ddl
+CREATE TABLE mut (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT UNIQUE,
+  "w:write-only" INT,
+  "d:delete-only" INT,
+  UNIQUE INDEX "w_idx:write-only" (w) WHERE w > 1,
+  UNIQUE INDEX "d_idx:delete-only" (d) WHERE d > 2,
+  UNIQUE INDEX "b_w_idx:write-only" (b) WHERE w > 3,
+  UNIQUE INDEX "b_d_idx:delete-only" (b) WHERE d > 4
+)
+----
+
 # -- SELECT tests --
 
 # Populate table metadata with partial index predicates.
@@ -61,9 +75,9 @@ project
            ├── partial_indexes_c_idx: filters
            │    └── (a:1 > b:2) AND (c:3 = 'bar')
            ├── b: filters
-           │    └── c:3 = 'delete-only'
+           │    └── c:3 = 'write-only'
            └── b: filters
-                └── c:3 = 'write-only'
+                └── c:3 = 'delete-only'
 
 # Inline virtual computed column expressions in partial index predicates in
 # table metadata. Do not inline stored computed column expressions.
@@ -89,6 +103,23 @@ project
       └── projections
            └── lower(c:3) [as=d:4]
 
+build
+SELECT a FROM mut
+----
+project
+ ├── columns: a:1!null
+ └── scan mut
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:6 tableoid:7
+      └── partial index predicates
+           ├── w_idx: filters
+           │    └── w:4 > 1
+           ├── b_w_idx: filters
+           │    └── w:4 > 3
+           ├── d_idx: filters
+           │    └── d:5 > 2
+           └── b_d_idx: filters
+                └── d:5 > 4
+
 # -- INSERT tests --
 
 build
@@ -109,8 +140,8 @@ insert partial_indexes
       └── projections
            ├── column3:8 = 'foo' [as=partial_index_put1:9]
            ├── (column1:6 > column2:7) AND (column3:8 = 'bar') [as=partial_index_put2:10]
-           ├── column3:8 = 'delete-only' [as=partial_index_put3:11]
-           └── column3:8 = 'write-only' [as=partial_index_put4:12]
+           ├── column3:8 = 'write-only' [as=partial_index_put3:11]
+           └── false [as=partial_index_put4:12]
 
 # Do not error with "column reference is ambiguous" when table column names
 # match synthesized column names.
@@ -170,6 +201,31 @@ insert comp
            ├── d_comp:11 = 'foo' [as=partial_index_put1:13]
            └── e_comp:12 = 'FOO' [as=partial_index_put2:14]
 
+build
+INSERT INTO mut (a, b, c) VALUES (1, 2, 3)
+----
+insert mut
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── column3:10 => c:3
+ │    └── w_default:11 => w:4
+ ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:14 partial_index_put3:14
+ └── project
+      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:14!null column1:8!null column2:9!null column3:10!null w_default:11
+      ├── project
+      │    ├── columns: w_default:11 column1:8!null column2:9!null column3:10!null
+      │    ├── values
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    └── (1, 2, 3)
+      │    └── projections
+      │         └── NULL::INT8 [as=w_default:11]
+      └── projections
+           ├── w_default:11 > 1 [as=partial_index_put1:12]
+           ├── w_default:11 > 3 [as=partial_index_put2:13]
+           └── false [as=partial_index_put3:14]
+
 # Regression test for issue #52546. Building partial index predicate expressions
 # that are only a single column reference should not panic.
 
@@ -214,14 +270,14 @@ delete partial_indexes
       │         ├── partial_indexes_c_idx: filters
       │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
       │         ├── b: filters
-      │         │    └── c:8 = 'delete-only'
+      │         │    └── c:8 = 'write-only'
       │         └── b: filters
-      │              └── c:8 = 'write-only'
+      │              └── c:8 = 'delete-only'
       └── projections
            ├── c:8 = 'foo' [as=partial_index_del1:11]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:12]
-           ├── c:8 = 'delete-only' [as=partial_index_del3:13]
-           └── c:8 = 'write-only' [as=partial_index_del4:14]
+           ├── c:8 = 'write-only' [as=partial_index_del3:13]
+           └── c:8 = 'delete-only' [as=partial_index_del4:14]
 
 # Do not error with "column reference is ambiguous" when table column names
 # match synthesized column names.
@@ -281,6 +337,32 @@ delete comp
            ├── d:11 = 'foo' [as=partial_index_del1:15]
            └── e:12 = 'FOO' [as=partial_index_del2:16]
 
+build
+DELETE FROM mut
+----
+delete mut
+ ├── columns: <none>
+ ├── fetch columns: a:8 b:9 c:10 w:11 d:12
+ ├── partial index del columns: partial_index_del1:15 partial_index_del2:16 partial_index_del3:17 partial_index_del4:18
+ └── project
+      ├── columns: partial_index_del1:15 partial_index_del2:16 partial_index_del3:17 partial_index_del4:18 a:8!null b:9 c:10 w:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      ├── scan mut
+      │    ├── columns: a:8!null b:9 c:10 w:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    └── partial index predicates
+      │         ├── w_idx: filters
+      │         │    └── w:11 > 1
+      │         ├── b_w_idx: filters
+      │         │    └── w:11 > 3
+      │         ├── d_idx: filters
+      │         │    └── d:12 > 2
+      │         └── b_d_idx: filters
+      │              └── d:12 > 4
+      └── projections
+           ├── w:11 > 1 [as=partial_index_del1:15]
+           ├── w:11 > 3 [as=partial_index_del2:16]
+           ├── d:12 > 2 [as=partial_index_del3:17]
+           └── d:12 > 4 [as=partial_index_del4:18]
+
 # -- UPDATE tests --
 
 build
@@ -292,9 +374,9 @@ update partial_indexes
  ├── update-mapping:
  │    └── a_new:11 => a:1
  ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:15 partial_index_put4:16
- ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16
+ ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_del4:17
  └── project
-      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16!null partial_index_del4:17 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
       ├── project
       │    ├── columns: a_new:11!null a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan partial_indexes
@@ -305,17 +387,18 @@ update partial_indexes
       │    │         ├── partial_indexes_c_idx: filters
       │    │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
       │    │         ├── b: filters
-      │    │         │    └── c:8 = 'delete-only'
+      │    │         │    └── c:8 = 'write-only'
       │    │         └── b: filters
-      │    │              └── c:8 = 'write-only'
+      │    │              └── c:8 = 'delete-only'
       │    └── projections
       │         └── 1 [as=a_new:11]
       └── projections
            ├── c:8 = 'foo' [as=partial_index_put1:12]
            ├── (a_new:11 > b:7) AND (c:8 = 'bar') [as=partial_index_put2:13]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:14]
-           ├── c:8 = 'delete-only' [as=partial_index_put3:15]
-           └── c:8 = 'write-only' [as=partial_index_put4:16]
+           ├── c:8 = 'write-only' [as=partial_index_put3:15]
+           ├── false [as=partial_index_put4:16]
+           └── c:8 = 'delete-only' [as=partial_index_del4:17]
 
 build
 UPDATE partial_indexes SET a = a + 5 RETURNING *
@@ -330,9 +413,9 @@ update partial_indexes
  │    ├── b:7 => b:2
  │    └── c:8 => c:3
  ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:15 partial_index_put4:16
- ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16
+ ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_del4:17
  └── project
-      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16!null partial_index_del4:17 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
       ├── project
       │    ├── columns: a_new:11!null a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan partial_indexes
@@ -343,17 +426,18 @@ update partial_indexes
       │    │         ├── partial_indexes_c_idx: filters
       │    │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
       │    │         ├── b: filters
-      │    │         │    └── c:8 = 'delete-only'
+      │    │         │    └── c:8 = 'write-only'
       │    │         └── b: filters
-      │    │              └── c:8 = 'write-only'
+      │    │              └── c:8 = 'delete-only'
       │    └── projections
       │         └── a:6 + 5 [as=a_new:11]
       └── projections
            ├── c:8 = 'foo' [as=partial_index_put1:12]
            ├── (a_new:11 > b:7) AND (c:8 = 'bar') [as=partial_index_put2:13]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:14]
-           ├── c:8 = 'delete-only' [as=partial_index_put3:15]
-           └── c:8 = 'write-only' [as=partial_index_put4:16]
+           ├── c:8 = 'write-only' [as=partial_index_put3:15]
+           ├── false [as=partial_index_put4:16]
+           └── c:8 = 'delete-only' [as=partial_index_del4:17]
 
 build
 UPDATE partial_indexes SET a = v.a FROM (VALUES (1), (2)) AS v(a) WHERE partial_indexes.a = v.a
@@ -365,9 +449,9 @@ update partial_indexes
  ├── update-mapping:
  │    └── column1:11 => a:1
  ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:15 partial_index_put4:16
- ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16
+ ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_del4:17
  └── project
-      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
+      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16!null partial_index_del4:17 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
       ├── distinct-on
       │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
       │    ├── grouping columns: a:6!null
@@ -383,9 +467,9 @@ update partial_indexes
       │    │    │    │         ├── partial_indexes_c_idx: filters
       │    │    │    │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
       │    │    │    │         ├── b: filters
-      │    │    │    │         │    └── c:8 = 'delete-only'
+      │    │    │    │         │    └── c:8 = 'write-only'
       │    │    │    │         └── b: filters
-      │    │    │    │              └── c:8 = 'write-only'
+      │    │    │    │              └── c:8 = 'delete-only'
       │    │    │    ├── values
       │    │    │    │    ├── columns: column1:11!null
       │    │    │    │    ├── (1,)
@@ -408,8 +492,9 @@ update partial_indexes
            ├── c:8 = 'foo' [as=partial_index_put1:12]
            ├── (column1:11 > b:7) AND (c:8 = 'bar') [as=partial_index_put2:13]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:14]
-           ├── c:8 = 'delete-only' [as=partial_index_put3:15]
-           └── c:8 = 'write-only' [as=partial_index_put4:16]
+           ├── c:8 = 'write-only' [as=partial_index_put3:15]
+           ├── false [as=partial_index_put4:16]
+           └── c:8 = 'delete-only' [as=partial_index_del4:17]
 
 # Do not error with "column reference is ambiguous" when table column names
 # match synthesized column names.
@@ -542,6 +627,47 @@ update comp
            ├── e_comp:17 = 'FOO' [as=partial_index_put2:20]
            └── e:12 = 'FOO' [as=partial_index_del2:21]
 
+build
+UPDATE mut SET b = 1
+----
+update mut
+ ├── columns: <none>
+ ├── fetch columns: a:8 b:9 c:10 w:11 d:12
+ ├── update-mapping:
+ │    ├── b_new:15 => b:2
+ │    └── w_default:16 => w:4
+ ├── partial index put columns: partial_index_put1:17 partial_index_put2:19 partial_index_put3:21 partial_index_put3:21
+ ├── partial index del columns: partial_index_del1:18 partial_index_del2:20 partial_index_del3:22 partial_index_del4:23
+ └── project
+      ├── columns: partial_index_put1:17 partial_index_del1:18 partial_index_put2:19 partial_index_del2:20 partial_index_put3:21!null partial_index_del3:22 partial_index_del4:23 a:8!null b:9 c:10 w:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null w_default:16
+      ├── project
+      │    ├── columns: w_default:16 a:8!null b:9 c:10 w:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null
+      │    ├── project
+      │    │    ├── columns: b_new:15!null a:8!null b:9 c:10 w:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── scan mut
+      │    │    │    ├── columns: a:8!null b:9 c:10 w:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    └── partial index predicates
+      │    │    │         ├── w_idx: filters
+      │    │    │         │    └── w:11 > 1
+      │    │    │         ├── b_w_idx: filters
+      │    │    │         │    └── w:11 > 3
+      │    │    │         ├── d_idx: filters
+      │    │    │         │    └── d:12 > 2
+      │    │    │         └── b_d_idx: filters
+      │    │    │              └── d:12 > 4
+      │    │    └── projections
+      │    │         └── 1 [as=b_new:15]
+      │    └── projections
+      │         └── NULL::INT8 [as=w_default:16]
+      └── projections
+           ├── w_default:16 > 1 [as=partial_index_put1:17]
+           ├── w:11 > 1 [as=partial_index_del1:18]
+           ├── w_default:16 > 3 [as=partial_index_put2:19]
+           ├── w:11 > 3 [as=partial_index_del2:20]
+           ├── false [as=partial_index_put3:21]
+           ├── d:12 > 2 [as=partial_index_del3:22]
+           └── d:12 > 4 [as=partial_index_del4:23]
+
 # Regression test for #61520. The new value for column a should be in-scope when
 # building the partial index PUT expression when the value in the FROM clause
 # must be assignment casted.
@@ -643,9 +769,9 @@ insert partial_indexes
       │    │    │    │    │    │    ├── partial_indexes_c_idx: filters
       │    │    │    │    │    │    │    └── (a:9 > b:10) AND (c:11 = 'bar')
       │    │    │    │    │    │    ├── b: filters
-      │    │    │    │    │    │    │    └── c:11 = 'delete-only'
+      │    │    │    │    │    │    │    └── c:11 = 'write-only'
       │    │    │    │    │    │    └── b: filters
-      │    │    │    │    │    │         └── c:11 = 'write-only'
+      │    │    │    │    │    │         └── c:11 = 'delete-only'
       │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── filters
       │    │    │    │         └── column1:6 = a:9
@@ -657,9 +783,9 @@ insert partial_indexes
       │    │    │    │    │    ├── partial_indexes_c_idx: filters
       │    │    │    │    │    │    └── (a:14 > b:15) AND (c:16 = 'bar')
       │    │    │    │    │    ├── b: filters
-      │    │    │    │    │    │    └── c:16 = 'delete-only'
+      │    │    │    │    │    │    └── c:16 = 'write-only'
       │    │    │    │    │    └── b: filters
-      │    │    │    │    │         └── c:16 = 'write-only'
+      │    │    │    │    │         └── c:16 = 'delete-only'
       │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    └── filters
       │    │    │         ├── column2:7 = b:15
@@ -675,8 +801,8 @@ insert partial_indexes
       └── projections
            ├── column3:8 = 'foo' [as=partial_index_put1:19]
            ├── (column1:6 > column2:7) AND (column3:8 = 'bar') [as=partial_index_put2:20]
-           ├── column3:8 = 'delete-only' [as=partial_index_put3:21]
-           └── column3:8 = 'write-only' [as=partial_index_put4:22]
+           ├── column3:8 = 'write-only' [as=partial_index_put3:21]
+           └── false [as=partial_index_put4:22]
 
 build
 INSERT INTO partial_indexes VALUES (2, 1, 'bar') ON CONFLICT (b, c) DO UPDATE SET b = partial_indexes.b + 1, c = 'baz'
@@ -720,9 +846,9 @@ upsert partial_indexes
       │    │    │    │    │    ├── partial_indexes_c_idx: filters
       │    │    │    │    │    │    └── (a:9 > b:10) AND (c:11 = 'bar')
       │    │    │    │    │    ├── b: filters
-      │    │    │    │    │    │    └── c:11 = 'delete-only'
+      │    │    │    │    │    │    └── c:11 = 'write-only'
       │    │    │    │    │    └── b: filters
-      │    │    │    │    │         └── c:11 = 'write-only'
+      │    │    │    │    │         └── c:11 = 'delete-only'
       │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    └── filters
       │    │    │         ├── column2:7 = b:10
@@ -739,10 +865,10 @@ upsert partial_indexes
            ├── c:11 = 'foo' [as=partial_index_del1:20]
            ├── (upsert_a:16 > upsert_b:17) AND (upsert_c:18 = 'bar') [as=partial_index_put2:21]
            ├── (a:9 > b:10) AND (c:11 = 'bar') [as=partial_index_del2:22]
-           ├── upsert_c:18 = 'delete-only' [as=partial_index_put3:23]
-           ├── c:11 = 'delete-only' [as=partial_index_del3:24]
-           ├── upsert_c:18 = 'write-only' [as=partial_index_put4:25]
-           └── c:11 = 'write-only' [as=partial_index_del4:26]
+           ├── upsert_c:18 = 'write-only' [as=partial_index_put3:23]
+           ├── c:11 = 'write-only' [as=partial_index_del3:24]
+           ├── false [as=partial_index_put4:25]
+           └── c:11 = 'delete-only' [as=partial_index_del4:26]
 
 build
 UPSERT INTO partial_indexes VALUES (2, 1, 'bar')
@@ -786,9 +912,9 @@ upsert partial_indexes
       │    │    │    │    ├── partial_indexes_c_idx: filters
       │    │    │    │    │    └── (a:9 > b:10) AND (c:11 = 'bar')
       │    │    │    │    ├── b: filters
-      │    │    │    │    │    └── c:11 = 'delete-only'
+      │    │    │    │    │    └── c:11 = 'write-only'
       │    │    │    │    └── b: filters
-      │    │    │    │         └── c:11 = 'write-only'
+      │    │    │    │         └── c:11 = 'delete-only'
       │    │    │    └── flags: disabled not visible index feature
       │    │    └── filters
       │    │         └── column1:6 = a:9
@@ -799,10 +925,10 @@ upsert partial_indexes
            ├── c:11 = 'foo' [as=partial_index_del1:16]
            ├── (upsert_a:14 > column2:7) AND (column3:8 = 'bar') [as=partial_index_put2:17]
            ├── (a:9 > b:10) AND (c:11 = 'bar') [as=partial_index_del2:18]
-           ├── column3:8 = 'delete-only' [as=partial_index_put3:19]
-           ├── c:11 = 'delete-only' [as=partial_index_del3:20]
-           ├── column3:8 = 'write-only' [as=partial_index_put4:21]
-           └── c:11 = 'write-only' [as=partial_index_del4:22]
+           ├── column3:8 = 'write-only' [as=partial_index_put3:19]
+           ├── c:11 = 'write-only' [as=partial_index_del3:20]
+           ├── false [as=partial_index_put4:21]
+           └── c:11 = 'delete-only' [as=partial_index_del4:22]
 
 # Columns referenced in the SET expression are ambiguous without a table name.
 # Is it the value of the column being inserted or the value of the column
@@ -1695,7 +1821,7 @@ insert comp
       │              └── first-agg [as=e_comp:12]
       │                   └── e_comp:12
       └── projections
-           ├── d_comp:11 = 'foo' [as=partial_index_put1:29]
+           ├── lower(column3:10) = 'foo' [as=partial_index_put1:29]
            ├── e_comp:12 = 'FOO' [as=partial_index_put2:30]
            └── e_comp:12 = 'bar' [as=partial_index_put4:31]
 
@@ -1775,7 +1901,7 @@ insert comp
       │         └── first-agg [as=e_comp:12]
       │              └── e_comp:12
       └── projections
-           ├── d_comp:11 = 'foo' [as=partial_index_put1:20]
+           ├── lower(column3:10) = 'foo' [as=partial_index_put1:20]
            ├── e_comp:12 = 'FOO' [as=partial_index_put2:21]
            └── e_comp:12 = 'bar' [as=partial_index_put4:22]
 
@@ -1889,9 +2015,226 @@ upsert comp
       │         ├── CASE WHEN a:14 IS NULL THEN d_comp:11 ELSE d:17 END [as=upsert_d:27]
       │         └── CASE WHEN a:14 IS NULL THEN e_comp:12 ELSE e:18 END [as=upsert_e:28]
       └── projections
-           ├── upsert_d:27 = 'foo' [as=partial_index_put1:29]
-           ├── d:17 = 'foo' [as=partial_index_del1:30]
+           ├── lower(upsert_c:26) = 'foo' [as=partial_index_put1:29]
+           ├── lower(c:16) = 'foo' [as=partial_index_del1:30]
            ├── upsert_e:28 = 'FOO' [as=partial_index_put2:31]
            ├── e:18 = 'FOO' [as=partial_index_del2:32]
            ├── upsert_e:28 = 'bar' [as=partial_index_put4:33]
            └── e:18 = 'bar' [as=partial_index_del4:34]
+
+build
+INSERT INTO mut VALUES (1, 2, 3) ON CONFLICT DO NOTHING
+----
+insert mut
+ ├── arbiter indexes: mut_pkey mut_c_key
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── column3:10 => c:3
+ │    └── w_default:11 => w:4
+ ├── partial index put columns: partial_index_put1:26 partial_index_put2:27 partial_index_put3:28 partial_index_put3:28
+ └── project
+      ├── columns: partial_index_put1:26 partial_index_put2:27 partial_index_put3:28!null column1:8!null column2:9!null column3:10!null w_default:11
+      ├── upsert-distinct-on
+      │    ├── columns: column1:8!null column2:9!null column3:10!null w_default:11
+      │    ├── grouping columns: column3:10!null
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null w_default:11
+      │    │    ├── grouping columns: column1:8!null
+      │    │    ├── anti-join (hash)
+      │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null w_default:11
+      │    │    │    ├── anti-join (hash)
+      │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null w_default:11
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: w_default:11 column1:8!null column2:9!null column3:10!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    │    │    │    │    └── (1, 2, 3)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── NULL::INT8 [as=w_default:11]
+      │    │    │    │    ├── scan mut
+      │    │    │    │    │    ├── columns: a:12!null b:13 c:14
+      │    │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    │    ├── w_idx: filters
+      │    │    │    │    │    │    │    └── w:15 > 1
+      │    │    │    │    │    │    ├── b_w_idx: filters
+      │    │    │    │    │    │    │    └── w:15 > 3
+      │    │    │    │    │    │    ├── d_idx: filters
+      │    │    │    │    │    │    │    └── d:16 > 2
+      │    │    │    │    │    │    └── b_d_idx: filters
+      │    │    │    │    │    │         └── d:16 > 4
+      │    │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    └── filters
+      │    │    │    │         └── column1:8 = a:12
+      │    │    │    ├── scan mut
+      │    │    │    │    ├── columns: a:19!null b:20 c:21
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    ├── w_idx: filters
+      │    │    │    │    │    │    └── w:22 > 1
+      │    │    │    │    │    ├── b_w_idx: filters
+      │    │    │    │    │    │    └── w:22 > 3
+      │    │    │    │    │    ├── d_idx: filters
+      │    │    │    │    │    │    └── d:23 > 2
+      │    │    │    │    │    └── b_d_idx: filters
+      │    │    │    │    │         └── d:23 > 4
+      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         └── column3:10 = c:21
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column2:9]
+      │    │         │    └── column2:9
+      │    │         ├── first-agg [as=column3:10]
+      │    │         │    └── column3:10
+      │    │         └── first-agg [as=w_default:11]
+      │    │              └── w_default:11
+      │    └── aggregations
+      │         ├── first-agg [as=column1:8]
+      │         │    └── column1:8
+      │         ├── first-agg [as=column2:9]
+      │         │    └── column2:9
+      │         └── first-agg [as=w_default:11]
+      │              └── w_default:11
+      └── projections
+           ├── w_default:11 > 1 [as=partial_index_put1:26]
+           ├── w_default:11 > 3 [as=partial_index_put2:27]
+           └── false [as=partial_index_put3:28]
+
+build
+INSERT INTO mut VALUES (1, 2, 3) ON CONFLICT (c) DO UPDATE SET b = 3
+----
+upsert mut
+ ├── arbiter indexes: mut_c_key
+ ├── columns: <none>
+ ├── canary column: a:12
+ ├── fetch columns: a:12 b:13 c:14 w:15 d:16
+ ├── insert-mapping:
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── column3:10 => c:3
+ │    └── w_default:11 => w:4
+ ├── update-mapping:
+ │    ├── upsert_b:21 => b:2
+ │    └── w_default:11 => w:4
+ ├── partial index put columns: partial_index_put1:23 partial_index_put2:25 partial_index_put3:27 partial_index_put3:27
+ ├── partial index del columns: partial_index_del1:24 partial_index_del2:26 partial_index_del3:28 partial_index_del4:29
+ └── project
+      ├── columns: partial_index_put1:23 partial_index_del1:24 partial_index_put2:25 partial_index_del2:26 partial_index_put3:27!null partial_index_del3:28 partial_index_del4:29 column1:8!null column2:9!null column3:10!null w_default:11 a:12 b:13 c:14 w:15 d:16 crdb_internal_mvcc_timestamp:17 tableoid:18 b_new:19!null upsert_a:20 upsert_b:21!null upsert_c:22
+      ├── project
+      │    ├── columns: upsert_a:20 upsert_b:21!null upsert_c:22 column1:8!null column2:9!null column3:10!null w_default:11 a:12 b:13 c:14 w:15 d:16 crdb_internal_mvcc_timestamp:17 tableoid:18 b_new:19!null
+      │    ├── project
+      │    │    ├── columns: b_new:19!null column1:8!null column2:9!null column3:10!null w_default:11 a:12 b:13 c:14 w:15 d:16 crdb_internal_mvcc_timestamp:17 tableoid:18
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null w_default:11 a:12 b:13 c:14 w:15 d:16 crdb_internal_mvcc_timestamp:17 tableoid:18
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null w_default:11
+      │    │    │    │    ├── grouping columns: column3:10!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: w_default:11 column1:8!null column2:9!null column3:10!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    │    │    │    │    └── (1, 2, 3)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── NULL::INT8 [as=w_default:11]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column1:8]
+      │    │    │    │         │    └── column1:8
+      │    │    │    │         ├── first-agg [as=column2:9]
+      │    │    │    │         │    └── column2:9
+      │    │    │    │         └── first-agg [as=w_default:11]
+      │    │    │    │              └── w_default:11
+      │    │    │    ├── scan mut
+      │    │    │    │    ├── columns: a:12!null b:13 c:14 w:15 d:16 crdb_internal_mvcc_timestamp:17 tableoid:18
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    ├── w_idx: filters
+      │    │    │    │    │    │    └── w:15 > 1
+      │    │    │    │    │    ├── b_w_idx: filters
+      │    │    │    │    │    │    └── w:15 > 3
+      │    │    │    │    │    ├── d_idx: filters
+      │    │    │    │    │    │    └── d:16 > 2
+      │    │    │    │    │    └── b_d_idx: filters
+      │    │    │    │    │         └── d:16 > 4
+      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         └── column3:10 = c:14
+      │    │    └── projections
+      │    │         └── 3 [as=b_new:19]
+      │    └── projections
+      │         ├── CASE WHEN a:12 IS NULL THEN column1:8 ELSE a:12 END [as=upsert_a:20]
+      │         ├── CASE WHEN a:12 IS NULL THEN column2:9 ELSE b_new:19 END [as=upsert_b:21]
+      │         └── CASE WHEN a:12 IS NULL THEN column3:10 ELSE c:14 END [as=upsert_c:22]
+      └── projections
+           ├── w_default:11 > 1 [as=partial_index_put1:23]
+           ├── w:15 > 1 [as=partial_index_del1:24]
+           ├── w_default:11 > 3 [as=partial_index_put2:25]
+           ├── w:15 > 3 [as=partial_index_del2:26]
+           ├── false [as=partial_index_put3:27]
+           ├── d:16 > 2 [as=partial_index_del3:28]
+           └── d:16 > 4 [as=partial_index_del4:29]
+
+build
+UPSERT INTO mut VALUES (1, 2, 3)
+----
+upsert mut
+ ├── arbiter indexes: mut_pkey
+ ├── columns: <none>
+ ├── canary column: a:12
+ ├── fetch columns: a:12 b:13 c:14 w:15 d:16
+ ├── insert-mapping:
+ │    ├── column1:8 => a:1
+ │    ├── column2:9 => b:2
+ │    ├── column3:10 => c:3
+ │    └── w_default:11 => w:4
+ ├── update-mapping:
+ │    ├── column2:9 => b:2
+ │    ├── column3:10 => c:3
+ │    └── w_default:11 => w:4
+ ├── partial index put columns: partial_index_put1:20 partial_index_put2:22 partial_index_put3:24 partial_index_put3:24
+ ├── partial index del columns: partial_index_del1:21 partial_index_del2:23 partial_index_del3:25 partial_index_del4:26
+ └── project
+      ├── columns: partial_index_put1:20 partial_index_del1:21 partial_index_put2:22 partial_index_del2:23 partial_index_put3:24!null partial_index_del3:25 partial_index_del4:26 column1:8!null column2:9!null column3:10!null w_default:11 a:12 b:13 c:14 w:15 d:16 crdb_internal_mvcc_timestamp:17 tableoid:18 upsert_a:19
+      ├── project
+      │    ├── columns: upsert_a:19 column1:8!null column2:9!null column3:10!null w_default:11 a:12 b:13 c:14 w:15 d:16 crdb_internal_mvcc_timestamp:17 tableoid:18
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null w_default:11 a:12 b:13 c:14 w:15 d:16 crdb_internal_mvcc_timestamp:17 tableoid:18
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null w_default:11
+      │    │    │    ├── grouping columns: column1:8!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: w_default:11 column1:8!null column2:9!null column3:10!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
+      │    │    │    │    │    └── (1, 2, 3)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::INT8 [as=w_default:11]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:9]
+      │    │    │         │    └── column2:9
+      │    │    │         ├── first-agg [as=column3:10]
+      │    │    │         │    └── column3:10
+      │    │    │         └── first-agg [as=w_default:11]
+      │    │    │              └── w_default:11
+      │    │    ├── scan mut
+      │    │    │    ├── columns: a:12!null b:13 c:14 w:15 d:16 crdb_internal_mvcc_timestamp:17 tableoid:18
+      │    │    │    ├── partial index predicates
+      │    │    │    │    ├── w_idx: filters
+      │    │    │    │    │    └── w:15 > 1
+      │    │    │    │    ├── b_w_idx: filters
+      │    │    │    │    │    └── w:15 > 3
+      │    │    │    │    ├── d_idx: filters
+      │    │    │    │    │    └── d:16 > 2
+      │    │    │    │    └── b_d_idx: filters
+      │    │    │    │         └── d:16 > 4
+      │    │    │    └── flags: disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:8 = a:12
+      │    └── projections
+      │         └── CASE WHEN a:12 IS NULL THEN column1:8 ELSE a:12 END [as=upsert_a:19]
+      └── projections
+           ├── w_default:11 > 1 [as=partial_index_put1:20]
+           ├── w:15 > 1 [as=partial_index_del1:21]
+           ├── w_default:11 > 3 [as=partial_index_put2:22]
+           ├── w:15 > 3 [as=partial_index_del2:23]
+           ├── false [as=partial_index_put3:24]
+           ├── d:16 > 2 [as=partial_index_del3:25]
+           └── d:16 > 4 [as=partial_index_del4:26]

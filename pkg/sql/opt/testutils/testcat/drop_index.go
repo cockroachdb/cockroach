@@ -33,7 +33,7 @@ func (tc *Catalog) DropIndex(stmt *tree.DropIndex) {
 					))
 				}
 				foundTab = tab
-				idxOrd = idx.ordinal
+				idxOrd = idx.Ordinal()
 			}
 		}
 
@@ -46,10 +46,20 @@ func (tc *Catalog) DropIndex(stmt *tree.DropIndex) {
 		}
 
 		// Delete the index from the table.
-		numIndexes := len(foundTab.Indexes)
-		foundTab.Indexes[idxOrd] = foundTab.Indexes[numIndexes-1]
-		foundTab.Indexes[idxOrd].ordinal = idxOrd
-		foundTab.Indexes = foundTab.Indexes[:numIndexes-1]
+		var indexes *[]*Index
+		switch {
+		case idxOrd < foundTab.IndexCount():
+			indexes = &foundTab.indexes
+		case idxOrd < foundTab.WritableIndexCount():
+			indexes = &foundTab.writeOnlyIndexes
+			idxOrd = idxOrd - foundTab.IndexCount()
+		default:
+			indexes = &foundTab.deleteOnlyIndexes
+			idxOrd = idxOrd - foundTab.WritableIndexCount()
+		}
+		numIndexes := len(*indexes)
+		(*indexes)[idxOrd] = (*indexes)[numIndexes-1]
+		*indexes = (*indexes)[:numIndexes-1]
 	}
 }
 
@@ -57,7 +67,9 @@ func (tc *Catalog) DropIndex(stmt *tree.DropIndex) {
 // name. If an index is found it returns the index and true, and nil and false
 // otherwise.
 func findIndex(tab *Table, name string) (*Index, bool) {
-	for _, idx := range tab.Indexes {
+	for i, n := 0, tab.DeletableIndexCount(); i < n; i++ {
+		tab.Index(i).Ordinal()
+		idx := tab.Index(i).(*Index)
 		if idx.IdxName == name {
 			return idx, true
 		}

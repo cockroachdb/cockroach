@@ -238,6 +238,30 @@ func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tr
 	}
 }
 
+// appendAllColumnsAsVisibleFromTable adds all columns, including mutation and
+// system columns, from the given table metadata to this scope with visibility
+// of accessibleByName. This should only be used when building scopes that need
+// to resolve any column. It should not be used to build a scope that resolves
+// user-created expressions in a query.
+func (s *scope) appendAllColumnsAsVisibleFromTable(tabMeta *opt.TableMeta, alias *tree.TableName) {
+	tab := tabMeta.Table
+	if s.cols == nil {
+		s.cols = make([]scopeColumn, 0, tab.ColumnCount())
+	}
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		tabCol := tab.Column(i)
+		s.cols = append(s.cols, scopeColumn{
+			name:       scopeColName(tabCol.ColName()),
+			table:      *alias,
+			typ:        tabCol.DatumType(),
+			id:         tabMeta.MetaID.ColumnID(i),
+			visibility: accessibleByName,
+			mutation:   true,
+			kind:       tabCol.Kind(),
+		})
+	}
+}
+
 // appendColumns adds newly bound variables to this scope.
 // The expressions in the new columns are reset to nil.
 func (s *scope) appendColumns(cols []scopeColumn) {

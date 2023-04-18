@@ -214,8 +214,6 @@ update t
            ├── (f:18 > 1) AND (g:19 > 1) [as=partial_index_del2:28, outer=(18,19)]
            └── c:15 > 1 [as=partial_index_put3:29, outer=(15)]
 
-# Do not simplify partial index put/del column to false when it is also an
-# update column (h_new).
 norm
 UPDATE t SET h = d > 1 WHERE k = 1
 ----
@@ -224,15 +222,15 @@ update t
  ├── fetch columns: k:12 a:13 b:14 c:15 d:16 e:17 f:18 g:19 h:20
  ├── update-mapping:
  │    └── h_new:23 => h:9
- ├── partial index put columns: h_new:23 partial_index_put2:24 partial_index_put3:25
- ├── partial index del columns: h_new:23 partial_index_put2:24 partial_index_put3:25
+ ├── partial index put columns: partial_index_put1:24 partial_index_put2:25 partial_index_put3:26
+ ├── partial index del columns: partial_index_put1:24 partial_index_put2:25 partial_index_put3:26
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: partial_index_put2:24!null partial_index_put3:25!null h_new:23 k:12!null a:13 b:14 c:15 d:16 e:17 f:18 g:19 h:20
+      ├── columns: partial_index_put1:24!null partial_index_put2:25!null partial_index_put3:26!null h_new:23 k:12!null a:13 b:14 c:15 d:16 e:17 f:18 g:19 h:20
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(12-20,23-25)
+      ├── fd: ()-->(12-20,23-26)
       ├── select
       │    ├── columns: k:12!null a:13 b:14 c:15 d:16 e:17 f:18 g:19 h:20
       │    ├── cardinality: [0 - 1]
@@ -253,8 +251,9 @@ update t
       │    └── filters
       │         └── k:12 = 1 [outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
       └── projections
-           ├── false [as=partial_index_put2:24]
-           ├── false [as=partial_index_put3:25]
+           ├── false [as=partial_index_put1:24]
+           ├── false [as=partial_index_put2:25]
+           ├── false [as=partial_index_put3:26]
            └── d:16 > 1 [as=h_new:23, outer=(16)]
 
 # Regression for #74385. Do not simplify partial index put/del columns to false

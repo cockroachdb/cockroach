@@ -33,10 +33,10 @@ func (tc *Catalog) SetZoneConfig(stmt *tree.SetZoneConfig) cat.Zone {
 		var index *Index
 		if stmt.TableOrIndex.Index == "" {
 			// This partition is in the primary index.
-			index = tab.Indexes[0]
+			index = tab.indexes[0]
 		} else {
 			// This partition is in a secondary index.
-			for _, idx := range tab.Indexes {
+			for _, idx := range tab.indexes {
 				if idx.IdxName == string(stmt.TableOrIndex.Index) {
 					index = idx
 					break
@@ -60,11 +60,11 @@ func (tc *Catalog) SetZoneConfig(stmt *tree.SetZoneConfig) cat.Zone {
 
 	// Handle special case of primary index.
 	if stmt.TableOrIndex.Index == "" {
-		tab.Indexes[0].IdxZone = makeZoneConfig(stmt.Options)
-		return tab.Indexes[0].IdxZone
+		tab.indexes[0].IdxZone = makeZoneConfig(stmt.Options)
+		return tab.indexes[0].IdxZone
 	}
 
-	for _, idx := range tab.Indexes {
+	for _, idx := range tab.indexes {
 		if idx.IdxName == string(stmt.TableOrIndex.Index) {
 			idx.IdxZone = makeZoneConfig(stmt.Options)
 			return idx.IdxZone

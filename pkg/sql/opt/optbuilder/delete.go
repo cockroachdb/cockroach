@@ -79,8 +79,11 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 func (mb *mutationBuilder) buildDelete(returning *tree.ReturningExprs) {
 	mb.buildFKChecksAndCascadesForDelete()
 
+	// Add the partial index predicate expressions to the table metadata.
+	mb.b.addPartialIndexPredicatesForTable(mb.md.TableMeta(mb.tabID), nil /* scan */)
+
 	// Project partial index DEL boolean columns.
-	mb.projectPartialIndexDelCols()
+	mb.projectPartialIndexCols(false /* includePutCols */, true /* includeDelCols */)
 
 	private := mb.makeMutationPrivate(returning != nil)
 	for _, col := range mb.extraAccessibleCols {
