@@ -100,7 +100,8 @@ func (e *scheduledBackupExecutor) executeBackup(
 	log.Infof(ctx, "Starting scheduled backup %d", sj.ScheduleID())
 
 	// Invoke backup plan hook.
-	hook, cleanup := cfg.PlanHookMaker("exec-backup", txn.KV(), sj.Owner())
+	// TODO(yang): This depends on scheduled jobs migrations.
+	hook, cleanup := cfg.PlanHookMaker("exec-backup", txn.KV(), sj.Owner(), 0 /* placeholder */)
 	defer cleanup()
 
 	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {

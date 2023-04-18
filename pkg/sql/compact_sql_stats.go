@@ -183,7 +183,7 @@ func (e *scheduledSQLStatsCompactionExecutor) ExecuteJob(
 func (e *scheduledSQLStatsCompactionExecutor) createSQLStatsCompactionJob(
 	ctx context.Context, cfg *scheduledjobs.JobExecutionConfig, sj *jobs.ScheduledJob, txn isql.Txn,
 ) error {
-	p, cleanup := cfg.PlanHookMaker("invoke-sql-stats-compact", txn.KV(), username.NodeUserName())
+	p, cleanup := cfg.PlanHookMaker("invoke-sql-stats-compact", txn.KV(), username.NodeUserName(), username.NodeUserID)
 	defer cleanup()
 
 	_, err :=

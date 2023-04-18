@@ -140,6 +140,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 		fmt.Sprintf("invoke-row-level-ttl-%d", args.TableID),
 		txn.KV(),
 		username.NodeUserName(),
+		username.NodeUserID,
 	)
 	defer cleanup()
 
