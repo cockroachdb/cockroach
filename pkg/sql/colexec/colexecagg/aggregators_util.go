@@ -40,7 +40,7 @@ type NewAggregatorArgs struct {
 		// HashTableNumBuckets if positive will override the initial number of
 		// buckets to be used by the hash table (if this struct is passed to the
 		// hash aggregator).
-		HashTableNumBuckets uint64
+		HashTableNumBuckets uint32
 	}
 }
 

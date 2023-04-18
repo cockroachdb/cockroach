@@ -31,8 +31,8 @@ func genHashUtils(inputFileContents string, wr io.Writer) error {
 	assignHash := makeFunctionRegex("_ASSIGN_HASH", 4)
 	s = assignHash.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignHash", 4))
 
-	rehash := makeFunctionRegex("_REHASH_BODY", 7)
-	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "HasSel" $6 "HasNulls" $7}}`)
+	rehash := makeFunctionRegex("_REHASH_BODY", 8)
+	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "HasSel" $6 "HasNulls" $7 "Uint64" $8}}`)
 
 	s = replaceManipulationFuncsAmbiguous(".Global", s)
 

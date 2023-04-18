@@ -35,7 +35,7 @@ var (
 // checkColAgainstItselfForDistinct is similar to checkCol, but it probes the
 // vector against itself for the purposes of finding matches to unordered
 // distinct columns.
-func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck uint64, sel []int) {
+func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck uint32, sel []int) {
 	probeVec, buildVec, probeSel := vec, vec, sel
 	switch probeVec.CanonicalTypeFamily() {
 	case types.BoolFamily:
@@ -3569,7 +3569,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 }
 
 func (ht *HashTable) checkColForDistinctTuples(
-	probeVec, buildVec coldata.Vec, nToCheck uint64, probeSel []int,
+	probeVec, buildVec coldata.Vec, nToCheck uint32, probeSel []int,
 ) {
 	switch probeVec.CanonicalTypeFamily() {
 	case types.BoolFamily:
@@ -5426,15 +5426,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 // CheckProbeForDistinct performs a column by column check for duplicated tuples
 // in the probe table.
-func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, sel []int) uint64 {
+func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint32, sel []int) uint32 {
 	for i := range ht.keyCols {
 		ht.checkColAgainstItselfForDistinct(vecs[i], nToCheck, sel)
 	}
-	nDiffers := uint64(0)
+	nDiffers := uint32(0)
 	if ht.allowNullEquality {
 		toCheckSlice := ht.ProbeScratch.ToCheck
 		_ = toCheckSlice[nToCheck-1]
-		for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		for toCheckPos := uint32(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 			//gcassert:bce
 			toCheck := toCheckSlice[toCheckPos]
 			if !ht.ProbeScratch.differs[toCheck] {
@@ -5450,7 +5450,7 @@ func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 	} else {
 		toCheckSlice := ht.ProbeScratch.ToCheck
 		_ = toCheckSlice[nToCheck-1]
-		for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		for toCheckPos := uint32(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 			//gcassert:bce
 			toCheck := toCheckSlice[toCheckPos]
 			if ht.ProbeScratch.foundNull[toCheck] {
@@ -5558,7 +5558,7 @@ func (ht *HashTable) FindBuckets(
 	batch coldata.Batch,
 	keyCols []coldata.Vec,
 	first, next []keyID,
-	duplicatesChecker func([]coldata.Vec, uint64, []int) uint64,
+	duplicatesChecker func([]coldata.Vec, uint32, []int) uint32,
 	zeroHeadIDForDistinctTuple bool,
 	probingAgainstItself bool,
 ) {
@@ -5573,19 +5573,20 @@ func (ht *HashTable) FindBuckets(
 				_ = toCheckIDs[batchLength-1]
 				headIDs := ht.ProbeScratch.HeadID
 				_ = headIDs[batchLength-1]
-				var nToCheck uint64
+				var nToCheck uint32
 				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-					toCheck := uint64(i)
+					toCheck := uint32(i)
 					nextToCheckID := first[hash]
 					{
-						if uint64(toCheck+1) == nextToCheckID {
+						if toCheck+1 == nextToCheckID {
 							_ = true
 							//gcassert:gce
 							headIDs[toCheck] = nextToCheckID
 						} else {
 							{
+								_ = true
 								//gcassert:bce
-								toCheckIDs[toCheck] = nextToCheckID
+								toCheckIDs[i] = nextToCheckID
 								ht.ProbeScratch.ToCheck[nToCheck] = toCheck
 								nToCheck++
 							}
@@ -5600,11 +5601,12 @@ func (ht *HashTable) FindBuckets(
 					for _, toCheck := range toCheckSlice {
 						nextToCheckID := next[toCheckIDs[toCheck]]
 						{
-							if uint64(toCheck+1) == nextToCheckID {
+							if toCheck+1 == nextToCheckID {
 								_ = true
 								headIDs[toCheck] = nextToCheckID
 							} else {
 								{
+									_ = true
 									//gcassert:bce
 									toCheckIDs[toCheck] = nextToCheckID
 									ht.ProbeScratch.ToCheck[nToCheck] = toCheck
@@ -5622,15 +5624,16 @@ func (ht *HashTable) FindBuckets(
 				// Early bounds checks.
 				toCheckIDs := ht.ProbeScratch.ToCheckID
 				_ = toCheckIDs[batchLength-1]
-				var nToCheck uint64
+				var nToCheck uint32
 				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-					toCheck := uint64(i)
+					toCheck := uint32(i)
 					nextToCheckID := first[hash]
 					{
 						if nextToCheckID != 0 {
 							{
+								_ = true
 								//gcassert:bce
-								toCheckIDs[toCheck] = nextToCheckID
+								toCheckIDs[i] = nextToCheckID
 								ht.ProbeScratch.ToCheck[nToCheck] = toCheck
 								nToCheck++
 							}
@@ -5649,6 +5652,7 @@ func (ht *HashTable) FindBuckets(
 						{
 							if nextToCheckID != 0 {
 								{
+									_ = true
 									//gcassert:bce
 									toCheckIDs[toCheck] = nextToCheckID
 									ht.ProbeScratch.ToCheck[nToCheck] = toCheck
@@ -5672,19 +5676,20 @@ func (ht *HashTable) FindBuckets(
 				_ = toCheckIDs[batchLength-1]
 				headIDs := ht.ProbeScratch.HeadID
 				_ = headIDs[batchLength-1]
-				var nToCheck uint64
+				var nToCheck uint32
 				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-					toCheck := uint64(i)
+					toCheck := uint32(i)
 					nextToCheckID := first[hash]
 					{
-						if uint64(toCheck+1) == nextToCheckID {
+						if toCheck+1 == nextToCheckID {
 							_ = true
 							//gcassert:gce
 							headIDs[toCheck] = nextToCheckID
 						} else {
 							{
+								_ = true
 								//gcassert:bce
-								toCheckIDs[toCheck] = nextToCheckID
+								toCheckIDs[i] = nextToCheckID
 								ht.ProbeScratch.ToCheck[nToCheck] = toCheck
 								nToCheck++
 							}
@@ -5699,11 +5704,12 @@ func (ht *HashTable) FindBuckets(
 					for _, toCheck := range toCheckSlice {
 						nextToCheckID := next[toCheckIDs[toCheck]]
 						{
-							if uint64(toCheck+1) == nextToCheckID {
+							if toCheck+1 == nextToCheckID {
 								_ = true
 								headIDs[toCheck] = nextToCheckID
 							} else {
 								{
+									_ = true
 									//gcassert:bce
 									toCheckIDs[toCheck] = nextToCheckID
 									ht.ProbeScratch.ToCheck[nToCheck] = toCheck
@@ -5723,15 +5729,16 @@ func (ht *HashTable) FindBuckets(
 				_ = toCheckIDs[batchLength-1]
 				headIDs := ht.ProbeScratch.HeadID
 				_ = headIDs[batchLength-1]
-				var nToCheck uint64
+				var nToCheck uint32
 				for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
-					toCheck := uint64(i)
+					toCheck := uint32(i)
 					nextToCheckID := first[hash]
 					{
 						if nextToCheckID != 0 {
 							{
+								_ = true
 								//gcassert:bce
-								toCheckIDs[toCheck] = nextToCheckID
+								toCheckIDs[i] = nextToCheckID
 								ht.ProbeScratch.ToCheck[nToCheck] = toCheck
 								nToCheck++
 							}
@@ -5753,6 +5760,7 @@ func (ht *HashTable) FindBuckets(
 						{
 							if nextToCheckID != 0 {
 								{
+									_ = true
 									//gcassert:bce
 									toCheckIDs[toCheck] = nextToCheckID
 									ht.ProbeScratch.ToCheck[nToCheck] = toCheck
@@ -5778,7 +5786,7 @@ const _ = "template_findBuckets"
 const _ = "template_handleNextToCheckID"
 
 // execgen:inline
-const _ = "inlined_includeTupleToCheck"
+const _ = "template_includeTupleToCheck"
 
 // execgen:inline
 const _ = "inlined_findBuckets_true_true"
@@ -5815,3 +5823,9 @@ const _ = "inlined_handleNextToCheckID_false_false_true"
 
 // execgen:inline
 const _ = "inlined_handleNextToCheckID_false_false_false"
+
+// execgen:inline
+const _ = "inlined_includeTupleToCheck_true"
+
+// execgen:inline
+const _ = "inlined_includeTupleToCheck_false"
