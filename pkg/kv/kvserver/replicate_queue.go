@@ -1028,7 +1028,7 @@ func (rq *replicateQueue) PlanOneChange(
 	if pErr != nil {
 		return change, pErr.GoError()
 	}
-	pErr = repl.maybeSwitchLeaseType(ctx, leaseStatus)
+	pErr = repl.MaybeSwitchLeaseType(ctx, leaseStatus)
 	if pErr != nil {
 		return change, pErr.GoError()
 	}

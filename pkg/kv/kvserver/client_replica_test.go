@@ -2084,6 +2084,9 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
+	// Ignore the initial counts since many ranges are created.
+	expiration0, epoch0 := getLeaseMetrics(tc, t)
+
 	// Up-replicate to two replicas.
 	expirationKey := tc.ScratchRangeWithExpirationLease(t)
 	expirationDesc := tc.LookupRangeOrFatal(t, expirationKey)
@@ -2114,41 +2117,40 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	require.Error(t, err)
 
 	metrics := tc.GetFirstStoreFromServer(t, 0).Metrics()
-	if a, e := metrics.LeaseTransferSuccessCount.Count(), int64(1); a != e {
-		t.Errorf("expected %d lease transfer successes; got %d", e, a)
-	}
-	if a, e := metrics.LeaseTransferErrorCount.Count(), int64(1); a != e {
-		t.Errorf("expected %d lease transfer errors; got %d", e, a)
-	}
+	require.Equal(t, int64(1), metrics.LeaseTransferSuccessCount.Count())
+	require.Equal(t, int64(1), metrics.LeaseTransferErrorCount.Count())
 
-	// Expire current leases and put a key to the epoch based scratch range to
-	// get a lease.
-	testutils.SucceedsSoon(t, func() error {
-		manualClock.Increment(tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().LeaseExpiration())
-		if err := tc.GetFirstStoreFromServer(t, 0).DB().Put(context.Background(), epochKey, "foo"); err != nil {
-			return err
-		}
+	require.Equal(t, roachpb.LeaseExpiration, tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(expirationKey)).CurrentLeaseStatus(ctx).Lease.Type())
+	require.Equal(t, roachpb.LeaseEpoch, tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(epochKey)).CurrentLeaseStatus(ctx).Lease.Type())
+	expiration1, epoch1 := getLeaseMetrics(tc, t)
+	require.Equal(t, int64(1), expiration1-expiration0)
+	require.Equal(t, int64(2), epoch1-epoch0)
 
-		// Update replication gauges for all stores and verify we have 1 each of
-		// expiration and epoch leases.
-		var expirationLeases int64
-		var epochLeases int64
-		for i := range tc.Servers {
-			if err := tc.GetFirstStoreFromServer(t, i).ComputeMetrics(context.Background()); err != nil {
-				return err
-			}
-			metrics = tc.GetFirstStoreFromServer(t, i).Metrics()
-			expirationLeases += metrics.LeaseExpirationCount.Value()
-			epochLeases += metrics.LeaseEpochCount.Value()
-		}
-		if a, e := expirationLeases, int64(1); a != e {
-			return errors.Errorf("expected %d expiration lease count; got %d", e, a)
-		}
-		if a, e := epochLeases, int64(1); a < e {
-			return errors.Errorf("expected greater than %d epoch lease count; got %d", e, a)
-		}
-		return nil
-	})
+	// Expire current leases and put a key to the epoch0 based scratch range to
+	// convert to Epoch
+	manualClock.Increment(tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().LeaseExpiration())
+	require.NoError(t, tc.GetFirstStoreFromServer(t, 0).DB().Put(context.Background(), epochKey, "foo"))
+	require.Equal(t, roachpb.LeaseExpiration, tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(expirationKey)).CurrentLeaseStatus(ctx).Lease.Type())
+	require.Equal(t, roachpb.LeaseEpoch, tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(epochKey)).CurrentLeaseStatus(ctx).Lease.Type())
+
+	// The one expired lease should be recreated, not sure where the epoch lease comes from...
+	expiration2, epoch2 := getLeaseMetrics(tc, t)
+	require.Equal(t, int64(1), expiration2)
+	require.Equal(t, int64(1), epoch2-epoch1)
+}
+
+func getLeaseMetrics(tc *testcluster.TestCluster, t *testing.T) (int64, int64) {
+	// Update replication gauges for all stores and verify we have 1 each of
+	// expiration and epoch leases.
+	var expirationLeases int64
+	var epochLeases int64
+	for i := range tc.Servers {
+		require.NoError(t, tc.GetFirstStoreFromServer(t, i).ComputeMetrics(context.Background()))
+		metrics := tc.GetFirstStoreFromServer(t, i).Metrics()
+		expirationLeases += metrics.LeaseExpirationCount.Value()
+		epochLeases += metrics.LeaseEpochCount.Value()
+	}
+	return expirationLeases, epochLeases
 }
 
 // Test that leases held before a restart are not used after the restart.

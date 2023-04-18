@@ -1464,10 +1464,10 @@ func (r *Replica) maybeExtendLeaseAsyncLocked(ctx context.Context, st kvserverpb
 	_ = r.requestLeaseLocked(ctx, st)
 }
 
-// maybeSwitchLeaseType will synchronously renew a lease using the appropriate
+// MaybeSwitchLeaseType will synchronously renew a lease using the appropriate
 // type if it is (or was) owned by this replica and has an incorrect type. This
 // typically happens when changing kv.expiration_leases_only.enabled.
-func (r *Replica) maybeSwitchLeaseType(ctx context.Context, st kvserverpb.LeaseStatus) *kvpb.Error {
+func (r *Replica) MaybeSwitchLeaseType(ctx context.Context, st kvserverpb.LeaseStatus) *kvpb.Error {
 	if !st.OwnedBy(r.store.StoreID()) {
 		return nil
 	}
