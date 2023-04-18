@@ -220,14 +220,14 @@ func (b *AppendOnlyBufferedBatch) AppendTuples(batch coldata.Batch, startIdx, en
 	})
 }
 
-// MaybeAllocateUint64Array makes sure that the passed in array is allocated, of
+// MaybeAllocateUint32Array makes sure that the passed in array is allocated, of
 // the desired length and zeroed out.
-func MaybeAllocateUint64Array(array []uint64, length int) []uint64 {
+func MaybeAllocateUint32Array(array []uint32, length int) []uint32 {
 	if cap(array) < length {
-		return make([]uint64, length)
+		return make([]uint32, length)
 	}
 	array = array[:length]
-	for n := 0; n < length; n += copy(array[n:], ZeroUint64Column) {
+	for n := 0; n < length; n += copy(array[n:], ZeroUint32Column) {
 	}
 	return array
 }
@@ -244,15 +244,15 @@ func MaybeAllocateBoolArray(array []bool, length int) []bool {
 	return array
 }
 
-// MaybeAllocateLimitedUint64Array is an optimized version of
-// MaybeAllocateUint64Array that can *only* be used when length is at most
+// MaybeAllocateLimitedUint32Array is an optimized version of
+// MaybeAllocateUint32Array that can *only* be used when length is at most
 // coldata.MaxBatchSize.
-func MaybeAllocateLimitedUint64Array(array []uint64, length int) []uint64 {
+func MaybeAllocateLimitedUint32Array(array []uint32, length int) []uint32 {
 	if cap(array) < length {
-		return make([]uint64, length)
+		return make([]uint32, length)
 	}
 	array = array[:length]
-	copy(array, ZeroUint64Column)
+	copy(array, ZeroUint32Column)
 	return array
 }
 
@@ -272,9 +272,9 @@ var (
 	// ZeroBoolColumn is zeroed out boolean slice of coldata.MaxBatchSize
 	// length.
 	ZeroBoolColumn = make([]bool, coldata.MaxBatchSize)
-	// ZeroUint64Column is zeroed out uint64 slice of coldata.MaxBatchSize
+	// ZeroUint32Column is zeroed out uint64 slice of coldata.MaxBatchSize
 	// length.
-	ZeroUint64Column = make([]uint64, coldata.MaxBatchSize)
+	ZeroUint32Column = make([]uint32, coldata.MaxBatchSize)
 )
 
 // HandleErrorFromDiskQueue takes in non-nil error emitted by colcontainer.Queue

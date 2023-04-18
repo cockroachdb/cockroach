@@ -30,23 +30,23 @@ func TestHashFunctionFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	bucketsA, bucketsB := make([]uint64, coldata.BatchSize()), make([]uint64, coldata.BatchSize())
+	bucketsA, bucketsB := make([]uint32, coldata.BatchSize()), make([]uint32, coldata.BatchSize())
 	nKeys := coldata.BatchSize()
 	keyTypes := []*types.T{types.Int}
 	keys := []coldata.Vec{testAllocator.NewMemColumn(keyTypes[0], coldata.BatchSize())}
 	for i := int64(0); i < int64(coldata.BatchSize()); i++ {
 		keys[0].Int64()[i] = i
 	}
-	numBuckets := uint64(16)
+	numBuckets := uint32(16)
 	var (
 		cancelChecker colexecutils.CancelChecker
 		datumAlloc    tree.DatumAlloc
 	)
 	cancelChecker.Init(context.Background())
 
-	for initHashValue, buckets := range [][]uint64{bucketsA, bucketsB} {
+	for initHashValue, buckets := range [][]uint32{bucketsA, bucketsB} {
 		// We need +1 here because 0 is not a valid initial hash value.
-		initHash(buckets, nKeys, uint64(initHashValue+1))
+		initHash(buckets, nKeys, uint32(initHashValue+1))
 		for _, keysCol := range keys {
 			rehash(buckets, keysCol, nKeys, nil /* sel */, cancelChecker, &datumAlloc)
 		}

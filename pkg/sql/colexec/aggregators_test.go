@@ -836,7 +836,7 @@ func TestAggregators(t *testing.T) {
 						ConstArguments: constArguments,
 						OutputTypes:    outputTypes,
 					}
-					args.TestingKnobs.HashTableNumBuckets = uint64(1 + rng.Intn(7))
+					args.TestingKnobs.HashTableNumBuckets = uint32(1 + rng.Intn(7))
 					return agg.new(ctx, args), nil
 				})
 		}
@@ -965,7 +965,7 @@ func TestAggregatorRandom(t *testing.T) {
 						ConstArguments: constArguments,
 						OutputTypes:    outputTypes,
 					}
-					args.TestingKnobs.HashTableNumBuckets = uint64(1 + rng.Intn(31))
+					args.TestingKnobs.HashTableNumBuckets = uint32(1 + rng.Intn(31))
 					a := agg.new(context.Background(), args)
 					a.Init(context.Background())
 

@@ -93,7 +93,7 @@ func NewExternalHashJoiner(
 			RightSource:              partitionedInputs[1],
 			// We start with relatively large initial number of buckets since we
 			// expect each partition to be of significant size.
-			InitialNumBuckets: uint64(coldata.BatchSize()),
+			InitialNumBuckets: uint32(coldata.BatchSize()),
 		})
 	}
 	diskBackedFallbackOpConstructor := func(
