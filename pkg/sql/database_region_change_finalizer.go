@@ -190,6 +190,7 @@ func (r *databaseRegionChangeFinalizer) updateDatabaseZoneConfig(
 		regionConfig,
 		txn,
 		r.localPlanner.ExecCfg(),
+		true, /* validateLocalities */
 		r.localPlanner.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	)
 }
