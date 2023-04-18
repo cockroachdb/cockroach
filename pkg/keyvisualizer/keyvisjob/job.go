@@ -41,6 +41,9 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 	stopper := execCtx.ExecCfg().DistSQLSrv.Stopper
 
 	runConsumer := func() error {
+		r.job.MarkIdle(false)
+		defer r.job.MarkIdle(true)
+
 		// TODO(zachlite): wrap this in a retry for better fault-tolerance
 		if err := consumer.UpdateBoundaries(ctx); err != nil {
 			return errors.Wrap(err, "update boundaries failed")
