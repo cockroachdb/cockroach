@@ -195,8 +195,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
               label="Transaction Fingerprint ID"
               value={TransactionDetailsLink(
                 insightDetails.transactionFingerprintID,
-                insightDetails.startTime,
-                setTimeScale,
+                insightDetails.application,
               )}
             />
             <SummaryCardItem

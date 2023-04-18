@@ -46,6 +46,7 @@ import {
   NodeNames,
   StatisticType,
 } from "../statsTableUtil/statsTableUtil";
+import { BarChartOptions } from "src/barCharts/barChartFactory";
 
 type IStatementDiagnosticsReport =
   cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -66,12 +67,14 @@ function makeCommonColumns(
       label: cx("statements-table__col--bar-chart__label"),
     },
   };
-  const sampledExecStatsBarChartOptions = {
-    classes: defaultBarChartOptions.classes,
-    displayNoSamples: (d: ICollectedStatementStatistics) => {
-      return longToInt(d.stats.exec_stats?.count) == 0;
-    },
-  };
+
+  const sampledExecStatsBarChartOptions: BarChartOptions<ICollectedStatementStatistics> =
+    {
+      classes: defaultBarChartOptions.classes,
+      displayNoSamples: (d: ICollectedStatementStatistics) => {
+        return longToInt(d.stats.exec_stats?.count) == 0;
+      },
+    };
 
   const countBar = countBarChart(statements, defaultBarChartOptions);
   const bytesReadBar = bytesReadBarChart(statements, defaultBarChartOptions);
@@ -113,7 +116,6 @@ function makeCommonColumns(
       cell: (stmt: AggregateStatistics) =>
         stmt.applicationName?.length > 0 ? stmt.applicationName : unset,
       sort: (stmt: AggregateStatistics) => stmt.applicationName,
-      showByDefault: false,
     },
     {
       name: "rowsProcessed",
@@ -325,25 +327,6 @@ export function makeStatementsColumns(
     columns.push(diagnosticsColumn);
   }
   return columns;
-}
-
-export function makeNodesColumns(
-  statements: AggregateStatistics[],
-  nodeNames: NodeNames,
-  totalWorkload: number,
-  nodeRegions: { [nodeId: string]: string },
-): ColumnDescriptor<AggregateStatistics>[] {
-  const original: ColumnDescriptor<AggregateStatistics>[] = [
-    {
-      name: "nodes",
-      title: null,
-      cell: StatementTableCell.nodeLink(nodeNames),
-    },
-  ];
-
-  return original.concat(
-    makeCommonColumns(statements, totalWorkload, nodeRegions, "statement"),
-  );
 }
 
 /**

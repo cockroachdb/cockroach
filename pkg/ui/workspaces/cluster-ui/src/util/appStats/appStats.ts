@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import {
   FixLong,
@@ -194,34 +193,10 @@ export function addStatementStats(
       a.last_exec_timestamp.seconds > b.last_exec_timestamp.seconds
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
-    nodes: uniqueLong([...a.nodes, ...b.nodes]),
+    nodes: uniqueLong([...(a?.nodes ?? []), ...(b?.nodes ?? [])]),
     plan_gists: planGists,
     index_recommendations: indexRec,
   };
-}
-
-export function aggregateStatementStats(
-  statementStats: CollectedStatementStatistics[],
-): CollectedStatementStatistics[] {
-  const statementsMap: {
-    [statement: string]: CollectedStatementStatistics[];
-  } = {};
-  statementStats.forEach((statement: CollectedStatementStatistics) => {
-    const matches =
-      statementsMap[statement.key.key_data.query] ||
-      (statementsMap[statement.key.key_data.query] = []);
-    matches.push(statement);
-  });
-
-  return _.values(statementsMap).map(statements =>
-    _.reduce(
-      statements,
-      (a: CollectedStatementStatistics, b: CollectedStatementStatistics) => ({
-        key: a.key,
-        stats: addStatementStats(a.stats, b.stats),
-      }),
-    ),
-  );
 }
 
 export interface ExecutionStatistics {
@@ -238,7 +213,7 @@ export interface ExecutionStatistics {
   full_scan: boolean;
   failed: boolean;
   node_id: number;
-  transaction_fingerprint_id: Long;
+  txn_fingerprint_ids: Long[];
   stats: StatementStatistics;
 }
 
@@ -259,7 +234,7 @@ export function flattenStatementStats(
     full_scan: stmt.key.key_data.full_scan,
     failed: stmt.key.key_data.failed,
     node_id: stmt.key.node_id,
-    transaction_fingerprint_id: stmt.key.key_data.transaction_fingerprint_id,
+    txn_fingerprint_ids: stmt.txn_fingerprint_ids,
     stats: stmt.stats,
   }));
 }
@@ -267,22 +242,16 @@ export function flattenStatementStats(
 export function combineStatementStats(
   statementStats: StatementStatistics[],
 ): StatementStatistics {
-  return _.reduce(statementStats, addStatementStats);
+  return statementStats.reduce(addStatementStats);
 }
-
-export const getSearchParams = (searchParams: string) => {
-  const sp = new URLSearchParams(searchParams);
-  return (key: string, defaultValue?: string | boolean | number) =>
-    sp.get(key) || defaultValue;
-};
 
 // This function returns a key based on all parameters
 // that should be used to group statements.
-// Currently, using only statement_fingerprint_id
+// Currently, using only statement_fingerprint_id and app anme.
 // (created by ConstructStatementFingerprintID using:
 // query, implicit_txn, database, failed).
 export function statementKey(stmt: ExecutionStatistics): string {
-  return stmt.statement_fingerprint_id?.toString();
+  return stmt.statement_fingerprint_id?.toString() + stmt.app;
 }
 
 // transactionScopedStatementKey is similar to statementKey, except that
@@ -290,7 +259,7 @@ export function statementKey(stmt: ExecutionStatistics): string {
 export function transactionScopedStatementKey(
   stmt: ExecutionStatistics,
 ): string {
-  return statementKey(stmt) + stmt.transaction_fingerprint_id.toString();
+  return statementKey(stmt) + stmt.txn_fingerprint_ids?.toString();
 }
 
 export const generateStmtDetailsToID = (

@@ -27,14 +27,12 @@ import {
   StatementsPageStateProps,
 } from "./statementsPage";
 import {
-  selectApps,
   selectDatabases,
   selectLastReset,
   selectStatements,
   selectStatementsDataValid,
   selectStatementsDataInFlight,
   selectStatementsLastError,
-  selectTotalFingerprints,
   selectColumns,
   selectTimeScale,
   selectSortSetting,
@@ -67,6 +65,7 @@ import {
   mapDispatchToActiveStatementsPageProps,
   mapStateToActiveStatementsPageProps,
 } from "./activeStatementsPage.selectors";
+import { selectStmtsAllApps } from "../selectors";
 
 type IStatementDiagnosticsReport =
   cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -98,7 +97,7 @@ export const ConnectedStatementsPage = withRouter(
     (state: AppState, props: RouteComponentProps) => ({
       fingerprintsPageProps: {
         ...props,
-        apps: selectApps(state),
+        apps: selectStmtsAllApps(state.adminUI?.statements?.data),
         columns: selectColumns(state),
         databases: selectDatabases(state),
         timeScale: selectTimeScale(state),
@@ -117,7 +116,6 @@ export const ConnectedStatementsPage = withRouter(
         isReqInFlight: selectStatementsDataInFlight(state),
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: selectStatementsLastError(state),
-        totalFingerprints: selectTotalFingerprints(state),
         limit: selectStmtsPageLimit(state),
         reqSortSetting: selectStmtsPageReqSort(state),
         stmtsTotalRuntimeSecs:

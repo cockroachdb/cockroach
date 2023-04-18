@@ -27,6 +27,7 @@ import {
   TimestampToMoment,
   computeOrUseStmtSummary,
   appNamesAttr,
+  unset,
 } from "src/util";
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
@@ -52,7 +53,13 @@ export const StatementTableCell = {
           statement={stmt.label}
           statementSummary={stmt.summary}
           aggregatedTs={stmt.aggregatedTs}
-          appNames={selectedApp}
+          appNames={[
+            stmt.applicationName != null
+              ? stmt.applicationName
+                ? stmt.applicationName
+                : unset
+              : null,
+          ]}
           implicitTxn={stmt.implicitTxn}
           search={search}
           onClick={onStatementClick}
@@ -158,10 +165,6 @@ export const StatementTableCell = {
         </div>
       );
     },
-  nodeLink:
-    (nodeNames: NodeNames) =>
-    (stmt: AggregateStatistics): React.ReactElement =>
-      <NodeLink nodeId={stmt.label} nodeNames={nodeNames} />,
 };
 
 type StatementLinkTargetProps = {

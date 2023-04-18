@@ -10,7 +10,11 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "src/api/fetchData";
-import { propsToQueryString } from "src/util";
+import {
+  combineStatementStats,
+  StatementStatistics,
+} from "src/util/appStats/appStats";
+import { propsToQueryString } from "src/util/query";
 import Long from "long";
 import moment from "moment";
 
@@ -76,6 +80,46 @@ export function createCombinedStmtsRequest({
   });
 }
 
+type StmtWithMultiStats = Stmt & {
+  combinedStats: StatementStatistics[];
+};
+
+export function aggregateOnStmtFingerprintAndAppName(
+  stmts: Stmt[] | null,
+): Stmt[] {
+  if (!stmts?.length) {
+    return [];
+  }
+
+  const groupedStmts: Record<string, StmtWithMultiStats> = {};
+
+  stmts.forEach(stmt => {
+    const key = stmt.id?.toString() + stmt.key?.key_data?.app;
+
+    if (groupedStmts[key] == null) {
+      groupedStmts[key] = {
+        ...stmt,
+        combinedStats: [],
+        txn_fingerprint_ids: [],
+      };
+    }
+
+    groupedStmts[key].combinedStats.push(stmt.stats);
+    groupedStmts[key].txn_fingerprint_ids.push(
+      stmt.key.key_data?.transaction_fingerprint_id,
+    );
+  });
+
+  return Object.values(groupedStmts).map(stmt => {
+    const { combinedStats, ...stmtFields } = stmt;
+
+    return {
+      ...stmtFields,
+      stats: combineStatementStats(combinedStats),
+    };
+  });
+}
+
 // Mutates the sqlstats response to conform to the provided sort and limit params.
 export function sortAndTruncateStmtsResponse(
   res: SqlStatsResponse,
@@ -86,14 +130,18 @@ export function sortAndTruncateStmtsResponse(
   // cleanest and least complex way of handling this scenario.
   res.transactions = [];
 
+  if (!res.statements?.length) {
+    return;
+  }
+
   switch (sort) {
     case SqlStatsSortOptions.SERVICE_LAT:
-      res.statements?.sort((stmtA: Stmt, stmtB: Stmt): number => {
+      res.statements.sort((stmtA: Stmt, stmtB: Stmt): number => {
         return stmtB.stats.service_lat.mean - stmtA.stats.service_lat.mean;
       });
       break;
     case SqlStatsSortOptions.CONTENTION_TIME:
-      res.statements?.sort((stmtA: Stmt, stmtB: Stmt): number => {
+      res.statements.sort((stmtA: Stmt, stmtB: Stmt): number => {
         return (
           stmtB.stats.exec_stats.contention_time.mean -
           stmtA.stats.exec_stats.contention_time.mean
@@ -101,13 +149,13 @@ export function sortAndTruncateStmtsResponse(
       });
       break;
     case SqlStatsSortOptions.EXECUTION_COUNT:
-      res.statements?.sort((stmtA: Stmt, stmtB: Stmt): number => {
+      res.statements.sort((stmtA: Stmt, stmtB: Stmt): number => {
         return stmtB.stats.count.toInt() - stmtA.stats.count.toInt();
       });
       break;
     case SqlStatsSortOptions.PCT_RUNTIME:
     default:
-      res.statements?.sort((stmtA: Stmt, stmtB: Stmt): number => {
+      res.statements.sort((stmtA: Stmt, stmtB: Stmt): number => {
         return (
           stmtB.stats.service_lat.mean * stmtB.stats.count.toInt() -
           stmtA.stats.service_lat.mean * stmtA.stats.count.toInt()
@@ -139,11 +187,14 @@ export const getCombinedStatements = (
     null,
     "10M",
   ).then(res => {
+    // Data from older server versions may be aggregated on more criteria.
+    // As of 23.1, we should now only aggregate on only stmt fingerprint id and app name.
+    res.statements = aggregateOnStmtFingerprintAndAppName(res.statements);
+
     // We may fall into the scenario of a newer UI version talking to an older server
     // version that does not support the fetch_mode and limit request params. In that
     // case We will have to manually sort and truncate the data to align the UI with
     // the data returned.
-
     const isOldServer =
       res?.transactions?.length || res?.statements?.length > limit;
 

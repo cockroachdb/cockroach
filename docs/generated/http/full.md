@@ -4000,6 +4000,7 @@ tenant pods.
 | key | [StatementsResponse.ExtendedStatementStatisticsKey](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedStatementStatisticsKey) |  |  | [reserved](#support-status) |
 | id | [uint64](#cockroach.server.serverpb.StatementsResponse-uint64) |  |  | [reserved](#support-status) |
 | stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.StatementStatistics) |  |  | [reserved](#support-status) |
+| txn_fingerprint_ids | [uint64](#cockroach.server.serverpb.StatementsResponse-uint64) | repeated | In 23.1 we expect the response to only group on fingerprint_id and app_name in the overview page. We now return the aggregated list of unique txn fingerprint ids, leaving the txn_fingerprint_id field in the key empty. | [reserved](#support-status) |
 
 
 
@@ -4111,6 +4112,7 @@ Support status: [reserved](#support-status)
 | key | [StatementsResponse.ExtendedStatementStatisticsKey](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedStatementStatisticsKey) |  |  | [reserved](#support-status) |
 | id | [uint64](#cockroach.server.serverpb.StatementsResponse-uint64) |  |  | [reserved](#support-status) |
 | stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.StatementStatistics) |  |  | [reserved](#support-status) |
+| txn_fingerprint_ids | [uint64](#cockroach.server.serverpb.StatementsResponse-uint64) | repeated | In 23.1 we expect the response to only group on fingerprint_id and app_name in the overview page. We now return the aggregated list of unique txn fingerprint ids, leaving the txn_fingerprint_id field in the key empty. | [reserved](#support-status) |
 
 
 

@@ -141,7 +141,6 @@ export interface StatementsPageStateProps {
   statementsError: Error | null;
   apps: string[];
   databases: string[];
-  totalFingerprints: number;
   lastReset: string;
   columns: string[];
   nodeRegions: { [key: string]: string };
