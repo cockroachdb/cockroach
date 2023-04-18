@@ -419,7 +419,6 @@ func (fr *FlowRegistry) waitForFlow(
 		waitCh = make(chan struct{})
 		entry.waitCh = waitCh
 	}
-	entry.refCount++
 	fr.Unlock()
 
 	select {
@@ -429,7 +428,6 @@ func (fr *FlowRegistry) waitForFlow(
 	}
 
 	fr.Lock()
-	fr.releaseEntryLocked(id)
 	return entry.flow
 }
 
@@ -439,7 +437,7 @@ func (fr *FlowRegistry) waitForFlow(
 // expectedConnectionTime so that any flows that were registered at the end of
 // the time window have a reasonable amount of time to connect to their
 // consumers, thus unblocking them. All flows that are still running at this
-// point are canceled if cancelStillRunning is true.
+// point are canceled.
 //
 // The FlowRegistry rejects any new flows once it has finished draining.
 //
@@ -546,8 +544,8 @@ func (fr *FlowRegistry) Drain(
 	allFlowsDone <- struct{}{}
 }
 
-// Undrain causes the FlowRegistry to start accepting flows again.
-func (fr *FlowRegistry) Undrain() {
+// undrain causes the FlowRegistry to start accepting flows again.
+func (fr *FlowRegistry) undrain() {
 	fr.Lock()
 	fr.draining = false
 	fr.Unlock()
@@ -578,7 +576,18 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	fr.Lock()
 	entry := fr.getEntryLocked(flowID)
 	flow := entry.flow
+	// Take a reference that is always released at the end of this method. In
+	// the happy case (when we end up returning a flow that we connected to),
+	// that flow also took reference in RegisterFlow, so the ref count won't go
+	// below one; in all other cases we want to make sure to delete the entry
+	// from the registry if we're holding the only reference.
+	entry.refCount++
 	fr.Unlock()
+	defer func() {
+		fr.Lock()
+		defer fr.Unlock()
+		fr.releaseEntryLocked(flowID)
+	}()
 	if flow == nil {
 		// Send the handshake message informing the producer that the consumer has
 		// not been scheduled yet. Another handshake will be sent below once the
@@ -592,13 +601,6 @@ func (fr *FlowRegistry) ConnectInboundStream(
 				MinAcceptedVersion:       execinfra.MinAcceptedVersion,
 			},
 		}); err != nil {
-			// TODO(andrei): We failed to send a message to the producer; we'll return
-			// an error and leave this stream with connected == false so it times out
-			// later. We could call finishInboundStreamLocked() now so that the flow
-			// doesn't wait for the timeout and we could remember the error for the
-			// consumer if the consumer comes later, but I'm not sure what the best
-			// way to do that is. Similarly for the 2nd handshake message below,
-			// except there we already have the consumer and we can push the error.
 			return nil, nil, nil, err
 		}
 		flow = fr.waitForFlow(ctx, flowID, timeout)
