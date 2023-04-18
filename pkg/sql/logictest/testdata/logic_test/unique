@@ -872,3 +872,79 @@ SELECT * FROM uniq_fk_child
 a  b     c  d     e
 1  1     1  1     1
 2  NULL  2  NULL  NULL
+
+subtest GroupByUnique
+
+# Group by UNIQUE WITHOUT INDEX columns which are nullable must not allow
+# non-aggregate expressions outside of the grouping columns.
+statement error pq: column "b" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT b FROM uniq_hidden_pk GROUP BY a
+
+# Group by UNIQUE INDEX columns which are nullable must not allow non-aggregate
+# expressions outside of the grouping columns.
+statement error pq: column "x" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT x FROM uniq GROUP BY v
+
+# Group by UNIQUE WITHOUT INDEX constraint can allow non-aggregate expressions
+# outside of the grouping columns if the constraint is not null.
+query TI colnames,rowsort
+SELECT r, i FROM uniq_enum GROUP BY i
+----
+r        i
+us-west  1
+eu-west  2
+
+statement ok
+ALTER TABLE uniq_hidden_pk ALTER COLUMN b SET NOT NULL
+
+# Group by UNIQUE WITHOUT INDEX constraint cannot allow non-aggregate
+# expressions if any of index columns is nullable.
+statement error pq: column "a" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT a FROM uniq_hidden_pk GROUP BY b, c
+
+statement ok
+ALTER TABLE uniq_hidden_pk ALTER COLUMN c SET NOT NULL
+
+# Group by UNIQUE WITHOUT INDEX constraint can allow non-aggregate expressions
+# outside of the grouping columns if the constraint is not nullable.
+query II colnames,rowsort
+SELECT a,d FROM uniq_hidden_pk GROUP BY b, c
+----
+a  d
+1  1
+2  2
+
+# Group by a subset of UNIQUE WITHOUT INDEX columns must not allow non-aggregate
+# expressions outside of the grouping columns.
+statement error pq: column "a" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT a FROM uniq_hidden_pk GROUP BY b
+
+# Group by UNIQUE INDEX constraint cannot allow non-aggregate expressions
+# outside of the grouping columns if index columns are nullable.
+statement error pq: column "x" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT x FROM uniq GROUP BY v
+
+statement ok
+ALTER TABLE uniq ALTER COLUMN v SET NOT NULL
+
+# Group by UNIQUE INDEX constraint can allow non-aggregate expressions
+# outside of the grouping columns if index columns are not nullable.
+query I colnames,rowsort
+SELECT x FROM uniq GROUP BY v ORDER BY v
+----
+x
+1
+2
+3
+NULL
+5
+NULL
+2
+NULL
+1
+NULL
+NULL
+20
+NULL
+NULL
+NULL
