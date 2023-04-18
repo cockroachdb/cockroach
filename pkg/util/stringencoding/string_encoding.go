@@ -21,6 +21,7 @@ package stringencoding
 
 import (
 	"bytes"
+	"io"
 	"unicode/utf8"
 )
 
@@ -76,10 +77,17 @@ func init() {
 	}
 }
 
+type Buffer interface {
+	io.ByteWriter
+	io.StringWriter
+	io.Writer
+	Grow(int)
+}
+
 // EncodeEscapedChar is used internally to write out a character from a larger
 // string that needs to be escaped to a buffer.
 func EncodeEscapedChar(
-	buf *bytes.Buffer,
+	buf Buffer,
 	entireString string,
 	currentRune rune,
 	currentByte byte,
@@ -90,45 +98,51 @@ func EncodeEscapedChar(
 	if currentRune == utf8.RuneError {
 		// Errors are due to invalid unicode points, so escape the bytes.
 		// Make sure this is run at least once in case ln == -1.
-		buf.Write(HexMap[entireString[currentIdx]])
+		_, _ = buf.Write(HexMap[entireString[currentIdx]])
 		for ri := 1; ri < ln; ri++ {
 			if currentIdx+ri < len(entireString) {
-				buf.Write(HexMap[entireString[currentIdx+ri]])
+				_, _ = buf.Write(HexMap[entireString[currentIdx+ri]])
 			}
 		}
 	} else if ln == 1 {
 		// For single-byte runes, do the same as encodeSQLBytes.
 		if encodedChar := EncodeMap[currentByte]; encodedChar != DontEscape {
-			buf.WriteByte('\\')
-			buf.WriteByte(encodedChar)
+			_ = buf.WriteByte('\\')
+			_ = buf.WriteByte(encodedChar)
 		} else if currentByte == quoteChar {
-			buf.WriteByte('\\')
-			buf.WriteByte(quoteChar)
+			_ = buf.WriteByte('\\')
+			_ = buf.WriteByte(quoteChar)
 		} else {
 			// Escape non-printable characters.
-			buf.Write(HexMap[currentByte])
+			_, _ = buf.Write(HexMap[currentByte])
 		}
 	} else {
 		writeMultibyteRuneAsHex(buf, currentRune, ln)
 	}
 }
 
-const uppercaseHex = `0123456789ABCDEF`
+const (
+	uppercaseHex = `0123456789ABCDEF`
+	mask         = 0x0f
+)
 
 // writeMultibyteRuneAsHex is equivalent to either
 // fmt.FPrintf(`\u%04X`) or fmt.FPrintf(`\U%08X`).
 // We can't quite just use strconv since we need uppercase hex.
-func writeMultibyteRuneAsHex(buf *bytes.Buffer, r rune, ln int) {
+func writeMultibyteRuneAsHex(buf Buffer, r rune, ln int) {
 	if ln == 2 {
-		buf.WriteString(`\u0000`)
+		_, _ = buf.WriteString(`\u`)
 	} else {
-		buf.WriteString(`\U00000000`)
+		_, _ = buf.WriteString(`\U`)
+		_ = buf.WriteByte(uppercaseHex[r>>28&mask])
+		_ = buf.WriteByte(uppercaseHex[r>>24&mask])
+		_ = buf.WriteByte(uppercaseHex[r>>20&mask])
+		_ = buf.WriteByte(uppercaseHex[r>>16&mask])
 	}
-	for i := 1; r > 0; r >>= 4 {
-		buf.Bytes()[buf.Len()-i] = uppercaseHex[r&0x0f]
-		i++
-	}
-
+	_ = buf.WriteByte(uppercaseHex[r>>12&mask])
+	_ = buf.WriteByte(uppercaseHex[r>>8&mask])
+	_ = buf.WriteByte(uppercaseHex[r>>4&mask])
+	_ = buf.WriteByte(uppercaseHex[r&mask])
 }
 
 func writeHexDigit(buf *bytes.Buffer, v int) {

@@ -13,6 +13,7 @@ package lexbase_test
 import (
 	"bytes"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -67,7 +68,7 @@ func TestEncodeSQLString(t *testing.T) {
 	testEncodeSQL(t, lexbase.EncodeSQLString, true)
 }
 
-func testEncodeSQL(t *testing.T, encode func(*bytes.Buffer, string), forceUTF8 bool) {
+func testEncodeSQL(t *testing.T, encode func(stringencoding.Buffer, string), forceUTF8 bool) {
 	type entry struct{ i, j int }
 	seen := make(map[string]entry)
 	for i := 0; i < 256; i++ {
@@ -95,7 +96,7 @@ func TestEncodeSQLStringSpecial(t *testing.T) {
 	}
 }
 
-func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, string)) string {
+func testEncodeString(t *testing.T, input []byte, encode func(stringencoding.Buffer, string)) string {
 	s := string(input)
 	var buf bytes.Buffer
 	encode(&buf, s)
