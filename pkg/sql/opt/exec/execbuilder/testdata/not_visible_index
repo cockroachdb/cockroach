@@ -1406,7 +1406,8 @@ vectorized: true
   spans: [/2 - /2]
 
 statement ok
-DROP TABLE t
+DROP TABLE t;
+RESET optimizer_use_not_visible_indexes
 
 ############################################################################
 # We should log notices when dropping an invisible index might be different from marking an index invisible.
@@ -1528,8 +1529,13 @@ statement ok
 CREATE INDEX k_idx on t(k) INVISIBLE
 
 statement ok
-CREATE INDEX v_idx on t(k);
-ALTER INDEX v_idx INVISIBLE
+CREATE INDEX k1_idx on t(k);
+ALTER INDEX k1_idx INVISIBLE
+
+# Create an index with partial visibility.
+statement ok
+CREATE INDEX v_idx on t(v);
+ALTER INDEX v_idx VISIBILITY 0.5
 
 query TTBITTTBBBF colnames
 SELECT * FROM [SHOW INDEX FROM t]
@@ -1541,5 +1547,50 @@ t           t_pkey      false       3             v            v           N/A  
 t           p_idx       true        1             p            p           ASC        false    false     false    0
 t           k_idx       true        1             k            k           ASC        false    false     false    0
 t           k_idx       true        2             p            p           ASC        false    true      false    0
-t           v_idx       true        1             k            k           ASC        false    false     false    0
-t           v_idx       true        2             p            p           ASC        false    true      false    0
+t           k1_idx      true        1             k            k           ASC        false    false     false    0
+t           k1_idx      true        2             p            p           ASC        false    true      false    0
+t           v_idx       true        1             v            v           ASC        false    false     false    0.5
+t           v_idx       true        2             p            p           ASC        false    true      false    0.5
+
+# Depending on the random seed v_idx may or may not be visible.
+statement ok
+SET testing_optimizer_random_seed=6320964980407535655
+
+query T
+EXPLAIN SELECT * FROM t WHERE v = 'foo'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ table: t@t_pkey
+│
+└── • scan
+      missing stats
+      table: t@v_idx
+      spans: [/'foo' - /'foo']
+
+statement ok
+SET testing_optimizer_random_seed=3164997759865821235
+
+query T
+EXPLAIN SELECT * FROM t WHERE v = 'foo'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: v = 'foo'
+│
+└── • scan
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+RESET testing_optimizer_random_seed
+
+# When the seed is unset we'll use a non-deterministic random number
+# to determine the visibility. Just make sure this doesn't cause an error.
+statement ok
+SELECT * FROM t WHERE v = 'foo'
