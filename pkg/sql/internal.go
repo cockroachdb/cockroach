@@ -781,6 +781,78 @@ var rowsAffectedResultColumns = colinfo.ResultColumns{
 	},
 }
 
+// execInternal is the main entry point for executing a statement via the
+// InternalExecutor. From the high level it does the following:
+// - parses the statement as well as its arguments
+// - creates an "internal" connExecutor that runs in a separate goroutine
+// - pushes a few commands onto the StmtBuf of the connExecutor to be evaluated
+// - blocks until the first row of data is sent by the connExecutor
+// - returns the rowsIterator that can consume the result of the statement.
+//
+// Only a single statement is supported. If there are no query arguments, then
+// {ExecStmt, Sync} commands are pushed onto the StmtBuf, if there are some
+// query arguments, then {PrepareStmt, BindStmt, ExecPortal, Sync} are pushed.
+//
+// The coordination between the rowsIterator and the connExecutor is managed by
+// the internalClientComm as well as the ieResultChannel. The rowsIterator is
+// the reader of the ieResultChannel while the connExecutor is the writer. The
+// connExecutor goroutine exits (achieved by closing the StmtBuf) once the
+// result for the Sync command evaluation is closed.
+//
+// execInternal defines two callbacks that are passed into the connExecutor
+// machinery:
+// - syncCallback is called when the result for the Sync command evaluation is
+// closed. It is responsible for closing the StmtBuf (to allow the connExecutor
+// to exit its 'run' loop) as well iterating over the results to see whether an
+// error was encountered. Note that, unlike rows that are sent directly from the
+// streamingCommandResult (the writer) to the rowsIterator (the reader), errors
+// are buffered in the results - this is needed since the errors might be
+// updated by the connExecutor after they have been generated (e.g. replacing
+// context cancellation error with a nice "statement timed out" error).
+// - errCallback is called when the connExecutor's 'run' returns an error in
+// order to propagate the error to the rowsIterator.
+//
+// It's worth noting that rows as well some metadata (column schema as well as
+// "rows affected" number) are sent directly from the streamingCommandResult to
+// the rowsIterator, meaning that this communication doesn't go through the
+// internalClientComm.
+//
+// The returned rowsIterator can be synchronized with the connExecutor goroutine
+// if "synchronous" ieResultChannel is provided. In this case, only one
+// goroutine (among the rowsIterator and the connExecutor) is active at any
+// point in time since each read / write is blocked until the "send" / "receive"
+// happens on the ieResultChannel.
+//
+// It's also worth noting that execInternal doesn't return until the
+// connExecutor reaches the execution engine (i.e. until after the query
+// planning has been performed). This is needed in order to avoid concurrent
+// access to the txn by the rowsIterator and the connExecutor goroutines. In
+// particular, this blocking allows us to avoid invalid concurrent txn access
+// when during the stmt evaluation the internal executor needs to run "nested"
+// internally-executed stmt  (see #62415 for an example).
+// TODO(yuzefovich): currently, this statement is not entirely true if the retry
+// occurs.
+//
+// An additional responsibility of the internalClientComm is handling the retry
+// errors. At the moment of writing, this is done incorrectly - namely, the
+// internalClientComm implements the ClientLock interface in such a fashion as
+// if any command can be transparently retried.
+// TODO(yuzefovich): fix this.
+//
+// Note that only implicit txns can be retried internally. If an explicit txn is
+// passed to execInternal, then the retry error is propagated to the
+// rowsIterator in the following manner (say we use {ExecStmt, Sync} commands):
+// - ExecStmt evaluation encounters a retry error
+// - the error is stored in internalClientComm.results[0] (since it's not
+//   propagated right away to the rowsIterator)
+// - the connExecutor's state machine rolls back the stmt
+// - the connExecutor then processes the Sync command, and when the
+//   corresponding result is closed, syncCallback is called
+// - in the syncCallback we iterate over two results and find the error in the
+//   zeroth result - the error is sent on the ieResultChannel
+// - the rowsIterator receives the error and returns it to the caller of
+//   execInternal.
+
 // execInternal executes a statement.
 //
 // sessionDataOverride can be used to control select fields in the executor's
