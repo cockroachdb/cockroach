@@ -2839,7 +2839,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 			ctx, 2, "delegating snapshot transmission attempt %v for %v to %v", n+1, recipient, sender,
 		)
 
-		selfDelegate := n == len(senders)-1
+		selfDelegate := sender.StoreID == r.StoreID()
 
 		// On the last attempt, always queue on the delegate to time out naturally.
 		if selfDelegate {
