@@ -43,7 +43,7 @@ describe("statementsDiagnostics sagas", () => {
     };
 
     const insertResponse: InsertStmtDiagnosticResponse = {
-      stmt_diag_req_id: "4132456789089978654",
+      req_resp: true,
     };
 
     const reportsResponse: StatementDiagnosticsResponse = [];

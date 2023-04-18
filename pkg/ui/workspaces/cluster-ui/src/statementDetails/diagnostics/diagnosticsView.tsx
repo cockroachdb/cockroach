@@ -12,7 +12,6 @@ import React from "react";
 import { Link } from "react-router-dom";
 import moment from "moment-timezone";
 import classnames from "classnames/bind";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Button, Icon } from "@cockroachlabs/ui-components";
 import { Button as CancelButton } from "src/button";
 import { Text, TextTypes } from "src/text";
