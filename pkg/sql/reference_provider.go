@@ -157,6 +157,6 @@ func NewReferenceProviderFactoryForTest(
 	opName string, txn *kv.Txn, user username.SQLUsername, execCfg *ExecutorConfig, curDB string,
 ) (scbuild.ReferenceProviderFactory, func()) {
 	ip, cleanup := newInternalPlanner(opName, txn, user, &MemoryMetrics{}, execCfg, sessiondatapb.SessionData{})
-	ip.SessionData().Database = "defaultdb"
+	ip.SessionData().Database = curDB
 	return &referenceProviderFactory{p: ip}, cleanup
 }
