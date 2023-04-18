@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -89,8 +88,13 @@ func (r *Replica) maybeUnquiesceAndWakeLeaderLocked() bool {
 	r.store.unquiescedReplicas.Unlock()
 	r.maybeCampaignOnWakeLocked(ctx)
 	// Propose an empty command which will wake the leader.
-	data := raftlog.EncodeRaftCommand(raftlog.EntryEncodingStandardWithoutAC, makeIDKey(), nil)
-	_ = r.mu.internalRaftGroup.Propose(data)
+	// NB: we formerly proposed an empty-payload-but-not-nil command here
+	// but since this method is called from handleRaftReady after flushing
+	// the proposal buffer, raft might be rejecting non-nil entries at this
+	// point and could log an annoying warning.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/100096
+	_ = r.mu.internalRaftGroup.Propose(nil /* data */)
 	return true
 }
 
