@@ -124,7 +124,7 @@ func newTableReader(
 		resultTypes[i] = spec.FetchSpec.FetchedColumns[i].Type
 	}
 
-	tr.ignoreMisplannedRanges = flowCtx.Local
+	tr.ignoreMisplannedRanges = flowCtx.Local || spec.IgnoreMisplannedRanges
 	if err := tr.Init(
 		ctx,
 		tr,
