@@ -49,6 +49,7 @@ describe("<ClusterNodeTotals>", () => {
         suspect: 0,
         dead: 0,
         decommissioned: 0,
+        draining: 0,
       },
     };
   });
@@ -74,6 +75,7 @@ describe("<ClusterNodeTotals>", () => {
         suspect: 0,
         dead: 0,
         decommissioned: 0,
+        draining: 0,
       },
     });
     const wrapper = mount(component);
@@ -90,6 +92,7 @@ describe("<ClusterNodeTotals>", () => {
         suspect: 1,
         dead: 1,
         decommissioned: 0,
+        draining: 0,
       },
     });
     const wrapper = mount(component);

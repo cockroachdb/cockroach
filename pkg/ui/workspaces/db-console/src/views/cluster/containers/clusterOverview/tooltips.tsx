@@ -115,6 +115,20 @@ export const SuspectNodesTooltip: React.FC<TooltipProps> = props => (
   </Tooltip>
 );
 
+export const DrainingNodesTooltip: React.FC<TooltipProps> = props => (
+  <Tooltip
+    {...props}
+    placement="bottom"
+    title={
+      <div className="tooltip__table--title">
+        <p>Node is draining.</p>
+      </div>
+    }
+  >
+    {props.children}
+  </Tooltip>
+);
+
 export const DeadNodesTooltip: React.FC<TooltipProps> = props => (
   <Tooltip
     {...props}
