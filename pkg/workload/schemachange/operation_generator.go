@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -2825,6 +2826,12 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 		// If the error not an instance of pgconn.PgError, then it is unexpected.
 		pgErr := new(pgconn.PgError)
 		if !errors.As(err, &pgErr) {
+			// Connections dropping with at the server side can be treated
+			// as rollback errors here.
+			if errors.Is(err, io.ErrUnexpectedEOF) {
+				return errors.Mark(err,
+					errRunInTxnRbkSentinel)
+			}
 			return errors.Mark(
 				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR; Received a non pg error."), s),
 				errRunInTxnFatalSentinel,
