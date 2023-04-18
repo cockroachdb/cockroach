@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -537,6 +538,78 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
+}
+
+// TestTxnSpanRefresherPreemptiveRefreshIsoLevel tests that the txnSpanRefresher
+// only performed preemptive client-side refreshes of Serializable transactions.
+func TestTxnSpanRefresherPreemptiveRefreshIsoLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		isoLevel   isolation.Level
+		expRefresh bool
+	}{
+		{isolation.Serializable, true},
+		{isolation.Snapshot, false},
+		{isolation.ReadCommitted, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.isoLevel.String(), func(t *testing.T) {
+			ctx := context.Background()
+			tsr, mockSender := makeMockTxnSpanRefresher()
+
+			txn := makeTxnProto()
+			txn.IsoLevel = tt.isoLevel
+
+			// Push the txn.
+			txn.WriteTimestamp = txn.WriteTimestamp.Add(1, 0)
+			origReadTs := txn.ReadTimestamp
+			pushedWriteTs := txn.WriteTimestamp
+
+			// Send an EndTxn request.
+			ba := &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: &txn}
+			etArgs := kvpb.EndTxnRequest{Commit: true}
+			ba.Add(&etArgs)
+
+			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.True(t, ba.CanForwardReadTimestamp)
+				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+				if tt.expRefresh {
+					// The transaction should be refreshed.
+					require.NotEqual(t, origReadTs, ba.Txn.ReadTimestamp)
+					require.Equal(t, pushedWriteTs, ba.Txn.ReadTimestamp)
+					require.Equal(t, pushedWriteTs, ba.Txn.WriteTimestamp)
+				} else {
+					// The transaction should not be refreshed.
+					require.Equal(t, origReadTs, ba.Txn.ReadTimestamp)
+					require.NotEqual(t, pushedWriteTs, ba.Txn.ReadTimestamp)
+					require.Equal(t, pushedWriteTs, ba.Txn.WriteTimestamp)
+				}
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			})
+
+			br, pErr := tsr.SendLocked(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+
+			expRefreshSuccess := int64(0)
+			if tt.expRefresh {
+				expRefreshSuccess = 1
+			}
+			require.Equal(t, expRefreshSuccess, tsr.refreshSuccess.Count())
+			require.Equal(t, int64(0), tsr.refreshFail.Count())
+			require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
+			require.True(t, tsr.refreshFootprint.empty())
+			require.False(t, tsr.refreshInvalid)
+		})
+	}
 }
 
 // TestTxnSpanRefresherSplitEndTxnOnAutoRetry tests that EndTxn requests are
