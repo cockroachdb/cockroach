@@ -32,7 +32,7 @@ func runMultiTenantTPCH(
 ) {
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
+	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
 
 	setupNames := []string{"single-tenant", "multi-tenant"}
 	const numRunsPerQuery = 3

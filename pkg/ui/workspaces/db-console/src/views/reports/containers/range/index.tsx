@@ -35,6 +35,7 @@ import AllocatorOutput from "src/views/reports/containers/range/allocator";
 import RangeInfo from "src/views/reports/containers/range/rangeInfo";
 import LeaseTable from "src/views/reports/containers/range/leaseTable";
 import { getMatchParamByName } from "src/util/query";
+import { BackToAdvanceDebug } from "../util";
 
 interface RangeDispatchProps {
   refreshRange: typeof refreshRange;
@@ -187,6 +188,7 @@ export class Range extends React.Component<RangeProps, {}> {
     return (
       <div className="section">
         <Helmet title={`r${responseRangeID.toString()} Range | Debug`} />
+        <BackToAdvanceDebug history={this.props.history} />
         <h1 className="base-heading">
           Range Report for r{responseRangeID.toString()}
         </h1>

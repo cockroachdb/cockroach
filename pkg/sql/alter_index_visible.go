@@ -111,9 +111,10 @@ func (n *alterIndexVisibleNode) startExec(params runParams) error {
 	return params.p.logEvent(params.ctx,
 		n.tableDesc.ID,
 		&eventpb.AlterIndexVisible{
-			TableName:  n.n.Index.Table.FQString(),
-			IndexName:  n.index.GetName(),
-			NotVisible: n.n.Invisibility != 0.0,
+			TableName:    n.n.Index.Table.FQString(),
+			IndexName:    n.index.GetName(),
+			NotVisible:   n.n.Invisibility != 0.0,
+			Invisibility: n.n.Invisibility,
 		})
 }
 func (n *alterIndexVisibleNode) Next(runParams) (bool, error) { return false, nil }

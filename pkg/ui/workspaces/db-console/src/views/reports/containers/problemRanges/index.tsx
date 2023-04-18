@@ -26,6 +26,7 @@ import { FixLong } from "src/util/fixLong";
 import ConnectionsTable from "src/views/reports/containers/problemRanges/connectionsTable";
 import { Loading } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
+import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
 type NodeProblems$Properties =
   protos.cockroach.server.serverpb.ProblemRangesResponse.INodeProblems;
@@ -225,6 +226,7 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
     return (
       <div className="section">
         <Helmet title="Problem Ranges | Debug" />
+        <BackToAdvanceDebug history={this.props.history} />
         <h1 className="base-heading">Problem Ranges Report</h1>
         <Loading
           loading={isLoading(this.props.problemRanges)}
