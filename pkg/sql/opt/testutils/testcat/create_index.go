@@ -21,13 +21,17 @@ func (tc *Catalog) CreateIndex(stmt *tree.CreateIndex, version descpb.IndexDescr
 	tn := stmt.Table
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(&tn)
-	tab := tc.Table(&tn)
-
-	for _, idx := range tab.Indexes {
-		in := stmt.Name.String()
-		if idx.IdxName == in {
-			panic(errors.Newf(`relation "%s" already exists`, in))
+	tab, err := tc.LookupTable(&tn)
+	var view *View
+	if err == nil {
+		for _, idx := range tab.Indexes {
+			in := stmt.Name.String()
+			if idx.IdxName == in {
+				panic(errors.Newf(`relation "%s" already exists`, in))
+			}
 		}
+	} else {
+		view = tc.View(&tn)
 	}
 
 	// Convert stmt to a tree.IndexTableDef so that Table.addIndex can be used
@@ -48,5 +52,9 @@ func (tc *Catalog) CreateIndex(stmt *tree.CreateIndex, version descpb.IndexDescr
 		idxType = uniqueIndex
 
 	}
-	tab.addIndexWithVersion(indexTableDef, idxType, version)
+	if tab != nil {
+		tab.addIndexWithVersion(indexTableDef, idxType, version)
+	} else if view != nil {
+		view.addIndex(indexTableDef)
+	}
 }
