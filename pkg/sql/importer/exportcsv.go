@@ -135,6 +135,7 @@ func newCSVWriterProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.ExportSpec,
+	post *execinfrapb.PostProcessSpec,
 	input execinfra.RowSource,
 ) (execinfra.Processor, error) {
 	c := &csvWriter{
@@ -144,7 +145,7 @@ func newCSVWriterProcessor(
 		input:       input,
 	}
 	semaCtx := tree.MakeSemaContext()
-	if err := c.out.Init(ctx, &execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx()); err != nil {
+	if err := c.out.Init(ctx, post, colinfo.ExportColumnTypes, &semaCtx, flowCtx.NewEvalCtx()); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -161,11 +162,7 @@ type csvWriter struct {
 var _ execinfra.Processor = &csvWriter{}
 
 func (sp *csvWriter) OutputTypes() []*types.T {
-	res := make([]*types.T, len(colinfo.ExportColumns))
-	for i := range res {
-		res[i] = colinfo.ExportColumns[i].Typ
-	}
-	return res
+	return sp.out.OutputTypes
 }
 
 func (sp *csvWriter) MustBeStreaming() bool {
