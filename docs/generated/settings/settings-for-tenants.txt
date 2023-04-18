@@ -253,6 +253,8 @@ sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if ena
 sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job	tenant-ro
 sql.show_ranges_deprecated_behavior.enabled	boolean	true	if set, SHOW RANGES and crdb_internal.ranges{_no_leases} behave with deprecated pre-v23.1 semantics. NB: the new SHOW RANGES interface has richer WITH options than pre-v23.1 SHOW RANGES.	tenant-rw
 sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators	tenant-rw
+sql.statements_cache.capacity	integer	20000	the maximum number of statements in the cache	tenant-rw
+sql.statements_cache.time_to_live	duration	1h0m0s	the maximum time to live	tenant-rw
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	tenant-rw
 sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh	tenant-rw
 sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh	tenant-rw
