@@ -102,7 +102,7 @@ export function getValueFromString(
 }
 
 /**
- * Renders the Network Diagnostics Report page.
+ * Renders the Network Report page.
  */
 export class Network extends React.Component<NetworkProps, INetworkState> {
   state: INetworkState = {
@@ -464,8 +464,8 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     const filters = getFilters(location);
     return (
       <Fragment>
-        <Helmet title="Network Diagnostics | Debug" />
-        <h3 className="base-heading">Network Diagnostics</h3>
+        <Helmet title="Network | Debug" />
+        <h3 className="base-heading">Network</h3>
         <Loading
           loading={!contentAvailable(nodesSummary)}
           page={"network"}
