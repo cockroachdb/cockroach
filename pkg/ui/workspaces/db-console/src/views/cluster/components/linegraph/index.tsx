@@ -293,8 +293,8 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
     // and are called when recomputing certain axis and
     // series options. This lets us use updated domains
     // when redrawing the uPlot chart on data change.
-    const resultDatapoints = _.flatMap(data.results, result =>
-      result.datapoints.map(dp => dp.value),
+    const resultDatapoints = _.flatMap(fData, result =>
+      result.values.map(dp => dp.value),
     );
     this.yAxisDomain = calculateYAxisDomain(axis.props.units, resultDatapoints);
     this.xAxisDomain = calculateXAxisDomain(
