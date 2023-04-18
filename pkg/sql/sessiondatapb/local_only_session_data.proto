@@ -374,6 +374,11 @@ message LocalOnlySessionData {
   // query without sub/post queries can be executed in interleaving manner, but
   // with a local execution plan.
   bool multiple_active_portals_enabled = 100;
+  // OptimizerHoistUncorrelatedEqualitySubqueries, when true, causes the
+  // optimizer to hoist uncorrelated subqueries that are part of an equality
+  // expression with a column reference, which can produce more efficient query
+  // plans.
+  bool optimizer_hoist_uncorrelated_equality_subqueries = 102;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
