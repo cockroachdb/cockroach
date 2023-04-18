@@ -266,11 +266,8 @@ go_test(
         "//pkg/sql/logictest:testdata",  # keep{{ end }}{{ if .ExecBuildLogicTest }}
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}
     ],
-    shard_count = {{ if gt .TestCount 48 }}48{{ else }}{{ .TestCount }}{{end}},
-    tags = [{{ if .Ccl }}
-        "ccl_test",{{ end }}
-        "cpu:{{ if gt .NumCPU 4 }}4{{ else }}{{ .NumCPU }}{{ end }}",
-    ],
+    shard_count = {{ if gt .TestCount 16 }}16{{ else }}{{ .TestCount }}{{end}},
+    tags = ["cpu:{{ if gt .NumCPU 4 }}4{{ else }}{{ .NumCPU }}{{ end }}"],
     deps = [
         "//pkg/build/bazel",{{ if .Ccl }}
         "//pkg/ccl",{{ end }}

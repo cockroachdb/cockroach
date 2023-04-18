@@ -11,7 +11,6 @@ go_test(
     args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]),
     shard_count = 16,
-    tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/bench/rttanalysis",
