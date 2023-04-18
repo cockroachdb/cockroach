@@ -98,7 +98,8 @@ type Optimizer struct {
 	// JoinOrderBuilder adds new join orderings to the memo.
 	jb JoinOrderBuilder
 
-	// rng is used to deterministically perturb costs and/or disable rules.
+	// rng is used to deterministically perturb costs and/or disable rules and/or
+	// determine the visibility (for this query) of a partially visible index.
 	rng *rand.Rand
 
 	// scratchSort is used to avoid repeated allocations during sort enforcement.
