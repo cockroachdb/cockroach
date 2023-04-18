@@ -238,7 +238,13 @@ type kvSparseSliceBulkSource[T kv.GValue] struct {
 var _ kv.BulkSource[[]byte] = &kvSparseSliceBulkSource[[]byte]{}
 
 func (k *kvSparseSliceBulkSource[T]) Len() int {
-	return len(k.keys)
+	cnt := 0
+	for _, k := range k.keys {
+		if len(k) > 0 {
+			cnt++
+		}
+	}
+	return cnt
 }
 
 type sliceIterator[T kv.GValue] struct {
@@ -253,9 +259,13 @@ func (k *kvSparseSliceBulkSource[T]) Iter() kv.BulkSourceIterator[T] {
 }
 
 func (s *sliceIterator[T]) Next() (roachpb.Key, T) {
-	k, v := s.s.keys[s.cursor], s.s.values[s.cursor]
-	s.cursor++
-	return k, v
+	for {
+		k, v := s.s.keys[s.cursor], s.s.values[s.cursor]
+		s.cursor++
+		if len(k) > 0 {
+			return k, v
+		}
+	}
 }
 
 // KVBatchAdapter implements Putter interface and adapts it to kv.Batch API.
