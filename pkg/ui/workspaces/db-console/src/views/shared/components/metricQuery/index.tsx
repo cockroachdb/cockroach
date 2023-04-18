@@ -89,6 +89,7 @@ export interface MetricProps {
   sources?: string[];
   title?: string;
   rate?: boolean;
+  scale?: number;
   nonNegativeRate?: boolean;
   aggregateMax?: boolean;
   aggregateMin?: boolean;

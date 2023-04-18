@@ -383,7 +383,7 @@ var (
 	// for now.
 	metaChangefeedMaxBehindNanos = metric.Metadata{
 		Name:        "changefeed.max_behind_nanos",
-		Help:        "Largest commit-to-emit duration of any running feed",
+		Help:        "Time since the changefeed last checkpointed its progress",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}

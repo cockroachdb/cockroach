@@ -21,25 +21,49 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph
-      title="Max Changefeed Latency"
+      title="Changefeed Status"
       isKvGraph={false}
       sources={storeSources}
     >
-      <Axis units={AxisUnits.Duration} label="time">
+      <Axis units={AxisUnits.Count} label="count">
         <Metric
-          name="cr.node.changefeed.max_behind_nanos"
-          title="Max Changefeed Latency"
-          downsampleMax
-          aggregateMax
+          name="cr.node.jobs.changefeed.currently_running"
+          title="Running"
         />
+        <Metric
+          name="cr.node.jobs.changefeed.currently_paused"
+          title="Paused"
+        />
+        <Metric name="cr.node.jobs.changefeed.resume_failed" title="Failed" />
       </Axis>
     </LineGraph>,
 
     <LineGraph
-      title="Sink Byte Traffic"
+      title="Commit Latency"
+      tooltip={`The difference between an event's MVCC timestamp and the time it was acknowledged as received by the downstream sink.`}
       isKvGraph={false}
       sources={storeSources}
     >
+      <Axis units={AxisUnits.Duration} label="latency">
+        <Metric
+          name="cr.node.changefeed.commit_latency-p99"
+          title="99th Percentile"
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.changefeed.commit_latency-p90"
+          title="90th Percentile"
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.changefeed.commit_latency-p50"
+          title="50th Percentile"
+          downsampleMax
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Emitted Bytes" isKvGraph={false} sources={storeSources}>
       <Axis units={AxisUnits.Bytes} label="bytes">
         <Metric
           name="cr.node.changefeed.emitted_bytes"
@@ -64,17 +88,18 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Sink Timings" isKvGraph={false} sources={storeSources}>
+    <LineGraph
+      title="Max Checkpoint Latency"
+      isKvGraph={false}
+      tooltip={`The most any changefeed's persisted checkpoint is behind the present (this is the timestamp from which a restarted changefeed would start from).`}
+      sources={storeSources}
+    >
       <Axis units={AxisUnits.Duration} label="time">
         <Metric
-          name="cr.node.changefeed.emit_nanos"
-          title="Message Emit Time"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.changefeed.flush_nanos"
-          title="Flush Time"
-          nonNegativeRate
+          name="cr.node.changefeed.max_behind_nanos"
+          title="Max Checkpoint Latency"
+          downsampleMax
+          aggregateMax
         />
       </Axis>
     </LineGraph>,
@@ -88,6 +113,51 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.node.changefeed.error_retries"
           title="Retryable Errors"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Oldest Protected Timestamp"
+      tooltip={`The oldest data that any changefeed is protecting from being able to be automatically garbage collected.`}
+      isKvGraph={false}
+      sources={storeSources}
+    >
+      <Axis units={AxisUnits.Duration} label="time">
+        <Metric
+          name="cr.node.jobs.changefeed.protected_age_sec"
+          title="Protected Timestamp Age"
+          scale={1_000_000_000}
+          downsampleMax
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Backfill Pending Ranges"
+      tooltip={`The number of ranges being backfilled (ex: due to an initial scan or schema change) that are yet to completely enter the Changefeed pipeline.`}
+      isKvGraph={false}
+      sources={storeSources}
+    >
+      <Axis units={AxisUnits.Count} label="count">
+        <Metric
+          name="cr.node.changefeed.backfill_pending_ranges"
+          title="Backfill Pending Ranges"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Schema Registry Registrations"
+      isKvGraph={false}
+      sources={storeSources}
+    >
+      <Axis units={AxisUnits.Count} label="action">
+        <Metric
+          name="cr.node.changefeed.schema_registry_registrations"
+          title="Schema Registry Registrations"
           nonNegativeRate
         />
       </Axis>
