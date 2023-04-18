@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -151,6 +152,7 @@ type treeMu struct {
 
 	// For constraining memory consumption. We need better memory accounting
 	// than this.
+	// TODO(nvanbenschoten): use an atomic.Int64.
 	numLocks int64
 
 	// For dampening the frequency with which we enforce lockTableImpl.maxLocks.
@@ -227,6 +229,7 @@ type lockTableImpl struct {
 	//   reservation at A.
 	// Now in the queues for A and B req1 is behind req3 and vice versa and
 	// this deadlock has been created entirely due to the lock table's behavior.
+	// TODO(nvanbenschoten): use an atomic.Uint64.
 	seqNum uint64
 
 	// locks contains the btree objects (wrapped in the treeMu structure) that
@@ -1399,6 +1402,25 @@ func (l *lockState) isEmptyLock() bool {
 	return false
 }
 
+// assertEmptyLock asserts that the lockState is empty. This condition must hold
+// for a lock to be safely removed from the tree. If it does not hold, requests
+// with stale snapshots of the btree will still be able to enter the lock's
+// wait-queue, after which point they will never hear of lock updates.
+// REQUIRES: l.mu is locked.
+func (l *lockState) assertEmptyLock() {
+	if !l.isEmptyLock() {
+		panic("lockState is not empty")
+	}
+}
+
+// assertEmptyLockUnlocked is like assertEmptyLock, but it locks the lockState.
+// REQUIRES: l.mu is not locked.
+func (l *lockState) assertEmptyLockUnlocked() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.assertEmptyLock()
+}
+
 // Returns the duration of time the lock has been tracked as held in the lock table.
 // REQUIRES: l.mu is locked.
 func (l *lockState) lockHeldDuration(now time.Time) time.Duration {
@@ -2059,15 +2081,15 @@ func (l *lockState) tryClearLock(force bool) bool {
 	if l.notRemovable > 0 && !force {
 		return false
 	}
-	replicatedHeld := l.holder.locked && l.holder.holder[lock.Replicated].txn != nil
 
-	// Remove unreplicated holder.
-	l.holder.holder[lock.Unreplicated] = lockHolderInfo{}
+	// Clear lock holder. While doing so, determine which waitingState to
+	// transition waiters to.
 	var waitState waitingState
+	replicatedHeld := l.holder.locked && l.holder.holder[lock.Replicated].txn != nil
 	if replicatedHeld && !force {
 		lockHolderTxn, _ := l.getLockHolder()
-		// Note that none of the current waiters can be requests
-		// from lockHolderTxn.
+		// Note that none of the current waiters can be requests from lockHolderTxn,
+		// so they will never be told to waitElsewhere on themselves.
 		waitState = waitingState{
 			kind:        waitElsewhere,
 			txn:         lockHolderTxn,
@@ -2078,11 +2100,11 @@ func (l *lockState) tryClearLock(force bool) bool {
 	} else {
 		// !replicatedHeld || force. Both are handled as doneWaiting since the
 		// system is no longer tracking the lock that was possibly held.
-		l.clearLockHolder()
 		waitState = waitingState{kind: doneWaiting}
 	}
+	l.clearLockHolder()
 
-	l.distinguishedWaiter = nil
+	// Clear reservation.
 	if l.reservation != nil {
 		g := l.reservation
 		g.mu.Lock()
@@ -2090,6 +2112,8 @@ func (l *lockState) tryClearLock(force bool) bool {
 		g.mu.Unlock()
 		l.reservation = nil
 	}
+
+	// Clear waitingReaders.
 	for e := l.waitingReaders.Front(); e != nil; {
 		g := e.Value.(*lockTableGuardImpl)
 		curr := e
@@ -2103,6 +2127,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 		g.mu.Unlock()
 	}
 
+	// Clear queuedWriters.
 	waitState.guardAccess = spanset.SpanReadWrite
 	for e := l.queuedWriters.Front(); e != nil; {
 		qg := e.Value.(*queuedGuard)
@@ -2119,6 +2144,12 @@ func (l *lockState) tryClearLock(force bool) bool {
 		delete(g.mu.locks, l)
 		g.mu.Unlock()
 	}
+
+	// Clear distinguishedWaiter.
+	l.distinguishedWaiter = nil
+
+	// The lockState must now be empty.
+	l.assertEmptyLock()
 	return true
 }
 
@@ -2404,6 +2435,7 @@ func (l *lockState) lockIsFree() (gc bool) {
 	}
 
 	if l.queuedWriters.Len() == 0 {
+		l.assertEmptyLock()
 		return true
 	}
 
@@ -2424,6 +2456,27 @@ func (l *lockState) lockIsFree() (gc bool) {
 	// Tell the active waiters who they are waiting for.
 	l.informActiveWaiters()
 	return false
+}
+
+// Delete removes the specified lock from the tree.
+// REQUIRES: t.mu is locked.
+func (t *treeMu) Delete(l *lockState) {
+	if buildutil.CrdbTestBuild {
+		l.assertEmptyLockUnlocked()
+	}
+	t.btree.Delete(l)
+}
+
+// Reset removes all locks from the tree.
+// REQUIRES: t.mu is locked.
+func (t *treeMu) Reset() {
+	if buildutil.CrdbTestBuild {
+		iter := t.MakeIter()
+		for iter.First(); iter.Valid(); iter.Next() {
+			iter.Cur().assertEmptyLockUnlocked()
+		}
+	}
+	t.btree.Reset()
 }
 
 func (t *treeMu) nextLockSeqNum() (seqNum uint64, checkMaxLocks bool) {
