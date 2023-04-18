@@ -31,6 +31,42 @@ SELECT gateway_region();
 ap-southeast-2
 
 statement ok
+CREATE TABLE xy (
+  x INT NOT NULL,
+  y INT NOT NULL
+);
+
+statement ok
+ALTER TABLE xy ADD COLUMN region crdb_internal_region
+ AS (
+  CASE WHEN x = 0 THEN 'ca-central-1'
+       WHEN x = 1 THEN 'ap-southeast-2'
+       WHEN x = 2 THEN 'us-east-1'
+       WHEN x = 3 THEN 'us-east-1'
+  END
+  ) STORED;
+
+# Add and drop some columns to change the default mapping of columns ordinals
+# to column IDs for testing purposes.
+statement ok
+ALTER TABLE xy ADD COLUMN z INT;
+
+statement ok
+ALTER TABLE xy DROP COLUMN y;
+
+statement ok
+ALTER TABLE xy ADD COLUMN y INT;
+
+statement ok
+ALTER TABLE xy ALTER COLUMN region SET NOT NULL;
+
+statement ok
+ALTER TABLE xy SET LOCALITY REGIONAL BY ROW AS region;
+
+statement ok
+INSERT INTO xy (x, y, z) VALUES (0, 0, 0), (2, 2, 2);
+
+statement ok
 CREATE TABLE t1 (a INT, b INT, c INT, primary key(a)) LOCALITY REGIONAL BY ROW;
 
 statement ok
@@ -293,7 +329,7 @@ skipif config multiregion-9node-3region-3azs-vec-off
 query I retry
 SELECT DISTINCT range_id FROM [SHOW RANGES FROM TABLE messages_rbr]
 ----
-62
+65
 
 # Update does not fail when accessing all rows in messages_rbr because lookup
 # join does not error out the lookup table in phase 1.
@@ -1289,6 +1325,64 @@ ROLLBACK TO SAVEPOINT foo
 
 statement ok
 COMMIT
+
+statement ok
+SET sql_safe_updates = false;
+
+# Unconstrained delete should fail.
+retry
+statement error pq: Query has no home region\. Try adding a filter on xy\.region and/or on key column \(xy\.rowid\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+DELETE FROM xy;
+
+# Insert should error on inserting to a remote region.
+statement error pq: Query has no home region\. Try running the query from region 'ca-central-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+INSERT INTO xy (z, x, y) VALUES (0, 0, 0);
+
+# Insert should not error on inserting to the local region.
+statement ok
+INSERT INTO xy (z, x, y) VALUES (1, 1, 1);
+
+statement ok
+ALTER TABLE xy ALTER PRIMARY KEY USING COLUMNS (x);
+
+# Insert fast-path should error on inserting to a remote region.
+retry
+statement error pq: Query has no home region\. Try running the query from region 'ca-central-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+INSERT INTO xy (z, x, y) VALUES (0, 0, 0);
+
+# Upsert should error on looking up the matching row.
+retry
+statement error pq: Query has no home region\. Try adding a filter on xy\.region and/or on key column \(xy\.x\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+UPSERT INTO xy (z, x, y) VALUES (0, 0, 0);
+
+# Attempt to delete remote row fails.
+retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+DELETE FROM xy WHERE x = 2;
+
+# Deleting a local row is allowed.
+statement ok
+DELETE FROM xy WHERE x = 1;
+
+# Insert fast-path should not error on inserting to the local region.
+retry
+statement ok
+INSERT INTO xy (z, x, y) VALUES (1, 1, 1);
+
+# Remote row update should fail.
+retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+UPDATE xy set z=5 WHERE x = 2;
+
+# Local row update should succeed.
+retry
+statement ok
+UPDATE xy set z=5 WHERE x = 1;
+
+# Updating the row to be in a different region should fail.
+retry
+statement error pq: Query has no home region\. Try running the query from region 'us-east-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+UPDATE xy set x=3 WHERE x = 1;
 
 statement ok
 RESET enforce_home_region
