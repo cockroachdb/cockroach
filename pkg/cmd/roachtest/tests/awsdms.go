@@ -575,6 +575,7 @@ func setupDMSEndpointsAndTask(
 				)
 				return retErr
 			}(); lastErr == nil {
+				t.L().Printf("test for %s successful", *ep.in.EndpointIdentifier)
 				break
 			} else {
 				t.L().Printf("replication endpoint test failed, retrying: %s", lastErr)
@@ -619,14 +620,26 @@ func setupDMSEndpointsAndTask(
 		return err
 	}
 	t.L().Printf("starting replication task")
-	if _, err := dmsCli.StartReplicationTask(
-		ctx,
-		&dms.StartReplicationTaskInput{
-			ReplicationTaskArn:       replTaskOut.ReplicationTask.ReplicationTaskArn,
-			StartReplicationTaskType: dmstypes.StartReplicationTaskTypeValueReloadTarget,
-		},
-	); err != nil {
-		return err
+	r := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     20 * time.Second,
+		MaxRetries:     10,
+	})
+	var lastErr error
+	for r.Next() {
+		if _, lastErr = dmsCli.StartReplicationTask(
+			ctx,
+			&dms.StartReplicationTaskInput{
+				ReplicationTaskArn:       replTaskOut.ReplicationTask.ReplicationTaskArn,
+				StartReplicationTaskType: dmstypes.StartReplicationTaskTypeValueReloadTarget,
+			},
+		); lastErr == nil {
+			break
+		}
+		t.L().Printf("got error starting DMS task; retrying: %+v", err)
+	}
+	if lastErr != nil {
+		return lastErr
 	}
 	t.L().Printf("waiting for replication task to be running")
 	if err := dms.NewReplicationTaskRunningWaiter(dmsCli).Wait(
