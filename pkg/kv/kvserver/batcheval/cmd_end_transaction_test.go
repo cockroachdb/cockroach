@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -29,6 +30,91 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
+
+func TestIsEndTxnExceedingDeadline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name     string
+		commitTS int64
+		deadline int64
+		exp      bool
+	}{
+		{"no deadline", 10, 0, false},
+		{"later deadline", 10, 11, false},
+		{"equal deadline", 10, 10, true},
+		{"earlier deadline", 10, 9, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			commitTS := hlc.Timestamp{WallTime: tt.commitTS}
+			deadline := hlc.Timestamp{WallTime: tt.deadline}
+			require.Equal(t, tt.exp, IsEndTxnExceedingDeadline(commitTS, deadline))
+		})
+	}
+}
+
+func TestIsEndTxnTriggeringRetryError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		txnIsoLevel             isolation.Level
+		txnWriteTooOld          bool
+		txnWriteTimestampPushed bool
+		txnExceedingDeadline    bool
+
+		expRetry  bool
+		expReason kvpb.TransactionRetryReason
+	}{
+		{isolation.Serializable, false, false, false, false, 0},
+		{isolation.Serializable, false, false, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
+		{isolation.Serializable, false, true, false, true, kvpb.RETRY_SERIALIZABLE},
+		{isolation.Serializable, false, true, true, true, kvpb.RETRY_SERIALIZABLE},
+		{isolation.Serializable, true, false, false, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.Serializable, true, false, true, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.Serializable, true, true, false, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.Serializable, true, true, true, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.Snapshot, false, false, false, false, 0},
+		{isolation.Snapshot, false, false, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
+		{isolation.Snapshot, false, true, false, true, kvpb.RETRY_SERIALIZABLE},
+		{isolation.Snapshot, false, true, true, true, kvpb.RETRY_SERIALIZABLE},
+		{isolation.Snapshot, true, false, false, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.Snapshot, true, false, true, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.Snapshot, true, true, false, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.Snapshot, true, true, true, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.ReadCommitted, false, false, false, false, 0},
+		{isolation.ReadCommitted, false, false, true, true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED},
+		{isolation.ReadCommitted, false, true, false, true, kvpb.RETRY_SERIALIZABLE},
+		{isolation.ReadCommitted, false, true, true, true, kvpb.RETRY_SERIALIZABLE},
+		{isolation.ReadCommitted, true, false, false, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.ReadCommitted, true, false, true, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.ReadCommitted, true, true, false, true, kvpb.RETRY_WRITE_TOO_OLD},
+		{isolation.ReadCommitted, true, true, true, true, kvpb.RETRY_WRITE_TOO_OLD},
+	}
+	for _, tt := range tests {
+		name := fmt.Sprintf("iso=%s/wto=%t/pushed=%t/deadline=%t",
+			tt.txnIsoLevel, tt.txnWriteTooOld, tt.txnWriteTimestampPushed, tt.txnExceedingDeadline)
+		t.Run(name, func(t *testing.T) {
+			txn := roachpb.MakeTransaction("test", nil, tt.txnIsoLevel, 0, hlc.Timestamp{WallTime: 10}, 0, 1)
+			if tt.txnWriteTooOld {
+				txn.WriteTooOld = true
+			}
+			if tt.txnWriteTimestampPushed {
+				txn.WriteTimestamp = txn.WriteTimestamp.Add(1, 0)
+			}
+			deadline := txn.WriteTimestamp.Next()
+			if tt.txnExceedingDeadline {
+				deadline = txn.WriteTimestamp.Prev()
+			}
+
+			gotRetry, gotReason, _ := IsEndTxnTriggeringRetryError(&txn, deadline)
+			require.Equal(t, tt.expRetry, gotRetry)
+			require.Equal(t, tt.expReason, gotReason)
+		})
+	}
+}
 
 // TestEndTxnUpdatesTransactionRecord tests EndTxn request across its various
 // possible transaction record state transitions and error cases.

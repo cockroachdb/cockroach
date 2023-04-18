@@ -361,7 +361,7 @@ func EndTxn(
 		// NOTE: if the transaction is in the implicit commit state and this EndTxn
 		// request is marking the commit as explicit, this check must succeed. We
 		// assert this in txnCommitter.makeTxnCommitExplicitAsync.
-		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args); retry {
+		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args.Deadline); retry {
 			return result.Result{}, kvpb.NewTransactionRetryError(reason, extraMsg)
 		}
 
@@ -491,36 +491,31 @@ func IsEndTxnExceedingDeadline(commitTS hlc.Timestamp, deadline hlc.Timestamp) b
 	return !deadline.IsEmpty() && deadline.LessEq(commitTS)
 }
 
-// IsEndTxnTriggeringRetryError returns true if the EndTxnRequest cannot be
+// IsEndTxnTriggeringRetryError returns true if the Transaction cannot be
 // committed and needs to return a TransactionRetryError. It also returns the
 // reason and possibly an extra message to be used for the error.
 func IsEndTxnTriggeringRetryError(
-	txn *roachpb.Transaction, args *kvpb.EndTxnRequest,
+	txn *roachpb.Transaction, deadline hlc.Timestamp,
 ) (retry bool, reason kvpb.TransactionRetryReason, extraMsg redact.RedactableString) {
-	// If we saw any WriteTooOldErrors, we must restart to avoid lost
-	// update anomalies.
 	if txn.WriteTooOld {
-		retry, reason = true, kvpb.RETRY_WRITE_TOO_OLD
-	} else {
-		readTimestamp := txn.ReadTimestamp
-		isTxnPushed := txn.WriteTimestamp != readTimestamp
-
+		// If we saw any WriteTooOldErrors, we must restart to avoid lost
+		// update anomalies.
+		return true, kvpb.RETRY_WRITE_TOO_OLD, ""
+	}
+	if txn.WriteTimestamp != txn.ReadTimestamp {
 		// Return a transaction retry error if the commit timestamp isn't equal to
 		// the txn timestamp.
-		if isTxnPushed {
-			retry, reason = true, kvpb.RETRY_SERIALIZABLE
-		}
+		return true, kvpb.RETRY_SERIALIZABLE, ""
 	}
-
-	// A transaction must obey its deadline, if set.
-	if !retry && IsEndTxnExceedingDeadline(txn.WriteTimestamp, args.Deadline) {
-		exceededBy := txn.WriteTimestamp.GoTime().Sub(args.Deadline.GoTime())
+	if IsEndTxnExceedingDeadline(txn.WriteTimestamp, deadline) {
+		// A transaction must obey its deadline, if set.
+		exceededBy := txn.WriteTimestamp.GoTime().Sub(deadline.GoTime())
 		extraMsg = redact.Sprintf(
 			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
-			exceededBy, txn.WriteTimestamp, args.Deadline)
-		retry, reason = true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED
+			exceededBy, txn.WriteTimestamp, deadline)
+		return true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg
 	}
-	return retry, reason, extraMsg
+	return false, 0, ""
 }
 
 const lockResolutionBatchSize = 500
