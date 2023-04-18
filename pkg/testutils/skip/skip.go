@@ -148,6 +148,18 @@ func UnderMetamorphic(t SkippableTest, args ...interface{}) {
 	}
 }
 
+// UnderMetamorphicWithIssue skips this test during metamorphic runs, which are
+// tests run with the metamorphic build tag, logging the given issue ID as the
+// reason.
+func UnderMetamorphicWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	if util.IsMetamorphicBuild() {
+		t.Skip(append([]interface{}{fmt.Sprintf(
+			"disabled under metamorphic. issue: https://github.com/cockroachdb/cockroach/issues/%d", githubIssueID,
+		)}, args...))
+	}
+}
+
 // UnderNonTestBuild skips this test if the build does not have the crdb_test
 // tag.
 func UnderNonTestBuild(t SkippableTest) {
