@@ -1065,6 +1065,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			opName,
 			txn,
 			username.RootUserName(),
+			username.RootUserID,
 			&sql.MemoryMetrics{},
 			sqlServer.execCfg,
 			sessiondatapb.SessionData{},

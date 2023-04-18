@@ -46,6 +46,7 @@ func newDatabaseRegionChangeFinalizer(
 		"repartition-regional-by-row-tables",
 		txn.KV(),
 		username.RootUserName(),
+		username.RootUserID,
 		&MemoryMetrics{},
 		execCfg,
 		txn.SessionData().SessionData,

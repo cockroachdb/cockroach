@@ -54,7 +54,8 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		sqlUser, err := username.MakeSQLUsernameFromUserInput(u, username.PurposeValidation)
 		require.NoError(t, err)
 		txn := kvDB.NewTxn(ctx, "test")
-		p, cleanup := sql.NewInternalPlanner("test", txn, sqlUser, &sql.MemoryMetrics{}, &execCfg, sessionData)
+		// TODO(yang): Figure out how to add user ID here.
+		p, cleanup := sql.NewInternalPlanner("test", txn, sqlUser, 0, &sql.MemoryMetrics{}, &execCfg, sessionData)
 
 		// Extract
 		pi := p.(interface {

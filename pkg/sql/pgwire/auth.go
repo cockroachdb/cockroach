@@ -145,7 +145,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLoginSQL, _, isSuperuser, defaultSettings, pwRetrievalFn, err :=
+	exists, userID, canLoginSQL, _, isSuperuser, defaultSettings, pwRetrievalFn, err :=
 		sql.GetUserSessionInitInfo(
 			ctx,
 			execCfg,
@@ -157,6 +157,7 @@ func (c *conn) handleAuthentication(
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
 		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
+	c.sessionArgs.UserID = userID
 	c.sessionArgs.IsSuperuser = isSuperuser
 
 	if !exists {

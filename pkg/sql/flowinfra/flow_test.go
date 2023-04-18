@@ -65,6 +65,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 						"test",
 						kv.NewTxn(ctx, s.DB(), s.NodeID()),
 						username.RootUserName(),
+						username.RootUserID,
 						&sql.MemoryMetrics{},
 						&execCfg,
 						sessiondatapb.SessionData{VectorizeMode: vectorizeMode},

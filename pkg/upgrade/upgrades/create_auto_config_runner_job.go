@@ -53,7 +53,7 @@ func createAutoConfigRunnerJob(
 			Description:   "applies automatic configuration",
 			Details:       jobspb.AutoConfigRunnerDetails{},
 			Progress:      jobspb.AutoConfigRunnerProgress{},
-			CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
+			CreatedBy:     &jobs.CreatedByInfo{Name: username.RootUser, ID: int64(username.RootUserID)},
 			Username:      username.RootUserName(),
 			NonCancelable: true,
 		}

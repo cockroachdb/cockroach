@@ -89,8 +89,10 @@ func (s *SessionData) User() username.SQLUsername {
 	return s.UserProto.Decode()
 }
 
-// SystemIdentity retrieves the session's system identity.
-// (Identity presented by the client prior to identity mapping.)
-func (s *LocalOnlySessionData) SystemIdentity() username.SQLUsername {
-	return s.SystemIdentityProto.Decode()
+// SetUser sets the user identity fields to the given values.
+// It should always be used instead of setting the fields directly to defend
+// against forgetting to set any of the tightly coupled fields.
+func (s *SessionData) SetUser(user username.SQLUsername, userID username.SQLUserID) {
+	s.UserProto = user.EncodeProto()
+	s.UserID = userID
 }

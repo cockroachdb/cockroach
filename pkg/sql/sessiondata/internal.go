@@ -20,6 +20,8 @@ import (
 type InternalExecutorOverride struct {
 	// User represents the user that the query will run under.
 	User username.SQLUsername
+	// UserID represents the user ID of the user that the query will run under.
+	UserID username.SQLUserID
 	// Database represents the default database for the query.
 	Database string
 	// ApplicationName represents the application that the query runs under.
@@ -43,11 +45,13 @@ var NoSessionDataOverride = InternalExecutorOverride{}
 // NodeUserSessionDataOverride is an InternalExecutorOverride which overrides
 // the user to the NodeUser.
 var NodeUserSessionDataOverride = InternalExecutorOverride{
-	User: username.MakeSQLUsernameFromPreNormalizedString(username.NodeUser),
+	User:   username.MakeSQLUsernameFromPreNormalizedString(username.NodeUser),
+	UserID: username.NodeUserID,
 }
 
 // RootUserSessionDataOverride is an InternalExecutorOverride which overrides
 // the user to the RootUser.
 var RootUserSessionDataOverride = InternalExecutorOverride{
-	User: username.MakeSQLUsernameFromPreNormalizedString(username.RootUser),
+	User:   username.MakeSQLUsernameFromPreNormalizedString(username.RootUser),
+	UserID: username.RootUserID,
 }

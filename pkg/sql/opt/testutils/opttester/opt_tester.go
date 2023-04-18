@@ -285,6 +285,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 
 	// Set any OptTester-wide session flags here.
 
+	// TODO(yang): Figure out if this needs to have a user ID.
 	ot.evalCtx.SessionData().UserProto = username.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
 	ot.evalCtx.SessionData().Database = "defaultdb"
 	ot.evalCtx.SessionData().ZigzagJoinEnabled = true

@@ -78,6 +78,7 @@ func GetUserSessionInitInfo(
 	ctx context.Context, execCfg *ExecutorConfig, user username.SQLUsername, databaseName string,
 ) (
 	exists bool,
+	userID username.SQLUserID,
 	canLoginSQL bool,
 	canLoginDBConsole bool,
 	isSuperuser bool,
@@ -109,7 +110,7 @@ func GetUserSessionInitInfo(
 
 		// Root user cannot have password expiry and must have login.
 		// It also never has default settings applied to it.
-		return true, true, true, true, nil, rootFn, nil
+		return true, username.RootUserID, true, true, true, nil, rootFn, nil
 	}
 
 	var authInfo sessioninit.AuthInfo
@@ -169,6 +170,7 @@ func GetUserSessionInitInfo(
 	}
 
 	return authInfo.UserExists,
+		authInfo.UserID,
 		canLoginSQL,
 		authInfo.CanLoginDBConsoleRoleOpt,
 		isSuperuser,
@@ -255,13 +257,13 @@ func retrieveAuthInfo(
 	// Use fully qualified table name to avoid looking up "".system.users.
 	// We use a nil txn as login is not tied to any transaction state, and
 	// we should always look up the latest data.
-	const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
+	const getUserIDAndHashedPassword = `SELECT user_id, "hashedPassword" FROM system.public.users ` +
 		`WHERE username=$1`
 	ie := f.Executor()
 	values, err := ie.QueryRowEx(
-		ctx, "get-hashed-pwd", nil, /* txn */
+		ctx, "get-user-id-and-hashed-pwd", nil, /* txn */
 		sessiondata.RootUserSessionDataOverride,
-		getHashedPassword, user)
+		getUserIDAndHashedPassword, user)
 
 	if err != nil {
 		return aInfo, errors.Wrapf(err, "error looking up user %s", user)
@@ -270,6 +272,9 @@ func retrieveAuthInfo(
 	if values != nil {
 		aInfo.UserExists = true
 		if v := values[0]; v != tree.DNull {
+			aInfo.UserID = username.SQLUserID(tree.MustBeDOid(v).Oid)
+		}
+		if v := values[1]; v != tree.DNull {
 			hashedPassword = []byte(*(v.(*tree.DBytes)))
 		}
 	}
@@ -467,6 +472,32 @@ func RoleExists(ctx context.Context, txn isql.Txn, role username.SQLUsername) (b
 	return row != nil, nil
 }
 
+// GetUserID returns a user's ID.
+func (p *planner) GetUserID(
+	ctx context.Context, user username.SQLUsername,
+) (username.SQLUserID, error) {
+	return GetUserID(ctx, p.InternalSQLTxn(), user)
+}
+
+// GetUserID returns a user's ID.
+func GetUserID(
+	ctx context.Context, txn isql.Txn, user username.SQLUsername,
+) (username.SQLUserID, error) {
+	query := `SELECT user_id FROM system.users WHERE username = $1`
+	row, err := txn.QueryRowEx(
+		ctx, "get-user-id", txn.KV(),
+		sessiondata.RootUserSessionDataOverride,
+		query, user,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if row == nil {
+		return 0, errors.Newf("cannot get user ID for non-existent user %s", user)
+	}
+	return username.SQLUserID(tree.MustBeDOid(row[0]).Oid), nil
+}
+
 var roleMembersTableName = tree.MakeTableNameWithSchema("system", tree.PublicSchemaName, "role_members")
 
 // BumpRoleMembershipTableVersion increases the table version for the
@@ -579,7 +610,7 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 			if becomeUser.IsNoneRole() {
 				if m.data.SessionUserProto.Decode().Normalized() != "" {
 					m.data.UserProto = m.data.SessionUserProto
-					m.data.SessionUserProto = ""
+					m.data.ResetSessionUser()
 				}
 				m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
 				return nil
@@ -588,14 +619,22 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 			// Only update session_user when we are transitioning from the current_user
 			// being the session_user.
 			if m.data.SessionUserProto == "" {
-				m.data.SessionUserProto = m.data.UserProto
+				user := m.data.UserProto.Decode()
+				userID, err := p.GetUserID(ctx, user)
+				if err != nil {
+					return err
+				}
+				m.data.SetSessionUser(user, userID)
 			}
-			m.data.UserProto = becomeUser.EncodeProto()
+			becomeUserID, err := p.GetUserID(ctx, becomeUser)
+			if err != nil {
+				return err
+			}
+			m.data.SetUser(becomeUser, becomeUserID)
 			m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
 			return nil
 		},
 	)
-
 }
 
 // checkCanBecomeUser returns an error if the SessionUser cannot become the

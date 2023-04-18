@@ -1203,7 +1203,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sd.DistSQLMode = sessiondatapb.DistSQLOff
 
 		// Job internal operations use the node principal.
-		sd.UserProto = username.NodeUserName().EncodeProto()
+		sd.SetUser(username.NodeUserName(), username.NodeUserID)
 	})
 	jobRegistry.SetInternalDB(jobsInternalDB)
 
@@ -1653,13 +1653,15 @@ func (s *SQLServer) preStart(
 			Settings:     s.execCfg.Settings,
 			DB:           s.execCfg.InternalDB,
 			TestingKnobs: knobs.JobsTestingKnobs,
-			PlanHookMaker: func(opName string, txn *kv.Txn, user username.SQLUsername) (interface{}, func()) {
+			PlanHookMaker: func(opName string, txn *kv.Txn, user username.SQLUsername, userID username.SQLUserID) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment
 				// in sql/jobs/registry.go on planHookMaker.
 				return sql.NewInternalPlanner(
 					opName,
 					txn,
 					user,
+					// TODO(yang): Figure out how to set the user ID here.
+					0,
 					&sql.MemoryMetrics{},
 					s.execCfg,
 					sessiondatapb.SessionData{},

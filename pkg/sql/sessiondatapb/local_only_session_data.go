@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/errors"
 )
@@ -393,4 +394,26 @@ func (e QoSLevel) ValidateInternal() QoSLevel {
 		return e
 	}
 	panic(errors.AssertionFailedf("use of illegal internal QoSLevel: %s", e.String()))
+}
+
+// ResetSessionUser resets the session user identity fields to zero values.
+func (s *LocalOnlySessionData) ResetSessionUser() {
+	s.SessionUserProto = ""
+	s.SessionUserID = 0
+}
+
+// SetSessionUser sets the session user identity fields to the given values.
+// It should always be used instead of updating the fields directly to defend
+// against forgetting to set any of the tightly coupled fields.
+func (s *LocalOnlySessionData) SetSessionUser(
+	user username.SQLUsername, userID username.SQLUserID,
+) {
+	s.SessionUserProto = user.EncodeProto()
+	s.SessionUserID = userID
+}
+
+// SystemIdentity retrieves the session's system identity.
+// (Identity presented by the client prior to identity mapping.)
+func (s *LocalOnlySessionData) SystemIdentity() username.SQLUsername {
+	return s.SystemIdentityProto.Decode()
 }

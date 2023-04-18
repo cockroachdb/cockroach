@@ -287,6 +287,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			desc,
 			txn.KV(),
 			username.RootUserName(),
+			username.RootUserID,
 			&MemoryMetrics{},
 			sc.execCfg,
 			sessiondatapb.SessionData{},
@@ -2539,6 +2540,7 @@ func NewFakeSessionData(sv *settings.Values, opName string) *sessiondata.Session
 			// pre-evaluated).
 			Database:      "",
 			UserProto:     username.NodeUserName().EncodeProto(),
+			UserID:        username.NodeUserID,
 			VectorizeMode: sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(sv)),
 			Internal:      true,
 		},

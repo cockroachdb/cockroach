@@ -179,6 +179,8 @@ func withPlanner(
 		planner, cleanup := sql.NewInternalPlanner(
 			"cdc-expr", txn.KV(),
 			user,
+			// TODO(yang): Figure out how to add the user ID here.
+			0,
 			&sql.MemoryMetrics{}, // TODO(yevgeniy): Use appropriate metrics.
 			execCfg,
 			sd,

@@ -63,6 +63,8 @@ type Cache struct {
 
 // AuthInfo contains data that is used to perform an authentication attempt.
 type AuthInfo struct {
+	// UserID is the user_id value in the user's row in system.users.
+	UserID username.SQLUserID
 	// UserExists is set to true if the user has a row in system.users.
 	UserExists bool
 	// CanLoginSQLRoleOpt is set to false if the user has the NOLOGIN or NOSQLLOGIN role option.

@@ -1508,7 +1508,8 @@ func maybeUpgradePreProductionReadyExpression(
 	// use any functions that depend on session data.  Thus, it is safe to use
 	// minimal session data.
 	sd := sessiondatapb.SessionData{
-		Database:   "",
+		Database: "",
+		// TODO(yang): Update UserID when the planner func is updated.
 		UserProto:  jobExec.User().EncodeProto(),
 		Internal:   true,
 		SearchPath: sessiondata.DefaultSearchPathForUser(jobExec.User()).GetPathArray(),

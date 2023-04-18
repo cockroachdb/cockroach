@@ -154,9 +154,14 @@ func NewReferenceProviderFactory(p *planner) scbuild.ReferenceProviderFactory {
 // only for test. A cleanup function is returned as well, which should be called
 // after test is done.
 func NewReferenceProviderFactoryForTest(
-	opName string, txn *kv.Txn, user username.SQLUsername, execCfg *ExecutorConfig, curDB string,
+	opName string,
+	txn *kv.Txn,
+	user username.SQLUsername,
+	userID username.SQLUserID,
+	execCfg *ExecutorConfig,
+	curDB string,
 ) (scbuild.ReferenceProviderFactory, func()) {
-	ip, cleanup := newInternalPlanner(opName, txn, user, &MemoryMetrics{}, execCfg, sessiondatapb.SessionData{})
+	ip, cleanup := newInternalPlanner(opName, txn, user, userID, &MemoryMetrics{}, execCfg, sessiondatapb.SessionData{})
 	ip.SessionData().Database = "defaultdb"
 	return &referenceProviderFactory{p: ip}, cleanup
 }

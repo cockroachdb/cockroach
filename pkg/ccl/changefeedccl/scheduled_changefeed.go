@@ -189,7 +189,8 @@ func (s *scheduledChangefeedExecutor) executeChangefeed(
 		sj.ScheduleID(), tree.AsString(changefeedStmt))
 
 	// Invoke changefeed plan hook.
-	hook, cleanup := cfg.PlanHookMaker("exec-changefeed", txn.KV(), sj.Owner())
+	// TODO(yang): This depends on scheduled jobs migrations.
+	hook, cleanup := cfg.PlanHookMaker("exec-changefeed", txn.KV(), sj.Owner(), 0 /* placeholder */)
 	defer cleanup()
 	changefeedFn, err := planCreateChangefeed(ctx, hook.(sql.PlanHookState), changefeedStmt)
 	if err != nil {

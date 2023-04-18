@@ -87,7 +87,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			txn := kvDB.NewTxn(ctx, "test")
-			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData)
+			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), username.RootUserID, &sql.MemoryMetrics{}, &execCfg, sessionData)
 			defer cleanup()
 
 			// The internal planner overrides the database to "system", here we
@@ -176,7 +176,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			txn := kvDB.NewTxn(ctx, "test")
-			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData)
+			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), username.RootUserID, &sql.MemoryMetrics{}, &execCfg, sessionData)
 			defer cleanup()
 
 			// The internal planner overrides the database to "system", here we
