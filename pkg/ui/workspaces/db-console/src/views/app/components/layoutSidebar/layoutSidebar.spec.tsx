@@ -28,7 +28,7 @@ describe("LayoutSidebar", () => {
     };
   });
 
-  it("does not show Network Latency link for single node cluster", () => {
+  it("does not show Network link for single node cluster", () => {
     const wrapper = shallow(
       <Sidebar
         history={history}
@@ -42,7 +42,7 @@ describe("LayoutSidebar", () => {
     ).toBe(false);
   });
 
-  it("shows Network Latency link for multi node cluster", () => {
+  it("shows Network link for multi node cluster", () => {
     const wrapper = shallow(
       <Sidebar
         history={history}
