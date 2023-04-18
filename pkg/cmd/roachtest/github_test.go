@@ -163,9 +163,7 @@ func TestCreatePostRequest(t *testing.T) {
 		// !nonReleaseBlocker and issue is an SSH flake. Also ensure that
 		// in the event of a failed cluster creation, nil `vmOptions` and
 		// `clusterImpl` are not dereferenced
-		// expectedReleaseBlocker is true on this branch due to a backport, which doesn't include
-		// a change to exclude infra flakes from being labeled as release blockers.
-		{false, true, false, false, "", createFailure(rperrors.ErrSSH255), true, true,
+		{false, true, false, false, "", createFailure(rperrors.ErrSSH255), true, false,
 			prefixAll(map[string]string{
 				"cloud": "gce",
 				"ssd":   "0",
