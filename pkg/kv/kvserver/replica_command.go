@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -586,6 +587,22 @@ func (r *Replica) AdminMerge(
 		if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
 			// Merging the final range doesn't make sense.
 			return errors.New("cannot merge final range")
+		}
+		for _, k := range config.StaticSplits() {
+			if origLeftDesc.EndKey.Equal(k) {
+				continue
+			}
+			// Undoing a static split is a bad idea because these ranges are usually
+			// special and don't tolerate that well. Our callers shouldn't be
+			// attempting to do this in the first place, but the API doesn't allow
+			// them to reliably prevent it. For example, if desc=[a,b) when the merge
+			// is being decided but has changed to `[a,c)` by the time we get here,
+			// suddenly we're merging away a different right neighbor than originally
+			// intended.
+			//
+			// See:
+			// https://github.com/cockroachdb/cockroach/issues/96365
+			return errors.AssertionFailedf("merge prevented by static split %s", k)
 		}
 
 		// Retrieve the current left hand side's range descriptor and confirm

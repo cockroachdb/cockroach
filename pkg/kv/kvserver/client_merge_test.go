@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -5231,6 +5232,36 @@ func BenchmarkStoreRangeMerge(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// TestStoreMergeStaticSplit verifies that one cannot unmerge a static split.
+// See https://github.com/cockroachdb/cockroach/issues/96365.
+func TestStoreMergeStaticSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	sender := tc.GetFirstStoreFromServer(t, 0).TestSender()
+	for _, rk := range config.StaticSplits() {
+		t.Run(rk.String(), func(t *testing.T) {
+			k := rk.AsRawKey()
+			pre, err := tc.LookupRange(k)
+			require.NoError(t, err)
+			require.EqualValues(t, pre.StartKey, k)
+			t.Logf("before: %v", pre)
+			args := adminMergeArgs(k)
+			_, pErr := kv.SendWrapped(ctx, sender, args)
+			require.ErrorContains(t, pErr.GoError(), "prevented by static split")
+			assert.Error(t, pErr.GoError())
+			post, err := tc.LookupRange(k)
+			require.NoError(t, err)
+			t.Logf("after: %v", post)
+			require.Equal(t, pre, post)
+		})
+	}
+
 }
 
 // TestStoreMergeGCHint splits the range, puts range tombstones on both ranges
