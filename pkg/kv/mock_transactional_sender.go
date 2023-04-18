@@ -223,11 +223,6 @@ func (m *MockTransactionalSender) GetSteppingMode(context.Context) SteppingMode 
 	return SteppingDisabled
 }
 
-// ManualRefresh is part of the TxnSender interface.
-func (m *MockTransactionalSender) ManualRefresh(ctx context.Context) error {
-	panic("unimplemented")
-}
-
 // DeferCommitWait is part of the TxnSender interface.
 func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(context.Context) error {
 	panic("unimplemented")
