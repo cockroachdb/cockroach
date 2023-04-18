@@ -31,6 +31,7 @@ import {
   UsableTooltip,
   LiveNodesTooltip,
   SuspectNodesTooltip,
+  DrainingNodesTooltip,
   DeadNodesTooltip,
   TotalRangesTooltip,
   UnderReplicatedRangesTooltip,
@@ -96,10 +97,11 @@ interface NodeLivenessProps {
   liveNodes: number;
   suspectNodes: number;
   deadNodes: number;
+  drainingNodes: number;
 }
 
 function renderNodeLiveness(props: NodeLivenessProps) {
-  const { liveNodes, suspectNodes, deadNodes } = props;
+  const { liveNodes, suspectNodes, deadNodes, drainingNodes } = props;
   const suspectClasses = classNames(
     "node-liveness",
     "cluster-summary__metric",
@@ -107,6 +109,15 @@ function renderNodeLiveness(props: NodeLivenessProps) {
     {
       warning: suspectNodes > 0,
       disabled: suspectNodes === 0,
+    },
+  );
+  const drainingClasses = classNames(
+    "node-liveness",
+    "cluster-summary__metric",
+    "draining-nodes",
+    {
+      warning: drainingNodes > 0,
+      disabled: drainingNodes === 0,
     },
   );
   const deadClasses = classNames(
@@ -138,6 +149,14 @@ function renderNodeLiveness(props: NodeLivenessProps) {
         Nodes
       </SuspectNodesTooltip>
     </div>,
+    <div className={drainingClasses}>{drainingNodes}</div>,
+    <div className="node-liveness cluster-summary__label draining-nodes">
+      <DrainingNodesTooltip>
+        Draining
+        <br />
+        Nodes
+      </DrainingNodesTooltip>
+    </div>,
     <div className={deadClasses}>{deadNodes}</div>,
     <div className="node-liveness cluster-summary__label dead-nodes">
       <DeadNodesTooltip>
@@ -157,6 +176,7 @@ const mapStateToNodeLivenessProps = createSelector(
       liveNodes: nodeCounts.healthy,
       suspectNodes: nodeCounts.suspect,
       deadNodes: nodeCounts.dead,
+      drainingNodes: nodeCounts.draining,
     };
   },
 );
