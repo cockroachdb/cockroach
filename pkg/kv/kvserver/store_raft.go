@@ -470,6 +470,7 @@ func (s *Store) processRaftSnapshotRequest(
 			// multiple snapshots raced (as is possible when raft leadership changes
 			// and both the old and new leaders send snapshots).
 			log.Infof(ctx, "ignored stale snapshot at index %d", snapHeader.RaftMessageRequest.Message.Snapshot.Metadata.Index)
+			s.metrics.RangeSnapshotRecvUnusable.Inc(1)
 		}
 		return nil
 	})
@@ -710,10 +711,6 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 }
 
 func (s *Store) processRaft(ctx context.Context) {
-	if s.cfg.TestingKnobs.DisableProcessRaft {
-		return
-	}
-
 	s.scheduler.Start(s.stopper)
 	// Wait for the scheduler worker goroutines to finish.
 	if err := s.stopper.RunAsyncTask(ctx, "sched-wait", s.scheduler.Wait); err != nil {

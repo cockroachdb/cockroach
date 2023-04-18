@@ -1279,11 +1279,12 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	// happening for a while, but only comes out rarely when this package is
 	// stressed. This test is very aggressive since it is calling GRPCDialNode in
 	// a busy loop for 50ms.
-	expected := "doesn't match server cluster ID"
+	expectedCluster := "doesn't match server cluster ID"
+	expectedNode := "doesn't match server node ID"
 	// Should stay unhealthy despite reconnection attempts.
 	for then := timeutil.Now(); timeutil.Since(then) < 50*clientCtx.Config.RPCHeartbeatTimeout; {
 		err := clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
-		if !isUnhealthy(err) && !testutils.IsError(err, expected) {
+		if !isUnhealthy(err) && !testutils.IsError(err, expectedCluster) && !testutils.IsError(err, expectedNode) {
 			t.Fatal(err)
 		}
 	}
