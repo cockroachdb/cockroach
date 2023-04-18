@@ -13,8 +13,9 @@ import {
   convertStatementRawFormatToAggregatedStatistics,
   executeInternalSql,
   fetchData,
+  formatApiResult,
   LARGE_RESULT_SIZE,
-  sqlApiErrorMessage,
+  SqlApiResponse,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
   StatementRawFormat,
@@ -89,7 +90,9 @@ export async function getStatementsUsingIndex({
   database,
   start,
   end,
-}: StatementsUsingIndexRequest): Promise<AggregateStatistics[]> {
+}: StatementsUsingIndexRequest): Promise<
+  SqlApiResponse<AggregateStatistics[]>
+> {
   const args: any = [`"${table}@${index}"`];
   let whereClause = "";
   if (start) {
@@ -117,18 +120,20 @@ export async function getStatementsUsingIndex({
   };
 
   const result = await executeInternalSql<StatementRawFormat>(req);
-  if (result.error) {
-    throw new Error(
-      `Error while retrieving list of statements: ${sqlApiErrorMessage(
-        result.error.message,
-      )}`,
+  if (sqlResultsAreEmpty(result)) {
+    return formatApiResult<AggregateStatistics[]>(
+      [],
+      result.error,
+      "retrieving list of statements per index",
     );
   }
-  if (sqlResultsAreEmpty(result)) {
-    return [];
-  }
 
-  return result.execution.txn_results[0].rows.map(s =>
+  const rows = result.execution.txn_results[0].rows.map(s =>
     convertStatementRawFormatToAggregatedStatistics(s),
+  );
+  return formatApiResult<AggregateStatistics[]>(
+    rows,
+    result.error,
+    "retrieving list of statements per index",
   );
 }
