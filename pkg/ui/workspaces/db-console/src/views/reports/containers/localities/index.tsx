@@ -32,6 +32,7 @@ import { findMostSpecificLocation, hasLocation } from "src/util/locations";
 import { Loading } from "@cockroachlabs/cluster-ui";
 import "./localities.styl";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { BackToAdvanceDebug } from "../util";
 
 function formatCoord(coordinate: number) {
   return coordinate.toFixed(4);
@@ -109,7 +110,10 @@ interface LocalitiesProps {
   refreshNodes: typeof refreshNodes;
 }
 
-export class Localities extends React.Component<LocalitiesProps, {}> {
+export class Localities extends React.Component<
+  LocalitiesProps & RouteComponentProps,
+  {}
+> {
   componentDidMount() {
     this.props.refreshLocations();
     this.props.refreshNodes();
@@ -124,6 +128,7 @@ export class Localities extends React.Component<LocalitiesProps, {}> {
     return (
       <div>
         <Helmet title="Localities | Debug" />
+        <BackToAdvanceDebug history={this.props.history} />
         <section className="section">
           <h1 className="base-heading">Localities</h1>
         </section>

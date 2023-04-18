@@ -1192,6 +1192,7 @@ var informationSchemaStatisticsTable = virtualSchemaTable{
 						yesOrNoDatum(isStored),               // storing
 						yesOrNoDatum(isImplicit),             // implicit
 						yesOrNoDatum(idxInvisibility == 0.0), // is_visible
+						tree.NewDFloat(tree.DFloat(1-idxInvisibility)), // visibility
 					)
 				}
 

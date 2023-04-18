@@ -233,12 +233,12 @@ database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 system         public       descriptor  admin    SELECT          true
 system         public       descriptor  root     SELECT          true
 
-query TTBITTTBBB colnames
+query TTBITTTBBBF colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
-descriptor  primary     false       1             id           id          ASC        false    false     true
-descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+descriptor  primary     false       1             id           id          ASC        false    false     true     1
+descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true     1
 
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
@@ -246,12 +246,12 @@ SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
 table_name  constraint_name  constraint_type  details               validated
 descriptor  primary          PRIMARY KEY      PRIMARY KEY (id ASC)  true
 
-query TTBITTTBBB colnames
+query TTBITTTBBBF colnames
 SELECT * FROM [SHOW KEYS FROM system.descriptor]
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
-descriptor  primary     false       1             id           id          ASC        false    false     true
-descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+descriptor  primary     false       1             id           id          ASC        false    false     true     1
+descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true     1
 
 query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS FROM system]
@@ -556,11 +556,11 @@ CREATE TABLE showdbindexestest.table1 (key1 INT PRIMARY KEY);
 statement ok
 CREATE TABLE showdbindexestest.table2 (key2 INT PRIMARY KEY);
 
-query TTTBITTTBBB
+query TTTBITTTBBBF
 SHOW INDEXES FROM DATABASE showdbindexestest;
 ----
-table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true
-table2  table2_pkey  public  false  1  key2  key2  ASC  false  false  true
+table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true  1
+table2  table2_pkey  public  false  1  key2  key2  ASC  false  false  true  1
 
 statement ok
 CREATE DATABASE "$peci@l";
@@ -571,11 +571,11 @@ CREATE TABLE "$peci@l".table1 (key1 INT PRIMARY KEY);
 statement ok
 CREATE TABLE "$peci@l".table2 (key2 INT PRIMARY KEY);
 
-query TTTBITTTBBB
+query TTTBITTTBBBF
 SHOW INDEXES FROM DATABASE "$peci@l";
 ----
-table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true
-table2  table2_pkey  public  false  1  key2  key2  ASC  false  false  true
+table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true  1
+table2  table2_pkey  public  false  1  key2  key2  ASC  false  false  true  1
 
 # Test SHOW LOCALITY telemetry.
 query T
@@ -647,30 +647,30 @@ CREATE TABLE t (
 COMMENT ON COLUMN t.z IS 'comm"en"t2';
 COMMENT ON INDEX t@i2 IS 'comm''ent3'
 
-query TTBITTTBBBT
+query TTBITTTBBBFT
 SHOW INDEXES FROM t WITH COMMENT
 ----
-t  i1      true   1  x      x      ASC  false  false  true  NULL
-t  i1      true   2  rowid  rowid  ASC  false  true   true  NULL
-t  i2      true   1  y      y      ASC  false  false  true  comm'ent3
-t  i2      true   2  rowid  rowid  ASC  false  true   true  comm'ent3
-t  i3      true   1  z      z      ASC  false  false  true  NULL
-t  i3      true   2  rowid  rowid  ASC  false  true   true  NULL
-t  t_pkey  false  1  rowid  rowid  ASC  false  false  true  NULL
-t  t_pkey  false  2  x      x      N/A  true   false  true  NULL
-t  t_pkey  false  3  y      y      N/A  true   false  true  NULL
-t  t_pkey  false  4  z      z      N/A  true   false  true  NULL
+t  i1      true   1  x      x      ASC  false  false  true  1  NULL
+t  i1      true   2  rowid  rowid  ASC  false  true   true  1  NULL
+t  i2      true   1  y      y      ASC  false  false  true  1  comm'ent3
+t  i2      true   2  rowid  rowid  ASC  false  true   true  1  comm'ent3
+t  i3      true   1  z      z      ASC  false  false  true  1  NULL
+t  i3      true   2  rowid  rowid  ASC  false  true   true  1  NULL
+t  t_pkey  false  1  rowid  rowid  ASC  false  false  true  1  NULL
+t  t_pkey  false  2  x      x      N/A  true   false  true  1  NULL
+t  t_pkey  false  3  y      y      N/A  true   false  true  1  NULL
+t  t_pkey  false  4  z      z      N/A  true   false  true  1  NULL
 
-query TTBITTTBBBT
+query TTBITTTBBBFT
 SHOW INDEXES FROM t2 WITH COMMENT
 ----
-t2  i1       true   1  x      x      ASC  false  false  true  NULL
-t2  i1       true   2  rowid  rowid  ASC  false  true   true  NULL
-t2  i2       true   1  y      y      ASC  false  false  true  NULL
-t2  i2       true   2  rowid  rowid  ASC  false  true   true  NULL
-t2  i3       true   1  z      z      ASC  false  false  true  NULL
-t2  i3       true   2  rowid  rowid  ASC  false  true   true  NULL
-t2  t2_pkey  false  1  rowid  rowid  ASC  false  false  true  NULL
-t2  t2_pkey  false  2  x      x      N/A  true   false  true  NULL
-t2  t2_pkey  false  3  y      y      N/A  true   false  true  NULL
-t2  t2_pkey  false  4  z      z      N/A  true   false  true  NULL
+t2  i1       true   1  x      x      ASC  false  false  true  1  NULL
+t2  i1       true   2  rowid  rowid  ASC  false  true   true  1  NULL
+t2  i2       true   1  y      y      ASC  false  false  true  1  NULL
+t2  i2       true   2  rowid  rowid  ASC  false  true   true  1  NULL
+t2  i3       true   1  z      z      ASC  false  false  true  1  NULL
+t2  i3       true   2  rowid  rowid  ASC  false  true   true  1  NULL
+t2  t2_pkey  false  1  rowid  rowid  ASC  false  false  true  1  NULL
+t2  t2_pkey  false  2  x      x      N/A  true   false  true  1  NULL
+t2  t2_pkey  false  3  y      y      N/A  true   false  true  1  NULL
+t2  t2_pkey  false  4  z      z      N/A  true   false  true  1  NULL

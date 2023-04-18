@@ -18,6 +18,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AdminUIState } from "src/redux/state";
 
 import "./redux.styl";
+import { BackToAdvanceDebug } from "../util";
 
 interface ReduxDebugProps extends RouteComponentProps {
   state: AdminUIState;
@@ -46,6 +47,7 @@ export class ReduxDebug extends React.Component<
     return (
       <div>
         <Helmet title="Redux State | Debug" />
+        <BackToAdvanceDebug history={this.props.history} />
         <section className="section">
           <h1 className="base-heading">Redux State</h1>
         </section>

@@ -527,7 +527,7 @@ func runTPCHVec(
 	firstNode := c.Node(1)
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", firstNode)
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 
 	conn := c.Conn(ctx, t.L(), 1)
 	t.Status("restoring TPCH dataset for Scale Factor 1")
