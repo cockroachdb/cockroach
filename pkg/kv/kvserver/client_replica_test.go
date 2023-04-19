@@ -1979,7 +1979,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 		}
 	}
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, numNodes,
+	tc := testcluster.StartTestCluster(t, numServers,
 		base.TestClusterArgs{
 			ReplicationMode:   base.ReplicationManual,
 			ServerArgsPerNode: serverArgs,
