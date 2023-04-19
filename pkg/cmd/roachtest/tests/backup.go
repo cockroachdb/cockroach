@@ -425,11 +425,13 @@ func registerBackup(r registry.Registry) {
 			Owner:             registry.OwnerDisasterRecovery,
 			Cluster:           r.MakeClusterSpec(3),
 			EncryptionSupport: registry.EncryptionMetamorphic,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != item.machine {
+			PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+				if tc.Cluster.Cloud != item.machine {
 					t.Skip("backup assumeRole is only configured to run on "+item.machine, "")
 				}
-
+				return nil
+			},
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rows := 100
 
 				dest := importBankData(ctx, rows, t, c)
@@ -532,11 +534,13 @@ func registerBackup(r registry.Registry) {
 			Cluster:           KMSSpec,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Tags:              item.tags,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != item.machine {
+			PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+				if tc.Cluster.Cloud != item.machine {
 					t.Skip("backupKMS roachtest is only configured to run on "+item.machine, "")
 				}
-
+				return nil
+			},
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				// ~10GiB - which is 30Gib replicated.
 				rows := rows30GiB
 				if c.IsLocal() {

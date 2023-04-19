@@ -101,10 +101,13 @@ func registerFollowerReads(r registry.Registry) {
 			3, /* nodeCount */
 			spec.CPU(2),
 		),
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
+		PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+			if tc.Cluster.Cloud == spec.Local && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
+			return nil
+		},
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, *t.BuildVersion())
 		},
 	})
