@@ -43,7 +43,7 @@ func BenchmarkParquetWriter(b *testing.B) {
 		datums[i] = tree.NewDString(string(p))
 	}
 
-	fileName := "BenchmarkParquetWriter"
+	fileName := "BenchmarkParquetWriter.parquet"
 	f, err := os.CreateTemp("", fileName)
 	require.NoError(b, err)
 

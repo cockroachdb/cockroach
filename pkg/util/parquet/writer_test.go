@@ -39,6 +39,8 @@ func newColSchema(numCols int) *colSchema {
 	}
 }
 
+// TODO (jayant): once all types are supported, we can use randgen.SeedTypes
+// instead of this array.
 var supportedTypes = []*types.T{
 	types.Int,
 	types.Bool,
@@ -46,6 +48,20 @@ var supportedTypes = []*types.T{
 	types.Decimal,
 	types.Uuid,
 	types.Timestamp,
+}
+
+func init() {
+	// Include all array types which are arrays of the scalar types above.
+	var arrayTypes []*types.T
+	for oid := range types.ArrayOids {
+		arrayTyp := types.OidToType[oid]
+		for _, typ := range supportedTypes {
+			if arrayTyp.InternalType.ArrayContents == typ {
+				arrayTypes = append(arrayTypes, arrayTyp)
+			}
+		}
+	}
+	supportedTypes = append(supportedTypes, arrayTypes...)
 }
 
 func makeRandDatums(numRows int, sch *colSchema, rng *rand.Rand) [][]tree.Datum {
@@ -80,7 +96,7 @@ func TestRandomDatums(t *testing.T) {
 	sch := makeRandSchema(numCols, rng)
 	datums := makeRandDatums(numRows, sch, rng)
 
-	fileName := "TestRandomDatums"
+	fileName := "TestRandomDatums.parquet"
 	f, err := os.CreateTemp("", fileName)
 	require.NoError(t, err)
 
@@ -199,6 +215,24 @@ func TestBasicDatums(t *testing.T) {
 				}, nil
 			},
 		},
+		{
+			name: "array",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.IntArray, types.IntArray},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				da := tree.NewDArray(types.Int)
+				da.Array = tree.Datums{tree.NewDInt(0), tree.NewDInt(1)}
+				da2 := tree.NewDArray(types.Int)
+				da2.Array = tree.Datums{tree.NewDInt(2), tree.DNull}
+				da3 := tree.NewDArray(types.Int)
+				da3.Array = tree.Datums{}
+				return [][]tree.Datum{
+					{da, da2}, {da3, tree.DNull},
+				}, nil
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			datums, err := tc.datums()
@@ -207,7 +241,7 @@ func TestBasicDatums(t *testing.T) {
 			numCols := len(datums[0])
 			maxRowGroupSize := int64(2)
 
-			fileName := "TestBasicDatums"
+			fileName := "TestBasicDatums.parquet"
 			f, err := os.CreateTemp("", fileName)
 			require.NoError(t, err)
 
@@ -255,7 +289,7 @@ func TestInvalidWriterUsage(t *testing.T) {
 		require.NoError(t, err)
 
 		err = writer.AddRow([]tree.Datum{tree.NewDInt(0), datum})
-		require.ErrorContains(t, err, "expected datum of type bool")
+		require.ErrorContains(t, err, "expected DBool")
 
 		_ = writer.Close()
 	})
@@ -266,7 +300,7 @@ func TestVersions(t *testing.T) {
 	require.NoError(t, err)
 
 	for version := range allowedVersions {
-		fileName := "TestVersions"
+		fileName := "TestVersions.parquet"
 		f, err := os.CreateTemp("", fileName)
 		require.NoError(t, err)
 

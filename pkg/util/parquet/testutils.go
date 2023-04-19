@@ -18,6 +18,7 @@ import (
 	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,27 +56,35 @@ func ReadFileAndVerifyDatums(
 	for rg := 0; rg < reader.NumRowGroups(); rg++ {
 		rgr := reader.RowGroup(rg)
 		rowsInRowGroup := rgr.NumRows()
-		defLevels := make([]int16, rowsInRowGroup)
 
 		for colIdx := 0; colIdx < numCols; colIdx++ {
 			col, err := rgr.Column(colIdx)
 			require.NoError(t, err)
 
 			dec := writer.sch.cols[colIdx].decoder
+			typ := writer.sch.cols[colIdx].typ
+
+			// Based on how we define schemas, we can detect an array by seeing if the
+			// primitive col reader has a max repetition level of 1. See comments above
+			// arrayEntryRepLevel for more info.
+			isArray := col.Descriptor().MaxRepetitionLevel() == 1
 
 			switch col.Type() {
 			case parquet.Types.Boolean:
-				values := make([]bool, rowsInRowGroup)
-				readBatchHelper(t, col, rowsInRowGroup, values, defLevels)
-				decodeValuesIntoDatumsHelper(t, readDatums, colIdx, startingRowIdx, dec, values, defLevels)
+				colDatums, read, err := readBatch(col, make([]bool, 1), dec, typ, isArray)
+				require.NoError(t, err)
+				require.Equal(t, rowsInRowGroup, read)
+				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.Int32:
-				values := make([]int32, numRows)
-				readBatchHelper(t, col, rowsInRowGroup, values, defLevels)
-				decodeValuesIntoDatumsHelper(t, readDatums, colIdx, startingRowIdx, dec, values, defLevels)
+				colDatums, read, err := readBatch(col, make([]int32, 1), dec, typ, isArray)
+				require.NoError(t, err)
+				require.Equal(t, rowsInRowGroup, read)
+				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.Int64:
-				values := make([]int64, rowsInRowGroup)
-				readBatchHelper(t, col, rowsInRowGroup, values, defLevels)
-				decodeValuesIntoDatumsHelper(t, readDatums, colIdx, startingRowIdx, dec, values, defLevels)
+				colDatums, read, err := readBatch(col, make([]int64, 1), dec, typ, isArray)
+				require.NoError(t, err)
+				require.Equal(t, rowsInRowGroup, read)
+				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.Int96:
 				panic("unimplemented")
 			case parquet.Types.Float:
@@ -83,13 +92,15 @@ func ReadFileAndVerifyDatums(
 			case parquet.Types.Double:
 				panic("unimplemented")
 			case parquet.Types.ByteArray:
-				values := make([]parquet.ByteArray, rowsInRowGroup)
-				readBatchHelper(t, col, rowsInRowGroup, values, defLevels)
-				decodeValuesIntoDatumsHelper(t, readDatums, colIdx, startingRowIdx, dec, values, defLevels)
+				colDatums, read, err := readBatch(col, make([]parquet.ByteArray, 1), dec, typ, isArray)
+				require.NoError(t, err)
+				require.Equal(t, rowsInRowGroup, read)
+				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.FixedLenByteArray:
-				values := make([]parquet.FixedLenByteArray, rowsInRowGroup)
-				readBatchHelper(t, col, rowsInRowGroup, values, defLevels)
-				decodeValuesIntoDatumsHelper(t, readDatums, colIdx, startingRowIdx, dec, values, defLevels)
+				colDatums, read, err := readBatch(col, make([]parquet.FixedLenByteArray, 1), dec, typ, isArray)
+				require.NoError(t, err)
+				require.Equal(t, rowsInRowGroup, read)
+				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
 			}
 		}
 		startingRowIdx += int(rowsInRowGroup)
@@ -98,54 +109,107 @@ func ReadFileAndVerifyDatums(
 
 	for i := 0; i < numRows; i++ {
 		for j := 0; j < numCols; j++ {
-			assert.Equal(t, writtenDatums[i][j], readDatums[i][j])
+			validateDatum(t, writtenDatums[i][j], readDatums[i][j])
 		}
 	}
-}
-
-func readBatchHelper[T parquetDatatypes](
-	t *testing.T, r file.ColumnChunkReader, expectedrowsInRowGroup int64, values []T, defLvls []int16,
-) {
-	numRead, err := readBatch(r, expectedrowsInRowGroup, values, defLvls)
-	require.NoError(t, err)
-	require.Equal(t, numRead, expectedrowsInRowGroup)
 }
 
 type batchReader[T parquetDatatypes] interface {
 	ReadBatch(batchSize int64, values []T, defLvls []int16, repLvls []int16) (total int64, valuesRead int, err error)
 }
 
+// readBatch reads all the datums in a row group for a column.
 func readBatch[T parquetDatatypes](
-	r file.ColumnChunkReader, batchSize int64, values []T, defLvls []int16,
-) (int64, error) {
+	r file.ColumnChunkReader, valueAlloc []T, dec decoder, typ *types.T, isArray bool,
+) (tree.Datums, int64, error) {
 	br, ok := r.(batchReader[T])
 	if !ok {
-		return 0, errors.AssertionFailedf("expected batchReader of type %T, but found %T instead", values, r)
+		return nil, 0, errors.AssertionFailedf("expected batchReader for type %T, but found %T instead", valueAlloc, r)
 	}
-	numRowsRead, _, err := br.ReadBatch(batchSize, values, defLvls, nil)
-	return numRowsRead, err
+
+	result := make([]tree.Datum, 0)
+	defLevels := [1]int16{}
+	repLevels := [1]int16{}
+
+	for {
+		numRowsRead, _, err := br.ReadBatch(1, valueAlloc, defLevels[:], repLevels[:])
+		if err != nil {
+			return nil, 0, err
+		}
+		if numRowsRead == 0 {
+			break
+		}
+
+		if isArray {
+			// Replevel 0 indicates the start of a new array.
+			if repLevels[0] == 0 {
+				// Replevel 0, Deflevel 0 represents a NULL array.
+				if defLevels[0] == 0 {
+					result = append(result, tree.DNull)
+					continue
+				}
+				arrDatum := tree.NewDArray(typ)
+				result = append(result, arrDatum)
+				// Replevel 0, Deflevel 1 represents an array which is empty.
+				if defLevels[0] == 1 {
+					continue
+				}
+			}
+			currentArrayDatum := result[len(result)-1].(*tree.DArray)
+			// Deflevel 2 represents a null value in an array.
+			if defLevels[0] == 2 {
+				currentArrayDatum.Array = append(currentArrayDatum.Array, tree.DNull)
+				continue
+			}
+			// Deflevel 3 represents a non-null datum in an array.
+			d, err := decode(dec, valueAlloc[0])
+			if err != nil {
+				return nil, 0, err
+			}
+			currentArrayDatum.Array = append(currentArrayDatum.Array, d)
+		} else {
+			// Deflevel 0 represents a null value
+			// Deflevel 1 represents a non-null value
+			d := tree.DNull
+			if defLevels[0] != 0 {
+				d, err = decode(dec, valueAlloc[0])
+				if err != nil {
+					return nil, 0, err
+				}
+			}
+			result = append(result, d)
+		}
+	}
+
+	return result, int64(len(result)), nil
 }
 
-func decodeValuesIntoDatumsHelper[T parquetDatatypes](
-	t *testing.T,
-	datums [][]tree.Datum,
-	colIdx int,
-	startingRowIdx int,
-	dec decoder,
-	values []T,
-	defLevels []int16,
+func decodeValuesIntoDatumsHelper(
+	colDatums []tree.Datum, datumRows [][]tree.Datum, colIdx int, startingRowIdx int,
 ) {
-	var err error
-	// If the defLevel of a datum is 0, parquet will not write it to the column.
-	// Use valueReadIdx to only read from the front of the values array, where datums are defined.
-	valueReadIdx := 0
-	for rowOffset, defLevel := range defLevels {
-		d := tree.DNull
-		if defLevel != 0 {
-			d, err = decode(dec, values[valueReadIdx])
-			require.NoError(t, err)
-			valueReadIdx++
+	for rowOffset, datum := range colDatums {
+		datumRows[startingRowIdx+rowOffset][colIdx] = datum
+	}
+}
+
+// validateDatum validates that the "contents" of the expected datum matches the
+// contents of the actual datum. For example, when validating two arrays, we
+// only compare the datums in the arrays. We do not compare CRDB-specific
+// metadata fields such as (tree.DArray).HasNulls or (tree.DArray).HasNonNulls.
+//
+// The reason for this special comparison that the parquet format is presently
+// used in an export use case, so we only need to test roundtripability with
+// data end users see. We do not need to check roundtripability of internal CRDB data.
+func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
+	switch expected.ResolvedType().Family() {
+	case types.ArrayFamily:
+		arr1 := expected.(*tree.DArray).Array
+		arr2 := actual.(*tree.DArray).Array
+		require.Equal(t, len(arr1), len(arr2))
+		for i := 0; i < len(arr1); i++ {
+			validateDatum(t, arr1[i], arr2[i])
 		}
-		datums[startingRowIdx+rowOffset][colIdx] = d
+	default:
+		require.Equal(t, expected, actual)
 	}
 }
