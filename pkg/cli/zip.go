@@ -35,8 +35,6 @@ import (
 	"github.com/jackc/pgconn"
 	"github.com/marusama/semaphore"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // zipRequest abstracts a possible server API call to one of the API
@@ -144,6 +142,11 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 
+	timeout := 10 * time.Second
+	if cliCtx.cmdTimeout != 0 {
+		timeout = cliCtx.cmdTimeout
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -163,24 +166,23 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 		}
 		defer finish()
 
-		resp, err := serverpb.NewAdminClient(conn).ListTenants(ctx, &serverpb.ListTenantsRequest{})
-		if err != nil {
-			if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {
-				// For pre-v23.1 clusters, this endpoint in not implemented, proceed with
-				// only querying the system tenant.
-				resp, sErr := serverpb.NewStatusClient(conn).Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
-				if sErr != nil {
-					return s.fail(errors.CombineErrors(err, sErr))
-				}
-				tenants = append(tenants, &serverpb.Tenant{
-					TenantId:   &roachpb.SystemTenantID,
-					TenantName: catconstants.SystemTenantName,
-					SqlAddr:    resp.SQLAddress.String(),
-					RpcAddr:    serverCfg.Addr,
-				})
-			} else {
-				return s.fail(err)
+		var resp *serverpb.ListTenantsResponse
+		if err := contextutil.RunWithTimeout(context.Background(), "list tenants", timeout, func(ctx context.Context) error {
+			resp, err = serverpb.NewAdminClient(conn).ListTenants(ctx, &serverpb.ListTenantsRequest{})
+			return err
+		}); err != nil {
+			// For pre-v23.1 clusters, this endpoint in not implemented, proceed with
+			// only querying the system tenant.
+			resp, sErr := serverpb.NewStatusClient(conn).Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
+			if sErr != nil {
+				return s.fail(errors.CombineErrors(err, sErr))
 			}
+			tenants = append(tenants, &serverpb.Tenant{
+				TenantId:   &roachpb.SystemTenantID,
+				TenantName: catconstants.SystemTenantName,
+				SqlAddr:    resp.SQLAddress.String(),
+				RpcAddr:    serverCfg.Addr,
+			})
 		} else {
 			tenants = resp.Tenants
 		}
@@ -254,11 +256,6 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 				defer func() { retErr = errors.CombineErrors(retErr, sqlConn.Close()) }()
 				s.progress("using SQL connection URL: %s", sqlConn.GetURL())
 				s.done()
-			}
-
-			timeout := 10 * time.Second
-			if cliCtx.cmdTimeout != 0 {
-				timeout = cliCtx.cmdTimeout
 			}
 
 			// Only add tenant prefix for non system tenants.
