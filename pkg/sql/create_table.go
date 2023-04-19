@@ -1475,14 +1475,14 @@ func NewTableDesc(
 			for _, def := range n.Defs {
 				switch def := def.(type) {
 				case *tree.ColumnTableDef:
-					if def.Name == colinfo.TTLDefaultExpirationColumnName {
+					if def.Name == catpb.TTLDefaultExpirationColumnName {
 						// If we find the column, make sure it has the expected type.
 						if def.Type.SQLString() != types.TimestampTZ.SQLString() {
 							return nil, pgerror.Newf(
 								pgcode.InvalidTableDefinition,
 								`table %s has TTL defined, but column %s is not a %s`,
 								def.Name,
-								colinfo.TTLDefaultExpirationColumnName,
+								catpb.TTLDefaultExpirationColumnName,
 								types.TimestampTZ.SQLString(),
 							)
 						}
@@ -2432,7 +2432,7 @@ func CreateRowLevelTTLScheduledJob(
 
 func rowLevelTTLAutomaticColumnDef(ttl *catpb.RowLevelTTL) (*tree.ColumnTableDef, error) {
 	def := &tree.ColumnTableDef{
-		Name:   colinfo.TTLDefaultExpirationColumnName,
+		Name:   catpb.TTLDefaultExpirationColumnName,
 		Type:   types.TimestampTZ,
 		Hidden: true,
 	}

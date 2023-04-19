@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -52,7 +52,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 				},
 				mockDuration,
 				2,
-				colinfo.TTLDefaultExpirationColumnName,
+				catpb.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
@@ -115,7 +115,7 @@ LIMIT 2`,
 				spanToProcess{},
 				mockDuration,
 				2,
-				colinfo.TTLDefaultExpirationColumnName,
+				catpb.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
@@ -177,7 +177,7 @@ LIMIT 2`,
 				},
 				mockDuration,
 				2,
-				colinfo.TTLDefaultExpirationColumnName,
+				catpb.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
@@ -242,7 +242,7 @@ LIMIT 2`,
 				},
 				mockDuration,
 				2,
-				colinfo.TTLDefaultExpirationColumnName,
+				catpb.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
@@ -306,7 +306,7 @@ LIMIT 2`,
 				},
 				mockDuration,
 				2,
-				colinfo.TTLDefaultExpirationColumnName,
+				catpb.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
@@ -392,7 +392,7 @@ func TestDeleteQueryBuilder(t *testing.T) {
 	}{
 		{
 			desc: "single delete less than batch size",
-			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3, colinfo.TTLDefaultExpirationColumnName),
+			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3, catpb.TTLDefaultExpirationColumnName),
 			iterations: []iteration{
 				{
 					rows: []tree.Datums{
@@ -412,7 +412,7 @@ AND (col1, col2) IN (($2, $3), ($4, $5))`,
 		},
 		{
 			desc: "multiple deletes",
-			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3, colinfo.TTLDefaultExpirationColumnName),
+			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3, catpb.TTLDefaultExpirationColumnName),
 			iterations: []iteration{
 				{
 					rows: []tree.Datums{
