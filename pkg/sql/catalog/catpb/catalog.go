@@ -124,3 +124,10 @@ func (m *RowLevelTTL) DeletionCronOrDefault() string {
 	}
 	return "@hourly"
 }
+
+func (rowLevelTTL *RowLevelTTL) GetTTLExpr() Expression {
+	if rowLevelTTL.HasExpirationExpr() {
+		return rowLevelTTL.ExpirationExpr
+	}
+	return DefaultTTLExpirationExpr
+}

@@ -149,10 +149,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		return err
 	}
 
-	ttlExpr := catpb.DefaultTTLExpirationExpr
-	if rowLevelTTL.HasExpirationExpr() {
-		ttlExpr = "(" + rowLevelTTL.ExpirationExpr + ")"
-	}
+	ttlExpr := rowLevelTTL.GetTTLExpr()
 
 	labelMetrics := rowLevelTTL.LabelMetrics
 	group := ctxgroup.WithContext(ctx)
