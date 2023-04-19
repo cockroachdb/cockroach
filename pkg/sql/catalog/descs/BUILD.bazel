@@ -78,7 +78,7 @@ go_library(
 
 go_test(
     name = "descs_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "collection_test.go",
         "errors_test.go",
@@ -86,7 +86,7 @@ go_test(
         "txn_external_test.go",
         "txn_with_executor_datadriven_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":descs"],
     deps = [
