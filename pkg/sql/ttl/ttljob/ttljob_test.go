@@ -978,7 +978,7 @@ func TestInboundForeignKeyOnDeleteRestrict(t *testing.T) {
 	sqlDB.Exec(t, "INSERT INTO child VALUES (1, 1)")
 
 	// Force the schedule to execute.
-	th.waitForScheduledJob(t, jobs.StatusFailed, `delete on table "tbl_name" violates foreign key constraint "child_tbl_id_fkey" on table "child"`)
+	th.waitForScheduledJob(t, jobs.StatusFailed, `delete on table "tbl" violates foreign key constraint "child_tbl_id_fkey" on table "child"`)
 
 	results := sqlDB.QueryStr(t, "SELECT * FROM tbl")
 	require.Len(t, results, 1)
