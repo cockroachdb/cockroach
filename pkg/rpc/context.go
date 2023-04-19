@@ -19,6 +19,7 @@ import (
 	"hash/fnv"
 	"io"
 	"math"
+	"math/rand"
 	"net"
 	"sync/atomic"
 	"time"
@@ -542,6 +543,10 @@ type ContextOptions struct {
 	// node-to-node connections and prevents one-way partitions from occurring by
 	// turing them into two-way partitions.
 	NeedsDialback bool
+
+	// PreferSRVLookup indicates whether SRV records are preferred over A/AAAA
+	// records when dialing network targets.
+	PreferSRVLookup bool
 }
 
 func (c ContextOptions) validate() error {
@@ -1829,6 +1834,12 @@ func (rpcCtx *Context) dialOptsNetwork(
 	// which is only definitely provided during dial.
 	dialer := onlyOnceDialer{}
 	dialerFunc := dialer.dial
+	if rpcCtx.ContextOptions.PreferSRVLookup {
+		dialer := &srvResolvingDialer{
+			dialerFunc: dialerFunc,
+		}
+		dialerFunc = dialer.dial
+	}
 	if rpcCtx.Knobs.InjectedLatencyOracle != nil {
 		latency := rpcCtx.Knobs.InjectedLatencyOracle.GetLatency(target)
 		log.VEventf(ctx, 1, "connecting with simulated latency %dms",
@@ -2006,6 +2017,25 @@ func (ald *artificialLatencyDialer) dial(ctx context.Context, addr string) (net.
 		enabled: ald.enabled,
 		readBuf: new(bytes.Buffer),
 	}, nil
+}
+
+// srvResolvingDialer first queries SRV records for addr, and dials
+// a random member of the result.
+// If the result is empty, it dials the addr directly.
+type srvResolvingDialer struct {
+	dialerFunc dialerFunc
+}
+
+func (srd *srvResolvingDialer) dial(ctx context.Context, addr string) (net.Conn, error) {
+	addrs, err := netutil.SRV(ctx, addr)
+	if err != nil {
+		return nil, err
+	}
+	if len(addrs) == 0 {
+		// If SRV lookup returns empty, we fallback to addr.
+		addrs = []string{addr}
+	}
+	return srd.dialerFunc(ctx, addrs[rand.Intn(len(addrs))])
 }
 
 type delayingListener struct {

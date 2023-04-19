@@ -496,27 +496,39 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 		serverUnaryInterceptor1Called = true
 		return handler(ctx, req)
 	}
-	serverInterceptors.UnaryInterceptors = append([]grpc.UnaryServerInterceptor{interceptor1}, serverInterceptors.UnaryInterceptors...)
-	serverInterceptors.UnaryInterceptors = append(serverInterceptors.UnaryInterceptors, func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		serverUnaryInterceptor2Called = true
-		return handler(ctx, req)
-	})
+	serverInterceptors.UnaryInterceptors = append(
+		[]grpc.UnaryServerInterceptor{interceptor1},
+		serverInterceptors.UnaryInterceptors...)
+	serverInterceptors.UnaryInterceptors = append(
+		serverInterceptors.UnaryInterceptors,
+		func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+			serverUnaryInterceptor2Called = true
+			return handler(ctx, req)
+		},
+	)
 
 	serverStreamInterceptor1Called := false
-	serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors, func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		serverStreamInterceptor1Called = true
-		return handler(srv, stream)
-	})
+	serverInterceptors.StreamInterceptors = append(
+		serverInterceptors.StreamInterceptors,
+		func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+			serverStreamInterceptor1Called = true
+			return handler(srv, stream)
+		},
+	)
 	serverStreamInterceptor2Called := false
-	serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors, func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		serverStreamInterceptor2Called = true
-		return handler(srv, stream)
-	})
+	serverInterceptors.StreamInterceptors = append(
+		serverInterceptors.StreamInterceptors,
+		func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+			serverStreamInterceptor2Called = true
+			return handler(srv, stream)
+		},
+	)
 
 	var clientInterceptors ClientInterceptorInfo
 	var clientUnaryInterceptor1Called, clientUnaryInterceptor2Called bool
 	var clientStreamInterceptor1Called, clientStreamInterceptor2Called bool
-	clientInterceptors.UnaryInterceptors = append(clientInterceptors.UnaryInterceptors,
+	clientInterceptors.UnaryInterceptors = append(
+		clientInterceptors.UnaryInterceptors,
 		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 			clientUnaryInterceptor1Called = true
 			return invoker(ctx, method, req, reply, cc, opts...)
@@ -524,8 +536,10 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 			clientUnaryInterceptor2Called = true
 			return invoker(ctx, method, req, reply, cc, opts...)
-		})
-	clientInterceptors.StreamInterceptors = append(clientInterceptors.StreamInterceptors,
+		},
+	)
+	clientInterceptors.StreamInterceptors = append(
+		clientInterceptors.StreamInterceptors,
 		func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 			clientStreamInterceptor1Called = true
 			return streamer(ctx, desc, cc, method, opts...)
@@ -533,7 +547,8 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 		func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 			clientStreamInterceptor2Called = true
 			return streamer(ctx, desc, cc, method, opts...)
-		})
+		},
+	)
 
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(
@@ -1143,7 +1158,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 					mu.conns = append(mu.conns, conn)
 				}
 				mu.Unlock()
-			}}
+			},
+		}
 	}()
 
 	_ = stopper.RunAsyncTask(ctx, "wait-quiesce", func(context.Context) {
@@ -1619,7 +1635,12 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			defer nodeCtx.ctx.RemoteClocks.mu.Unlock()
 
 			if a, e := len(nodeCtx.ctx.RemoteClocks.mu.offsets), len(nodeCtxs)-1; a != e {
-				return errors.Errorf("not yet fully connected: have %d of %d connections: %v", a, e, nodeCtx.ctx.RemoteClocks.mu.offsets)
+				return errors.Errorf(
+					"not yet fully connected: have %d of %d connections: %v",
+					a,
+					e,
+					nodeCtx.ctx.RemoteClocks.mu.offsets,
+				)
 			}
 			return nil
 		})
@@ -1627,8 +1648,17 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 
 	for i, nodeCtx := range nodeCtxs {
 		if nodeOffset := nodeCtx.offset; nodeOffset > maxOffset {
-			if err := nodeCtx.ctx.RemoteClocks.VerifyClockOffset(nodeCtx.ctx.MasterCtx); testutils.IsError(err, errOffsetGreaterThanMaxOffset) {
-				t.Logf("max offset: %s - node %d with excessive clock offset of %s returned expected error: %s", maxOffset, i, nodeOffset, err)
+			if err := nodeCtx.ctx.RemoteClocks.VerifyClockOffset(nodeCtx.ctx.MasterCtx); testutils.IsError(
+				err,
+				errOffsetGreaterThanMaxOffset,
+			) {
+				t.Logf(
+					"max offset: %s - node %d with excessive clock offset of %s returned expected error: %s",
+					maxOffset,
+					i,
+					nodeOffset,
+					err,
+				)
 			} else {
 				t.Errorf("max offset: %s - node %d with excessive clock offset of %s returned unexpected error: %v", maxOffset, i, nodeOffset, err)
 			}
@@ -2696,8 +2726,8 @@ func TestHeartbeatDialback(t *testing.T) {
 		require.Equal(t, 0, len(pingChan1))
 	}
 
-	//Now connect back in the opposite direction. This should not initiate any
-	//dialback since we are already connected.
+	// Now connect back in the opposite direction. This should not initiate any
+	// dialback since we are already connected.
 	{
 		conn, err := ctx1.GRPCDialNode(remoteAddr2, 2, DefaultClass).Connect(ctx)
 		defer func() {
@@ -2744,6 +2774,52 @@ func TestHeartbeatDialback(t *testing.T) {
 			return
 		}
 	}
+}
+
+// TestSRVResolvingDialer tests srvResolvingDialer dials the correct target if SRV query
+// is successful, and dials the input target directly if SRV query returns empty records.
+func TestSRVResolvingDialer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	t.Run("success SRV lookup", func(t *testing.T) {
+		expected := &net.SRV{
+			Target: "test",
+			Port:   123,
+		}
+		defer netutil.TestingOverrideSRVLookupFn(func(service, proto, name string) (string, []*net.SRV, error) {
+			fmt.Println("test srv lookup")
+			return "", []*net.SRV{expected}, nil
+		})()
+
+		dialed := false
+		dial := func(ctx context.Context, addr string) (net.Conn, error) {
+			dialed = true
+			require.Equal(t, fmt.Sprintf("%s:%d", expected.Target, expected.Port), addr)
+			return nil, nil
+		}
+		dialer := &srvResolvingDialer{dialerFunc: dial}
+		_, err := dialer.dial(ctx, "srvquery")
+		require.NoError(t, err)
+		require.True(t, dialed)
+	})
+
+	t.Run("empty SRV lookup", func(t *testing.T) {
+		defer netutil.TestingOverrideSRVLookupFn(func(service, proto, name string) (string, []*net.SRV, error) {
+			return "", []*net.SRV{}, nil
+		})()
+		expected := "test-expected"
+		dialed := false
+		dial := func(ctx context.Context, addr string) (net.Conn, error) {
+			dialed = true
+			require.Equal(t, expected, addr)
+			return nil, nil
+		}
+		dialer := &srvResolvingDialer{dialerFunc: dial}
+		_, err := dialer.dial(ctx, expected)
+		require.NoError(t, err)
+		require.True(t, dialed)
+	})
 }
 
 // TODO(baptist): Add a test using TestCluster to verify this works in a full

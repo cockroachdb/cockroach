@@ -240,11 +240,8 @@ func TestParseBootstrapResolvers(t *testing.T) {
 
 	t.Run("srv", func(t *testing.T) {
 		cfg.JoinPreferSRVRecords = true
-		cfg.JoinList = append(base.JoinListType(nil), "othername")
-
-		defer netutil.TestingOverrideSRVLookupFn(func(service, proto, name string) (string, []*net.SRV, error) {
-			return "cluster", []*net.SRV{{Target: expectedName, Port: 111}}, nil
-		})()
+		const srvName = "srv-name"
+		cfg.JoinList = append(base.JoinListType(nil), srvName)
 
 		addresses, err := cfg.parseGossipBootstrapAddresses(context.Background())
 		if err != nil {
@@ -253,18 +250,15 @@ func TestParseBootstrapResolvers(t *testing.T) {
 		if len(addresses) != 1 {
 			t.Fatalf("expected 1 address, got %# v", pretty.Formatter(addresses))
 		}
-		host, port, err := addr.SplitHostPort(addresses[0].String(), "UNKNOWN")
+		host, port, err := addr.SplitHostPort(addresses[0].String(), "defaultPort")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if port == "UNKNOWN" {
-			t.Fatalf("expected port defined in resover: %# v", pretty.Formatter(addresses))
+		if port != "defaultPort" {
+			t.Fatalf("unexpected port defined in resover: %# v", pretty.Formatter(addresses))
 		}
-		if port != "111" {
-			t.Fatalf("expected port 111 from SRV, got %q", port)
-		}
-		if host != expectedName {
-			t.Errorf("expected name %q, got %q", expectedName, host)
+		if host != srvName {
+			t.Errorf("expected host %q, got %q", srvName, host)
 		}
 	})
 }

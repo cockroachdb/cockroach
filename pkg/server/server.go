@@ -321,6 +321,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		},
 		TenantRPCAuthorizer: authorizer,
 		NeedsDialback:       true,
+		PreferSRVLookup:     cfg.JoinPreferSRVRecords,
 	}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
