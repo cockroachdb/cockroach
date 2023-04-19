@@ -224,7 +224,8 @@ var UseMuxRangeFeed = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"changefeed.mux_rangefeed.enabled",
 	"if true, changefeed uses multiplexing rangefeed RPC",
-	util.ConstantWithMetamorphicTestBool("changefeed.mux_rangefeed.enabled", false),
+	true,
+	//util.ConstantWithMetamorphicTestBool("changefeed.mux_rangefeed.enabled", false),
 )
 
 // EventConsumerWorkers specifies the maximum number of workers to use when
