@@ -23,7 +23,8 @@ const DefaultAOSTDuration = -time.Second * 30
 
 // SelectTemplate is the format string used to build SELECT queries for the
 // TTL job.
-const SelectTemplate = `SELECT %[1]s FROM [%[2]d AS tbl_name]
+const SelectTemplate = `SELECT %[1]s
+FROM %[2]s
 AS OF SYSTEM TIME INTERVAL '%[3]d seconds'
 WHERE %[4]s <= $1
 %[5]s%[6]s
@@ -32,7 +33,7 @@ LIMIT %[7]v`
 
 // DeleteTemplate is the format string used to build DELETE queries for the
 // TTL job.
-const DeleteTemplate = `DELETE FROM [%d AS tbl_name]
+const DeleteTemplate = `DELETE FROM %s
 WHERE %s <= $1
 AND (%s) IN (%s)`
 

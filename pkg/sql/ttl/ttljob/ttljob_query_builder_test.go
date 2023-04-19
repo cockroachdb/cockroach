@@ -42,7 +42,6 @@ func TestSelectQueryBuilder(t *testing.T) {
 		{
 			desc: "middle range",
 			b: makeSelectQueryBuilder(
-				1,
 				mockTime,
 				[]string{"col1", "col2"},
 				"relation_name",
@@ -56,7 +55,8 @@ func TestSelectQueryBuilder(t *testing.T) {
 			),
 			iterations: []iteration{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) >= ($4, $5) AND (col1, col2) < ($2, $3)
@@ -73,7 +73,8 @@ LIMIT 2`,
 					},
 				},
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
@@ -90,7 +91,8 @@ LIMIT 2`,
 					},
 				},
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
@@ -108,10 +110,9 @@ LIMIT 2`,
 		{
 			desc: "only one range",
 			b: makeSelectQueryBuilder(
-				1,
 				mockTime,
 				[]string{"col1", "col2"},
-				"table_name",
+				"relation_name",
 				spanToProcess{},
 				mockDuration,
 				2,
@@ -119,7 +120,8 @@ LIMIT 2`,
 			),
 			iterations: []iteration{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 
@@ -134,7 +136,8 @@ LIMIT 2`,
 					},
 				},
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($2, $3)
@@ -150,7 +153,8 @@ LIMIT 2`,
 					},
 				},
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($2, $3)
@@ -167,10 +171,9 @@ LIMIT 2`,
 		{
 			desc: "one range, but a partial startPK and endPK split",
 			b: makeSelectQueryBuilder(
-				1,
 				mockTime,
 				[]string{"col1", "col2"},
-				"table_name",
+				"relation_name",
 				spanToProcess{
 					startPK: tree.Datums{tree.NewDInt(100)},
 					endPK:   tree.Datums{tree.NewDInt(181)},
@@ -181,7 +184,8 @@ LIMIT 2`,
 			),
 			iterations: []iteration{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1) >= ($3) AND (col1) < ($2)
@@ -198,7 +202,8 @@ LIMIT 2`,
 					},
 				},
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($3, $4) AND (col1) < ($2)
@@ -215,7 +220,8 @@ LIMIT 2`,
 					},
 				},
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($3, $4) AND (col1) < ($2)
@@ -233,10 +239,9 @@ LIMIT 2`,
 		{
 			desc: "first range",
 			b: makeSelectQueryBuilder(
-				1,
 				mockTime,
 				[]string{"col1", "col2"},
-				"table_name",
+				"relation_name",
 				spanToProcess{
 					endPK: tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				},
@@ -246,7 +251,8 @@ LIMIT 2`,
 			),
 			iterations: []iteration{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
  AND (col1, col2) < ($2, $3)
@@ -262,7 +268,8 @@ LIMIT 2`,
 					},
 				},
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
@@ -279,7 +286,8 @@ LIMIT 2`,
 					},
 				},
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
@@ -297,10 +305,9 @@ LIMIT 2`,
 		{
 			desc: "last range",
 			b: makeSelectQueryBuilder(
-				1,
 				mockTime,
 				[]string{"col1", "col2"},
-				"table_name",
+				"relation_name",
 				spanToProcess{
 					startPK: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 				},
@@ -310,7 +317,8 @@ LIMIT 2`,
 			),
 			iterations: []iteration{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) >= ($2, $3)
@@ -326,7 +334,8 @@ LIMIT 2`,
 					},
 				},
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($2, $3)
@@ -342,7 +351,8 @@ LIMIT 2`,
 					},
 				},
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($2, $3)
@@ -392,14 +402,14 @@ func TestDeleteQueryBuilder(t *testing.T) {
 	}{
 		{
 			desc: "single delete less than batch size",
-			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3, catpb.TTLDefaultExpirationColumnName),
+			b:    makeDeleteQueryBuilder(mockTime, []string{"col1", "col2"}, "relation_name", 3, catpb.TTLDefaultExpirationColumnName),
 			iterations: []iteration{
 				{
 					rows: []tree.Datums{
 						{tree.NewDInt(10), tree.NewDInt(15)},
 						{tree.NewDInt(12), tree.NewDInt(16)},
 					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name]
+					expectedQuery: `DELETE FROM relation_name
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) IN (($2, $3), ($4, $5))`,
 					expectedArgs: []interface{}{
@@ -412,7 +422,7 @@ AND (col1, col2) IN (($2, $3), ($4, $5))`,
 		},
 		{
 			desc: "multiple deletes",
-			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3, catpb.TTLDefaultExpirationColumnName),
+			b:    makeDeleteQueryBuilder(mockTime, []string{"col1", "col2"}, "relation_name", 3, catpb.TTLDefaultExpirationColumnName),
 			iterations: []iteration{
 				{
 					rows: []tree.Datums{
@@ -420,7 +430,7 @@ AND (col1, col2) IN (($2, $3), ($4, $5))`,
 						{tree.NewDInt(12), tree.NewDInt(16)},
 						{tree.NewDInt(12), tree.NewDInt(18)},
 					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name]
+					expectedQuery: `DELETE FROM relation_name
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
 					expectedArgs: []interface{}{
@@ -436,7 +446,7 @@ AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
 						{tree.NewDInt(112), tree.NewDInt(116)},
 						{tree.NewDInt(112), tree.NewDInt(118)},
 					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name]
+					expectedQuery: `DELETE FROM relation_name
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
 					expectedArgs: []interface{}{
@@ -450,7 +460,7 @@ AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
 					rows: []tree.Datums{
 						{tree.NewDInt(1210), tree.NewDInt(1215)},
 					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name]
+					expectedQuery: `DELETE FROM relation_name
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) IN (($2, $3))`,
 					expectedArgs: []interface{}{
