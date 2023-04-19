@@ -57,7 +57,6 @@ func (b *Builder) buildDataSource(
 			indexFlags = source.IndexFlags
 		}
 		if source.As.Alias != "" {
-			inScope = inScope.push()
 			inScope.alias = &source.As
 			locking = locking.filter(source.As.Alias)
 		}
