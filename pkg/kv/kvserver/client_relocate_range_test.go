@@ -359,7 +359,7 @@ func TestAdminRelocateRangeFailsWithDuplicates(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	}
 
-	tc := testcluster.StartTestCluster(t, numNodes, args)
+	tc := testcluster.StartTestCluster(t, 3, args)
 	defer tc.Stopper().Stop(ctx)
 
 	k := keys.MustAddr(tc.ScratchRange(t))

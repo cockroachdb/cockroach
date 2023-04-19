@@ -5146,7 +5146,7 @@ func setupClusterWithSubsumedRange(
 		})
 		require.NoError(t, tc.(*testcluster.TestCluster).WaitForFullReplication())
 		testutils.SucceedsSoon(t, func() error {
-			if count := len(replsForRange(ctx, t, tc, newDesc, numNodes)); count != 2 {
+			if count := len(replsForRange(ctx, t, tc, newDesc)); count != 2 {
 				return errors.Newf("expected %d replicas for range %d; found %d", 2, newDesc.RangeID, count)
 			}
 			return nil
