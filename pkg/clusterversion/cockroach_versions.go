@@ -512,6 +512,10 @@ const (
 	// SQL Stats tables.
 	V23_1ChangeSQLStatsTTL
 
+	// V23_1_TenantIDSequence is the version where system.tenant_id_seq
+	// was introduced.
+	V23_1_TenantIDSequence
+
 	// **********************************************************
 	// ** If we haven't yet selected a final 23.1 RC candidate **
 	// Step 1a: Add new versions for release-23.1 branch above here.
@@ -903,6 +907,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1ChangeSQLStatsTTL,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 98},
+	},
+	{
+		Key:     V23_1_TenantIDSequence,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 100},
 	},
 
 	// **********************************************************

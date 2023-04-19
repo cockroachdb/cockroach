@@ -154,6 +154,11 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	params.ServerArgs.DefaultTestTenant = cfg.defaultTestTenant
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		TenantTestingKnobs: &sql.TenantTestingKnobs{
+			// The tests in this package are particular about the tenant IDs
+			// they get in CREATE TENANT.
+			EnableTenantIDReuse: true,
+		},
 	}
 
 	settings := cluster.MakeTestingClusterSettings()

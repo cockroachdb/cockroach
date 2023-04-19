@@ -377,6 +377,11 @@ CREATE TENANT othertenant LIKE system
 # Create some "interesting" tenant template.
 statement ok
 CREATE TENANT tmpl;
+
+let $tmplid
+SELECT id FROM system.tenants WHERE name = 'tmpl'
+
+statement ok
 ALTER TENANT tmpl GRANT CAPABILITY can_view_node_info; -- will be copied
 ALTER TENANT tmpl SET CLUSTER SETTING trace.debug.enable = true; -- will be copied
 -- Simulate resource limits. Will be copied.
@@ -385,7 +390,7 @@ ALTER TENANT tmpl SET CLUSTER SETTING trace.debug.enable = true; -- will be copi
 INSERT INTO system.tenant_usage(
         tenant_id, instance_id, next_instance_id, last_update,
         ru_burst_limit, ru_refill_rate, ru_current, current_share_sum, total_consumption)
-VALUES ((SELECT id FROM system.tenants WHERE name = 'tmpl'), 0, 0, now(),
+VALUES ($tmplid, 0, 0, now(),
         11, 22, 33, 44, ''::BYTES);
 ALTER TENANT tmpl START SERVICE SHARED; -- will not be copied.
 
@@ -393,11 +398,14 @@ ALTER TENANT tmpl START SERVICE SHARED; -- will not be copied.
 statement ok
 CREATE TENANT othertenant LIKE tmpl
 
+let $otherid
+SELECT id FROM system.tenants WHERE name = 'othertenant'
+
 # Verify the service mode was not copied.
-query ITTT
-SHOW TENANT othertenant
+query BTTT
+SELECT id = $otherid, name, data_state, service_mode FROM [SHOW TENANT othertenant]
 ----
-13  othertenant  ready  none
+true  othertenant  ready  none
 
 # Verify the new tenant has the same caps as the template
 # (by showing there's no difference between the two)
@@ -418,7 +426,7 @@ query IIRRRRI
 SELECT instance_id, next_instance_id,
        ru_burst_limit, ru_refill_rate, ru_current,
        current_share_sum, length(total_consumption)
-FROM system.tenant_usage WHERE tenant_id = (SELECT id FROM system.tenants WHERE name = 'othertenant')
+FROM system.tenant_usage WHERE tenant_id = $otherid
 ----
 0  0  11  22  33  0  0
 
@@ -440,11 +448,14 @@ SET CLUSTER SETTING sql.create_tenant.default_template = 'tmpl';
 statement ok
 CREATE TENANT othertenant
 
+let $otherid
+SELECT id FROM system.tenants WHERE name = 'othertenant'
+
 # Verify the service mode was not copied.
-query ITTT
-SHOW TENANT othertenant
+query BTTT
+SELECT id = $otherid, name, data_state, service_mode FROM [SHOW TENANT othertenant]
 ----
-14  othertenant  ready  none
+true  othertenant  ready  none
 
 query TT
 SELECT capability_name, capability_value FROM [SHOW TENANT tmpl WITH CAPABILITIES]
@@ -463,7 +474,7 @@ query IIRRRRI
 SELECT instance_id, next_instance_id,
        ru_burst_limit, ru_refill_rate, ru_current,
        current_share_sum, length(total_consumption)
-FROM system.tenant_usage WHERE tenant_id = (SELECT id FROM system.tenants WHERE name = 'othertenant')
+FROM system.tenant_usage WHERE tenant_id = $otherid
 ----
 0  0  11  22  33  0  0
 
@@ -492,4 +503,3 @@ RESET disable_drop_tenant
 
 statement ok
 DROP TENANT nodelete
-
