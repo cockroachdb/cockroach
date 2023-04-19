@@ -1107,6 +1107,12 @@ $$
 ----
 
 exec-ddl
+CREATE FUNCTION add_strict(x INT, y INT) RETURNS INT STRICT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x + y
+$$
+----
+
+exec-ddl
 CREATE FUNCTION rec(r RECORD) RETURNS RECORD IMMUTABLE LANGUAGE SQL AS $$
   SELECT r
 $$
@@ -1177,6 +1183,23 @@ project
  │    └── columns: i:2
  └── projections
       └── (1, i:2, $1) [as=rec:10, outer=(2)]
+
+# A strict UDF is not inlined.
+norm expect-not=InlineUDF
+SELECT add_strict(1, i) FROM (VALUES (1), (2), (3)) v(i)
+----
+project
+ ├── columns: add_strict:5
+ ├── cardinality: [3 - 3]
+ ├── immutable
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (3,)
+ └── projections
+      └── add_strict(1, column1:1) [as=add_strict:5, outer=(1), immutable, udf]
 
 # A UDF is not inlined when the arguments are not constants or either Variable or Const
 # expressions.

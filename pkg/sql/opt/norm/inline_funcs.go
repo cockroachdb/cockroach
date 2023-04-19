@@ -410,7 +410,9 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 //     leak-proof.
 //  2. It has a single statement.
 //  3. It is not a set-returning function.
-//  4. Its arguments are only Variable or Const expressions.
+//  4. It is not a STRICT function, i.e., it is always called, even when one of
+//     its arguments is NULL.
+//  5. Its arguments are only Variable or Const expressions.
 //
 // UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
 // we do not need an explicit check for this because immutable UDFs cannot
@@ -427,7 +429,11 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 // challenge because we cannot wrap a set-returning function in a CASE
 // expression, like we do for strict, non-set-returning functions.
 //
-// TODO(mgartner): We may be able to loosen (4), but there are several
+// TODO(mgartner): We should be able to loosen (4) by wrapping the UDF's body in
+// a CASE expression that prevents the UDF body from being evaluated if any of
+// the arguments are NULL.
+//
+// TODO(mgartner): We may be able to loosen (5), but there are several
 // difficulties to overcome. We must take care not to inline UDFs with volatile
 // arguments used more than once in the function body. We should also be sure
 // not to inline when the arguments are computationally expensive and are
@@ -435,7 +441,8 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 // subquery and is referenced multiple times cannot be inlined, unless new
 // columns IDs for the entire subquery are generated (see #100915).
 func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
-	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 || udfp.SetReturning {
+	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 ||
+		udfp.SetReturning || !udfp.CalledOnNullInput {
 		return false
 	}
 	if !args.IsConstantsAndPlaceholdersAndVariables() {
