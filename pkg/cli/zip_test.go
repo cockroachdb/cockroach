@@ -258,7 +258,6 @@ create table defaultdb."../system"(x int);
 // need the SSL certs dir to run a CLI test securely.
 func TestUnavailableZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 53306, "flaky test")
 
 	skip.UnderShort(t)
 	// Race builds make the servers so slow that they report spurious
@@ -353,6 +352,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `timed out after...`)
 	re = regexp.MustCompile(`(?m)failed to connect to .*$`)
 	out = re.ReplaceAllString(out, `failed to connect to ...`)
+	re = regexp.MustCompile(`(?m)last request failed: .*$`)
+	out = re.ReplaceAllString(out, `last request failed: ...`)
 
 	// The number of memory profiles previously collected is not deterministic.
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ heap profiles found$`)
