@@ -1370,31 +1370,6 @@ func (tc *TxnCoordSender) GetSteppingMode(ctx context.Context) (curMode kv.Stepp
 	return curMode
 }
 
-// ManualRefresh is part of the TxnSender interface.
-func (tc *TxnCoordSender) ManualRefresh(ctx context.Context) error {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-
-	// Hijack the pre-emptive refresh code path to perform the refresh but
-	// provide the force flag to ensure that the refresh occurs unconditionally.
-	// We provide an empty BatchRequest - maybeRefreshPreemptivelyLocked just
-	// needs the transaction proto. The function then returns a BatchRequest
-	// with the updated transaction proto. We use this updated proto to call
-	// into updateStateLocked directly.
-	ba := &kvpb.BatchRequest{}
-	ba.Txn = tc.mu.txn.Clone()
-	const force = true
-	refreshedBa, pErr := tc.interceptorAlloc.txnSpanRefresher.maybeRefreshPreemptivelyLocked(ctx, ba, force)
-	if pErr != nil {
-		pErr = tc.updateStateLocked(ctx, ba, nil, pErr)
-	} else {
-		var br kvpb.BatchResponse
-		br.Txn = refreshedBa.Txn
-		pErr = tc.updateStateLocked(ctx, ba, &br, nil)
-	}
-	return pErr.GoError()
-}
-
 // DeferCommitWait is part of the TxnSender interface.
 func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Context) error {
 	tc.mu.Lock()
