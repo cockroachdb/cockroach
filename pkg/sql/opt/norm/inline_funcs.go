@@ -410,9 +410,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 //     leak-proof.
 //  2. It has a single statement.
 //  3. It is not a set-returning function.
-//  4. It is not a STRICT function, i.e., it is always called, even when one of
-//     its arguments is NULL.
-//  5. Its arguments are only Variable or Const expressions.
+//  4. Its arguments are only Variable or Const expressions.
 //
 // UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
 // we do not need an explicit check for this because immutable UDFs cannot
@@ -429,11 +427,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 // challenge because we cannot wrap a set-returning function in a CASE
 // expression, like we do for strict, non-set-returning functions.
 //
-// TODO(mgartner): We should be able to loosen (4) by wrapping the UDF's body in
-// a CASE expression that prevents the UDF body from being evaluated if any of
-// the arguments are NULL.
-//
-// TODO(mgartner): We may be able to loosen (5), but there are several
+// TODO(mgartner): We may be able to loosen (4), but there are several
 // difficulties to overcome. We must take care not to inline UDFs with volatile
 // arguments used more than once in the function body. We should also be sure
 // not to inline when the arguments are computationally expensive and are
@@ -441,8 +435,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 // subquery and is referenced multiple times cannot be inlined, unless new
 // columns IDs for the entire subquery are generated (see #100915).
 func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
-	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 ||
-		udfp.SetReturning || !udfp.CalledOnNullInput {
+	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 || udfp.SetReturning {
 		return false
 	}
 	if !args.IsConstantsAndPlaceholdersAndVariables() {
@@ -492,7 +485,7 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 	// SubqueryPrivate for SETOF UDFs.
 	stmt := udfp.Body[0]
 	returnColID := stmt.PhysProps.Presentation[0].ID
-	return c.f.ConstructSubquery(
+	res := c.f.ConstructSubquery(
 		c.f.ConstructProject(
 			replace(stmt.RelExpr).(memo.RelExpr),
 			nil, /* projections */
@@ -500,4 +493,44 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 		),
 		&memo.SubqueryPrivate{},
 	)
+
+	// If the UDF is strict, it should not be invoked when any of the arguments
+	// are NULL. To achieve this, we wrap the UDF in a CASE expression like:
+	//
+	//   CASE
+	//     WHEN arg1 IS NULL OR arg2 IS NULL OR ... THEN NULL
+	//     ELSE <subquery>
+	//   END
+	//
+	if !udfp.CalledOnNullInput && len(args) > 0 {
+		var anyArgIsNull opt.ScalarExpr
+		for i := range args {
+			// Note: We do NOT use a TupleIsNullExpr here if the argument is a
+			// tuple because a strict UDF will be called if an argument, T, is a
+			// tuple with all NULL elements, even though T IS NULL evaluates to
+			// true. For example:
+			//
+			//   SELECT strict_fn(1, (NULL, NULL)) -- the UDF will be called
+			//   SELECT (NULL, NULL) IS NULL       -- returns true
+			//
+			argIsNull := c.f.ConstructIs(args[i], memo.NullSingleton)
+			if anyArgIsNull == nil {
+				anyArgIsNull = argIsNull
+				continue
+			}
+			anyArgIsNull = c.f.ConstructOr(argIsNull, anyArgIsNull)
+		}
+		res = c.f.ConstructCase(
+			memo.TrueSingleton,
+			memo.ScalarListExpr{
+				c.f.ConstructWhen(
+					anyArgIsNull,
+					c.f.ConstructNull(udfp.Typ),
+				),
+			},
+			res,
+		)
+	}
+
+	return res
 }
