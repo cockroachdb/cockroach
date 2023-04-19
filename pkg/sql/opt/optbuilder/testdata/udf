@@ -1048,6 +1048,7 @@ project
  │    └── tuple
  └── projections
       └── udf: strict_fn [as=strict_fn:5]
+           ├── strict
            ├── params: i:1 t:2 b:3
            ├── args
            │    ├── const: 1
@@ -1076,6 +1077,7 @@ project
  │    └── filters
  │         └── eq
  │              ├── udf: strict_fn
+ │              │    ├── strict
  │              │    ├── params: i:6 t:7 b:8
  │              │    ├── args
  │              │    │    ├── plus
@@ -1099,6 +1101,7 @@ project
  │              └── const: 10
  └── projections
       └── udf: strict_fn [as=strict_fn:14]
+           ├── strict
            ├── params: i:10 t:11 b:12
            ├── args
            │    ├── variable: a:1
@@ -1137,6 +1140,7 @@ project
  │    └── columns: t1.i:1
  └── projections
       └── udf: f101516 [as=f101516:16]
+           ├── strict
            ├── params: x:14
            ├── args
            │    └── subquery
