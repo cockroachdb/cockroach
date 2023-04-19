@@ -14,7 +14,9 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -23,31 +25,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+const MixedVersionErr = "span stats request - unable to service a mixed version request"
+const UnexpectedLegacyRequest = "span stats request - unexpected populated legacy fields (StartKey, EndKey)"
+const nodeErrorMsgPlaceholder = "could not get span stats sample for node %d: %v"
+const exceedSpanLimitPlaceholder = "error getting span statistics - number of spans in request payload (%d) exceeds 'server.span_stats.span_batch_limit' cluster setting limit (%d)"
+
 func (s *systemStatusServer) spanStatsFanOut(
 	ctx context.Context, req *roachpb.SpanStatsRequest,
 ) (*roachpb.SpanStatsResponse, error) {
-	res := &roachpb.SpanStatsResponse{}
-
-	rSpan := roachpb.RSpan{
-		Key:    req.StartKey,
-		EndKey: req.EndKey,
+	res := &roachpb.SpanStatsResponse{
+		SpanToStats: make(map[string]*roachpb.SpanStats),
 	}
-	nodeIDs, _, err := nodeIDsAndRangeCountForSpan(ctx, s.distSender, rSpan)
+	// Response level error
+	var respErr error
+
+	spansPerNode, err := s.getSpansPerNode(ctx, req, s.distSender)
 	if err != nil {
 		return nil, err
 	}
-	nodesWithReplica := make(map[roachpb.NodeID]bool)
-	for _, nodeID := range nodeIDs {
-		nodesWithReplica[nodeID] = true
-	}
 
-	// We should only fan out to a node if it has replicas for this span.
+	// We should only fan out to a node if it has replicas of any span.
 	// A blind fan out would be wasteful.
 	smartDial := func(
 		ctx context.Context,
 		nodeID roachpb.NodeID,
 	) (interface{}, error) {
-		if _, ok := nodesWithReplica[nodeID]; ok {
+		if _, ok := spansPerNode[nodeID]; ok {
 			return s.dialNode(ctx, nodeID)
 		}
 		return nil, nil
@@ -55,30 +58,42 @@ func (s *systemStatusServer) spanStatsFanOut(
 
 	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
 		// `smartDial` may skip this node, so check to see if the client is nil.
+		// If it is, return nil response.
 		if client == nil {
-			return &roachpb.SpanStatsResponse{}, nil
+			return nil, nil
 		}
-		stats, err := client.(serverpb.StatusClient).SpanStats(ctx,
+
+		resp, err := client.(serverpb.StatusClient).SpanStats(ctx,
 			&roachpb.SpanStatsRequest{
-				NodeID:   nodeID.String(),
-				StartKey: req.StartKey,
-				EndKey:   req.EndKey,
+				NodeID: nodeID.String(),
+				Spans:  spansPerNode[nodeID],
 			})
-		if err != nil {
-			return nil, err
-		}
-		return stats, err
+		return resp, err
 	}
 
 	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		// Noop if nil response (returned from skipped node).
+		if resp == nil {
+			return
+		}
+
 		nodeResponse := resp.(*roachpb.SpanStatsResponse)
-		res.ApproximateDiskBytes += nodeResponse.ApproximateDiskBytes
-		res.TotalStats.Add(nodeResponse.TotalStats)
-		res.RangeCount += nodeResponse.RangeCount
+
+		for spanStr, spanStats := range nodeResponse.SpanToStats {
+			_, exists := res.SpanToStats[spanStr]
+			if !exists {
+				res.SpanToStats[spanStr] = spanStats
+			} else {
+				res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
+				res.SpanToStats[spanStr].TotalStats.Add(spanStats.TotalStats)
+				res.SpanToStats[spanStr].RangeCount += spanStats.RangeCount
+			}
+		}
 	}
 
 	errorFn := func(nodeID roachpb.NodeID, err error) {
-		log.Errorf(ctx, "could not get span stats sample for node %d: %v", nodeID, err)
+		log.Errorf(ctx, nodeErrorMsgPlaceholder, nodeID, err)
+		respErr = err
 	}
 
 	if err := s.statusServer.iterateNodes(
@@ -92,59 +107,80 @@ func (s *systemStatusServer) spanStatsFanOut(
 		return nil, err
 	}
 
-	return res, nil
+	return res, respErr
 }
 
 func (s *systemStatusServer) getLocalStats(
 	ctx context.Context, req *roachpb.SpanStatsRequest,
 ) (*roachpb.SpanStatsResponse, error) {
-	res := &roachpb.SpanStatsResponse{}
-
-	sp := roachpb.RSpan{
-		Key:    req.StartKey,
-		EndKey: req.EndKey,
-	}
+	var res = &roachpb.SpanStatsResponse{SpanToStats: make(map[string]*roachpb.SpanStats)}
 	ri := kvcoord.MakeRangeIterator(s.distSender)
-	ri.Seek(ctx, sp.Key, kvcoord.Ascending)
 
+	// For each span
+	for _, span := range req.Spans {
+		rSpan, err := keys.SpanAddr(span)
+		if err != nil {
+			return nil, err
+		}
+		// Seek to the span's start key.
+		ri.Seek(ctx, rSpan.Key, kvcoord.Ascending)
+		spanStats, err := s.statsForSpan(ctx, ri, rSpan)
+		if err != nil {
+			return nil, err
+		}
+		res.SpanToStats[span.String()] = spanStats
+	}
+	return res, nil
+}
+
+func (s *systemStatusServer) statsForSpan(
+	ctx context.Context, ri kvcoord.RangeIterator, rSpan roachpb.RSpan,
+) (*roachpb.SpanStats, error) {
+	// Seek to the span's start key.
+	ri.Seek(ctx, rSpan.Key, kvcoord.Ascending)
+	spanStats := &roachpb.SpanStats{}
+	var fullyContainedKeysBatch []roachpb.Key
+	var err error
+	// Iterate through the span's ranges.
 	for {
 		if !ri.Valid() {
 			return nil, ri.Error()
 		}
 
+		// Get the descriptor for the current range of the span.
 		desc := ri.Desc()
 		descSpan := desc.RSpan()
-		res.RangeCount += 1
+		spanStats.RangeCount += 1
 
 		// Is the descriptor fully contained by the request span?
-		if sp.ContainsKeyRange(descSpan.Key, desc.EndKey) {
-			// If so, obtain stats for this range via RangeStats.
-			rangeStats, err := s.rangeStatsFetcher.RangeStats(ctx,
-				desc.StartKey.AsRawKey())
-			if err != nil {
-				return nil, err
+		if rSpan.ContainsKeyRange(descSpan.Key, desc.EndKey) {
+			// Collect into fullyContainedKeys batch.
+			fullyContainedKeysBatch = append(fullyContainedKeysBatch, desc.StartKey.AsRawKey())
+			// If we've exceeded the batch limit, request range stats for the current batch.
+			if len(fullyContainedKeysBatch) > int(roachpb.RangeStatsBatchLimit.Get(&s.st.SV)) {
+				// Obtain stats for fully contained ranges via RangeStats.
+				fullyContainedKeysBatch, err = flushBatchedContainedKeys(ctx, s.rangeStatsFetcher, fullyContainedKeysBatch, spanStats)
+				if err != nil {
+					return nil, err
+				}
 			}
-			for _, resp := range rangeStats {
-				res.TotalStats.Add(resp.MVCCStats)
-			}
-
 		} else {
 			// Otherwise, do an MVCC Scan.
 			// We should only scan the part of the range that our request span
 			// encompasses.
-			scanStart := sp.Key
-			scanEnd := sp.EndKey
+			scanStart := rSpan.Key
+			scanEnd := rSpan.EndKey
 			// If our request span began before the start of this range,
 			// start scanning from this range's start key.
-			if descSpan.Key.Compare(sp.Key) == 1 {
+			if descSpan.Key.Compare(rSpan.Key) == 1 {
 				scanStart = descSpan.Key
 			}
 			// If our request span ends after the end of this range,
 			// stop scanning at this range's end key.
-			if descSpan.EndKey.Compare(sp.EndKey) == -1 {
+			if descSpan.EndKey.Compare(rSpan.EndKey) == -1 {
 				scanEnd = descSpan.EndKey
 			}
-			err := s.stores.VisitStores(func(s *kvserver.Store) error {
+			err = s.stores.VisitStores(func(s *kvserver.Store) error {
 				stats, err := storage.ComputeStats(
 					s.TODOEngine(),
 					scanStart.AsRawKey(),
@@ -156,7 +192,7 @@ func (s *systemStatusServer) getLocalStats(
 					return err
 				}
 
-				res.TotalStats.Add(stats)
+				spanStats.TotalStats.Add(stats)
 				return nil
 			})
 
@@ -165,28 +201,35 @@ func (s *systemStatusServer) getLocalStats(
 			}
 		}
 
-		if !ri.NeedAnother(sp) {
+		if !ri.NeedAnother(rSpan) {
 			break
 		}
 		ri.Next(ctx)
 	}
-
+	// If we still have some remaining ranges, request range stats for the current batch.
+	if len(fullyContainedKeysBatch) > 0 {
+		// Obtain stats for fully contained ranges via RangeStats.
+		_, err = flushBatchedContainedKeys(ctx, s.rangeStatsFetcher, fullyContainedKeysBatch, spanStats)
+		if err != nil {
+			return nil, err
+		}
+		// Nil the batch.
+		fullyContainedKeysBatch = nil
+	}
 	// Finally, get the approximate disk bytes from each store.
-	err := s.stores.VisitStores(func(store *kvserver.Store) error {
-		approxDiskBytes, err := store.TODOEngine().ApproximateDiskBytes(req.
-			StartKey.AsRawKey(), req.EndKey.AsRawKey())
+	err = s.stores.VisitStores(func(store *kvserver.Store) error {
+		approxDiskBytes, err := store.TODOEngine().ApproximateDiskBytes(rSpan.Key.AsRawKey(), rSpan.EndKey.AsRawKey())
 		if err != nil {
 			return err
 		}
-		res.ApproximateDiskBytes += approxDiskBytes
+		spanStats.ApproximateDiskBytes += approxDiskBytes
 		return nil
 	})
 
 	if err != nil {
 		return nil, err
 	}
-
-	return res, nil
+	return spanStats, nil
 }
 
 // getSpanStatsInternal will return span stats according to the nodeID specified
@@ -224,4 +267,53 @@ func (s *systemStatusServer) getSpanStatsInternal(
 		return nil, err
 	}
 	return client.SpanStats(ctx, req)
+}
+
+func (s *systemStatusServer) getSpansPerNode(
+	ctx context.Context, req *roachpb.SpanStatsRequest, ds *kvcoord.DistSender,
+) (map[roachpb.NodeID][]roachpb.Span, error) {
+	// Mapping of node ids to spans with a replica on the node.
+	spansPerNode := make(map[roachpb.NodeID][]roachpb.Span)
+
+	// Iterate over the request spans.
+	for _, span := range req.Spans {
+		rSpan, err := keys.SpanAddr(span)
+		if err != nil {
+			return nil, err
+		}
+		// Get the node ids belonging to the span.
+		nodeIDs, _, err := nodeIDsAndRangeCountForSpan(ctx, ds, rSpan)
+		if err != nil {
+			return nil, err
+		}
+		// Add the span to the map for each of the node IDs it belongs to.
+		for _, nodeID := range nodeIDs {
+			spansPerNode[nodeID] = append(spansPerNode[nodeID], span)
+		}
+	}
+	return spansPerNode, nil
+}
+
+func flushBatchedContainedKeys(
+	ctx context.Context,
+	fetcher *rangestats.Fetcher,
+	fullyContainedKeysBatch []roachpb.Key,
+	spanStats *roachpb.SpanStats,
+) ([]roachpb.Key, error) {
+	// Obtain stats for fully contained ranges via RangeStats.
+	rangeStats, err := fetcher.RangeStats(ctx,
+		fullyContainedKeysBatch...)
+	if err != nil {
+		return nil, err
+	}
+	for _, resp := range rangeStats {
+		spanStats.TotalStats.Add(resp.MVCCStats)
+	}
+	// Reset the keys batch
+	return fullyContainedKeysBatch[:0], nil
+}
+
+func isLegacyRequest(req *roachpb.SpanStatsRequest) bool {
+	// If the start/end key fields are not nil, we have a request using the old request format.
+	return req.StartKey != nil || req.EndKey != nil
 }

@@ -2920,24 +2920,34 @@ func makeIdentGenerator(
 	}, nil
 }
 
-type tableSpanStatsIterator struct {
-	it                eval.InternalRows
-	codec             keys.SQLCodec
-	p                 eval.Planner
-	currDbId          int
-	currTableId       int
-	currStatsResponse *roachpb.SpanStatsResponse
-	singleTableReq    bool
+type spanStatsDetails struct {
+	dbId    int
+	tableId int
 }
 
-func newTableSpanStatsIterator(eval *eval.Context, dbId int, tableId int) *tableSpanStatsIterator {
-	return &tableSpanStatsIterator{codec: eval.Codec, p: eval.Planner, currDbId: dbId, currTableId: tableId, singleTableReq: tableId != 0}
+type tableSpanStatsIterator struct {
+	argDbId             int
+	argTableId          int
+	it                  eval.InternalRows
+	codec               keys.SQLCodec
+	p                   eval.Planner
+	spanStatsBatchLimit int
+	// Each iter
+	iterSpanIdx       int
+	spanStatsDetails  []spanStatsDetails
+	currStatsResponse *roachpb.SpanStatsResponse
+}
+
+func newTableSpanStatsIterator(
+	eval *eval.Context, dbId int, tableId int, spanBatchLimit int,
+) *tableSpanStatsIterator {
+	return &tableSpanStatsIterator{codec: eval.Codec, p: eval.Planner, argDbId: dbId, argTableId: tableId, spanStatsBatchLimit: spanBatchLimit}
 }
 
 // Start implements the tree.ValueGenerator interface.
 func (tssi *tableSpanStatsIterator) Start(ctx context.Context, _ *kv.Txn) error {
 	var err error = nil
-	tssi.it, err = tssi.p.GetDetailsForSpanStats(ctx, tssi.currDbId, tssi.currTableId)
+	tssi.it, err = tssi.p.GetDetailsForSpanStats(ctx, tssi.argDbId, tssi.argTableId)
 	return err
 }
 
@@ -2946,41 +2956,101 @@ func (tssi *tableSpanStatsIterator) Next(ctx context.Context) (bool, error) {
 	if tssi.it == nil {
 		return false, errors.AssertionFailedf("Start must be called before Next")
 	}
-	next, err := tssi.it.Next(ctx)
-	if err != nil || !next {
-		return false, err
+	// Check if we can iterate through the span details buffer.
+	if tssi.iterSpanIdx+1 < len(tssi.spanStatsDetails) {
+		tssi.iterSpanIdx++
+		return true, nil
 	}
-	// Pull the current row.
-	row := tssi.it.Cur()
-	tssi.currDbId = int(tree.MustBeDInt(row[0]))
-	tssi.currTableId = int(tree.MustBeDInt(row[1]))
 
-	// Set our current stats response.
-	startKey := roachpb.RKey(tssi.codec.TablePrefix(uint32(tssi.currTableId)))
-	tssi.currStatsResponse, err = tssi.p.SpanStats(ctx, startKey, startKey.PrefixEnd())
+	// There are no more span details to iterate in the buffer.
+	// Instead, we continue to fetch more span stats (if possible).
+	hasMoreRows, err := tssi.fetchSpanStats(ctx)
 	if err != nil {
 		return false, err
 	}
-	return next, err
+	// After fetching new span stats, reset the index.
+	tssi.iterSpanIdx = 0
+	return hasMoreRows || len(tssi.spanStatsDetails) != 0, nil
+}
+
+func (tssi *tableSpanStatsIterator) fetchSpanStats(ctx context.Context) (bool, error) {
+	// Reset span details.
+	tssi.spanStatsDetails = tssi.spanStatsDetails[:0]
+
+	var ok bool
+	var err error
+	var spans []roachpb.Span
+	// While we have more rows
+	for ok, err = tssi.it.Next(ctx); ok; ok, err = tssi.it.Next(ctx) {
+
+		// Pull the current row.
+		row := tssi.it.Cur()
+		dbId := int(tree.MustBeDInt(row[0]))
+		tableId := int(tree.MustBeDInt(row[1]))
+
+		// Add the row data to span stats details
+		tssi.spanStatsDetails = append(tssi.spanStatsDetails, spanStatsDetails{
+			dbId:    dbId,
+			tableId: tableId,
+		})
+
+		// Gather the span for the current span stats request.
+		tableStartKey := tssi.codec.TablePrefix(uint32(tableId))
+		spans = append(spans, roachpb.Span{
+			Key:    tableStartKey,
+			EndKey: tableStartKey.PrefixEnd(),
+		})
+
+		// Exit the loop if we're reached our limit of spans
+		// for the span stats request.
+		if len(tssi.spanStatsDetails) >= tssi.spanStatsBatchLimit {
+			break
+		}
+	}
+
+	// If we encounter an error while iterating over rows,
+	// return error before fetching span stats.
+	if err != nil {
+		return false, err
+	}
+
+	// If we have spans, request span stats
+	if len(spans) > 0 {
+		tssi.currStatsResponse, err = tssi.p.SpanStats(ctx, spans)
+	}
+
+	if err != nil {
+		return false, err
+	}
+	return ok, err
 }
 
 // Values implements the tree.ValueGenerator interface.
 func (tssi *tableSpanStatsIterator) Values() (tree.Datums, error) {
-	liveBytes := tssi.currStatsResponse.TotalStats.LiveBytes
-	totalBytes := tssi.currStatsResponse.TotalStats.KeyBytes +
-		tssi.currStatsResponse.TotalStats.ValBytes +
-		tssi.currStatsResponse.TotalStats.RangeKeyBytes +
-		tssi.currStatsResponse.TotalStats.RangeValBytes
+	// Get the current span details.
+	spanDetails := tssi.spanStatsDetails[tssi.iterSpanIdx]
+	startKey := tssi.codec.TablePrefix(uint32(spanDetails.tableId))
+	tableSpan := roachpb.Span{Key: startKey, EndKey: startKey.PrefixEnd()}
+	// Get the current span stats.
+	spanStats, found := tssi.currStatsResponse.SpanToStats[tableSpan.String()]
+	if !found {
+		return nil, errors.Errorf("could not find span stats for table span: %s", tableSpan.String())
+	}
+
+	totalBytes := spanStats.TotalStats.KeyBytes +
+		spanStats.TotalStats.ValBytes +
+		spanStats.TotalStats.RangeKeyBytes +
+		spanStats.TotalStats.RangeValBytes
 	livePercentage := float64(0)
 	if totalBytes > 0 {
-		livePercentage = float64(liveBytes) / float64(totalBytes)
+		livePercentage = float64(spanStats.TotalStats.LiveBytes) / float64(totalBytes)
 	}
 	return []tree.Datum{
-		tree.NewDInt(tree.DInt(tssi.currDbId)),
-		tree.NewDInt(tree.DInt(tssi.currTableId)),
-		tree.NewDInt(tree.DInt(tssi.currStatsResponse.RangeCount)),
-		tree.NewDInt(tree.DInt(tssi.currStatsResponse.ApproximateDiskBytes)),
-		tree.NewDInt(tree.DInt(liveBytes)),
+		tree.NewDInt(tree.DInt(spanDetails.dbId)),
+		tree.NewDInt(tree.DInt(spanDetails.tableId)),
+		tree.NewDInt(tree.DInt(spanStats.RangeCount)),
+		tree.NewDInt(tree.DInt(spanStats.ApproximateDiskBytes)),
+		tree.NewDInt(tree.DInt(spanStats.TotalStats.LiveBytes)),
 		tree.NewDInt(tree.DInt(totalBytes)),
 		tree.NewDFloat(tree.DFloat(livePercentage)),
 	}, nil
@@ -3024,5 +3094,7 @@ func makeTableSpanStatsGenerator(
 			return nil, errors.New("provided table id must be greater than or equal to 1")
 		}
 	}
-	return newTableSpanStatsIterator(evalCtx, dbId, tableId), nil
+
+	spanBatchLimit := roachpb.SpanStatsBatchLimit.Get(&evalCtx.Settings.SV)
+	return newTableSpanStatsIterator(evalCtx, dbId, tableId, int(spanBatchLimit)), nil
 }

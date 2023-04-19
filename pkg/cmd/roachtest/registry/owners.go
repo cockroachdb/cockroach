@@ -30,4 +30,5 @@ const (
 	OwnerTestEng          Owner = `test-eng`
 	OwnerDevInf           Owner = `dev-inf`
 	OwnerMultiTenant      Owner = `multi-tenant`
+	OwnerClusterObs       Owner = `cluster-observability`
 )
