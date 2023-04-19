@@ -666,6 +666,14 @@ func (ctx *FmtCtx) CloseAndGetString() string {
 	return s
 }
 
+// CloseAndGetBytes is the same as CloseAndGetString, except it returns bytes.
+// This avoids an allocation by not calling ctx.String().
+func (ctx *FmtCtx) CloseAndGetBytes() []byte {
+	s := ctx.Bytes()
+	ctx.Close()
+	return s
+}
+
 func (ctx *FmtCtx) alwaysFormatTablePrefix() bool {
 	return ctx.flags.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil
 }
