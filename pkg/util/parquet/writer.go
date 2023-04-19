@@ -113,8 +113,7 @@ func (w *Writer) writeDatumToColChunk(d tree.Datum, colIdx int) error {
 		return err
 	}
 
-	err = w.sch.cols[colIdx].colWriter(d, cw, w.ba)
-	if err != nil {
+	if err = w.sch.cols[colIdx].colWriter.Write(d, cw, w.ba); err != nil {
 		return err
 	}
 	return nil
@@ -138,11 +137,6 @@ func (w *Writer) AddRow(datums []tree.Datum) error {
 	}
 
 	for idx, d := range datums {
-		// Note that EquivalentOrNull only allows null equivalence if the receiver is null.
-		if !d.ResolvedType().EquivalentOrNull(w.sch.cols[idx].typ, false) {
-			return errors.AssertionFailedf("expected datum of type %s, but found datum"+
-				"	of type: %s at column index %d", w.sch.cols[idx].typ.Name(), d.ResolvedType().Name(), idx)
-		}
 		if err := w.writeDatumToColChunk(d, idx); err != nil {
 			return err
 		}
