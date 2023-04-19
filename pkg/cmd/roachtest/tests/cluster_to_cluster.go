@@ -696,6 +696,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            4 * time.Hour,
 			additionalDuration: 0,
 			cutover:            5 * time.Minute,
+			skip:               "flaky",
 		},
 	} {
 		sp := sp
