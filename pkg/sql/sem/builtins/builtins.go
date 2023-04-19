@@ -5538,6 +5538,25 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 		},
 	),
 
+	"crdb_internal.pretty_value": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				tree.ParamType{Name: "raw_value", Typ: types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				var v roachpb.Value
+				v.RawBytes = []byte(tree.MustBeDBytes(args[0]))
+				return tree.NewDString(v.PrettyPrint()), nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	// Return statistics about a range.
 	"crdb_internal.range_stats": makeBuiltin(
 		tree.FunctionProperties{
