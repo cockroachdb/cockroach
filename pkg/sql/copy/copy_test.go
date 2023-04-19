@@ -143,6 +143,7 @@ func TestDataDriven(t *testing.T) {
 								require.Error(t, err, "copy-from-error didn't return and error!")
 								return err.Error()
 							case "copy-from-kvtrace":
+								require.NoError(t, err, "%s\n%s\n", d.Cmd, d.Input)
 								rows, err := conn.Query(ctx,
 									`SELECT
 						  regexp_replace(message, '/Table/[0-9]*/', '/Table/<>/')
