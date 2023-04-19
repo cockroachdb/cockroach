@@ -93,7 +93,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 
 	var slowStatements util.FastIntSet
 	for i, s := range *statements {
-		if r.detector.isSlow(s) {
+		if !shouldIgnoreStatement(s) && r.detector.isSlow(s) {
 			slowStatements.Add(i)
 		}
 	}
