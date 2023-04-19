@@ -6949,9 +6949,13 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 
 				waitingStmtId := tree.NewDString(hex.EncodeToString(resp.Events[i].WaitingStmtID.GetBytes()))
 
+				// getContentionEventInfo needs to handle both the time and type of
+				// possible descriptors. It just logs the error and uses empty string
+				// for the values if an error occurs.
+				// https://github.com/cockroachdb/cockroach/issues/101826
 				schemaName, dbName, tableName, indexName, err := getContentionEventInfo(ctx, p, resp.Events[i])
 				if err != nil {
-					return err
+					log.Errorf(ctx, "getContentionEventInfo failed to decode key: %v", err)
 				}
 
 				row = row[:0]
