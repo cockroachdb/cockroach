@@ -53,6 +53,7 @@ values
  ├── fd: ()-->(5)
  └── tuple
       └── udf: strict_fn
+           ├── strict
            ├── params: i:1 t:2 b:3
            ├── args
            │    ├── const: 1
