@@ -26,6 +26,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import "./index.styl";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { BackToAdvanceDebug } from "../util";
 
 interface SettingsOwnProps {
   settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;
@@ -144,6 +145,7 @@ export class Settings extends React.Component<SettingsProps, SettingsState> {
     return (
       <div className="section">
         <Helmet title="Cluster Settings | Debug" />
+        <BackToAdvanceDebug history={this.props.history} />
         <h1 className="base-heading">Cluster Settings</h1>
         <Loading
           loading={!this.props.settings.data}

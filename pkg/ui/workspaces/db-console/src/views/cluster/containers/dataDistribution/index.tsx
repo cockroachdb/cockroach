@@ -35,6 +35,7 @@ import {
   selectLivenessRequestStatus,
   selectNodeRequestStatus,
 } from "src/redux/nodes";
+import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
 type DataDistributionResponse =
   cockroach.server.serverpb.DataDistributionResponse;
@@ -159,7 +160,9 @@ interface DataDistributionPageProps {
   refreshLiveness: typeof refreshLiveness;
 }
 
-export class DataDistributionPage extends React.Component<DataDistributionPageProps> {
+export class DataDistributionPage extends React.Component<
+  DataDistributionPageProps & RouteComponentProps
+> {
   componentDidMount() {
     this.props.refreshDataDistribution();
     this.props.refreshNodes();
@@ -176,6 +179,7 @@ export class DataDistributionPage extends React.Component<DataDistributionPagePr
     return (
       <div>
         <Helmet title="Data Distribution" />
+        <BackToAdvanceDebug history={this.props.history} />
         <section className="section">
           <h1 className="base-heading">Data Distribution</h1>
         </section>
