@@ -2276,3 +2276,44 @@ build
 SELECT (1, 1) = ANY (VALUES (1, 2, 3))
 ----
 error (22023): unsupported comparison operator: <tuple{int, int}> = ANY <tuple{tuple{int AS column1, int AS column2, int AS column3}}>
+
+# Regression test for #95470. Ensure that using an alias for a data source does
+# not cause us to falsely conclude a subquery has outer columns.
+exec-ddl
+CREATE TABLE t95470 (a STRING)
+----
+
+exec-ddl
+CREATE VIEW v95470 (a) AS
+SELECT a FROM t95470, ROWS FROM (upper(a)) AS alias1
+----
+
+build
+SELECT count((SELECT a FROM v95470))
+----
+scalar-group-by
+ ├── columns: count:7!null
+ ├── project
+ │    ├── columns: column6:6
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         └── subquery [as=column6:6]
+ │              └── max1-row
+ │                   ├── columns: a:1
+ │                   └── project
+ │                        ├── columns: a:1
+ │                        └── inner-join-apply
+ │                             ├── columns: a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 upper:5
+ │                             ├── scan t95470
+ │                             │    └── columns: a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │                             ├── project-set
+ │                             │    ├── columns: upper:5
+ │                             │    ├── values
+ │                             │    │    └── ()
+ │                             │    └── zip
+ │                             │         └── upper(a:1)
+ │                             └── filters (true)
+ └── aggregations
+      └── count [as=count:7]
+           └── column6:6
