@@ -331,12 +331,6 @@ func (r *commandResult) SetPortalOutput(
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, formatCodes, &r.conn.writerState.buf)
 }
 
-// SetRowsAffected is part of the sql.CopyIn interface.
-func (r *commandResult) SetRowsAffected(ctx context.Context, n int) {
-	r.assertNotReleased()
-	r.rowsAffected = n
-}
-
 // SendCopyOut is part of the sql.CopyOutResult interface.
 func (r *commandResult) SendCopyOut(
 	ctx context.Context, cols colinfo.ResultColumns, format pgwirebase.FormatCode,
@@ -367,10 +361,10 @@ func (r *commandResult) SendCopyDone(ctx context.Context) error {
 	return r.conn.bufferCopyDone()
 }
 
-// IncrementRowsAffected is part of the sql.RestrictedCommandResult interface.
-func (r *commandResult) IncrementRowsAffected(ctx context.Context, n int) {
+// SetRowsAffected is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) SetRowsAffected(ctx context.Context, n int) {
 	r.assertNotReleased()
-	r.rowsAffected += n
+	r.rowsAffected = n
 }
 
 // RowsAffected is part of the sql.RestrictedCommandResult interface.
@@ -386,7 +380,7 @@ func (r *commandResult) ResetStmtType(stmt tree.Statement) {
 	r.cmdCompleteTag = stmt.StatementTag()
 }
 
-// GetEntryFromExtraInfo is part of the sql.RestrictedCommandResult interface.
+// GetBulkJobId is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) GetBulkJobId() uint64 {
 	return r.bulkJobId
 }

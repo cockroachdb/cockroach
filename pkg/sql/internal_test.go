@@ -685,6 +685,87 @@ func TestInternalDBWithOverrides(t *testing.T) {
 	assert.Equal(t, "'off'", drow[0].String())
 }
 
+// TestInternalExecutorEncountersRetry verifies that if the internal executor
+// encounters a retry error after some data (rows or metadata) have been
+// communicated to the client, the query either results in a retry error (when
+// rows have been sent) or correctly transparently retries (#98558).
+func TestInternalExecutorEncountersRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := db.Exec("CREATE DATABASE test; CREATE TABLE test.t (c) AS SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	ieo := sessiondata.InternalExecutorOverride{
+		User:                     username.RootUserName(),
+		InjectRetryErrorsEnabled: true,
+	}
+
+	// This test case verifies that if we execute the stmt of the RowsAffected
+	// type, it is transparently retried and the correct number of "rows
+	// affected" is reported.
+	t.Run("RowsAffected stmt", func(t *testing.T) {
+		// We will use PAUSE SCHEDULES statement which is of RowsAffected type.
+		//
+		// Notably, internally this statement will run some other queries via
+		// the "nested" internal executor, but those "nested" queries don't hit
+		// the injected retry error since this knob only applies to the "top"
+		// IE.
+		const stmt = `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR SQL STATISTICS];`
+		paused, err := ie.ExecEx(ctx, "pause schedule", nil /* txn */, ieo, stmt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if paused != 1 {
+			t.Fatalf("expected 1 schedule to be paused, got %d", paused)
+		}
+	})
+
+	const rowsStmt = `SELECT * FROM test.t`
+
+	// This test case verifies that if the retry error occurs after some rows
+	// have been communicated to the client, then the stmt results in the retry
+	// error too - the IE cannot transparently retry it.
+	t.Run("Rows stmt", func(t *testing.T) {
+		_, err := ie.QueryBufferedEx(ctx, "read rows", nil /* txn */, ieo, rowsStmt)
+		if !testutils.IsError(err, "inject_retry_errors_enabled") {
+			t.Fatalf("expected to see injected retry error, got %v", err)
+		}
+	})
+
+	// This test case verifies that ExecEx of a stmt of Rows type correctly and
+	// transparently to us retries the stmt.
+	t.Run("ExecEx retries in implicit txn", func(t *testing.T) {
+		numRows, err := ie.ExecEx(ctx, "read rows", nil /* txn */, ieo, rowsStmt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if numRows != 1 {
+			t.Fatalf("expected 1 rowsAffected, got %d", numRows)
+		}
+	})
+
+	// This test case verifies that ExecEx doesn't retry when it's provided with
+	// an explicit txn.
+	t.Run("ExecEx doesn't retry in explicit txn", func(t *testing.T) {
+		txn := kvDB.NewTxn(ctx, "explicit")
+		_, err := ie.ExecEx(ctx, "read rows", txn, ieo, rowsStmt)
+		if !testutils.IsError(err, "inject_retry_errors_enabled") {
+			t.Fatalf("expected to see injected retry error, got %v", err)
+		}
+	})
+
+	// TODO(yuzefovich): add a test for when a schema change is done in-between
+	// the retries.
+}
+
 // TODO(andrei): Test that descriptor leases are released by the
 // Executor, with and without a higher-level txn. When there is no
 // higher-level txn, the leases are released normally by the txn finishing. When
