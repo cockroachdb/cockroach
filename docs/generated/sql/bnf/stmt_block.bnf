@@ -2432,6 +2432,7 @@ opt_index_visible ::=
 	'NOT' 'VISIBLE'
 	| 'INVISIBLE'
 	| 'VISIBLE'
+	| 'VISIBILITY' 'FCONST'
 	| 
 
 opt_schema_name ::=
