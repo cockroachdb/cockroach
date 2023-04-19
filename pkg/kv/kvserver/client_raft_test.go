@@ -3267,8 +3267,9 @@ HAVING
 
 func TestDecommission(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 96630, "flaky test")
 	defer log.Scope(t).Close(t)
+	skip.UnderMetamorphicWithIssue(t, 100783,
+		"span configs not updating with mux rangefeeds")
 
 	// Five nodes is too much to reliably run under testrace with our aggressive
 	// liveness timings.
@@ -3306,6 +3307,17 @@ func TestDecommission(t *testing.T) {
 			for _, rDesc := range desc.Replicas().VoterDescriptors() {
 				store, err := tc.Servers[int(rDesc.NodeID-1)].Stores().GetStore(rDesc.StoreID)
 				require.NoError(t, err)
+
+				confReader, err := store.GetConfReader(ctx)
+				require.NoError(t, err)
+				conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+				require.NoError(t, err)
+				if conf.NumReplicas != int32(repFactor) {
+					return errors.Errorf("s%d has out-of-date SpanConfig on r%d%s, "+
+						"actual RF %d != expected RF %d", store.StoreID(), desc.RangeID, desc.RSpan(),
+						conf.NumReplicas, repFactor)
+				}
+
 				if err := store.ForceReplicationScanAndProcess(); err != nil {
 					return err
 				}

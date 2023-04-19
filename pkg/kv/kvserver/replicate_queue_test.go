@@ -622,7 +622,8 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes a long time or times out under race")
 	skip.UnderDeadlockWithIssue(t, 94383)
-	skip.UnderMetamorphicWithIssue(t, 99207)
+	skip.UnderMetamorphicWithIssue(t, 100783,
+		"span configs not updating with mux rangefeeds")
 
 	ctx := context.Background()
 
