@@ -792,9 +792,9 @@ func TestUpdateRootWithLeafFinalStateReadsBelowRefreshTimestamp(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
 
-	performConflictingRead := func(ctx context.Context, key roachpb.Key) (hlc.Timestamp, error) {
+	performConflictingWrite := func(ctx context.Context, key roachpb.Key) (hlc.Timestamp, error) {
 		conflictTxn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
-		if _, err := conflictTxn.Get(ctx, key); err != nil {
+		if err := conflictTxn.Put(ctx, key, "conflict"); err != nil {
 			return hlc.Timestamp{}, err
 		}
 		if err := conflictTxn.Commit(ctx); err != nil {
@@ -811,15 +811,13 @@ func TestUpdateRootWithLeafFinalStateReadsBelowRefreshTimestamp(t *testing.T) {
 		require.NoError(t, err)
 		leafTxn := kv.NewLeafTxn(ctx, db, 0, leafInputState)
 
-		readTS, err := performConflictingRead(ctx, keyB)
+		writeTS, err := performConflictingWrite(ctx, keyB)
 		require.NoError(t, err)
-		require.True(t, leafTxn.TestingCloneTxn().ReadTimestamp.Less(readTS))
+		require.True(t, leafTxn.TestingCloneTxn().ReadTimestamp.Less(writeTS))
 
-		// Write to KeyB using the root transaction. This should cause the timestamp
-		// to get bumped, which we will refresh to further down.
+		// Write to keyB using the root transaction. This should hit a write-write
+		// conflict and cause the root transaction to be immediately refreshed.
 		err = txn.Put(ctx, keyB, "garbage")
-		require.NoError(t, err)
-		err = txn.ManualRefresh(ctx)
 		require.NoError(t, err)
 
 		// Finally, try and update the root with the leaf transaction's state.

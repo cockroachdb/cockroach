@@ -1507,21 +1507,6 @@ func (txn *Txn) ReleaseSavepoint(ctx context.Context, s SavepointToken) error {
 	return txn.mu.sender.ReleaseSavepoint(ctx, s)
 }
 
-// ManualRefresh forces a refresh of the read timestamp of a transaction to
-// match that of its write timestamp. It is only recommended for transactions
-// that need extremely precise control over the request ordering, like the
-// transaction that merges ranges together. When combined with
-// DisablePipelining, this feature allows the range merge transaction to
-// prove that it will not be pushed between sending its SubsumeRequest and
-// committing. This enables that request to be pushed at earlier points in
-// its lifecycle.
-func (txn *Txn) ManualRefresh(ctx context.Context) error {
-	txn.mu.Lock()
-	sender := txn.mu.sender
-	txn.mu.Unlock()
-	return sender.ManualRefresh(ctx)
-}
-
 // DeferCommitWait defers the transaction's commit-wait operation, passing
 // responsibility of commit-waiting from the Txn to the caller of this
 // method. The method returns a function which the caller must eventually
