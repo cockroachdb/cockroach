@@ -2796,9 +2796,7 @@ project
  │    │    │    │              └── fd: ()-->(1,2), (5)-->(3,4,9)
  │    │    │    └── filters
  │    │    │         ├── t2.col2:20 = 1 [outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
- │    │    │         ├── t2.col1:19 = 1 [outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
- │    │    │         ├── t2.col3:21 = t1.col3:3 [outer=(3,21), constraints=(/3: (/NULL - ]; /21: (/NULL - ]), fd=(3)==(21), (21)==(3)]
- │    │    │         └── t2.col4:22 = t1.col4:4 [outer=(4,22), constraints=(/4: (/NULL - ]; /22: (/NULL - ]), fd=(4)==(22), (22)==(4)]
+ │    │    │         └── t2.col1:19 = 1 [outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
  │    │    └── aggregations
  │    │         ├── array-agg [as=array_agg:27, outer=(24)]
  │    │         │    └── t2.col6:24
@@ -2953,9 +2951,7 @@ limit
  │    │    │         └── fd: ()-->(1,2), (5)-->(3,4,9)
  │    │    └── filters
  │    │         ├── t2.col2:20 = 1 [outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
- │    │         ├── t2.col1:19 = 1 [outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
- │    │         ├── t2.col3:21 = t1.col3:3 [outer=(3,21), constraints=(/3: (/NULL - ]; /21: (/NULL - ]), fd=(3)==(21), (21)==(3)]
- │    │         └── t2.col4:22 = t1.col4:4 [outer=(4,22), constraints=(/4: (/NULL - ]; /22: (/NULL - ]), fd=(4)==(22), (22)==(4)]
+ │    │         └── t2.col1:19 = 1 [outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
  │    └── aggregations
  │         └── first-agg [as=t2.col2:20, outer=(20)]
  │              └── t2.col2:20
