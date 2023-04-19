@@ -13,16 +13,22 @@ package parquet
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/apache/arrow/go/v11/parquet/file"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -39,18 +45,30 @@ func newColSchema(numCols int) *colSchema {
 	}
 }
 
-// TODO (jayant): once all types are supported, we can use randgen.SeedTypes
-// instead of this array.
-var supportedTypes = []*types.T{
-	types.Int,
-	types.Bool,
-	types.String,
-	types.Decimal,
-	types.Uuid,
-	types.Timestamp,
-}
+// supportedTypes contains all types supported by the writer,
+// which is all types that pass randomized testing below.
+var supportedTypes []*types.T
 
 func init() {
+	for _, typ := range randgen.SeedTypes {
+		switch typ.Family() {
+		// The types below are unsupported. They will fail randomized tests.
+		case types.AnyFamily:
+		case types.TSQueryFamily, types.TSVectorFamily:
+		case types.VoidFamily:
+		case types.TupleFamily:
+		case types.ArrayFamily:
+			// We will manually add array types which are supported below.
+			// Excluding types.TupleFamily and types.ArrayFamily leaves us with only
+			// scalar types so far.
+		default:
+			supportedTypes = append(supportedTypes, typ)
+		}
+	}
+
+	// randgen.SeedTypes does not include types.Json, so we add it manually here.
+	supportedTypes = append(supportedTypes, types.Json)
+
 	// Include all array types which are arrays of the scalar types above.
 	var arrayTypes []*types.T
 	for oid := range types.ArrayOids {
@@ -75,10 +93,10 @@ func makeRandDatums(numRows int, sch *colSchema, rng *rand.Rand) [][]tree.Datum 
 	return datums
 }
 
-func makeRandSchema(numCols int, rng *rand.Rand) *colSchema {
+func makeRandSchema(numCols int, allowedTypes []*types.T, rng *rand.Rand) *colSchema {
 	sch := newColSchema(numCols)
 	for i := 0; i < numCols; i++ {
-		sch.columnTypes[i] = supportedTypes[rng.Intn(len(supportedTypes))]
+		sch.columnTypes[i] = allowedTypes[rng.Intn(len(allowedTypes))]
 		sch.columnNames[i] = fmt.Sprintf("%s%d", sch.columnTypes[i].Name(), i)
 	}
 	return sch
@@ -93,7 +111,7 @@ func TestRandomDatums(t *testing.T) {
 	numCols := 128
 	maxRowGroupSize := int64(8)
 
-	sch := makeRandSchema(numCols, rng)
+	sch := makeRandSchema(numCols, supportedTypes, rng)
 	datums := makeRandDatums(numRows, sch, rng)
 
 	fileName := "TestRandomDatums.parquet"
@@ -157,6 +175,22 @@ func TestBasicDatums(t *testing.T) {
 					{
 						tree.MustMakeDTimestamp(timeutil.Now(), time.Microsecond),
 						tree.MustMakeDTimestamp(timeutil.Now(), time.Microsecond),
+						tree.DNull,
+					},
+				}, nil
+			},
+		},
+		{
+			name: "timestamptz",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.TimestampTZ, types.TimestampTZ, types.TimestampTZ},
+				columnNames: []string{"a", "b", "c"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				return [][]tree.Datum{
+					{
+						tree.MustMakeDTimestampTZ(timeutil.Now(), time.Microsecond),
+						tree.MustMakeDTimestampTZ(timeutil.Now(), time.Microsecond),
 						tree.DNull,
 					},
 				}, nil
@@ -230,6 +264,192 @@ func TestBasicDatums(t *testing.T) {
 				da3.Array = tree.Datums{}
 				return [][]tree.Datum{
 					{da, da2}, {da3, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "inet",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.INet, types.INet},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				var ipa ipaddr.IPAddr
+				err := ipaddr.ParseINet("192.168.2.1", &ipa)
+				require.NoError(t, err)
+
+				return [][]tree.Datum{
+					{&tree.DIPAddr{IPAddr: ipa}, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "json",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.Json, types.Jsonb},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				j, err := tree.ParseDJSON("[{\"a\": 1}]")
+				require.NoError(t, err)
+
+				return [][]tree.Datum{
+					{j, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "bitarray",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.VarBit, types.VarBit},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				ba, err := bitarray.Parse(string("101001"))
+				if err != nil {
+					return nil, err
+				}
+
+				return [][]tree.Datum{
+					{&tree.DBitArray{BitArray: ba}, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "bytes",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.Bytes, types.Bytes},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				return [][]tree.Datum{
+					{tree.NewDBytes("bytes"), tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "enum",
+			sch: &colSchema{
+				columnTypes: []*types.T{makeTestingEnumType(), makeTestingEnumType()},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				d, err := tree.MakeDEnumFromLogicalRepresentation(makeTestingEnumType(), "hi")
+				require.NoError(t, err)
+				return [][]tree.Datum{
+					{&d, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "date",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.Date, types.Date},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				d, err := pgdate.MakeDateFromTime(timeutil.Now())
+				require.NoError(t, err)
+				date := tree.MakeDDate(d)
+				return [][]tree.Datum{
+					{&date, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "box2d",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.Box2D, types.Box2D},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				b, err := geo.ParseCartesianBoundingBox("BOX(-0.4088850532348978 -0.19224841029808887,0.9334155753101069 0.7180433951296195)")
+				require.NoError(t, err)
+				return [][]tree.Datum{
+					{tree.NewDBox2D(b), tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "geography",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.Geography, types.Geography},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				g, err := geo.ParseGeographyFromEWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))
+				require.NoError(t, err)
+				return [][]tree.Datum{
+					{&tree.DGeography{Geography: g}, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "geometry",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.Geometry, types.Geometry},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				g, err := geo.ParseGeometryFromEWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))
+				require.NoError(t, err)
+				return [][]tree.Datum{
+					{&tree.DGeometry{Geometry: g}, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "interval",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.Interval, types.Interval},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				return [][]tree.Datum{
+					{&tree.DInterval{Duration: duration.MakeDuration(0, 10, 15)}, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "time",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.Time, types.Time},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				dt := tree.DTime(12345)
+				return [][]tree.Datum{
+					{&dt, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "timetz",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.TimeTZ, types.TimeTZ},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				dt := tree.NewDTimeTZFromTime(timeutil.Now())
+				return [][]tree.Datum{
+					{dt, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			name: "float",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.Float, types.Float, types.Float, types.Float, types.Float4, types.Float4, types.Float4},
+				columnNames: []string{"a", "b", "c", "d", "e", "f", "g"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				d1 := tree.DFloat(math.MaxFloat64)
+				d2 := tree.DFloat(math.SmallestNonzeroFloat64)
+				d3 := tree.DFloat(math.NaN())
+				d4 := tree.DFloat(math.MaxFloat32)
+				d5 := tree.DFloat(math.SmallestNonzeroFloat32)
+				return [][]tree.Datum{
+					{&d1, &d2, &d3, tree.DNull, &d4, &d5, tree.DNull},
 				}, nil
 			},
 		},

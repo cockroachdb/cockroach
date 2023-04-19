@@ -14,9 +14,15 @@ import (
 	"time"
 
 	"github.com/apache/arrow/go/v11/parquet"
+	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // decoder is used to store typedDecoders of various types in the same
@@ -72,7 +78,23 @@ func (timestampDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
 	dtStr := string(v)
 	d, dependsOnCtx, err := tree.ParseDTimestamp(nil, dtStr, time.Microsecond)
 	if dependsOnCtx {
-		return nil, errors.New("TimestampTZ depends on context")
+		return nil, errors.Newf("decoding timestamp %s depends on context", v)
+	}
+	if err != nil {
+		return nil, err
+	}
+	// Converts the timezone from "loc(+0000)" to "UTC", which are equivalent.
+	d.Time = d.Time.UTC()
+	return d, nil
+}
+
+type timestampTZDecoder struct{}
+
+func (timestampTZDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	dtStr := string(v)
+	d, dependsOnCtx, err := tree.ParseDTimestampTZ(nil, dtStr, time.Microsecond)
+	if dependsOnCtx {
+		return nil, errors.Newf("decoding timestampTZ %s depends on context", v)
 	}
 	if err != nil {
 		return nil, err
@@ -92,6 +114,128 @@ func (uUIDDecoder) decode(v parquet.FixedLenByteArray) (tree.Datum, error) {
 	return tree.NewDUuid(tree.DUuid{UUID: uid}), nil
 }
 
+type iNetDecoder struct{}
+
+func (iNetDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	return tree.ParseDIPAddrFromINetString(string(v))
+}
+
+type jsonDecoder struct{}
+
+func (jsonDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	return tree.ParseDJSON(string(v))
+}
+
+type bitDecoder struct{}
+
+func (bitDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	ba, err := bitarray.Parse(string(v))
+	if err != nil {
+		return nil, err
+	}
+	return &tree.DBitArray{BitArray: ba}, err
+}
+
+type bytesDecoder struct{}
+
+func (bytesDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	return tree.NewDBytes(tree.DBytes(v)), nil
+}
+
+type enumDecoder struct{}
+
+func (ed enumDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	return &tree.DEnum{
+		LogicalRep: string(v),
+	}, nil
+}
+
+type dateDecoder struct{}
+
+func (dateDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	d, dependCtx, err := tree.ParseDDate(nil, string(v))
+	if dependCtx {
+		return nil, errors.Newf("decoding date %s depends on context", v)
+	}
+	return d, err
+}
+
+type box2DDecoder struct{}
+
+func (box2DDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	b, err := geo.ParseCartesianBoundingBox(string(v))
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDBox2D(b), nil
+}
+
+type geographyDecoder struct{}
+
+func (geographyDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	g, err := geo.ParseGeographyFromEWKB(geopb.EWKB(v))
+	if err != nil {
+		return nil, err
+	}
+	return &tree.DGeography{Geography: g}, nil
+}
+
+type geometryDecoder struct{}
+
+func (geometryDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	g, err := geo.ParseGeometryFromEWKB(geopb.EWKB(v))
+	if err != nil {
+		return nil, err
+	}
+	return &tree.DGeometry{Geometry: g}, nil
+}
+
+type intervalDecoder struct{}
+
+func (intervalDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	return tree.ParseDInterval(duration.IntervalStyle_ISO_8601, string(v))
+}
+
+type timeDecoder struct{}
+
+func (timeDecoder) decode(v int64) (tree.Datum, error) {
+	return tree.MakeDTime(timeofday.TimeOfDay(v)), nil
+}
+
+type timeTZDecoder struct{}
+
+func (timeTZDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	d, dependsOnCtx, err := tree.ParseDTimeTZ(nil, string(v), time.Microsecond)
+	if dependsOnCtx {
+		return nil, errors.Newf("parsed timeTZ %s depends on context", v)
+	}
+	return d, err
+}
+
+type float32Decoder struct{}
+
+func (float32Decoder) decode(v float32) (tree.Datum, error) {
+	return tree.NewDFloat(tree.DFloat(v)), nil
+}
+
+type float64Decoder struct{}
+
+func (float64Decoder) decode(v float64) (tree.Datum, error) {
+	return tree.NewDFloat(tree.DFloat(v)), nil
+}
+
+type oidDecoder struct{}
+
+func (oidDecoder) decode(v int32) (tree.Datum, error) {
+	return tree.NewDOid(oid.Oid(v)), nil
+}
+
+type collatedStringDecoder struct{}
+
+func (collatedStringDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	return &tree.DCollatedString{Contents: string(v)}, nil
+}
+
 // Defeat the linter's unused lint errors.
 func init() {
 	var _, _ = boolDecoder{}.decode(false)
@@ -100,5 +244,23 @@ func init() {
 	var _, _ = int64Decoder{}.decode(0)
 	var _, _ = decimalDecoder{}.decode(parquet.ByteArray{})
 	var _, _ = timestampDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = timestampTZDecoder{}.decode(parquet.ByteArray{})
 	var _, _ = uUIDDecoder{}.decode(parquet.FixedLenByteArray{})
+	var _, _ = iNetDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = jsonDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = bitDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = bytesDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = enumDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = dateDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = box2DDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = box2DDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = geographyDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = geometryDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = intervalDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = timeDecoder{}.decode(0)
+	var _, _ = timeTZDecoder{}.decode(parquet.ByteArray{})
+	var _, _ = float64Decoder{}.decode(0.0)
+	var _, _ = float32Decoder{}.decode(0.0)
+	var _, _ = oidDecoder{}.decode(0)
+	var _, _ = collatedStringDecoder{}.decode(parquet.ByteArray{})
 }

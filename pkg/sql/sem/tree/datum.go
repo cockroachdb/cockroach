@@ -1421,6 +1421,20 @@ func NewDCollatedString(
 	return &d, nil
 }
 
+// AsDCollatedString attempts to retrieve a DString from an Expr, returning a AsDCollatedString and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DCollatedString wrapped by a
+// *DOidWrapper is possible.
+func AsDCollatedString(e Expr) (DCollatedString, bool) {
+	switch t := e.(type) {
+	case *DCollatedString:
+		return *t, true
+	case *DOidWrapper:
+		return AsDCollatedString(t.Wrapped)
+	}
+	return DCollatedString{}, false
+}
+
 // AmbiguousFormat implements the Datum interface.
 func (*DCollatedString) AmbiguousFormat() bool { return false }
 
@@ -2300,6 +2314,20 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 	return &d
 }
 
+// AsDTime attempts to retrieve a DTime from an Expr, returning a DTimestamp and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DTime wrapped by a
+// *DOidWrapper is possible.
+func AsDTime(e Expr) (DTime, bool) {
+	switch t := e.(type) {
+	case *DTime:
+		return *t, true
+	case *DOidWrapper:
+		return AsDTime(t.Wrapped)
+	}
+	return DTime(timeofday.FromInt(0)), false
+}
+
 // ParseDTime parses and returns the *DTime Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 //
@@ -2446,6 +2474,20 @@ func NewDTimeTZFromOffset(t timeofday.TimeOfDay, offsetSecs int32) *DTimeTZ {
 // NewDTimeTZFromLocation creates a DTimeTZ from a TimeOfDay and time.Location.
 func NewDTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) *DTimeTZ {
 	return &DTimeTZ{timetz.MakeTimeTZFromLocation(t, loc)}
+}
+
+// AsDTimeTZ attempts to retrieve a DTimeTZ from an Expr, returning a DTimeTZ and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DTimeTZ wrapped by a
+// *DOidWrapper is possible.
+func AsDTimeTZ(e Expr) (DTimeTZ, bool) {
+	switch t := e.(type) {
+	case *DTimeTZ:
+		return *t, true
+	case *DOidWrapper:
+		return AsDTimeTZ(t.Wrapped)
+	}
+	return DTimeTZ{}, false
 }
 
 // ParseDTimeTZ parses and returns the *DTime Datum value represented by the
@@ -3083,12 +3125,16 @@ type DInterval struct {
 	duration.Duration
 }
 
-// AsDInterval attempts to retrieve a DInterval from an Expr, panicking if the
-// assertion fails.
+// AsDInterval attempts to retrieve a DInterval from an Expr, returning a DInterval and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DInterval wrapped by a
+// *DOidWrapper is possible.
 func AsDInterval(e Expr) (*DInterval, bool) {
 	switch t := e.(type) {
 	case *DInterval:
 		return t, true
+	case *DOidWrapper:
+		return AsDInterval(t.Wrapped)
 	}
 	return nil, false
 }
@@ -4990,6 +5036,20 @@ func GetEnumComponentsFromLogicalRep(typ *types.T, rep string) ([]byte, string, 
 // NewDEnum initializes a new DEnum from its argument.
 func NewDEnum(e DEnum) *DEnum {
 	return &e
+}
+
+// AsDEnum attempts to retrieve a DEnum from an Expr, returning a DEnum and
+// a flag signifying whether the assertion was successful. The function should
+// // be used instead of direct type assertions wherever a *DEnum wrapped by a
+// // *DOidWrapper is possible.
+func AsDEnum(e Expr) (*DEnum, bool) {
+	switch t := e.(type) {
+	case *DEnum:
+		return t, true
+	case *DOidWrapper:
+		return AsDEnum(t.Wrapped)
+	}
+	return nil, false
 }
 
 // MakeDEnumFromPhysicalRepresentation creates a DEnum of the input type
