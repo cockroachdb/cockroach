@@ -4618,6 +4618,54 @@ inner-join (lookup t63735)
  └── filters
       └── y:7 = 15 [outer=(7), constraints=(/7: [/15 - /15]; tight), fd=()-->(7)]
 
+# Regression test for #101844. Derived FK equalities should not be added to the
+# ON filters of a lookup join.
+exec-ddl
+CREATE TABLE p101844 (
+  r INT,
+  id INT,
+  PRIMARY KEY (r, id),
+  UNIQUE WITHOUT INDEX (id)
+)
+----
+
+exec-ddl
+CREATE TABLE c101844 (
+  r INT,
+  p_id INT,
+  id INT,
+  PRIMARY KEY (r, p_id, id),
+  UNIQUE INDEX c_p_id_id_key (p_id, id),
+  FOREIGN KEY (r, p_id) REFERENCES p101844 (r, id)
+)
+----
+
+# The derived c.r = p.r filters should not be added to the lookup join ON
+# condition if they aren't used as equality columns.
+opt
+SELECT *
+FROM p101844 p LEFT LOOKUP JOIN c101844@c_p_id_id_key c
+ON c.p_id = p.id AND c.id = 1234
+----
+left-join (lookup c101844@c_p_id_id_key [as=c])
+ ├── columns: r:1!null id:2!null r:5 p_id:6 id:7
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [2 10] = [6 7]
+ ├── lookup columns are key
+ ├── key: (2)
+ ├── fd: (2)-->(1,5-7), (6)-->(5)
+ ├── project
+ │    ├── columns: "lookup_join_const_col_@7":10!null p.r:1!null p.id:2!null
+ │    ├── key: (2)
+ │    ├── fd: ()-->(10), (2)-->(1)
+ │    ├── scan p101844 [as=p]
+ │    │    ├── columns: p.r:1!null p.id:2!null
+ │    │    ├── key: (2)
+ │    │    └── fd: (2)-->(1)
+ │    └── projections
+ │         └── 1234 [as="lookup_join_const_col_@7":10]
+ └── filters (true)
+
 
 # --------------------------------------------------
 # GenerateLookupJoinsWithVirtualCols
