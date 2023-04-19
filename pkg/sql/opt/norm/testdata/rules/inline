@@ -1113,6 +1113,12 @@ $$
 ----
 
 exec-ddl
+CREATE FUNCTION one_strict() RETURNS INT STRICT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT 1
+$$
+----
+
+exec-ddl
 CREATE FUNCTION rec(r RECORD) RETURNS RECORD IMMUTABLE LANGUAGE SQL AS $$
   SELECT r
 $$
@@ -1151,7 +1157,7 @@ project
       └── filters
            └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
 
-# A UDF with a placehold argument should be inlined.
+# A UDF with a placeholder argument should be inlined.
 norm expect=InlineUDF
 SELECT add(1, $1)
 ----
@@ -1184,8 +1190,8 @@ project
  └── projections
       └── (1, i:2, $1) [as=rec:10, outer=(2)]
 
-# A strict UDF is not inlined.
-norm expect-not=InlineUDF
+# A strict UDF is inlined and wrapped in a CASE expression.
+norm expect=InlineUDF
 SELECT add_strict(1, i) FROM (VALUES (1), (2), (3)) v(i)
 ----
 project
@@ -1199,10 +1205,70 @@ project
  │    ├── (2,)
  │    └── (3,)
  └── projections
-      └── add_strict(1, column1:1) [as=add_strict:5, outer=(1), immutable, udf]
+      └── case [as=add_strict:5, outer=(1), immutable, correlated-subquery]
+           ├── true
+           ├── when
+           │    ├── column1:1 IS NULL
+           │    └── CAST(NULL AS INT8)
+           └── subquery
+                └── values
+                     ├── columns: "?column?":4
+                     ├── outer: (1)
+                     ├── cardinality: [1 - 1]
+                     ├── immutable
+                     ├── key: ()
+                     ├── fd: ()-->(4)
+                     └── (column1:1 + 1,)
 
-# A UDF is not inlined when the arguments are not constants or either Variable or Const
-# expressions.
+# A strict non-set-returning UDF used as a datasource is inlined.
+norm expect=InlineUDF
+SELECT * FROM add_strict(1, $1)
+----
+project-set
+ ├── columns: add_strict:4
+ ├── immutable, has-placeholder
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── ()
+ └── zip
+      └── case [immutable, subquery]
+           ├── true
+           ├── when
+           │    ├── $1 IS NULL
+           │    └── CAST(NULL AS INT8)
+           └── subquery
+                └── values
+                     ├── columns: "?column?":3
+                     ├── cardinality: [1 - 1]
+                     ├── immutable, has-placeholder
+                     ├── key: ()
+                     ├── fd: ()-->(3)
+                     └── ($1 + 1,)
+
+# A strict UDF with zero arguments is inlined without a CASE expression.
+norm expect=InlineUDF
+SELECT one_strict() FROM (VALUES (1), (2), (3)) v(i)
+----
+project
+ ├── columns: one_strict:3
+ ├── cardinality: [3 - 3]
+ ├── values
+ │    ├── cardinality: [3 - 3]
+ │    ├── ()
+ │    ├── ()
+ │    └── ()
+ └── projections
+      └── subquery [as=one_strict:3, subquery]
+           └── values
+                ├── columns: "?column?":2!null
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(2)
+                └── (1,)
+
+# A UDF is not inlined when the arguments are not constants or either Variable
+# or Const expressions.
 norm expect-not=InlineUDF
 SELECT add(1, i+10) FROM (VALUES (1), (2), (3)) v(i)
 ----
