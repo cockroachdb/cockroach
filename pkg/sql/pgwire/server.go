@@ -805,6 +805,12 @@ func (s *Server) ServeConn(
 
 	hbaConf, identMap := s.GetAuthenticationConfiguration()
 
+	// TODO(thomas): add auth metadata info here to the session cache in executor config
+	//	- how do we map this back to a user?
+	//	- from sArgs.User
+	//	- maybe we can read everything from the session args?
+	s.execCfg
+
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.
 	s.serveConn(

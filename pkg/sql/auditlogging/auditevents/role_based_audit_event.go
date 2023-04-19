@@ -20,6 +20,7 @@ import (
 type RoleBasedAuditEvent struct {
 	Setting       *auditlogging.AuditSetting
 	StatementType string
+	DatabaseName  string
 }
 
 // BuildAuditEvent implements the auditlogging.AuditEventBuilder interface
