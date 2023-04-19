@@ -1,12 +1,31 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "ttlbase",
-    srcs = ["ttl_helpers.go"],
+    srcs = [
+        "ttl_helpers.go",
+        "ttl_test_util.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/sql/lexbase"],
+    deps = [
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/catpb",
+    ],
+)
+
+go_test(
+    name = "ttlbase_test",
+    srcs = ["ttl_helpers_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":ttlbase"],
+    deps = [
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 get_x_data(name = "get_x_data")
