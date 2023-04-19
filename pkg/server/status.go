@@ -3469,6 +3469,19 @@ func (s *systemStatusServer) SpanStats(
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
+	// If we receive a request using the old format.
+	if isLegacyRequest(req) {
+		// We want to force 23.1 callers to use the new format (e.g. Spans field).
+		if req.NodeID == "0" {
+			return nil, errors.New(UnexpectedLegacyRequest)
+		}
+		// We want to error if we receive a legacy request from a 22.2
+		// node (e.g. during a mixed-version fanout).
+		return nil, errors.New(MixedVersionErr)
+	}
+	if len(req.Spans) > int(roachpb.SpanStatsBatchLimit.Get(&s.st.SV)) {
+		return nil, errors.Newf(exceedSpanLimitPlaceholder, len(req.Spans), int(roachpb.SpanStatsBatchLimit.Get(&s.st.SV)))
+	}
 	return s.getSpanStatsInternal(ctx, req)
 }
 

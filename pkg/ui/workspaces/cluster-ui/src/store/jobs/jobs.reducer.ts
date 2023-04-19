@@ -12,22 +12,11 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { JobsRequest, JobsResponse } from "src/api/jobsApi";
 import { DOMAIN_NAME } from "../utils";
 import moment from "moment-timezone";
+import { createInitialState, RequestState } from "src/api/types";
 
-export type JobsState = {
-  data: JobsResponse;
-  lastError: Error;
-  lastUpdated: moment.Moment;
-  valid: boolean;
-  inFlight: boolean;
-};
+export type JobsState = RequestState<JobsResponse>;
 
-const initialState: JobsState = {
-  data: null,
-  lastError: null,
-  valid: true,
-  inFlight: false,
-  lastUpdated: null,
-};
+export const initialState = createInitialState<JobsResponse>();
 
 const JobsSlice = createSlice({
   name: `${DOMAIN_NAME}/jobs`,
@@ -36,14 +25,14 @@ const JobsSlice = createSlice({
     received: (state, action: PayloadAction<JobsResponse>) => {
       state.data = action.payload;
       state.valid = true;
-      state.lastError = null;
+      state.error = null;
       state.inFlight = false;
       state.lastUpdated = moment.utc();
     },
     failed: (state, action: PayloadAction<Error>) => {
       state.inFlight = false;
       state.valid = false;
-      state.lastError = action.payload;
+      state.error = action.payload;
       state.lastUpdated = moment.utc();
     },
     invalidated: state => {
