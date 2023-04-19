@@ -130,9 +130,19 @@ func TestCreatePostRequest(t *testing.T) {
 				"localSSD":  "true",
 			}),
 		},
+		{true, false, false, true, setupErr, true,
+			prefixAll(map[string]string{
+				"cloud":     "gce",
+				"encrypted": "false",
+				"fs":        "ext4",
+				"ssd":       "0",
+				"cpu":       "4",
+				"localSSD":  "true",
+			}),
+		},
 		// Assert that release-blocker label exists when !nonReleaseBlocker
 		// Also ensure that in the event of a failed cluster creation,
-		// nil `vmOptions` and `clusterImpl` are not dereferenced
+		// nil `clusterImpl` is not dereferenced
 		{false, true, false, false, sshErr, true,
 			prefixAll(map[string]string{
 				"cloud": "gce",
@@ -159,14 +169,12 @@ func TestCreatePostRequest(t *testing.T) {
 			spec: testSpec,
 			l:    nilLogger(),
 		}
-
-		testClusterImpl := &clusterImpl{spec: clusterSpec}
 		vo := vm.DefaultCreateOpts()
 		vmOpts := &vo
+		testClusterImpl := &clusterImpl{spec: clusterSpec, vmCreateOpts: vmOpts}
 
 		if c.clusterCreationFailed {
 			testClusterImpl = nil
-			vmOpts = nil
 		} else if !c.localSSD {
 			// The default is true set in `vm.DefaultCreateOpts`
 			vmOpts.SSDOpts.UseLocalSSD = false
@@ -179,9 +187,8 @@ func TestCreatePostRequest(t *testing.T) {
 		}
 
 		github := &githubIssues{
-			vmCreateOpts: vmOpts,
-			cluster:      testClusterImpl,
-			teamLoader:   teamLoadFn,
+			cluster:    testClusterImpl,
+			teamLoader: teamLoadFn,
 		}
 
 		if c.loadTeamsFailed {
@@ -208,7 +215,12 @@ func TestCreatePostRequest(t *testing.T) {
 			if c.category == clusterCreationErr {
 				expectedTeam = "@cockroachdb/dev-inf"
 				expectedName = "cluster_creation"
-				expectedMessagePrefix = "test github_test was skipped due to "
+				expectedMessagePrefix = "test github_test failed during 'Setup' due to "
+			} else if c.category == setupErr {
+				expectedTeam = "@cockroachdb/test-eng"
+				expectedLabel = "T-testeng"
+				expectedName = "setup_problem"
+				expectedMessagePrefix = "test github_test failed during 'Setup' due to "
 			} else if c.category == sshErr {
 				expectedTeam = "@cockroachdb/test-eng"
 				expectedLabel = "T-testeng"

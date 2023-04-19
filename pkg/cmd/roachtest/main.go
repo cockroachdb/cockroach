@@ -113,25 +113,8 @@ func main() {
 		Short: "roachtest tool for testing cockroach clusters",
 		Long: `roachtest is a tool for testing cockroach clusters.
 `,
-		Version: "details:\n" + build.GetInfo().Long(),
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			// Don't bother checking flags for the default help command.
-			if cmd.Name() == "help" {
-				return nil
-			}
-
-			if clusterName != "" && local {
-				return fmt.Errorf(
-					"cannot specify both an existing cluster (%s) and --local. However, if a local cluster "+
-						"already exists, --clusters=local will use it",
-					clusterName)
-			}
-			switch cmd.Name() {
-			case "run", "bench", "store-gen":
-				initBinariesAndLibraries()
-			}
-			return nil
-		},
+		Version:          "details:\n" + build.GetInfo().Long(),
+		PersistentPreRun: validateAndConfigure,
 	}
 
 	rootCmd.PersistentFlags().StringVarP(
@@ -359,20 +342,6 @@ runner itself.
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
 
-	var err error
-	config.OSUser, err = user.Current()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "unable to lookup current user: %s\n", err)
-		os.Exit(1)
-	}
-	// Disable spinners and other fancy status messages since all IO is non-interactive.
-	config.Quiet = true
-
-	if err := roachprod.InitDirs(); err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-		os.Exit(1)
-	}
-
 	if err := rootCmd.Execute(); err != nil {
 		code := 1
 		if errors.Is(err, errTestsFailed) {
@@ -384,6 +353,57 @@ runner itself.
 		// Cobra has already printed the error message.
 		os.Exit(code)
 	}
+}
+
+// Before executing any command, validate args and set up the global configuration.
+func validateAndConfigure(cmd *cobra.Command, args []string) {
+	// Skip validation for commands that are self-sufficient.
+	switch cmd.Name() {
+	case "help", "version", "list":
+		return
+	}
+
+	var err error
+	printErrAndExit := func(err error) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "unable to lookup current user: %s\n", err)
+			os.Exit(1)
+		}
+	}
+	if clusterName != "" && local {
+		printErrAndExit(fmt.Errorf(
+			"cannot specify both an existing cluster (%s) and --local. However, if a local cluster "+
+				"already exists, --clusters=local will use it",
+			clusterName))
+	}
+	// Create a temporary dir for artifacts if none was specified.
+	if artifactsOpt := cmd.Flags().Lookup("artifacts"); artifactsOpt != nil && artifactsOpt.Changed {
+		artifacts, err := os.MkdirTemp("", "roachtest-logger")
+		if err != nil {
+			printErrAndExit(err)
+		}
+		_ = cmd.Flags().Set("artifacts", artifacts)
+
+		fmt.Printf("No artifacts dir. was specified; will use: %s\n", artifacts)
+	}
+	// Locate cockroach and workload binaries.
+	switch cmd.Name() {
+	case "run", "bench", "store-gen":
+		initBinariesAndLibraries()
+	}
+	// Configure OSUser for roachprod.
+	config.OSUser, err = user.Current()
+	if err != nil {
+		printErrAndExit(err)
+	}
+	fmt.Printf("Running as user: %s\n", config.OSUser.Username)
+	// Configure roachprod local cache.
+	err = roachprod.InitDirs()
+	if err != nil {
+		printErrAndExit(err)
+	}
+	// Disable spinners and other fancy status messages since all IO is non-interactive.
+	config.Quiet = true
 }
 
 type cliCfg struct {
@@ -487,13 +507,30 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	CtrlC(ctx, l, cancel, cr)
-	err := runner.Run(
-		ctx, tests, cfg.count, cfg.parallelism, opt,
-		testOpts{
-			versionsBinaryOverride: cfg.versionsBinaryOverride,
-			skipInit:               cfg.skipInit,
-		},
-		lopt, nil /* clusterAllocator */)
+
+	l.PrintfCtx(ctx, "%d tests (%d runs), %d workers, %d cpus quota", n, cfg.count, cfg.parallelism, cfg.cpuQuota)
+	//TODO(srosenberg): expand the validation to include more checks, e.g., cloud-specific checks
+	validateTestSpecs := func() error {
+		for _, t := range tests {
+			testCPUs := t.Cluster.CPUs * t.Cluster.NodeCount
+
+			if testCPUs > cfg.cpuQuota {
+				return errors.Newf("test %s requires %d CPUs, but only %d are available", t.Name, testCPUs, cfg.cpuQuota)
+			}
+		}
+		return nil
+	}
+	err := validateTestSpecs()
+	if err == nil {
+		// Let's run the tests.
+		err = runner.Run(
+			ctx, tests, cfg.count, cfg.parallelism, opt,
+			testOpts{
+				versionsBinaryOverride: cfg.versionsBinaryOverride,
+				skipInit:               cfg.skipInit,
+			},
+			lopt, nil /* clusterAllocator */)
+	}
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's
