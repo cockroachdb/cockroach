@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -81,7 +81,7 @@ func checkRowLevelTTLColumn(
 	if rowLevelTTL == nil {
 		return
 	}
-	if rowLevelTTL.DurationExpr != "" && n.Column == colinfo.TTLDefaultExpirationColumnName {
+	if rowLevelTTL.DurationExpr != "" && n.Column == catpb.TTLDefaultExpirationColumnName {
 		panic(errors.WithHintf(
 			pgerror.Newf(
 				pgcode.InvalidTableDefinition,
