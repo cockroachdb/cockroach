@@ -168,7 +168,8 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 		result.decoder = uUIDDecoder{}
 		return result, nil
 	case types.TimestampFamily:
-		// Note that all timestamp datums are in UTC: https://www.cockroachlabs.com/docs/stable/timestamp.html
+		// We do not use schema.TimestampLogicalType because the library will enforce
+		// a physical type of int64, which is not sufficient for CRDB timestamps.
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
 			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
@@ -177,6 +178,180 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 		}
 		result.colWriter = scalarWriter(writeTimestamp)
 		result.decoder = timestampDecoder{}
+		return result, nil
+	case types.TimestampTZFamily:
+		// We do not use schema.TimestampLogicalType because the library will enforce
+		// a physical type of int64, which is not sufficient for CRDB timestamps.
+		result.node, err = schema.NewPrimitiveNodeLogical(colName,
+			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeTimestampTZ)
+		result.decoder = timestampTZDecoder{}
+		return result, nil
+	case types.INetFamily:
+		result.node, err = schema.NewPrimitiveNodeLogical(colName,
+			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeINet)
+		result.decoder = iNetDecoder{}
+		return result, nil
+	case types.JsonFamily:
+		result.node, err = schema.NewPrimitiveNodeLogical(colName,
+			repetitions, schema.JSONLogicalType{}, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeJSON)
+		result.decoder = jsonDecoder{}
+		return result, nil
+	case types.BitFamily:
+		result.node, err = schema.NewPrimitiveNode(colName,
+			repetitions, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeBit)
+		result.decoder = bitDecoder{}
+		return result, nil
+	case types.BytesFamily:
+		result.node, err = schema.NewPrimitiveNode(colName,
+			repetitions, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeBytes)
+		result.decoder = bytesDecoder{}
+		return result, nil
+	case types.EnumFamily:
+		result.node, err = schema.NewPrimitiveNodeLogical(colName,
+			repetitions, schema.EnumLogicalType{}, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeEnum)
+		result.decoder = enumDecoder{}
+		return result, nil
+	case types.DateFamily:
+		// We do not use schema.DateLogicalType because the library will enforce
+		// a physical type of int32, which is not sufficient for CRDB timestamps.
+		result.node, err = schema.NewPrimitiveNodeLogical(colName,
+			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeDate)
+		result.decoder = dateDecoder{}
+		return result, nil
+	case types.Box2DFamily:
+		result.node, err = schema.NewPrimitiveNodeLogical(colName,
+			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeBox2D)
+		result.decoder = box2DDecoder{}
+		return result, nil
+	case types.GeographyFamily:
+		result.node, err = schema.NewPrimitiveNode(colName,
+			repetitions, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeGeography)
+		result.decoder = geographyDecoder{}
+		return result, nil
+	case types.GeometryFamily:
+		result.node, err = schema.NewPrimitiveNode(colName,
+			repetitions, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeGeometry)
+		result.decoder = geometryDecoder{}
+		return result, nil
+	case types.IntervalFamily:
+		result.node, err = schema.NewPrimitiveNodeLogical(colName,
+			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeInterval)
+		result.decoder = intervalDecoder{}
+		return result, nil
+	case types.TimeFamily:
+		// CRDB stores time datums in microseconds, adjusted to UTC.
+		// See https://www.cockroachlabs.com/docs/stable/time.html.
+		result.node, err = schema.NewPrimitiveNodeLogical(colName,
+			repetitions, schema.NewTimeLogicalType(true, schema.TimeUnitMicros), parquet.Types.Int64,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeTime)
+		result.decoder = timeDecoder{}
+		return result, nil
+	case types.TimeTZFamily:
+		// We cannot use the schema.NewTimeLogicalType because it does not support
+		// timezones.
+		result.node, err = schema.NewPrimitiveNodeLogical(colName,
+			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeTimeTZ)
+		result.decoder = timeTZDecoder{}
+		return result, nil
+	case types.FloatFamily:
+		if typ.Oid() == oid.T_float4 {
+			result.node, err = schema.NewPrimitiveNode(colName,
+				repetitions, parquet.Types.Float,
+				defaultTypeLength, defaultSchemaFieldID)
+			if err != nil {
+				return result, err
+			}
+			result.colWriter = scalarWriter(writeFloat32)
+			result.decoder = float32Decoder{}
+			return result, nil
+		}
+		result.node, err = schema.NewPrimitiveNode(colName,
+			repetitions, parquet.Types.Double,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeFloat64)
+		result.decoder = float64Decoder{}
+		return result, nil
+	case types.OidFamily:
+		result.node = schema.NewInt32Node(colName, repetitions, defaultSchemaFieldID)
+		result.colWriter = scalarWriter(writeOid)
+		result.decoder = oidDecoder{}
+		return result, nil
+	case types.CollatedStringFamily:
+		result.node, err = schema.NewPrimitiveNodeLogical(colName,
+			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.colWriter = scalarWriter(writeCollatedString)
+		result.decoder = collatedStringDecoder{}
 		return result, nil
 	case types.ArrayFamily:
 		// Arrays for type T are represented by the following:
@@ -191,17 +366,20 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 		// and [] when encoding.
 		// There is more info about encoding arrays here:
 		// https://arrow.apache.org/blog/2022/10/08/arrow-parquet-encoding-part-2/
-		elementCol, err := makeColumn("element", typ.ArrayContents(), parquet.Repetitions.Optional)
+		elementCol, err := makeColumn("element", typ.ArrayContents(),
+			parquet.Repetitions.Optional)
 		if err != nil {
 			return result, err
 		}
 		innerListFields := []schema.Node{elementCol.node}
-		innerListNode, err := schema.NewGroupNode("list", parquet.Repetitions.Repeated, innerListFields, defaultSchemaFieldID)
+		innerListNode, err := schema.NewGroupNode("list", parquet.Repetitions.Repeated,
+			innerListFields, defaultSchemaFieldID)
 		if err != nil {
 			return result, err
 		}
 		outerListFields := []schema.Node{innerListNode}
-		result.node, err = schema.NewGroupNodeLogical(colName, parquet.Repetitions.Optional, outerListFields, schema.ListLogicalType{}, defaultSchemaFieldID)
+		result.node, err = schema.NewGroupNodeLogical(colName, parquet.Repetitions.Optional,
+			outerListFields, schema.ListLogicalType{}, defaultSchemaFieldID)
 		if err != nil {
 			return result, err
 		}
@@ -213,23 +391,8 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 		result.colWriter = arrayWriter(scalarColWriter)
 		result.typ = elementCol.typ
 		return result, nil
-
-		// TODO(#99028): implement support for the remaining types.
-		//	case types.INetFamily:
-		//	case types.JsonFamily:
-		//	case types.FloatFamily:
-		//	case types.BytesFamily:
-		//	case types.BitFamily:
-		//	case types.EnumFamily:
-		//	case types.Box2DFamily:
-		//	case types.GeographyFamily:
-		//	case types.GeometryFamily:
-		//	case types.DateFamily:
-		//	case types.TimeFamily:
-		//	case types.TimeTZFamily:
-		//	case types.IntervalFamily:
-		//	case types.TimestampTZFamily:
 	default:
-		return result, pgerror.Newf(pgcode.FeatureNotSupported, "parquet export does not support the %v type", typ.Family())
+		return result, pgerror.Newf(pgcode.FeatureNotSupported,
+			"parquet writer does not support the type family %v", typ.Family())
 	}
 }

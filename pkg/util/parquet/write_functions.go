@@ -40,32 +40,35 @@ type batchAlloc struct {
 	boolBatch              [1]bool
 	int32Batch             [1]int32
 	int64Batch             [1]int64
+	float32Batch           [1]float32
+	float64Batch           [1]float64
 	byteArrayBatch         [1]parquet.ByteArray
 	fixedLenByteArrayBatch [1]parquet.FixedLenByteArray
 }
 
 // The following variables are used when writing datums which are not in arrays.
 //
-// nonNilDefLevel represents a definition level of 1, meaning that the value is non-nil.
-// nilDefLevel represents a definition level of 0, meaning that the value is nil.
-// Any corresponding repetition level should be 0 as nonzero repetition levels are only valid for
-// arrays in this library.
+// nonNilDefLevel represents a definition level of 1, meaning that the value is
+// non-nil. nilDefLevel represents a definition level of 0, meaning that the
+// value is nil. Any corresponding repetition level should be 0 as nonzero
+// repetition levels are only valid for arrays in this library.
 //
 // For more info on definition levels, refer to
 // https://arrow.apache.org/blog/2022/10/05/arrow-parquet-encoding-part-1/
 var nonNilDefLevel = []int16{1}
 var nilDefLevel = []int16{0}
 
-// The following variables are used when writing datums which are in arrays. This explanation
-// is valid for the array schema constructed in makeColumn.
+// The following variables are used when writing datums which are in arrays.
+// This explanation is valid for the array schema constructed in makeColumn.
 //
 // In summary:
-// - def level 0 means the array is null
-// - def level 1 means the array is not null, but is empty.
-// - def level 2 means the array is not null, and contains a null datum
-// - def level 3 means the array is not null, and contains a non-null datum
-// - rep level 0 indicates the start of a new array (which may be null or non-null depending on the def level)
-// - rep level 1 indicates that we are writing to an existing array
+//   - def level 0 means the array is null
+//   - def level 1 means the array is not null, but is empty.
+//   - def level 2 means the array is not null, and contains a null datum
+//   - def level 3 means the array is not null, and contains a non-null datum
+//   - rep level 0 indicates the start of a new array (which may be null or
+//     non-null depending on the def level)
+//   - rep level 1 indicates that we are writing to an existing array
 //
 // Examples:
 //
@@ -84,13 +87,17 @@ var nilDefLevel = []int16{0}
 // d.Array = tree.Datums{1, 2, NULL, 3, 4}
 // d2 := tree.NewDArray(types.Int)
 // d2.Array = tree.Datums{1, 1}
-// writeFn(d.Array[0], ..., defLevels = [3], repLevels = [0]) -- repLevel 0 indicates the start of an array
-// writeFn(d.Array[1], ..., defLevels = [3], repLevels = [1]) -- repLevel 1 writes the datum in the array
-// writeFn(tree.DNull, ..., defLevels = [2], repLevels = [1]) -- defLevel 2 indicates a null datum
+// writeFn(d.Array[0], ..., defLevels = [3], repLevels = [0])
+// (repLevel 0 indicates the start of an array)
+// writeFn(d.Array[1], ..., defLevels = [3], repLevels = [1])
+// (repLevel 1 writes the datum in the array)
+// writeFn(tree.DNull, ..., defLevels = [2], repLevels = [1])
+// (defLevel 2 indicates a null datum)
 // writeFn(d.Array[3], ..., defLevels = [3], repLevels = [1])
 // writeFn(d.Array[4], ..., defLevels = [3], repLevels = [1])
 //
-// writeFn(d2.Array[0], ..., defLevels = [3], repLevels = [0]) -- repLevel 0 indicates the start of a new array
+// writeFn(d2.Array[0], ..., defLevels = [3], repLevels = [0])
+// (repLevel 0 indicates the start of a new array)
 // writeFn(d2.Array[1], ..., defLevels = [3], repLevels = [1])
 //
 // For more info on definition levels and repetition levels, refer to
@@ -104,24 +111,28 @@ var arrayEntryNonNilDefLevel = []int16{3}
 
 // A colWriter is responsible for writing a datum to a file.ColumnChunkWriter.
 type colWriter interface {
-	Write(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc) error
+	Write(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx) error
 }
 
 type scalarWriter writeFn
 
-func (w scalarWriter) Write(d tree.Datum, cw file.ColumnChunkWriter, a *batchAlloc) error {
-	return writeScalar(d, cw, a, writeFn(w))
+func (w scalarWriter) Write(
+	d tree.Datum, cw file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx,
+) error {
+	return writeScalar(d, cw, a, fmtCtx, writeFn(w))
 }
 
-func writeScalar(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, wFn writeFn) error {
+func writeScalar(
+	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx, wFn writeFn,
+) error {
 	if d == tree.DNull {
-		if err := wFn(tree.DNull, w, a, nilDefLevel, newEntryRepLevel); err != nil {
+		if err := wFn(tree.DNull, w, a, fmtCtx, nilDefLevel, newEntryRepLevel); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	if err := wFn(d, w, a, nonNilDefLevel, newEntryRepLevel); err != nil {
+	if err := wFn(d, w, a, fmtCtx, nonNilDefLevel, newEntryRepLevel); err != nil {
 		return err
 	}
 	return nil
@@ -129,20 +140,24 @@ func writeScalar(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, wFn writ
 
 type arrayWriter writeFn
 
-func (w arrayWriter) Write(d tree.Datum, cw file.ColumnChunkWriter, a *batchAlloc) error {
-	return writeArray(d, cw, a, writeFn(w))
+func (w arrayWriter) Write(
+	d tree.Datum, cw file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx,
+) error {
+	return writeArray(d, cw, a, fmtCtx, writeFn(w))
 }
 
-func writeArray(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, wFn writeFn) error {
+func writeArray(
+	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx, wFn writeFn,
+) error {
 	if d == tree.DNull {
-		return wFn(tree.DNull, w, a, nilArrayDefLevel, newEntryRepLevel)
+		return wFn(tree.DNull, w, a, nil, nilArrayDefLevel, newEntryRepLevel)
 	}
 	di, ok := tree.AsDArray(d)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DArray, found %T", d)
 	}
 	if len(di.Array) == 0 {
-		return wFn(tree.DNull, w, a, zeroLengthArrayDefLevel, newEntryRepLevel)
+		return wFn(tree.DNull, w, a, nil, zeroLengthArrayDefLevel, newEntryRepLevel)
 	}
 
 	repLevel := newEntryRepLevel
@@ -151,11 +166,11 @@ func writeArray(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, wFn write
 			repLevel = arrayEntryRepLevel
 		}
 		if childDatum == tree.DNull {
-			if err := wFn(childDatum, w, a, arrayEntryNilDefLevel, repLevel); err != nil {
+			if err := wFn(childDatum, w, a, fmtCtx, arrayEntryNilDefLevel, repLevel); err != nil {
 				return err
 			}
 		} else {
-			if err := wFn(childDatum, w, a, arrayEntryNonNilDefLevel, repLevel); err != nil {
+			if err := wFn(childDatum, w, a, fmtCtx, arrayEntryNonNilDefLevel, repLevel); err != nil {
 				return err
 			}
 		}
@@ -163,12 +178,28 @@ func writeArray(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, wFn write
 	return nil
 }
 
-// A writeFn encodes a datum and writes it using the provided column chunk writer.
-// The caller is responsible for ensuring that the def levels and rep levels are correct.
-type writeFn func(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16) error
+// A writeFn encodes a datum and writes it using the provided column chunk
+// writer. The caller is responsible for ensuring that the def levels and rep
+// levels are correct.
+type writeFn func(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx,
+	defLevels, repLevels []int16) error
+
+// formatDatum writes the datum into the parquet.ByteArray batch alloc using the
+// tree.NodeFormatter interface. It is important that the fmtCtx remains open
+// until after the bytes have been read from the batchAlloc, otherwise the byte
+// slice may point to invalid data.
+func formatDatum(d tree.Datum, a *batchAlloc, fmtCtx *tree.FmtCtx) {
+	fmtCtx.Reset()
+	d.Format(fmtCtx)
+	a.byteArrayBatch[0] = fmtCtx.Bytes()
+}
 
 func writeInt32(
-	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
 ) error {
 	if d == tree.DNull {
 		return writeBatch[int32](w, a.int32Batch[:], defLevels, repLevels)
@@ -182,7 +213,11 @@ func writeInt32(
 }
 
 func writeInt64(
-	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
 ) error {
 	if d == tree.DNull {
 		return writeBatch[int64](w, a.int64Batch[:], defLevels, repLevels)
@@ -196,7 +231,11 @@ func writeInt64(
 }
 
 func writeBool(
-	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
 ) error {
 	if d == tree.DNull {
 		return writeBatch[bool](w, a.boolBatch[:], defLevels, repLevels)
@@ -210,7 +249,11 @@ func writeBool(
 }
 
 func writeString(
-	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
 ) error {
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
@@ -256,7 +299,11 @@ func unsafeGetBytes(s string) ([]byte, error) {
 }
 
 func writeTimestamp(
-	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	fmtCtx *tree.FmtCtx,
+	defLevels, repLevels []int16,
 ) error {
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
@@ -267,15 +314,36 @@ func writeTimestamp(
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DTimestamp, found %T", d)
 	}
 
-	fmtCtx := tree.NewFmtCtx(tree.FmtBareStrings)
-	d.Format(fmtCtx)
+	formatDatum(d, a, fmtCtx)
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
 
-	a.byteArrayBatch[0] = parquet.ByteArray(fmtCtx.CloseAndGetString())
+func writeTimestampTZ(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	fmtCtx *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+
+	_, ok := tree.AsDTimestampTZ(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DTimestampTZ, found %T", d)
+	}
+
+	formatDatum(d, a, fmtCtx)
 	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 }
 
 func writeUUID(
-	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
 ) error {
 	if d == tree.DNull {
 		return writeBatch[parquet.FixedLenByteArray](w, a.fixedLenByteArrayBatch[:], defLevels, repLevels)
@@ -290,22 +358,334 @@ func writeUUID(
 }
 
 func writeDecimal(
-	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	fmtCtx *tree.FmtCtx,
+	defLevels, repLevels []int16,
 ) error {
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDDecimal(d)
+	_, ok := tree.AsDDecimal(d)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DDecimal, found %T", d)
 	}
-	a.byteArrayBatch[0] = parquet.ByteArray(di.String())
+	formatDatum(d, a, fmtCtx)
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeINet(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	fmtCtx *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	_, ok := tree.AsDIPAddr(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DIPAddr, found %T", d)
+	}
+
+	formatDatum(d, a, fmtCtx)
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeJSON(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	fmtCtx *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	_, ok := tree.AsDJSON(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DJSON, found %T", d)
+	}
+
+	formatDatum(d, a, fmtCtx)
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeBit(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	fmtCtx *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	_, ok := tree.AsDBitArray(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DBitArray, found %T", d)
+	}
+
+	formatDatum(d, a, fmtCtx)
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeBytes(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	di, ok := tree.AsDBytes(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DBytes, found %T", d)
+	}
+	b, err := unsafeGetBytes(string(di))
+	if err != nil {
+		return err
+	}
+
+	a.byteArrayBatch[0] = b
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeEnum(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	di, ok := tree.AsDEnum(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DEnum, found %T", d)
+	}
+	b, err := unsafeGetBytes(di.LogicalRep)
+	if err != nil {
+		return err
+	}
+
+	a.byteArrayBatch[0] = b
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeDate(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	fmtCtx *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	_, ok := tree.AsDDate(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DDate, found %T", d)
+	}
+
+	formatDatum(d, a, fmtCtx)
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeBox2D(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	fmtCtx *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	_, ok := tree.AsDBox2D(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DBox2D, found %T", d)
+	}
+	formatDatum(d, a, fmtCtx)
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeGeography(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	di, ok := tree.AsDGeography(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DGeography, found %T", d)
+	}
+
+	a.byteArrayBatch[0] = parquet.ByteArray(di.EWKB())
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeGeometry(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	di, ok := tree.AsDGeometry(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DGeometry, found %T", d)
+	}
+	a.byteArrayBatch[0] = parquet.ByteArray(di.EWKB())
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeInterval(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	fmtCtx *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	_, ok := tree.AsDInterval(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DInterval, found %T", d)
+	}
+
+	formatDatum(d, a, fmtCtx)
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeTime(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[int64](w, a.int64Batch[:], defLevels, repLevels)
+	}
+	di, ok := tree.AsDTime(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DTime, found %T", d)
+	}
+	a.int64Batch[0] = int64(di)
+	return writeBatch[int64](w, a.int64Batch[:], defLevels, repLevels)
+}
+
+func writeTimeTZ(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	fmtCtx *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	_, ok := tree.AsDTimeTZ(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DTimeTZ, found %T", d)
+	}
+	formatDatum(d, a, fmtCtx)
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
+func writeFloat32(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[float32](w, a.float32Batch[:], defLevels, repLevels)
+	}
+	di, ok := tree.AsDFloat(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DFloat, found %T", d)
+	}
+	a.float32Batch[0] = float32(*di)
+	return writeBatch[float32](w, a.float32Batch[:], defLevels, repLevels)
+}
+
+func writeFloat64(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[float64](w, a.float64Batch[:], defLevels, repLevels)
+	}
+	di, ok := tree.AsDFloat(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DFloat, found %T", d)
+	}
+	a.float64Batch[0] = float64(*di)
+	return writeBatch[float64](w, a.float64Batch[:], defLevels, repLevels)
+}
+
+func writeOid(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[int32](w, a.int32Batch[:], defLevels, repLevels)
+	}
+	di, ok := tree.AsDOid(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DInt, found %T", d)
+	}
+	a.int32Batch[0] = int32(di.Oid)
+	return writeBatch[int32](w, a.int32Batch[:], defLevels, repLevels)
+}
+
+func writeCollatedString(
+	d tree.Datum,
+	w file.ColumnChunkWriter,
+	a *batchAlloc,
+	_ *tree.FmtCtx,
+	defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	di, ok := tree.AsDCollatedString(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DInt, found %T", d)
+	}
+	b, err := unsafeGetBytes(di.Contents)
+	if err != nil {
+		return err
+	}
+	a.byteArrayBatch[0] = b
 	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 }
 
 // parquetDatatypes are the physical types used in the parquet library.
 type parquetDatatypes interface {
-	bool | int32 | int64 | parquet.ByteArray | parquet.FixedLenByteArray
+	bool | int32 | int64 | float32 | float64 | parquet.ByteArray | parquet.FixedLenByteArray
 }
 
 // batchWriter is an interface representing parquet column chunk writers such as

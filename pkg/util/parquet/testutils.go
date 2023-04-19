@@ -17,8 +17,10 @@ import (
 
 	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/apache/arrow/go/v11/parquet/file"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -88,9 +90,15 @@ func ReadFileAndVerifyDatums(
 			case parquet.Types.Int96:
 				panic("unimplemented")
 			case parquet.Types.Float:
-				panic("unimplemented")
+				arrs, read, err := readBatch(col, make([]float32, 1), dec, typ, isArray)
+				require.NoError(t, err)
+				require.Equal(t, rowsInRowGroup, read)
+				decodeValuesIntoDatumsHelper(arrs, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.Double:
-				panic("unimplemented")
+				arrs, read, err := readBatch(col, make([]float64, 1), dec, typ, isArray)
+				require.NoError(t, err)
+				require.Equal(t, rowsInRowGroup, read)
+				decodeValuesIntoDatumsHelper(arrs, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.ByteArray:
 				colDatums, read, err := readBatch(col, make([]parquet.ByteArray, 1), dec, typ, isArray)
 				require.NoError(t, err)
@@ -192,6 +200,15 @@ func decodeValuesIntoDatumsHelper(
 	}
 }
 
+func unwrapDatum(d tree.Datum) tree.Datum {
+	switch t := d.(type) {
+	case *tree.DOidWrapper:
+		return unwrapDatum(t.Wrapped)
+	default:
+		return d
+	}
+}
+
 // validateDatum validates that the "contents" of the expected datum matches the
 // contents of the actual datum. For example, when validating two arrays, we
 // only compare the datums in the arrays. We do not compare CRDB-specific
@@ -201,7 +218,29 @@ func decodeValuesIntoDatumsHelper(
 // used in an export use case, so we only need to test roundtripability with
 // data end users see. We do not need to check roundtripability of internal CRDB data.
 func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
+	// The randgen library may generate datums wrapped in a *tree.DOidWrapper, so
+	// we should unwrap them. We unwrap at this stage as opposed to when
+	// generating datums to test that the writer can handle wrapped datums.
+	expected = unwrapDatum(expected)
+
 	switch expected.ResolvedType().Family() {
+	case types.JsonFamily:
+		require.Equal(t, expected.(*tree.DJSON).JSON.String(),
+			actual.(*tree.DJSON).JSON.String())
+	case types.DateFamily:
+		require.Equal(t, expected.(*tree.DDate).Date.UnixEpochDays(),
+			actual.(*tree.DDate).Date.UnixEpochDays())
+	case types.FloatFamily:
+		if expected.ResolvedType().Equal(types.Float4) && expected.(*tree.DFloat).String() != "NaN" {
+			// CRDB currently doesn't truncate non NAN float4's correctly, so this
+			// test does it manually :(
+			// https://github.com/cockroachdb/cockroach/issues/73743
+			e := float32(*expected.(*tree.DFloat))
+			a := float32(*expected.(*tree.DFloat))
+			require.Equal(t, e, a)
+		} else {
+			require.Equal(t, expected.String(), actual.String())
+		}
 	case types.ArrayFamily:
 		arr1 := expected.(*tree.DArray).Array
 		arr2 := actual.(*tree.DArray).Array
@@ -209,7 +248,31 @@ func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 		for i := 0; i < len(arr1); i++ {
 			validateDatum(t, arr1[i], arr2[i])
 		}
+	case types.EnumFamily:
+		require.Equal(t, expected.(*tree.DEnum).LogicalRep, actual.(*tree.DEnum).LogicalRep)
+	case types.CollatedStringFamily:
+		require.Equal(t, expected.(*tree.DCollatedString).Contents, actual.(*tree.DCollatedString).Contents)
 	default:
 		require.Equal(t, expected, actual)
 	}
+}
+
+func makeTestingEnumType() *types.T {
+	enumMembers := []string{"hi", "hello"}
+	enumType := types.MakeEnum(catid.TypeIDToOID(500), catid.TypeIDToOID(100500))
+	enumType.TypeMeta = types.UserDefinedTypeMetadata{
+		Name: &types.UserDefinedTypeName{
+			Schema: "test",
+			Name:   "greeting",
+		},
+		EnumData: &types.EnumMetadata{
+			LogicalRepresentations: enumMembers,
+			PhysicalRepresentations: [][]byte{
+				encoding.EncodeUntaggedIntValue(nil, 0),
+				encoding.EncodeUntaggedIntValue(nil, 1),
+			},
+			IsMemberReadOnly: make([]bool, len(enumMembers)),
+		},
+	}
+	return enumType
 }

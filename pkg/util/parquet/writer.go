@@ -113,9 +113,14 @@ func (w *Writer) writeDatumToColChunk(d tree.Datum, colIdx int) error {
 		return err
 	}
 
-	if err = w.sch.cols[colIdx].colWriter.Write(d, cw, w.ba); err != nil {
+	// tree.NewFmtCtx uses an underlying pool, so we can assume there is no
+	// allocation here.
+	fmtCtx := tree.NewFmtCtx(tree.FmtExport)
+	defer fmtCtx.Close()
+	if err = w.sch.cols[colIdx].colWriter.Write(d, cw, w.ba, fmtCtx); err != nil {
 		return err
 	}
+
 	return nil
 }
 
