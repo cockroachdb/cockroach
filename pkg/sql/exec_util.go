@@ -59,7 +59,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -1439,8 +1438,6 @@ type ExecutorConfig struct {
 	// AutoConfigProvider informs the auto config runner job of new
 	// tasks to run.
 	AutoConfigProvider acprovider.Provider
-
-	AuditConfig *auditlogging.AuditConfigLock
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

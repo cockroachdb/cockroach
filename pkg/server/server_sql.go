@@ -1029,9 +1029,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
 		AutoConfigProvider:         cfg.AutoConfigProvider,
-		AuditConfig: &auditlogging.AuditConfigLock{
-			Config: auditlogging.EmptyAuditConfig(),
-		},
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -1370,7 +1367,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	auditlogging.UserAuditLogConfig.SetOnChange(
 		&execCfg.Settings.SV, func(ctx context.Context) {
-			auditlogging.UpdateAuditConfigOnChange(ctx, execCfg.AuditConfig, execCfg.Settings)
+			auditlogging.UpdateAuditConfigOnChange(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings)
 		})
 
 	return &SQLServer{
