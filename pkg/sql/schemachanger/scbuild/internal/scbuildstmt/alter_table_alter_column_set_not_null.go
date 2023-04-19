@@ -11,7 +11,7 @@
 package scbuildstmt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -40,7 +40,7 @@ func alterColumnPreChecks(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, colum
 	scpb.ForEachRowLevelTTL(b.QueryByID(tbl.TableID), func(
 		_ scpb.Status, _ scpb.TargetStatus, e *scpb.RowLevelTTL,
 	) {
-		if columnName == colinfo.TTLDefaultExpirationColumnName && e.HasDurationExpr() {
+		if columnName == catpb.TTLDefaultExpirationColumnName && e.HasDurationExpr() {
 			panic(pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				`cannot alter column %s while ttl_expire_after is set`,
