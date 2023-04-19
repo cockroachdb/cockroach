@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -30,8 +29,8 @@ import (
 // selectQueryBuilder is responsible for maintaining state around the
 // SELECT portion of the TTL job.
 type selectQueryBuilder struct {
-	tableID         descpb.ID
-	pkColumns       []string
+	relationName    string
+	pkColNames      []string
 	selectOpName    string
 	spanToProcess   spanToProcess
 	selectBatchSize int64
@@ -57,7 +56,6 @@ type spanToProcess struct {
 }
 
 func makeSelectQueryBuilder(
-	tableID descpb.ID,
 	cutoff time.Time,
 	pkColumns []string,
 	relationName string,
@@ -66,8 +64,8 @@ func makeSelectQueryBuilder(
 	selectBatchSize int64,
 	ttlExpr catpb.Expression,
 ) selectQueryBuilder {
-	// We will have a maximum of 1 + len(pkColumns)*2 columns, where one
-	// is reserved for AOST, and len(pkColumns) for both start and end key.
+	// We will have a maximum of 1 + len(pkColNames)*2 columns, where one
+	// is reserved for AOST, and len(pkColNames) for both start and end key.
 	cachedArgs := make([]interface{}, 0, 1+len(pkColumns)*2)
 	cachedArgs = append(cachedArgs, cutoff)
 	endPK := spanToProcess.endPK
@@ -80,8 +78,8 @@ func makeSelectQueryBuilder(
 	}
 
 	return selectQueryBuilder{
-		tableID:         tableID,
-		pkColumns:       pkColumns,
+		relationName:    relationName,
+		pkColNames:      pkColumns,
 		selectOpName:    fmt.Sprintf("ttl select %s", relationName),
 		spanToProcess:   spanToProcess,
 		aostDuration:    aostDuration,
@@ -117,7 +115,7 @@ func (b *selectQueryBuilder) buildQuery() string {
 	if !b.isFirst {
 		// After the first query, we always want (col1, ...) > (cursor_col_1, ...)
 		filterClause = fmt.Sprintf("AND (%s) > (", b.pkColumnNamesSQL)
-		for i := range b.pkColumns {
+		for i := range b.pkColNames {
 			if i > 0 {
 				filterClause += ", "
 			}
@@ -128,7 +126,7 @@ func (b *selectQueryBuilder) buildQuery() string {
 		filterClause += ")"
 	} else if len(startPK) > 0 {
 		// For the the first query, we want (col1, ...) >= (cursor_col_1, ...)
-		filterClause = fmt.Sprintf("AND (%s) >= (", ttlbase.MakeColumnNamesSQL(b.pkColumns[:len(startPK)]))
+		filterClause = fmt.Sprintf("AND (%s) >= (", ttlbase.MakeColumnNamesSQL(b.pkColNames[:len(startPK)]))
 		for i := range startPK {
 			if i > 0 {
 				filterClause += ", "
@@ -143,7 +141,7 @@ func (b *selectQueryBuilder) buildQuery() string {
 	return fmt.Sprintf(
 		ttlbase.SelectTemplate,
 		b.pkColumnNamesSQL,
-		b.tableID,
+		b.relationName,
 		int64(b.aostDuration.Seconds()),
 		b.ttlExpr,
 		filterClause,
@@ -200,8 +198,8 @@ func (b *selectQueryBuilder) moveCursor(rows []tree.Datums) error {
 	if len(rows) > 0 {
 		lastRow := rows[len(rows)-1]
 		b.cachedArgs = b.cachedArgs[:1+len(b.spanToProcess.endPK)]
-		if len(lastRow) != len(b.pkColumns) {
-			return errors.AssertionFailedf("expected %d columns for last row, got %d", len(b.pkColumns), len(lastRow))
+		if len(lastRow) != len(b.pkColNames) {
+			return errors.AssertionFailedf("expected %d columns for last row, got %d", len(b.pkColNames), len(lastRow))
 		}
 		for _, d := range lastRow {
 			b.cachedArgs = append(b.cachedArgs, d)
@@ -213,7 +211,7 @@ func (b *selectQueryBuilder) moveCursor(rows []tree.Datums) error {
 // deleteQueryBuilder is responsible for maintaining state around the
 // SELECT portion of the TTL job.
 type deleteQueryBuilder struct {
-	tableID         descpb.ID
+	relationName    string
 	pkColumns       []string
 	deleteBatchSize int64
 	deleteOpName    string
@@ -228,7 +226,6 @@ type deleteQueryBuilder struct {
 }
 
 func makeDeleteQueryBuilder(
-	tableID descpb.ID,
 	cutoff time.Time,
 	pkColumns []string,
 	relationName string,
@@ -239,7 +236,7 @@ func makeDeleteQueryBuilder(
 	cachedArgs = append(cachedArgs, cutoff)
 
 	return deleteQueryBuilder{
-		tableID:         tableID,
+		relationName:    relationName,
 		pkColumns:       pkColumns,
 		deleteBatchSize: deleteBatchSize,
 		deleteOpName:    fmt.Sprintf("ttl delete %s", relationName),
@@ -267,7 +264,7 @@ func (b *deleteQueryBuilder) buildQuery(numRows int) string {
 
 	return fmt.Sprintf(
 		ttlbase.DeleteTemplate,
-		b.tableID,
+		b.relationName,
 		b.ttlExpr,
 		columnNamesSQL,
 		placeholderStr,

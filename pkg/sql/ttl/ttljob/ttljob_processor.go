@@ -273,7 +273,6 @@ func (t *ttlProcessor) runTTLOnSpan(
 
 	ttlSpec := t.ttlSpec
 	details := ttlSpec.RowLevelTTLDetails
-	tableID := details.TableID
 	cutoff := details.Cutoff
 	ttlExpr := ttlSpec.TTLExpr
 	settingsValues, ie, db, descsCol := t.getSpanFields()
@@ -291,7 +290,6 @@ func (t *ttlProcessor) runTTLOnSpan(
 	}
 
 	selectBuilder := makeSelectQueryBuilder(
-		tableID,
 		cutoff,
 		pkColumns,
 		relationName,
@@ -302,7 +300,6 @@ func (t *ttlProcessor) runTTLOnSpan(
 	)
 	deleteBatchSize := ttlSpec.DeleteBatchSize
 	deleteBuilder := makeDeleteQueryBuilder(
-		tableID,
 		cutoff,
 		pkColumns,
 		relationName,
