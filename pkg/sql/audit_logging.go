@@ -63,6 +63,7 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(
 			&auditevents.RoleBasedAuditEvent{
 				Setting:       auditSetting,
 				StatementType: stmtType.String(),
+				DatabaseName:  p.CurrentDatabase(),
 			},
 		)
 	}
