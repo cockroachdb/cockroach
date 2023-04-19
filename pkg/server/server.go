@@ -262,6 +262,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// operations should fail immediately.
 			return checkPingFor(ctx, req.OriginNodeID, codes.PermissionDenied)
 		},
+		PreferSRVLookup: cfg.JoinPreferSRVRecords,
 	}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
