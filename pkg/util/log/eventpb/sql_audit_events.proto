@@ -88,6 +88,7 @@ message RoleBasedAuditEvent {
   // The configured audit role that emitted this log.
   string role = 4 [(gogoproto.jsontag) = ",omitempty"];
   string statement_type = 5 [(gogoproto.jsontag) = ",omitempty"];
+  string database_name = 6 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // Category: SQL Slow Query Log
