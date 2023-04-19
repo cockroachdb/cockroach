@@ -11,6 +11,7 @@
 package ttljob
 
 import (
+	"bytes"
 	"context"
 	"runtime"
 	"sync/atomic"
@@ -24,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -66,11 +69,13 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 
 	processorRowCount := int64(0)
 
-	var relationName string
-	var pkColumns []string
-	var pkTypes []*types.T
-	var colDirs []catenumpb.IndexColumn_Direction
-	var labelMetrics bool
+	var (
+		relationName string
+		pkColNames   []string
+		pkColTypes   []*types.T
+		pkColDirs    []catenumpb.IndexColumn_Direction
+		labelMetrics bool
+	)
 	if err := serverCfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		desc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
 		if err != nil {
@@ -78,16 +83,16 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		}
 
 		primaryIndexDesc := desc.GetPrimaryIndex().IndexDesc()
-		pkColumns = primaryIndexDesc.KeyColumnNames
-		pkTypes = make([]*types.T, 0, len(primaryIndexDesc.KeyColumnIDs))
+		pkColNames = primaryIndexDesc.KeyColumnNames
+		pkColTypes = make([]*types.T, 0, len(primaryIndexDesc.KeyColumnIDs))
 		for _, id := range primaryIndexDesc.KeyColumnIDs {
 			col, err := catalog.MustFindColumnByID(desc, id)
 			if err != nil {
 				return err
 			}
-			pkTypes = append(pkTypes, col.GetType())
+			pkColTypes = append(pkColTypes, col.GetType())
 		}
-		colDirs = primaryIndexDesc.KeyColumnDirections
+		pkColDirs = primaryIndexDesc.KeyColumnDirections
 
 		if !desc.HasRowLevelTTL() {
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
@@ -106,6 +111,12 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
+	var buf bytes.Buffer
+	for i := range pkColNames {
+		lexbase.EncodeRestrictedSQLIdent(&buf, pkColNames[i], lexbase.EncNoFlags)
+		pkColNames[i] = buf.String()
+		buf.Reset()
+	}
 
 	jobRegistry := serverCfg.JobRegistry
 	metrics := jobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
@@ -120,7 +131,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		processorConcurrency = processorSpanCount
 	}
 	err := func() error {
-		spanChan := make(chan spanToProcess, processorConcurrency)
+		spanChan := make(chan ttlbase.QueryBounds, processorConcurrency)
 		defer close(spanChan)
 		for i := int64(0); i < processorConcurrency; i++ {
 			group.GoCtx(func(ctx context.Context) error {
@@ -130,7 +141,8 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 						ctx,
 						metrics,
 						spanToProcess,
-						pkColumns,
+						pkColNames,
+						pkColDirs,
 						relationName,
 						deleteRateLimiter,
 					)
@@ -153,18 +165,18 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		var alloc tree.DatumAlloc
 		for _, span := range ttlSpec.Spans {
 			startKey := span.Key
-			startPK, err := rowenc.DecodeIndexKeyToDatums(codec, pkTypes, colDirs, startKey, &alloc)
+			startPK, err := rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, startKey, &alloc)
 			if err != nil {
-				return errors.Wrapf(err, "decode startKey error pkTypes=%s colDirs=%s key=%x", pkTypes, colDirs, []byte(startKey))
+				return errors.Wrapf(err, "decode startKey error pkColTypes=%s pkColDirs=%s key=%x", pkColTypes, pkColDirs, []byte(startKey))
 			}
 			endKey := span.EndKey
-			endPK, err := rowenc.DecodeIndexKeyToDatums(codec, pkTypes, colDirs, endKey, &alloc)
+			endPK, err := rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, endKey, &alloc)
 			if err != nil {
-				return errors.Wrapf(err, "decode endKey error pkTypes=%s colDirs=%s key=%x", pkTypes, colDirs, []byte(startKey))
+				return errors.Wrapf(err, "decode endKey error pkColTypes=%s pkColDirs=%s key=%x", pkColTypes, pkColDirs, []byte(startKey))
 			}
-			spanChan <- spanToProcess{
-				startPK: startPK,
-				endPK:   endPK,
+			spanChan <- ttlbase.QueryBounds{
+				Start: startPK,
+				End:   endPK,
 			}
 		}
 		return nil
@@ -212,8 +224,9 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 func (t *ttlProcessor) runTTLOnSpan(
 	ctx context.Context,
 	metrics rowLevelTTLMetrics,
-	spanToProcess spanToProcess,
-	pkColumns []string,
+	queryBounds ttlbase.QueryBounds,
+	pkColNames []string,
+	pkColDirs []catenumpb.IndexColumn_Direction,
 	relationName string,
 	deleteRateLimiter *quotapool.RateLimiter,
 ) (spanRowCount int64, err error) {
@@ -244,9 +257,10 @@ func (t *ttlProcessor) runTTLOnSpan(
 
 	selectBuilder := makeSelectQueryBuilder(
 		cutoff,
-		pkColumns,
+		pkColNames,
+		pkColDirs,
 		relationName,
-		spanToProcess,
+		queryBounds,
 		aostDuration,
 		selectBatchSize,
 		ttlExpr,
@@ -254,7 +268,7 @@ func (t *ttlProcessor) runTTLOnSpan(
 	deleteBatchSize := ttlSpec.DeleteBatchSize
 	deleteBuilder := makeDeleteQueryBuilder(
 		cutoff,
-		pkColumns,
+		pkColNames,
 		relationName,
 		deleteBatchSize,
 		ttlExpr,

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
@@ -40,14 +41,15 @@ func TestSelectQueryBuilder(t *testing.T) {
 		iterations []iteration
 	}{
 		{
-			desc: "middle range",
+			desc: "middle range ASC",
 			b: makeSelectQueryBuilder(
 				mockTime,
 				[]string{"col1", "col2"},
+				[]catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				"relation_name",
-				spanToProcess{
-					startPK: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
-					endPK:   tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
+				ttlbase.QueryBounds{
+					Start: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
+					End:   tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				},
 				mockDuration,
 				2,
@@ -58,9 +60,16 @@ func TestSelectQueryBuilder(t *testing.T) {
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) >= ($4, $5) AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $4) OR
+  (col1 = $4 AND col2 >= $5)
+)
+AND (
+  (col1 < $2) OR
+  (col1 = $2 AND col2 < $3)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -76,9 +85,16 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $4) OR
+  (col1 = $4 AND col2 > $5)
+)
+AND (
+  (col1 < $2) OR
+  (col1 = $2 AND col2 < $3)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -94,9 +110,16 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $4) OR
+  (col1 = $4 AND col2 > $5)
+)
+AND (
+  (col1 < $2) OR
+  (col1 = $2 AND col2 < $3)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -108,12 +131,16 @@ LIMIT 2`,
 			},
 		},
 		{
-			desc: "only one range",
+			desc: "middle range DESC",
 			b: makeSelectQueryBuilder(
 				mockTime,
 				[]string{"col1", "col2"},
+				[]catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_DESC, catenumpb.IndexColumn_DESC},
 				"relation_name",
-				spanToProcess{},
+				ttlbase.QueryBounds{
+					Start: tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
+					End:   tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
+				},
 				mockDuration,
 				2,
 				catpb.TTLDefaultExpirationColumnName,
@@ -123,9 +150,95 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 < $4) OR
+  (col1 = $4 AND col2 <= $5)
+)
+AND (
+  (col1 > $2) OR
+  (col1 = $2 AND col2 > $3)
+)
+ORDER BY col1 DESC, col2 DESC
+LIMIT 2`,
+					expectedArgs: []interface{}{
+						mockTime,
+						tree.NewDInt(100), tree.NewDInt(5),
+						tree.NewDInt(200), tree.NewDInt(15),
+					},
+					rows: []tree.Datums{
+						{tree.NewDInt(105), tree.NewDInt(12)},
+						{tree.NewDInt(100), tree.NewDInt(12)},
+					},
+				},
+				{
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 < $4) OR
+  (col1 = $4 AND col2 < $5)
+)
+AND (
+  (col1 > $2) OR
+  (col1 = $2 AND col2 > $3)
+)
+ORDER BY col1 DESC, col2 DESC
+LIMIT 2`,
+					expectedArgs: []interface{}{
+						mockTime,
+						tree.NewDInt(100), tree.NewDInt(5),
+						tree.NewDInt(100), tree.NewDInt(12),
+					},
+					rows: []tree.Datums{
+						{tree.NewDInt(180), tree.NewDInt(132)},
+						{tree.NewDInt(112), tree.NewDInt(19)},
+					},
+				},
+				{
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 < $4) OR
+  (col1 = $4 AND col2 < $5)
+)
+AND (
+  (col1 > $2) OR
+  (col1 = $2 AND col2 > $3)
+)
+ORDER BY col1 DESC, col2 DESC
+LIMIT 2`,
+					expectedArgs: []interface{}{
+						mockTime,
+						tree.NewDInt(100), tree.NewDInt(5),
+						tree.NewDInt(112), tree.NewDInt(19),
+					},
+					rows: []tree.Datums{},
+				},
+			},
+		},
+		{
+			desc: "only one range",
+			b: makeSelectQueryBuilder(
+				mockTime,
+				[]string{"col1", "col2"},
+				[]catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				"relation_name",
+				ttlbase.QueryBounds{},
+				mockDuration,
+				2,
+				catpb.TTLDefaultExpirationColumnName,
+			),
+			iterations: []iteration{
+				{
+					expectedQuery: `SELECT col1, col2
+FROM relation_name
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
+WHERE ((crdb_internal_expiration) <= $1)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -139,9 +252,12 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) > ($2, $3)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $2) OR
+  (col1 = $2 AND col2 > $3)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -156,9 +272,12 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) > ($2, $3)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $2) OR
+  (col1 = $2 AND col2 > $3)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -173,10 +292,11 @@ LIMIT 2`,
 			b: makeSelectQueryBuilder(
 				mockTime,
 				[]string{"col1", "col2"},
+				[]catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				"relation_name",
-				spanToProcess{
-					startPK: tree.Datums{tree.NewDInt(100)},
-					endPK:   tree.Datums{tree.NewDInt(181)},
+				ttlbase.QueryBounds{
+					Start: tree.Datums{tree.NewDInt(100)},
+					End:   tree.Datums{tree.NewDInt(181)},
 				},
 				mockDuration,
 				2,
@@ -187,9 +307,14 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1) >= ($3) AND (col1) < ($2)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 >= $3)
+)
+AND (
+  (col1 < $2)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -205,9 +330,15 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) > ($3, $4) AND (col1) < ($2)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $3) OR
+  (col1 = $3 AND col2 > $4)
+)
+AND (
+  (col1 < $2)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -223,9 +354,15 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) > ($3, $4) AND (col1) < ($2)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $3) OR
+  (col1 = $3 AND col2 > $4)
+)
+AND (
+  (col1 < $2)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -241,9 +378,10 @@ LIMIT 2`,
 			b: makeSelectQueryBuilder(
 				mockTime,
 				[]string{"col1", "col2"},
+				[]catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				"relation_name",
-				spanToProcess{
-					endPK: tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
+				ttlbase.QueryBounds{
+					End: tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				},
 				mockDuration,
 				2,
@@ -254,9 +392,12 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
- AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 < $2) OR
+  (col1 = $2 AND col2 < $3)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -271,9 +412,16 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $4) OR
+  (col1 = $4 AND col2 > $5)
+)
+AND (
+  (col1 < $2) OR
+  (col1 = $2 AND col2 < $3)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -289,9 +437,16 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $4) OR
+  (col1 = $4 AND col2 > $5)
+)
+AND (
+  (col1 < $2) OR
+  (col1 = $2 AND col2 < $3)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -307,9 +462,10 @@ LIMIT 2`,
 			b: makeSelectQueryBuilder(
 				mockTime,
 				[]string{"col1", "col2"},
+				[]catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				"relation_name",
-				spanToProcess{
-					startPK: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
+				ttlbase.QueryBounds{
+					Start: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 				},
 				mockDuration,
 				2,
@@ -320,9 +476,12 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) >= ($2, $3)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $2) OR
+  (col1 = $2 AND col2 >= $3)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -337,9 +496,12 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) > ($2, $3)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $2) OR
+  (col1 = $2 AND col2 > $3)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -354,9 +516,12 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE (crdb_internal_expiration) <= $1
-AND (col1, col2) > ($2, $3)
-ORDER BY col1, col2
+WHERE ((crdb_internal_expiration) <= $1)
+AND (
+  (col1 > $2) OR
+  (col1 = $2 AND col2 > $3)
+)
+ORDER BY col1 ASC, col2 ASC
 LIMIT 2`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -371,12 +536,13 @@ LIMIT 2`,
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			for i, it := range tc.iterations {
+				const msg = "iteration=%d"
 				q, args := tc.b.nextQuery()
-				require.Equal(t, it.expectedQuery, q)
-				require.Equal(t, it.expectedArgs, args)
-				require.NoError(t, tc.b.moveCursor(it.rows))
+				require.Equalf(t, it.expectedQuery, q, msg, i)
+				require.Equalf(t, it.expectedArgs, args, msg, i)
+				require.NoErrorf(t, tc.b.moveCursor(it.rows), msg, i)
 				if i >= 1 {
-					require.NotEmpty(t, tc.b.cachedQuery)
+					require.NotEmptyf(t, tc.b.cachedQuery, msg, i)
 				}
 			}
 		})
@@ -479,27 +645,6 @@ AND (col1, col2) IN (($2, $3))`,
 				require.Equal(t, it.expectedQuery, q)
 				require.Equal(t, it.expectedArgs, args)
 			}
-		})
-	}
-}
-
-func TestMakeColumnNamesSQL(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testCases := []struct {
-		cols     []string
-		expected string
-	}{
-		{[]string{"a"}, "a"},
-		{[]string{"index"}, `index`},
-		{[]string{"a", "b"}, "a, b"},
-		{[]string{"escape-me", "index", "c"}, `"escape-me", index, c`},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.expected, func(t *testing.T) {
-			require.Equal(t, tc.expected, ttlbase.MakeColumnNamesSQL(tc.cols))
 		})
 	}
 }

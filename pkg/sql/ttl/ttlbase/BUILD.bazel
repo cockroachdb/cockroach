@@ -6,7 +6,11 @@ go_library(
     srcs = ["ttl_helpers.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/sql/lexbase"],
+    deps = [
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/sem/tree",
+    ],
 )
 
 get_x_data(name = "get_x_data")

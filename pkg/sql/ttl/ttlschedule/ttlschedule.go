@@ -214,30 +214,33 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 }
 
 func makeTTLJobDescription(tableDesc catalog.TableDescriptor, tn tree.ObjectName) string {
-	pkColumns := tableDesc.GetPrimaryIndex().IndexDesc().KeyColumnNames
-	pkColumnNamesSQL := ttlbase.MakeColumnNamesSQL(pkColumns)
-	selectQuery := fmt.Sprintf(
-		ttlbase.SelectTemplate,
-		pkColumnNamesSQL,
-		tableDesc.GetID(),
-		int64(ttlbase.DefaultAOSTDuration.Seconds()),
-		"<crdb_internal_expiration OR ttl_expiration_expression>",
-		fmt.Sprintf("AND (%s) > (<span start>)", pkColumnNamesSQL),
-		fmt.Sprintf(" AND (%s) < (<span end>)", pkColumnNamesSQL),
-		"<ttl_select_batch_size>",
+	relationName := tn.FQString()
+	pkIndex := tableDesc.GetPrimaryIndex().IndexDesc()
+	pkColNames := pkIndex.KeyColumnNames
+	pkColDirs := pkIndex.KeyColumnDirections
+	rowLevelTTL := tableDesc.GetRowLevelTTL()
+	ttlExpirationExpr := rowLevelTTL.GetTTLExpr()
+	selectQuery := ttlbase.BuildSelectQuery(
+		relationName,
+		pkColNames,
+		pkColDirs,
+		ttlbase.DefaultAOSTDuration,
+		ttlExpirationExpr,
+		ttlbase.QueryBounds{},
+		rowLevelTTL.SelectBatchSize,
+		true, /*startIncl*/
 	)
-	deleteQuery := fmt.Sprintf(
-		ttlbase.DeleteTemplate,
-		tableDesc.GetID(),
-		"<crdb_internal_expiration OR ttl_expiration_expression>",
-		pkColumnNamesSQL,
-		"<rows selected above>",
+	deleteQuery := ttlbase.BuildDeleteQuery(
+		relationName,
+		pkColNames,
+		ttlExpirationExpr,
+		1, /*numRows*/
 	)
 	return fmt.Sprintf(`ttl for %s
 -- for each span, iterate to find rows:
 %s
 -- then delete with:
-%s`, tn.FQString(), selectQuery, deleteQuery)
+%s`, relationName, selectQuery, deleteQuery)
 }
 
 func createRowLevelTTLJob(
@@ -248,7 +251,8 @@ func createRowLevelTTLJob(
 	ttlArgs catpb.ScheduledRowLevelTTLArgs,
 ) (jobspb.JobID, error) {
 	descsCol := descs.FromTxn(txn)
-	tableDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, ttlArgs.TableID)
+	tableID := ttlArgs.TableID
+	tableDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 	if err != nil {
 		return 0, err
 	}
@@ -260,7 +264,7 @@ func createRowLevelTTLJob(
 		Description: makeTTLJobDescription(tableDesc, tn),
 		Username:    username.NodeUserName(),
 		Details: jobspb.RowLevelTTLDetails{
-			TableID:      ttlArgs.TableID,
+			TableID:      tableID,
 			Cutoff:       timeutil.Now(),
 			TableVersion: tableDesc.GetVersion(),
 		},
