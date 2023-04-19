@@ -442,6 +442,7 @@ func TestGCTenant(t *testing.T) {
 			},
 			execCfg.DefaultZoneConfig,
 			false, /* ifNotExists */
+			execCfg.TenantTestingKnobs,
 		)
 		return err
 	}))
@@ -459,6 +460,7 @@ func TestGCTenant(t *testing.T) {
 			},
 			execCfg.DefaultZoneConfig,
 			false, /* ifNotExists */
+			execCfg.TenantTestingKnobs,
 		)
 		return err
 	}))

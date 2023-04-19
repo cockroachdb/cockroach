@@ -790,6 +790,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.DescIDSequence.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.TenantIDSequence.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 	systemschema.SystemJobInfoTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},

@@ -23,6 +23,7 @@ var (
 		catconstants.NamespaceTableName,
 		catconstants.DescriptorTableName,
 		catconstants.DescIDSequenceTableName,
+		catconstants.TenantIDSequenceTableName,
 		catconstants.TenantsTableName,
 		catconstants.ProtectedTimestampsMetaTableName,
 		catconstants.ProtectedTimestampsRecordsTableName,

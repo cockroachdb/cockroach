@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -177,6 +178,8 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	const oldTenantID = 10
 	oldTenantName := roachpb.TenantName("10")
 	// The destination tenant is going to be assigned ID 2.
+	// TODO(ssd,knz): This is a hack, we should really retrieve the tenant ID
+	// from beyond the point CREATE TENANT has run below.
 	const newTenantID = 2
 	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.MakeSQLCodec(roachpb.MustMakeTenantID(oldTenantID)),
 		nil /* tableRekeys */, []execinfrapb.TenantRekey{{
@@ -205,6 +208,12 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 			// Test hangs with test tenant. More investigation is required.
 			// Tracked with #76378.
 			DefaultTestTenant: base.TestTenantDisabled,
+			Knobs: base.TestingKnobs{
+				TenantTestingKnobs: &sql.TenantTestingKnobs{
+					// Needed to pin down the ID of the replication target.
+					EnableTenantIDReuse: true,
+				},
+			},
 		},
 	}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
@@ -246,6 +255,13 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 
 	_, err = conn.Exec(query)
 	require.NoError(t, err)
+
+	// Check that the tenant ID that was created is the one we expect.
+	var tenantID int
+	err = conn.QueryRow(`SELECT id FROM system.tenants WHERE name = '30'`).Scan(&tenantID)
+	require.NoError(t, err)
+	require.Equal(t, newTenantID, tenantID)
+
 	_, ingestionJobID := replicationtestutils.GetStreamJobIds(t, ctx, sqlDB, "30")
 
 	// Start the ingestion stream and wait for at least one AddSSTable to ensure the job is running.
