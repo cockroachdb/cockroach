@@ -58,7 +58,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) >= ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -76,7 +76,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -94,7 +94,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -123,7 +123,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 
 ORDER BY col1, col2
 LIMIT 2`,
@@ -139,7 +139,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -156,7 +156,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -187,7 +187,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1) >= ($3) AND (col1) < ($2)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -205,7 +205,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) > ($3, $4) AND (col1) < ($2)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -223,7 +223,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) > ($3, $4) AND (col1) < ($2)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -254,7 +254,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
  AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -271,7 +271,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -289,7 +289,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -320,7 +320,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) >= ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -337,7 +337,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -354,7 +354,7 @@ LIMIT 2`,
 					expectedQuery: `SELECT col1, col2
 FROM relation_name
 AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
 LIMIT 2`,
@@ -410,7 +410,7 @@ func TestDeleteQueryBuilder(t *testing.T) {
 						{tree.NewDInt(12), tree.NewDInt(16)},
 					},
 					expectedQuery: `DELETE FROM relation_name
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) IN (($2, $3), ($4, $5))`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -431,7 +431,7 @@ AND (col1, col2) IN (($2, $3), ($4, $5))`,
 						{tree.NewDInt(12), tree.NewDInt(18)},
 					},
 					expectedQuery: `DELETE FROM relation_name
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -447,7 +447,7 @@ AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
 						{tree.NewDInt(112), tree.NewDInt(118)},
 					},
 					expectedQuery: `DELETE FROM relation_name
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
 					expectedArgs: []interface{}{
 						mockTime,
@@ -461,7 +461,7 @@ AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
 						{tree.NewDInt(1210), tree.NewDInt(1215)},
 					},
 					expectedQuery: `DELETE FROM relation_name
-WHERE crdb_internal_expiration <= $1
+WHERE (crdb_internal_expiration) <= $1
 AND (col1, col2) IN (($2, $3))`,
 					expectedArgs: []interface{}{
 						mockTime,
