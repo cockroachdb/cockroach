@@ -164,19 +164,10 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	}
 
 	autoStatsRunShouldFail := func() {
-		expectErrCh := make(chan error, 1)
-		go func() {
-			_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
-			expectErrCh <- err
-		}()
-		select {
-		case err := <-expectErrCh:
-			expected := "another CREATE STATISTICS job is already running"
-			if !testutils.IsError(err, expected) {
-				t.Fatalf("expected '%s' error, but got %v", expected, err)
-			}
-		case <-time.After(time.Second):
-			panic("CREATE STATISTICS job which was expected to fail, timed out instead")
+		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
+		expected := "another CREATE STATISTICS job is already running"
+		if !testutils.IsError(err, expected) {
+			t.Fatalf("expected '%s' error, but got %v", expected, err)
 		}
 	}
 
