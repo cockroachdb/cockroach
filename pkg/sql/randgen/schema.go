@@ -231,7 +231,9 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 			indexDef.Invisibility = 0.0
 			if notvisible := rng.Intn(6) == 0; notvisible {
 				indexDef.Invisibility = 1.0
-				// TODO(rytaft): sometimes generate a float between (0.0,1.0).
+				if rng.Intn(2) == 0 {
+					indexDef.Invisibility = 1 - rng.Float64()
+				}
 			}
 
 			defs = append(defs, &indexDef)
