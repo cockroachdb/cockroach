@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -176,8 +175,6 @@ func TestStoreResolveMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 98404)
-
 	// First prevent rot that would result from adding fields without handling
 	// them everywhere.
 	{
@@ -198,6 +195,12 @@ func TestStoreResolveMetrics(t *testing.T) {
 	key, err := s.ScratchRange()
 	require.NoError(t, err)
 	span := roachpb.Span{Key: key, EndKey: key.Next()}
+
+	// Clear the metrics before starting the test so that we don't count intent
+	// resolutions from server startup.
+	store.Metrics().ResolveCommitCount.Clear()
+	store.Metrics().ResolveAbortCount.Clear()
+	store.Metrics().ResolvePoisonCount.Clear()
 
 	txn := roachpb.MakeTransaction("foo", span.Key, isolation.Serializable, roachpb.MinUserPriority, hlc.Timestamp{WallTime: 123}, 999, int32(s.NodeID()))
 
