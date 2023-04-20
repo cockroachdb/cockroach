@@ -54,6 +54,7 @@ go_test(
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/types",
         "//pkg/testutils",
+        "//pkg/util",
         "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/mon",

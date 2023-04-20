@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func init() {
@@ -30,6 +31,7 @@ func TestMain(m *testing.M) {
 	// a version injected. Pretend to be a very up-to-date version.
 	defer build.TestingOverrideVersion("v999.0.0")()
 
+	util.LogMetamorphicVariables()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }

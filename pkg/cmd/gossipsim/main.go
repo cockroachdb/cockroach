@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -264,6 +265,7 @@ func outputDotFile(
 func main() {
 	// Seed the random number generator for non-determinism across
 	// multiple runs.
+	util.LogMetamorphicVariables()
 	randutil.SeedForTests()
 
 	if f := flag.Lookup("logtostderr"); f != nil {

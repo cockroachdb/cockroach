@@ -71,6 +71,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/cancelchecker",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",

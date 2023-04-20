@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
 
@@ -29,6 +30,7 @@ func ResetTest() {
 
 func TestMain(m *testing.M) {
 	ResetTest()
+	util.LogMetamorphicVariables()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }

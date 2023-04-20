@@ -78,6 +78,7 @@ go_test(
         "//pkg/sql/sem/eval",
         "//pkg/sql/types",
         "//pkg/testutils/skip",
+        "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/mon",

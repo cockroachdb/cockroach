@@ -116,6 +116,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
+        "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",

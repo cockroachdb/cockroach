@@ -76,6 +76,7 @@ go_test(
         "//pkg/sql/lexbase",
         "//pkg/sql/scanner",
         "//pkg/testutils/serverutils",
+        "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",

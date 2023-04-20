@@ -92,6 +92,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/ts/testmodel",
         "//pkg/ts/tspb",
+        "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

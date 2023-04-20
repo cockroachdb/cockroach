@@ -166,6 +166,7 @@ go_test(
         "//pkg/build",
         "//pkg/cli/exit",
         "//pkg/settings/cluster",
+        "//pkg/util",
         "//pkg/util/caller",
         "//pkg/util/ctxgroup",
         "//pkg/util/envutil",

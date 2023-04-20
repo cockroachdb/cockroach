@@ -47,6 +47,7 @@ go_test(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/testutils",
+        "//pkg/util",
         "//pkg/util/envutil",
         "//pkg/util/randutil",
         "//pkg/util/stop",

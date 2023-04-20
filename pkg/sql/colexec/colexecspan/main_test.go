@@ -20,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestMain(m *testing.M) {
+	util.LogMetamorphicVariables()
 	randutil.SeedForTests()
 	os.Exit(func() int {
 		flag.Parse()
