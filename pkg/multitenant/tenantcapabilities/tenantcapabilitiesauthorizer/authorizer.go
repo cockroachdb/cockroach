@@ -16,10 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,10 +61,14 @@ const (
 // Authorizer is a concrete implementation of the tenantcapabilities.Authorizer
 // interface. It's safe for concurrent use.
 type Authorizer struct {
-	settings           *cluster.Settings
-	capabilitiesReader tenantcapabilities.Reader
+	settings *cluster.Settings
+	knobs    tenantcapabilities.TestingKnobs
 
-	knobs tenantcapabilities.TestingKnobs
+	// We protect capabilitiesReader by a mutex because it is assigned
+	// asynchronously during server startup, after the RPC service may
+	// have started accepting requests.
+	syncutil.Mutex
+	capabilitiesReader tenantcapabilities.Reader
 }
 
 var _ tenantcapabilities.Authorizer = &Authorizer{}
@@ -90,9 +96,10 @@ func (a *Authorizer) HasCapabilityForBatch(
 		return nil
 	}
 
-	switch mode := a.getMode(ctx); mode {
+	cp, mode := a.getMode(ctx, tenID)
+	switch mode {
 	case authorizerModeOn:
-		return a.capCheckForBatch(ctx, tenID, ba)
+		return a.capCheckForBatch(ctx, tenID, ba, cp)
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
@@ -127,40 +134,16 @@ func (a *Authorizer) authBatchNoCap(
 }
 
 func (a *Authorizer) capCheckForBatch(
-	ctx context.Context, tenID roachpb.TenantID, ba *kvpb.BatchRequest,
+	ctx context.Context,
+	tenID roachpb.TenantID,
+	ba *kvpb.BatchRequest,
+	cp *tenantcapabilitiespb.TenantCapabilities,
 ) error {
-	if a.capabilitiesReader == nil {
-		return errors.AssertionFailedf("programming error: trying to perform capability check when no reader exists")
-	}
-	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
-	if !found {
-		log.VInfof(ctx, 2,
-			"no capability information for tenant %s; requests that require capabilities may be denied",
-			tenID)
-	}
-
 	for _, ru := range ba.Requests {
 		request := ru.GetInner()
 		requiredCap, hasCap := reqMethodToCap[request.Method()]
 		if requiredCap == noCapCheckNeeded {
 			continue
-		}
-		if !found {
-			switch request.Method() {
-			case kvpb.AdminSplit, kvpb.AdminScatter:
-				// Secondary tenants are allowed to run AdminSplit and AdminScatter
-				// requests by default, as they're integral to the performance of IMPORT
-				// and RESTORE. If no entry is found in the capabilities map, we
-				// fallback to this default behavior. Note that this isn't expected to
-				// be the case during normal operation, as tenants that exist should
-				// always have an entry in this map. It does help for some tests,
-				// however.
-				continue
-			default:
-				// For all other requests we conservatively return an error if no entry
-				// is to be found for the tenant.
-				return newTenantDoesNotHaveCapabilityError(requiredCap, request)
-			}
 		}
 		if !hasCap || requiredCap == onlySystemTenant ||
 			!tenantcapabilities.MustGetBoolByID(cp, requiredCap) {
@@ -245,6 +228,8 @@ const (
 
 // BindReader implements the tenantcapabilities.Authorizer interface.
 func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
+	a.Lock()
+	defer a.Unlock()
 	a.capabilitiesReader = reader
 }
 
@@ -255,7 +240,8 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 	errFn := func() error {
 		return errors.New("client tenant does not have capability to query cluster node metadata")
 	}
-	switch mode := a.getMode(ctx); mode {
+	cp, mode := a.getMode(ctx, tenID)
+	switch mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
 	case authorizerModeAllowAll:
@@ -266,14 +252,7 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 		return errors.AssertionFailedf("unknown authorizer mode: %d", mode)
 	}
 
-	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
-	if !found {
-		log.Infof(ctx,
-			"no capability information for tenant %s; requests that require capabilities may be denied",
-			tenID,
-		)
-	}
-	if !found || !tenantcapabilities.MustGetBoolByID(
+	if !tenantcapabilities.MustGetBoolByID(
 		cp, tenantcapabilities.CanViewNodeInfo,
 	) {
 		return errFn()
@@ -289,7 +268,8 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 		return errors.Newf("client tenant does not have capability to query timeseries data")
 	}
 
-	switch mode := a.getMode(ctx); mode {
+	cp, mode := a.getMode(ctx, tenID)
+	switch mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
 	case authorizerModeAllowAll:
@@ -300,14 +280,7 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 		return errors.AssertionFailedf("unknown authorizer mode: %d", mode)
 	}
 
-	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
-	if !found {
-		log.Infof(ctx,
-			"no capability information for tenant %s; requests that require capabilities may be denied",
-			tenID,
-		)
-	}
-	if !found || !tenantcapabilities.MustGetBoolByID(
+	if !tenantcapabilities.MustGetBoolByID(
 		cp, tenantcapabilities.CanViewTSDBMetrics,
 	) {
 		return errFn()
@@ -324,7 +297,8 @@ func (a *Authorizer) HasNodelocalStorageCapability(
 	errFn := func() error {
 		return errors.Newf("client tenant does not have capability to use nodelocal storage")
 	}
-	switch mode := a.getMode(ctx); mode {
+	cp, mode := a.getMode(ctx, tenID)
+	switch mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
 	case authorizerModeAllowAll:
@@ -335,14 +309,7 @@ func (a *Authorizer) HasNodelocalStorageCapability(
 		return errors.AssertionFailedf("unknown authorizer mode: %d", mode)
 	}
 
-	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
-	if !found {
-		log.Infof(ctx,
-			"no capability information for tenant %s; requests that require capabilities may be denied",
-			tenID,
-		)
-	}
-	if !found || !tenantcapabilities.MustGetBoolByID(
+	if !tenantcapabilities.MustGetBoolByID(
 		cp, tenantcapabilities.CanUseNodelocalStorage,
 	) {
 		return errFn()
@@ -355,7 +322,8 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 	if tenID.IsSystem() {
 		return true
 	}
-	switch mode := a.getMode(ctx); mode {
+	cp, mode := a.getMode(ctx, tenID)
+	switch mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
 	case authorizerModeAllowAll:
@@ -367,24 +335,15 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 		return false
 	}
 
-	// Because tenant limiters are constructed based on the range
-	// bounds of the replica, requests from the system tenant that
-	// touch a tenant span will result in a query to this
-	// capability before we have a capability reader. We do not
-	// want to panic in that case since it is currently expected.
-	if a.capabilitiesReader == nil {
-		log.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming rate limit applies", tenID.String())
-		return false
-	}
-	if cp, found := a.capabilitiesReader.GetCapabilities(tenID); found {
-		return tenantcapabilities.MustGetBoolByID(cp, tenantcapabilities.ExemptFromRateLimiting)
-	}
-	return false
+	return tenantcapabilities.MustGetBoolByID(cp, tenantcapabilities.ExemptFromRateLimiting)
 }
 
 // getMode retrieves the authorization mode.
-func (a *Authorizer) getMode(ctx context.Context) authorizerModeType {
-	selectedMode := authorizerModeType(authorizerMode.Get(&a.settings.SV))
+func (a *Authorizer) getMode(
+	ctx context.Context, tid roachpb.TenantID,
+) (cp *tenantcapabilitiespb.TenantCapabilities, selectedMode authorizerModeType) {
+	// We prioritize what the cluster setting tells us.
+	selectedMode = authorizerModeType(authorizerMode.Get(&a.settings.SV))
 	if selectedMode == authorizerModeOn {
 		if !a.settings.Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {
 			// If the cluster hasn't been upgraded to v23.1 with
@@ -393,5 +352,28 @@ func (a *Authorizer) getMode(ctx context.Context) authorizerModeType {
 			selectedMode = authorizerModeV222
 		}
 	}
-	return selectedMode
+
+	// If the mode is "on", we need to check the capabilities. Are they
+	// available?
+	if selectedMode == authorizerModeOn {
+		a.Lock()
+		reader := a.capabilitiesReader
+		a.Unlock()
+		if reader == nil {
+			// The server has started but the reader hasn't started/bound
+			// yet. Block requests that would need specific capabilities.
+			selectedMode = authorizerModeV222
+		} else {
+			// We have a reader. Did we get data from the rangefeed yet?
+			var found bool
+			cp, found = reader.GetCapabilities(tid)
+			if !found {
+				// No data from the rangefeed yet. Assume caps are still
+				// unavailable.
+				log.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming capability is unavailable", tid.String())
+				selectedMode = authorizerModeV222
+			}
+		}
+	}
+	return cp, selectedMode
 }
