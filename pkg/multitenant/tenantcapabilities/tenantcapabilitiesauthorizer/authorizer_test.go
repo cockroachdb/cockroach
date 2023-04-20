@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils"
@@ -186,5 +187,14 @@ func TestAllBatchCapsAreBoolean(t *testing.T) {
 		caps := tenantcapabilities.DefaultCapabilities()
 		var v *tenantcapabilities.BoolValue
 		require.Implements(t, v, tenantcapabilities.MustGetValueByID(caps, capID))
+	}
+}
+
+func TestAllBatchRequestTypesHaveAssociatedCaps(t *testing.T) {
+	for req := kvpb.Method(0); req < kvpb.NumMethods; req++ {
+		_, ok := reqMethodToCap[req]
+		if !ok {
+			t.Errorf("no capability associated with request type %s", req)
+		}
 	}
 }
