@@ -1334,17 +1334,21 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		}
 		return false
 	}()
-	// Forward indexes for arrays were added in 23.1, so check the index
-	// definitions for them in mixed version states.
-	forwardIndexesOnNewTypesSupported, err := isClusterVersionLessThan(
+	// Forward indexes for arrays were added in 23.1 and JSON in 23.2, so check
+	// the index definitions for them in mixed version states.
+	forwardIndexesOnArraysNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
 		clusterversion.ByKey(clusterversion.V23_1))
+	forwardIndexesOnJSONNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_2))
 	if err != nil {
 		return nil, err
 	}
 	hasUnsupportedForwardIdxQueries, err := func() (bool, error) {
-		if !forwardIndexesOnNewTypesSupported {
+		if !forwardIndexesOnJSONNotSupported {
 			return false, nil
 		}
 		colInfoMap := make(map[tree.Name]*tree.ColumnTableDef)
@@ -1366,7 +1370,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 						if err != nil {
 							return false, err
 						}
-						if typ.Family() == types.ArrayFamily ||
+						if (typ.Family() == types.ArrayFamily && forwardIndexesOnArraysNotSupported) ||
 							typ.Family() == types.JsonFamily {
 							return true, err
 						}
