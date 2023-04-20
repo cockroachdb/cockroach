@@ -268,6 +268,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
 		),
 	}
+	sc.TestingKnobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
 
 	// Use shorter Raft tick settings in order to minimize start up and failover
 	// time in tests.
@@ -1414,10 +1415,15 @@ func NewStore(
 	})
 
 	var authorizer tenantcapabilities.Authorizer
-	if cfg.RPCContext != nil && cfg.RPCContext.TenantRPCAuthorizer != nil {
+	if cfg.RPCContext != nil {
 		authorizer = cfg.RPCContext.TenantRPCAuthorizer
 	} else {
-		authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
+		// No RPCContext - we're in a test. The test better provide an
+		// authorizer.
+		authorizer = cfg.TestingKnobs.TenantRateKnobs.Authorizer
+	}
+	if authorizer == nil {
+		log.Fatalf(ctx, "programming error: missing authorizer from config")
 	}
 
 	s.tenantRateLimiters = tenantrate.NewLimiterFactory(&cfg.Settings.SV, &cfg.TestingKnobs.TenantRateKnobs, authorizer)
