@@ -117,6 +117,9 @@ type serverOrchestrator interface {
 		// tenantName is the name of the tenant for which a server should
 		// be created.
 		tenantName roachpb.TenantName,
+		// retryStartupOnFailure indicates whether the server startup should
+		// retry until it succeeds.
+		retryStartupOnFailure bool,
 		// finalizeFn is called when the server is fully stopped.
 		// This is always called, even if there is a server startup error.
 		// It is also called asynchronously, possibly after

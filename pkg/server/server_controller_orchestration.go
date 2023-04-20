@@ -32,12 +32,18 @@ import (
 
 // start monitors changes to the service mode and updates
 // the running servers accordingly.
-func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
-	// We perform one round of updates synchronously, to ensure that
-	// any tenants already in service mode SHARED get a chance to boot
-	// up before we signal readiness.
-	if err := c.startInitialSecondaryTenantServers(ctx, ie); err != nil {
-		return err
+func (c *serverController) start(
+	ctx context.Context, ie isql.Executor, autoStartAndWaitForSharedServers bool,
+) error {
+	if autoStartAndWaitForSharedServers {
+		// We perform one round of updates synchronously, to ensure that
+		// any tenants already in service mode SHARED get a chance to boot
+		// up before we signal readiness.
+		if err := c.startInitialSecondaryTenantServers(ctx, ie); err != nil {
+			return err
+		}
+	} else {
+		log.Infof(ctx, "not waiting for secondary tenant servers to become ready")
 	}
 
 	// Run the detection of which servers should be started or stopped.
@@ -84,7 +90,10 @@ func (c *serverController) startInitialSecondaryTenantServers(
 			// We already pre-initialize the entry for the system tenant.
 			continue
 		}
-		if _, err := c.startAndWaitForRunningServer(ctx, name); err != nil {
+		if _, err := c.startAndWaitForRunningServer(ctx, name,
+			true,  /* expectNoEntryYet */
+			false, /* retryStartupOnFailure */
+		); err != nil {
 			return err
 		}
 	}
@@ -126,7 +135,7 @@ func (c *serverController) scanTenantsForRunnableServices(
 		if _, ok := c.mu.servers[name]; !ok {
 			log.Infof(ctx, "tenant %q has changed service mode, should now start", name)
 			// Mark the server for async creation.
-			if _, err := c.createServerEntryLocked(ctx, name); err != nil {
+			if _, err := c.createServerEntryLocked(ctx, name, true /* retryStartupOnFailure */); err != nil {
 				return err
 			}
 		}
@@ -134,8 +143,10 @@ func (c *serverController) scanTenantsForRunnableServices(
 	return nil
 }
 
+// createServerEntryLocked starts an orchestration task for the given
+// tenant.
 func (c *serverController) createServerEntryLocked(
-	ctx context.Context, tenantName roachpb.TenantName,
+	ctx context.Context, tenantName roachpb.TenantName, retryStartupOnFailure bool,
 ) (serverState, error) {
 	if c.draining.Get() {
 		return nil, errors.New("server is draining")
@@ -165,7 +176,7 @@ func (c *serverController) createServerEntryLocked(
 		c.logStopEvent(ctx, tid, sid, tenantName)
 	}
 
-	entry, err := c.orchestrator.startControlledServer(ctx, tenantName,
+	entry, err := c.orchestrator.startControlledServer(ctx, tenantName, retryStartupOnFailure,
 		finalizeFn, startErrorFn, serverStartedFn, serverStoppingFn)
 	if err != nil {
 		return nil, err
@@ -207,19 +218,33 @@ ORDER BY name`, mtinfopb.ServiceModeShared, mtinfopb.DataStateReady)
 	return tenantNames, err
 }
 
-// startAndWaitForRunningServer either waits for an existing server to
-// have started already for the given tenant, or starts and wait for a
-// new server.
+// startAndWaitForRunningServer creates a server for the named tenant
+// and waits for it to start up.
+// If expectNoEntryYet is true, the server must not exist yet.
+// If retryStartupOnFailure is true, the startup will be retried until it succeeds.
+//
+// It is valid to call this function after the server has already
+// began initialization, if expectedNoEntry==false; for example,
+// running ALTER TENANT START SERVICE SHARED will cause the server
+// controller to begin initializing the tenant server asynchronously;
+// at which point waitForRunningServer() merely picks up the
+// in-progress startup and simply waits for it to complete.
 func (c *serverController) startAndWaitForRunningServer(
-	ctx context.Context, tenantName roachpb.TenantName,
+	ctx context.Context,
+	tenantName roachpb.TenantName,
+	expectNoEntryYet bool,
+	retryStartupOnFailure bool,
 ) (onDemandServer, error) {
 	entry, err := func() (serverState, error) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if entry, ok := c.mu.servers[tenantName]; ok {
+			if expectNoEntryYet {
+				return nil, errors.Errorf("server for tenant %q already exists", tenantName)
+			}
 			return entry, nil
 		}
-		return c.createServerEntryLocked(ctx, tenantName)
+		return c.createServerEntryLocked(ctx, tenantName, retryStartupOnFailure)
 	}()
 	if err != nil {
 		return nil, err
@@ -247,13 +272,10 @@ func (c *serverController) newServerForOrchestrator(
 	tenantName := nameContainer.Get()
 	testArgs := c.testArgs[tenantName]
 
+	serverIdx := c.nextServerIdx.Add(1)
+	idx := int(serverIdx)
+
 	// Server does not exist yet: instantiate and start it.
-	idx := func() int {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		c.mu.nextServerIdx++
-		return c.mu.nextServerIdx
-	}()
 	return c.tenantServerCreator.newTenantServer(ctx, nameContainer, tenantStopper, idx, testArgs)
 }
 

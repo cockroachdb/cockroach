@@ -14,6 +14,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -94,11 +95,12 @@ type serverController struct {
 		// TODO(knz): Detect when the mapping of name to tenant ID has
 		// changed, and invalidate the entry.
 		servers map[roachpb.TenantName]serverState
-
-		// nextServerIdx is the index to provide to the next call to
-		// newServerFn.
-		nextServerIdx int
 	}
+
+	// nextServerIdx is the index to provide to the next call to
+	// newServerFn. This is updated concurrently, use the atomic
+	// package to access.
+	nextServerIdx atomic.Uint32
 }
 
 func newServerController(
