@@ -142,7 +142,7 @@ type hashTableProbeBuffer struct {
 	// tuples from the probing batch. Concretely, ToCheckID[i] is the keyID of
 	// the tuple in the hash table which we are currently comparing with the ith
 	// tuple of the probing batch. i is included in ToCheck. The result of the
-	// comparison is stored in 'differs' and/or 'distinct'.
+	// comparison is stored in 'differs' and/or 'foundNull'.
 	//
 	// On the first iteration:
 	//   ToCheckID[i] = First[hash[i]]
@@ -819,8 +819,8 @@ func (ht *HashTable) buildNextChains(first, next []keyID, offset, batchSize uint
 	ht.cancelChecker.CheckEveryCall()
 }
 
-// SetupLimitedSlices ensures that HeadID, differs, distinct, ToCheckID, and
-// ToCheck are of the desired length and are setup for probing.
+// SetupLimitedSlices ensures that HeadID, differs, foundNull, ToCheckID, and
+// ToCheck are of the desired length and are set up for probing.
 // Note that if the old ToCheckID or ToCheck slices have enough capacity, they
 // are *not* zeroed out.
 func (p *hashTableProbeBuffer) SetupLimitedSlices(length int, buildMode HashTableBuildMode) {

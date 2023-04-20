@@ -380,3 +380,8 @@ query I
 SELECT crdb_internal.create_tenant('{"name":"tenant-number-ten", "if_not_exists": true}'::JSONB)
 ----
 NULL
+
+subtest avoid_too_large_ids
+
+query error tenant ID 10000000000 out of range
+SELECT crdb_internal.create_tenant(10000000000)
