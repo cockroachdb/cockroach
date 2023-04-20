@@ -195,7 +195,7 @@ func makeIndexDescriptor(
 		return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name)
 	}
 
-	if err := checkIndexColumns(tableDesc, columns, n.Storing, n.Inverted); err != nil {
+	if err := checkIndexColumns(tableDesc, columns, n.Storing, n.Inverted, params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)); err != nil {
 		return nil, err
 	}
 
@@ -319,7 +319,11 @@ func makeIndexDescriptor(
 }
 
 func checkIndexColumns(
-	desc catalog.TableDescriptor, columns tree.IndexElemList, storing tree.NameList, inverted bool,
+	desc catalog.TableDescriptor,
+	columns tree.IndexElemList,
+	storing tree.NameList,
+	inverted bool,
+	version clusterversion.ClusterVersion,
 ) error {
 	for i, colDef := range columns {
 		col, err := catalog.MustFindColumnByTreeName(desc, colDef.Column)
@@ -336,6 +340,20 @@ func checkIndexColumns(
 			return pgerror.New(pgcode.DatatypeMismatch,
 				"operator classes are only allowed for the last column of an inverted index")
 		}
+
+		// Checking if JSON Columns can be forward indexed for a given cluster version.
+		if col.GetType().Family() == types.JsonFamily && !inverted && !version.IsActive(clusterversion.V23_2) {
+			return errors.WithHint(
+				pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"index element %s of type %s is not indexable in a non-inverted index",
+					col.GetName(),
+					col.GetType().Name(),
+				),
+				"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"),
+			)
+		}
+
 	}
 	for i, colName := range storing {
 		col, err := catalog.MustFindColumnByTreeName(desc, colName)
@@ -541,6 +559,18 @@ func replaceExpressionElemsWithVirtualCols(
 						elem.Expr.String(),
 					),
 					"consider adding a type cast to the expression",
+				)
+			}
+
+			if typ.Family() == types.JsonFamily && !version.IsActive(clusterversion.V23_2) {
+				return errors.WithHint(
+					pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						"index element %s of type %s is not indexable in a non-inverted index",
+						elem.Expr.String(),
+						typ.Name(),
+					),
+					"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"),
 				)
 			}
 
