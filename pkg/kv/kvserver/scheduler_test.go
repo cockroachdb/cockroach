@@ -249,7 +249,8 @@ func TestSchedulerLoop(t *testing.T) {
 		return nil
 	})
 
-	require.Equal(t, int64(3), m.RaftSchedulerLatency.TotalCount())
+	count, _ := m.RaftSchedulerLatency.Total()
+	require.Equal(t, int64(3), count)
 }
 
 // Verify that when we enqueue the same range multiple times for the same

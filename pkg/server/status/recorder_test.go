@@ -298,6 +298,7 @@ func TestMetricsRecorder(t *testing.T) {
 					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, 10, reg.isNode)
 				}
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
+				addExpected(reg.prefix, data.name+"-sum", reg.source, 100, 9, reg.isNode)
 				addExpected(reg.prefix, data.name+"-avg", reg.source, 100, 9, reg.isNode)
 			default:
 				t.Fatalf("unexpected: %+v", data)

@@ -89,10 +89,16 @@ type PrometheusIterable interface {
 // and values at specific quantiles from "windowed" histograms and record that
 // data directly. These windows could be arbitrary and overlapping.
 type WindowedHistogram interface {
-	// TotalCountWindowed returns the number of samples in the current window.
-	TotalCountWindowed() int64
-	// TotalSumWindowed returns the number of samples in the current window.
-	TotalSumWindowed() float64
+	// TotalWindowed returns the number of samples and their sum (respectively)
+	// in the current window.
+	TotalWindowed() (int64, float64)
+	// Total returns the number of samples and their sum (respectively) in the
+	// cumulative histogram.
+	Total() (int64, float64)
+	// MeanWindowed returns the average of the samples in the current window.
+	MeanWindowed() float64
+	// Mean returns the average of the sample in teh cumulative histogram.
+	Mean() float64
 	// ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
 	// interpolated value at that quantile for the windowed histogram.
 	ValueAtQuantileWindowed(q float64) float64
@@ -320,10 +326,7 @@ type IHistogram interface {
 	WindowedHistogram
 
 	RecordValue(n int64)
-	TotalCount() int64
-	TotalSum() float64
-	TotalCountWindowed() int64
-	TotalSumWindowed() float64
+	Total() (int64, float64)
 	Mean() float64
 }
 
@@ -397,30 +400,28 @@ func (h *Histogram) Inspect(f func(interface{})) {
 	f(h)
 }
 
-// TotalCount returns the (cumulative) number of samples.
-func (h *Histogram) TotalCount() int64 {
-	return int64(h.ToPrometheusMetric().Histogram.GetSampleCount())
+// Total returns the (cumulative) number of samples and the sum of all samples.
+func (h *Histogram) Total() (int64, float64) {
+	pHist := h.ToPrometheusMetric().Histogram
+	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
 }
 
-// TotalCountWindowed implements the WindowedHistogram interface.
-func (h *Histogram) TotalCountWindowed() int64 {
-	return int64(h.ToPrometheusMetricWindowed().Histogram.GetSampleCount())
-}
-
-// TotalSum returns the (cumulative) number of samples.
-func (h *Histogram) TotalSum() float64 {
-	return h.ToPrometheusMetric().Histogram.GetSampleSum()
-}
-
-// TotalSumWindowed implements the WindowedHistogram interface.
-func (h *Histogram) TotalSumWindowed() float64 {
-	return h.ToPrometheusMetricWindowed().Histogram.GetSampleSum()
+// TotalWindowed implements the WindowedHistogram interface.
+func (h *Histogram) TotalWindowed() (int64, float64) {
+	pHist := h.ToPrometheusMetricWindowed().Histogram
+	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
 }
 
 // Mean returns the (cumulative) mean of samples.
 func (h *Histogram) Mean() float64 {
 	pm := h.ToPrometheusMetric()
 	return pm.Histogram.GetSampleSum() / float64(pm.Histogram.GetSampleCount())
+}
+
+// MeanWindowed implements the WindowedHistogram interface.
+func (h *Histogram) MeanWindowed() float64 {
+	pHist := h.ToPrometheusMetricWindowed().Histogram
+	return pHist.GetSampleSum() / float64(pHist.GetSampleCount())
 }
 
 // ValueAtQuantileWindowed implements the WindowedHistogram interface.

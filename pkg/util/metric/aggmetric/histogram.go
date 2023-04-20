@@ -61,14 +61,24 @@ func (a *AggHistogram) GetMetadata() metric.Metadata { return a.h.GetMetadata() 
 // Inspect is part of the metric.Iterable interface.
 func (a *AggHistogram) Inspect(f func(interface{})) { f(a) }
 
-// TotalCountWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) TotalCountWindowed() int64 {
-	return a.h.TotalCountWindowed()
+// TotalWindowed is part of the metric.WindowedHistogram interface
+func (a *AggHistogram) TotalWindowed() (int64, float64) {
+	return a.h.TotalWindowed()
 }
 
-// TotalSumWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) TotalSumWindowed() float64 {
-	return a.h.TotalSumWindowed()
+// Total is part of the metric.WindowedHistogram interface
+func (a *AggHistogram) Total() (int64, float64) {
+	return a.h.Total()
+}
+
+// MeanWindowed is part of the metric.WindowedHistogram interface
+func (a *AggHistogram) MeanWindowed() float64 {
+	return a.h.MeanWindowed()
+}
+
+// Mean is part of the metric.WindowedHistogram interface
+func (a *AggHistogram) Mean() float64 {
+	return a.h.Mean()
 }
 
 // ValueAtQuantileWindowed is part of the metric.WindowedHistogram interface
