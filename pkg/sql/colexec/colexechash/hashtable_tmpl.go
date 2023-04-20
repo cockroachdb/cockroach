@@ -111,133 +111,117 @@ func _CHECK_COL_BODY(
 		// {{/*
 		//     The build table tuple (identified by ToCheckID value) is being
 		//     compared to the corresponding probing tuple (with the ordinal
-		//     'toCheck') to determine if it is an equality match. keyID of 0
-		//     indicates that for the probing tuple there are no more build
-		//     tuples to try.
+		//     'toCheck') to determine if it is an equality match.
+		//
+		//     We assume that keyID is non-zero because zero keyID indicates
+		//     that for the probing tuple there are no more build tuples to try,
+		//     so there wouldn't be any point in including such a tuple to be
+		//     checked.
 		// */}}
 		keyID := ht.ProbeScratch.ToCheckID[toCheck]
-		// {{if or (not .SelectDistinct) (not .ProbingAgainstItself)}}
-		// {{/*
-		//      When we're selecting distinct tuples and probing against itself,
-		//      we're in the code path of the unordered distinct where we're
-		//      trying to find duplicates within a single input batch. In such a
-		//      case we will never hit keyID of 0 because each tuple in the
-		//      batch is equal to itself (and possibly others). Once we find a
-		//      match, the tuple is no longer checked, so we never reach the end
-		//      of the corresponding hash chain which could result in keyID
-		//      being 0.
-		// */}}
-		if keyID != 0 {
-			// {{end}}
-			// {{if .DeletingProbeMode}}
-			if ht.Visited[keyID] {
-				// {{/*
-				//     This build tuple has already been matched, so we treat
-				//     it as different from the probing tuple.
-				// */}}
-				ht.ProbeScratch.differs[toCheck] = true
-				continue
-			}
-			// {{end}}
+		// {{if .DeletingProbeMode}}
+		if ht.Visited[keyID] {
 			// {{/*
-			//     Figure out the indexes of the tuples we're looking at.
+			//     This build tuple has already been matched, so we treat
+			//     it as different from the probing tuple.
 			// */}}
-			// {{if .UseProbeSel}}
-			probeIdx = probeSel[toCheck]
-			// {{else}}
-			probeIdx = int(toCheck)
-			// {{end}}
-			// {{/*
-			//     Usually, the build vector is already stored in the hash table,
-			//     so there is no selection vector. However, there is a use case
-			//     when we want to apply the selection vector to keyID when the
-			//     hash table is used by unordered distinct to remove the
-			//     duplicates within the vector itself - the vector is being
-			//     probed "against itself". In such case .UseProbeSel also
-			//     means .UseBuildSel if we were to introduce it.
-			// */}}
-			// {{if and (.UseProbeSel) (.ProbingAgainstItself)}}
-			// {{/*
-			//     The vector is probed against itself, so buildVec has the same
-			//     selection vector as probeVec.
-			// */}}
-			buildIdx = probeSel[keyID-1]
-			// {{else}}
-			buildIdx = int(keyID - 1)
-			// {{end}}
-			// {{/*
-			//     If either of the tuples might have NULLs, check that.
-			// */}}
-			// {{if .ProbeHasNulls}}
-			probeIsNull := probeVecNulls.NullAt(probeIdx)
-			// {{end}}
-			// {{if .BuildHasNulls}}
-			buildIsNull := buildVecNulls.NullAt(buildIdx)
-			// {{end}}
-			// {{/*
-			//     If the probing tuple might have NULLs, handle that case
-			//     first.
-			// */}}
-			// {{if .ProbeHasNulls}}
-			if probeIsNull {
-				if ht.allowNullEquality {
-					// {{/*
-					//     The probing tuple has a NULL value and NULLs are
-					//     treated as equal, so our behavior will depend on
-					//     whether the build tuple also has a NULL value:
-					//     - buildIsNull is false, then we have a mismatch and
-					//     we want to mark 'differs' accordingly;
-					//     - buildIsNull is true, then we have a match for the
-					//     current value and want to proceed checking on the
-					//     following column.
-					//     The template is set up such that in both cases we
-					//     fall down to 'continue', and when !buildIsNull, we
-					//     also generate code for updating 'differs'.
-					// */}}
-					// {{if .BuildHasNulls}}
-					if !buildIsNull {
-						// {{end}}
-						ht.ProbeScratch.differs[toCheck] = true
-						// {{if .BuildHasNulls}}
-					}
-					// {{end}}
-				} else {
-					// {{if .SelectDistinct}}
-					ht.ProbeScratch.foundNull[toCheck] = true
-					// {{else}}
-					ht.ProbeScratch.ToCheckID[toCheck] = 0
-					// {{end}}
-				}
-				continue
-			}
-			// {{end}}
-			// {{/*
-			//     At this point only the build tuple might have a NULL value,
-			//     and if it is NULL, regardless of allowNullEquality, we have a
-			//     mismatch.
-			// */}}
-			// {{if .BuildHasNulls}}
-			if buildIsNull {
-				ht.ProbeScratch.differs[toCheck] = true
-				continue
-			}
-			// {{end}}
-			// {{/*
-			//     Now both values are not NULL, so we have to perform actual
-			//     comparison.
-			//     TODO(yuzefovich): depending on the type, it might be faster
-			//     to check whether differs[toCheck] is already true. My guess
-			//     is that for simple types like int64 introducing a conditional
-			//     will be slower.
-			// */}}
-			probeVal := probeKeys.Get(probeIdx)
-			buildVal := buildKeys.Get(buildIdx)
-			var unique bool
-			_ASSIGN_NE(unique, probeVal, buildVal, _, probeKeys, buildKeys)
-			ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
-			// {{if or (not .SelectDistinct) (not .ProbingAgainstItself)}}
+			ht.ProbeScratch.differs[toCheck] = true
+			continue
 		}
 		// {{end}}
+		// {{/*
+		//     Figure out the indexes of the tuples we're looking at.
+		// */}}
+		// {{if .UseProbeSel}}
+		probeIdx = probeSel[toCheck]
+		// {{else}}
+		probeIdx = int(toCheck)
+		// {{end}}
+		// {{/*
+		//     Usually, the build vector is already stored in the hash table,
+		//     so there is no selection vector. However, there is a use case
+		//     when we want to apply the selection vector to keyID when the
+		//     hash table is used by unordered distinct to remove the
+		//     duplicates within the vector itself - the vector is being
+		//     probed "against itself". In such case .UseProbeSel also
+		//     means .UseBuildSel if we were to introduce it.
+		// */}}
+		// {{if and (.UseProbeSel) (.ProbingAgainstItself)}}
+		// {{/*
+		//     The vector is probed against itself, so buildVec has the same
+		//     selection vector as probeVec.
+		// */}}
+		buildIdx = probeSel[keyID-1]
+		// {{else}}
+		buildIdx = int(keyID - 1)
+		// {{end}}
+		// {{/*
+		//     If either of the tuples might have NULLs, check that.
+		// */}}
+		// {{if .ProbeHasNulls}}
+		probeIsNull := probeVecNulls.NullAt(probeIdx)
+		// {{end}}
+		// {{if .BuildHasNulls}}
+		buildIsNull := buildVecNulls.NullAt(buildIdx)
+		// {{end}}
+		// {{/*
+		//     If the probing tuple might have NULLs, handle that case
+		//     first.
+		// */}}
+		// {{if .ProbeHasNulls}}
+		if probeIsNull {
+			if ht.allowNullEquality {
+				// {{/*
+				//     The probing tuple has a NULL value and NULLs are
+				//     treated as equal, so our behavior will depend on
+				//     whether the build tuple also has a NULL value:
+				//     - buildIsNull is false, then we have a mismatch and
+				//     we want to mark 'differs' accordingly;
+				//     - buildIsNull is true, then we have a match for the
+				//     current value and want to proceed checking on the
+				//     following column.
+				//     The template is set up such that in both cases we
+				//     fall down to 'continue', and when !buildIsNull, we
+				//     also generate code for updating 'differs'.
+				// */}}
+				// {{if .BuildHasNulls}}
+				if !buildIsNull {
+					// {{end}}
+					ht.ProbeScratch.differs[toCheck] = true
+					// {{if .BuildHasNulls}}
+				}
+				// {{end}}
+			} else {
+				ht.ProbeScratch.differs[toCheck] = true
+				ht.ProbeScratch.foundNull[toCheck] = true
+			}
+			continue
+		}
+		// {{end}}
+		// {{/*
+		//     At this point only the build tuple might have a NULL value,
+		//     and if it is NULL, regardless of allowNullEquality, we have a
+		//     mismatch.
+		// */}}
+		// {{if .BuildHasNulls}}
+		if buildIsNull {
+			ht.ProbeScratch.differs[toCheck] = true
+			continue
+		}
+		// {{end}}
+		// {{/*
+		//     Now both values are not NULL, so we have to perform actual
+		//     comparison.
+		//     TODO(yuzefovich): depending on the type, it might be faster
+		//     to check whether differs[toCheck] is already true. My guess
+		//     is that for simple types like int64 introducing a conditional
+		//     will be slower.
+		// */}}
+		probeVal := probeKeys.Get(probeIdx)
+		buildVal := buildKeys.Get(buildIdx)
+		var unique bool
+		_ASSIGN_NE(unique, probeVal, buildVal, _, probeKeys, buildKeys)
+		ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 	}
 	// {{end}}
 	// {{/*
@@ -460,8 +444,9 @@ func _CHECK_BODY(
 	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
-		// {{if and (.SelectDistinct) (not .AllowNullEquality)}}
+		// {{if not .AllowNullEquality}}
 		if ht.ProbeScratch.foundNull[toCheck] {
+			// {{if .SelectDistinct}}
 			// {{/*
 			//     The hash table is used for the unordered distinct operator.
 			//     This code block is only relevant when we're probing the batch
@@ -472,6 +457,15 @@ func _CHECK_BODY(
 			//     NULL value, so we want to mark it as equal to itself only.
 			// */}}
 			ht.ProbeScratch.HeadID[toCheck] = toCheck + 1
+			// {{else}}
+			// {{/*
+			//     The hash table is used by the hash joiner when the NULL
+			//     equality is not allowed. In such case, since we found a NULL
+			//     value in the equality column, we know for sure that this
+			//     probing tuple won't ever get a match.
+			// */}}
+			ht.ProbeScratch.ToCheckID[toCheck] = 0
+			// {{end}}
 			continue
 		}
 		// {{end}}
@@ -592,13 +586,21 @@ func (ht *HashTable) Check(nToCheck uint64, probeSel []int) uint64 {
 	nDiffers := uint64(0)
 	switch ht.probeMode {
 	case HashTableDefaultProbeMode:
+		// {{/*
+		//     HashTableDefaultProbeMode is used by join types other than
+		//     set-operation joins, so it never allows the null equality.
+		// */}}
 		if ht.Same != nil {
 			_CHECK_BODY(true, false, false, false)
 		} else {
 			_CHECK_BODY(false, false, false, false)
 		}
 	case HashTableDeletingProbeMode:
-		_CHECK_BODY(false, true, false, false)
+		// {{/*
+		//     HashTableDeletingProbeMode is only used by the set-operation
+		//     joins, which always allow the null equality.
+		// */}}
+		_CHECK_BODY(false, true, false, true)
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unsupported hash table probe mode"))
 	}
@@ -711,7 +713,7 @@ func (ht *HashTable) FindBuckets(
 	zeroHeadIDForDistinctTuple bool,
 	probingAgainstItself bool,
 ) {
-	ht.ProbeScratch.SetupLimitedSlices(batch.Length(), ht.BuildMode)
+	ht.ProbeScratch.SetupLimitedSlices(batch.Length())
 	if zeroHeadIDForDistinctTuple {
 		if probingAgainstItself {
 			findBuckets(ht, batch, keyCols, first, next, duplicatesChecker, true, true)
