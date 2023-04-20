@@ -69,7 +69,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -934,7 +933,7 @@ func (s *systemStatusServer) AllocatorRange(
 			ctx,
 			"server.statusServer: requesting remote Allocator simulation",
 			func(ctx context.Context) {
-				_ = contextutil.RunWithTimeout(ctx, "allocator range", 3*time.Second, func(ctx context.Context) error {
+				_ = timeutil.RunWithTimeout(ctx, "allocator range", 3*time.Second, func(ctx context.Context) error {
 					status, err := s.dialNode(ctx, nodeID)
 					var allocatorResponse *serverpb.AllocatorResponse
 					if err == nil {
@@ -2869,7 +2868,7 @@ func (s *statusServer) iterateNodes(
 
 	nodeQuery := func(ctx context.Context, nodeID roachpb.NodeID) {
 		var client interface{}
-		err := contextutil.RunWithTimeout(ctx, "dial node", base.DialTimeout, func(ctx context.Context) error {
+		err := timeutil.RunWithTimeout(ctx, "dial node", base.DialTimeout, func(ctx context.Context) error {
 			var err error
 			client, err = dialFn(ctx, nodeID)
 			return err

@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"go.opentelemetry.io/otel/attribute"
@@ -383,7 +383,7 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 }
 
 func (s *azureStorage) Delete(ctx context.Context, basename string) error {
-	err := contextutil.RunWithTimeout(ctx, "delete azure file", cloud.Timeout.Get(&s.settings.SV),
+	err := timeutil.RunWithTimeout(ctx, "delete azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			_, err := s.getBlob(basename).Delete(ctx, nil)
 			return err
@@ -393,7 +393,7 @@ func (s *azureStorage) Delete(ctx context.Context, basename string) error {
 
 func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error) {
 	var props blob.GetPropertiesResponse
-	err := contextutil.RunWithTimeout(ctx, "size azure file", cloud.Timeout.Get(&s.settings.SV),
+	err := timeutil.RunWithTimeout(ctx, "size azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			var err error
 			props, err = s.getBlob(basename).GetProperties(ctx, nil)

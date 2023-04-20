@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -923,7 +922,7 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return toSend, nil
 		}
 
-		if err := contextutil.RunWithTimeout(
+		if err := timeutil.RunWithTimeout(
 			context.Background(), timeoutOp("tableFeed.Next", c.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
@@ -1367,7 +1366,7 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return e, nil
 		}
 
-		if err := contextutil.RunWithTimeout(
+		if err := timeutil.RunWithTimeout(
 			context.Background(), timeoutOp("cloudfeed.Next", c.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
@@ -1813,7 +1812,7 @@ func (k *kafkaFeed) Partitions() []string {
 func (k *kafkaFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		var msg *sarama.ProducerMessage
-		if err := contextutil.RunWithTimeout(
+		if err := timeutil.RunWithTimeout(
 			context.Background(), timeoutOp("kafka.Next", k.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
@@ -2107,7 +2106,7 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return m, nil
 		}
 
-		if err := contextutil.RunWithTimeout(
+		if err := timeutil.RunWithTimeout(
 			context.Background(), timeoutOp("webhook.Next", f.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
@@ -2458,7 +2457,7 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return m, nil
 		}
 
-		if err := contextutil.RunWithTimeout(
+		if err := timeutil.RunWithTimeout(
 			context.Background(), timeoutOp("pubsub.Next", p.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
