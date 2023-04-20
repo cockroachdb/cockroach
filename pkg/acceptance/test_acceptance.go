@@ -30,11 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func MainTest(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
+	util.LogMetamorphicVariables()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(RunTests(m))
@@ -42,6 +44,7 @@ func MainTest(m *testing.M) {
 
 // RunTests runs the tests in a package while gracefully handling interrupts.
 func RunTests(m *testing.M) int {
+	util.LogMetamorphicVariables()
 	randutil.SeedForTests()
 
 	ctx := context.Background()

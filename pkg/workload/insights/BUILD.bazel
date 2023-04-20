@@ -38,6 +38,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "//pkg/workload/workloadsql",

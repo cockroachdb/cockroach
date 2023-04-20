@@ -20,6 +20,7 @@ go_test(
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/util",
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/log",

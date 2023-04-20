@@ -43,6 +43,7 @@ go_test(
         "//pkg/server",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/randutil",
     ],
 )

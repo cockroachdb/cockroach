@@ -10,6 +10,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils/serverutils",
+        "//pkg/util",
         "//pkg/util/randutil",
     ],
 )

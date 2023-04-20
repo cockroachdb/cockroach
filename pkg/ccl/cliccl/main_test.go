@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestMain(m *testing.M) {
@@ -24,6 +25,7 @@ func TestMain(m *testing.M) {
 	defer build.TestingOverrideVersion("v999.0.0")()
 
 	defer ccl.TestingEnableEnterprise()()
+	util.LogMetamorphicVariables()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }

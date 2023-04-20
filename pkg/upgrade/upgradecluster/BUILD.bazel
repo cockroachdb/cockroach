@@ -52,6 +52,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/upgrade/nodelivenesstest",
+        "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/syncutil",
         "@org_golang_google_grpc//:go_default_library",

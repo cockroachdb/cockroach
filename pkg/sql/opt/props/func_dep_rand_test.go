@@ -22,6 +22,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -1016,6 +1017,7 @@ func TestFuncDepOpsRandom(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	util.LogMetamorphicVariables()
 	randutil.SeedForTests()
 	os.Exit(m.Run())
 }

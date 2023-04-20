@@ -33,6 +33,7 @@ go_test(
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",

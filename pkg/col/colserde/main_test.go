@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -37,6 +38,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	util.LogMetamorphicVariables()
 	randutil.SeedForTests()
 	os.Exit(func() int {
 		ctx := context.Background()

@@ -45,7 +45,6 @@ var smallEngineBlocks = !util.RaceEnabled &&
 	util.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
 
 func init() {
-	randutil.SeedForTests()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)

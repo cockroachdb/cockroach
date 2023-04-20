@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 //go:generate ../../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
+	util.LogMetamorphicVariables()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())

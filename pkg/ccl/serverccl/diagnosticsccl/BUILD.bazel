@@ -29,6 +29,7 @@ go_test(
         "//pkg/testutils/diagutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
+        "//pkg/util",
         "//pkg/util/cloudinfo",
         "//pkg/util/leaktest",
         "//pkg/util/log",

@@ -65,6 +65,7 @@ go_test(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/types",
         "//pkg/testutils",
+        "//pkg/util",
         "//pkg/util/cancelchecker",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

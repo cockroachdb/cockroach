@@ -184,6 +184,7 @@ import ({{ if .SqliteLogicTest }}
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -211,6 +212,7 @@ func TestMain(m *testing.M) {
 	}
 {{ end }}{{ if .Ccl }}	defer ccl.TestingEnableEnterprise()()
 {{ end }}	securityassets.SetLoader(securitytest.EmbeddedAssets)
+	util.LogMetamorphicVariables()
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
@@ -284,6 +286,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "//pkg/util",
         "//pkg/util/randutil",
     ],
 )

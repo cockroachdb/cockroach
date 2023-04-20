@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func init() {
@@ -27,6 +28,7 @@ func init() {
 }
 
 func TestMain(m *testing.M) {
+	util.LogMetamorphicVariables()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	kvtenant.InitTestConnectorFactory()

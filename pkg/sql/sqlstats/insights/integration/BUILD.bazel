@@ -16,6 +16,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/timeutil",
