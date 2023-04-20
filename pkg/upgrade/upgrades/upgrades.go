@@ -310,6 +310,12 @@ var upgrades = []upgradebase.Upgrade{
 		createActivityUpdateJobMigration,
 		"create statement_activity and transaction_activity job",
 	),
+	upgrade.NewTenantUpgrade(
+		"enable JSON forward indexes and ORDER BY on JSON columns",
+		toCV(clusterversion.V23_2_JSONForwardIndexes),
+		upgrade.NoPrecondition,
+		NoTenantUpgradeFunc,
+	),
 }
 
 func init() {

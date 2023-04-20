@@ -540,6 +540,10 @@ const (
 	// the process of upgrading from previous supported releases to 23.2.
 	V23_2Start
 
+	// V23_2_JSONForwardIndexes enables forward indexing for JSON columns, along with a
+	// lexicographical ordering for JSON columns, for all clusters with a version >= 23.2
+	V23_2_JSONForwardIndexes
+
 	// *************************************************
 	// Step 1b: Add new version for 23.2 development here.
 	// Do not add new versions to a patch release.
@@ -941,6 +945,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2Start,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 2},
+	},
+	{
+		Key:     V23_2_JSONForwardIndexes,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 4},
 	},
 
 	// *************************************************
