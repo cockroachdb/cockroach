@@ -764,6 +764,13 @@ func TestTenantLogic_explain_analyze(
 	runLogicTest(t, "explain_analyze")
 }
 
+func TestTenantLogic_export(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "export")
+}
+
 func TestTenantLogic_expression_index(
 	t *testing.T,
 ) {
