@@ -11,12 +11,15 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/kv/kvpb",
         "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -33,7 +36,6 @@ go_test(
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils",
         "//pkg/roachpb",
-        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
