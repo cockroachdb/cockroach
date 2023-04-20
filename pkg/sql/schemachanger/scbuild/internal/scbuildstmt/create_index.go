@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -368,6 +369,7 @@ func processColNodeType(
 		})
 	}
 	// Only certain column types are supported for inverted indexes.
+	version := b.EvalCtx().Settings.Version.ActiveVersion(b)
 	if n.Inverted && lastColIdx &&
 		!colinfo.ColumnTypeIsInvertedIndexable(columnType.Type) {
 		colNameForErr := colName
@@ -377,7 +379,8 @@ func processColNodeType(
 		panic(tabledesc.NewInvalidInvertedColumnError(colNameForErr,
 			columnType.Type.String()))
 	} else if (!n.Inverted || !lastColIdx) &&
-		!colinfo.ColumnTypeIsIndexable(columnType.Type) {
+		(!colinfo.ColumnTypeIsIndexable(columnType.Type) ||
+			(columnType.Type.Family() == types.JsonFamily && !version.IsActive(clusterversion.V23_2))) {
 		// Otherwise, check if the column type is indexable.
 		panic(unimplemented.NewWithIssueDetailf(35730,
 			columnType.Type.DebugString(),
