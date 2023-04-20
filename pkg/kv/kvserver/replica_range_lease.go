@@ -432,12 +432,10 @@ func (p *pendingLeaseRequest) requestLease(
 		p.repl.store.metrics.LeaseRequestLatency.RecordValue(timeutil.Since(started).Nanoseconds())
 	}()
 
-	// If requesting an epoch-based lease & current state is expired,
-	// potentially heartbeat our own liveness or increment epoch of
-	// prior owner. Note we only do this if the previous lease was
-	// epoch-based.
-	if reqLease.Type() == roachpb.LeaseEpoch && status.State == kvserverpb.LeaseState_EXPIRED &&
-		status.Lease.Type() == roachpb.LeaseEpoch {
+	// If we're replacing an expired epoch-based lease, we must increment the
+	// epoch of the prior owner to invalidate its leases. If we were the owner,
+	// then we instead heartbeat to become live.
+	if status.Lease.Type() == roachpb.LeaseEpoch && status.State == kvserverpb.LeaseState_EXPIRED {
 		var err error
 		// If this replica is previous & next lease holder, manually heartbeat to become live.
 		if status.OwnedBy(nextLeaseHolder.StoreID) &&
