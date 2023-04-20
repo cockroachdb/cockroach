@@ -327,6 +327,9 @@ func (tf *schemaFeed) periodicallyMaybePollTableHistory(ctx context.Context) err
 			if err := tf.updateTableHistory(ctx, tf.clock.Now()); err != nil {
 				return err
 			}
+			if tf.metrics != nil {
+				tf.metrics.TableHistoryScans.Inc(1)
+			}
 		}
 
 		select {

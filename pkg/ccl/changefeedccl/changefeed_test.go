@@ -4021,7 +4021,10 @@ func TestChangefeedMonitoring(t *testing.T) {
 		if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.out`); c != 0 {
 			t.Errorf(`expected 0 got %d`, c)
 		}
-		if c := s.Server.MustGetSQLCounter(`changefeed.table_metadata_nanos`); c != 0 {
+		if c := s.Server.MustGetSQLCounter(`changefeed.schemafeed.table_metadata_nanos`); c != 0 {
+			t.Errorf(`expected 0 got %d`, c)
+		}
+		if c := s.Server.MustGetSQLCounter(`changefeed.schemafeed.table_history_scans`); c != 0 {
 			t.Errorf(`expected 0 got %d`, c)
 		}
 
@@ -4052,6 +4055,9 @@ func TestChangefeedMonitoring(t *testing.T) {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
 			if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.out`); c <= 0 {
+				return errors.Errorf(`expected > 0 got %d`, c)
+			}
+			if c := s.Server.MustGetSQLCounter(`changefeed.schemafeed.table_history_scans`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
 			return nil
