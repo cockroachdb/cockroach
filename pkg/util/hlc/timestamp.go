@@ -397,18 +397,6 @@ func (LegacyTimestamp) SafeValue() {}
 // Synthetic flag set to false.
 type ClockTimestamp Timestamp
 
-// DeprecatedTryToClockTimestamp attempts to downcast a Timestamp into a
-// ClockTimestamp. Returns the result and a boolean indicating whether the cast
-// succeeded.
-// TODO(nvanbenschoten): remove this in v23.1 when we remove the synthetic
-// timestamp bit.
-func (t Timestamp) DeprecatedTryToClockTimestamp() (ClockTimestamp, bool) {
-	if t.Synthetic {
-		return ClockTimestamp{}, false
-	}
-	return ClockTimestamp(t), true
-}
-
 // UnsafeToClockTimestamp converts a Timestamp to a ClockTimestamp, regardless
 // of whether such a cast would be legal according to the Synthetic flag. The
 // method should only be used in tests.
