@@ -143,19 +143,31 @@ func (h *runtimeHistogram) GetMetadata() metric.Metadata {
 // Inspect is part of the Iterable interface.
 func (h *runtimeHistogram) Inspect(f func(interface{})) { f(h) }
 
-// TotalCountWindowed implements the WindowedHistogram interface.
-func (h *runtimeHistogram) TotalCountWindowed() int64 {
-	return int64(h.ToPrometheusMetric().Histogram.GetSampleCount())
+// TotalWindowed implements the WindowedHistogram interface.
+func (h *runtimeHistogram) TotalWindowed() (int64, float64) {
+	return h.Total()
 }
 
-// TotalSumWindowed implements the WindowedHistogram interface.
-func (h *runtimeHistogram) TotalSumWindowed() float64 {
-	return h.ToPrometheusMetric().Histogram.GetSampleSum()
+// Total implements the WindowedHistogram interface.
+func (h *runtimeHistogram) Total() (int64, float64) {
+	pHist := h.ToPrometheusMetric().Histogram
+	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
 }
 
 // ValueAtQuantileWindowed implements the WindowedHistogram interface.
 func (h *runtimeHistogram) ValueAtQuantileWindowed(q float64) float64 {
 	return metric.ValueAtQuantileWindowed(h.ToPrometheusMetric().Histogram, q)
+}
+
+// MeanWindowed implements the WindowedHistogram interface.
+func (h *runtimeHistogram) MeanWindowed() float64 {
+	return h.Mean()
+}
+
+// Mean implements the WindowedHistogram interface.
+func (h *runtimeHistogram) Mean() float64 {
+	pHist := h.ToPrometheusMetric().Histogram
+	return pHist.GetSampleSum() / float64(pHist.GetSampleCount())
 }
 
 // reBucketExpAndTrim takes a list of bucket boundaries (lower bound inclusive)
