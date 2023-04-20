@@ -65,7 +65,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
@@ -849,9 +848,7 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 		}
 	}
 
-	if logcrash.DiagnosticsReportingEnabled.Get(&s.ClusterSettings().SV) {
-		structlogging.StartHotRangesLoggingScheduler(ctx, s.stopper, s.sqlServer.tenantConnect, *s.sqlServer.internalExecutor, s.ClusterSettings())
-	}
+	structlogging.StartHotRangesLoggingScheduler(ctx, s.stopper, s.sqlServer.tenantConnect, *s.sqlServer.internalExecutor, s.ClusterSettings())
 
 	s.sqlServer.isReady.Set(true)
 
