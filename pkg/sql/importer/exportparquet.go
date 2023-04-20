@@ -678,6 +678,7 @@ func newParquetWriterProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.ExportSpec,
+	post *execinfrapb.PostProcessSpec,
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
@@ -689,7 +690,7 @@ func newParquetWriterProcessor(
 		output:      output,
 	}
 	semaCtx := tree.MakeSemaContext()
-	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx()); err != nil {
+	if err := c.out.Init(post, colinfo.ExportColumnTypes, &semaCtx, flowCtx.NewEvalCtx()); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -707,11 +708,7 @@ type parquetWriterProcessor struct {
 var _ execinfra.Processor = &parquetWriterProcessor{}
 
 func (sp *parquetWriterProcessor) OutputTypes() []*types.T {
-	res := make([]*types.T, len(colinfo.ExportColumns))
-	for i := range res {
-		res[i] = colinfo.ExportColumns[i].Typ
-	}
-	return res
+	return sp.out.OutputTypes
 }
 
 // MustBeStreaming currently never gets called by the parquetWriterProcessor as
