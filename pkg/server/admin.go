@@ -60,7 +60,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -1416,7 +1415,7 @@ func (s *adminServer) statsForSpan(
 			func(ctx context.Context) {
 				// Set a generous timeout on the context for each individual query.
 				var spanResponse *roachpb.SpanStatsResponse
-				err := contextutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
+				err := timeutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
 					func(ctx context.Context) error {
 						conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
 						if err == nil {
@@ -3260,7 +3259,7 @@ func (s *systemAdminServer) EnqueueRange(
 		response.Details = append(response.Details, errDetail)
 	}
 
-	if err := contextutil.RunWithTimeout(ctx, "enqueue range", time.Minute, func(ctx context.Context) error {
+	if err := timeutil.RunWithTimeout(ctx, "enqueue range", time.Minute, func(ctx context.Context) error {
 		return s.server.status.iterateNodes(
 			ctx, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
 			dialFn, nodeFn, responseFn, errorFn,

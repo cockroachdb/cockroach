@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -263,7 +263,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		c.Start(ctx, t.L(), option.DefaultStartSingleNodeOpts(), settings, c.Nodes(remaining...))
 
 		t.L().Printf("waiting for nodes to restart")
-		if err = contextutil.RunWithTimeout(ctx, "wait-for-restart", time.Minute,
+		if err = timeutil.RunWithTimeout(ctx, "wait-for-restart", time.Minute,
 			func(ctx context.Context) error {
 				var err error
 				for {
@@ -297,7 +297,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		}
 
 		t.L().Printf("mark dead nodes as decommissioned")
-		if err := contextutil.RunWithTimeout(ctx, "mark-nodes-decommissioned", 5*time.Minute,
+		if err := timeutil.RunWithTimeout(ctx, "mark-nodes-decommissioned", 5*time.Minute,
 			func(ctx context.Context) error {
 				decommissionCmd := fmt.Sprintf(
 					"./cockroach node decommission --wait none --insecure --url={pgurl:%d} 2 3", 1)
@@ -323,7 +323,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 			// cluster is not healthy after recovery and that means restart failed.
 			return &recoveryImpossibleError{testOutcome: restartFailed}
 		}
-		if err := contextutil.RunWithTimeout(ctx, "decommission-removed-nodes", 5*time.Minute,
+		if err := timeutil.RunWithTimeout(ctx, "decommission-removed-nodes", 5*time.Minute,
 			func(ctx context.Context) error {
 				decommissionCmd := fmt.Sprintf(
 					"./cockroach node decommission --wait all --insecure --url={pgurl:%d} 2 3", 1)
@@ -474,7 +474,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 
 		t.L().Printf("waiting for nodes to process recovery")
 		verifyCommand := "./cockroach debug recover verify --insecure --host " + addr + " " + planName
-		if err = contextutil.RunWithTimeout(ctx, "wait-for-restart", 2*time.Minute,
+		if err = timeutil.RunWithTimeout(ctx, "wait-for-restart", 2*time.Minute,
 			func(ctx context.Context) error {
 				for {
 					res, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(controller), verifyCommand)
@@ -537,7 +537,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		// In half online mode, nodes will update dead nodes' status upon
 		// restart. Check that it actually happened. We also need to have retry
 		// since decommission is done in the background with retries.
-		if err = contextutil.RunWithTimeout(ctx, "wait-for-decommission", 5*time.Minute,
+		if err = timeutil.RunWithTimeout(ctx, "wait-for-decommission", 5*time.Minute,
 			func(ctx context.Context) error {
 				// Keep trying to query until either we get no rows (all nodes are
 				// decommissioned or removed) or task times out. In timeout case, test

@@ -37,11 +37,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -855,7 +855,7 @@ func (s *s3Storage) Delete(ctx context.Context, basename string) error {
 	if err != nil {
 		return err
 	}
-	return contextutil.RunWithTimeout(ctx, "delete s3 object",
+	return timeutil.RunWithTimeout(ctx, "delete s3 object",
 		cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			_, err := client.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
@@ -872,7 +872,7 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 		return 0, err
 	}
 	var out *s3.HeadObjectOutput
-	err = contextutil.RunWithTimeout(ctx, "get s3 object header",
+	err = timeutil.RunWithTimeout(ctx, "get s3 object header",
 		cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			var err error

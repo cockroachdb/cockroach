@@ -40,7 +40,6 @@ go_library(
         "//pkg/ts/tspb",
         "//pkg/util",
         "//pkg/util/buildutil",
-        "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/growstack",
         "//pkg/util/grpcutil",

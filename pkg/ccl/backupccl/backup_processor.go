@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -463,7 +462,7 @@ func runBackupProcessor(
 					var recording tracingpb.Recording
 					var pErr *kvpb.Error
 					requestSentAt := timeutil.Now()
-					exportRequestErr := contextutil.RunWithTimeout(ctx,
+					exportRequestErr := timeutil.RunWithTimeout(ctx,
 						fmt.Sprintf("ExportRequest for span %s", span.span),
 						timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
 							sp := tracing.SpanFromContext(ctx)
@@ -494,7 +493,7 @@ func runBackupProcessor(
 						}
 						// TimeoutError improves the opaque `context deadline exceeded` error
 						// message so use that instead.
-						if errors.HasType(exportRequestErr, (*contextutil.TimeoutError)(nil)) {
+						if errors.HasType(exportRequestErr, (*timeutil.TimeoutError)(nil)) {
 							if recording != nil {
 								log.Errorf(ctx, "failed export request for span %s\n trace:\n%s", span.span, recording)
 							}

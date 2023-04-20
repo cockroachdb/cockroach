@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var (
@@ -200,7 +200,7 @@ func (p *poller) poll(ctx context.Context) {
 		const opName = "ts-poll"
 		ctx, span := p.AnnotateCtxWithSpan(ctx, opName)
 		defer span.Finish()
-		if err := contextutil.RunWithTimeout(ctx, opName, storeDataTimeout,
+		if err := timeutil.RunWithTimeout(ctx, opName, storeDataTimeout,
 			func(ctx context.Context) error {
 				return p.db.StoreData(ctx, p.r, data)
 			},

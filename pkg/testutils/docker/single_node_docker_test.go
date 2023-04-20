@@ -28,8 +28,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -177,7 +177,7 @@ func TestSingleNodeDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := contextutil.RunWithTimeout(
+	if err := timeutil.RunWithTimeout(
 		ctx,
 		"remove all containers using current image",
 		defaultTimeout,
@@ -190,7 +190,7 @@ func TestSingleNodeDocker(t *testing.T) {
 	for _, test := range dockerTests {
 		t.Run(test.testName, func(t *testing.T) {
 
-			if err := contextutil.RunWithTimeout(
+			if err := timeutil.RunWithTimeout(
 				ctx,
 				"start container",
 				defaultTimeout,
@@ -207,7 +207,7 @@ func TestSingleNodeDocker(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := contextutil.RunWithTimeout(
+			if err := timeutil.RunWithTimeout(
 				ctx,
 				"wait for the server to finish the initialization",
 				waitInitTimeout,
@@ -218,7 +218,7 @@ func TestSingleNodeDocker(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := contextutil.RunWithTimeout(
+			if err := timeutil.RunWithTimeout(
 				ctx,
 				"show log",
 				defaultTimeout,
@@ -233,7 +233,7 @@ func TestSingleNodeDocker(t *testing.T) {
 				query := qe.query
 				expected := qe.expectedResult
 
-				if err := contextutil.RunWithTimeout(
+				if err := timeutil.RunWithTimeout(
 					ctx,
 					fmt.Sprintf("execute command \"%s\"", query),
 					defaultTimeout,
@@ -256,7 +256,7 @@ func TestSingleNodeDocker(t *testing.T) {
 				}
 			}
 
-			if err := contextutil.RunWithTimeout(
+			if err := timeutil.RunWithTimeout(
 				ctx,
 				"remove current container",
 				defaultTimeout,

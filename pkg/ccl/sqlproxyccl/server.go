@@ -16,12 +16,12 @@ import (
 	"net/http/pprof"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	proxyproto "github.com/pires/go-proxyproto"
@@ -188,7 +188,7 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 		// down. The HTTP service is an auxiliary service for health
 		// checking and metrics, which does not need a completely
 		// graceful shutdown.
-		_ = contextutil.RunWithTimeout(
+		_ = timeutil.RunWithTimeout(
 			context.Background(),
 			"http server shutdown",
 			15*time.Second,

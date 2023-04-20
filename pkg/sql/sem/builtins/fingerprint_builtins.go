@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -94,7 +93,7 @@ func fingerprint(
 			var rawResp kvpb.Response
 			var recording tracingpb.Recording
 			var pErr *kvpb.Error
-			exportRequestErr := contextutil.RunWithTimeout(ctx,
+			exportRequestErr := timeutil.RunWithTimeout(ctx,
 				fmt.Sprintf("ExportRequest fingerprint for span %s", roachpb.Span{Key: span.Key,
 					EndKey: span.EndKey}),
 				5*time.Minute, func(ctx context.Context) error {

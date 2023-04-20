@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -266,7 +265,7 @@ func (r *Replica) executeWriteBatch(
 				//
 				// [1]: See PurgeOutdatedReplicas from the Migration service.
 				// [2]: pkg/migration
-				applicationErr := contextutil.RunWithTimeout(ctx, "wait for Migrate application",
+				applicationErr := timeutil.RunWithTimeout(ctx, "wait for Migrate application",
 					migrateApplicationTimeout.Get(&r.ClusterSettings().SV),
 					func(ctx context.Context) error {
 						desc := r.Desc()
@@ -305,7 +304,7 @@ func (r *Replica) executeWriteBatch(
 					r.AnnotateCtx(context.Background()),
 					taskName,
 					func(ctx context.Context) {
-						err := contextutil.RunWithTimeout(ctx, taskName, 20*time.Second,
+						err := timeutil.RunWithTimeout(ctx, taskName, 20*time.Second,
 							func(ctx context.Context) error {
 								select {
 								case propResult := <-ch:
