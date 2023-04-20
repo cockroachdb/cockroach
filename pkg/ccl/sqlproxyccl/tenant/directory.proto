@@ -15,6 +15,7 @@ import "google/protobuf/timestamp.proto";
 
 // PodState gives the current state of a tenant pod, so that the proxy knows
 // how/where to route traffic.
+//
 // NOTE: This is not the same as the Kubernetes Pod Status.
 enum PodState {
   option (gogoproto.goproto_enum_prefix) = false;
@@ -74,7 +75,7 @@ message ListPodsResponse {
 // WatchPodsRequest is empty as we want to get all notifications.
 message WatchPodsRequest {}
 
-// WatchPodsResponse represents the notifications that the server sends to
+// WatchPodsResponse represents the pod notifications that the server sends to
 // its clients when clients want to monitor the directory server activity.
 message WatchPodsResponse {
   // Pod describes the tenant pod which has been added, modified, or deleted.
@@ -93,6 +94,14 @@ message EnsurePodRequest {
 message EnsurePodResponse {
 }
 
+// Tenant contains information about a tenant, such as its name and ID.
+message Tenant {
+  // TenantID identifies the tenant.
+  uint64 tenant_id = 1 [(gogoproto.customname) = "TenantID"];
+  // ClusterName is the name of the tenant's cluster.
+  string cluster_name = 2;
+}
+
 // GetTenantRequest is used by a client to request from the sever metadata
 // related to a given tenant.
 message GetTenantRequest {
@@ -103,7 +112,22 @@ message GetTenantRequest {
 // GetTenantResponse is sent back when a client requests metadata for a tenant.
 message GetTenantResponse {
   // ClusterName is the name of the tenant's cluster.
-  string cluster_name = 1; // add more metadata if needed
+  //
+  // TODO(jaylim-crl): Remove this field once it is no longer used.
+  string cluster_name = 1;
+  // Tenant describes the tenant that is being requested.
+  Tenant tenant = 2;
+}
+
+// WatchTenantsRequest is empty as we want to get all notifications.
+message WatchTenantsRequest {}
+
+// WatchTenantsResponse represents the tenant notifications that the server
+// sends to its clients when clients want to monitor the directory server
+// activity.
+message WatchTenantsResponse {
+  // Tenant describes the tenant which has been added, modified, or deleted.
+  Tenant tenant = 1;
 }
 
 // Directory specifies a service that keeps track and manages tenant backends,
@@ -126,4 +150,9 @@ service Directory {
   // GetTenant is used to fetch the metadata of a specific tenant. If the tenant
   // does not exist, GetTenant returns a GRPC NotFound error.
   rpc GetTenant(GetTenantRequest) returns (GetTenantResponse);
+  // WatchTenants gets a stream of tenant metadata change notifications.
+  // Notifications are sent when a tenant is created, destroyed, or modified.
+  // When WatchTenants is first called, it returns notifications for all
+  // existing tenants.
+  rpc WatchTenants(WatchTenantsRequest) returns (stream WatchTenantsResponse);
 }
