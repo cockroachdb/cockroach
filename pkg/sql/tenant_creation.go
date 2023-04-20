@@ -14,6 +14,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -60,6 +61,14 @@ func (p *planner) CreateTenant(
 		if err := d.Decode(&ctcfg); err != nil {
 			return tid, pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
+	}
+
+	if ctcfg.ID != nil && *ctcfg.ID > math.MaxUint32 {
+		// Tenant creation via this interface (which includes
+		// crdb_internal.create_tenant) should be prevented from gobbling
+		// up the entire tenant ID space by asking for too large values.
+		// Otherwise, CREATE TENANT will not be possible any more.
+		return tid, pgerror.Newf(pgcode.ProgramLimitExceeded, "tenant ID %d out of range", *ctcfg.ID)
 	}
 
 	configTemplate := mtinfopb.TenantInfoWithUsage{}
