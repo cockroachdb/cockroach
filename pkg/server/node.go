@@ -1248,7 +1248,7 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		tenantID = roachpb.SystemTenantID
 	} else {
 		// We had this tag before the ResetAndAnnotateCtx() call above.
-		ctx = logtags.AddTag(ctx, "tenant", tenantID.String())
+		ctx = logtags.AddTag(ctx, "tenant", tenantID)
 	}
 
 	// If the node is collecting a CPU profile with labels, and the sender has set
