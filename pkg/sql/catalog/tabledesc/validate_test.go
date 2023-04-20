@@ -385,8 +385,9 @@ func TestValidateTableDesc(t *testing.T) {
 	}
 
 	testData := []struct {
-		err  string
-		desc descpb.TableDescriptor
+		err     string
+		desc    descpb.TableDescriptor
+		version clusterversion.Key
 	}{
 		{err: `empty relation name`,
 			desc: descpb.TableDescriptor{}},
@@ -2354,7 +2355,8 @@ func TestValidateTableDesc(t *testing.T) {
 				RowLevelTTL: &catpb.RowLevelTTL{
 					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
 				},
-			}},
+			},
+			version: clusterversion.V22_2},
 		{err: `unknown mutation ID 123 associated with job ID 456`,
 			desc: descpb.TableDescriptor{
 				ID:            2,
@@ -2455,7 +2457,14 @@ func TestValidateTableDesc(t *testing.T) {
 			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(username.RootUserName())
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
-			err := validate.Self(clusterversion.TestingClusterVersion, desc)
+			clusterVersion := clusterversion.TestingClusterVersion
+			version := d.version
+			if version != 0 {
+				clusterVersion = clusterversion.ClusterVersion{
+					Version: clusterversion.ByKey(version),
+				}
+			}
+			err := validate.Self(clusterVersion, desc)
 			if d.err == "" && err != nil {
 				t.Errorf("%d: expected success, but found error: \"%+v\"", i, err)
 			} else if d.err != "" && err == nil {
