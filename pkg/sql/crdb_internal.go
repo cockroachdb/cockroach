@@ -179,6 +179,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalSchemaChangesTableID:               crdbInternalSchemaChangesTable,
 		catconstants.CrdbInternalSessionTraceTableID:                crdbInternalSessionTraceTable,
 		catconstants.CrdbInternalSessionVariablesTableID:            crdbInternalSessionVariablesTable,
+		catconstants.CrdbInternalStmtActivityTableID:                crdbInternalStmtActivityView,
 		catconstants.CrdbInternalStmtStatsTableID:                   crdbInternalStmtStatsView,
 		catconstants.CrdbInternalStmtStatsPersistedTableID:          crdbInternalStmtStatsPersistedView,
 		catconstants.CrdbInternalStmtStatsPersistedV22_2TableID:     crdbInternalStmtStatsPersistedViewV22_2,
@@ -188,6 +189,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTablesTableLastStatsID:             crdbInternalTablesTableLastStats,
 		catconstants.CrdbInternalTablesTableID:                      crdbInternalTablesTable,
 		catconstants.CrdbInternalClusterTxnStatsTableID:             crdbInternalClusterTxnStatsTable,
+		catconstants.CrdbInternalTxnActivityTableID:                 crdbInternalTxnActivityView,
 		catconstants.CrdbInternalTxnStatsTableID:                    crdbInternalTxnStatsView,
 		catconstants.CrdbInternalTxnStatsPersistedTableID:           crdbInternalTxnStatsPersistedView,
 		catconstants.CrdbInternalTxnStatsPersistedV22_2TableID:      crdbInternalTxnStatsPersistedViewV22_2,
@@ -6443,6 +6445,88 @@ CREATE VIEW crdb_internal.statement_statistics_persisted AS
 		{Name: "plan", Typ: types.Jsonb},
 		{Name: "index_recommendations", Typ: types.StringArray},
 		{Name: "indexes_usage", Typ: types.Jsonb},
+		{Name: "execution_count", Typ: types.Int},
+		{Name: "service_latency", Typ: types.Float},
+		{Name: "cpu_sql_nanos", Typ: types.Float},
+		{Name: "contention_time", Typ: types.Float},
+		{Name: "total_estimated_execution_time", Typ: types.Float},
+		{Name: "p99_latency", Typ: types.Float},
+	},
+}
+
+// crdb_internal.statement_activity view to give permission to non-admins
+// to access the system.statement_activity table
+var crdbInternalStmtActivityView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.statement_activity AS
+      SELECT
+          aggregated_ts,
+          fingerprint_id,
+          transaction_fingerprint_id,
+          plan_hash,
+          app_name,
+          agg_interval,
+          metadata,
+          statistics,
+          plan,
+          index_recommendations,
+          indexes_usage,
+          execution_count,
+          service_latency,
+          cpu_sql_nanos,
+          contention_time,
+          total_estimated_execution_time,
+          p99_latency
+      FROM
+          system.statement_activity`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "aggregated_ts", Typ: types.TimestampTZ},
+		{Name: "fingerprint_id", Typ: types.Bytes},
+		{Name: "transaction_fingerprint_id", Typ: types.Bytes},
+		{Name: "plan_hash", Typ: types.Bytes},
+		{Name: "app_name", Typ: types.String},
+		{Name: "agg_interval", Typ: types.Interval},
+		{Name: "metadata", Typ: types.Jsonb},
+		{Name: "statistics", Typ: types.Jsonb},
+		{Name: "plan", Typ: types.Jsonb},
+		{Name: "index_recommendations", Typ: types.StringArray},
+		{Name: "indexes_usage", Typ: types.Jsonb},
+		{Name: "execution_count", Typ: types.Int},
+		{Name: "service_latency", Typ: types.Float},
+		{Name: "cpu_sql_nanos", Typ: types.Float},
+		{Name: "contention_time", Typ: types.Float},
+		{Name: "total_estimated_execution_time", Typ: types.Float},
+		{Name: "p99_latency", Typ: types.Float},
+	},
+}
+
+// crdb_internal.transaction_activity is a view to give permission to non-admins
+// to access the system.transaction_activity table
+var crdbInternalTxnActivityView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.transaction_activity AS
+      SELECT
+        aggregated_ts,
+        fingerprint_id,
+        app_name,
+        agg_interval,
+        metadata,
+        statistics,
+        execution_count,
+        service_latency,
+        cpu_sql_nanos,
+        contention_time,
+        total_estimated_execution_time,
+        p99_latency
+      FROM
+        system.transaction_activity`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "aggregated_ts", Typ: types.TimestampTZ},
+		{Name: "fingerprint_id", Typ: types.Bytes},
+		{Name: "app_name", Typ: types.String},
+		{Name: "agg_interval", Typ: types.Interval},
+		{Name: "metadata", Typ: types.Jsonb},
+		{Name: "statistics", Typ: types.Jsonb},
 		{Name: "execution_count", Typ: types.Int},
 		{Name: "service_latency", Typ: types.Float},
 		{Name: "cpu_sql_nanos", Typ: types.Float},
