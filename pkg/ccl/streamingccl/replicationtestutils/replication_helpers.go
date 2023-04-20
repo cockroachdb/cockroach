@@ -27,9 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -104,27 +104,27 @@ func MakeReplicationFeed(t *testing.T, f FeedSource) *ReplicationFeed {
 // Note: we don't do any buffering here.  Therefore, it is required that the key
 // we want to observe will arrive at some point in the future.
 func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roachpb.KeyValue {
-	require.NoError(rf.t, rf.consumeUntil(ctx, KeyMatches(key), func(err error) bool {
-		return true
-	}))
+	rf.consumeUntil(ctx, KeyMatches(key), func(err error) bool {
+		return false
+	})
 	return *rf.msg.GetKV()
 }
 
 // ObserveResolved consumes the feed until we received resolved timestamp that's at least
 // as high as the specified low watermark.  Returns observed resolved timestamp.
 func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp) hlc.Timestamp {
-	require.NoError(rf.t, rf.consumeUntil(ctx, ResolvedAtLeast(lo), func(err error) bool {
-		return true
-	}))
+	rf.consumeUntil(ctx, ResolvedAtLeast(lo), func(err error) bool {
+		return false
+	})
 	return minResolvedTimestamp(rf.msg.GetResolvedSpans())
 }
 
 // ObserveError consumes the feed until the feed is exhausted, and the final error should
 // match 'errPred'.
 func (rf *ReplicationFeed) ObserveError(ctx context.Context, errPred FeedErrorPredicate) {
-	require.NoError(rf.t, rf.consumeUntil(ctx, func(message streamingccl.Event) bool {
+	rf.consumeUntil(ctx, func(message streamingccl.Event) bool {
 		return false
-	}, errPred))
+	}, errPred)
 }
 
 // Close cleans up any resources.
@@ -134,51 +134,33 @@ func (rf *ReplicationFeed) Close(ctx context.Context) {
 
 func (rf *ReplicationFeed) consumeUntil(
 	ctx context.Context, pred FeedEventPredicate, errPred FeedErrorPredicate,
-) error {
-	const maxWait = 2 * time.Minute
-	doneCh := make(chan struct{})
-	mu := struct {
-		syncutil.Mutex
-		err error
-	}{}
-	defer close(doneCh)
-	go func() {
-		select {
-		case <-time.After(maxWait):
-			mu.Lock()
-			mu.err = errors.New("test timed out")
-			mu.Unlock()
-			rf.f.Close(ctx)
-		case <-doneCh:
-		}
-	}()
-
-	rowCount := 0
-	for {
-		msg, haveMoreRows := rf.f.Next()
-		if !haveMoreRows {
-			// We have run out of rows, let's try and make a nice error
-			// message.
-			mu.Lock()
-			err := mu.err
-			mu.Unlock()
-			if rf.f.Error() != nil {
-				require.True(rf.t, errPred(rf.f.Error()))
-				return nil
-			} else if err != nil {
-				rf.t.Fatal(err)
-			} else {
-				rf.t.Fatalf("ran out of rows after processing %d rows", rowCount)
+) {
+	require.NoError(rf.t, contextutil.RunWithTimeout(ctx, "consume", 2*time.Minute,
+		func(ctx context.Context) error {
+			rowCount := 0
+			for {
+				msg, haveMoreRows := rf.f.Next()
+				if !haveMoreRows {
+					if rf.f.Error() != nil {
+						if errPred(rf.f.Error()) {
+							return nil
+						}
+						return rf.f.Error()
+					}
+					return errors.Newf("ran out of rows after processing %d rows", rowCount)
+				}
+				rowCount++
+				if msg == nil {
+					return errors.New("consumed empty msg")
+				}
+				if pred(msg) {
+					rf.msg = msg
+					return nil
+				}
 			}
-		}
-		rowCount++
+		}),
+	)
 
-		require.NotNil(rf.t, msg)
-		if pred(msg) {
-			rf.msg = msg
-			return nil
-		}
-	}
 }
 
 // TenantState maintains test state related to tenant.

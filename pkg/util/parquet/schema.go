@@ -23,6 +23,11 @@ import (
 	"github.com/lib/pq/oid"
 )
 
+// Setting parquet.Repetitions.Optional makes parquet a column nullable. When
+// writing a datum, we will always specify a definition level to indicate if the
+// datum is null or not. See comments on nonNilDefLevel or nilDefLevel for more info.
+var defaultRepetitions = parquet.Repetitions.Optional
+
 // A schema field is an internal identifier for schema nodes used by the parquet library.
 // A value of -1 will let the library auto-assign values. This does not affect reading
 // or writing parquet files.
@@ -36,7 +41,7 @@ const defaultTypeLength = -1
 // A column stores column metadata.
 type column struct {
 	node      schema.Node
-	colWriter writeFn
+	colWriter colWriter
 	decoder   decoder
 	typ       *types.T
 }
@@ -67,7 +72,7 @@ func NewSchema(columnNames []string, columnTypes []*types.T) (*SchemaDefinition,
 	fields := make([]schema.Node, 0)
 
 	for i := 0; i < len(columnNames); i++ {
-		parquetCol, err := makeColumn(columnNames[i], columnTypes[i])
+		parquetCol, err := makeColumn(columnNames[i], columnTypes[i], defaultRepetitions)
 		if err != nil {
 			return nil, err
 		}
@@ -87,50 +92,44 @@ func NewSchema(columnNames []string, columnTypes []*types.T) (*SchemaDefinition,
 }
 
 // makeColumn constructs a column.
-func makeColumn(colName string, typ *types.T) (column, error) {
-	// Setting parquet.Repetitions.Optional makes parquet interpret all columns as nullable.
-	// When writing data, we will specify a definition level of 0 (null) or 1 (not null).
-	// See https://blog.twitter.com/engineering/en_us/a/2013/dremel-made-simple-with-parquet
-	// for more information regarding definition levels.
-	defaultRepetitions := parquet.Repetitions.Optional
-
+func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (column, error) {
 	result := column{typ: typ}
 	var err error
 	switch typ.Family() {
 	case types.BoolFamily:
-		result.node = schema.NewBooleanNode(colName, defaultRepetitions, defaultSchemaFieldID)
-		result.colWriter = writeBool
+		result.node = schema.NewBooleanNode(colName, repetitions, defaultSchemaFieldID)
+		result.colWriter = scalarWriter(writeBool)
 		result.decoder = boolDecoder{}
 		result.typ = types.Bool
 		return result, nil
 	case types.StringFamily:
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
-			defaultRepetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
+			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 
 		if err != nil {
 			return result, err
 		}
-		result.colWriter = writeString
+		result.colWriter = scalarWriter(writeString)
 		result.decoder = stringDecoder{}
 		return result, nil
 	case types.IntFamily:
 		// Note: integer datums are always signed: https://www.cockroachlabs.com/docs/stable/int.html
 		if typ.Oid() == oid.T_int8 {
 			result.node, err = schema.NewPrimitiveNodeLogical(colName,
-				defaultRepetitions, schema.NewIntLogicalType(64, true),
+				repetitions, schema.NewIntLogicalType(64, true),
 				parquet.Types.Int64, defaultTypeLength,
 				defaultSchemaFieldID)
 			if err != nil {
 				return result, err
 			}
-			result.colWriter = writeInt64
+			result.colWriter = scalarWriter(writeInt64)
 			result.decoder = int64Decoder{}
 			return result, nil
 		}
 
-		result.node = schema.NewInt32Node(colName, defaultRepetitions, defaultSchemaFieldID)
-		result.colWriter = writeInt32
+		result.node = schema.NewInt32Node(colName, repetitions, defaultSchemaFieldID)
+		result.colWriter = scalarWriter(writeInt32)
 		result.decoder = int32Decoder{}
 		return result, nil
 	case types.DecimalFamily:
@@ -149,36 +148,70 @@ func makeColumn(colName string, typ *types.T) (column, error) {
 		}
 
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
-			defaultRepetitions, schema.NewDecimalLogicalType(precision,
+			repetitions, schema.NewDecimalLogicalType(precision,
 				scale), parquet.Types.ByteArray, defaultTypeLength,
 			defaultSchemaFieldID)
 		if err != nil {
 			return result, err
 		}
-		result.colWriter = writeDecimal
+		result.colWriter = scalarWriter(writeDecimal)
 		result.decoder = decimalDecoder{}
 		return result, nil
 	case types.UuidFamily:
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
-			defaultRepetitions, schema.UUIDLogicalType{},
+			repetitions, schema.UUIDLogicalType{},
 			parquet.Types.FixedLenByteArray, uuid.Size, defaultSchemaFieldID)
 		if err != nil {
 			return result, err
 		}
-		result.colWriter = writeUUID
+		result.colWriter = scalarWriter(writeUUID)
 		result.decoder = uUIDDecoder{}
 		return result, nil
 	case types.TimestampFamily:
 		// Note that all timestamp datums are in UTC: https://www.cockroachlabs.com/docs/stable/timestamp.html
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
-			defaultRepetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
+			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
 			return result, err
 		}
-
-		result.colWriter = writeTimestamp
+		result.colWriter = scalarWriter(writeTimestamp)
 		result.decoder = timestampDecoder{}
+		return result, nil
+	case types.ArrayFamily:
+		// Arrays for type T are represented by the following:
+		// message schema {                 -- toplevel schema
+		//   optional group a (LIST) {      -- list column
+		//     repeated group list {
+		//       optional T element;
+		//     }
+		//   }
+		// }
+		// Representing arrays this way makes it easier to differentiate NULL, [NULL],
+		// and [] when encoding.
+		// There is more info about encoding arrays here:
+		// https://arrow.apache.org/blog/2022/10/08/arrow-parquet-encoding-part-2/
+		elementCol, err := makeColumn("element", typ.ArrayContents(), parquet.Repetitions.Optional)
+		if err != nil {
+			return result, err
+		}
+		innerListFields := []schema.Node{elementCol.node}
+		innerListNode, err := schema.NewGroupNode("list", parquet.Repetitions.Repeated, innerListFields, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		outerListFields := []schema.Node{innerListNode}
+		result.node, err = schema.NewGroupNodeLogical(colName, parquet.Repetitions.Optional, outerListFields, schema.ListLogicalType{}, defaultSchemaFieldID)
+		if err != nil {
+			return result, err
+		}
+		result.decoder = elementCol.decoder
+		scalarColWriter, ok := elementCol.colWriter.(scalarWriter)
+		if !ok {
+			return result, errors.AssertionFailedf("expected scalar column writer")
+		}
+		result.colWriter = arrayWriter(scalarColWriter)
+		result.typ = elementCol.typ
 		return result, nil
 
 		// TODO(#99028): implement support for the remaining types.
@@ -196,8 +229,7 @@ func makeColumn(colName string, typ *types.T) (column, error) {
 		//	case types.TimeTZFamily:
 		//	case types.IntervalFamily:
 		//	case types.TimestampTZFamily:
-		//	case types.ArrayFamily:
 	default:
-		return result, pgerror.Newf(pgcode.FeatureNotSupported, "parquet export does not support the %v type yet", typ.Family())
+		return result, pgerror.Newf(pgcode.FeatureNotSupported, "parquet export does not support the %v type", typ.Family())
 	}
 }
