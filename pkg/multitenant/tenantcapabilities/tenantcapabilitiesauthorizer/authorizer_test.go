@@ -13,7 +13,6 @@ package tenantcapabilitiesauthorizer
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -122,18 +120,14 @@ func TestDataDriven(t *testing.T) {
 					return "ok"
 				}
 				return err.Error()
-			case "set-bool-cluster-setting":
-				var settingName string
-				d.ScanArgs(t, "name", &settingName)
-				setting, ok := supportedClusterSettings[settingName]
-				if !ok {
-					t.Fatalf("cluster setting %s not supported", settingName)
-				}
+			case "set-authorizer-mode":
 				var valStr string
 				d.ScanArgs(t, "value", &valStr)
-				val, err := strconv.ParseBool(valStr)
-				require.NoError(t, err)
-				setting.Override(ctx, &clusterSettings.SV, val)
+				val, ok := authorizerMode.ParseEnum(valStr)
+				if !ok {
+					t.Fatalf("unknown authorizer mode %s", valStr)
+				}
+				authorizerMode.Override(ctx, &clusterSettings.SV, val)
 			case "is-exempt-from-rate-limiting":
 				return fmt.Sprintf("%t", authorizer.IsExemptFromRateLimiting(context.Background(), tenID))
 			default:
@@ -142,13 +136,6 @@ func TestDataDriven(t *testing.T) {
 			return "ok"
 		})
 	})
-}
-
-// supportedClusterSettings is a map, keyed by cluster setting name, of all
-// boolean cluster settings that can be altered when running datadriven tests
-// for the Authorizer.
-var supportedClusterSettings = map[string]*settings.BoolSetting{
-	authorizerEnabled.Key(): authorizerEnabled,
 }
 
 type mockReader map[roachpb.TenantID]*tenantcapabilitiespb.TenantCapabilities
