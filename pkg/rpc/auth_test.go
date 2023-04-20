@@ -855,7 +855,7 @@ func TestTenantAuthRequest(t *testing.T) {
 			for _, tc := range tests {
 				t.Run("", func(t *testing.T) {
 					err := rpc.TestingAuthorizeTenantRequest(
-						ctx, &settings.Values{}, tenID, method, tc.req, tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+						ctx, &settings.Values{}, tenID, method, tc.req, tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
 					)
 					if tc.expErr == noError {
 						require.NoError(t, err)

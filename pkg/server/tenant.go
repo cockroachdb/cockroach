@@ -962,7 +962,10 @@ func makeTenantSQLServerArgs(
 		rpcTestingKnobs = p.ContextTestingKnobs
 	}
 
-	authorizer := tenantcapabilitiesauthorizer.NewNoopAuthorizer()
+	// This tenant's SQL server only serves SQL connections and SQL-to-SQL
+	// RPCs; so it should refuse to serve SQL-to-KV RPCs completely.
+	authorizer := tenantcapabilitiesauthorizer.NewAllowNothingAuthorizer()
+
 	rpcContext := rpc.NewContext(startupCtx, rpc.ContextOptions{
 		TenantID:            sqlCfg.TenantID,
 		UseNodeAuth:         sqlCfg.LocalKVServerInfo != nil,
