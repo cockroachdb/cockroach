@@ -1165,12 +1165,13 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
+	isTxnSerializable := tc.mu.txn.IsoLevel == isolation.Serializable
 	isTxnPushed := tc.mu.txn.WriteTimestamp != tc.mu.txn.ReadTimestamp
 	refreshAttemptNotPossible := tc.interceptorAlloc.txnSpanRefresher.refreshInvalid ||
 		tc.mu.txn.CommitTimestampFixed
 	// We check CommitTimestampFixed here because, if that's set, refreshing
 	// of reads is not performed.
-	return isTxnPushed && refreshAttemptNotPossible
+	return isTxnSerializable && isTxnPushed && refreshAttemptNotPossible
 }
 
 // Epoch is part of the kv.TxnSender interface.
