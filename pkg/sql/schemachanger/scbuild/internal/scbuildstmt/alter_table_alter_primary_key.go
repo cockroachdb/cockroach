@@ -418,9 +418,11 @@ func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t al
 
 	// It's a row-level-ttl table. Ensure it has no non-descending
 	// key columns, and there is no inbound/outbound foreign keys.
-	for _, col := range t.Columns {
-		if indexColumnDirection(col.Direction) != catenumpb.IndexColumn_ASC {
-			panic(scerrors.NotImplementedErrorf(t.n, "non-ascending ordering on PRIMARY KEYs are not supported"))
+	if !b.ClusterSettings().Version.IsActive(b, clusterversion.V23_2TTLAllowDescPK) {
+		for _, col := range t.Columns {
+			if indexColumnDirection(col.Direction) != catenumpb.IndexColumn_ASC {
+				panic(scerrors.NotImplementedErrorf(t.n, "non-ascending ordering on PRIMARY KEYs are not supported"))
+			}
 		}
 	}
 }
