@@ -2848,7 +2848,7 @@ func TestTxnSetIsoLevel(t *testing.T) {
 	txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
 
 	defaultLevel := isolation.Serializable
-	levels := []isolation.Level{isolation.ReadCommitted, isolation.Snapshot, isolation.Serializable}
+	levels := isolation.Levels()
 
 	// The default isolation level is Serializable.
 	require.Equal(t, defaultLevel, txn.IsoLevel())
