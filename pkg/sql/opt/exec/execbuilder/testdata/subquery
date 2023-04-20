@@ -563,3 +563,108 @@ statement error could not decorrelate subquery
 SELECT
   CASE WHEN k < 5 THEN (SELECT array(SELECT 1) FROM corr tmp WHERE k*10 = corr.k) END
 FROM corr
+
+subtest expressionInSubquery
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+statement ok
+CREATE TABLE ab (a INT, b INT);
+
+# The outer (a, b) is already a tuple, so shouldn't be wrapped in another
+# tuple before comparison.
+query T
+SELECT * FROM [EXPLAIN (VERBOSE)
+SELECT * FROM ab WHERE (a, b) IN (SELECT x+1, y+1 FROM xy)] OFFSET 2;
+----
+·
+• hash join (semi)
+│ columns: (a, b)
+│ estimated row count: 1,000 (missing stats)
+│ equality: (a, b) = (column14, column15)
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1,000 (missing stats)
+│     table: ab@ab_pkey
+│     spans: FULL SCAN
+│
+└── • render
+    │ columns: (column15, column14)
+    │ render column15: y + 1
+    │ render column14: x + 1
+    │
+    └── • scan
+          columns: (x, y)
+          estimated row count: 1,000 (missing stats)
+          table: xy@xy_pkey
+          spans: FULL SCAN
+
+# The outer (2, 2) is already a tuple, so shouldn't be wrapped in another
+# tuple before comparison.
+query T
+SELECT * FROM [EXPLAIN (VERBOSE)
+SELECT (SELECT 2, 2) IN (SELECT x+1, y+1 FROM xy)] OFFSET 2
+----
+·
+• root
+│ columns: ("?column?")
+│
+├── • values
+│     columns: ("?column?")
+│     size: 1 column, 1 row
+│     row 0, expr 0: @S2 = ANY @S1
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: (SELECT x + 1, y + 1 FROM xy)
+│   │ exec mode: any rows
+│   │
+│   └── • render
+│       │ columns: (column9)
+│       │ render column9: (x + 1, y + 1)
+│       │
+│       └── • scan
+│             columns: (x, y)
+│             estimated row count: 1,000 (missing stats)
+│             table: xy@xy_pkey
+│             spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: (SELECT 2, 2)
+    │ exec mode: one row
+    │
+    └── • values
+          columns: (column10)
+          size: 1 column, 1 row
+          row 0, expr 0: (2, 2)
+
+query T
+SELECT * FROM [EXPLAIN (VERBOSE)
+SELECT (2, 2) IN (SELECT x+1, y+1 FROM xy)] OFFSET 2
+----
+·
+• root
+│ columns: ("?column?")
+│
+├── • values
+│     columns: ("?column?")
+│     size: 1 column, 1 row
+│     row 0, expr 0: (2, 2) = ANY @S1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT x + 1, y + 1 FROM xy)
+    │ exec mode: any rows
+    │
+    └── • render
+        │ columns: (column8)
+        │ render column8: (x + 1, y + 1)
+        │
+        └── • scan
+              columns: (x, y)
+              estimated row count: 1,000 (missing stats)
+              table: xy@xy_pkey
+              spans: FULL SCAN
