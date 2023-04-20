@@ -485,6 +485,11 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			b.printError(fmt.Sprintf("-- error getting schema for udfs: %v", err), &buf)
 		}
 	}
+	// Get all user-defined types.
+	blankLine()
+	if err := c.PrintCreateUDT(&buf, b.flags.RedactValues); err != nil {
+		fmt.Fprintf(&buf, "-- error getting schema for UDTs: %v\n", err)
+	}
 	for i := range tables {
 		blankLine()
 		if err := c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues); err != nil {
@@ -822,6 +827,22 @@ func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) 
 		return err
 	}
 	fmt.Fprintf(w, "%s;\n", createStatement)
+	return nil
+}
+
+func (c *stmtEnvCollector) PrintCreateUDT(w io.Writer, redactValues bool) error {
+	qry := "SELECT create_statement FROM [SHOW CREATE ALL TYPES]"
+	if redactValues {
+		qry = "SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM [SHOW CREATE ALL TYPES]"
+
+	}
+	createStatement, err := c.queryRows(qry)
+	if err != nil {
+		return err
+	}
+	for _, cs := range createStatement {
+		fmt.Fprintf(w, "%s\n", cs)
+	}
 	return nil
 }
 
