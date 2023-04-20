@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -746,7 +745,7 @@ func (r *Replica) AdminMerge(
 		}
 		rhsSnapshotRes := br.(*kvpb.SubsumeResponse)
 
-		err = contextutil.RunWithTimeout(ctx, "waiting for merge application", mergeApplicationTimeout,
+		err = timeutil.RunWithTimeout(ctx, "waiting for merge application", mergeApplicationTimeout,
 			func(ctx context.Context) error {
 				if disableWaitForReplicasInTesting {
 					return nil
@@ -850,7 +849,7 @@ func waitForReplicasInit(
 	rangeID roachpb.RangeID,
 	replicas []roachpb.ReplicaDescriptor,
 ) error {
-	return contextutil.RunWithTimeout(ctx, "wait for replicas init", 5*time.Second, func(ctx context.Context) error {
+	return timeutil.RunWithTimeout(ctx, "wait for replicas init", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
 		for _, repl := range replicas {
 			repl := repl // copy for goroutine
@@ -1971,7 +1970,7 @@ func (r *Replica) tryRollbackRaftLearner(
 	// AddTags and not WithTags, so that we combine the tags with those
 	// filled by AnnotateCtx.
 	rollbackCtx = logtags.AddTags(rollbackCtx, logtags.FromContext(ctx))
-	if err := contextutil.RunWithTimeout(
+	if err := timeutil.RunWithTimeout(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {
 		log.Infof(
@@ -2844,7 +2843,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 			r.store.Metrics().DelegateSnapshotInProgress.Inc(1)
 		}
 
-		retErr = contextutil.RunWithTimeout(
+		retErr = timeutil.RunWithTimeout(
 			ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 				// Sending snapshot
 				return r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
@@ -3140,7 +3139,7 @@ func (r *Replica) followerSendSnapshot(
 		}
 	}
 
-	return contextutil.RunWithTimeout(
+	return timeutil.RunWithTimeout(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 			return r.store.cfg.Transport.SendSnapshot(
 				ctx,

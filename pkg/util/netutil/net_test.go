@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cmux"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )
@@ -82,7 +82,7 @@ func TestIsClosedConnection(t *testing.T) {
 			false,
 		},
 		{
-			&contextutil.TimeoutError{},
+			&timeutil.TimeoutError{},
 			false,
 		},
 	} {

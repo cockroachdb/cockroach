@@ -227,7 +227,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/binfetcher",
         "//pkg/util/cancelchecker",
-        "//pkg/util/contextutil",
+        "//pkg/util/contextutil:go_default_library",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/httputil",

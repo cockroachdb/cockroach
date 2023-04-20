@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -307,7 +306,7 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 		if !deadline.IsZero() {
 			actualSend := send
 			send = func(context.Context) error {
-				return contextutil.RunWithTimeout(ctx, b.sendBatchOpName, timeutil.Until(deadline), actualSend)
+				return timeutil.RunWithTimeout(ctx, b.sendBatchOpName, timeutil.Until(deadline), actualSend)
 			}
 		}
 		// Send requests in a loop to support pagination, which may be necessary
