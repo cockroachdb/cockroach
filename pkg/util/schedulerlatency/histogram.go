@@ -148,6 +148,11 @@ func (h *runtimeHistogram) TotalCountWindowed() int64 {
 	return int64(h.ToPrometheusMetric().Histogram.GetSampleCount())
 }
 
+// TotalCount implements the WindowedHistogram interface.
+func (h *runtimeHistogram) TotalCount() int64 {
+	return int64(h.ToPrometheusMetric().Histogram.GetSampleCount())
+}
+
 // TotalSumWindowed implements the WindowedHistogram interface.
 func (h *runtimeHistogram) TotalSumWindowed() float64 {
 	return h.ToPrometheusMetric().Histogram.GetSampleSum()

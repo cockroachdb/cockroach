@@ -91,6 +91,8 @@ type PrometheusIterable interface {
 type WindowedHistogram interface {
 	// TotalCountWindowed returns the number of samples in the current window.
 	TotalCountWindowed() int64
+	// TotalCount returns the number of samples in the cumulative histogram.
+	TotalCount() int64
 	// TotalSumWindowed returns the number of samples in the current window.
 	TotalSumWindowed() float64
 	// ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
@@ -596,6 +598,11 @@ func (mwh *ManualWindowHistogram) TotalCountWindowed() int64 {
 	mwh.mu.RLock()
 	defer mwh.mu.RUnlock()
 	return int64(mwh.mu.cur.GetSampleCount())
+}
+
+// TotalCount implements the WindowedHistogram interface.
+func (mwh *ManualWindowHistogram) TotalCount() int64 {
+	return int64(mwh.ToPrometheusMetric().Histogram.GetSampleCount())
 }
 
 // TotalSumWindowed implements the WindowedHistogram interface.

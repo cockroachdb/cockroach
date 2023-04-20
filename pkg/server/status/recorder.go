@@ -609,8 +609,9 @@ type registryRecorder struct {
 func extractValue(name string, mtr interface{}, fn func(string, float64)) error {
 	switch mtr := mtr.(type) {
 	case metric.WindowedHistogram:
+		// Use cumulative count here
+		fn(name+"-count", float64(mtr.TotalCount()))
 		n := float64(mtr.TotalCountWindowed())
-		fn(name+"-count", n)
 		avg := mtr.TotalSumWindowed() / n
 		if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 			avg = 0

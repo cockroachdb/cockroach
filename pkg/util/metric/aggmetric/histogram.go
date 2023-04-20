@@ -66,6 +66,11 @@ func (a *AggHistogram) TotalCountWindowed() int64 {
 	return a.h.TotalCountWindowed()
 }
 
+// TotalCount is part of the metric.WindowedHistogram interface
+func (a *AggHistogram) TotalCount() int64 {
+	return a.h.TotalCount()
+}
+
 // TotalSumWindowed is part of the metric.WindowedHistogram interface
 func (a *AggHistogram) TotalSumWindowed() float64 {
 	return a.h.TotalSumWindowed()
