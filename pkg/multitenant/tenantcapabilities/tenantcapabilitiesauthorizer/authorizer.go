@@ -107,10 +107,6 @@ func (a *Authorizer) HasCapabilityForBatch(
 			// disallowed. This prevents accidents where someone adds a new
 			// sensitive request type in KV and forgets to add an explicit
 			// authorization rule for it here.
-			//
-			// TODO(arul): This should be caught by a linter instead. Add a test that
-			// goes over all request types and ensures there's an entry in this map
-			// instead.
 			return newTenantDoesNotHaveCapabilityError(requiredCap, request)
 		}
 	}
@@ -176,6 +172,7 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
 	kvpb.Subsume:                       onlySystemTenant,
 	kvpb.TransferLease:                 onlySystemTenant,
 	kvpb.TruncateLog:                   onlySystemTenant,
+	kvpb.WriteBatch:                    onlySystemTenant,
 }
 
 const (
