@@ -251,6 +251,10 @@ func (op *hashAggregator) Init(ctx context.Context) {
 	op.ht = colexechash.NewHashTable(
 		op.Ctx,
 		op.hashTableAllocator,
+		// The hash aggregator will buffer tuples from the input until it has
+		// hashAggregatorMaxBuffered of them. This is coldata.MaxBatchSize in
+		// production builds.
+		hashAggregatorMaxBuffered,
 		hashTableLoadFactor,
 		op.hashTableNumBuckets,
 		op.inputTypes,

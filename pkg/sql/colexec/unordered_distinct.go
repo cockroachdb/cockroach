@@ -83,6 +83,7 @@ func (op *UnorderedDistinct) Init(ctx context.Context) {
 	op.Ht = colexechash.NewHashTable(
 		op.Ctx,
 		op.hashTableAllocator,
+		coldata.BatchSize(),
 		hashTableLoadFactor,
 		op.hashTableNumBuckets,
 		op.typs,
