@@ -49,7 +49,7 @@ upgrade 1
 query B nodeidx=1
 SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
-true
+false
 
 user root nodeidx=1
 
@@ -85,14 +85,14 @@ upgrade 2
 query B nodeidx=0
 SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
-true
+false
 
 query B nodeidx=1
 SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
-true
+false
 
 query B nodeidx=2
 SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
-true
+false

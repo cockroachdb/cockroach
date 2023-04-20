@@ -23,7 +23,7 @@ upgrade 1
 query B
 SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
-true
+false
 
 query T nodeidx=2
 SELECT crdb_internal.node_executable_version()
@@ -36,7 +36,7 @@ user testuser nodeidx=0
 query B
 SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
-true
+false
 
 # Verify that a root user can login on the upgraded node.
 user root nodeidx=1
@@ -44,7 +44,7 @@ user root nodeidx=1
 query B
 SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
-true
+false
 
 # Verify that a non-root user can login on the non-upgraded node.
 user testuser nodeidx=2
@@ -67,7 +67,7 @@ upgrade 2
 query B
 SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
-true
+false
 
 statement ok
 CREATE TABLE bootstrapped_tenant_data AS

@@ -24,7 +24,7 @@ upgrade 0
 query B nodeidx=0
 SELECT crdb_internal.node_executable_version() SIMILAR TO '1000023.1-%'
 ----
-true
+false
 
 # Range tombstones remain disabled.
 
