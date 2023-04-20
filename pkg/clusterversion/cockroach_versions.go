@@ -184,8 +184,6 @@ const (
 	// TODODelete_V22_2Start demarcates work towards CockroachDB v22.2.
 	TODODelete_V22_2Start
 
-	// TODODelete_V22_2LocalTimestamps enables the use of local timestamps in MVCC values.
-	TODODelete_V22_2LocalTimestamps
 	// TODODelete_V22_2PebbleFormatSplitUserKeysMarkedCompacted updates the Pebble format
 	// version that recombines all user keys that may be split across multiple
 	// files into a single table.
@@ -612,10 +610,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TODODelete_V22_2Start,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 2},
-	},
-	{
-		Key:     TODODelete_V22_2LocalTimestamps,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 4},
 	},
 	{
 		Key:     TODODelete_V22_2PebbleFormatSplitUserKeysMarkedCompacted,
