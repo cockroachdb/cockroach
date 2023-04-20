@@ -2025,6 +2025,13 @@ func TestLogic_udf(
 	runLogicTest(t, "udf")
 }
 
+func TestLogic_udf_insert(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_insert")
+}
+
 func TestLogic_udf_oid_ref(
 	t *testing.T,
 ) {
