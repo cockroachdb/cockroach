@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -215,7 +216,11 @@ func completeIngestion(
 	// disaster recovery scenario, who knows what state the source cluster will be
 	// in; thus, we should not fail the cutover step on the consumer side if we
 	// cannot complete the producer job.
-	if err := client.Complete(ctx, streampb.StreamID(streamID), true /* successfulIngestion */); err != nil {
+	if err := contextutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
+		func(ctx context.Context) error {
+			return client.Complete(ctx, streampb.StreamID(streamID), true /* successfulIngestion */)
+		},
+	); err != nil {
 		log.Warningf(ctx, "encountered error when completing the source cluster producer job %d: %s", streamID, err.Error())
 	}
 	// Now that we have completed the cutover we can release the protected
