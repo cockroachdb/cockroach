@@ -819,8 +819,8 @@ func (ht *HashTable) buildNextChains(first, next []keyID, offset, batchSize uint
 	ht.cancelChecker.CheckEveryCall()
 }
 
-// SetupLimitedSlices ensures that HeadID, differs, distinct, ToCheckID, and
-// ToCheck are of the desired length and are setup for probing.
+// SetupLimitedSlices ensures that HeadID, differs, foundNull, ToCheckID, and
+// ToCheck are of the desired length and are set up for probing.
 // Note that if the old ToCheckID or ToCheck slices have enough capacity, they
 // are *not* zeroed out.
 func (p *hashTableProbeBuffer) SetupLimitedSlices(length int, buildMode HashTableBuildMode) {

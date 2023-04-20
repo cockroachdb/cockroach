@@ -195,8 +195,8 @@ type hashJoiner struct {
 
 	// probeState is used in hjProbing state.
 	probeState struct {
-		// buildIdx and probeIdx represents the matching row indices that are used to
-		// stitch together the join results.
+		// buildIdx and probeIdx represents the matching row indices that are
+		// used to stitch together the join results.
 		buildIdx []int
 		probeIdx []int
 
@@ -205,17 +205,22 @@ type hashJoiner struct {
 		// be NULL on the build table. This indicates that the probe table row
 		// did not match any build table rows.
 		probeRowUnmatched []bool
-		// buildRowMatched is used in the case that spec.trackBuildMatches is true. This
-		// means that an outer join is performed on the build side and buildRowMatched
-		// marks all the build table rows that have been matched already. The rows
-		// that were unmatched are emitted during the hjEmittingRight phase.
+		// buildRowMatched is used in the case that spec.trackBuildMatches is
+		// true. This means that an outer join is performed on the build side
+		// and buildRowMatched marks all the build table rows that have been
+		// matched already. The rows that were unmatched are emitted during the
+		// hjEmittingRight phase.
+		//
+		// Note that this is the only slice in probeState of non-constant size
+		// (i.e. not limited by coldata.BatchSize() in capacity), so it's the
+		// only one we perform the memory accounting for.
 		buildRowMatched []bool
 
-		// buckets is used to store the computed hash value of each key in a single
-		// probe batch.
+		// buckets is used to store the computed hash value of each key in a
+		// single probe batch.
 		buckets []uint64
-		// prevBatch, if not nil, indicates that the previous probe input batch has
-		// not been fully processed.
+		// prevBatch, if not nil, indicates that the previous probe input batch
+		// has not been fully processed.
 		prevBatch coldata.Batch
 		// prevBatchResumeIdx indicates the index of the probe row to resume the
 		// collection from. It is used only in case of non-distinct build source
@@ -235,6 +240,9 @@ type hashJoiner struct {
 		hashtableSame int64
 		// hashtableVisited tracks the current memory usage of hj.ht.Visited.
 		hashtableVisited int64
+		// buildRowMatches tracks the current memory usage of
+		// hj.probeState.buildRowMatched.
+		buildRowMatched int64
 	}
 
 	exportBufferedState struct {
@@ -328,50 +336,57 @@ func (hj *hashJoiner) Next() coldata.Batch {
 func (hj *hashJoiner) build() {
 	hj.ht.FullBuild(hj.InputTwo)
 
+	// At this point, we have fully built the hash table on the right side
+	// (meaning we have fully consumed the right input), so it'd be a shame to
+	// fall back to disk, thus, we use the unlimited allocator.
+	allocator := hj.outputUnlimitedAllocator
+
 	// If we might have duplicates in the hash table (meaning that rightDistinct
 	// is false), we need to set up Same and Visited slices for the prober
 	// (depending on the join type).
+	var needSame bool
+	// Visited slice is always used for set-operation joins, regardless of
+	// the fact whether the right side is distinct.
+	needVisited := hj.spec.JoinType.IsSetOpJoin()
+
 	if !hj.spec.rightDistinct {
 		switch hj.spec.JoinType {
 		case descpb.LeftAntiJoin, descpb.ExceptAllJoin, descpb.IntersectAllJoin:
 		default:
 			// We don't need Same with LEFT ANTI, EXCEPT ALL, and INTERSECT ALL
 			// joins because they have a separate collectSingleMatch method.
-			hj.ht.Same = colexecutils.MaybeAllocateUint64Array(hj.ht.Same, hj.ht.Vals.Length()+1)
-			// At this point, we have fully built the hash table on the right
-			// side (meaning we have fully consumed the right input), so it'd be
-			// a shame to fallback to disk, thus, we use the unlimited
-			// allocator.
-			newAccountedFor := memsize.Uint64 * int64(cap(hj.ht.Same))
-			// hj.ht.Same will never shrink, so the delta is non-negative.
-			hj.outputUnlimitedAllocator.AdjustMemoryUsageAfterAllocation(newAccountedFor - hj.accountedFor.hashtableSame)
-			hj.accountedFor.hashtableSame = newAccountedFor
+			needSame = true
+			// Visited isn't needed for LEFT ANTI joins (it's used by EXCEPT ALL
+			// and INTERSECT ALL, but those cases are handled above already).
+			needVisited = true
 		}
 	}
-	if !hj.spec.rightDistinct || hj.spec.JoinType.IsSetOpJoin() {
-		// Visited slice is also used for set-operation joins, regardless of
-		// the fact whether the right side is distinct.
+	if needSame {
+		hj.ht.Same = colexecutils.MaybeAllocateUint64Array(hj.ht.Same, hj.ht.Vals.Length()+1)
+		newAccountedFor := memsize.Uint64 * int64(cap(hj.ht.Same))
+		// hj.ht.Same will never shrink, so the delta is non-negative.
+		allocator.AdjustMemoryUsageAfterAllocation(newAccountedFor - hj.accountedFor.hashtableSame)
+		hj.accountedFor.hashtableSame = newAccountedFor
+	}
+
+	if needVisited {
 		hj.ht.Visited = colexecutils.MaybeAllocateBoolArray(hj.ht.Visited, hj.ht.Vals.Length()+1)
-		// At this point, we have fully built the hash table on the right side
-		// (meaning we have fully consumed the right input), so it'd be a shame
-		// to fallback to disk, thus, we use the unlimited allocator.
 		newAccountedFor := memsize.Bool * int64(cap(hj.ht.Visited))
 		// hj.ht.Visited will never shrink, so the delta is non-negative.
-		hj.outputUnlimitedAllocator.AdjustMemoryUsageAfterAllocation(newAccountedFor - hj.accountedFor.hashtableVisited)
+		allocator.AdjustMemoryUsageAfterAllocation(newAccountedFor - hj.accountedFor.hashtableVisited)
 		hj.accountedFor.hashtableVisited = newAccountedFor
-		// Since keyID = 0 is reserved for end of list, it can be marked as visited
-		// at the beginning.
+		// Since keyID = 0 is reserved for end of list, it can be marked as
+		// visited at the beginning.
 		hj.ht.Visited[0] = true
 	}
 
 	if hj.spec.trackBuildMatches {
-		if cap(hj.probeState.buildRowMatched) < hj.ht.Vals.Length() {
-			hj.probeState.buildRowMatched = make([]bool, hj.ht.Vals.Length())
-		} else {
-			hj.probeState.buildRowMatched = hj.probeState.buildRowMatched[:hj.ht.Vals.Length()]
-			for n := 0; n < hj.ht.Vals.Length(); n += copy(hj.probeState.buildRowMatched[n:], colexecutils.ZeroBoolColumn) {
-			}
-		}
+		hj.probeState.buildRowMatched = colexecutils.MaybeAllocateBoolArray(hj.probeState.buildRowMatched, hj.ht.Vals.Length())
+		newAccountedFor := memsize.Bool * int64(cap(hj.probeState.buildRowMatched))
+		// hj.probeState.buildRowMatched will never shrink, so the delta is
+		// non-negative.
+		allocator.AdjustMemoryUsageAfterAllocation(newAccountedFor - hj.accountedFor.buildRowMatched)
+		hj.accountedFor.buildRowMatched = newAccountedFor
 	}
 
 	hj.state = hjProbing
@@ -463,11 +478,9 @@ func (hj *hashJoiner) prepareForCollecting(batchSize int) {
 		return
 	}
 	if hj.spec.JoinType.IsLeftOuterOrFullOuter() {
-		if cap(hj.probeState.probeRowUnmatched) < batchSize {
-			hj.probeState.probeRowUnmatched = make([]bool, batchSize)
-		} else {
-			hj.probeState.probeRowUnmatched = hj.probeState.probeRowUnmatched[:batchSize]
-		}
+		hj.probeState.probeRowUnmatched = colexecutils.MaybeAllocateLimitedBoolArray(
+			hj.probeState.probeRowUnmatched, batchSize,
+		)
 	}
 	if cap(hj.probeState.buildIdx) < batchSize {
 		hj.probeState.buildIdx = make([]int, batchSize)
