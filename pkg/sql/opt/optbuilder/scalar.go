@@ -789,21 +789,24 @@ func (b *Builder) buildUDF(
 			// column so that its type matches the function return type. Record return
 			// types do not need an assignment cast, since at this point the return
 			// column is already a tuple.
-			returnCol := physProps.Presentation[0].ID
-			returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
-			if !types.IsRecordType(rtyp) && !isMultiColDataSource && !returnColMeta.Type.Identical(rtyp) {
-				if !cast.ValidCast(returnColMeta.Type, rtyp, cast.ContextAssignment) {
-					panic(sqlerrors.NewInvalidAssignmentCastError(
-						returnColMeta.Type, rtyp, returnColMeta.Alias))
+			cols = physProps.Presentation
+			if len(cols) > 0 {
+				returnCol := physProps.Presentation[0].ID
+				returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
+				if !types.IsRecordType(rtyp) && !isMultiColDataSource && !returnColMeta.Type.Identical(rtyp) {
+					if !cast.ValidCast(returnColMeta.Type, rtyp, cast.ContextAssignment) {
+						panic(sqlerrors.NewInvalidAssignmentCastError(
+							returnColMeta.Type, rtyp, returnColMeta.Alias))
+					}
+					cast := b.factory.ConstructAssignmentCast(
+						b.factory.ConstructVariable(physProps.Presentation[0].ID),
+						rtyp,
+					)
+					stmtScope = bodyScope.push()
+					col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, cast)
+					expr = b.constructProject(expr, []scopeColumn{*col})
+					physProps = stmtScope.makePhysicalProps()
 				}
-				cast := b.factory.ConstructAssignmentCast(
-					b.factory.ConstructVariable(physProps.Presentation[0].ID),
-					rtyp,
-				)
-				stmtScope = bodyScope.push()
-				col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, cast)
-				expr = b.constructProject(expr, []scopeColumn{*col})
-				physProps = stmtScope.makePhysicalProps()
 			}
 		}
 
