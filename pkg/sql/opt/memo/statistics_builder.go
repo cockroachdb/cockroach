@@ -2855,7 +2855,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 			lookupJoinPrivate = &copy
 
 		default:
-			if t.On.IsTrue() {
+			if t.On.IsTrue() || (t.LookupColsAreTableKey && len(t.AllLookupFilters) == len(t.KeyCols)) {
 				// If there are no additional ON filters, the number of rows processed
 				// equals the number of output rows.
 				return e.Relational().Statistics().RowCount

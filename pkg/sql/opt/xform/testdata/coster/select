@@ -179,7 +179,7 @@ AND s LIKE '%bat%'
 ----
 select
  ├── columns: k:1!null i:2 s:3!null d:4!null
- ├── stats: [rows=6.89948e-05, distinct(3)=6.89948e-05, null(3)=0]
+ ├── stats: [rows=12.22222, distinct(3)=12.2222, null(3)=0]
  ├── cost: 1118.91
  ├── key: (1)
  ├── fd: (1)-->(2-4)
