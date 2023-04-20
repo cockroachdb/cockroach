@@ -359,6 +359,7 @@
 /pkg/ccl/buildccl/           @cockroachdb/dev-inf
 #!/pkg/ccl/cliccl/           @cockroachdb/unowned
 /pkg/ccl/cmdccl/stub-schema-registry/ @cockroachdb/cdc-prs
+/pkg/ccl/cmdccl/clusterrepl/ @cockroachdb/disaster-recovery
 #!/pkg/ccl/gssapiccl/        @cockroachdb/unowned
 /pkg/ccl/jwtauthccl/         @cockroachdb/cloud-identity
 #!/pkg/ccl/kvccl/              @cockroachdb/kv-noreview
