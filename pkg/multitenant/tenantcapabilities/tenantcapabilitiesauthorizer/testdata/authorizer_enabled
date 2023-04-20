@@ -6,6 +6,10 @@ has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
 ----
 client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
 
+has-capability-for-batch ten=10 cmds=(Merge)
+----
+client tenant does not have capability "ID(12)" (*kvpb.MergeRequest)
+
 has-node-status-capability ten=10
 ----
 client tenant does not have capability to query cluster node metadata
@@ -14,13 +18,39 @@ has-tsdb-query-capability ten=10
 ----
 client tenant does not have capability to query timeseries data
 
-# Disable the Authorizer.
-set-bool-cluster-setting name=tenant_capabilities.authorizer.enabled value=false
+# Disable the capability checks by falling back to the v22.2 behavior.
+set-authorizer-mode value=v222
 ----
 ok
 
-# Now that the Authorizer is disabled, all the checks that were previously
-# failing should continue to fail.
+# Now that the v22.2 behavior is restored, the batch requests
+# available to secondary tenants should succeeds; those
+# reserved to the system tenant should fail; and other
+# type of operations should fail too.
+
+has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(Merge)
+----
+client tenant does not have capability "ID(12)" (*kvpb.MergeRequest)
+
+has-node-status-capability ten=10
+----
+client tenant does not have capability to query cluster node metadata
+
+has-tsdb-query-capability ten=10
+----
+client tenant does not have capability to query timeseries data
+
+# Disable the capability checks by allowing all requests.
+set-authorizer-mode value=allow-all
+----
+ok
+
+# Now that we allow all operations, the previous checks
+# should now succeed.
 
 has-capability-for-batch ten=10 cmds=(AdminScatter, Scan)
 ----
@@ -34,9 +64,9 @@ has-tsdb-query-capability ten=10
 ----
 ok
 
-# Enable the Authorizer again and ensure we start failing capability checks
+# Enable the authorizer again and ensure we start failing capability checks
 # again.
-set-bool-cluster-setting name=tenant_capabilities.authorizer.enabled value=true
+set-authorizer-mode value=on
 ----
 ok
 
