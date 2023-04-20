@@ -33,6 +33,7 @@ var provisionalReleasePrefixRE = regexp.MustCompile(`^provisional_[0-9]{12}_`)
 func main() {
 	var gcsBucket string
 	var outputDirectory string
+	var tagOverride string
 	var doProvisional bool
 	var isRelease bool
 	var doBless bool
@@ -40,6 +41,7 @@ func main() {
 	flag.StringVar(&gcsBucket, "gcs-bucket", "", "GCS bucket")
 	flag.StringVar(&outputDirectory, "output-directory", "",
 		"Save local copies of uploaded release archives in this directory")
+	flag.StringVar(&tagOverride, "build-tag-override", "", "override the version from version.txt")
 	flag.BoolVar(&doProvisional, "provisional", false, "publish provisional binaries")
 	flag.BoolVar(&doBless, "bless", false, "bless provisional binaries")
 
@@ -85,6 +87,7 @@ func main() {
 		doProvisional:   doProvisional,
 		doBless:         doBless,
 		isRelease:       isRelease,
+		tagOverride:     tagOverride,
 		branch:          branch,
 		pkgDir:          pkg,
 		sha:             string(bytes.TrimSpace(shaOut)),
@@ -96,6 +99,7 @@ type runFlags struct {
 	doProvisional   bool
 	doBless         bool
 	isRelease       bool
+	tagOverride     string
 	branch          string
 	sha             string
 	pkgDir          string
@@ -241,7 +245,9 @@ func buildCockroach(flags runFlags, o opts, execFn release.ExecFn) {
 	}
 	if flags.isRelease {
 		buildOpts.Release = true
-		buildOpts.BuildTag = o.VersionStr
+	}
+	if flags.tagOverride != "" {
+		buildOpts.BuildTag = flags.tagOverride
 	}
 
 	if err := release.MakeRelease(o.Platform, buildOpts, o.PkgDir); err != nil {

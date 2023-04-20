@@ -32,6 +32,7 @@ var (
 	// when compiling release binaries.
 	utcTime         string // Build time in UTC (year/month/day hour:min:sec)
 	rev             string // SHA-1 of this build (git rev-parse)
+	buildTagOverride string
 	cgoCompiler     = cgoVersion()
 	cgoTargetTriple string
 	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
@@ -62,6 +63,9 @@ func SeemsOfficial() bool {
 }
 
 func computeBinaryVersion(versionTxt, revision string) string {
+	if buildTagOverride != "" {
+		return buildTagOverride
+	}
 	txt := strings.TrimSuffix(versionTxt, "\n")
 	v, err := version.Parse(txt)
 	if err != nil {
