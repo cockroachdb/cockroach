@@ -56,7 +56,7 @@ func (s *Fast) prepareForMutation() {
 // Add adds a value to the set. No-op if the value is already in the set.
 func (s *Fast) Add(i int) {
 	s.prepareForMutation()
-	s.s.Insert(i)
+	s.s.Add(i)
 }
 
 // AddRange adds values 'from' up to 'to' (inclusively) to the set.
@@ -66,7 +66,7 @@ func (s *Fast) Add(i int) {
 func (s *Fast) AddRange(from, to int) {
 	s.prepareForMutation()
 	for i := from; i <= to; i++ {
-		s.s.Insert(i)
+		s.s.Add(i)
 	}
 }
 
@@ -78,12 +78,12 @@ func (s *Fast) Remove(i int) {
 
 // Contains returns true if the set contains the value.
 func (s Fast) Contains(i int) bool {
-	return s.s != nil && s.s.Has(i)
+	return s.s != nil && s.s.Contains(i)
 }
 
 // Empty returns true if the set is empty.
 func (s Fast) Empty() bool {
-	return s.s == nil || s.s.IsEmpty()
+	return s.s == nil || s.s.Empty()
 }
 
 // Len returns the number of the elements in the set.
@@ -119,7 +119,11 @@ func (s Fast) Ordered() []int {
 	if s.Empty() {
 		return nil
 	}
-	return s.s.AppendTo([]int(nil))
+	result := make([]int, 0, s.Len())
+	s.ForEach(func(i int) {
+		result = append(result, i)
+	})
+	return result
 }
 
 // Copy returns a copy of s which can be modified independently.
@@ -213,16 +217,6 @@ func (s Fast) SubsetOf(rhs Fast) bool {
 	return s.s.SubsetOf(rhs.s)
 }
 
-// Shift generates a new set which contains elements i+delta for elements i in
-// the original set.
-func (s *Fast) Shift(delta int) Fast {
-	n := &Sparse{}
-	s.ForEach(func(i int) {
-		n.Insert(i + delta)
-	})
-	return Fast{s: n}
-}
-
 // Encode the set and write it to a bytes.Buffer using binary.varint byte
 // encoding.
 //
@@ -243,7 +237,14 @@ func (s *Fast) Encode(buf *bytes.Buffer) error {
 	//gcassert:noescape
 	tmp := make([]byte, binary.MaxVarintLen64+1)
 
-	if s.s == nil || s.s.Max() < 64 {
+	max := MinInt
+	s.ForEach(func(i int) {
+		if i > max {
+			max = i
+		}
+	})
+
+	if s.s == nil || max < 64 {
 		n := binary.PutUvarint(tmp, 0)
 		var bitmap uint64
 		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
@@ -296,6 +297,3 @@ func (s *Fast) Decode(br io.ByteReader) error {
 	}
 	return nil
 }
-
-// This is defined to allow the test to build.
-const smallCutoff = 10
