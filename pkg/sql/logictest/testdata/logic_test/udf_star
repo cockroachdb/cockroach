@@ -195,11 +195,11 @@ SELECT f_unqualified_twocol()
 statement error pq: cannot alter type of column "b" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol ALTER b TYPE FLOAT;
 
-# TODO(harding): Postgres allows column renaming when only referenced by UDFs.
+# TODO(101934): Postgres allows column renaming when only referenced by UDFs.
 statement error pq: cannot rename column "a" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol RENAME COLUMN a TO d;
 
-# TODO(harding): Postgres allows table renaming when only referenced by UDFs.
+# TODO(101934): Postgres allows table renaming when only referenced by UDFs.
 statement error pq: cannot rename relation "t_twocol" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol RENAME TO t_twocol_prime;
 
