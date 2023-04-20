@@ -35,7 +35,6 @@ go_library(
         "//pkg/security/certmgr",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgwirebase",
-        "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
         "//pkg/util/httputil",
         "//pkg/util/log",

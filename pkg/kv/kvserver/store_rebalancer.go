@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -494,7 +493,7 @@ func (sr *StoreRebalancer) applyLeaseRebalance(
 	ctx context.Context, candidateReplica CandidateReplica, target roachpb.ReplicaDescriptor,
 ) bool {
 	timeout := sr.processTimeoutFn(candidateReplica)
-	if err := contextutil.RunWithTimeout(ctx, "transfer lease", timeout, func(ctx context.Context) error {
+	if err := timeutil.RunWithTimeout(ctx, "transfer lease", timeout, func(ctx context.Context) error {
 		return sr.rr.TransferLease(
 			ctx,
 			candidateReplica,
@@ -658,7 +657,7 @@ func (sr *StoreRebalancer) applyRangeRebalance(
 	)
 
 	timeout := sr.processTimeoutFn(candidateReplica)
-	if err := contextutil.RunWithTimeout(ctx, "relocate range", timeout, func(ctx context.Context) error {
+	if err := timeutil.RunWithTimeout(ctx, "relocate range", timeout, func(ctx context.Context) error {
 		return sr.rr.RelocateRange(
 			ctx,
 			descBeforeRebalance.StartKey.AsRawKey(),

@@ -887,14 +887,14 @@ func TestLint(t *testing.T) {
 			`\bcontext\.With(Deadline|Timeout)\(`,
 			"--",
 			"*.go",
-			":!util/contextutil/context.go",
+			":!util/timeutil/context.go",
 			// TODO(jordan): ban these too?
 			":!server/debug/**",
 			":!workload/**",
 			":!*_test.go",
 			":!cli/debug_synctest.go",
 			":!cmd/**",
-			":!roachprod", // TODO: switch to contextutil
+			":!roachprod", // TODO: switch to timeutil
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -908,7 +908,7 @@ func TestLint(t *testing.T) {
 			filter,
 			stream.GrepNot(`nolint:context`),
 		), func(s string) {
-			t.Errorf("\n%s <- forbidden; use 'contextutil.RunWithTimeout' instead", s)
+			t.Errorf("\n%s <- forbidden; use 'timeutil.RunWithTimeout' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1263,7 +1263,7 @@ func TestLint(t *testing.T) {
 			":!sql/pgwire/pgwirebase/too_big_error.go",
 			":!sql/protoreflect/redact.go",
 			":!sql/colexecerror/error.go",
-			":!util/contextutil/timeout_error.go",
+			":!util/timeutil/timeout_error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
@@ -2292,7 +2292,7 @@ func TestLint(t *testing.T) {
 			// of the exception.
 			stream.GrepNot(`pkg/sql/pgwire/pgerror/pgcode\.go:.*invalid direct cast on error object`),
 			// Cast in decode handler.
-			stream.GrepNot(`pkg/util/contextutil/timeout_error\.go:.*invalid direct cast on error object`),
+			stream.GrepNot(`pkg/util/timeutil/timeout_error\.go:.*invalid direct cast on error object`),
 			// Direct error cast OK in this case for a low-dependency helper binary.
 			stream.GrepNot(`pkg/cmd/github-pull-request-make/main\.go:.*invalid direct cast on error object`),
 			// The logging package translates log.Fatal calls into errors.
