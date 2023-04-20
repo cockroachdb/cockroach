@@ -606,9 +606,12 @@ type registryRecorder struct {
 func extractValue(name string, mtr interface{}, fn func(string, float64)) error {
 	switch mtr := mtr.(type) {
 	case metric.WindowedHistogram:
-		n := float64(mtr.TotalCountWindowed())
-		fn(name+"-count", n)
-		avg := mtr.TotalSumWindowed() / n
+		// Use cumulative stats here
+		count, sum := mtr.Total()
+		fn(name+"-count", float64(count))
+		fn(name+"-sum", sum)
+		// Use windowed stats for avg and quantiles
+		avg := mtr.MeanWindowed()
 		if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 			avg = 0
 		}

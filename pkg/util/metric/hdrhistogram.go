@@ -105,11 +105,12 @@ func (h *HdrHistogram) RecordValue(v int64) {
 	}
 }
 
-// TotalCount returns the (cumulative) number of samples.
-func (h *HdrHistogram) TotalCount() int64 {
+// Total returns the (cumulative) number of samples and sum of samples.
+func (h *HdrHistogram) Total() (int64, float64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.mu.cumulative.TotalCount()
+	totalSum := float64(h.mu.cumulative.TotalCount()) * h.mu.cumulative.Mean()
+	return h.mu.cumulative.TotalCount(), totalSum
 }
 
 // Min returns the minimum.
@@ -168,14 +169,10 @@ func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	}
 }
 
-// TotalCountWindowed implements the WindowedHistogram interface.
-func (h *HdrHistogram) TotalCountWindowed() int64 {
-	return int64(h.ToPrometheusMetricWindowed().Histogram.GetSampleCount())
-}
-
-// TotalSumWindowed implements the WindowedHistogram interface.
-func (h *HdrHistogram) TotalSumWindowed() float64 {
-	return h.ToPrometheusMetricWindowed().Histogram.GetSampleSum()
+// TotalWindowed implements the WindowedHistogram interface.
+func (h *HdrHistogram) TotalWindowed() (int64, float64) {
+	pHist := h.ToPrometheusMetricWindowed().Histogram
+	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
 }
 
 func (h *HdrHistogram) toPrometheusMetricWindowedLocked() *prometheusgo.Metric {
@@ -240,9 +237,9 @@ func (h *HdrHistogram) Mean() float64 {
 	return h.mu.cumulative.Mean()
 }
 
-func (h *HdrHistogram) TotalSum() float64 {
+func (h *HdrHistogram) MeanWindowed() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	return h.ToPrometheusMetric().GetSummary().GetSampleSum()
+	return h.mu.sliding.Current.Mean()
 }
