@@ -961,7 +961,7 @@ subtest end
 
 subtest desc_pk_with_ttl
 
-statement error non-ascending ordering on PRIMARY KEYs are not supported
+statement ok
 CREATE TABLE tbl_desc_pk_with_ttl (id INT, id2 INT, PRIMARY KEY (id, id2 DESC)) WITH (ttl_expire_after = '10 minutes')
 
 subtest end
@@ -971,7 +971,7 @@ subtest desc_pk_without_ttl_add_ttl
 statement ok
 CREATE TABLE tbl_desc_pk_without_ttl_add_ttl (id INT, id2 INT, PRIMARY KEY (id, id2 DESC))
 
-statement error non-ascending ordering on PRIMARY KEYs are not supported
+statement ok
 ALTER TABLE tbl_desc_pk_without_ttl_add_ttl SET (ttl_expire_after = '10 minutes')
 
 subtest end
@@ -981,7 +981,7 @@ subtest asc_pk_alter_desc_pk
 statement ok
 CREATE TABLE tbl_asc_pk_alter_desc_pk (id INT, id2 INT, PRIMARY KEY (id, id2)) WITH (ttl_expire_after = '10 minutes')
 
-statement error non-ascending ordering on PRIMARY KEYs are not supported
+statement ok
 ALTER TABLE tbl_asc_pk_alter_desc_pk ALTER PRIMARY KEY USING COLUMNS (id, id2 DESC)
 
 subtest end
