@@ -1503,7 +1503,13 @@ var charts = []sectionDescription{
 			{
 				Title: "Total Time Spent",
 				Metrics: []string{
-					"changefeed.table_metadata_nanos",
+					"changefeed.schemafeed.table_metadata_nanos",
+				},
+			},
+			{
+				Title: "Table History Scans",
+				Metrics: []string{
+					"changefeed.schemafeed.table_history_scans",
 				},
 			},
 			{

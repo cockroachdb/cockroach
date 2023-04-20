@@ -15,15 +15,23 @@ import (
 )
 
 var metaChangefeedTableMetadataNanos = metric.Metadata{
-	Name:        "changefeed.table_metadata_nanos",
+	Name:        "changefeed.schemafeed.table_metadata_nanos",
 	Help:        "Time blocked while verifying table metadata histories",
 	Measurement: "Nanoseconds",
 	Unit:        metric.Unit_NANOSECONDS,
 }
 
+var metaChangefeedTableHistoryScans = metric.Metadata{
+	Name:        "changefeed.schemafeed.table_history_scans",
+	Help:        "The number of table history scans during polling",
+	Measurement: "Counts",
+	Unit:        metric.Unit_COUNT,
+}
+
 // Metrics is a metric.Struct for schemafeed metrics.
 type Metrics struct {
 	TableMetadataNanos *metric.Counter
+	TableHistoryScans  *metric.Counter
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -33,6 +41,7 @@ func (Metrics) MetricStruct() {}
 func MakeMetrics(histogramWindow time.Duration) Metrics {
 	return Metrics{
 		TableMetadataNanos: metric.NewCounter(metaChangefeedTableMetadataNanos),
+		TableHistoryScans:  metric.NewCounter(metaChangefeedTableHistoryScans),
 	}
 }
 
