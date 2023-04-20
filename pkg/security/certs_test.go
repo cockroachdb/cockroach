@@ -404,7 +404,7 @@ func TestUseCerts(t *testing.T) {
 		clientContext,
 		security.CommandTLSSettings{},
 		roachpb.SystemTenantID,
-		tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+		tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
 	)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
@@ -429,7 +429,7 @@ func TestUseCerts(t *testing.T) {
 			clientContext,
 			security.CommandTLSSettings{},
 			roachpb.SystemTenantID,
-			tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+			tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
 		)
 		httpClient, err = secondSCtx.GetHTTPClient()
 	}
@@ -496,7 +496,7 @@ func TestUseSplitCACerts(t *testing.T) {
 		clientContext,
 		security.CommandTLSSettings{},
 		roachpb.SystemTenantID,
-		tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+		tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
 	)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
@@ -521,7 +521,7 @@ func TestUseSplitCACerts(t *testing.T) {
 			clientContext,
 			security.CommandTLSSettings{},
 			roachpb.SystemTenantID,
-			tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+			tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
 		)
 		httpClient, err = secondSCtx.GetHTTPClient()
 	}
@@ -624,7 +624,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		clientContext,
 		security.CommandTLSSettings{},
 		roachpb.SystemTenantID,
-		tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+		tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
 	)
 	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
@@ -649,7 +649,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 			clientContext,
 			security.CommandTLSSettings{},
 			roachpb.SystemTenantID,
-			tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+			tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
 		)
 		httpClient, err = secondCtx.GetHTTPClient()
 	}
