@@ -145,18 +145,18 @@ func (b *ConstraintBuilder) Init(
 func (b *ConstraintBuilder) Build(
 	index cat.Index, onFilters, optionalFilters, derivedFkOnFilters memo.FiltersExpr,
 ) (_ Constraint, foundEqualityCols bool) {
-	onFilters = append(onFilters, derivedFkOnFilters...)
+	// Combine the ON and derived FK filters which can contain equality
+	// conditions.
+	allFilters := make(memo.FiltersExpr, 0, len(onFilters)+len(derivedFkOnFilters)+len(optionalFilters))
+	allFilters = append(allFilters, onFilters...)
+	allFilters = append(allFilters, derivedFkOnFilters...)
 
-	// Extract the equality columns from onFilters. We cannot use the results of
-	// the extraction in Init because onFilters may be reduced by the caller
-	// after Init due to partial index implication. If the filters are reduced,
-	// eqFilterOrds calculated during Init would no longer be valid because the
-	// ordinals of the filters will have changed.
+	// Extract the equality columns from the ON and derived FK filters.
 	leftEq, rightEq, eqFilterOrds :=
-		memo.ExtractJoinEqualityColumnsWithFilterOrds(b.leftCols, b.rightCols, onFilters)
+		memo.ExtractJoinEqualityColumnsWithFilterOrds(b.leftCols, b.rightCols, allFilters)
 	rightEqSet := rightEq.ToSet()
 
-	// Retrieve the inequality columns from onFilters.
+	// Retrieve the inequality columns from the ON and derived FK filters.
 	var rightCmp opt.ColList
 	var inequalityFilterOrds []int
 	if b.evalCtx.SessionData().VariableInequalityLookupJoinEnabled {
@@ -164,7 +164,8 @@ func (b *ConstraintBuilder) Build(
 			memo.ExtractJoinInequalityRightColumnsWithFilterOrds(b.leftCols, b.rightCols, onFilters)
 	}
 
-	allFilters := append(onFilters, optionalFilters...)
+	// Add the optional filters.
+	allFilters = append(allFilters, optionalFilters...)
 
 	// Check if the first column in the index either:
 	//
