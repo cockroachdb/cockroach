@@ -32,7 +32,6 @@ go_library(
         "//pkg/storage",
         "//pkg/ts/tspb",
         "//pkg/ts/tsutil",
-        "//pkg/util/contextutil",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/log",

@@ -187,7 +187,6 @@ go_library(
         "//pkg/upgrade/upgrades",
         "//pkg/util",
         "//pkg/util/cgroups",
-        "//pkg/util/contextutil",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/flagutil",
