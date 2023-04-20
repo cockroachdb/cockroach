@@ -59,6 +59,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -101,12 +104,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -142,7 +148,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -150,6 +156,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -180,11 +189,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -210,7 +222,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -221,6 +233,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -263,12 +278,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -304,7 +322,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -312,6 +330,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -342,11 +363,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -372,7 +396,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -398,6 +422,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -432,12 +459,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -465,7 +495,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -473,6 +503,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -495,11 +528,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -517,7 +553,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -528,6 +564,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -562,12 +601,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -595,7 +637,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -603,6 +645,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -625,11 +670,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -647,7 +695,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -673,6 +721,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -707,12 +758,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -740,7 +794,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -748,6 +802,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -770,11 +827,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -792,7 +852,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -803,6 +863,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -837,12 +900,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -870,7 +936,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -878,6 +944,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -900,11 +969,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -922,7 +994,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -946,6 +1018,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -991,12 +1066,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1035,7 +1113,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -1043,6 +1121,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1076,11 +1157,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1109,7 +1193,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -1120,6 +1204,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1165,12 +1252,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1209,7 +1299,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -1217,6 +1307,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1250,11 +1343,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1283,7 +1379,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -1298,6 +1394,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1343,12 +1442,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1387,7 +1489,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -1395,6 +1497,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1428,11 +1533,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1461,7 +1569,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -1472,6 +1580,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1517,12 +1628,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1561,7 +1675,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -1569,6 +1683,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1602,11 +1719,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1635,7 +1755,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -1651,6 +1771,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1696,12 +1819,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1740,7 +1866,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -1748,6 +1874,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1781,11 +1910,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1814,7 +1946,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -1825,6 +1957,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1870,12 +2005,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1914,7 +2052,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -1922,6 +2060,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1955,11 +2096,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -1988,7 +2132,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -2009,6 +2153,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2054,12 +2201,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2098,7 +2248,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -2106,6 +2256,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2139,11 +2292,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2172,7 +2328,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -2183,6 +2339,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2228,12 +2387,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2272,7 +2434,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -2280,6 +2442,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2313,11 +2478,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2346,7 +2514,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -2361,6 +2529,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2406,12 +2577,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2450,7 +2624,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -2458,6 +2632,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2491,11 +2668,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2524,7 +2704,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -2535,6 +2715,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2580,12 +2763,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2624,7 +2810,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -2632,6 +2818,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2665,11 +2854,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2698,7 +2890,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -2714,6 +2906,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2759,12 +2954,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2803,7 +3001,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -2811,6 +3009,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2844,11 +3045,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2877,7 +3081,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -2888,6 +3092,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2933,12 +3140,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -2977,7 +3187,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -2985,6 +3195,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3018,11 +3231,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3051,7 +3267,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -3073,6 +3289,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3118,12 +3337,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3162,7 +3384,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -3170,6 +3392,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3203,11 +3428,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3236,7 +3464,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -3247,6 +3475,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3292,12 +3523,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3336,7 +3570,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -3344,6 +3578,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3377,11 +3614,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3410,7 +3650,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -3425,6 +3665,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3470,12 +3713,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3514,7 +3760,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -3522,6 +3768,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3555,11 +3804,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3588,7 +3840,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -3599,6 +3851,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3644,12 +3899,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3688,7 +3946,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -3696,6 +3954,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3729,11 +3990,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3762,7 +4026,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -3778,6 +4042,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3823,12 +4090,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3867,7 +4137,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -3875,6 +4145,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3908,11 +4181,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3941,7 +4217,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -3952,6 +4228,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -3997,12 +4276,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4041,7 +4323,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -4049,6 +4331,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4082,11 +4367,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4115,7 +4403,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -4141,6 +4429,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4194,12 +4485,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4246,7 +4540,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -4254,6 +4548,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4295,11 +4592,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4336,7 +4636,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -4347,6 +4647,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4400,12 +4703,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4452,7 +4758,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -4460,6 +4766,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4501,11 +4810,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4542,7 +4854,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -4568,6 +4880,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4609,12 +4924,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4649,7 +4967,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -4657,6 +4975,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4686,11 +5007,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4715,7 +5039,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -4726,6 +5050,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4767,12 +5094,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4807,7 +5137,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -4815,6 +5145,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4844,11 +5177,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4873,7 +5209,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -4899,6 +5235,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4933,12 +5272,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4966,7 +5308,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -4974,6 +5316,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -4996,11 +5341,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5018,7 +5366,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -5029,6 +5377,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5063,12 +5414,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5096,7 +5450,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -5104,6 +5458,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5126,11 +5483,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5148,7 +5508,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -5174,6 +5534,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5214,12 +5577,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5253,7 +5619,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -5261,6 +5627,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5289,11 +5658,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5317,7 +5689,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -5328,6 +5700,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5368,12 +5743,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5407,7 +5785,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -5415,6 +5793,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5443,11 +5824,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5471,7 +5855,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -5497,6 +5881,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5533,12 +5920,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5568,7 +5958,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -5576,6 +5966,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5600,11 +5993,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5624,7 +6020,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
@@ -5635,6 +6031,9 @@ func (ht *HashTable) checkColDeleting(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5671,12 +6070,15 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5706,7 +6108,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						} else {
@@ -5714,6 +6116,9 @@ func (ht *HashTable) checkColDeleting(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5738,11 +6143,14 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
+									if ht.ProbeScratch.differs[toCheck] {
+										continue
+									}
 									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if ht.Visited[keyID] {
 										ht.ProbeScratch.differs[toCheck] = true
@@ -5762,7 +6170,7 @@ func (ht *HashTable) checkColDeleting(
 										unique = cmpResult != 0
 									}
 
-									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									ht.ProbeScratch.differs[toCheck] = unique
 								}
 							}
 						}
