@@ -1589,9 +1589,9 @@ func (c *clusterImpl) ConnectToLiveNode(ctx context.Context, t *testImpl) (*gosq
 func (c *clusterImpl) FailOnInvalidDescriptors(ctx context.Context, db *gosql.DB, t *testImpl) {
 	t.L().Printf("checking for invalid descriptors")
 	if err := contextutil.RunWithTimeout(
-		ctx, "invalid descriptors check", 5*time.Minute,
+		ctx, "invalid descriptors check", 1*time.Minute,
 		func(ctx context.Context) error {
-			return roachtestutil.CheckInvalidDescriptors(db)
+			return roachtestutil.CheckInvalidDescriptors(ctx, db)
 		},
 	); err != nil {
 		t.Errorf("invalid descriptors check failed: %v", err)

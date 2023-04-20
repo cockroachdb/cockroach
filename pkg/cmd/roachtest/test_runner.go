@@ -1162,7 +1162,7 @@ func (r *testRunner) teardownTest(
 			defer db.Close()
 			t.L().Printf("running validation checks on node %d (<10m)", node)
 			// If this validation fails due to a timeout, it is very likely that
-			// the Replica Divegence check below will also fail.
+			// the replica divergence check below will also fail.
 			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
 				c.FailOnInvalidDescriptors(ctx, db, t)
 			}
