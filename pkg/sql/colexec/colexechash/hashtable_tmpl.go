@@ -856,7 +856,8 @@ func (ht *HashTable) updateSel(b coldata.Batch) {
 // since we know that every tuple has at least one match.
 //
 // NOTE: *first* and *next* vectors should be properly populated.
-// NOTE: batch is assumed to be non-zero length.
+// NOTE: the length of the batch is assumed to be in [1, coldata.MaxBatchSize]
+// range.
 func (ht *HashTable) FindBuckets(
 	batch coldata.Batch,
 	keyCols []coldata.Vec,

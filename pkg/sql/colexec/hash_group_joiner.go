@@ -203,6 +203,7 @@ func (h *hashGroupJoiner) Next() coldata.Batch {
 			// headID value which equals the position of the earliest tuple from
 			// this set in h.ht.Vals. By construction, whenever a larger headID
 			// is seen, it is the first tuple of the new bucket.
+			// TODO: this is wrong for h.ht.Vals > coldata.MaxBatchSize.
 			h.ht.FindBuckets(
 				h.ht.Vals, h.ht.Keys, h.ht.BuildScratch.First,
 				h.ht.BuildScratch.Next, h.ht.CheckProbeForDistinct,
