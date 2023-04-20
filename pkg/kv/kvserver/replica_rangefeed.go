@@ -718,6 +718,7 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 				select {
 				case m.RangeFeedSlowClosedTimestampNudgeSem <- struct{}{}:
 				case <-ctx.Done():
+					return nil, ctx.Err()
 				}
 				defer func() { <-m.RangeFeedSlowClosedTimestampNudgeSem }()
 				if err := r.ensureClosedTimestampStarted(ctx); err != nil {
