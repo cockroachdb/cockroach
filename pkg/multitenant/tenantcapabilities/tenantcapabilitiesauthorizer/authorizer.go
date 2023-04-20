@@ -13,6 +13,7 @@ package tenantcapabilitiesauthorizer
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -89,7 +90,7 @@ func (a *Authorizer) HasCapabilityForBatch(
 		return nil
 	}
 
-	switch mode := authorizerModeType(authorizerMode.Get(&a.settings.SV)); mode {
+	switch mode := a.getMode(ctx); mode {
 	case authorizerModeOn:
 		return a.capCheckForBatch(ctx, tenID, ba)
 	case authorizerModeAllowAll:
@@ -254,7 +255,7 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 	errFn := func() error {
 		return errors.New("client tenant does not have capability to query cluster node metadata")
 	}
-	switch mode := authorizerModeType(authorizerMode.Get(&a.settings.SV)); mode {
+	switch mode := a.getMode(ctx); mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
 	case authorizerModeAllowAll:
@@ -288,7 +289,7 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 		return errors.Newf("client tenant does not have capability to query timeseries data")
 	}
 
-	switch mode := authorizerModeType(authorizerMode.Get(&a.settings.SV)); mode {
+	switch mode := a.getMode(ctx); mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
 	case authorizerModeAllowAll:
@@ -323,7 +324,7 @@ func (a *Authorizer) HasNodelocalStorageCapability(
 	errFn := func() error {
 		return errors.Newf("client tenant does not have capability to use nodelocal storage")
 	}
-	switch mode := authorizerModeType(authorizerMode.Get(&a.settings.SV)); mode {
+	switch mode := a.getMode(ctx); mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
 	case authorizerModeAllowAll:
@@ -354,7 +355,7 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 	if tenID.IsSystem() {
 		return true
 	}
-	switch mode := authorizerModeType(authorizerMode.Get(&a.settings.SV)); mode {
+	switch mode := a.getMode(ctx); mode {
 	case authorizerModeOn:
 		break // fallthrough to the next check.
 	case authorizerModeAllowAll:
@@ -379,4 +380,18 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 		return tenantcapabilities.MustGetBoolByID(cp, tenantcapabilities.ExemptFromRateLimiting)
 	}
 	return false
+}
+
+// getMode retrieves the authorization mode.
+func (a *Authorizer) getMode(ctx context.Context) authorizerModeType {
+	selectedMode := authorizerModeType(authorizerMode.Get(&a.settings.SV))
+	if selectedMode == authorizerModeOn {
+		if !a.settings.Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {
+			// If the cluster hasn't been upgraded to v23.1 with
+			// capabilities yet, the capabilities won't be ready for use. In
+			// that case, fall back to the previous behavior.
+			selectedMode = authorizerModeV222
+		}
+	}
+	return selectedMode
 }
