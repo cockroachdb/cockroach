@@ -1219,6 +1219,7 @@ func createImportingDescriptors(
 						&tenantInfoCopy,
 						initialTenantZoneConfig,
 						false, /* ifNotExists */
+						p.ExecCfg().TenantTestingKnobs,
 					); err != nil {
 						return err
 					}

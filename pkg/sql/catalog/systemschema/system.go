@@ -99,6 +99,9 @@ CREATE TABLE system.settings (
 	DescIDSequenceSchema = `
 CREATE SEQUENCE system.descriptor_id_seq;`
 
+	TenantIDSequenceSchema = `
+CREATE SEQUENCE system.tenant_id_seq;`
+
 	// Note: the "active" column is deprecated.
 	TenantsTableSchema = `
 CREATE TABLE system.tenants (
@@ -1154,6 +1157,7 @@ func MakeSystemTables() []SystemTable {
 		SettingsTable,
 		DescIDSequence,
 		RoleIDSequence,
+		TenantIDSequence,
 		TenantsTable,
 		LeaseTable(),
 		EventLogTable,
@@ -1418,6 +1422,50 @@ var (
 				CacheSize: 1,
 			}
 			tbl.SequenceOpts = opts
+			tbl.NextColumnID = 0
+			tbl.NextFamilyID = 0
+			tbl.NextIndexID = 0
+			tbl.NextMutationID = 0
+			// Sequences never exposed their internal constraints,
+			// so all IDs will be left at zero. CREATE SEQUENCE has
+			// the same behaviour.
+			tbl.NextConstraintID = 0
+			tbl.PrimaryIndex.ConstraintID = 0
+		},
+	)
+
+	// TenantIDSequence is the descriptor for the descriptor ID sequence.
+	TenantIDSequence = makeSystemTable(
+		TenantIDSequenceSchema,
+		systemTable(
+			catconstants.TenantIDSequenceTableName,
+			descpb.InvalidID, // dynamically assigned table ID
+			[]descpb.ColumnDescriptor{
+				{Name: tabledesc.SequenceColumnName, ID: tabledesc.SequenceColumnID, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{{
+				Name:            "primary",
+				ID:              keys.SequenceColumnFamilyID,
+				ColumnNames:     []string{tabledesc.SequenceColumnName},
+				ColumnIDs:       []descpb.ColumnID{tabledesc.SequenceColumnID},
+				DefaultColumnID: tabledesc.SequenceColumnID,
+			}},
+			descpb.IndexDescriptor{
+				ID:                  keys.SequenceIndexID,
+				Name:                tabledesc.LegacyPrimaryKeyIndexName,
+				KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+				KeyColumnNames:      []string{tabledesc.SequenceColumnName},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.SequenceOpts = &descpb.TableDescriptor_SequenceOpts{
+				Increment: 1,
+				MinValue:  1,
+				MaxValue:  math.MaxInt64,
+				Start:     1,
+				CacheSize: 1,
+			}
 			tbl.NextColumnID = 0
 			tbl.NextFamilyID = 0
 			tbl.NextIndexID = 0

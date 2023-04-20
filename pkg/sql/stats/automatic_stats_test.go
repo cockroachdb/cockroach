@@ -829,7 +829,9 @@ func TestAnalyzeSystemTables(t *testing.T) {
 	for _, tableName := range tableNames {
 		// Stats may not be collected on system.lease and system.table_statistics.
 		if tableName == "lease" || tableName == "table_statistics" ||
-			tableName == "jobs" || tableName == "scheduled_jobs" || tableName == "role_id_seq" ||
+			tableName == "jobs" || tableName == "scheduled_jobs" ||
+			tableName == "role_id_seq" ||
+			tableName == "tenant_id_seq" ||
 			tableName == "descriptor_id_seq" {
 			continue
 		}
