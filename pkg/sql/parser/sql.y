@@ -10810,6 +10810,18 @@ opt_index_visible:
   {
     $$.val = tree.NewNumVal(constant.MakeFloat64(0.0), "0.0", false /*negative*/)
   }
+| VISIBILITY FCONST
+  {
+    visibilityConst, _ := constant.Float64Val($2.numVal().AsConstantValue())
+      if visibilityConst < 0.0 || visibilityConst > 1.0 {
+        sqllex.Error("index visibility must be between 0 and 1")
+        return 1
+      }
+    invisibilityConst := 1.0 - visibilityConst
+    invisibilityStr := fmt.Sprintf("%.2f", invisibilityConst)
+    treeNumVal := tree.NewNumVal(constant.MakeFloat64(invisibilityConst), invisibilityStr, false /*negative*/)
+    $$.val = treeNumVal
+  }
 | /* EMPTY */
   {
     $$.val = tree.NewNumVal(constant.MakeFloat64(0.0), "0.0", false /*negative*/)
