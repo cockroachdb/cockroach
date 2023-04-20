@@ -45,6 +45,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -54,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -67,6 +70,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -922,6 +927,61 @@ func TestTxnContentionEventsTable(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	testTxnContentionEventsTableHelper(t, ctx, conn, sqlDB)
 	testTxnContentionEventsTableWithDroppedInfo(t, ctx, conn, sqlDB)
+}
+
+func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := tc.ServerConn(0)
+	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '10ms'")
+	require.NoError(t, err)
+	rangeKey := "/Local/Range/Table/106/1/-1704619207610523008/RangeDescriptor"
+	rangeKeyEscaped := fmt.Sprintf("\"%s\"", rangeKey)
+	tc.Server(0).SQLServer().(*sql.Server).GetExecutorConfig().ContentionRegistry.AddContentionEvent(contentionpb.ExtendedContentionEvent{
+		BlockingEvent: kvpb.ContentionEvent{
+			Key: roachpb.Key(rangeKey),
+			TxnMeta: enginepb.TxnMeta{
+				Key: roachpb.Key(rangeKey),
+				ID:  uuid.FastMakeV4(),
+			},
+
+			Duration: 1 * time.Minute,
+		},
+		BlockingTxnFingerprintID: 9001,
+		WaitingTxnID:             uuid.FastMakeV4(),
+		WaitingTxnFingerprintID:  9002,
+		WaitingStmtID:            clusterunique.ID{Uint128: uint128.Uint128{Lo: 9003, Hi: 1004}},
+		WaitingStmtFingerprintID: 9004,
+	})
+
+	// Contention flush can take some time to flush
+	// the events
+	testutils.SucceedsSoon(t, func() error {
+		row := sqlDB.QueryRow(`SELECT
+    database_name, 
+    schema_name, 
+    table_name, 
+    index_name 
+		FROM crdb_internal.transaction_contention_events
+		WHERE contending_pretty_key = $1`, rangeKeyEscaped)
+
+		var db, schema, table, index string
+		err = row.Scan(&db, &schema, &table, &index)
+		if err != nil {
+			return err
+		}
+		require.Equal(t, "", db)
+		require.Equal(t, "", schema)
+		require.Equal(t, "", table)
+		require.Equal(t, "", index)
+		return nil
+	})
 }
 
 func TestTxnContentionEventsTableMultiTenant(t *testing.T) {
