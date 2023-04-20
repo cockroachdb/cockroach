@@ -1964,8 +1964,6 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 100491, "flaky test")
-
 	numServers := 2
 	var manuals []*hlc.HybridManualClock
 	for i := 0; i < numServers; i++ {
@@ -1982,7 +1980,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 		}
 	}
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, numNodes,
+	tc := testcluster.StartTestCluster(t, numServers,
 		base.TestClusterArgs{
 			ReplicationMode:   base.ReplicationManual,
 			ServerArgsPerNode: serverArgs,
@@ -2389,7 +2387,7 @@ func getLeaseInfoOrFatal(
 func TestRemoveLeaseholder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testcluster.StartTestCluster(t, numNodes,
+	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})

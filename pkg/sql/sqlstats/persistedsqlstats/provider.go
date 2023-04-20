@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -67,6 +68,10 @@ type PersistedSQLStats struct {
 	// exceeded.
 	memoryPressureSignal chan struct{}
 
+	// Use the signal the flush completed.
+	flushDoneCallback func()
+	flushMutex        syncutil.Mutex
+
 	lastFlushStarted time.Time
 	jobMonitor       jobMonitor
 	atomic           struct {
@@ -89,6 +94,7 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 		cfg:                  cfg,
 		memoryPressureSignal: make(chan struct{}),
 		drain:                make(chan struct{}),
+		flushDoneCallback:    nil,
 	}
 
 	p.jobMonitor = jobMonitor{
@@ -126,6 +132,12 @@ func (s *PersistedSQLStats) Stop(ctx context.Context) {
 		close(s.drain)
 	})
 	s.tasksDoneWG.Wait()
+}
+
+func (s *PersistedSQLStats) SetFlushDoneCallback(callBackFunc func()) {
+	s.flushMutex.Lock()
+	defer s.flushMutex.Unlock()
+	s.flushDoneCallback = callBackFunc
 }
 
 // GetController returns the controller of the PersistedSQLStats.
@@ -173,6 +185,14 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			}
 
 			s.Flush(ctx)
+
+			func() {
+				s.flushMutex.Lock()
+				defer s.flushMutex.Unlock()
+				if s.flushDoneCallback != nil {
+					s.flushDoneCallback()
+				}
+			}()
 		}
 	})
 	if err != nil {

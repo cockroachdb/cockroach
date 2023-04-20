@@ -236,22 +236,23 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 			newCanceledJob := writeJob("new_canceled", earlier, earlier.Add(time.Minute),
 				StatusCanceled, mutOptions)
 
+			sqlActivityJob := fmt.Sprintf("%d", SqlActivityUpdaterJobID)
 			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-				{oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldRevertFailedJob}, {oldCanceledJob},
+				{sqlActivityJob}, {oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldRevertFailedJob}, {oldCanceledJob},
 				{newRunningJob}, {newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
 
 			if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
 				t.Fatal(err)
 			}
 			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-				{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newSucceededJob},
-				{newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
+				{sqlActivityJob}, {oldRunningJob}, {oldRevertFailedJob}, {newRunningJob},
+				{newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
 
 			if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
 				t.Fatal(err)
 			}
 			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-				{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newRevertFailedJob}})
+				{sqlActivityJob}, {oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newRevertFailedJob}})
 
 			// Delete the revert failed, and running jobs for the next run of the
 			// test.
@@ -280,6 +281,7 @@ func TestRegistryGCPagination(t *testing.T) {
 				DontUseJobs:                       true,
 				SkipJobMetricsPollingJobBootstrap: true,
 				SkipAutoConfigRunnerJobBootstrap:  true,
+				SkipUpdateSQLActivityJobBootstrap: true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
@@ -446,6 +448,39 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 			return nil
 		}))
 		runTests(t, createdJob)
+	})
+
+	t.Run("CreateIfNotExistAdoptableJobWithTxn", func(t *testing.T) {
+		tempRecord := Record{
+			JobID:    r.MakeJobID(),
+			Details:  jobspb.ImportDetails{},
+			Progress: jobspb.ImportProgress{},
+			Username: username.RootUserName(),
+		}
+
+		// loop to verify no errors if create if not exist is called multiple times
+		for i := 0; i < 3; i++ {
+			err := ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return r.CreateIfNotExistAdoptableJobWithTxn(ctx, tempRecord, txn)
+			})
+			require.NoError(t, err)
+		}
+
+		require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			row, err := txn.QueryRowEx(
+				ctx,
+				"check if job exists",
+				txn.KV(),
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				"SELECT id FROM system.jobs WHERE id = $1",
+				tempRecord.JobID,
+			)
+			if err != nil {
+				return err
+			}
+			require.NotNil(t, row)
+			return nil
+		}))
 	})
 }
 
@@ -665,6 +700,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 					DontUseJobs:                       true,
 					SkipJobMetricsPollingJobBootstrap: true,
 					SkipAutoConfigRunnerJobBootstrap:  true,
+					SkipUpdateSQLActivityJobBootstrap: true,
 				},
 				KeyVisualizer: &keyvisualizer.TestingKnobs{
 					SkipJobBootstrap: true,

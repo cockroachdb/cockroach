@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1571,4 +1573,76 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 		return nil
 	})
 	tc.WaitForLeaseUpgrade(ctx, t, desc)
+}
+
+// TestLeaseRequestBumpsEpoch tests that a non-cooperative lease acquisition of
+// an expired epoch lease always bumps the epoch of the outgoing leaseholder,
+// regardless of the type of lease being acquired.
+func TestLeaseRequestBumpsEpoch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "expLease", func(t *testing.T, expLease bool) {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
+
+		manual := hlc.NewHybridManualClock()
+		args := base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						// Required by TestCluster.MoveRangeLeaseNonCooperatively.
+						AllowLeaseRequestProposalsWhenNotLeader: true,
+						DisableAutomaticLeaseRenewal:            true,
+					},
+					Server: &server.TestingKnobs{
+						WallClock: manual,
+					},
+				},
+			},
+		}
+		tc := testcluster.StartTestCluster(t, 2, args)
+		defer tc.Stopper().Stop(ctx)
+
+		// Create range and upreplicate.
+		key := tc.ScratchRange(t)
+		tc.AddVotersOrFatal(t, key, tc.Target(1))
+		desc := tc.LookupRangeOrFatal(t, key)
+
+		// Make sure n1 has an epoch lease.
+		t0 := tc.Target(0)
+		tc.TransferRangeLeaseOrFatal(t, desc, t0)
+		prevLease, _, err := tc.FindRangeLease(desc, &t0)
+		require.NoError(t, err)
+		require.Equal(t, roachpb.LeaseEpoch, prevLease.Type())
+
+		// Non-cooperatively move the lease to n2.
+		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, expLease)
+		t1 := tc.Target(1)
+		newLease, err := tc.MoveRangeLeaseNonCooperatively(ctx, desc, t1, manual)
+		require.NoError(t, err)
+		require.NotNil(t, newLease)
+		if expLease {
+			require.Equal(t, roachpb.LeaseExpiration, newLease.Type())
+		} else {
+			require.Equal(t, roachpb.LeaseEpoch, newLease.Type())
+		}
+
+		// Check that n1's liveness epoch was bumped.
+		l0 := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
+		livenesses, err := l0.GetLivenessesFromKV(ctx)
+		require.NoError(t, err)
+		var liveness livenesspb.Liveness
+		for _, l := range livenesses {
+			if l.NodeID == 1 {
+				liveness = l
+				break
+			}
+		}
+		require.NotZero(t, liveness)
+		require.Greater(t, liveness.Epoch, prevLease.Epoch)
+	})
 }

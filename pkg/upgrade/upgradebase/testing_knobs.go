@@ -71,6 +71,11 @@ type TestingKnobs struct {
 	// AfterRunPermanentUpgrades is called after each call to
 	// RunPermanentUpgrades.
 	AfterRunPermanentUpgrades func()
+
+	// SkipUpdateSQLActivityJobBootstrap, if set, disables the
+	// clusterversion.V23_1AddSystemActivityTables upgrade, which prevents a
+	// job from being created.
+	SkipUpdateSQLActivityJobBootstrap bool
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.
