@@ -33,6 +33,7 @@ var provisionalReleasePrefixRE = regexp.MustCompile(`^provisional_[0-9]{12}_`)
 func main() {
 	var gcsBucket string
 	var outputDirectory string
+	var buildTagOverride string
 	var doProvisional bool
 	var isRelease bool
 	var doBless bool
@@ -40,6 +41,7 @@ func main() {
 	flag.StringVar(&gcsBucket, "gcs-bucket", "", "GCS bucket")
 	flag.StringVar(&outputDirectory, "output-directory", "",
 		"Save local copies of uploaded release archives in this directory")
+	flag.StringVar(&buildTagOverride, "build-tag-override", "", "override the version from version.txt")
 	flag.BoolVar(&doProvisional, "provisional", false, "publish provisional binaries")
 	flag.BoolVar(&doBless, "bless", false, "bless provisional binaries")
 
@@ -82,24 +84,26 @@ func main() {
 	}
 
 	run(providers, runFlags{
-		doProvisional:   doProvisional,
-		doBless:         doBless,
-		isRelease:       isRelease,
-		branch:          branch,
-		pkgDir:          pkg,
-		sha:             string(bytes.TrimSpace(shaOut)),
-		outputDirectory: outputDirectory,
+		doProvisional:    doProvisional,
+		doBless:          doBless,
+		isRelease:        isRelease,
+		buildTagOverride: buildTagOverride,
+		branch:           branch,
+		pkgDir:           pkg,
+		sha:              string(bytes.TrimSpace(shaOut)),
+		outputDirectory:  outputDirectory,
 	}, release.ExecFn{})
 }
 
 type runFlags struct {
-	doProvisional   bool
-	doBless         bool
-	isRelease       bool
-	branch          string
-	sha             string
-	pkgDir          string
-	outputDirectory string
+	doProvisional    bool
+	doBless          bool
+	isRelease        bool
+	buildTagOverride string
+	branch           string
+	sha              string
+	pkgDir           string
+	outputDirectory  string
 }
 
 func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
@@ -241,7 +245,9 @@ func buildCockroach(flags runFlags, o opts, execFn release.ExecFn) {
 	}
 	if flags.isRelease {
 		buildOpts.Release = true
-		buildOpts.BuildTag = o.VersionStr
+	}
+	if flags.buildTagOverride != "" {
+		buildOpts.BuildTag = flags.buildTagOverride
 	}
 
 	if err := release.MakeRelease(o.Platform, buildOpts, o.PkgDir); err != nil {

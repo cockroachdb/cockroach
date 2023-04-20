@@ -31,7 +31,8 @@ import (
 type BuildOptions struct {
 	// True iff this is a release build.
 	Release bool
-	// BuildTag must be set if Release is set, and vice-versea.
+	// BuildTag overrides the build tag for a "Release" build.
+	// This can only be set for a Release build.
 	BuildTag string
 
 	// ExecFn.Run() is called to execute commands for this build.
@@ -163,17 +164,20 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		buildArgs = append(buildArgs, "//c-deps:libgeos")
 	}
 	targetTriple := TargetTripleFromPlatform(platform)
+	var stampCommand string
 	if opts.Release {
 		if opts.BuildTag == "" {
-			return errors.Newf("must set BuildTag if Release is set")
+			stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s release", targetTriple, opts.Channel)
+		} else {
+			stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s release %s", targetTriple, opts.Channel, opts.BuildTag)
 		}
-		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s release", targetTriple, opts.Channel))
 	} else {
 		if opts.BuildTag != "" {
-			return errors.Newf("cannot set BuildTag if Release is not set")
+			return errors.Newf("BuildTag cannot be set for non-Release builds")
 		}
-		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s", targetTriple, opts.Channel))
+		stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s", targetTriple, opts.Channel)
 	}
+	buildArgs = append(buildArgs, stampCommand)
 	configs := []string{"-c", "opt", "--config=ci", "--config=force_build_cdeps", "--config=with_ui", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
 	buildArgs = append(buildArgs, configs...)
 	cmd := exec.Command("bazel", buildArgs...)
