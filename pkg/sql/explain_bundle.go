@@ -459,6 +459,11 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			fmt.Fprintf(&buf, "-- error getting schema for sequence %s: %v\n", sequences[i].String(), err)
 		}
 	}
+	// Get all user-defined types.
+	blankLine()
+	if err := c.PrintCreateEnum(&buf); err != nil {
+		fmt.Fprintf(&buf, "-- error getting schema for enums: %v\n", err)
+	}
 	for i := range tables {
 		blankLine()
 		if err := c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues); err != nil {
@@ -793,6 +798,19 @@ func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) 
 		return err
 	}
 	fmt.Fprintf(w, "%s;\n", createStatement)
+	return nil
+}
+
+func (c *stmtEnvCollector) PrintCreateEnum(w io.Writer) error {
+	createStatement, err := c.queryRows(
+		"SELECT create_statement FROM [SHOW CREATE ALL TYPES]",
+	)
+	if err != nil {
+		return err
+	}
+	for _, cs := range createStatement {
+		fmt.Fprintf(w, "%s\n", cs)
+	}
 	return nil
 }
 

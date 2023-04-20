@@ -304,6 +304,18 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			plans, "statement.sql stats-defaultdb.public.pterosaur.sql env.sql vec.txt vec-v.txt",
 		)
 	})
+
+	t.Run("redact", func(t *testing.T) {
+		r.Exec(t, "CREATE TYPE test_type1 AS ENUM ('hello','world');")
+		r.Exec(t, "CREATE TYPE test_type2 AS ENUM ('goodbye','earth');")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 1;")
+		checkBundle(
+			t, fmt.Sprint(rows), "test_type1", nil, base, plans,
+			"distsql.html vec.txt vec-v.txt")
+		checkBundle(
+			t, fmt.Sprint(rows), "test_type2", nil, base, plans,
+			"distsql.html vec.txt vec-v.txt")
+	})
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the
