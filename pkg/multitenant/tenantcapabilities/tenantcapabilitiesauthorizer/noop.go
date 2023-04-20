@@ -39,26 +39,26 @@ func (n *NoopAuthorizer) HasCapabilityForBatch(
 func (n *NoopAuthorizer) BindReader(tenantcapabilities.Reader) {
 }
 
-// HasNodeStatusCapability implements the tenantcapabilities.Authorizer interface
+// HasNodeStatusCapability implements the tenantcapabilities.Authorizer interface.
 func (n *NoopAuthorizer) HasNodeStatusCapability(
 	ctx context.Context, tenID roachpb.TenantID,
 ) error {
 	return nil
 }
 
-// HasTSDBQueryCapability implements the tenantcapabilities.Authorizer interface
+// HasTSDBQueryCapability implements the tenantcapabilities.Authorizer interface.
 func (n *NoopAuthorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
 	return nil
 }
 
-// HasNodelocalStorageCapability implements the tenantcapabilities.Authorizer interface
+// HasNodelocalStorageCapability implements the tenantcapabilities.Authorizer interface.
 func (n *NoopAuthorizer) HasNodelocalStorageCapability(
 	ctx context.Context, tenID roachpb.TenantID,
 ) error {
 	return nil
 }
 
-// IsExemptFromRateLimiting implements the tenantcapabilities.Authorizer interface
+// IsExemptFromRateLimiting implements the tenantcapabilities.Authorizer interface.
 func (n *NoopAuthorizer) IsExemptFromRateLimiting(context.Context, roachpb.TenantID) bool {
-	return false
+	return true
 }
