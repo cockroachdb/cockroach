@@ -14,6 +14,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -60,6 +61,14 @@ func (p *planner) CreateTenant(
 		if err := d.Decode(&ctcfg); err != nil {
 			return tid, pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
+	}
+
+	if ctcfg.ID != nil && *ctcfg.ID > math.MaxUint32 {
+		// Tenant creation via this interface (which includes
+		// crdb_internal.create_tenant) should be prevented from gobbling
+		// up the entire tenant ID space by asking for too large values.
+		// Otherwise, CREATE TENANT will not be possible any more.
+		return tid, pgerror.Newf(pgcode.ProgramLimitExceeded, "tenant ID %d out of range", *ctcfg.ID)
 	}
 
 	configTemplate := mtinfopb.TenantInfoWithUsage{}
@@ -608,6 +617,8 @@ HAVING ($1 = '' OR NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.name = $1)
 	return roachpb.MakeTenantID(nextID)
 }
 
+var tenantIDSequenceFQN = tree.MakeTableNameWithSchema(catconstants.SystemDatabaseName, tree.PublicSchemaName, tree.Name(catconstants.TenantIDSequenceTableName))
+
 // getTenantIDSequenceDesc retrieves a leased descriptor for the
 // sequence system.tenant_id_seq.
 func getTenantIDSequenceDesc(ctx context.Context, txn isql.Txn) (catalog.TableDescriptor, error) {
@@ -626,9 +637,8 @@ func getTenantIDSequenceDesc(ctx context.Context, txn isql.Txn) (catalog.TableDe
 	coll := itxn.Descriptors()
 
 	// Full name of the sequence.
-	tn := tree.MakeTableNameWithSchema(catconstants.SystemDatabaseName, tree.PublicSchemaName, tree.Name(catconstants.TenantIDSequenceTableName))
 	// Look up the sequence by name with lease.
-	_, desc, err := descs.PrefixAndTable(ctx, coll.ByNameWithLeased(txn.KV()).Get(), &tn)
+	_, desc, err := descs.PrefixAndTable(ctx, coll.ByNameWithLeased(txn.KV()).Get(), &tenantIDSequenceFQN)
 	if err != nil {
 		return nil, err
 	}
