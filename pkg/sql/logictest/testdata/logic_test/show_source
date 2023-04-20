@@ -271,7 +271,7 @@ public           descriptor_id_seq
 public           role_id_seq
 public           tenant_id_seq
 
-query TTTTT colnames,rowsort
+query TTTTT colnames
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system]
 ORDER BY schema_name, table_name
 ----
@@ -328,7 +328,7 @@ public       users                            table     NULL   NULL
 public       web_sessions                     table     NULL   NULL
 public       zones                            table     NULL   NULL
 
-query TTTTTT colnames,rowsort
+query TTTTTT colnames
 SELECT schema_name, table_name, type, owner, locality, comment FROM [SHOW TABLES FROM system WITH COMMENT]
 ORDER BY schema_name, table_name
 ----
