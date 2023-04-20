@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -367,7 +366,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 	result.Execution = &execResult{}
 	result.Execution.TxnResults = make([]txnResult, 0, len(requestPayload.Statements))
 
-	err = contextutil.RunWithTimeout(ctx, "run-sql-via-api", timeout, func(ctx context.Context) error {
+	err = timeutil.RunWithTimeout(ctx, "run-sql-via-api", timeout, func(ctx context.Context) error {
 		retryNum := 0
 
 		return a.sqlServer.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {

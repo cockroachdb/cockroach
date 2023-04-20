@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -371,7 +370,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 	// Slow enough response times are not different than errors from the
 	// perspective of the user.
 	timeout := readTimeout.Get(&p.settings.SV)
-	err = contextutil.RunWithTimeout(ctx, "read probe", timeout, func(ctx context.Context) error {
+	err = timeutil.RunWithTimeout(ctx, "read probe", timeout, func(ctx context.Context) error {
 		// We read a "range-local" key dedicated to probing. See pkg/keys for more.
 		// There is no data at the key, but that is okay. Even tho there is no data
 		// at the key, the prober still executes a read operation on the range.
@@ -427,7 +426,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 	// Slow enough response times are not different than errors from the
 	// perspective of the user.
 	timeout := writeTimeout.Get(&p.settings.SV)
-	err = contextutil.RunWithTimeout(ctx, "write probe", timeout, func(ctx context.Context) error {
+	err = timeutil.RunWithTimeout(ctx, "write probe", timeout, func(ctx context.Context) error {
 		f := ops.Write(step.Key)
 		if bypassAdmissionControl.Get(&p.settings.SV) {
 			return txns.Txn(ctx, f)

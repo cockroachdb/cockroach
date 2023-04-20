@@ -102,7 +102,6 @@ go_library(
         "//pkg/util/admission/admissionpb",
         "//pkg/util/arith",
         "//pkg/util/bitarray",
-        "//pkg/util/contextutil",
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",

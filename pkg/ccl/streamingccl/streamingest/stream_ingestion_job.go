@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -232,7 +231,7 @@ func completeProducerJob(
 	ctx context.Context, ingestionJob *jobs.Job, internalDB *sql.InternalDB, successfulIngestion bool,
 ) {
 	streamID := ingestionJob.Details().(jobspb.StreamIngestionDetails).StreamID
-	if err := contextutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
+	if err := timeutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
 		func(ctx context.Context) error {
 			client, err := connectToActiveClient(ctx, ingestionJob, internalDB)
 			if err != nil {

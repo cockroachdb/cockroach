@@ -17,7 +17,6 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/storage",
-        "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
