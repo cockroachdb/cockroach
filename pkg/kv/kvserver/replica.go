@@ -1323,7 +1323,7 @@ func (r *Replica) SetMVCCStatsForTesting(stats *enginepb.MVCCStats) {
 //
 // Use LoadStats.QueriesPerSecond for all other purposes.
 func (r *Replica) GetMaxSplitQPS(ctx context.Context) (float64, bool) {
-	snap := r.loadBasedSplitter.Snapshot(ctx, r.Clock().PhysicalTime())
+	snap := r.loadBasedSplitter.Snapshot(ctx, r.Clock().Now())
 
 	if snap.SplitObjective != split.SplitQPS {
 		return 0, false
@@ -1341,7 +1341,7 @@ func (r *Replica) GetMaxSplitQPS(ctx context.Context) (float64, bool) {
 // Use LoadStats.RaftCPUNanosPerSecond and RequestCPUNanosPerSecond for current
 // CPU stats for all other purposes.
 func (r *Replica) GetMaxSplitCPU(ctx context.Context) (float64, bool) {
-	snap := r.loadBasedSplitter.Snapshot(ctx, r.Clock().PhysicalTime())
+	snap := r.loadBasedSplitter.Snapshot(ctx, r.Clock().Now())
 
 	if snap.SplitObjective != split.SplitCPU {
 		return 0, false

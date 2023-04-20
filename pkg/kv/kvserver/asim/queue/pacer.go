@@ -14,12 +14,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // ReplicaPacer controls the speed of considering a replica.
 type ReplicaPacer interface {
 	// Next returns the next replica for the current tick, if exists.
-	Next(tick time.Time) state.Replica
+	Next(tick hlc.Timestamp) state.Replica
 }
 
 // ReplicaScanner simulates store scanner replica pacing, iterating over
@@ -30,8 +31,8 @@ type ReplicaScanner struct {
 	// replicas in state.
 	nextReplsFn        func() []state.Replica
 	repls              []state.Replica
-	start              time.Time
-	lastLoop           time.Time
+	start              hlc.Timestamp
+	lastLoop           hlc.Timestamp
 	targetLoopInterval time.Duration
 	minIterInvterval   time.Duration
 	maxIterInvterval   time.Duration
@@ -73,7 +74,7 @@ func (rp ReplicaScanner) Swap(i, j int) {
 // resetPacerLoop collects the current replicas on the store and sets the
 // pacing interval to complete iteration over all replicas in exactly target
 // loop interval.
-func (rp *ReplicaScanner) resetPacerLoop(tick time.Time) {
+func (rp *ReplicaScanner) resetPacerLoop(tick hlc.Timestamp) {
 	rp.repls = rp.nextReplsFn()
 
 	// Avoid the same replicas being processed in the same order in each
@@ -113,21 +114,21 @@ func (rp *ReplicaScanner) resetPacerLoop(tick time.Time) {
 
 // maybeResetPacerLoop checks whether we have completed iteration and resets
 // the pacing loop if so.
-func (rp *ReplicaScanner) maybeResetPacerLoop(tick time.Time) {
+func (rp *ReplicaScanner) maybeResetPacerLoop(tick hlc.Timestamp) {
 	if rp.visited >= len(rp.repls) {
 		rp.resetPacerLoop(tick)
 	}
 }
 
 // Next returns the next replica for the current tick, if exists.
-func (rp *ReplicaScanner) Next(tick time.Time) state.Replica {
+func (rp *ReplicaScanner) Next(tick hlc.Timestamp) state.Replica {
 	rp.maybeResetPacerLoop(tick)
 
 	elapsed := tick.Sub(rp.start)
 	if elapsed >= rp.iterInterval && len(rp.repls) > 0 {
 		repl := rp.repls[rp.visited]
 		rp.visited++
-		rp.start = rp.start.Add(rp.iterInterval)
+		rp.start = rp.start.AddDuration(rp.iterInterval)
 		return repl
 	}
 	return nil

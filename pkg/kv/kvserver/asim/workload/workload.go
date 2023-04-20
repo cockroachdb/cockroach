@@ -14,7 +14,8 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // LoadEvent represent a key access that generates load against the database.
@@ -51,7 +52,7 @@ func (lb LoadBatch) Len() int {
 type Generator interface {
 	// Tick returns the load events up till time tick, from the last time the
 	// workload generator was called.
-	Tick(tick time.Time) LoadBatch
+	Tick(tick hlc.Timestamp) LoadBatch
 }
 
 // RandomGenerator generates random operations within some limits.
@@ -59,7 +60,7 @@ type RandomGenerator struct {
 	seed           int64
 	keyGenerator   KeyGenerator
 	rand           *rand.Rand
-	lastRun        time.Time
+	lastRun        hlc.Timestamp
 	rollsPerSecond float64
 	readRatio      float64
 	maxSize        int
@@ -69,7 +70,7 @@ type RandomGenerator struct {
 // NewRandomGenerator returns a generator that generates random operations
 // within some limits.
 func NewRandomGenerator(
-	start time.Time,
+	start hlc.Timestamp,
 	seed int64,
 	keyGenerator KeyGenerator,
 	rate float64,
@@ -83,7 +84,7 @@ func NewRandomGenerator(
 // newRandomGenerator returns a generator that generates random operations
 // within some limits.
 func newRandomGenerator(
-	start time.Time,
+	start hlc.Timestamp,
 	seed int64,
 	keyGenerator KeyGenerator,
 	rate float64,
@@ -105,7 +106,7 @@ func newRandomGenerator(
 
 // Tick returns the load events up till time tick, from the last time the
 // workload generator was called.
-func (rwg *RandomGenerator) Tick(maxTime time.Time) LoadBatch {
+func (rwg *RandomGenerator) Tick(maxTime hlc.Timestamp) LoadBatch {
 	elapsed := maxTime.Sub(rwg.lastRun).Seconds()
 	count := int(elapsed * rwg.rollsPerSecond)
 	// Do not attempt to generate additional load events if the elapsed
@@ -244,7 +245,9 @@ func (g *zipfianGenerator) rand() *rand.Rand {
 // TestCreateWorkloadGenerator creates a simple uniform workload generator that
 // will generate load events at the rate given. The read ratio is fixed to
 // 0.95.
-func TestCreateWorkloadGenerator(seed int64, start time.Time, rate int, keySpan int64) Generator {
+func TestCreateWorkloadGenerator(
+	seed int64, start hlc.Timestamp, rate int, keySpan int64,
+) Generator {
 	readRatio := 0.95
 	minWriteSize := 128
 	maxWriteSize := 256

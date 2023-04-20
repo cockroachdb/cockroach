@@ -79,7 +79,7 @@ func TestGossip(t *testing.T) {
 
 	// Add the delay interval and then assert that the storepools for each
 	// store are populated.
-	tick = tick.Add(settings.StateExchangeDelay)
+	tick = tick.AddDuration(settings.StateExchangeDelay)
 	gossip.Tick(ctx, tick, s)
 
 	// The exchange component should now be empty, clearing the previous
@@ -98,7 +98,7 @@ func TestGossip(t *testing.T) {
 	require.Len(t, gossip.exchange.pending, 2)
 	// Increment the tick and check that the updated lease count information
 	// reached each storepool.
-	tick = tick.Add(settings.StateExchangeDelay)
+	tick = tick.AddDuration(settings.StateExchangeDelay)
 	gossip.Tick(ctx, tick, s)
 	require.Len(t, gossip.exchange.pending, 0)
 

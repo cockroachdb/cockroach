@@ -196,7 +196,7 @@ func (sq *splitQueue) shouldQueue(
 		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), confReader)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
-		if splitKey := repl.loadSplitKey(ctx, repl.Clock().PhysicalTime()); splitKey != nil {
+		if splitKey := repl.loadSplitKey(ctx, repl.Clock().Now()); splitKey != nil {
 			shouldQ, priority = true, 1.0 // default priority
 		}
 	}
@@ -284,7 +284,7 @@ func (sq *splitQueue) processAttempt(
 		return true, nil
 	}
 
-	now := r.Clock().PhysicalTime()
+	now := r.Clock().Now()
 	if splitByLoadKey := r.loadSplitKey(ctx, now); splitByLoadKey != nil {
 		loadStats := r.loadStats.Stats()
 		batchHandledQPS := loadStats.QueriesPerSecond
@@ -332,7 +332,7 @@ func (sq *splitQueue) processAttempt(
 		sq.metrics.LoadBasedSplitCount.Inc(1)
 
 		// Reset the splitter now that the bounds of the range changed.
-		r.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())
+		r.loadBasedSplitter.Reset(sq.store.Clock().Now())
 		return true, nil
 	}
 

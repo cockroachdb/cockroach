@@ -419,7 +419,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	if !ok {
 		t.Fatalf("store:%d was not found in the store pool", singleStore[0].StoreID)
 	}
-	storeDetail.ThrottledUntil = timeutil.Now().Add(24 * time.Hour)
+	storeDetail.ThrottledUntil = hlc.Timestamp{WallTime: timeutil.Now().Add(24 * time.Hour).UnixNano()}
 	sp.DetailsMu.Unlock()
 	_, _, err = a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, nil, allocatorimpl.Dead)
 	if _, ok := IsPurgatoryError(err); ok {

@@ -13,6 +13,7 @@ package state
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/google/btree"
 )
 
@@ -38,10 +39,10 @@ type Changer interface {
 	// state change per Range() at any time. Push returns the time the state
 	// change will apply, and true if this is satisfied; else it will return
 	// false.
-	Push(tick time.Time, sc Change) (time.Time, bool)
+	Push(tick hlc.Timestamp, sc Change) (hlc.Timestamp, bool)
 	// Tick updates state changer to apply any changes that have occurred
 	// between the last tick and this one.
-	Tick(tick time.Time, state State)
+	Tick(tick hlc.Timestamp, state State)
 }
 
 // ReplicaChange contains information necessary to add, remove or move (both) a
@@ -211,7 +212,7 @@ type replicaChanger struct {
 	lastTicket     int
 	completeAt     *btree.BTree
 	pendingTickets map[int]Change
-	pendingTarget  map[StoreID]time.Time
+	pendingTarget  map[StoreID]hlc.Timestamp
 	pendingRange   map[RangeID]int
 }
 
@@ -221,20 +222,20 @@ func NewReplicaChanger() Changer {
 	return &replicaChanger{
 		completeAt:     btree.New(8),
 		pendingTickets: make(map[int]Change),
-		pendingTarget:  make(map[StoreID]time.Time),
+		pendingTarget:  make(map[StoreID]hlc.Timestamp),
 		pendingRange:   make(map[RangeID]int),
 	}
 }
 
 type pendingChange struct {
 	ticket     int
-	completeAt time.Time
+	completeAt hlc.Timestamp
 }
 
 // Less is part of the btree.Item interface.
 func (pc *pendingChange) Less(than btree.Item) bool {
 	// Targettal order on (completeAt, ticket)
-	return pc.completeAt.Before(than.(*pendingChange).completeAt) ||
+	return pc.completeAt.Less(than.(*pendingChange).completeAt) ||
 		(pc.completeAt.Equal(than.(*pendingChange).completeAt) && pc.ticket < than.(*pendingChange).ticket)
 }
 
@@ -242,7 +243,7 @@ func (pc *pendingChange) Less(than btree.Item) bool {
 // state change per Range() at any time. Push returns the time the state
 // change will apply, and true if this is satisfied; else it will return
 // false.
-func (rc *replicaChanger) Push(tick time.Time, change Change) (time.Time, bool) {
+func (rc *replicaChanger) Push(tick hlc.Timestamp, change Change) (hlc.Timestamp, bool) {
 	// Allow at most one pending action per range at any point in time.
 	if _, ok := rc.pendingRange[change.Range()]; ok {
 		return tick, false
@@ -264,7 +265,7 @@ func (rc *replicaChanger) Push(tick time.Time, change Change) (time.Time, bool) 
 		}
 		completeAt = rc.pendingTarget[change.Target()]
 	}
-	completeAt = completeAt.Add(change.Delay())
+	completeAt = completeAt.AddDuration(change.Delay())
 
 	// Create a unique entry (completionTime, ticket) and append it to the
 	// completion queue.
@@ -276,12 +277,12 @@ func (rc *replicaChanger) Push(tick time.Time, change Change) (time.Time, bool) 
 
 // Tick updates state changer to apply any changes that have occurred
 // between the last tick and this one.
-func (rc *replicaChanger) Tick(tick time.Time, state State) {
+func (rc *replicaChanger) Tick(tick hlc.Timestamp, state State) {
 	changeList := make(map[int]*pendingChange)
 
 	// NB: Add the smallest unit of time, in order to find all items in
 	// [smallest, tick].
-	pivot := &pendingChange{completeAt: tick.Add(time.Nanosecond)}
+	pivot := &pendingChange{completeAt: tick.AddDuration(time.Nanosecond)}
 	rc.completeAt.AscendLessThan(pivot, func(i btree.Item) bool {
 		nextChange, _ := i.(*pendingChange)
 		changeList[nextChange.ticket] = nextChange

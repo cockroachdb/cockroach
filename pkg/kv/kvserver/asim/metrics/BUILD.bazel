@@ -13,6 +13,7 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/asim/state",
         "//pkg/util/encoding/csv",
+        "//pkg/util/hlc",
         "//pkg/util/log",
     ],
 )

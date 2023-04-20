@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -101,7 +102,7 @@ func newReplicaSplitConfig(st *cluster.Settings) *replicaSplitConfig {
 // NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
 // find the midpoint based on recorded load.
 func (c *replicaSplitConfig) NewLoadBasedSplitter(
-	startTime time.Time, obj split.SplitObjective,
+	startTime hlc.Timestamp, obj split.SplitObjective,
 ) split.LoadBasedSplitter {
 	switch obj {
 	case split.SplitQPS:
@@ -246,7 +247,7 @@ func (r *Replica) recordBatchForLoadBasedSplitting(
 		return getResponseBoundarySpan(ba, br)
 	}
 
-	shouldInitSplit := r.loadBasedSplitter.Record(ctx, r.Clock().PhysicalTime(), loadFn, spanFn)
+	shouldInitSplit := r.loadBasedSplitter.Record(ctx, r.Clock().Now(), loadFn, spanFn)
 	if shouldInitSplit {
 		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
@@ -255,8 +256,8 @@ func (r *Replica) recordBatchForLoadBasedSplitting(
 // loadSplitKey returns a suggested load split key for the range if it exists,
 // otherwise it returns nil. If there were any errors encountered when
 // validating the split key, the error is returned as well.
-func (r *Replica) loadSplitKey(ctx context.Context, now time.Time) roachpb.Key {
-	splitKey := r.loadBasedSplitter.MaybeSplitKey(ctx, now)
+func (r *Replica) loadSplitKey(ctx context.Context, timestamp hlc.Timestamp) roachpb.Key {
+	splitKey := r.loadBasedSplitter.MaybeSplitKey(ctx, timestamp)
 	if splitKey == nil {
 		return nil
 	}

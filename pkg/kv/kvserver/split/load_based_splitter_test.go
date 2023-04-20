@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/ycsb"
 	"golang.org/x/exp/rand"
@@ -320,7 +321,7 @@ func ExampleUnweightedFinder() {
 			rangeRequestPercent:     0.95,
 			numRequests:             13000,
 			lbs: func(randSource *rand.Rand) LoadBasedSplitter {
-				return NewUnweightedFinder(timeutil.Now(), randSource)
+				return NewUnweightedFinder(hlc.Timestamp{}, randSource)
 			},
 			seed: 2022,
 		},
@@ -330,7 +331,7 @@ func ExampleUnweightedFinder() {
 func ExampleWeightedFinder() {
 	seed := uint64(2022)
 	lbs := func(randSource *rand.Rand) LoadBasedSplitter {
-		return NewWeightedFinder(timeutil.Now(), randSource)
+		return NewWeightedFinder(hlc.Timestamp{}, randSource)
 	}
 	runTestMultipleSettings([]lbsTestSettings{
 		{

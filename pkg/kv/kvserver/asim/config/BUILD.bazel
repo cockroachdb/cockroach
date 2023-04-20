@@ -6,6 +6,7 @@ go_library(
     srcs = ["settings.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/hlc"],
 )
 
 get_x_data(name = "get_x_data")

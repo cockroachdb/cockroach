@@ -4422,8 +4422,8 @@ func TestMergeQueue(t *testing.T) {
 			// not leak over between subtests. Then, bump the manual clock so that
 			// both range's load-based splitters consider their measurements to be
 			// reliable.
-			lhs().LoadBasedSplitter().Reset(tc.Servers[0].Clock().PhysicalTime())
-			rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().PhysicalTime())
+			lhs().LoadBasedSplitter().Reset(tc.Servers[0].Clock().Now())
+			rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().Now())
 			manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
 		}
 		for _, splitObjective := range []kvserver.LBRebalancingObjective{
@@ -4434,7 +4434,7 @@ func TestMergeQueue(t *testing.T) {
 			t.Run(fmt.Sprintf("unreliable-lhs-%s", splitObjective.ToDimension().String()), func(t *testing.T) {
 				resetForLoadBasedSubtest(t)
 
-				lhs().LoadBasedSplitter().Reset(tc.Servers[0].Clock().PhysicalTime())
+				lhs().LoadBasedSplitter().Reset(tc.Servers[0].Clock().Now())
 
 				clearRange(t, lhsStartKey, rhsEndKey)
 				verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
@@ -4443,7 +4443,7 @@ func TestMergeQueue(t *testing.T) {
 			t.Run(fmt.Sprintf("unreliable-rhs-%s", splitObjective.ToDimension().String()), func(t *testing.T) {
 				resetForLoadBasedSubtest(t)
 
-				rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().PhysicalTime())
+				rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().Now())
 
 				clearRange(t, lhsStartKey, rhsEndKey)
 				verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
@@ -4453,8 +4453,8 @@ func TestMergeQueue(t *testing.T) {
 				resetForLoadBasedSubtest(t)
 
 				moreThanHalfStat := mergeByLoadStat/2 + 1
-				rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), moreThanHalfStat)
-				lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), moreThanHalfStat)
+				rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().Now(), moreThanHalfStat)
+				lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().Now(), moreThanHalfStat)
 
 				clearRange(t, lhsStartKey, rhsEndKey)
 				verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
@@ -4465,8 +4465,8 @@ func TestMergeQueue(t *testing.T) {
 
 				manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
 				lessThanHalfStat := mergeByLoadStat/2 - 1
-				rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), lessThanHalfStat)
-				lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), lessThanHalfStat)
+				rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().Now(), lessThanHalfStat)
+				lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().Now(), lessThanHalfStat)
 
 				clearRange(t, lhsStartKey, rhsEndKey)
 				verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
@@ -4495,8 +4495,8 @@ func TestMergeQueue(t *testing.T) {
 					resetForLoadBasedSubtest(t)
 
 					moreThanHalfStat := mergeByLoadStat/2 + 1
-					rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), moreThanHalfStat)
-					lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), moreThanHalfStat)
+					rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().Now(), moreThanHalfStat)
+					lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().Now(), moreThanHalfStat)
 
 					clearRange(t, lhsStartKey, rhsEndKey)
 					// Switch the dimension, so that any recorded load should
@@ -4515,8 +4515,8 @@ func TestMergeQueue(t *testing.T) {
 
 					manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
 					lessThanHalfStat := mergeByLoadStat/2 - 1
-					rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), lessThanHalfStat)
-					lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), lessThanHalfStat)
+					rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().Now(), lessThanHalfStat)
+					lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().Now(), lessThanHalfStat)
 
 					clearRange(t, lhsStartKey, rhsEndKey)
 					setSplitObjective(secondSplitObjective)

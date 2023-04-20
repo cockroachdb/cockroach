@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // Load-based splitting.
@@ -62,14 +63,14 @@ type sample struct {
 // UnweightedFinder is a structure that is used to determine the split point
 // using the Reservoir Sampling method.
 type UnweightedFinder struct {
-	startTime  time.Time
+	startTime  hlc.Timestamp
 	randSource RandSource
 	samples    [splitKeySampleSize]sample
 	count      int
 }
 
 // NewUnweightedFinder initiates a UnweightedFinder with the given time.
-func NewUnweightedFinder(startTime time.Time, randSource RandSource) *UnweightedFinder {
+func NewUnweightedFinder(startTime hlc.Timestamp, randSource RandSource) *UnweightedFinder {
 	return &UnweightedFinder{
 		startTime:  startTime,
 		randSource: randSource,
@@ -77,7 +78,7 @@ func NewUnweightedFinder(startTime time.Time, randSource RandSource) *Unweighted
 }
 
 // Ready implements the LoadBasedSplitter interface.
-func (f *UnweightedFinder) Ready(nowTime time.Time) bool {
+func (f *UnweightedFinder) Ready(nowTime hlc.Timestamp) bool {
 	return nowTime.Sub(f.startTime) > RecordDurationThreshold
 }
 

@@ -17,12 +17,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // StoreMetrics tracks metrics per-store in a simulation run. Each metrics
 // struct is associated with a tick.
 type StoreMetrics struct {
-	Tick       time.Time
+	Tick       hlc.Timestamp
 	StoreID    int64
 	QPS        int64
 	WriteKeys  int64
@@ -52,7 +53,7 @@ type StoreMetricsListener interface {
 // StoreMetrics information when ticked.
 type Tracker struct {
 	storeListeners []StoreMetricsListener
-	lastTick       time.Time
+	lastTick       hlc.Timestamp
 	interval       time.Duration
 }
 
@@ -72,8 +73,8 @@ func (mt *Tracker) Register(listeners ...StoreMetricsListener) {
 
 // Tick updates all listeners attached to the metrics tracker with the state at
 // the tick given.
-func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {
-	if mt.lastTick.Add(mt.interval).After(tick) {
+func (mt *Tracker) Tick(ctx context.Context, tick hlc.Timestamp, s state.State) {
+	if mt.lastTick.AddDuration(mt.interval).After(tick) {
 		// Nothing to do yet.
 		return
 	}

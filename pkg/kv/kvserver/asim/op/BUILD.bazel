@@ -20,6 +20,7 @@ go_library(
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/roachpb",
+        "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

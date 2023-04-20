@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -28,7 +29,7 @@ import (
 type Gossip interface {
 	// Tick checks for completed gossip updates and triggers new gossip
 	// updates if needed.
-	Tick(context.Context, time.Time, state.State)
+	Tick(context.Context, hlc.Timestamp, state.State)
 }
 
 // gossip is an implementation of the Gossip interface. It manages the
@@ -46,14 +47,14 @@ var _ Gossip = &gossip{}
 // have been triggered by the underlying kvserver.StoreGossip component.
 type storeGossiper struct {
 	local              *kvserver.StoreGossip
-	lastIntervalGossip time.Time
+	lastIntervalGossip hlc.Timestamp
 	descriptorGetter   func(cached bool) roachpb.StoreDescriptor
 	pendingOutbound    *roachpb.StoreDescriptor
 }
 
 func newStoreGossiper(descriptorGetter func(cached bool) roachpb.StoreDescriptor) *storeGossiper {
 	sg := &storeGossiper{
-		lastIntervalGossip: time.Time{},
+		lastIntervalGossip: hlc.Timestamp{},
 		descriptorGetter:   descriptorGetter,
 	}
 
@@ -123,7 +124,7 @@ func (g *gossip) addStoreToGossip(s state.State, storeID state.StoreID) {
 
 // Tick checks for completed gossip updates and triggers new gossip
 // updates if needed.
-func (g *gossip) Tick(ctx context.Context, tick time.Time, s state.State) {
+func (g *gossip) Tick(ctx context.Context, tick hlc.Timestamp, s state.State) {
 	stores := s.Stores()
 	for _, store := range stores {
 		var sg *storeGossiper
@@ -139,7 +140,7 @@ func (g *gossip) Tick(ctx context.Context, tick time.Time, s state.State) {
 		// shoud gossip.
 		// NB: In the real code this is controlled by a gossip
 		// ticker on the node that activates every 10 seconds.
-		if !tick.Before(sg.lastIntervalGossip.Add(g.settings.StateExchangeInterval)) {
+		if !tick.Less(sg.lastIntervalGossip.AddDuration(g.settings.StateExchangeInterval)) {
 			sg.lastIntervalGossip = tick
 			_ = sg.local.GossipStore(ctx, false /* useCached */)
 		}
@@ -182,7 +183,7 @@ func (g *gossip) NewCapacityNotify(capacity roachpb.StoreCapacity, storeID state
 	}
 }
 
-func (g *gossip) maybeUpdateState(tick time.Time, s state.State) {
+func (g *gossip) maybeUpdateState(tick hlc.Timestamp, s state.State) {
 	// NB: The updates function gives back all store descriptors which have
 	// completed exchange. We apply the update to every stores state uniformly,
 	// i.e. fixed delay.

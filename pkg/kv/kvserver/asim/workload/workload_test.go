@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -144,11 +145,11 @@ func TestRandWorkloadGenerator(t *testing.T) {
 		},
 	}
 
-	start := time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
+	start := hlc.Timestamp{WallTime: time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC).UnixNano()}
 	for _, tc := range testCases {
 		workLoadGenerator := newRandomGenerator(start, testingSeed, tc.keyGenerator, tc.rate, tc.readRatio, tc.maxSize, tc.minSize)
 		workLoadGenerator.lastRun = start
-		end := start.Add(tc.duration)
+		end := start.AddDuration(tc.duration)
 
 		// Generate the workload events.
 		ops := workLoadGenerator.Tick(end)

@@ -14,9 +14,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -68,7 +68,7 @@ func max(a, b int64) int64 {
 // Listen implements the StoreMetricsListener interface.
 func (m *ClusterMetricsTracker) Listen(ctx context.Context, sms []StoreMetrics) {
 	var (
-		tick                 time.Time
+		tick                 hlc.Timestamp
 		totalRangeCount      int64
 		totalLeaseTransfers  int64
 		totalRebalances      int64
@@ -100,7 +100,7 @@ func (m *ClusterMetricsTracker) Listen(ctx context.Context, sms []StoreMetrics) 
 	}
 
 	record := make([]string, 0, 10)
-	record = append(record, tick.String())
+	record = append(record, tick.GoTime().String())
 	record = append(record, fmt.Sprintf("%d", totalRangeCount))
 	record = append(record, fmt.Sprintf("%d", totalWriteKeys))
 	record = append(record, fmt.Sprintf("%d", totalWriteBytes))

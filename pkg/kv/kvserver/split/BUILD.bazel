@@ -14,6 +14,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/metric",
@@ -36,6 +37,7 @@ go_test(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/util/encoding",
+        "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
         "//pkg/util/stop",

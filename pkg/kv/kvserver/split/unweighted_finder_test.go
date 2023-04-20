@@ -19,9 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -168,7 +168,7 @@ func TestSplitFinderKey(t *testing.T) {
 
 	randSource := rand.New(rand.NewSource(2022))
 	for i, test := range testCases {
-		finder := NewUnweightedFinder(timeutil.Now(), randSource)
+		finder := NewUnweightedFinder(hlc.Timestamp{}, randSource)
 		finder.samples = test.reservoir
 		if splitByLoadKey := finder.Key(); !bytes.Equal(splitByLoadKey, test.splitByLoadKey) {
 			t.Errorf(
@@ -266,7 +266,7 @@ func TestSplitFinderRecorder(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		finder := NewUnweightedFinder(timeutil.Now(), test.randSource)
+		finder := NewUnweightedFinder(hlc.Timestamp{}, test.randSource)
 		finder.samples = test.currReservoir
 		finder.count = test.currCount
 		finder.Record(test.recordSpan, 1)
@@ -323,7 +323,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 	}
 
 	randSource := rand.New(rand.NewSource(2022))
-	finder := NewUnweightedFinder(timeutil.Now(), randSource)
+	finder := NewUnweightedFinder(hlc.Timestamp{}, randSource)
 	finder.samples = samples
 	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := finder.noSplitKeyCause()
 	assert.Equal(t, 5, insufficientCounters, "unexpected insufficient counters")
@@ -400,7 +400,7 @@ func TestFinderPopularKeyFrequency(t *testing.T) {
 
 	randSource := rand.New(rand.NewSource(2022))
 	for i, test := range testCases {
-		finder := NewUnweightedFinder(timeutil.Now(), randSource)
+		finder := NewUnweightedFinder(hlc.Timestamp{}, randSource)
 		finder.samples = test.samples
 		popularKeyFrequency := finder.PopularKeyFrequency()
 		assert.Equal(t, test.expectedPopularKeyFrequency, popularKeyFrequency, "unexpected popular key frequency in test %d", i)

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/assert"
@@ -38,7 +39,7 @@ type testLoadSplitConfig struct {
 // NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
 // find the midpoint based on recorded load.
 func (t *testLoadSplitConfig) NewLoadBasedSplitter(
-	startTime time.Time, _ SplitObjective,
+	startTime hlc.Timestamp, _ SplitObjective,
 ) LoadBasedSplitter {
 	if t.useWeighted {
 		return NewWeightedFinder(startTime, t.randSource)
@@ -63,12 +64,12 @@ func ld(n int) func(SplitObjective) int {
 	}
 }
 
-func ms(i int) time.Time {
+func ms(i int) hlc.Timestamp {
 	ts, err := time.Parse(time.RFC3339, "2000-01-01T00:00:00Z")
 	if err != nil {
 		panic(err)
 	}
-	return ts.Add(time.Duration(i) * time.Millisecond)
+	return hlc.Timestamp{WallTime: ts.Add(time.Duration(i) * time.Millisecond).UnixNano()}
 }
 
 func TestDecider(t *testing.T) {
@@ -318,11 +319,11 @@ func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
 	require.NoError(t, err)
 
 	var k roachpb.Key
-	var now time.Time
+	var now hlc.Timestamp
 	for i := 0; i < 2*int(minSplitSuggestionInterval/time.Second); i++ {
-		now = now.Add(500 * time.Millisecond)
+		now = now.AddDuration(500 * time.Millisecond)
 		d.Record(context.Background(), now, ld(1), c0)
-		now = now.Add(500 * time.Millisecond)
+		now = now.AddDuration(500 * time.Millisecond)
 		d.Record(context.Background(), now, ld(1), c1)
 		k = d.MaybeSplitKey(context.Background(), now)
 		if len(k) != 0 {
@@ -365,11 +366,11 @@ func TestDeciderIgnoresEnsureSafeSplitKeyOnError(t *testing.T) {
 	require.Error(t, err)
 
 	var k roachpb.Key
-	var now time.Time
+	var now hlc.Timestamp
 	for i := 0; i < 2*int(minSplitSuggestionInterval/time.Second); i++ {
-		now = now.Add(500 * time.Millisecond)
+		now = now.AddDuration(500 * time.Millisecond)
 		d.Record(context.Background(), now, ld(1), c0)
-		now = now.Add(500 * time.Millisecond)
+		now = now.AddDuration(500 * time.Millisecond)
 		d.Record(context.Background(), now, ld(1), c1)
 		k = d.MaybeSplitKey(context.Background(), now)
 		if len(k) != 0 {

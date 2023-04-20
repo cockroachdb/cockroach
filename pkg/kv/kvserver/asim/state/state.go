@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/raft/v3"
 )
@@ -131,7 +132,7 @@ type State interface {
 	// ClusterUsageInfo returns the usage information for the entire cluster.
 	ClusterUsageInfo() *ClusterUsageInfo
 	// TickClock modifies the state Clock time to Tick.
-	TickClock(time.Time)
+	TickClock(hlc.Timestamp)
 	// UpdateStorePool modifies the state of the StorePool for the Store with
 	// ID StoreID.
 	UpdateStorePool(StoreID, map[roachpb.StoreID]*storepool.StoreDetail)

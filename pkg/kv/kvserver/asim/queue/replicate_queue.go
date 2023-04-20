@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -36,7 +37,7 @@ func NewReplicateQueue(
 	delay func(rangeSize int64, add bool) time.Duration,
 	allocator allocatorimpl.Allocator,
 	storePool storepool.AllocatorStorePool,
-	start time.Time,
+	start hlc.Timestamp,
 ) RangeQueue {
 	return &replicateQueue{
 		baseQueue: baseQueue{
@@ -85,12 +86,12 @@ func (rq *replicateQueue) MaybeAdd(
 // supports processing ConsiderRebalance actions on replicas.
 // TODO(kvoli,lidorcarmel): Support taking additional actions, beyond consider
 // rebalance.
-func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
+func (rq *replicateQueue) Tick(ctx context.Context, tick hlc.Timestamp, s state.State) {
 	if rq.lastTick.After(rq.next) {
 		rq.next = rq.lastTick
 	}
 
-	for !tick.Before(rq.next) && rq.priorityQueue.Len() != 0 {
+	for !tick.Less(rq.next) && rq.priorityQueue.Len() != 0 {
 		item := heap.Pop(rq).(*replicaItem)
 		if item == nil {
 			return
@@ -124,7 +125,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 // changer and update the time to process the next replica, with the completion
 // time returned.
 func (rq *replicateQueue) considerRebalance(
-	ctx context.Context, tick time.Time, rng state.Range, s state.State,
+	ctx context.Context, tick hlc.Timestamp, rng state.Range, s state.State,
 ) {
 	add, remove, _, ok := rq.allocator.RebalanceVoter(
 		ctx,

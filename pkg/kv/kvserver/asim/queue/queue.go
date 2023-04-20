@@ -12,10 +12,10 @@ package queue
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // RangeQueue presents an interface to interact with a single consumer
@@ -35,7 +35,7 @@ type RangeQueue interface {
 	// processed at a time and the duration taken to process a replica depends
 	// on the action taken. Replicas in the queue are processed in order of
 	// priority, then in FIFO order on ties.
-	Tick(ctx context.Context, tick time.Time, state state.State)
+	Tick(ctx context.Context, tick hlc.Timestamp, state state.State)
 }
 
 // replicaItem represents an item in the replica queue.
@@ -104,5 +104,5 @@ type baseQueue struct {
 	priorityQueue
 	storeID        state.StoreID
 	stateChanger   state.Changer
-	next, lastTick time.Time
+	next, lastTick hlc.Timestamp
 }

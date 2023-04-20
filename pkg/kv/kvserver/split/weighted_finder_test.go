@@ -19,9 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/exp/rand"
 )
@@ -174,7 +174,7 @@ func TestSplitWeightedFinderKey(t *testing.T) {
 
 	randSource := rand.New(rand.NewSource(2022))
 	for i, test := range testCases {
-		weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
+		weightedFinder := NewWeightedFinder(hlc.Timestamp{}, randSource)
 		weightedFinder.samples = test.reservoir
 		if splitByLoadKey := weightedFinder.Key(); !bytes.Equal(splitByLoadKey, test.splitByLoadKey) {
 			t.Errorf(
@@ -293,7 +293,7 @@ func TestSplitWeightedFinderRecorder(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		weightedFinder := NewWeightedFinder(timeutil.Now(), test.randSource)
+		weightedFinder := NewWeightedFinder(hlc.Timestamp{}, test.randSource)
 		weightedFinder.samples = test.currReservoir
 		weightedFinder.count = test.currCount
 		weightedFinder.totalWeight = 100
@@ -333,7 +333,7 @@ func TestWeightedFinderNoSplitKeyCause(t *testing.T) {
 	}
 
 	randSource := rand.New(rand.NewSource(2022))
-	weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
+	weightedFinder := NewWeightedFinder(hlc.Timestamp{}, randSource)
 	weightedFinder.samples = samples
 	insufficientCounters, imbalance := weightedFinder.noSplitKeyCause()
 	assert.Equal(t, 7, insufficientCounters, "unexpected insufficient counters")
@@ -403,7 +403,7 @@ func TestWeightedFinderPopularKeyFrequency(t *testing.T) {
 
 	randSource := rand.New(rand.NewSource(2022))
 	for i, test := range testCases {
-		weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
+		weightedFinder := NewWeightedFinder(hlc.Timestamp{}, randSource)
 		weightedFinder.samples = test.samples
 		popularKeyFrequency := weightedFinder.PopularKeyFrequency()
 		assert.True(t, math.Abs(test.expectedPopularKeyFrequency-popularKeyFrequency) < eps,

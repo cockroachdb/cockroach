@@ -12,16 +12,16 @@ package gossip
 
 import (
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // exchangeInfo contains the information of a gossiped store descriptor.
 type exchangeInfo struct {
-	created time.Time
+	created hlc.Timestamp
 	desc    roachpb.StoreDescriptor
 }
 
@@ -34,7 +34,7 @@ type fixedDelayExchange struct {
 
 // put adds the given descriptors at the current tick into the exchange
 // network.
-func (u *fixedDelayExchange) put(tick time.Time, descs ...roachpb.StoreDescriptor) {
+func (u *fixedDelayExchange) put(tick hlc.Timestamp, descs ...roachpb.StoreDescriptor) {
 	for _, desc := range descs {
 		u.pending = append(u.pending, exchangeInfo{created: tick, desc: desc})
 	}
@@ -42,11 +42,11 @@ func (u *fixedDelayExchange) put(tick time.Time, descs ...roachpb.StoreDescripto
 
 // updates returns back exchanged infos, wrapped as store details that have
 // completed between the last tick update was called and the tick given.
-func (u *fixedDelayExchange) updates(tick time.Time) []*storepool.StoreDetail {
-	sort.Slice(u.pending, func(i, j int) bool { return u.pending[i].created.Before(u.pending[j].created) })
-	ready := []*storepool.StoreDetail{}
+func (u *fixedDelayExchange) updates(tick hlc.Timestamp) []*storepool.StoreDetail {
+	sort.Slice(u.pending, func(i, j int) bool { return u.pending[i].created.Less(u.pending[j].created) })
+	var ready []*storepool.StoreDetail
 	i := 0
-	for ; i < len(u.pending) && !tick.Before(u.pending[i].created.Add(u.settings.StateExchangeDelay)); i++ {
+	for ; i < len(u.pending) && !tick.Less(u.pending[i].created.AddDuration(u.settings.StateExchangeDelay)); i++ {
 		ready = append(ready, makeStoreDetail(&u.pending[i].desc, u.pending[i].created))
 	}
 	u.pending = u.pending[i:]
@@ -55,7 +55,7 @@ func (u *fixedDelayExchange) updates(tick time.Time) []*storepool.StoreDetail {
 
 // makeStoreDetail wraps a store descriptor into a storepool StoreDetail at the
 // given tick.
-func makeStoreDetail(desc *roachpb.StoreDescriptor, tick time.Time) *storepool.StoreDetail {
+func makeStoreDetail(desc *roachpb.StoreDescriptor, tick hlc.Timestamp) *storepool.StoreDetail {
 	return &storepool.StoreDetail{
 		Desc:            desc,
 		LastUpdatedTime: tick,

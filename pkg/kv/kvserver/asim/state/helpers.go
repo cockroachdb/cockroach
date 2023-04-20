@@ -36,8 +36,10 @@ func NewShuffler(seed int64) func(n int, swap func(i, j int)) {
 }
 
 // TestingStartTime returns a start time that may be used for tests.
-func TestingStartTime() time.Time {
-	return time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
+func TestingStartTime() hlc.Timestamp {
+	return hlc.Timestamp{
+		WallTime: time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC).UnixNano(),
+	}
 }
 
 // TestingWorkloadSeed returns a seed to use for constructing a workload
@@ -88,14 +90,14 @@ func NewStorePool(
 // OffsetTick offsets start time by adding tick number of seconds to it.
 // TODO(kvoli): Use a dedicated tick package, which would contain methods such
 // as this. Deprecating direct use of time.
-func OffsetTick(start time.Time, tick int64) time.Time {
-	tickTime := start.Add(time.Duration(tick) * time.Second)
+func OffsetTick(start hlc.Timestamp, tick int64) hlc.Timestamp {
+	tickTime := start.AddDuration(time.Duration(tick) * time.Second)
 	return tickTime
 }
 
 // ReverseOffsetTick converts an offset time from the start time, into the
 // number of ticks (seconds) since the start.
-func ReverseOffsetTick(start, tickTime time.Time) int64 {
+func ReverseOffsetTick(start, tickTime hlc.Timestamp) int64 {
 	offSetTickTime := tickTime.Sub(start)
 	return int64(offSetTickTime.Seconds())
 }

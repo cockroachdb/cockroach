@@ -6,6 +6,7 @@ go_library(
     srcs = ["workload.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/hlc"],
 )
 
 go_test(
@@ -13,7 +14,10 @@ go_test(
     srcs = ["workload_test.go"],
     args = ["-test.timeout=295s"],
     embed = [":workload"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/util/hlc",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 get_x_data(name = "get_x_data")

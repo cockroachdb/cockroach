@@ -24,10 +24,10 @@ type priorityQueue struct {
 // Less is part of the container.Heap interface.
 func (pq *priorityQueue) Less(i, j int) bool {
 	a, b := pq.items[i], pq.items[j]
-	if a.Next().Equal(b.Next()) {
+	if a.Next().EqOrdering(b.Next()) {
 		return a.seq < b.seq
 	}
-	return a.Next().Before(b.Next())
+	return a.Next().Less(b.Next())
 }
 
 // Swap is part of the container.Heap interface.

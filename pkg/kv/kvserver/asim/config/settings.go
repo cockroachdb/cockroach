@@ -10,7 +10,11 @@
 
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 const (
 	defaultTickInteval             = 500 * time.Millisecond
@@ -38,8 +42,10 @@ const (
 var (
 	// defaultStartTime is used as the default beginning time for simulation
 	// runs. It isn't necessarily meaningful other than for logging and having
-	// "some" start time for components taking a time.Time.
-	defaultStartTime = time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
+	// "some" start time for components taking a hlc.Timestamp.
+	defaultStartTime = hlc.Timestamp{
+		WallTime: time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC).UnixNano(),
+	}
 )
 
 // SimulationSettings controls
@@ -47,7 +53,7 @@ var (
 type SimulationSettings struct {
 	// StartTime is the time to start the simulation at. This is also used to
 	// init the shared state simulation clock.
-	StartTime time.Time
+	StartTime hlc.Timestamp
 	// TickInterval is the duration between simulator ticks. The lower this
 	// setting, the higher resolution the simulation will be. A lower
 	// TickInterval will also take longer to execute so a tradeoff exists.

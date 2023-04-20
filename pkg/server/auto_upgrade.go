@@ -128,7 +128,7 @@ func (s *Server) upgradeStatus(
 		return upgradeBlockedDueToError, err
 	}
 	clock := s.admin.server.clock
-	statusMap, err := getLivenessStatusMap(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
+	statusMap, err := getLivenessStatusMap(ctx, s.nodeLiveness, clock.Now(), s.st)
 	if err != nil {
 		return upgradeBlockedDueToError, err
 	}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 type splitQueue struct {
@@ -32,7 +33,7 @@ func NewSplitQueue(
 	stateChanger state.Changer,
 	delay func() time.Duration,
 	splitThreshold int64,
-	start time.Time,
+	start hlc.Timestamp,
 ) RangeQueue {
 	return &splitQueue{
 		baseQueue: baseQueue{
@@ -69,12 +70,12 @@ func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state
 // taken. Replicas in the queue are processed in order of priority, then in
 // FIFO order on ties. The tick currently only considers size based range
 // splitting.
-func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
+func (sq *splitQueue) Tick(ctx context.Context, tick hlc.Timestamp, s state.State) {
 	if sq.lastTick.After(sq.next) {
 		sq.next = sq.lastTick
 	}
 
-	for !tick.Before(sq.next) && sq.priorityQueue.Len() != 0 {
+	for !tick.Less(sq.next) && sq.priorityQueue.Len() != 0 {
 		item := heap.Pop(sq).(*replicaItem)
 		if item == nil {
 			return
@@ -115,7 +116,9 @@ func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 // shouldSplit returns whether a range should be split into two. When the
 // floating point number returned is greater than or equal to 1, it should be
 // split with that priority, else it shouldn't.
-func (sq *splitQueue) shouldSplit(tick time.Time, rangeID state.RangeID, s state.State) float64 {
+func (sq *splitQueue) shouldSplit(
+	tick hlc.Timestamp, rangeID state.RangeID, s state.State,
+) float64 {
 	rng, ok := s.Range(rangeID)
 	if !ok {
 		return 0
@@ -136,7 +139,7 @@ func (sq *splitQueue) shouldSplit(tick time.Time, rangeID state.RangeID, s state
 // two. It will return the key that divides the range into an equal number of
 // keys on the lhs and rhs.
 func (sq *splitQueue) findKeySpanSplit(
-	tick time.Time, s state.State, rangeID state.RangeID,
+	tick hlc.Timestamp, s state.State, rangeID state.RangeID,
 ) (state.Key, bool) {
 	// Try and use the split key suggested by the load based splitter, if one
 	// exists.

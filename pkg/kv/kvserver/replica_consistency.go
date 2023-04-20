@@ -165,7 +165,7 @@ func (r *Replica) checkConsistencyImpl(
 	// match. It helps to further check that the recomputed MVCC stats match the
 	// stored stats.
 	//
-	// Both Persisted and Delta stats were computed deterministically from the
+	// Both Persisted and Sub stats were computed deterministically from the
 	// data fed into the checksum, so if all checksums match, we can take the
 	// stats from an arbitrary replica that succeeded.
 	//

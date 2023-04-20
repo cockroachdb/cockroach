@@ -14,9 +14,9 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // Load-based splitting.
@@ -60,12 +60,12 @@ type WeightedFinder struct {
 	samples     [splitKeySampleSize]weightedSample
 	count       int
 	totalWeight float64
-	startTime   time.Time
+	startTime   hlc.Timestamp
 	randSource  RandSource
 }
 
 // NewWeightedFinder initiates a WeightedFinder with the given time.
-func NewWeightedFinder(startTime time.Time, randSource RandSource) *WeightedFinder {
+func NewWeightedFinder(startTime hlc.Timestamp, randSource RandSource) *WeightedFinder {
 	return &WeightedFinder{
 		startTime:  startTime,
 		randSource: randSource,
@@ -73,7 +73,7 @@ func NewWeightedFinder(startTime time.Time, randSource RandSource) *WeightedFind
 }
 
 // Ready implements the LoadBasedSplitter interface.
-func (f *WeightedFinder) Ready(nowTime time.Time) bool {
+func (f *WeightedFinder) Ready(nowTime hlc.Timestamp) bool {
 	return nowTime.Sub(f.startTime) > RecordDurationThreshold
 }
 

@@ -1239,7 +1239,7 @@ func NewStore(
 			func(ctx context.Context, obj LBRebalancingObjective) {
 				s.VisitReplicas(func(r *Replica) (wantMore bool) {
 					r.loadBasedSplitter.SetSplitObjective(
-						s.Clock().PhysicalTime(),
+						s.Clock().Now(),
 						obj.ToSplitObjective(),
 					)
 					return true

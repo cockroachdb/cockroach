@@ -276,7 +276,7 @@ func (mq *mergeQueue) process(
 	mergedStats := lhsStats
 	mergedStats.Add(rhsStats)
 
-	lhsLoadSplitSnap := lhsRepl.loadBasedSplitter.Snapshot(ctx, mq.store.Clock().PhysicalTime())
+	lhsLoadSplitSnap := lhsRepl.loadBasedSplitter.Snapshot(ctx, mq.store.Clock().Now())
 	var loadMergeReason string
 	if lhsRepl.SplitByLoadEnabled() {
 		var canMergeLoad bool
@@ -428,7 +428,7 @@ func (mq *mergeQueue) process(
 	// could just Reset the splitter, but then we'd need to wait out a full
 	// measurement period (default of 5m) before merging this range again.
 	if mergedLoadSplitStat := lhsLoadSplitSnap.Max + rhsLoadSplitSnap.Max; mergedLoadSplitStat != 0 {
-		lhsRepl.loadBasedSplitter.RecordMax(mq.store.Clock().PhysicalTime(), mergedLoadSplitStat)
+		lhsRepl.loadBasedSplitter.RecordMax(mq.store.Clock().Now(), mergedLoadSplitStat)
 	}
 	return true, nil
 }

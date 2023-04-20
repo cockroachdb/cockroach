@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -28,10 +29,10 @@ import (
 type LoadSplitter interface {
 	// Record records a workload event at the time given, against the range
 	// with ID RangeID.
-	Record(time.Time, RangeID, workload.LoadEvent) bool
+	Record(hlc.Timestamp, RangeID, workload.LoadEvent) bool
 	// SplitKey returns whether split key and true if a valid split key exists
 	// given the recorded load, otherwise returning false.
-	SplitKey(time.Time, RangeID) (Key, bool)
+	SplitKey(hlc.Timestamp, RangeID) (Key, bool)
 	// ClearSplitKeys returns a suggested list of ranges that should be split
 	// due to load. Calling this function resets the list of suggestions.
 	ClearSplitKeys() []RangeID
@@ -47,7 +48,7 @@ type loadSplitConfig struct {
 // NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
 // find the midpoint based on recorded load.
 func (lsc loadSplitConfig) NewLoadBasedSplitter(
-	startTime time.Time, _ split.SplitObjective,
+	startTime hlc.Timestamp, _ split.SplitObjective,
 ) split.LoadBasedSplitter {
 	return split.NewUnweightedFinder(startTime, lsc.randSource)
 }
@@ -93,7 +94,7 @@ func (s *SplitDecider) newDecider() *split.Decider {
 
 // Record records a workload event at the time given, against the range
 // with ID RangeID.
-func (s *SplitDecider) Record(tick time.Time, rangeID RangeID, le workload.LoadEvent) bool {
+func (s *SplitDecider) Record(tick hlc.Timestamp, rangeID RangeID, le workload.LoadEvent) bool {
 	decider := s.deciders[rangeID]
 
 	if decider == nil {
@@ -119,7 +120,7 @@ func (s *SplitDecider) Record(tick time.Time, rangeID RangeID, le workload.LoadE
 
 // SplitKey returns whether split key and true if a valid split key exists
 // given the recorded load, otherwise returning false.
-func (s *SplitDecider) SplitKey(tick time.Time, rangeID RangeID) (Key, bool) {
+func (s *SplitDecider) SplitKey(tick hlc.Timestamp, rangeID RangeID) (Key, bool) {
 	decider := s.deciders[rangeID]
 	if decider == nil {
 		return InvalidKey, false

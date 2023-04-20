@@ -40,11 +40,11 @@ func TestFixedDelayExchange(t *testing.T) {
 	require.Len(t, exchange.pending, 3)
 
 	// There should be no updates until after the tick + state exchange delay.
-	halfTick := tick.Add(settings.StateExchangeDelay / 2)
+	halfTick := tick.AddDuration(settings.StateExchangeDelay / 2)
 	require.Len(t, exchange.updates(halfTick), 0)
 
 	// Update the tick to be >= tick + delay, there should be three updates.
-	tick = tick.Add(settings.StateExchangeDelay)
+	tick = tick.AddDuration(settings.StateExchangeDelay)
 	require.Len(t, exchange.updates(tick), 3)
 	require.Len(t, exchange.pending, 0)
 }

@@ -59,7 +59,7 @@ func TestSplitDecider(t *testing.T) {
 	// There should now be 1 suggested range for splitting which corresponds to
 	// the midpoint of the testing sequence.
 	require.Equal(t, []RangeID{1}, decider.ClearSplitKeys())
-	splitKey, found = decider.SplitKey(startTime.Add(testSettings.SplitStatRetention), 1)
+	splitKey, found = decider.SplitKey(startTime.AddDuration(testSettings.SplitStatRetention), 1)
 	require.True(t, found)
 	require.Equal(t, Key(6), splitKey)
 

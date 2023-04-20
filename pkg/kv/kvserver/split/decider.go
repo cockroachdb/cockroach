@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -40,7 +41,7 @@ type LoadBasedSplitter interface {
 
 	// Ready checks if the LoadBasedSplitter has been initialized with a
 	// sufficient sample duration.
-	Ready(nowTime time.Time) bool
+	Ready(nowTime hlc.Timestamp) bool
 
 	// NoSplitKeyCauseLogMsg returns a log message containing information on the
 	// number of samples that don't pass each split key requirement if not all
@@ -56,7 +57,7 @@ type LoadBasedSplitter interface {
 type LoadSplitConfig interface {
 	// NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
 	// find the midpoint based on recorded load.
-	NewLoadBasedSplitter(time.Time, SplitObjective) LoadBasedSplitter
+	NewLoadBasedSplitter(hlc.Timestamp, SplitObjective) LoadBasedSplitter
 	// StatRetention returns the duration that recorded load is to be retained.
 	StatRetention() time.Duration
 	// StatThreshold returns the threshold for load above which the range
@@ -144,19 +145,19 @@ type Decider struct {
 		objective SplitObjective // supplied to Init
 
 		// Fields tracking the current qps sample.
-		lastStatRollover time.Time // most recent time recorded by requests.
-		lastStatVal      float64   // last reqs/s rate as of lastStatRollover
-		count            int64     // number of requests recorded since last rollover
+		lastStatRollover hlc.Timestamp // most recent time recorded by requests.
+		lastStatVal      float64       // last reqs/s rate as of lastStatRollover
+		count            int64         // number of requests recorded since last rollover
 
 		// Fields tracking historical qps samples.
 		maxStat maxStatTracker
 
 		// Fields tracking split key suggestions.
 		splitFinder         LoadBasedSplitter // populated when engaged or decided
-		lastSplitSuggestion time.Time         // last stipulation to client to carry out split
+		lastSplitSuggestion hlc.Timestamp     // last stipulation to client to carry out split
 
 		// Fields tracking logging / metrics around load-based splitter split key.
-		lastNoSplitKeyLoggingMetrics time.Time
+		lastNoSplitKeyLoggingMetrics hlc.Timestamp
 	}
 }
 
@@ -184,7 +185,7 @@ func Init(
 // disappear as more keys are sampled) and should be initiated by the caller,
 // which can call MaybeSplitKey to retrieve the suggested key.
 func (d *Decider) Record(
-	ctx context.Context, now time.Time, load func(SplitObjective) int, span func() roachpb.Span,
+	ctx context.Context, now hlc.Timestamp, load func(SplitObjective) int, span func() roachpb.Span,
 ) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -193,12 +194,12 @@ func (d *Decider) Record(
 }
 
 func (d *Decider) recordLocked(
-	ctx context.Context, now time.Time, n int, span func() roachpb.Span,
+	ctx context.Context, now hlc.Timestamp, n int, span func() roachpb.Span,
 ) bool {
 	d.mu.count += int64(n)
 
 	// First compute requests per second since the last check.
-	if d.mu.lastStatRollover.IsZero() {
+	if d.mu.lastStatRollover.IsEmpty() {
 		d.mu.lastStatRollover = now
 	}
 	elapsedSinceLastSample := now.Sub(d.mu.lastStatRollover)
@@ -260,7 +261,7 @@ func (d *Decider) recordLocked(
 // RecordMax adds a stat measurement directly into the Decider's historical
 // stat value tracker. The stat sample is considered to have been captured at
 // the provided time.
-func (d *Decider) RecordMax(now time.Time, qps float64) {
+func (d *Decider) RecordMax(now hlc.Timestamp, qps float64) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -268,7 +269,7 @@ func (d *Decider) RecordMax(now time.Time, qps float64) {
 }
 
 // lastStatLocked returns the most recent stat measurement.
-func (d *Decider) lastStatLocked(ctx context.Context, now time.Time) float64 {
+func (d *Decider) lastStatLocked(ctx context.Context, now hlc.Timestamp) float64 {
 	d.recordLocked(ctx, now, 0, nil) // force stat computation
 	return d.mu.lastStatVal
 }
@@ -276,7 +277,7 @@ func (d *Decider) lastStatLocked(ctx context.Context, now time.Time) float64 {
 // maxStatLocked returns the maximum stat measurement recorded over the retention
 // period. If the Decider has not been recording for a full retention period,
 // the method returns false.
-func (d *Decider) maxStatLocked(ctx context.Context, now time.Time) (float64, bool) {
+func (d *Decider) maxStatLocked(ctx context.Context, now hlc.Timestamp) (float64, bool) {
 	d.recordLocked(ctx, now, 0, nil) // force stat computation
 	return d.mu.maxStat.max(now, d.config.StatRetention())
 }
@@ -286,7 +287,7 @@ func (d *Decider) maxStatLocked(ctx context.Context, now time.Time) (float64, bo
 // or if it wasn't able to determine a suitable split key.
 //
 // It is legal to call MaybeSplitKey at any time.
-func (d *Decider) MaybeSplitKey(ctx context.Context, now time.Time) roachpb.Key {
+func (d *Decider) MaybeSplitKey(ctx context.Context, now hlc.Timestamp) roachpb.Key {
 	var key roachpb.Key
 
 	d.mu.Lock()
@@ -336,26 +337,26 @@ func (d *Decider) MaybeSplitKey(ctx context.Context, now time.Time) roachpb.Key 
 
 // Reset deactivates any current attempt at determining a split key. The method
 // also discards any historical stat tracking information.
-func (d *Decider) Reset(now time.Time) {
+func (d *Decider) Reset(now hlc.Timestamp) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	d.resetLocked(now)
 }
 
-func (d *Decider) resetLocked(now time.Time) {
-	d.mu.lastStatRollover = time.Time{}
+func (d *Decider) resetLocked(now hlc.Timestamp) {
+	d.mu.lastStatRollover = hlc.Timestamp{}
 	d.mu.lastStatVal = 0
 	d.mu.count = 0
 	d.mu.maxStat.reset(now, d.config.StatRetention())
 	d.mu.splitFinder = nil
-	d.mu.lastSplitSuggestion = time.Time{}
-	d.mu.lastNoSplitKeyLoggingMetrics = time.Time{}
+	d.mu.lastSplitSuggestion = hlc.Timestamp{}
+	d.mu.lastNoSplitKeyLoggingMetrics = hlc.Timestamp{}
 }
 
 // SetSplitObjective sets the decider split objective to the given value and
 // discards any existing state.
-func (d *Decider) SetSplitObjective(now time.Time, obj SplitObjective) {
+func (d *Decider) SetSplitObjective(now hlc.Timestamp, obj SplitObjective) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -381,7 +382,7 @@ type LoadSplitSnapshot struct {
 }
 
 // Snapshot returns a consistent snapshot of the decider state.
-func (d *Decider) Snapshot(ctx context.Context, now time.Time) LoadSplitSnapshot {
+func (d *Decider) Snapshot(ctx context.Context, now hlc.Timestamp) LoadSplitSnapshot {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -415,13 +416,13 @@ func (d *Decider) Snapshot(ctx context.Context, now time.Time) LoadSplitSnapshot
 type maxStatTracker struct {
 	windows      [6]float64
 	curIdx       int
-	curStart     time.Time
-	lastReset    time.Time
+	curStart     hlc.Timestamp
+	lastReset    hlc.Timestamp
 	minRetention time.Duration
 }
 
 // record adds the qps sample to the tracker.
-func (t *maxStatTracker) record(now time.Time, minRetention time.Duration, qps float64) {
+func (t *maxStatTracker) record(now hlc.Timestamp, minRetention time.Duration, qps float64) {
 	t.maybeReset(now, minRetention)
 	t.maybeRotate(now)
 	t.windows[t.curIdx] = max(t.windows[t.curIdx], qps)
@@ -429,7 +430,7 @@ func (t *maxStatTracker) record(now time.Time, minRetention time.Duration, qps f
 
 // reset clears the tracker. maxStatTracker will begin returning false until a full
 // minRetention period has elapsed.
-func (t *maxStatTracker) reset(now time.Time, minRetention time.Duration) {
+func (t *maxStatTracker) reset(now hlc.Timestamp, minRetention time.Duration) {
 	if minRetention <= 0 {
 		panic("minRetention must be positive")
 	}
@@ -440,7 +441,7 @@ func (t *maxStatTracker) reset(now time.Time, minRetention time.Duration) {
 	t.minRetention = minRetention
 }
 
-func (t *maxStatTracker) maybeReset(now time.Time, minRetention time.Duration) {
+func (t *maxStatTracker) maybeReset(now hlc.Timestamp, minRetention time.Duration) {
 	// If the retention period changes, simply reset the entire tracker. Merging
 	// or splitting windows would be a difficult task and could lead to samples
 	// either not being retained for long-enough, or being retained for too long.
@@ -451,7 +452,7 @@ func (t *maxStatTracker) maybeReset(now time.Time, minRetention time.Duration) {
 	}
 }
 
-func (t *maxStatTracker) maybeRotate(now time.Time) {
+func (t *maxStatTracker) maybeRotate(now hlc.Timestamp) {
 	sinceLastRotate := now.Sub(t.curStart)
 	windowWidth := t.windowWidth()
 	if sinceLastRotate < windowWidth {
@@ -469,7 +470,7 @@ func (t *maxStatTracker) maybeRotate(now time.Time) {
 	}
 	for i := 0; i < shift; i++ {
 		t.curIdx = (t.curIdx + 1) % len(t.windows)
-		t.curStart = t.curStart.Add(windowWidth)
+		t.curStart = t.curStart.AddDuration(windowWidth)
 		t.windows[t.curIdx] = 0
 	}
 }
@@ -477,7 +478,7 @@ func (t *maxStatTracker) maybeRotate(now time.Time) {
 // max returns the maximum queries-per-second samples recorded over the last
 // retention period. If the tracker has not been recording for a full retention
 // period, then the method returns false.
-func (t *maxStatTracker) max(now time.Time, minRetention time.Duration) (float64, bool) {
+func (t *maxStatTracker) max(now hlc.Timestamp, minRetention time.Duration) (float64, bool) {
 	t.record(now, minRetention, 0) // expire samples, if necessary
 
 	if now.Sub(t.lastReset) < t.minRetention {

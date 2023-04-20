@@ -11,11 +11,10 @@
 package op
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -29,7 +28,7 @@ type TransferLeaseOp struct {
 
 // NewTransferLeaseOp returns a new TransferLeaseOp.
 func NewTransferLeaseOp(
-	tick time.Time,
+	tick hlc.Timestamp,
 	rangeID roachpb.RangeID,
 	source, target roachpb.StoreID,
 	usage allocator.RangeUsageInfo,

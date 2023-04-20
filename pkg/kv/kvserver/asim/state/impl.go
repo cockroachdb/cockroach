@@ -61,7 +61,7 @@ func newState(settings *config.SimulationSettings) *state {
 		nodes:      make(map[NodeID]*node),
 		stores:     make(map[StoreID]*store),
 		loadsplits: make(map[StoreID]LoadSplitter),
-		clock:      &ManualSimClock{nanos: settings.StartTime.UnixNano()},
+		clock:      &ManualSimClock{nanos: settings.StartTime.GoTime().UnixNano()},
 		ranges:     newRMap(),
 		usageInfo:  newClusterUsageInfo(),
 		settings:   settings,
@@ -702,7 +702,7 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 	if !ok {
 		return
 	}
-	s.loadsplits[store.StoreID()].Record(s.clock.Now(), rng.rangeID, le)
+	s.loadsplits[store.StoreID()].Record(hlc.Timestamp{WallTime: s.clock.Now().UnixNano()}, rng.rangeID, le)
 }
 
 // ReplicaLoad returns the usage information for the Range with ID
@@ -736,8 +736,8 @@ func (s *state) ClusterUsageInfo() *ClusterUsageInfo {
 
 // TickClock modifies the state Clock time to Tick. The clock is used as the
 // system time source for the store pools that are spawned from this state.
-func (s *state) TickClock(tick time.Time) {
-	s.clock.Set(tick.UnixNano())
+func (s *state) TickClock(tick hlc.Timestamp) {
+	s.clock.Set(tick.GoTime().UnixNano())
 }
 
 // UpdateStorePool modifies the state of the StorePool for the Store with
@@ -766,7 +766,7 @@ func (s *state) NextReplicasFn(storeID StoreID) func() []Replica {
 // liveness of the Node with ID NodeID.
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeLivenessFn() storepool.NodeLivenessFunc {
-	nodeLivenessFn := func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	nodeLivenessFn := func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
 		// TODO(kvoli): Implement liveness records for nodes, that signal they
 		// are dead when simulating partitions, crashes etc.
 		return livenesspb.NodeLivenessStatus_LIVE
