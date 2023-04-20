@@ -463,11 +463,11 @@ func NewManualWindowHistogram(
 
 	h := &ManualWindowHistogram{
 		Metadata: meta,
-		rotating: withRotate,
-		cum:      cum,
-		prev:     prev.GetHistogram(),
-		cur:      nil,
 	}
+	h.mu.rotating = withRotate
+	h.mu.cum = cum
+	h.mu.prev = prev.GetHistogram()
+
 	return h
 }
 
@@ -480,33 +480,41 @@ func NewManualWindowHistogram(
 // or ManualWindowHistogram.RecordValue and subsequently Rotate.
 type ManualWindowHistogram struct {
 	Metadata
-	syncutil.RWMutex
-	rotating  bool
-	cum       prometheus.Histogram
-	prev, cur *prometheusgo.Histogram
+
+	mu struct {
+		// prometheus.Histogram is thread safe, so we only need an RLock to
+		// RecordValue. When calling Update or Rotate, we require a WLock since we
+		// swap out fields.
+		syncutil.RWMutex
+		rotating  bool
+		cum       prometheus.Histogram
+		prev, cur *prometheusgo.Histogram
+	}
 }
 
 // Update replaces the cumulative and current windowed histograms.
 func (mwh *ManualWindowHistogram) Update(cum prometheus.Histogram, cur *prometheusgo.Histogram) {
-	mwh.Lock()
-	defer mwh.Unlock()
-	if mwh.rotating {
+	mwh.mu.Lock()
+	defer mwh.mu.Unlock()
+
+	if mwh.mu.rotating {
 		panic("Unexpected call to Update with rotate enabled")
 	}
 
-	mwh.cum = cum
-	mwh.cur = cur
+	mwh.mu.cum = cum
+	mwh.mu.cur = cur
 }
 
 // RecordValue records a value to the cumulative histogram. The value is only
 // added to the current window histogram once Rotate is called.
 func (mwh *ManualWindowHistogram) RecordValue(val float64) {
-	mwh.Lock()
-	defer mwh.Unlock()
-	if !mwh.rotating {
+	mwh.mu.RLock()
+	defer mwh.mu.RUnlock()
+
+	if !mwh.mu.rotating {
 		panic("Unexpected call to RecordValue with rotate disabled")
 	}
-	mwh.cum.Observe(val)
+	mwh.mu.cum.Observe(val)
 }
 
 // SubtractPrometheusHistograms subtracts the prev histogram from the cur
@@ -531,26 +539,26 @@ func SubtractPrometheusHistograms(cur *prometheusgo.Histogram, prev *prometheusg
 // cumulative histogram at the last rotation (prev) and the cumulative
 // histogram currently (cum).
 func (mwh *ManualWindowHistogram) Rotate() error {
-	mwh.Lock()
-	defer mwh.Unlock()
+	mwh.mu.Lock()
+	defer mwh.mu.Unlock()
 
-	if !mwh.rotating {
-		panic("Unexpected call to RecordValue with rotate disabled")
+	if !mwh.mu.rotating {
+		panic("Unexpected call to Rotate with rotate disabled")
 	}
 
 	cur := &prometheusgo.Metric{}
-	if err := mwh.cum.Write(cur); err != nil {
+	if err := mwh.mu.cum.Write(cur); err != nil {
 		return err
 	}
 
-	SubtractPrometheusHistograms(cur.GetHistogram(), mwh.prev)
-	mwh.cur = cur.GetHistogram()
+	SubtractPrometheusHistograms(cur.GetHistogram(), mwh.mu.prev)
+	mwh.mu.cur = cur.GetHistogram()
 	prev := &prometheusgo.Metric{}
 
-	if err := mwh.cum.Write(prev); err != nil {
+	if err := mwh.mu.cum.Write(prev); err != nil {
 		return err
 	}
-	mwh.prev = prev.GetHistogram()
+	mwh.mu.prev = prev.GetHistogram()
 
 	return nil
 }
@@ -573,8 +581,11 @@ func (mwh *ManualWindowHistogram) GetType() *prometheusgo.MetricType {
 
 // ToPrometheusMetric returns a filled-in prometheus metric of the right type.
 func (mwh *ManualWindowHistogram) ToPrometheusMetric() *prometheusgo.Metric {
+	mwh.mu.RLock()
+	defer mwh.mu.RUnlock()
+
 	m := &prometheusgo.Metric{}
-	if err := mwh.cum.Write(m); err != nil {
+	if err := mwh.mu.cum.Write(m); err != nil {
 		panic(err)
 	}
 	return m
@@ -582,16 +593,16 @@ func (mwh *ManualWindowHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 
 // TotalCountWindowed implements the WindowedHistogram interface.
 func (mwh *ManualWindowHistogram) TotalCountWindowed() int64 {
-	mwh.RLock()
-	defer mwh.RUnlock()
-	return int64(mwh.cur.GetSampleCount())
+	mwh.mu.RLock()
+	defer mwh.mu.RUnlock()
+	return int64(mwh.mu.cur.GetSampleCount())
 }
 
 // TotalSumWindowed implements the WindowedHistogram interface.
 func (mwh *ManualWindowHistogram) TotalSumWindowed() float64 {
-	mwh.RLock()
-	defer mwh.RUnlock()
-	return mwh.cur.GetSampleSum()
+	mwh.mu.RLock()
+	defer mwh.mu.RUnlock()
+	return mwh.mu.cur.GetSampleSum()
 }
 
 // ValueAtQuantileWindowed implements the WindowedHistogram interface.
@@ -599,12 +610,12 @@ func (mwh *ManualWindowHistogram) TotalSumWindowed() float64 {
 // This function is very similar to Histogram.ValueAtQuantileWindowed. Thus see
 // Histogram.ValueAtQuantileWindowed for a more in-depth description.
 func (mwh *ManualWindowHistogram) ValueAtQuantileWindowed(q float64) float64 {
-	mwh.RLock()
-	defer mwh.RUnlock()
-	if mwh.cur == nil {
+	mwh.mu.RLock()
+	defer mwh.mu.RUnlock()
+	if mwh.mu.cur == nil {
 		return 0
 	}
-	return ValueAtQuantileWindowed(mwh.cur, q)
+	return ValueAtQuantileWindowed(mwh.mu.cur, q)
 }
 
 // A Counter holds a single mutable atomic value.
