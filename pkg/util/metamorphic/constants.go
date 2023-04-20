@@ -30,7 +30,26 @@ func IsMetamorphicBuild() bool {
 	return metamorphicBuild
 }
 
+// LogMetamorphicVariables is intended to be run at the start of every
+// TestMain(..) or Main() function run code built with tag 'crdb_test'. By
+// logging all metamorphic variables at program startup, rather than at module
+// initialization, we can ensure we only see the metamorphic variables applying
+// to the current execution.
+//
+// NB: This can avoid issues due to Go test binaries run by
+// Bazel forking a child process to run the actual test, instantiating
+// metamorphic constants in both parent and child processes and potentially
+// confusing the output if the non-applicable initializations from the parent
+// process were logged.
+func LogMetamorphicVariables() {
+	for name, value := range metamorphicVariableLog {
+		fmt.Fprintf(os.Stderr, "initialized metamorphic constant %q with value %v\n", name, value)
+	}
+}
+
 var metamorphicBuild bool
+
+var metamorphicVariableLog map[string]interface{}
 
 const (
 	metamorphicBuildProbability = 0.8
@@ -70,7 +89,7 @@ func ConstantWithMetamorphicTestValue(name string, defaultValue, metamorphicValu
 		rng.Lock()
 		defer rng.Unlock()
 		if rng.r.Float64() < metamorphicValueProbability {
-			logMetamorphicValue(name, metamorphicValue)
+			recordMetamorphicValue(name, metamorphicValue)
 			return metamorphicValue
 		}
 	}
@@ -89,11 +108,15 @@ var rng struct {
 const DisableMetamorphicEnvVar = "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING"
 
 func init() {
+	metamorphicVariableLog = make(map[string]interface{})
 	if buildutil.CrdbTestBuild {
 		if !disableMetamorphicTesting {
 			rng.r, _ = randutil.NewTestRand()
 			metamorphicBuild = rng.r.Float64() < metamorphicBuildProbability
 		}
+		// TODO(sarkesian,ricky): Remove logging from this init-time function once
+		// LogMetamorphicVariables() is called wherever needed.
+		fmt.Fprintf(os.Stderr, "initialized test build with metamorphic: %t\n", metamorphicBuild)
 	}
 }
 
@@ -111,7 +134,7 @@ func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) i
 			if max > min {
 				ret = int(rng.r.Int31())%(max-min) + min
 			}
-			logMetamorphicValue(name, ret)
+			recordMetamorphicValue(name, ret)
 			return ret
 		}
 	}
@@ -128,7 +151,7 @@ func ConstantWithMetamorphicTestBool(name string, defaultValue bool) bool {
 		defer rng.Unlock()
 		if rng.r.Float64() < metamorphicBoolProbability {
 			ret := !defaultValue
-			logMetamorphicValue(name, ret)
+			recordMetamorphicValue(name, ret)
 			return ret
 		}
 	}
@@ -148,12 +171,15 @@ func ConstantWithMetamorphicTestChoice(
 		rng.Lock()
 		defer rng.Unlock()
 		value := values[rng.r.Int63n(int64(len(values)))]
-		logMetamorphicValue(name, value)
+		recordMetamorphicValue(name, value)
 		return value
 	}
 	return defaultValue
 }
 
-func logMetamorphicValue(name string, value interface{}) {
+func recordMetamorphicValue(name string, value interface{}) {
+	metamorphicVariableLog[name] = value
+	// TODO(sarkesian,ricky): Remove logging from this init-time function once
+	// LogMetamorphicVariables() is called wherever needed.
 	fmt.Fprintf(os.Stderr, "initialized metamorphic constant %q with value %v\n", name, value)
 }
