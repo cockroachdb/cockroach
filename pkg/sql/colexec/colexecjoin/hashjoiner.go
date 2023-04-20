@@ -577,39 +577,28 @@ func (hj *hashJoiner) exec() coldata.Batch {
 		// Now we collect all matches that we can emit in the probing phase
 		// in a single batch.
 		hj.prepareForCollecting(batchSize)
-		var nResults int
+
+		checker, collector := hj.ht.Check, hj.collect
 		if hj.spec.rightDistinct {
-			for nToCheck > 0 {
-				// Continue searching along the hash table next chains for the corresponding
-				// buckets. If the key is found or end of next chain is reached, the key is
-				// removed from the ToCheck array.
-				nToCheck = hj.ht.DistinctCheck(nToCheck, sel)
-				// TODO(yuzefovich): check whether we can omit the 'toCheck'
-				// tuple if the new ToCheckID is 0.
-				for _, toCheck := range hj.ht.ProbeScratch.ToCheck[:nToCheck] {
-					hj.ht.ProbeScratch.ToCheckID[toCheck] = hj.ht.BuildScratch.Next[hj.ht.ProbeScratch.ToCheckID[toCheck]]
-				}
-			}
-
-			nResults = hj.distinctCollect(batch, batchSize, sel)
-		} else {
-			for nToCheck > 0 {
-				// Continue searching for the build table matching keys while the ToCheck
-				// array is non-empty.
-				nToCheck = hj.ht.Check(hj.ht.Keys, nToCheck, sel)
-				// TODO(yuzefovich): check whether we can omit the 'toCheck'
-				// tuple if the new ToCheckID is 0.
-				for _, toCheck := range hj.ht.ProbeScratch.ToCheck[:nToCheck] {
-					hj.ht.ProbeScratch.ToCheckID[toCheck] = hj.ht.BuildScratch.Next[hj.ht.ProbeScratch.ToCheckID[toCheck]]
-				}
-			}
-
-			// We're processing a new batch, so we'll reset the index to start
-			// collecting from.
-			hj.probeState.prevBatchResumeIdx = 0
-			nResults = hj.collect(batch, batchSize, sel)
+			checker, collector = hj.ht.DistinctCheck, hj.distinctCollect
 		}
 
+		for nToCheck > 0 {
+			// Continue searching for the build table matching keys while the
+			// ToCheck array is non-empty.
+			nToCheck = checker(nToCheck, sel)
+			// TODO(yuzefovich): check whether we can omit the 'toCheck'
+			// tuple if the new ToCheckID is 0.
+			for _, toCheck := range hj.ht.ProbeScratch.ToCheck[:nToCheck] {
+				hj.ht.ProbeScratch.ToCheckID[toCheck] = hj.ht.BuildScratch.Next[hj.ht.ProbeScratch.ToCheckID[toCheck]]
+			}
+		}
+
+		// We're processing a new batch, so we'll reset the index to start
+		// collecting from.
+		hj.probeState.prevBatchResumeIdx = 0
+
+		nResults := collector(batch, batchSize, sel)
 		if nResults > 0 {
 			hj.congregate(nResults, batch)
 			break

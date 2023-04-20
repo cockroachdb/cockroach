@@ -5984,8 +5984,8 @@ func (ht *HashTable) checkColDeleting(
 // key is removed from ToCheck if it has already been visited in a previous
 // probe, or the bucket has reached the end (key not found in build table). The
 // new length of ToCheck is returned by this function.
-func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []int) uint64 {
-	ht.checkCols(probeVecs, nToCheck, probeSel)
+func (ht *HashTable) Check(nToCheck uint64, probeSel []int) uint64 {
+	ht.checkCols(ht.Keys, nToCheck, probeSel)
 	nDiffers := uint64(0)
 	switch ht.probeMode {
 	case HashTableDefaultProbeMode:
