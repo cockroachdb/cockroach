@@ -211,6 +211,34 @@ func (cr catalogReader) ScanNamespaceForSchemaObjects(
 	}))
 }
 
+// forEachDescriptorIDSpan loops over a list of descriptor IDs and generates
+// spans from them.
+func forEachDescriptorIDSpan(ids []descpb.ID, spanFn func(startID descpb.ID, endID descpb.ID)) {
+	// Tracks the start and end of the run of descriptor ID's.
+	startIDSet := false
+	runStartID := descpb.InvalidID
+	runEndID := descpb.InvalidID
+
+	for _, id := range ids {
+		// Detect if we have a linear run of IDs, which case extend the batch.
+		if startIDSet && id == runEndID+1 {
+			runEndID = id
+		} else if startIDSet {
+			// The run has broken so emit whatever is left.
+			spanFn(runStartID, runEndID)
+			startIDSet = false
+		}
+		if !startIDSet {
+			startIDSet = true
+			runStartID = id
+			runEndID = id
+		}
+	}
+	if startIDSet {
+		spanFn(runStartID, runEndID)
+	}
+}
+
 // GetByIDs is part of the CatalogReader interface.
 func (cr catalogReader) GetByIDs(
 	ctx context.Context,
@@ -228,18 +256,36 @@ func (cr catalogReader) GetByIDs(
 		isDescriptorRequired: isDescriptorRequired,
 		expectedType:         expectedType,
 	}
+
 	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
-		for _, id := range ids {
-			get(ctx, b, catalogkeys.MakeDescMetadataKey(codec, id))
-			for _, t := range catalogkeys.AllCommentTypes {
-				scan(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, id))
+		// Attempt to generate a optimal set of requests by extracting
+		// a spans of descriptors when possible.
+		forEachDescriptorIDSpan(ids, func(startID descpb.ID, endID descpb.ID) {
+			// Only a single descriptor run, so generate a Get request.
+			if startID == endID {
+				get(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID))
+				for _, t := range catalogkeys.AllCommentTypes {
+					scan(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID))
+				}
+				get(ctx, b, config.MakeZoneKey(codec, startID))
+			} else {
+				// Otherwise, generate a Scan request instead. The end key is exclusive,
+				// so we will need to increment the endID.
+				scanRange(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID),
+					catalogkeys.MakeDescMetadataKey(codec, endID+1))
+				for _, t := range catalogkeys.AllCommentTypes {
+					scanRange(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID),
+						catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, endID+1))
+				}
+				scanRange(ctx, b, config.MakeZoneKey(codec, startID),
+					config.MakeZoneKey(codec, endID+1))
 			}
-			get(ctx, b, config.MakeZoneKey(codec, id))
-		}
+		})
 	})
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
+
 	if isDescriptorRequired {
 		for _, id := range ids {
 			if mc.LookupDescriptor(id) == nil {
@@ -276,6 +322,14 @@ func get(ctx context.Context, b *kv.Batch, key roachpb.Key) {
 	b.Get(key)
 	if isEventLoggingEnabled(ctx) {
 		log.VEventfDepth(ctx, 1, 2, "Get %s", key)
+	}
+}
+
+func scanRange(ctx context.Context, b *kv.Batch, start roachpb.Key, end roachpb.Key) {
+	b.Header.MaxSpanRequestKeys = 0
+	b.Scan(start, end)
+	if isEventLoggingEnabled(ctx) {
+		log.VEventfDepth(ctx, 1, 2, "Scan Range %s %s", start, end)
 	}
 }
 
