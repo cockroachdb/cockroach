@@ -161,7 +161,6 @@ go_library(
         "//pkg/kv/kvserver/txnwait",
         "//pkg/kv/kvserver/uncertainty",
         "//pkg/multitenant",
-        "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb",
