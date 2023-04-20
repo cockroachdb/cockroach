@@ -544,6 +544,10 @@ const (
 	// Step 1b: Add new version for 23.2 development here.
 	// Do not add new versions to a patch release.
 	// *************************************************
+
+	// V23_2TTLAllowDescPK is the version where TTL tables can have descending
+	// primary keys.
+	V23_2TTLAllowDescPK
 )
 
 func (k Key) String() string {
@@ -947,6 +951,10 @@ var rawVersionsSingleton = keyedVersions{
 	// Step 2b: Add new version gates for 23.2 development here.
 	// Do not add new versions to a patch release.
 	// *************************************************
+	{
+		Key:     V23_2TTLAllowDescPK,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 4},
+	},
 }
 
 // developmentBranch must true on the main development branch but
