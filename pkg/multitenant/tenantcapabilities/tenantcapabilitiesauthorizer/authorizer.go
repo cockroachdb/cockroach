@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -105,7 +106,9 @@ func (a *Authorizer) HasCapabilityForBatch(
 	case authorizerModeV222:
 		return a.authBatchNoCap(ctx, tenID, ba)
 	default:
-		return errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		return err
 	}
 }
 
@@ -249,7 +252,9 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 	case authorizerModeV222:
 		return errFn()
 	default:
-		return errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		return err
 	}
 
 	if !tenantcapabilities.MustGetBoolByID(
@@ -277,7 +282,9 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 	case authorizerModeV222:
 		return errFn()
 	default:
-		return errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		return err
 	}
 
 	if !tenantcapabilities.MustGetBoolByID(
@@ -306,7 +313,9 @@ func (a *Authorizer) HasNodelocalStorageCapability(
 	case authorizerModeV222:
 		return errFn()
 	default:
-		return errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		return err
 	}
 
 	if !tenantcapabilities.MustGetBoolByID(
@@ -331,7 +340,8 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 	case authorizerModeV222:
 		return false
 	default:
-		log.Warningf(ctx, "unknown authorizer mode: %d", mode)
+		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
 		return false
 	}
 
