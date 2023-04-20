@@ -308,9 +308,16 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.COMMITTED
-		br.Responses[1].GetQueryIntent().FoundIntent = true
+		// NOTE: expected response from a v23.1 node.
+		// TODO(nvanbenschoten): update this case when v23.1 compatibility is no
+		// longer required.
+		br.Responses[2].GetQueryIntent().FoundIntent = false
+		br.Responses[1].GetQueryIntent().FoundUnpushedIntent = true
+		// NOTE: expected responses from a v23.2 node.
 		br.Responses[2].GetQueryIntent().FoundIntent = true
+		br.Responses[2].GetQueryIntent().FoundUnpushedIntent = true
 		br.Responses[3].GetQueryIntent().FoundIntent = true
+		br.Responses[2].GetQueryIntent().FoundUnpushedIntent = false
 		return br, nil
 	})
 
