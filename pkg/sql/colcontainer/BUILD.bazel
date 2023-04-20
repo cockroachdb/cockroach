@@ -49,6 +49,7 @@ go_test(
         "//pkg/sql/types",
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/skip",
+        "//pkg/util",
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",

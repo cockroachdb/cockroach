@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -34,6 +35,7 @@ import (
 func TestRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	util.LogMetamorphicVariables()
 	randutil.SeedForTests()
 	ctx := context.Background()
 	alphabet := "abcdefghijklmnopqrstuvwxyz"

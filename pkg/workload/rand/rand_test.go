@@ -13,6 +13,7 @@ package rand
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"os"
 	"testing"
 
@@ -32,6 +33,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	util.LogMetamorphicVariables()
 	randutil.SeedForTests()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	serverutils.InitTestServerFactory(server.TestServerFactory)

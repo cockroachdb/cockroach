@@ -50,6 +50,7 @@ go_test(
         "//pkg/spanconfig/spanconfigbounds",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",

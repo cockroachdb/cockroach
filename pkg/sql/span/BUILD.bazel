@@ -49,6 +49,7 @@ go_test(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
+        "//pkg/util",
         "//pkg/util/intsets",
         "//pkg/util/leaktest",
         "//pkg/util/log",

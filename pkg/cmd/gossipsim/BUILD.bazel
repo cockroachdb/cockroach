@@ -11,6 +11,7 @@ go_library(
         "//pkg/gossip",
         "//pkg/gossip/simulation",
         "//pkg/roachpb",
+        "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/log",
         "//pkg/util/randutil",

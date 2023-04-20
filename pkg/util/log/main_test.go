@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -24,6 +25,7 @@ func TestMain(m *testing.M) {
 	fmt.Fprintf(log.OrigStderr, "initial logging configuration:\n  %s\n",
 		strings.TrimSpace(strings.ReplaceAll(log.DescribeAppliedConfig(), "\n", "\n  ")))
 
+	util.LogMetamorphicVariables()
 	randutil.SeedForTests()
 
 	os.Exit(m.Run())

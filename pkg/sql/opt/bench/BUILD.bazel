@@ -40,6 +40,7 @@ go_test(
         "//pkg/sql/sem/volatility",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
+        "//pkg/util",
         "//pkg/util/log",
         "//pkg/util/randutil",
     ],

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -27,6 +28,7 @@ func init() {
 
 func TestMain(m *testing.M) {
 	serverutils.InitTestServerFactory(server.TestServerFactory)
+	util.LogMetamorphicVariables()
 	randutil.SeedForTests()
 	os.Exit(m.Run())
 }

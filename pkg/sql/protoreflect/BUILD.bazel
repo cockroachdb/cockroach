@@ -37,6 +37,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect/test",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",

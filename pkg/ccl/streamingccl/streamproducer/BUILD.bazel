@@ -106,6 +106,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/storageutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

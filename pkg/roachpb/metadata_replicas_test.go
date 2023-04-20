@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -311,6 +312,7 @@ func TestReplicaDescriptorsCanMakeProgress(t *testing.T) {
 func TestReplicaDescriptorsCanMakeProgressRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	util.LogMetamorphicVariables()
 	randutil.SeedForTests()
 
 	var progress, noProgress, skipped int

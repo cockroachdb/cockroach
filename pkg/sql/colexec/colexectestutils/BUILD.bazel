@@ -61,6 +61,7 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/sem/eval",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/mon",
