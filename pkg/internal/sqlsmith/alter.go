@@ -367,7 +367,9 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 	visibility := 1.0
 	if notvisible := s.d6() == 1; notvisible {
 		visibility = 0.0
-		// TODO(rytaft): sometimes generate a float between (0.0,1.0).
+		if s.coin() {
+			visibility = s.rnd.Float64() // [0.0, 1.0)
+		}
 	}
 
 	return &tree.CreateIndex{
