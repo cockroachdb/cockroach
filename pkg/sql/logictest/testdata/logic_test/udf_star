@@ -195,11 +195,11 @@ SELECT f_unqualified_twocol()
 statement error pq: cannot alter type of column "b" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol ALTER b TYPE FLOAT;
 
-# TODO(harding): Postgres allows column renaming when only referenced by UDFs.
+# TODO(#101934): Postgres allows column renaming when only referenced by UDFs.
 statement error pq: cannot rename column "a" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol RENAME COLUMN a TO d;
 
-# TODO(harding): Postgres allows table renaming when only referenced by UDFs.
+# TODO(#101934): Postgres allows table renaming when only referenced by UDFs.
 statement error pq: cannot rename relation "t_twocol" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol RENAME TO t_twocol_prime;
 
@@ -208,7 +208,7 @@ statement error pq: cannot drop column "b" because function "f_unqualified_twoco
 ALTER TABLE t_twocol DROP COLUMN b;
 
 # Drop all but one of the functions with an implicit record return value.
-# TODO(96368): Allow these UDFs to be dropped in the CASCADE when the cross-
+# TODO(#96368): Allow these UDFs to be dropped in the CASCADE when the cross-
 # references are fixed instead.
 statement ok
 DROP FUNCTION f_tuplestar;

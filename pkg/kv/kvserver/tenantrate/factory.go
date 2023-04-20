@@ -26,6 +26,9 @@ import (
 // TestingKnobs configures a LimiterFactory for testing.
 type TestingKnobs struct {
 	TimeSource timeutil.TimeSource
+
+	// Authorizer, if set, replaces the authorizer in the RPCContext.
+	Authorizer tenantcapabilities.Authorizer
 }
 
 // LimiterFactory constructs and manages per-tenant Limiters.

@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -268,6 +267,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
 		),
 	}
+	sc.TestingKnobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
 
 	// Use shorter Raft tick settings in order to minimize start up and failover
 	// time in tests.
@@ -1413,11 +1413,12 @@ func NewStore(
 			int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)))
 	})
 
-	var authorizer tenantcapabilities.Authorizer
+	authorizer := cfg.TestingKnobs.TenantRateKnobs.Authorizer
 	if cfg.RPCContext != nil && cfg.RPCContext.TenantRPCAuthorizer != nil {
 		authorizer = cfg.RPCContext.TenantRPCAuthorizer
-	} else {
-		authorizer = tenantcapabilitiesauthorizer.NewNoopAuthorizer()
+	}
+	if authorizer == nil {
+		log.Fatalf(ctx, "programming error: missing authorizer from config")
 	}
 
 	s.tenantRateLimiters = tenantrate.NewLimiterFactory(&cfg.Settings.SV, &cfg.TestingKnobs.TenantRateKnobs, authorizer)

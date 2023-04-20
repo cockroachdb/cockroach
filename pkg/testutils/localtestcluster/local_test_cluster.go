@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
@@ -144,6 +145,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		Stopper:         ltc.stopper,
 		Settings:        cfg.Settings,
 		NodeID:          nc,
+
+		TenantRPCAuthorizer: tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
 	})
 	cfg.RPCContext.NodeID.Set(ctx, nodeID)
 	clusterID := cfg.RPCContext.StorageClusterID

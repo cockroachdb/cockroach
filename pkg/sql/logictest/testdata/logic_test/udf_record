@@ -13,11 +13,11 @@ SELECT f_one();
 ----
 (1)
 
-# TODO(97059): The following query should require a column definition list.
+# TODO(#97059): The following query should require a column definition list.
 statement ok
 SELECT * FROM f_one();
 
-# TODO(97059): The following query should produce a row, not a tuple.
+# TODO(#97059): The following query should produce a row, not a tuple.
 query T
 SELECT * FROM f_one() AS foo (a INT);
 ----
