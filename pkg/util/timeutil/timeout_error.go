@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package contextutil
+package timeutil
 
 import (
 	"context"
@@ -128,7 +128,11 @@ func decodeTimeoutError(
 }
 
 func init() {
+	errors.RegisterTypeMigration("github.com/cockroachdb/cockroach/pkg/util/contextutil",
+		"*contextutil.TimeoutError", &TimeoutError{})
+
 	pKey := errors.GetTypeKey(&TimeoutError{})
 	errors.RegisterWrapperEncoder(pKey, encodeTimeoutError)
 	errors.RegisterWrapperDecoder(pKey, decodeTimeoutError)
+
 }

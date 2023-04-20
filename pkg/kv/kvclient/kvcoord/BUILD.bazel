@@ -66,7 +66,6 @@ go_library(
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
-        "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/envutil",
         "//pkg/util/errorutil/unimplemented",

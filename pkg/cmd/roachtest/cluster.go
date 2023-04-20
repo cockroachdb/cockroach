@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -1152,7 +1151,7 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {
 	c.status("fetching logs")
 
 	// Don't hang forever if we can't fetch the logs.
-	return contextutil.RunWithTimeout(ctx, "fetch logs", 2*time.Minute, func(ctx context.Context) error {
+	return timeutil.RunWithTimeout(ctx, "fetch logs", 2*time.Minute, func(ctx context.Context) error {
 		path := filepath.Join(c.t.ArtifactsDir(), "logs", "unredacted")
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
@@ -1187,7 +1186,7 @@ func saveDiskUsageToLogsDir(ctx context.Context, c cluster.Cluster) error {
 	}
 
 	// Don't hang forever.
-	return contextutil.RunWithTimeout(ctx, "disk usage", 20*time.Second, func(ctx context.Context) error {
+	return timeutil.RunWithTimeout(ctx, "disk usage", 20*time.Second, func(ctx context.Context) error {
 		return c.RunE(ctx, c.All(),
 			"du -c /mnt/data1 --exclude lost+found >> logs/diskusage.txt")
 	})
@@ -1220,7 +1219,7 @@ func (c *clusterImpl) CopyRoachprodState(ctx context.Context) error {
 // `COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob ./cockroach start-single-node --insecure --store=$(mktemp -d)`
 func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger) error {
 	l.Printf("fetching timeseries data\n")
-	return contextutil.RunWithTimeout(ctx, "fetch tsdata", 5*time.Minute, func(ctx context.Context) error {
+	return timeutil.RunWithTimeout(ctx, "fetch tsdata", 5*time.Minute, func(ctx context.Context) error {
 		node := 1
 		for ; node <= c.spec.NodeCount; node++ {
 			db, err := c.ConnE(ctx, l, node)
@@ -1302,7 +1301,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 	c.status("fetching debug zip")
 
 	// Don't hang forever if we can't fetch the debug zip.
-	return contextutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
+	return timeutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
 		const zipName = "debug.zip"
 		path := filepath.Join(c.t.ArtifactsDir(), zipName)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -1410,7 +1409,7 @@ func (c *clusterImpl) HealthStatus(
 
 	results := make([]*HealthStatusResult, c.spec.NodeCount)
 
-	_ = contextutil.RunWithTimeout(ctx, "health status", 15*time.Second, func(ctx context.Context) error {
+	_ = timeutil.RunWithTimeout(ctx, "health status", 15*time.Second, func(ctx context.Context) error {
 		var wg sync.WaitGroup
 		wg.Add(c.spec.NodeCount)
 		for i := 1; i <= c.spec.NodeCount; i++ {
@@ -1430,7 +1429,7 @@ func (c *clusterImpl) HealthStatus(
 // the crdb_internal.invalid_objects virtual table.
 func (c *clusterImpl) FailOnInvalidDescriptors(ctx context.Context, db *gosql.DB, t *testImpl) {
 	t.L().Printf("checking for invalid descriptors")
-	if err := contextutil.RunWithTimeout(
+	if err := timeutil.RunWithTimeout(
 		ctx, "invalid descriptors check", 1*time.Minute,
 		func(ctx context.Context) error {
 			return roachtestutil.CheckInvalidDescriptors(ctx, db)
@@ -1445,7 +1444,7 @@ func (c *clusterImpl) FailOnInvalidDescriptors(ctx context.Context, db *gosql.DB
 // replicas are inconsistent with each other.
 func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, db *gosql.DB, t *testImpl) {
 	t.L().Printf("checking for replica divergence")
-	if err := contextutil.RunWithTimeout(
+	if err := timeutil.RunWithTimeout(
 		ctx, "consistency check", 5*time.Minute,
 		func(ctx context.Context) error {
 			return roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
@@ -1468,7 +1467,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, l *logger.Logger) error {
 	c.status("fetching dmesg")
 
 	// Don't hang forever.
-	return contextutil.RunWithTimeout(ctx, "dmesg", 20*time.Second, func(ctx context.Context) error {
+	return timeutil.RunWithTimeout(ctx, "dmesg", 20*time.Second, func(ctx context.Context) error {
 		const name = "dmesg.txt"
 		path := filepath.Join(c.t.ArtifactsDir(), name)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -1519,7 +1518,7 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, l *logger.Logger) err
 	c.status("fetching journalctl")
 
 	// Don't hang forever.
-	return contextutil.RunWithTimeout(ctx, "journalctl", 20*time.Second, func(ctx context.Context) error {
+	return timeutil.RunWithTimeout(ctx, "journalctl", 20*time.Second, func(ctx context.Context) error {
 		const name = "journalctl.txt"
 		path := filepath.Join(c.t.ArtifactsDir(), name)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -1579,7 +1578,7 @@ func (c *clusterImpl) FetchCores(ctx context.Context, l *logger.Logger) error {
 
 	// Don't hang forever. The core files can be large, so we give a generous
 	// timeout.
-	return contextutil.RunWithTimeout(ctx, "cores", 60*time.Second, func(ctx context.Context) error {
+	return timeutil.RunWithTimeout(ctx, "cores", 60*time.Second, func(ctx context.Context) error {
 		path := filepath.Join(c.t.ArtifactsDir(), "cores")
 		return errors.Wrap(c.Get(ctx, c.l, "/mnt/data1/cores" /* src */, path /* dest */), "cluster.FetchCores")
 	})
