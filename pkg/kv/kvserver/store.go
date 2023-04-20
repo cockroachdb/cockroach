@@ -1416,7 +1416,7 @@ func NewStore(
 	if cfg.RPCContext != nil && cfg.RPCContext.TenantRPCAuthorizer != nil {
 		authorizer = cfg.RPCContext.TenantRPCAuthorizer
 	} else {
-		authorizer = tenantcapabilitiesauthorizer.NewNoopAuthorizer()
+		authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
 	}
 
 	s.tenantRateLimiters = tenantrate.NewLimiterFactory(&cfg.Settings.SV, &cfg.TestingKnobs.TenantRateKnobs, authorizer)
