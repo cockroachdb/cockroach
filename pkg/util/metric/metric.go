@@ -495,6 +495,8 @@ func (mwh *ManualWindowHistogram) GetType() *prometheusgo.MetricType {
 
 // ToPrometheusMetric returns a filled-in prometheus metric of the right type.
 func (mwh *ManualWindowHistogram) ToPrometheusMetric() *prometheusgo.Metric {
+	mwh.RLock()
+	defer mwh.RUnlock()
 	m := &prometheusgo.Metric{}
 	if err := mwh.cum.Write(m); err != nil {
 		panic(err)
