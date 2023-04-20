@@ -109,6 +109,13 @@ func _CHECK_COL_BODY(
 	// {{end}}
 	for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 		// {{/*
+		//     If the tuple is already marked as different, there is no point in
+		//     checking it further.
+		// */}}
+		if ht.ProbeScratch.differs[toCheck] {
+			continue
+		}
+		// {{/*
 		//     The build table tuple (identified by ToCheckID value) is being
 		//     compared to the corresponding probing tuple (with the ordinal
 		//     'toCheck') to determine if it is an equality match.
@@ -212,16 +219,12 @@ func _CHECK_COL_BODY(
 		// {{/*
 		//     Now both values are not NULL, so we have to perform actual
 		//     comparison.
-		//     TODO(yuzefovich): depending on the type, it might be faster
-		//     to check whether differs[toCheck] is already true. My guess
-		//     is that for simple types like int64 introducing a conditional
-		//     will be slower.
 		// */}}
 		probeVal := probeKeys.Get(probeIdx)
 		buildVal := buildKeys.Get(buildIdx)
 		var unique bool
 		_ASSIGN_NE(unique, probeVal, buildVal, _, probeKeys, buildKeys)
-		ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+		ht.ProbeScratch.differs[toCheck] = unique
 	}
 	// {{end}}
 	// {{/*
