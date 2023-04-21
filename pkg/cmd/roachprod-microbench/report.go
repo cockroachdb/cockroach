@@ -90,10 +90,10 @@ func (report *Report) closeReports() {
 	}
 }
 
-func (report *Report) writeBenchmarkErrorLogs(response cluster.RemoteResponse, index int) error {
+func (report *Report) writeBenchmarkErrorLogs(response cluster.RemoteResponse, tag string) error {
 	benchmarkResponse := response.Metadata.(benchmarkIndexed)
-	stdoutLogName := fmt.Sprintf("%s-%d-stdout.log", benchmarkResponse.name, index)
-	stderrLogName := fmt.Sprintf("%s-%d-stderr.log", benchmarkResponse.name, index)
+	stdoutLogName := fmt.Sprintf("%s-%s-stdout.log", benchmarkResponse.name, tag)
+	stderrLogName := fmt.Sprintf("%s-%s-stderr.log", benchmarkResponse.name, tag)
 	l.Printf("Writing error logs for benchmark at %s, %s\n", stdoutLogName, stderrLogName)
 
 	if err := os.WriteFile(filepath.Join(report.path, stdoutLogName), []byte(response.Stdout), 0644); err != nil {

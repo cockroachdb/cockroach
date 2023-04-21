@@ -37,6 +37,12 @@ type benchmarkIndexed struct {
 	index int
 }
 
+type benchmarkExtractionResult struct {
+	results [][]string
+	errors  bool
+	skipped bool
+}
+
 // prepareCluster prepares the cluster for executing microbenchmarks. It copies
 // the binaries to the remote cluster and extracts it. It also copies the lib
 // directory to the remote cluster. The number of nodes in the cluster is
@@ -130,7 +136,9 @@ func listBenchmarks(
 	errorCount := 0
 	benchmarkCounts := make(map[benchmark]int)
 	cluster.ExecuteRemoteCommands(log, *flagCluster, commands, numNodes, true, func(response cluster.RemoteResponse) {
-		fmt.Print(".")
+		if !*flagQuiet {
+			fmt.Print(".")
+		}
 		if response.Err == nil {
 			pkg := response.Metadata.(string)
 		outer:
@@ -140,7 +148,9 @@ func listBenchmarks(
 					continue
 				}
 				if !isValidBenchmarkName(benchmarkName) {
-					fmt.Println()
+					if !*flagQuiet {
+						fmt.Println()
+					}
 					l.Printf("Ignoring invalid benchmark name: %s", benchmarkName)
 					continue
 				}
@@ -154,13 +164,17 @@ func listBenchmarks(
 				benchmarkCounts[benchmarkEntry]++
 			}
 		} else {
-			fmt.Println()
+			if !*flagQuiet {
+				fmt.Println()
+			}
 			l.Errorf("Remote command = {%s}, error = {%v}, stderr output = {%s}",
 				strings.Join(response.Args, " "), response.Err, response.Stderr)
 			errorCount++
 		}
 	})
-	fmt.Println()
+	if !*flagQuiet {
+		fmt.Println()
+	}
 
 	if errorCount > 0 {
 		return nil, nil, errors.New("Failed to list benchmarks")
@@ -241,7 +255,7 @@ func executeBenchmarks(binaries, packages []string) error {
 	// Generate commands for running benchmarks.
 	commands := make([][]cluster.RemoteCommand, 0)
 	for _, bench := range benchmarks {
-		runCommand := fmt.Sprintf("./run.sh %s -test.benchmem -test.bench=^%s$ -test.run=^$",
+		runCommand := fmt.Sprintf("./run.sh %s -test.benchmem -test.bench=^%s$ -test.run=^$ -test.v",
 			strings.Join(testArgs, " "), bench.name)
 		if *flagTimeout != "" {
 			runCommand = fmt.Sprintf("timeout %s %s", *flagTimeout, runCommand)
@@ -277,22 +291,32 @@ func executeBenchmarks(binaries, packages []string) error {
 	errorCount := 0
 	logIndex := 0
 	missingBenchmarks := make(map[benchmark]int, 0)
+	failedBenchmarks := make(map[benchmark]int, 0)
+	skippedBenchmarks := make(map[benchmark]int, 0)
 	l.Printf("Found %d benchmarks, distributing and running benchmarks for %d iteration(s) across cluster %s",
 		len(benchmarks), *flagIterations, *flagCluster)
 	cluster.ExecuteRemoteCommands(muteLogger, *flagCluster, commands, numNodes, !*flagLenient, func(response cluster.RemoteResponse) {
-		fmt.Print(".")
-		benchmarkResults, containsErrors := extractBenchmarkResults(response.Stdout)
+		if !*flagQuiet {
+			fmt.Print(".")
+		}
+		extractResults := extractBenchmarkResults(response.Stdout)
 		benchmarkResponse := response.Metadata.(benchmarkIndexed)
 		report := reporters[benchmarkResponse.index]
-		for _, benchmarkResult := range benchmarkResults {
+		for _, benchmarkResult := range extractResults.results {
 			if _, writeErr := report.benchmarkOutput[benchmarkResponse.pkg].WriteString(
 				fmt.Sprintf("%s\n", strings.Join(benchmarkResult, " "))); writeErr != nil {
 				l.Errorf("Failed to write benchmark result to file - %v", writeErr)
 			}
 		}
-		if containsErrors || response.Err != nil {
-			fmt.Println()
-			err = report.writeBenchmarkErrorLogs(response, logIndex)
+		if extractResults.errors || response.Err != nil {
+			if !*flagQuiet {
+				fmt.Println()
+			}
+			tag := fmt.Sprintf("%d", logIndex)
+			if response.ExitStatus == 124 {
+				tag = fmt.Sprintf("%d-timeout", logIndex)
+			}
+			err = report.writeBenchmarkErrorLogs(response, tag)
 			if err != nil {
 				l.Errorf("Failed to write error logs - %v", err)
 			}
@@ -304,17 +328,34 @@ func executeBenchmarks(binaries, packages []string) error {
 				response.Duration.Milliseconds())); writeErr != nil {
 			l.Errorf("Failed to write analytics to file - %v", writeErr)
 		}
-		if len(benchmarkResults) == 0 {
-			missingBenchmarks[benchmarkResponse.benchmark]++
+
+		// If we didn't find any results, increment the appropriate counter.
+		if len(extractResults.results) == 0 {
+			switch {
+			case extractResults.errors:
+				failedBenchmarks[benchmarkResponse.benchmark]++
+			case extractResults.skipped:
+				skippedBenchmarks[benchmarkResponse.benchmark]++
+			default:
+				missingBenchmarks[benchmarkResponse.benchmark]++
+			}
 		}
 	})
 
-	fmt.Println()
-	l.Printf("Completed benchmarks, results located at %s for time %s", workingDir, timestamp.Format(timeFormat))
-	if len(missingBenchmarks) > 0 {
-		l.Errorf("Failed to find results for %d benchmarks", len(missingBenchmarks))
-		l.Errorf("Missing benchmarks %v", missingBenchmarks)
+	if !*flagQuiet {
+		fmt.Println()
 	}
+	for res, count := range failedBenchmarks {
+		l.Errorf("Failed benchmark: %s/%s in %d iterations", res.pkg, res.name, count)
+	}
+	for res, count := range skippedBenchmarks {
+		l.Errorf("Skipped benchmark: %s/%s in %d iterations", res.pkg, res.name, count)
+	}
+	for res, count := range missingBenchmarks {
+		l.Errorf("Missing benchmark: %s/%s in %d iterations", res.pkg, res.name, count)
+	}
+
+	l.Printf("Completed benchmarks, results located at %s for time %s", workingDir, timestamp.Format(timeFormat))
 	if errorCount != 0 {
 		if *flagLenient {
 			l.Printf("Ignoring errors in benchmark results (lenient flag was set)")
@@ -350,12 +391,12 @@ func getRegexExclusionPairs() [][]*regexp.Regexp {
 }
 
 // extractBenchmarkResults extracts the microbenchmark results generated by a
-// test binary and reports if any failures were found in the output. This method
-// makes specific assumptions regarding the format of the output, and attempts
-// to ignore any spurious output that the test binary may have logged. The
-// returned list of string arrays each represent a row of metrics as outputted
-// by the test binary.
-func extractBenchmarkResults(benchmarkOutput string) ([][]string, bool) {
+// test binary and reports if any failures or skips were found in the output.
+// This method makes specific assumptions regarding the format of the output,
+// and attempts to ignore any spurious output that the test binary may have
+// logged. The returned list of string arrays each represent a row of metrics as
+// outputted by the test binary.
+func extractBenchmarkResults(benchmarkOutput string) benchmarkExtractionResult {
 	keywords := map[string]struct{}{
 		"ns/op":     {},
 		"b/op":      {},
@@ -364,12 +405,16 @@ func extractBenchmarkResults(benchmarkOutput string) ([][]string, bool) {
 	results := make([][]string, 0)
 	buf := make([]string, 0)
 	containsErrors := false
+	skipped := false
 	var benchName string
 	for _, line := range strings.Split(benchmarkOutput, "\n") {
 		elems := strings.Fields(line)
 		for _, s := range elems {
 			if !containsErrors {
-				containsErrors = strings.Contains(s, "FAIL") || strings.Contains(s, "panic")
+				containsErrors = strings.Contains(s, "FAIL") || strings.Contains(s, "panic:")
+			}
+			if !skipped {
+				skipped = strings.Contains(s, "SKIP")
 			}
 			if strings.HasPrefix(s, "Benchmark") && len(s) > 9 {
 				benchName = s
@@ -390,5 +435,5 @@ func extractBenchmarkResults(benchmarkOutput string) ([][]string, bool) {
 			}
 		}
 	}
-	return results, containsErrors
+	return benchmarkExtractionResult{results, containsErrors, skipped}
 }
