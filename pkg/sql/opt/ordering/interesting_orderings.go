@@ -17,34 +17,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
-// DeriveSimplifiedInterestingOrderings calculates and returns the
-// Relational.Rule.SimplifiedInterestingOrderings property of a relational
-// operator.
-func DeriveSimplifiedInterestingOrderings(e memo.RelExpr) props.OrderingSet {
+// DeriveRestrictedInterestingOrderings calculates and returns the entry of the
+// Relational.Rule.RestrictedInterestingOrderings property of a relational
+// operator that corresponds to the given columns.
+func DeriveRestrictedInterestingOrderings(e memo.RelExpr, cols opt.ColSet) props.OrderingSet {
 	l := e.Relational()
 	fds := &l.FuncDeps
-	if l.IsAvailable(props.SimplifiedInterestingOrderings) {
-		return l.Rule.SimplifiedInterestingOrderings
+	// We follow the convention of checking if the property is available, even
+	// though it is not necessary because the property is a slice. The overhead
+	// of the check is basically zero.
+	if l.IsAvailable(props.RestrictedInterestingOrderings) {
+		for i := range l.Rule.RestrictedInterestingOrderings {
+			ord := &l.Rule.RestrictedInterestingOrderings[i]
+			if cols.Equals(ord.Cols) {
+				return ord.OrderingSet
+			}
+		}
 	}
-	l.SetAvailable(props.SimplifiedInterestingOrderings)
+	l.SetAvailable(props.RestrictedInterestingOrderings)
 
-	// Derive the interesting orderings and simplify them.
+	// Derive the interesting orderings and restrict them to the given columns.
 	orders := DeriveInterestingOrderings(e).Copy()
-	old := orders
-	orders = orders[:0]
-	for _, o := range old {
-		newOrd := o.Copy()
-		if o.CanSimplify(fds) {
-			newOrd.Simplify(fds)
-		}
-		if !newOrd.Any() {
-			// This function appends at most one element; it is ok to operate on
-			// the same slice.
-			orders.Add(&newOrd)
-		}
-	}
+	orders.RestrictToCols(cols, fds)
 
-	l.Rule.SimplifiedInterestingOrderings = orders
+	l.Rule.RestrictedInterestingOrderings = append(l.Rule.RestrictedInterestingOrderings,
+		props.RestrictedInterestingOrdering{
+			OrderingSet: orders,
+			Cols:        cols,
+		})
 	return orders
 }
 
