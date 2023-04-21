@@ -161,6 +161,17 @@ func (s *schemaChange) Ops(
 		return workload.QueryLoad{}, err
 	}
 	cfg := workload.NewMultiConnPoolCfgFromFlags(s.connFlags)
+	// We will need double the concurrency, since we need watch
+	// dog connections. There is a danger of the pool emptying on
+	// termination (since we will cancel schema changes).
+	cfg.MaxConnsPerPool *= 2
+	cfg.MaxTotalConnections *= 2
+	// Disallow connection lifetime jittering and allow long
+	// life times for this test. Schema changes can drag for
+	// a long time on this workload and we have our own health
+	// checks for progress.
+	cfg.MaxConnLifetime = time.Hour
+	cfg.MaxConnIdleTime = time.Hour
 	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -451,11 +462,14 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	if err != nil {
 		// Rollback in all cases to release the txn object and its conn pool. Wrap the original
 		// error with a rollback error if necessary.
-		if rbkErr := tx.Rollback(ctx); rbkErr != nil {
-			err = errors.Mark(
-				errors.Wrap(rbkErr, "***UNEXPECTED ERROR DURING ROLLBACK;"),
-				errRunInTxnFatalSentinel,
-			)
+		if !conn.Conn().IsClosed() {
+			if rbkErr := tx.Rollback(ctx); rbkErr != nil {
+				err = errors.Mark(
+					errors.Wrap(errors.WithSecondaryError(err,
+						rbkErr), "***UNEXPECTED ERROR DURING ROLLBACK;"),
+					errRunInTxnFatalSentinel,
+				)
+			}
 		}
 
 		w.logger.flushLogWithError(tx, err)
@@ -477,6 +491,11 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		// If the error not an instance of pgconn.PgError, then it is unexpected.
 		pgErr := new(pgconn.PgError)
 		if !errors.As(err, &pgErr) {
+			if errors.Is(err, io.ErrUnexpectedEOF) {
+				err = nil
+				w.logger.writeLog("WARNING: Connection failed at server")
+				return err
+			}
 			err = errors.Mark(
 				errors.Wrap(err, "***UNEXPECTED COMMIT ERROR; Received a non pg error"),
 				errRunInTxnFatalSentinel,
