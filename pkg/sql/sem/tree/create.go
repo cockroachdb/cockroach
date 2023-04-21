@@ -2147,7 +2147,7 @@ func (node *CreateExtension) Format(ctx *FmtCtx) {
 	// do not contain sensitive information and
 	// 2) we want to get telemetry on which extensions
 	// users attempt to load.
-	ctx.WriteString(node.Name)
+	lexbase.EncodeRestrictedSQLIdent(&ctx.Buffer, node.Name, ctx.flags.EncodeFlags())
 }
 
 // CreateExternalConnection represents a CREATE EXTERNAL CONNECTION statement.
