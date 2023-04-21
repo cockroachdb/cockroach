@@ -3181,6 +3181,8 @@ Note: the name pattern must contain ASCII letters already for capital letters to
 <tr><td><a name="crdb_internal.is_constraint_active"></a><code>crdb_internal.is_constraint_active(table_name: <a href="string.html">string</a>, constraint_name: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to determine if a given constraint is currently.
 active for the current transaction.</p>
 </span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.job_execution_details"></a><code>crdb_internal.job_execution_details(job_id: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Output a JSONB version of the specified job’s execution details. The execution details are collectedand persisted during the lifetime of the job and provide more observability into the job’s execution</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.lease_holder"></a><code>crdb_internal.lease_holder(key: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used to fetch the leaseholder corresponding to a request key</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.list_sql_keys_in_range"></a><code>crdb_internal.list_sql_keys_in_range(range_id: <a href="int.html">int</a>) &rarr; tuple{string AS key, string AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns all SQL K/V pairs within the requested range.</p>

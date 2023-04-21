@@ -1,11 +1,14 @@
 show_jobs_stmt ::=
 	'SHOW' 'AUTOMATIC' 'JOBS'
 	| 'SHOW' 'JOBS'
+	| 'SHOW' 'JOBS' 'WITH' show_job_options_list
 	| 'SHOW' 'CHANGEFEED' 'JOBS'
 	| 'SHOW' 'JOBS' select_stmt
+	| 'SHOW' 'JOBS' select_stmt 'WITH' show_job_options_list
 	| 'SHOW' 'JOBS' 'WHEN' 'COMPLETE' select_stmt
 	| 'SHOW' 'JOBS' for_schedules_clause
 	| 'SHOW' 'CHANGEFEED' 'JOBS' select_stmt
 	| 'SHOW' 'JOB' job_id
+	| 'SHOW' 'JOB' job_id 'WITH' show_job_options_list
 	| 'SHOW' 'CHANGEFEED' 'JOB' job_id
 	| 'SHOW' 'JOB' 'WHEN' 'COMPLETE' job_id
