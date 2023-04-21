@@ -211,6 +211,7 @@ func (r *databaseRegionChangeFinalizer) updateDatabaseZoneConfig(
 		txn,
 		r.localPlanner.ExecCfg(),
 		r.localPlanner.Descriptors(),
+		true, /* validateLocalities */
 	)
 }
 

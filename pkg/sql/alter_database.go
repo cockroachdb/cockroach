@@ -790,6 +790,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
+		true, /* validateLocalities */
 	); err != nil {
 		return err
 	}
@@ -1165,6 +1166,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
+		true, /* validateLocalities */
 	); err != nil {
 		return err
 	}
@@ -1295,6 +1297,7 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
+		true, /* validateLocalities */
 	); err != nil {
 		return err
 	}
@@ -1839,6 +1842,7 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
+		true, /* validateLocalities */
 	); err != nil {
 		return err
 	}
@@ -1946,6 +1950,7 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
+		true, /* validateLocalities */
 	); err != nil {
 		return err
 	}
@@ -2219,7 +2224,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 
 	// Validate if the zone config extension is compatible with the database.
 	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(
-		params.ctx, params.ExecCfg(), updatedRegionConfig,
+		params.ctx, params.ExecCfg(), updatedRegionConfig, true, /* validateLocalities */
 	)
 	if err != nil {
 		return err

@@ -76,16 +76,16 @@ message StreamIngestionDetails {
   // StreamAddress locates the stream. It enables the client to find the
   // addresses of the stream's partitions.
   string stream_address = 1;
-  
+
   uint64 stream_id = 4 [(gogoproto.customname) = "StreamID"];
-  
+
   // Span is the keyspan into which this job will ingest KVs.
   //
   // The stream should emit all changes for a given span, and no changes outside
   // a span. Note that KVs received from the stream may need to be re-keyed into
   // this span.
   roachpb.Span span = 2 [(gogoproto.nullable) = false];
-  
+
   reserved 5;
   roachpb.TenantID tenant_id = 6 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
 
@@ -267,7 +267,7 @@ message BackupProgress {
 }
 
 // DescriptorRewrite specifies a remapping from one descriptor ID to another for
-// use in rewritting descriptors themselves or things that reference them such 
+// use in rewritting descriptors themselves or things that reference them such
 // as is done during RESTORE or IMPORT.
 message DescriptorRewrite {
   uint32 id = 1 [
@@ -390,7 +390,18 @@ message RestoreDetails {
 
   bool VerifyData = 26;
 
-  // NEXT ID: 28.
+
+  // ProtectedTimestampRecord is the ID of the protected timestamp record
+  // corresponding to this job.
+  bytes protected_timestamp_record = 28 [
+    (gogoproto.customname) = "ProtectedTimestampRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  // Disables loacality checking for zone configs.
+  bool SkipLocalitiesCheck = 29;
+
+  // NEXT ID: 30.
 }
 
 
