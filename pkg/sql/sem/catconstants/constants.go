@@ -163,6 +163,7 @@ const (
 	CrdbInternalSchemaChangesTableID
 	CrdbInternalSessionTraceTableID
 	CrdbInternalSessionVariablesTableID
+	CrdbInternalStmtActivityTableID
 	CrdbInternalStmtStatsTableID
 	CrdbInternalStmtStatsPersistedTableID
 	CrdbInternalStmtStatsPersistedV22_2TableID
@@ -172,6 +173,7 @@ const (
 	CrdbInternalTablesTableID
 	CrdbInternalTablesTableLastStatsID
 	CrdbInternalTransactionStatsTableID
+	CrdbInternalTxnActivityTableID
 	CrdbInternalTxnStatsTableID
 	CrdbInternalTxnStatsPersistedTableID
 	CrdbInternalTxnStatsPersistedV22_2TableID
