@@ -706,6 +706,14 @@ func (expr *ColumnNameRef) Walk(_ Visitor) Expr {
 	return expr
 }
 
+func (expr *TableIDRef) Walk(_ Visitor) Expr {
+	return expr
+}
+
+func (expr *TableName) Walk(_ Visitor) Expr {
+	return expr
+}
+
 // Walk implements the Expr interface.
 func (expr DefaultVal) Walk(_ Visitor) Expr { return expr }
 
