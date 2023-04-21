@@ -701,7 +701,7 @@ upsert bc
 query T
 EXPLAIN (OPT, MEMO, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
 ----
-memo (optimized, ~32KB, required=[presentation: info:19] [distribution: test])
+memo (optimized, ~33KB, required=[presentation: info:19] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:19] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -977,7 +977,7 @@ upsert d
 query T
 EXPLAIN (OPT, MEMO, REDACT) UPSERT INTO d VALUES (7.7)
 ----
-memo (optimized, ~5KB, required=[presentation: info:6] [distribution: test])
+memo (optimized, ~6KB, required=[presentation: info:6] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:6] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1367,7 +1367,7 @@ update e
 query T
 EXPLAIN (OPT, MEMO, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
 ----
-memo (optimized, ~15KB, required=[presentation: info:13] [distribution: test])
+memo (optimized, ~16KB, required=[presentation: info:13] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:13] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1545,7 +1545,7 @@ delete f
 query T
 EXPLAIN (OPT, MEMO, REDACT) DELETE FROM f WHERE f = 8.5
 ----
-memo (optimized, ~15KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~16KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1973,7 +1973,7 @@ select
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT a FROM a WHERE a % 8 > 2
 ----
-memo (optimized, ~6KB, required=[presentation: info:5] [distribution: test])
+memo (optimized, ~7KB, required=[presentation: info:5] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1] [distribution: test])
  │    └── [presentation: info:5] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1] [distribution: test]" [presentation: a:1] [distribution: test])
@@ -2440,7 +2440,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 ----
-memo (optimized, ~25KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~26KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: b:1,c:2,f:5] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: b:1,c:2,f:5] [distribution: test]" [presentation: b:1,c:2,f:5] [distribution: test])
@@ -2825,7 +2825,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
 ----
-memo (optimized, ~31KB, required=[presentation: info:12] [distribution: test])
+memo (optimized, ~32KB, required=[presentation: info:12] [distribution: test])
  ├── G1: (explain G2 [presentation: f:1,g:11] [distribution: test])
  │    └── [presentation: info:12] [distribution: test]
  │         ├── best: (explain G2="[presentation: f:1,g:11] [distribution: test]" [presentation: f:1,g:11] [distribution: test])
@@ -3260,7 +3260,7 @@ select
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
 ----
-memo (optimized, ~6KB, required=[presentation: info:5] [distribution: test])
+memo (optimized, ~7KB, required=[presentation: info:5] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1] [distribution: test])
  │    └── [presentation: info:5] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1] [distribution: test]" [presentation: a:1] [distribution: test])
