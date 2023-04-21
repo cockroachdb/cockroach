@@ -623,6 +623,7 @@ regions                                 NULL
 schema_changes                          NULL
 session_trace                           NULL
 session_variables                       NULL
+statement_activity                      NULL
 statement_statistics                    NULL
 statement_statistics_persisted          NULL
 statement_statistics_persisted_v22_2    NULL
@@ -634,6 +635,7 @@ table_row_statistics                    NULL
 table_spans                             NULL
 tables                                  NULL
 tenant_usage_details                    NULL
+transaction_activity                    NULL
 transaction_contention_events           NULL
 transaction_statistics                  NULL
 transaction_statistics_persisted        NULL
