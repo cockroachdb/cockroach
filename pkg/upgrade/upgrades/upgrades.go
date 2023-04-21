@@ -310,6 +310,12 @@ var upgrades = []upgradebase.Upgrade{
 		toCV(clusterversion.V23_1_TenantIDSequence),
 		tenantIDSequenceForSystemTenant,
 	),
+	upgrade.NewPermanentTenantUpgrade(
+		"create sql activity updater job",
+		toCV(clusterversion.V23_1CreateSystemActivityUpdateJob),
+		createActivityUpdateJobMigration,
+		"create statement_activity and transaction_activity job",
+	),
 }
 
 func init() {
