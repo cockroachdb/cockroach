@@ -769,20 +769,23 @@ COCKROACHSHORT := ./cockroachshort$(SUFFIX)
 COCKROACHSQL   := ./cockroach-sql$(SUFFIX)
 
 LOG_TARGETS = \
-	pkg/util/log/severity/severity_generated.go \
-	pkg/util/log/channel/channel_generated.go \
-	pkg/util/log/eventpb/eventlog_channels_generated.go \
-	pkg/util/log/eventpb/json_encode_generated.go \
-	pkg/util/log/log_channels_generated.go
+        pkg/util/log/severity/severity_generated.go \
+        pkg/util/log/channel/channel_generated.go \
+        pkg/util/log/eventpb/eventlog_channels_generated.go \
+        pkg/util/log/eventpb/json_encode_generated.go \
+        pkg/util/log/log_channels_generated.go
 
 SQLPARSER_TARGETS = \
-	pkg/sql/parser/sql.go \
-	pkg/sql/parser/helpmap_test.go \
-	pkg/sql/parser/help_messages.go \
-	pkg/sql/lexbase/tokens.go \
-	pkg/sql/lexbase/keywords.go \
-	pkg/sql/lexbase/reserved_keywords.go \
-	pkg/sql/scanner/token_names_test.go \
+        pkg/sql/parser/sql.go \
+        pkg/sql/parser/helpmap_test.go \
+        pkg/sql/parser/help_messages.go \
+        pkg/sql/lexbase/tokens.go \
+        pkg/sql/lexbase/keywords.go \
+        pkg/sql/lexbase/reserved_keywords.go \
+        pkg/sql/plpgsql/parser/plpgsql.go \
+        pkg/sql/plpgsql/parser/lexbase/tokens.go \
+        pkg/sql/plpgsql/parser/lexbase/keywords.go \
+        pkg/sql/scanner/token_names_test.go
 
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources
 $(PROTOBUF_TARGETS): fake-protobufs
@@ -801,10 +804,7 @@ DOCGEN_TARGETS := \
 
 GENERATED_TARGETS = \
   pkg/roachprod/vm/aws/embedded.go \
-  pkg/security/securitytest/embedded.go \
-  pkg/sql/plpgsql/parser/plpgsql.go \
-  pkg/sql/plpgsql/parser/lexbase/tokens.go \
- 	pkg/sql/plpgsql/parser/lexbase/keywords.go \
+  pkg/security/securitytest/embedded.go
 
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
