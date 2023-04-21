@@ -1048,85 +1048,113 @@ func TestHashJoiner(t *testing.T) {
 func BenchmarkHashJoiner(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
-	nCols := 4
-	sourceTypes := make([]*types.T, nCols)
+	rng := randutil.NewTestRandWithSeed(42)
+	const nCols = 4
+	// Left input is usually larger, so we will make it twice as large as the
+	// right input.
+	const leftRowsMultiple = 2
 
-	for colIdx := 0; colIdx < nCols; colIdx++ {
-		sourceTypes[colIdx] = types.Int
-	}
-
-	batch := testAllocator.NewMemBatchWithMaxCapacity(sourceTypes)
-
-	for colIdx := 0; colIdx < nCols; colIdx++ {
-		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < coldata.BatchSize(); i++ {
-			col[i] = int64(i)
+	getCols := func(typ *types.T, length int, distinct bool, nullProb float64) []coldata.Vec {
+		var cols []coldata.Vec
+		dupCount := 1
+		if distinct {
+			// When the source contains non-distinct tuples, then each tuple
+			// will have 15 duplicates.
+			dupCount = 16
 		}
-	}
-
-	batch.SetLength(coldata.BatchSize())
-
-	for _, hasNulls := range []bool{false, true} {
-		b.Run(fmt.Sprintf("nulls=%v", hasNulls), func(b *testing.B) {
-
-			if hasNulls {
-				for colIdx := 0; colIdx < nCols; colIdx++ {
-					vec := batch.ColVec(colIdx)
-					vec.Nulls().SetNull(0)
-				}
-			} else {
-				for colIdx := 0; colIdx < nCols; colIdx++ {
-					vec := batch.ColVec(colIdx)
-					vec.Nulls().UnsetNulls()
-				}
-			}
-
-			for _, fullOuter := range []bool{false, true} {
-				b.Run(fmt.Sprintf("fullOuter=%v", fullOuter), func(b *testing.B) {
-					for _, rightDistinct := range []bool{true, false} {
-						b.Run(fmt.Sprintf("distinct=%v", rightDistinct), func(b *testing.B) {
-							for _, nBatches := range []int{1 << 1, 1 << 8, 1 << 12} {
-								b.Run(fmt.Sprintf("rows=%d", nBatches*coldata.BatchSize()), func(b *testing.B) {
-									// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
-									// batch) * nCols (number of columns / row) * 2 (number of sources).
-									b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
-									b.ResetTimer()
-									for i := 0; i < b.N; i++ {
-										leftSource := colexecop.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
-										rightSource := colexectestutils.NewFiniteBatchSource(testAllocator, batch, sourceTypes, nBatches)
-										joinType := descpb.InnerJoin
-										if fullOuter {
-											joinType = descpb.FullOuterJoin
-										}
-										hjSpec := colexecjoin.MakeHashJoinerSpec(
-											joinType,
-											[]uint32{0, 1}, []uint32{2, 3},
-											sourceTypes, sourceTypes,
-											rightDistinct,
-										)
-										hj := colexecjoin.NewHashJoiner(colexecjoin.NewHashJoinerArgs{
-											BuildSideAllocator:       testAllocator,
-											OutputUnlimitedAllocator: testAllocator,
-											Spec:                     hjSpec,
-											LeftSource:               leftSource,
-											RightSource:              rightSource,
-											InitialNumBuckets:        colexecjoin.HashJoinerInitialNumBuckets,
-										})
-										hj.Init(ctx)
-
-										for i := 0; i < nBatches; i++ {
-											// Technically, the non-distinct hash join will produce much more
-											// than nBatches of output.
-											hj.Next()
-										}
-									}
-								})
-							}
-						})
-					}
-				})
+		if typ == types.Int {
+			cols = newIntColumns(nCols, length, dupCount)
+		} else {
+			cols = newBytesColumns(nCols, length, dupCount)
+		}
+		// The input was constructed in the ordered fashion, so let's shuffle
+		// it. Note that it matters only when dupCount is greater than 1.
+		rng.Shuffle(length, func(i, j int) {
+			for _, col := range cols {
+				l, r := coldata.GetValueAt(col, i), coldata.GetValueAt(col, j)
+				coldata.SetValueAt(col, l, j)
+				coldata.SetValueAt(col, r, i)
 			}
 		})
+		if nullProb != 0 {
+			for _, col := range cols {
+				for i := 0; i < length; i++ {
+					if rng.Float64() < nullProb {
+						col.Nulls().SetNull(i)
+					}
+				}
+			}
+		}
+		return cols
+	}
+	getSources := func(
+		sourceTypes []*types.T, nullProb float64, leftDistinct, rightDistinct bool, nRightRows int,
+	) (
+		left, right colexecop.ResettableOperator,
+	) {
+		nLeftRows := leftRowsMultiple * nRightRows
+		leftCols := getCols(sourceTypes[0], nLeftRows, leftDistinct, nullProb)
+		rightCols := getCols(sourceTypes[0], nRightRows, rightDistinct, nullProb)
+		left = colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, leftCols, nLeftRows)
+		right = colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, rightCols, nRightRows)
+		return left, right
+	}
+
+	for _, typ := range []*types.T{types.Int, types.Bytes} {
+		sourceTypes := make([]*types.T, nCols)
+		for colIdx := 0; colIdx < nCols; colIdx++ {
+			sourceTypes[colIdx] = typ
+		}
+		for _, hasNulls := range []bool{false, true} {
+			var nullProb float64
+			if hasNulls {
+				nullProb = 0.1
+			}
+			for _, leftDistinct := range []bool{false, true} {
+				for _, rightDistinct := range []bool{false, true} {
+					for _, nRightRows := range []int{1 << 11, 1 << 15} {
+						leftSource, rightSource := getSources(
+							sourceTypes, nullProb, leftDistinct, rightDistinct, nRightRows,
+						)
+						for _, nEqCols := range []int{1, 3} {
+							eqCols := []uint32{0, 1, 2}[:nEqCols]
+							hjSpec := colexecjoin.MakeHashJoinerSpec(
+								descpb.InnerJoin, eqCols, eqCols,
+								sourceTypes, sourceTypes, rightDistinct,
+							)
+							name := fmt.Sprintf(
+								"%s/nulls=%t/ldistinct=%t/rdistinct=%t/rrows=%d/eqcols=%d",
+								typ, hasNulls, leftDistinct, rightDistinct, nRightRows, nEqCols,
+							)
+							b.Run(name, func(b *testing.B) {
+								// Measure the throughput relative to the inputs.
+								nInputRows := (leftRowsMultiple + 1) * nRightRows
+								b.SetBytes(int64(nInputRows * nCols * 8))
+								b.ResetTimer()
+								for i := 0; i < b.N; i++ {
+									hj := colexecjoin.NewHashJoiner(colexecjoin.NewHashJoinerArgs{
+										BuildSideAllocator:       testAllocator,
+										OutputUnlimitedAllocator: testAllocator,
+										Spec:                     hjSpec,
+										LeftSource:               leftSource,
+										RightSource:              rightSource,
+										InitialNumBuckets:        colexecjoin.HashJoinerInitialNumBuckets,
+									})
+									hj.Init(ctx)
+
+									b.StartTimer()
+									for hj.Next().Length() != 0 {
+									}
+									b.StopTimer()
+									leftSource.Reset(ctx)
+									rightSource.Reset(ctx)
+								}
+							})
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
