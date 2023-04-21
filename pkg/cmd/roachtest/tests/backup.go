@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -38,11 +39,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -78,6 +80,8 @@ const (
 	rows15GiB  = rows30GiB / 2
 	rows5GiB   = rows100GiB / 20
 	rows3GiB   = rows30GiB / 10
+
+	initBankPayloadBytes = 2 << 20
 )
 
 func destinationName(c cluster.Cluster) string {
@@ -109,7 +113,7 @@ func runImportBankDataSplit(ctx context.Context, rows, ranges int, t test.Test, 
 	importArgs := []string{
 		"./workload", "fixtures", "import", "bank",
 		"--db=bank",
-		"--payload-bytes=10240",
+		fmt.Sprintf("--payload-bytes=%d", initBankPayloadBytes),
 		"--csv-server", "http://localhost:8081",
 		"--seed=1",
 		fmt.Sprintf("--ranges=%d", ranges),
@@ -896,211 +900,157 @@ func registerBackup(r registry.Registry) {
 		})
 	}
 
-	// backupTPCC continuously runs TPCC, takes a full backup after some time,
-	// and incremental after more time. It then restores the two backups and
+	// backupTPCC continuously runs TPCC and the bank workload. It then restores the two backups and
 	// verifies them with a fingerprint.
 	r.Add(registry.TestSpec{
 		Name:              `backupTPCC`,
 		Owner:             registry.OwnerDisasterRecovery,
-		Cluster:           r.MakeClusterSpec(3),
+		Cluster:           r.MakeClusterSpec(4),
 		Timeout:           1 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			rng, seed := randutil.NewTestRand()
+			t.L().Printf(`Seed chosen: %d`, seed)
+			roachNodes := c.Nodes(1, 2, 3)
+			workloadNode := c.Node(4)
+
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-			conn := c.Conn(ctx, t.L(), 1)
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 
-			duration := 5 * time.Minute
-			if c.IsLocal() {
-				duration = 5 * time.Second
-			}
-			warehouses := 10
-
+			//warehouses := 100
+			maxSleepAfterWorkloadBegins := 300 * time.Second
 			backupDir := "gs://cockroachdb-backup-testing/" + c.Name() + "?AUTH=implicit"
-			// Use inter-node file sharing on 20.1+.
-			if t.BuildVersion().AtLeast(version.MustParse(`v20.1.0-0`)) {
-				backupDir = "nodelocal://1/" + c.Name()
-			}
-			fullDir := backupDir + "/full"
-			incDir := backupDir + "/inc"
+			bankInitRows := 10
 
-			t.Status(`workload initialization`)
-			cmd := []string{fmt.Sprintf(
-				"./workload init tpcc --warehouses=%d {pgurl:1-%d}",
-				warehouses, c.Spec().NodeCount,
-			)}
-			if !t.BuildVersion().AtLeast(version.MustParse("v20.2.0")) {
-				cmd = append(cmd, "--deprecated-fk-indexes")
+			if c.IsLocal() {
+				//warehouses = 10
+				maxSleepAfterWorkloadBegins = 10 * time.Second
+				backupDir = "nodelocal://1/" + c.Name()
+				bankInitRows = 10
 			}
-			c.Run(ctx, c.Node(1), cmd...)
 
 			m := c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				_, err := conn.ExecContext(ctx, `
-					CREATE DATABASE restore_full;
-					CREATE DATABASE restore_inc;
-				`)
-				return err
-			})
-			m.Wait()
+			workloadCtx, workloadCancel := context.WithCancel(ctx)
+			runCancellableWorkload := func(cmd string) error {
+				err := c.RunE(workloadCtx, workloadNode, cmd)
+				if err != nil && workloadCtx.Err() == nil {
+					// We only expect a context cancelled error, once the backup completes.
+					return errors.Wrapf(err, "workload returned unexpected error")
+				}
+				return nil
+			}
+
+			/*t.Status(`tpcc init`)
+			c.Run(ctx, workloadNode, fmt.Sprintf(
+				"./workload init tpcc --warehouses=%d {pgurl%s}",
+				warehouses, roachNodes))
 
 			t.Status(`run tpcc`)
-			ctx, cancel := context.WithCancel(ctx)
-			defer cancel()
-
-			cmdDone := make(chan error)
-			go func() {
-				cmd := fmt.Sprintf(
-					"./workload run tpcc --warehouses=%d {pgurl:1-%d}",
-					warehouses, c.Spec().NodeCount,
-				)
-
-				cmdDone <- c.RunE(ctx, c.Node(1), cmd)
-			}()
-
-			select {
-			case <-time.After(duration):
-			case <-ctx.Done():
-				return
-			}
-
-			// Use a time slightly in the past to avoid "cannot specify timestamp in the future" errors.
-			tFull := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
-			m = c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
-				t.Status(`full backup`)
-				_, err := conn.ExecContext(ctx,
-					`BACKUP tpcc.* TO $1 AS OF SYSTEM TIME `+tFull,
-					fullDir,
-				)
-				return err
+				return runCancellableWorkload(fmt.Sprintf(
+					"./workload run tpcc --warehouses=%d --tolerate-errors {pgurl%s}",
+					warehouses, roachNodes))
+			})*/
+
+			t.L().Printf(`init bank`)
+			runImportBankDataSplit(ctx, bankInitRows, 0, t, c)
+			//c.Run(ctx, workloadNode, fmt.Sprintf(
+			//	"./workload init bank --rows %d --payload-bytes=%d {pgurl%s}",
+			//	bankInitRows, bankPayloadBytes, roachNodes))
+			t.L().Printf(`run bank`)
+			m.Go(func(ctx context.Context) error {
+				return runCancellableWorkload(fmt.Sprintf(
+					"./workload run bank --tolerate-errors {pgurl%s}",
+					roachNodes))
 			})
-			m.Wait()
 
-			t.Status(`continue tpcc`)
-			select {
-			case <-time.After(duration):
-			case <-ctx.Done():
-				return
-			}
+			workloadStart := timeutil.Now()
+			minWorkloadDuration := 10 * time.Minute
+			t.L().Printf("workload start: %s", workloadStart)
+			sleepyTime := time.Duration(rng.Intn(int(maxSleepAfterWorkloadBegins.Seconds())))*time.
+				Second + minWorkloadDuration
+			t.L().Printf("Letting the workload run for %0.2f seconds", sleepyTime.Seconds())
+			time.Sleep(sleepyTime)
 
-			tInc := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
-			m = c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`incremental backup`)
-				_, err := conn.ExecContext(ctx,
-					`BACKUP tpcc.* TO $1 AS OF SYSTEM TIME `+tInc+` INCREMENTAL FROM $2`,
-					incDir,
-					fullDir,
+			conn := c.Conn(ctx, t.L(), 1)
+
+			backupTime := pickRandomTimeBetween(workloadStart.Add(minWorkloadDuration), timeutil.Now(),
+				rng)
+			backupAOST := reformatToAOST(backupTime)
+			t.L().Printf("Backup AOST %s", backupTime)
+
+			_, err := conn.ExecContext(ctx,
+				fmt.Sprintf(`BACKUP INTO %q AS OF SYSTEM TIME '%s' WITH revision_history`,
+					backupDir, backupAOST))
+			require.NoError(t, err)
+			workloadCancel()
+
+			//restoreTime := pickRandomTimeBetween(workloadStart, backupTime, rng)
+			restoreAOST := backupAOST //reformatToAOST(restoreTime)
+			//t.L().Printf("Restore AOST %s", restoreTime)
+
+			// TODO(adityamaru): Pull the fingerprint logic into a utility method
+			// which can be shared by multiple roachtests.
+			fingerprint := func(db string, asof string) (string, error) {
+				var b strings.Builder
+
+				var tables []string
+				rows, err := conn.QueryContext(
+					ctx,
+					fmt.Sprintf("SELECT table_name FROM [SHOW TABLES FROM %s] ORDER BY table_name", db),
 				)
 				if err != nil {
-					return err
+					return "", err
 				}
-
-				// Backups are done, make sure workload is still running.
-				select {
-				case err := <-cmdDone:
-					// Workload exited before it should have.
-					return err
-				default:
-					return nil
+				defer rows.Close()
+				for rows.Next() {
+					var name string
+					if err := rows.Scan(&name); err != nil {
+						return "", err
+					}
+					tables = append(tables, name)
 				}
-			})
-			m.Wait()
-
-			m = c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`restore full`)
-				if _, err := conn.ExecContext(ctx,
-					`RESTORE tpcc.* FROM $1 WITH into_db='restore_full'`,
-					fullDir,
-				); err != nil {
-					return err
-				}
-
-				t.Status(`restore incremental`)
-				if _, err := conn.ExecContext(ctx,
-					`RESTORE tpcc.* FROM $1, $2 WITH into_db='restore_inc'`,
-					fullDir,
-					incDir,
-				); err != nil {
-					return err
-				}
-
-				t.Status(`fingerprint`)
-				// TODO(adityamaru): Pull the fingerprint logic into a utility method
-				// which can be shared by multiple roachtests.
-				fingerprint := func(db string, asof string) (string, error) {
-					var b strings.Builder
-
-					var tables []string
-					rows, err := conn.QueryContext(
-						ctx,
-						fmt.Sprintf("SELECT table_name FROM [SHOW TABLES FROM %s] ORDER BY table_name", db),
-					)
+				for _, table := range tables {
+					fmt.Fprintf(&b, "table %s\n", table)
+					query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, table)
+					if asof != "" {
+						query = fmt.Sprintf("SELECT * FROM [%s] AS OF SYSTEM TIME %s", query, asof)
+					}
+					rows, err = conn.QueryContext(ctx, query)
 					if err != nil {
 						return "", err
 					}
 					defer rows.Close()
 					for rows.Next() {
-						var name string
-						if err := rows.Scan(&name); err != nil {
+						var name, fp string
+						if err := rows.Scan(&name, &fp); err != nil {
 							return "", err
 						}
-						tables = append(tables, name)
+						fmt.Fprintf(&b, "%s: %s\n", name, fp)
 					}
+				}
+				return b.String(), rows.Err()
+			}
 
-					for _, table := range tables {
-						fmt.Fprintf(&b, "table %s\n", table)
-						query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, table)
-						if asof != "" {
-							query = fmt.Sprintf("SELECT * FROM [%s] AS OF SYSTEM TIME %s", query, asof)
-						}
-						rows, err = conn.QueryContext(ctx, query)
-						if err != nil {
-							return "", err
-						}
-						defer rows.Close()
-						for rows.Next() {
-							var name, fp string
-							if err := rows.Scan(&name, &fp); err != nil {
-								return "", err
-							}
-							fmt.Fprintf(&b, "%s: %s\n", name, fp)
-						}
-					}
+			restoreAndFingerprint := func(database, asOf string) {
+				t.L().Printf("restore and fingerprint %s", database)
+				restoredDatabase := "restore_" + database
+				_, err = conn.ExecContext(ctx,
+					fmt.Sprintf(`RESTORE DATABASE %s FROM LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH new_db_name = '%s'`,
+						database, backupDir, asOf, restoredDatabase))
+				require.NoError(t, err)
 
-					return b.String(), rows.Err()
-				}
-
-				tpccFull, err := fingerprint("tpcc", tFull)
-				if err != nil {
-					return err
-				}
-				tpccInc, err := fingerprint("tpcc", tInc)
-				if err != nil {
-					return err
-				}
-				restoreFull, err := fingerprint("restore_full", "")
-				if err != nil {
-					return err
-				}
-				restoreInc, err := fingerprint("restore_inc", "")
-				if err != nil {
-					return err
-				}
-
-				if tpccFull != restoreFull {
-					return errors.Errorf("got %s, expected %s", restoreFull, tpccFull)
-				}
-				if tpccInc != restoreInc {
-					return errors.Errorf("got %s, expected %s", restoreInc, tpccInc)
-				}
-
-				return nil
-			})
-			m.Wait()
+				backupFingerprint, err := fingerprint(database, asOf)
+				require.NoError(t, err)
+				restoreFingerprint, err := fingerprint(restoredDatabase, "")
+				require.NoError(t, err)
+				require.Equal(t, backupFingerprint, restoreFingerprint, "fingerprint mismatch")
+			}
+			//restoreAndFingerprint("tpcc", restoreAOST)
+			restoreAndFingerprint("bank", restoreAOST)
+			one := 2
+			require.Equal(t, 1, one)
 		},
 	})
 
@@ -1114,6 +1064,16 @@ func registerBackup(r registry.Registry) {
 			runBackupMVCCRangeTombstones(ctx, t, c)
 		},
 	})
+}
+
+func pickRandomTimeBetween(start, end time.Time, rng *rand.Rand) time.Time {
+	timeDifference := end.Sub(start)
+	randomSubset := time.Duration(int64(timeDifference.Seconds()*rng.Float64())) * time.Second
+	return start.Add(randomSubset)
+}
+
+func reformatToAOST(input time.Time) string {
+	return hlc.Timestamp{WallTime: input.UnixNano()}.AsOfSystemTime()
 }
 
 // runBackupMVCCRangeTombstones tests that backup and restore works in the
