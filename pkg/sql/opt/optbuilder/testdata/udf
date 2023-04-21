@@ -1047,37 +1047,23 @@ project
  ├── values
  │    └── tuple
  └── projections
-      └── case [as=strict_fn:5]
-           ├── true
-           ├── when
-           │    ├── or
-           │    │    ├── is
-           │    │    │    ├── false
-           │    │    │    └── null
-           │    │    └── or
-           │    │         ├── is
-           │    │         │    ├── const: 'foo'
-           │    │         │    └── null
-           │    │         └── is
-           │    │              ├── const: 1
-           │    │              └── null
-           │    └── null
-           └── udf: strict_fn
-                ├── params: i:1 t:2 b:3
-                ├── args
-                │    ├── const: 1
-                │    ├── const: 'foo'
-                │    └── false
-                └── body
-                     └── limit
-                          ├── columns: i:4
-                          ├── project
-                          │    ├── columns: i:4
-                          │    ├── values
-                          │    │    └── tuple
-                          │    └── projections
-                          │         └── variable: i:1 [as=i:4]
-                          └── const: 1
+      └── udf: strict_fn [as=strict_fn:5]
+           ├── strict
+           ├── params: i:1 t:2 b:3
+           ├── args
+           │    ├── const: 1
+           │    ├── const: 'foo'
+           │    └── false
+           └── body
+                └── limit
+                     ├── columns: i:4
+                     ├── project
+                     │    ├── columns: i:4
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── variable: i:1 [as=i:4]
+                     └── const: 1
 
 build format=show-scalars
 SELECT strict_fn(a, b::TEXT, false) FROM abc WHERE strict_fn(a+1+2, b::TEXT, false) = 10
@@ -1090,81 +1076,94 @@ project
  │    │    └── columns: a:1!null abc.b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
  │    └── filters
  │         └── eq
- │              ├── case
- │              │    ├── true
- │              │    ├── when
- │              │    │    ├── or
- │              │    │    │    ├── is
- │              │    │    │    │    ├── false
- │              │    │    │    │    └── null
- │              │    │    │    └── or
- │              │    │    │         ├── is
- │              │    │    │         │    ├── cast: STRING
- │              │    │    │         │    │    └── variable: abc.b:2
- │              │    │    │         │    └── null
- │              │    │    │         └── is
- │              │    │    │              ├── plus
- │              │    │    │              │    ├── plus
- │              │    │    │              │    │    ├── variable: a:1
- │              │    │    │              │    │    └── const: 1
- │              │    │    │              │    └── const: 2
- │              │    │    │              └── null
- │              │    │    └── null
- │              │    └── udf: strict_fn
- │              │         ├── params: i:6 t:7 b:8
- │              │         ├── args
- │              │         │    ├── plus
- │              │         │    │    ├── plus
- │              │         │    │    │    ├── variable: a:1
- │              │         │    │    │    └── const: 1
- │              │         │    │    └── const: 2
- │              │         │    ├── cast: STRING
- │              │         │    │    └── variable: abc.b:2
- │              │         │    └── false
- │              │         └── body
- │              │              └── limit
- │              │                   ├── columns: i:9
- │              │                   ├── project
- │              │                   │    ├── columns: i:9
- │              │                   │    ├── values
- │              │                   │    │    └── tuple
- │              │                   │    └── projections
- │              │                   │         └── variable: i:6 [as=i:9]
- │              │                   └── const: 1
+ │              ├── udf: strict_fn
+ │              │    ├── strict
+ │              │    ├── params: i:6 t:7 b:8
+ │              │    ├── args
+ │              │    │    ├── plus
+ │              │    │    │    ├── plus
+ │              │    │    │    │    ├── variable: a:1
+ │              │    │    │    │    └── const: 1
+ │              │    │    │    └── const: 2
+ │              │    │    ├── cast: STRING
+ │              │    │    │    └── variable: abc.b:2
+ │              │    │    └── false
+ │              │    └── body
+ │              │         └── limit
+ │              │              ├── columns: i:9
+ │              │              ├── project
+ │              │              │    ├── columns: i:9
+ │              │              │    ├── values
+ │              │              │    │    └── tuple
+ │              │              │    └── projections
+ │              │              │         └── variable: i:6 [as=i:9]
+ │              │              └── const: 1
  │              └── const: 10
  └── projections
-      └── case [as=strict_fn:14]
-           ├── true
-           ├── when
-           │    ├── or
-           │    │    ├── is
-           │    │    │    ├── false
-           │    │    │    └── null
-           │    │    └── or
-           │    │         ├── is
-           │    │         │    ├── cast: STRING
-           │    │         │    │    └── variable: abc.b:2
-           │    │         │    └── null
-           │    │         └── is
-           │    │              ├── variable: a:1
-           │    │              └── null
-           │    └── null
-           └── udf: strict_fn
-                ├── params: i:10 t:11 b:12
-                ├── args
-                │    ├── variable: a:1
-                │    ├── cast: STRING
-                │    │    └── variable: abc.b:2
-                │    └── false
-                └── body
-                     └── limit
-                          ├── columns: i:13
-                          ├── project
-                          │    ├── columns: i:13
-                          │    ├── values
-                          │    │    └── tuple
-                          │    └── projections
-                          │         └── variable: i:10 [as=i:13]
+      └── udf: strict_fn [as=strict_fn:14]
+           ├── strict
+           ├── params: i:10 t:11 b:12
+           ├── args
+           │    ├── variable: a:1
+           │    ├── cast: STRING
+           │    │    └── variable: abc.b:2
+           │    └── false
+           └── body
+                └── limit
+                     ├── columns: i:13
+                     ├── project
+                     │    ├── columns: i:13
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── variable: i:10 [as=i:13]
+                     └── const: 1
+
+exec-ddl
+CREATE TABLE t101516 (i INT)
+----
+
+exec-ddl
+CREATE FUNCTION f101516(x INT) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 1'
+----
+
+# Regression test for #101516. Subquery arguments should not be duplicated in a
+# CASE expression for STRICT UDFs. This can cause intersecting columns in the
+# left and right children of a join after hoisting the subquery. We use the norm
+# directive here so that the subqueries are hoisted.
+norm format=show-scalars
+SELECT f101516((SELECT t1.i FROM t101516 t2 JOIN t101516 t3 ON t2.i = t3.i)) FROM t101516 t1
+----
+project
+ ├── columns: f101516:16
+ ├── scan t101516 [as=t1]
+ │    └── columns: t1.i:1
+ └── projections
+      └── udf: f101516 [as=f101516:16]
+           ├── strict
+           ├── params: x:14
+           ├── args
+           │    └── subquery
+           │         └── max1-row
+           │              ├── columns: i:13
+           │              └── project
+           │                   ├── columns: i:13
+           │                   ├── inner-join (hash)
+           │                   │    ├── columns: t2.i:5!null t3.i:9!null
+           │                   │    ├── scan t101516 [as=t2]
+           │                   │    │    └── columns: t2.i:5
+           │                   │    ├── scan t101516 [as=t3]
+           │                   │    │    └── columns: t3.i:9
+           │                   │    └── filters
+           │                   │         └── eq
+           │                   │              ├── variable: t2.i:5
+           │                   │              └── variable: t3.i:9
+           │                   └── projections
+           │                        └── variable: t1.i:1 [as=i:13]
+           └── body
+                └── values
+                     ├── columns: "?column?":15!null
+                     └── tuple
                           └── const: 1
 
 
