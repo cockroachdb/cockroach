@@ -71,10 +71,13 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(5, spec.Zones(zones)),
 		Timeout:         timeout,
 		RequiresLicense: true,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
+		PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+			if tc.Cluster.Cloud == spec.Local && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
+			return nil
+		},
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCMixedVersions(ctx, t, c, *t.BuildVersion())
 		},
 	})

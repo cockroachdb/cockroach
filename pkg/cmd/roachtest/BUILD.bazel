@@ -40,7 +40,6 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/log",
         "//pkg/util/quotapool",
-        "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -70,6 +69,7 @@ go_test(
     name = "roachtest_test",
     size = "small",
     srcs = [
+        "cluster_mocks_test.go",
         "cluster_test.go",
         "github_test.go",
         "main_test.go",
@@ -86,7 +86,9 @@ go_test(
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
         "//pkg/internal/team",
+        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/prometheus",
         "//pkg/roachprod/vm",
         "//pkg/testutils",
         "//pkg/util/quotapool",
@@ -98,6 +100,7 @@ go_test(
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_net//context",
     ],
 )
 

@@ -11,6 +11,7 @@
 package aws
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -37,7 +38,11 @@ import (
 const ProviderName = "aws"
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
-var providerInstance = &Provider{}
+var providerInstance = &Provider{
+	CLIProvider: vm.CLIProvider{
+		CLICommand: "aws",
+	},
+}
 
 // Init initializes the AWS provider and registers it into vm.Providers.
 //
@@ -58,6 +63,7 @@ func Init() error {
 
 	haveRequiredVersion := func() bool {
 		cmd := exec.Command("aws", "--version")
+		vm.MaybeLogCmd(config.Logger, cmd)
 		output, err := cmd.Output()
 		if err != nil {
 			return false
@@ -245,6 +251,8 @@ type Provider struct {
 	// IAMProfile designates the name of the instance profile to use for created
 	// EC2 instances if non-empty.
 	IAMProfile string
+
+	vm.CLIProvider
 }
 
 const (
@@ -466,6 +474,9 @@ func (p *Provider) Create(
 	if err := g.Wait(); err != nil {
 		return err
 	}
+	if config.DryRun {
+		return nil
+	}
 
 	return p.waitForIPs(l, names, regions, providerOpts)
 }
@@ -533,7 +544,7 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 			if len(data.TerminatingInstances) > 0 {
 				_ = data.TerminatingInstances[0].InstanceID // silence unused warning
 			}
-			return p.runJSONCommand(l, args, &data)
+			return p.RunJSONCommand(l, args, &data)
 		})
 	}
 	return g.Wait()
@@ -563,7 +574,8 @@ func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration)
 		args = append(args, list.ProviderIDs()...)
 
 		g.Go(func() error {
-			_, err := p.runCommand(l, args)
+			_, err := p.RunCommand(context.Background(), l, args)
+
 			return err
 		})
 	}
@@ -604,7 +616,8 @@ func (p *Provider) iamGetUser(l *logger.Logger) (string, error) {
 		}
 	}
 	args := []string{"iam", "get-user"}
-	err := p.runJSONCommand(l, args, &userInfo)
+	err := p.RunJSONCommand(l, args, &userInfo, true)
+
 	if err != nil {
 		return "", err
 	}
@@ -621,7 +634,8 @@ func (p *Provider) stsGetCallerIdentity(l *logger.Logger) (string, error) {
 		Arn string
 	}
 	args := []string{"sts", "get-caller-identity"}
-	err := p.runJSONCommand(l, args, &userInfo)
+	err := p.RunJSONCommand(l, args, &userInfo)
+
 	if err != nil {
 		return "", err
 	}
@@ -750,8 +764,8 @@ func (p *Provider) getVolumesForInstance(
 		"--region", region,
 		"--filters", "Name=attachment.instance-id,Values=" + instanceID,
 	}
+	err = p.RunJSONCommand(l, getVolumesArgs, &volumeOut)
 
-	err = p.runJSONCommand(l, getVolumesArgs, &volumeOut)
 	if err != nil {
 		return vols, err
 	}
@@ -814,7 +828,8 @@ func (p *Provider) listRegion(
 		"ec2", "describe-instances",
 		"--region", region,
 	}
-	err := p.runJSONCommand(l, args, &data)
+	err := p.RunJSONCommand(l, args, &data)
+
 	if err != nil {
 		return nil, err
 	}
@@ -906,6 +921,72 @@ func (p *Provider) listRegion(
 	}
 
 	return ret, nil
+}
+
+func (p *Provider) validateMachineType(l *logger.Logger, machineType string, region string,
+	ebsVolumes ebsVolumeList, useLocalSSD bool, useMultipleDisks bool) error {
+	args := []string{
+		"ec2", "describe-instance-types",
+		"--instance-types", machineType,
+		"--region", region,
+	}
+	var data struct {
+		InstanceTypes []struct {
+			InstanceStorageSupported bool `json:"InstanceStorageSupported"`
+			InstanceStorageInfo      struct {
+				TotalSizeInGB float32 `json:"TotalSizeInGB"`
+				Disks         []struct {
+					SizeInGB float32 `json:"SizeInGB"`
+					Count    float32 `json:"Count"`
+					Type     string  `json:"Type"`
+				}
+			}
+			EbsInfo struct {
+				EbsOptimizedInfo struct {
+					BaselineBandwidthInMbps  float32 `json:"BaselineBandwidthInMbps"`
+					BaselineThroughputInMBps float32 `json:"BaselineThroughputInMBps"`
+					BaselineIOPS             float32 `json:"BaselineIOPS"`
+					MaximumBandwidthInMbps   float32 `json:"MaximumBandwidthInMbps"`
+					MaximumThroughputInMBps  float32 `json:"MaximumThroughputInMBps"`
+					MaximumIOPS              float32 `json:"MaximumIOPS"`
+				}
+			}
+		}
+	}
+	//_ = data.InstanceTypes // silence unused warning
+	//if len(data.InstanceTypes) > 0 {
+	//	_ = data.InstanceTypes[0].InstanceStorageSupported // silence unused warning
+	//}
+
+	if err := p.RunJSONCommand(l, args, &data, true); err != nil {
+		return err
+	}
+
+	if len(data.InstanceTypes) == 0 {
+		return nil
+	}
+	if !data.InstanceTypes[0].InstanceStorageSupported {
+		return nil
+	}
+	// TODO: use verbose when volumes are assigned
+	strs := make([]string, len(ebsVolumes))
+	for i, v := range ebsVolumes {
+		strs[i] = fmt.Sprintf("%+v", v)
+	}
+	fmt.Printf("EBS volumes: %s\n", strings.Join(strs, ", "))
+
+	if len(ebsVolumes) >= 2 && !useMultipleDisks {
+		fmt.Printf("using local NVMes with multiple EBS volumes without --aws-use-multiple-disks\n")
+		//return errors.Newf("instance type %s supports multiple disks, but --aws-use-multiple-disks was not specified", len(ebsVolumes)-1)
+	}
+	if !useLocalSSD {
+		fmt.Printf("using local NVMes without --aws-use-local-ssd\n")
+	}
+
+	pretty, _ := json.MarshalIndent(data.InstanceTypes[0].EbsInfo, "", "  ")
+	fmt.Println(string(pretty))
+
+	return nil
 }
 
 // runInstance is responsible for allocating a single ec2 vm.
@@ -1008,9 +1089,12 @@ func (p *Provider) runInstance(
 	if err != nil {
 		return errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}
-	defer func() {
-		_ = os.Remove(filename)
-	}()
+	// Keep startup script in dry-run mode.
+	if !config.DryRun {
+		defer func() {
+			_ = os.Remove(filename)
+		}()
+	}
 
 	withFlagOverride := func(cfg string, fl *string) string {
 		if *fl == "" {
@@ -1045,11 +1129,16 @@ func (p *Provider) runInstance(
 		args = append(args, "--iam-instance-profile", "Name="+p.IAMProfile)
 	}
 	ebsVolumes := assignEBSVolumes(&opts, providerOpts)
+
+	if err = p.validateMachineType(l, machineType, az.region.Name, ebsVolumes, opts.SSDOpts.UseLocalSSD, providerOpts.UseMultipleDisks); err != nil {
+		return err
+	}
 	args, err = genDeviceMapping(ebsVolumes, args)
 	if err != nil {
 		return err
 	}
-	return p.runJSONCommand(l, args, &data)
+
+	return p.RunJSONCommand(l, args, &data)
 }
 
 func genDeviceMapping(ebsVolumes ebsVolumeList, args []string) ([]string, error) {
@@ -1133,7 +1222,8 @@ func (p *Provider) AttachVolumeToVM(l *logger.Logger, volume vm.Volume, vm *vm.V
 	}
 
 	var commandResponse attachJsonResponse
-	err := p.runJSONCommand(l, args, &commandResponse)
+	err := p.RunJSONCommand(l, args, &commandResponse)
+
 	if err != nil {
 		return "", err
 	}
@@ -1150,7 +1240,8 @@ func (p *Provider) AttachVolumeToVM(l *logger.Logger, volume vm.Volume, vm *vm.V
 		"--block-device-mappings",
 		"DeviceName=" + deviceName + ",Ebs={DeleteOnTermination=true,VolumeId=" + volume.ProviderResourceID + "}",
 	}
-	_, err = p.runCommand(l, args)
+	_, err = p.RunCommand(context.Background(), l, args)
+
 	if err != nil {
 		return "", err
 	}
@@ -1222,7 +1313,9 @@ func (p *Provider) CreateVolume(
 	}
 	args = append(args, "--size", strconv.Itoa(vco.Size))
 	var volumeDetails createVolume
-	err = p.runJSONCommand(l, args, &volumeDetails)
+
+	err = p.RunJSONCommand(l, args, &volumeDetails)
+
 	if err != nil {
 		return vol, err
 	}
@@ -1245,7 +1338,8 @@ func (p *Provider) CreateVolume(
 		"--query", "Volumes[*].State",
 	}
 	for waitForVolume.Next() {
-		err = p.runJSONCommand(l, args, &state)
+		err = p.RunJSONCommand(l, args, &state)
+
 		if len(state) > 0 && state[0] == "available" {
 			close(waitForVolumeCloser)
 		}
@@ -1300,8 +1394,9 @@ func (p *Provider) SnapshotVolume(
 		"--volume-id", volume.ProviderResourceID,
 		"--tag-specifications", "ResourceType=snapshot,Tags=[" + strings.Join(tags, ",") + "]",
 	}
-
 	var so snapshotOutput
-	err := p.runJSONCommand(l, args, &so)
+
+	err := p.RunJSONCommand(l, args, &so)
+
 	return so.SnapshotID, err
 }

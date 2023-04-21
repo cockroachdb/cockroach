@@ -56,13 +56,6 @@ func RunBuildInfo(ctx context.Context, t test.Test, c cluster.Cluster) {
 // RunBuildAnalyze performs static analysis on the built binary to
 // ensure it's built as expected.
 func RunBuildAnalyze(ctx context.Context, t test.Test, c cluster.Cluster) {
-
-	if c.IsLocal() {
-		// This test is linux-specific and needs to be able to install apt
-		// packages, so only run it on dedicated remote VMs.
-		t.Skip("local execution not supported")
-	}
-
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	// 1. Check for executable stack.

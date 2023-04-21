@@ -21,15 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 type githubIssues struct {
-	disable      bool
-	cluster      *clusterImpl
-	vmCreateOpts *vm.CreateOpts
-	issuePoster  func(context.Context, *logger.Logger, issues.IssueFormatter, issues.PostRequest) error
-	teamLoader   func() (team.Map, error)
+	disable     bool
+	cluster     *clusterImpl
+	issuePoster func(context.Context, *logger.Logger, issues.IssueFormatter, issues.PostRequest) error
+	teamLoader  func() (team.Map, error)
 }
 
 type issueCategory int
@@ -37,16 +35,16 @@ type issueCategory int
 const (
 	otherErr issueCategory = iota
 	clusterCreationErr
+	setupErr
 	sshErr
 )
 
-func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssues {
+func newGithubIssues(disable bool, c *clusterImpl) *githubIssues {
 	return &githubIssues{
-		disable:      disable,
-		vmCreateOpts: vmCreateOpts,
-		cluster:      c,
-		issuePoster:  issues.Post,
-		teamLoader:   team.DefaultLoadTeams,
+		disable:     disable,
+		cluster:     c,
+		issuePoster: issues.Post,
+		teamLoader:  team.DefaultLoadTeams,
 	}
 }
 
@@ -120,7 +118,11 @@ func (g *githubIssues) createPostRequest(
 	if cat == clusterCreationErr {
 		issueOwner = registry.OwnerDevInf
 		issueName = "cluster_creation"
-		messagePrefix = fmt.Sprintf("test %s was skipped due to ", t.Name())
+		messagePrefix = fmt.Sprintf("test %s failed during 'Setup' due to ", t.Name())
+	} else if cat == setupErr {
+		issueOwner = registry.OwnerTestEng
+		issueName = "setup_problem"
+		messagePrefix = fmt.Sprintf("test %s failed during 'Setup' due to ", t.Name())
 	} else if cat == sshErr {
 		issueOwner = registry.OwnerTestEng
 		issueName = "ssh_problem"
@@ -162,15 +164,13 @@ func (g *githubIssues) createPostRequest(
 		roachtestPrefix("cpu"):   fmt.Sprintf("%d", spec.Cluster.CPUs),
 		roachtestPrefix("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
 	}
-
-	// These params can be probabilistically set, so we pass them here to
-	// show what their actual values are in the posted issue.
-	if g.vmCreateOpts != nil {
-		clusterParams[roachtestPrefix("fs")] = g.vmCreateOpts.SSDOpts.FileSystem
-		clusterParams[roachtestPrefix("localSSD")] = fmt.Sprintf("%v", g.vmCreateOpts.SSDOpts.UseLocalSSD)
-	}
-
 	if g.cluster != nil {
+		// These params can be probabilistically set, so we pass them here to
+		// show what their actual values are in the posted issue.
+		if g.cluster.vmCreateOpts != nil {
+			clusterParams[roachtestPrefix("fs")] = g.cluster.vmCreateOpts.SSDOpts.FileSystem
+			clusterParams[roachtestPrefix("localSSD")] = fmt.Sprintf("%v", g.cluster.vmCreateOpts.SSDOpts.UseLocalSSD)
+		}
 		clusterParams[roachtestPrefix("encrypted")] = fmt.Sprintf("%v", g.cluster.encAtRest)
 	}
 
@@ -213,6 +213,8 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 	firstFailure := t.firstFailure()
 	if failureContainsError(firstFailure, errClusterProvisioningFailed) {
 		cat = clusterCreationErr
+	} else if failureContainsError(firstFailure, errTestSetupFailed) {
+		cat = setupErr
 	} else if failureContainsError(firstFailure, rperrors.ErrSSH255) {
 		cat = sshErr
 	}

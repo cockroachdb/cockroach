@@ -662,6 +662,9 @@ type clusterImpl struct {
 
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
+
+	// vmCreateOpts denotes the VM options used to create the cluster.
+	vmCreateOpts *vm.CreateOpts
 }
 
 // Name returns the cluster name, i.e. something like `teamcity-....`
@@ -830,15 +833,6 @@ func createFlagsOverride(flags *pflag.FlagSet, opts *vm.CreateOpts) {
 	}
 }
 
-// clusterMock creates a cluster to be used for (self) testing.
-func (f *clusterFactory) clusterMock(cfg clusterConfig) *clusterImpl {
-	return &clusterImpl{
-		name:       f.genName(cfg),
-		expiration: timeutil.Now().Add(24 * time.Hour),
-		r:          f.r,
-	}
-}
-
 // newCluster creates a new roachprod cluster.
 //
 // setStatus is called with status messages indicating the stage of cluster
@@ -846,23 +840,28 @@ func (f *clusterFactory) clusterMock(cfg clusterConfig) *clusterImpl {
 //
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func (f *clusterFactory) newCluster(
-	ctx context.Context, cfg clusterConfig, setStatus func(string), teeOpt logger.TeeOptType,
-) (*clusterImpl, *vm.CreateOpts, error) {
+	ctx context.Context,
+	l *logger.Logger,
+	testName string,
+	cfg clusterConfig,
+	setStatus func(string),
+	teeOpt logger.TeeOptType,
+) (res *clusterImpl, err error) {
+	defer func() {
+		if err != nil {
+			// We must release the allocation because cluster creation is not possible at this point.
+			l.PrintfCtx(ctx, "Releasing cpu (quota) allocation of %d for %s", cfg.alloc.Acquired(), testName)
+			cfg.alloc.Release()
+		}
+	}()
+
 	if ctx.Err() != nil {
-		return nil, nil, errors.Wrap(ctx.Err(), "newCluster")
+		err = errors.Wrap(ctx.Err(), "newCluster")
+		return
 	}
 
 	if overrideFlagset != nil && overrideFlagset.Changed("nodes") {
 		cfg.spec.NodeCount = overrideNumNodes
-	}
-
-	if cfg.spec.NodeCount == 0 {
-		// For tests, use a mock cluster.
-		c := f.clusterMock(cfg)
-		if err := f.r.registerCluster(c); err != nil {
-			return nil, nil, err
-		}
-		return c, nil, nil
 	}
 
 	if cfg.localCluster {
@@ -880,12 +879,10 @@ func (f *clusterFactory) newCluster(
 	providerOptsContainer := vm.CreateProviderOptionsContainer()
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.
-	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts("", cfg.useIOBarrier, cfg.enableFIPS)
-	if err != nil {
-		// We must release the allocation because cluster creation is not possible at this point.
-		cfg.alloc.Release()
-
-		return nil, nil, err
+	createVMOpts, providerOpts, curErr := cfg.spec.RoachprodOpts("", cfg.useIOBarrier, cfg.enableFIPS)
+	if curErr != nil {
+		err = curErr
+		return
 	}
 	if cfg.spec.Cloud != spec.Local {
 		providerOptsContainer.SetProviderOpts(cfg.spec.Cloud, providerOpts)
@@ -929,28 +926,32 @@ func (f *clusterFactory) newCluster(
 			retryStr = "-retry" + strconv.Itoa(i-1)
 		}
 		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", c.name+retryStr+".log")
-		l, err := logger.RootLogger(logPath, teeOpt)
-		if err != nil {
-			log.Fatalf(ctx, "%v", err)
+		l, curErr := logger.RootLogger(logPath, teeOpt)
+		if curErr != nil {
+			log.Fatalf(ctx, "%v", curErr)
 		}
 
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
 		err = roachprod.Create(ctx, l, cfg.username, cfg.spec.NodeCount, createVMOpts, providerOptsContainer)
 		if err == nil {
-			if err := f.r.registerCluster(c); err != nil {
-				return nil, nil, err
+			c.vmCreateOpts = &createVMOpts
+			err = f.r.registerCluster(c)
+			if err != nil {
+				return
 			}
 			c.status("idle")
 			l.Close()
-			return c, &createVMOpts, nil
+			// We have successfully created a new cluster. We are done, let's bail out.
+			res = c
+			return
 		}
 
 		if errors.HasType(err, (*roachprod.ClusterAlreadyExistsError)(nil)) {
 			// If the cluster couldn't be created because it existed already, bail.
 			// In reality when this is hit is when running with the `local` flag
 			// or a destroy from the previous iteration failed.
-			return nil, nil, err
+			return
 		}
 
 		l.PrintfCtx(ctx, "cluster creation failed, cleaning up in case it was partially created: %s", err)
@@ -960,9 +961,8 @@ func (f *clusterFactory) newCluster(
 		c.destroyState.alloc = nil
 		c.Destroy(ctx, closeLogger, l)
 		if i >= maxAttempts {
-			// Here we have to release the alloc, as we are giving up.
-			cfg.alloc.Release()
-			return nil, nil, err
+			// Out of retries, bail out.
+			return
 		}
 		// Try again to create the cluster.
 	}
@@ -1031,14 +1031,6 @@ func attachToExistingCluster(
 
 	c.status("idle")
 	return c, nil
-}
-
-// setTest prepares c for being used on behalf of t.
-//
-// TODO(andrei): Get rid of c.t, c.l and of this method.
-func (c *clusterImpl) setTest(t test.Test) {
-	c.t = t
-	c.l = t.L()
 }
 
 // StopCockroachGracefullyOnNode stops a running cockroach instance on the requested

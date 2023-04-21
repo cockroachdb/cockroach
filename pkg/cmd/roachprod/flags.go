@@ -85,6 +85,12 @@ func initFlags() {
 	rootCmd.PersistentFlags().IntVarP(&config.MaxConcurrency, "max-concurrency", "", 32,
 		"maximum number of operations to execute on nodes concurrently, set to zero for infinite",
 	)
+	rootCmd.PersistentFlags().BoolVarP(&[]bool{false}[0], "version", "V",
+		false, "print version and exit")
+	rootCmd.PersistentFlags().BoolVarP(&config.DryRun, "dry-run", "d",
+		false, "dry-run mode (execute read-only operations; i.e., no infra changes are made)")
+	rootCmd.PersistentFlags().BoolVarP(&config.Verbose, "verbose", "v",
+		false, "verbose mode")
 
 	createCmd.Flags().DurationVarP(&createVMOpts.Lifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
@@ -139,8 +145,8 @@ func initFlags() {
 	extendCmd.Flags().DurationVarP(&extendLifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
 
-	listCmd.Flags().BoolVarP(&listDetails,
-		"details", "d", false, "Show cluster details")
+	listCmd.Flags().BoolVar(&listDetails,
+		"details", false, "Show cluster details")
 	listCmd.Flags().BoolVar(&listJSON,
 		"json", false, "Show cluster specs in a json format")
 	listCmd.Flags().BoolVarP(&listMine,

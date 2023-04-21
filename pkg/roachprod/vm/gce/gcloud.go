@@ -11,9 +11,7 @@
 package gce
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -45,7 +43,11 @@ const (
 )
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
-var providerInstance = &Provider{}
+var providerInstance = &Provider{
+	CLIProvider: vm.CLIProvider{
+		CLICommand: "gcloud",
+	},
+}
 
 // DefaultProject returns the default GCE project.
 func DefaultProject() string {
@@ -75,31 +77,8 @@ func Init() error {
 		return errors.New("gcloud not found")
 	}
 	initialized = true
+
 	vm.Providers[ProviderName] = providerInstance
-	return nil
-}
-
-func runJSONCommand(args []string, parsed interface{}) error {
-	cmd := exec.Command("gcloud", args...)
-
-	rawJSON, err := cmd.Output()
-	if err != nil {
-		var stderr []byte
-		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
-			stderr = exitErr.Stderr
-		}
-		// TODO(peter,ajwerner): Remove this hack once gcloud behaves when adding
-		// new zones.
-		if matched, _ := regexp.Match(`.*Unknown zone`, stderr); !matched {
-			return errors.Wrapf(err, "failed to run: gcloud %s\nstdout: %s\nstderr: %s\n",
-				strings.Join(args, " "), bytes.TrimSpace(rawJSON), bytes.TrimSpace(stderr))
-		}
-	}
-
-	if err := json.Unmarshal(rawJSON, &parsed); err != nil {
-		return errors.Wrapf(err, "failed to parse json %s", rawJSON)
-	}
-
 	return nil
 }
 
@@ -293,6 +272,8 @@ type ProviderOpts struct {
 type Provider struct {
 	Projects       []string
 	ServiceAccount string
+
+	vm.CLIProvider
 }
 
 type snapshotCreateJson struct {
@@ -328,7 +309,7 @@ func (p *Provider) SnapshotVolume(
 	}
 
 	var createJsonResponse snapshotCreateJson
-	err := runJSONCommand(args, &createJsonResponse)
+	err := p.RunJSONCommand(l, args, &createJsonResponse)
 	if err != nil {
 		return "", err
 	}
@@ -345,8 +326,7 @@ func (p *Provider) SnapshotVolume(
 		"add-labels", name,
 		"--labels", s[:len(s)-1],
 	}
-	cmd := exec.Command("gcloud", args...)
-	_, err = cmd.CombinedOutput()
+	_, err = p.RunCommand(context.Background(), l, args)
 
 	if err != nil {
 		return "", err
@@ -413,7 +393,7 @@ func (p *Provider) CreateVolume(
 	}
 
 	var commandResponse []describeVolumeCommandResponse
-	err = runJSONCommand(args, &commandResponse)
+	err = p.RunJSONCommand(l, args, &commandResponse)
 	if err != nil {
 		return vm.Volume{}, err
 	}
@@ -440,8 +420,7 @@ func (p *Provider) CreateVolume(
 		"--labels", s[:len(s)-1],
 		"--zone", vco.Zone,
 	}
-	cmd := exec.Command("gcloud", args...)
-	_, err = cmd.CombinedOutput()
+	_, err = p.RunCommand(context.Background(), l, args)
 
 	if err != nil {
 		return vol, err
@@ -490,7 +469,7 @@ func (p *Provider) AttachVolumeToVM(l *logger.Logger, volume vm.Volume, vm *vm.V
 	}
 
 	var commandResponse []instanceDisksResponse
-	if err := runJSONCommand(args, &commandResponse); err != nil {
+	if err := p.RunJSONCommand(l, args, &commandResponse); err != nil {
 		return "", err
 	}
 	found := false
@@ -517,7 +496,7 @@ func (p *Provider) AttachVolumeToVM(l *logger.Logger, volume vm.Volume, vm *vm.V
 		"--format=json(disks)",
 	}
 
-	if err := runJSONCommand(args, &commandResponse); err != nil {
+	if err := p.RunJSONCommand(l, args, &commandResponse); err != nil {
 		return "", err
 	}
 
@@ -664,11 +643,9 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 func (p *Provider) CleanSSH(l *logger.Logger) error {
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet", "--remove"}
-		cmd := exec.Command("gcloud", args...)
-
-		output, err := cmd.CombinedOutput()
+		_, err := p.RunCommand(context.Background(), l, args)
 		if err != nil {
-			return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			return err
 		}
 	}
 	return nil
@@ -679,11 +656,9 @@ func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 	// Populate SSH config files with Host entries from each instance in active projects.
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet"}
-		cmd := exec.Command("gcloud", args...)
-
-		output, err := cmd.CombinedOutput()
+		_, err := p.RunCommand(context.Background(), l, args)
 		if err != nil {
-			return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			return err
 		}
 	}
 	return nil
@@ -800,9 +775,12 @@ func (p *Provider) Create(
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
-	defer func() {
-		_ = os.Remove(filename)
-	}()
+	// keep startup script in dry-run mode
+	if !config.DryRun {
+		defer func() {
+			_ = os.Remove(filename)
+		}()
+	}
 
 	args = append(args, "--machine-type", providerOpts.MachineType)
 	if providerOpts.MinCPUPlatform != "" {
@@ -846,13 +824,9 @@ func (p *Provider) Create(
 		argsWithZone := append(args[:len(args):len(args)], "--zone", zone)
 		argsWithZone = append(argsWithZone, zoneHosts...)
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", argsWithZone...)
+			_, err := p.RunCommand(context.Background(), l, argsWithZone)
 
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
-			}
-			return nil
+			return err
 		})
 
 	}
@@ -861,12 +835,12 @@ func (p *Provider) Create(
 		return err
 	}
 
-	return propagateDiskLabels(l, project, labels, zoneToHostNames, &opts)
+	return p.propagateDiskLabels(l, project, labels, zoneToHostNames, &opts)
 }
 
 // N.B. neither boot disk nor additional persistent disks are assigned VM labels by default.
 // Hence, we must propagate them. See: https://cloud.google.com/compute/docs/labeling-resources#labeling_boot_disks
-func propagateDiskLabels(
+func (p *Provider) propagateDiskLabels(
 	l *logger.Logger,
 	project string,
 	labels string,
@@ -878,38 +852,31 @@ func propagateDiskLabels(
 	l.Printf("Propagating labels across all disks")
 
 	for zone, zoneHosts := range zoneToHostNames {
-		zoneArg := []string{"--zone", zone}
+		args := []string{"compute", "disks", "update"}
+		args = append(args, "--update-labels", labels[:len(labels)-1])
+		args = append(args, "--project", project)
+		args = append(args, "--zone", zone)
+		args = args[:len(args):len(args)]
 
 		for _, host := range zoneHosts {
-			args := []string{"compute", "disks", "update"}
-			args = append(args, "--update-labels", labels[:len(labels)-1])
-			args = append(args, "--project", project)
-			args = append(args, zoneArg...)
 			host := host
 
 			g.Go(func() error {
 				// N.B. boot disk has the same name as the host.
 				bootDiskArgs := append(args, host)
-				cmd := exec.Command("gcloud", bootDiskArgs...)
+				_, err := p.RunCommand(context.Background(), l, bootDiskArgs)
 
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", bootDiskArgs, output)
-				}
-				return nil
+				return err
 			})
 
 			if !opts.SSDOpts.UseLocalSSD {
+				// N.B. roachprod currently supports only one persistent disk per host.
 				g.Go(func() error {
 					// N.B. additional persistent disks are suffixed with the offset, starting at 1.
 					persistentDiskArgs := append(args, fmt.Sprintf("%s-1", host))
-					cmd := exec.Command("gcloud", persistentDiskArgs...)
+					_, err := p.RunCommand(context.Background(), l, persistentDiskArgs)
 
-					output, err := cmd.CombinedOutput()
-					if err != nil {
-						return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", persistentDiskArgs, output)
-					}
-					return nil
+					return err
 				})
 			}
 		}
@@ -954,13 +921,9 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 			args = append(args, names...)
 
 			g.Go(func() error {
-				cmd := exec.CommandContext(ctx, "gcloud", args...)
+				_, err := p.RunCommand(ctx, l, args)
 
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
-				}
-				return nil
+				return err
 			})
 		}
 	}
@@ -997,13 +960,9 @@ func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 			args = append(args, names...)
 
 			g.Go(func() error {
-				cmd := exec.CommandContext(ctx, "gcloud", args...)
+				_, err := p.RunCommand(ctx, l, args)
 
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
-				}
-				return nil
+				return err
 			})
 		}
 	}
@@ -1023,11 +982,9 @@ func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration)
 		args = append(args, "--labels", fmt.Sprintf("lifetime=%s", lifetime))
 		args = append(args, v.Name)
 
-		cmd := exec.Command("gcloud", args...)
-
-		output, err := cmd.CombinedOutput()
+		_, err := p.RunCommand(context.Background(), l, args)
 		if err != nil {
-			return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			return err
 		}
 	}
 	return nil
@@ -1038,7 +995,7 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 	args := []string{"auth", "list", "--format", "json", "--filter", "status~ACTIVE"}
 
 	accounts := make([]jsonAuth, 0)
-	if err := runJSONCommand(args, &accounts); err != nil {
+	if err := p.RunJSONCommand(l, args, &accounts, true); err != nil {
 		return "", err
 	}
 
@@ -1068,7 +1025,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 
 		// Run the command, extracting the JSON payload
 		jsonVMS := make([]jsonVM, 0)
-		if err := runJSONCommand(args, &jsonVMS); err != nil {
+		if err := p.RunJSONCommand(l, args, &jsonVMS); err != nil {
 			return nil, err
 		}
 
@@ -1089,7 +1046,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 			}
 
 			var disks []describeVolumeCommandResponse
-			if err := runJSONCommand(args, &disks); err != nil {
+			if err := p.RunJSONCommand(l, args, &disks); err != nil {
 				return nil, err
 			}
 

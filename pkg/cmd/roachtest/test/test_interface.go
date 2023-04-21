@@ -23,6 +23,7 @@ type Test interface {
 	// --crdb_test build tag, or an empty string if no such binary was given.
 	CockroachShort() string
 	Name() string
+	RunNum() int
 	BuildVersion() *version.Version
 	IsBuildVersion(string) bool // "vXX.YY"
 	Helper()
@@ -44,6 +45,7 @@ type Test interface {
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
 	Failed() bool
+	Skipped() bool
 	ArtifactsDir() string
 	// PerfArtifactsDir is the directory on cluster nodes in which perf artifacts
 	// reside. Upon success this directory is copied into test's ArtifactsDir from

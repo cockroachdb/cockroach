@@ -12,10 +12,12 @@ package tests
 
 import (
 	"context"
+	"runtime"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
@@ -23,6 +25,7 @@ func registerAcceptance(r registry.Registry) {
 	testCases := map[registry.Owner][]struct {
 		name              string
 		fn                func(ctx context.Context, t test.Test, c cluster.Cluster)
+		preSetup          func(ctx context.Context, t test.Test, spec *registry.TestSpec) error
 		skip              string
 		numNodes          int
 		timeout           time.Duration
@@ -59,19 +62,42 @@ func registerAcceptance(r registry.Registry) {
 		},
 		registry.OwnerDevInf: {
 			{name: "build-info", fn: RunBuildInfo},
-			{name: "build-analyze", fn: RunBuildAnalyze},
+			{
+				name: "build-analyze",
+				fn:   RunBuildAnalyze,
+				preSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+					if tc.Cluster.Cloud == spec.Local {
+						// This test is linux-specific and needs to be able to install apt
+						// packages, so only run it on dedicated remote VMs.
+						t.Skip("local execution not supported")
+					}
+					return nil
+				},
+			},
 		},
 		registry.OwnerTestEng: {
 			{
-				name:    "version-upgrade",
-				fn:      runVersionUpgrade,
+				name: "version-upgrade",
+				fn:   runVersionUpgrade,
+				preSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+					if tc.Cluster.Cloud == spec.Local && runtime.GOARCH == "arm64" {
+						t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
+					}
+					return nil
+				},
 				timeout: 30 * time.Minute,
 			},
 		},
 		registry.OwnerDisasterRecovery: {
 			{
-				name:     "c2c",
-				fn:       runAcceptanceClusterReplication,
+				name: "c2c",
+				fn:   runAcceptanceClusterReplication,
+				preSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+					if tc.Cluster.Cloud != spec.Local {
+						t.Skip("c2c/acceptance is only meant to run on a local cluster")
+					}
+					return nil
+				},
 				numNodes: 3,
 			},
 		},
@@ -105,6 +131,7 @@ func registerAcceptance(r registry.Registry) {
 				spec.Timeout = tc.timeout
 			}
 			spec.EncryptionSupport = tc.encryptionSupport
+			spec.PreSetup = tc.preSetup
 			spec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tc.fn(ctx, t, c)
 			}
