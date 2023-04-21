@@ -10,6 +10,7 @@
 #  target-triple: defaults to the value of `cc -dumpmachine`
 #  build-channel: defaults to `unknown`, but can be `official-binary`
 #  build-type: defaults to `development`, but can be `release`
+#  build-tag: will default to an appropriate value if not passed in, but can be overridden
 
 set -euo pipefail
 
@@ -56,7 +57,16 @@ else
     CRASH_REPORT_ENV="development"
 fi
 
-BUILD_REV=$(git rev-parse HEAD)
+# Handle build-tag.
+if [ -z "${1+x}" ]
+then
+    BUILD_TAG=
+else
+    BUILD_TAG="$1"
+    shift 1
+fi
+
+BUILD_REV=$(git describe --match="" --always --abbrev=40 --dirty)
 BUILD_UTCTIME=$(date -u '+%Y/%m/%d %H:%M:%S')
 
 
@@ -69,6 +79,7 @@ BUILD_UTCTIME=$(date -u '+%Y/%m/%d %H:%M:%S')
 # * https://github.com/bazelbuild/rules_go/blob/master/go/core.rst#defines-and-stamping
 cat <<EOF
 STABLE_BUILD_CHANNEL ${BUILD_CHANNEL-}
+STABLE_BUILD_TAG ${BUILD_TAG-}
 STABLE_BUILD_TARGET_TRIPLE ${TARGET_TRIPLE-}
 STABLE_BUILD_TYPE ${BUILD_TYPE-}
 STABLE_CRASH_REPORT_ENV ${CRASH_REPORT_ENV-}
