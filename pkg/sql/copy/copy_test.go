@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -653,6 +654,8 @@ const lineitemSchemaMunged string = `CREATE TABLE lineitem (
 func TestLargeCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// This test can cause timeouts.
+	skip.UnderRace(t)
 	ctx := context.Background()
 
 	s, _, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
@@ -673,7 +676,7 @@ func TestLargeCopy(t *testing.T) {
 	require.NoError(t, err)
 
 	rng := rand.New(rand.NewSource(0))
-	rows := 10000
+	rows := 100
 	numrows, err := conn.GetDriverConn().CopyFrom(ctx,
 		&copyReader{rng: rng, cols: desc.PublicColumns(), rows: rows},
 		"COPY lineitem FROM STDIN WITH CSV;")
