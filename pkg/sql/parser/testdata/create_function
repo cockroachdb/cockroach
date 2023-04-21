@@ -217,19 +217,15 @@ HINT: try \h CREATE FUNCTION
 error
 CREATE OR REPLACE FUNCTION f(OUT a int = 7) RETURNS INT AS 'SELECT 1' LANGUAGE SQL
 ----
-----
 at or near "out": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 CREATE OR REPLACE FUNCTION f(OUT a int = 7) RETURNS INT AS 'SELECT 1' LANGUAGE SQL
                              ^
 HINT: You have attempted to use a feature that is not yet implemented.
 See: https://go.crdb.dev/issue-v/100405/
-----
-----
 
 error
 CREATE OR REPLACE FUNCTION f(INOUT a int = 7) RETURNS INT AS 'SELECT 1' LANGUAGE SQL
-----
 ----
 at or near "inout": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
@@ -237,12 +233,9 @@ CREATE OR REPLACE FUNCTION f(INOUT a int = 7) RETURNS INT AS 'SELECT 1' LANGUAGE
                              ^
 HINT: You have attempted to use a feature that is not yet implemented.
 See: https://go.crdb.dev/issue-v/100405/
-----
-----
 
 error
 CREATE OR REPLACE FUNCTION f(IN OUT a int = 7) RETURNS INT AS 'SELECT 1' LANGUAGE SQL
-----
 ----
 at or near "out": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
@@ -250,8 +243,6 @@ CREATE OR REPLACE FUNCTION f(IN OUT a int = 7) RETURNS INT AS 'SELECT 1' LANGUAG
                                 ^
 HINT: You have attempted to use a feature that is not yet implemented.
 See: https://go.crdb.dev/issue-v/100405/
-----
-----
 
 error
 CREATE OR REPLACE FUNCTION f(VARIADIC a int = 7) RETURNS INT AS 'SELECT 1' LANGUAGE SQL

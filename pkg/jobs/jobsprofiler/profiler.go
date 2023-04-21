@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -37,15 +38,15 @@ func StorePlanDiagram(
 
 		err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			flowSpecs := p.GenerateFlowSpecs()
-			_, diagURL, err := execinfrapb.GeneratePlanDiagramURL(fmt.Sprintf("job:%d", jobID), flowSpecs, execinfrapb.DiagramFlags{})
+			_, diagURL, err := execinfrapb.GeneratePlanDiagramURL(fmt.Sprintf("job:%d", jobID), flowSpecs,
+				execinfrapb.DiagramFlags{})
 			if err != nil {
 				return err
 			}
 
-			const infoKey = "dsp-diag-url-%d"
 			infoStorage := jobs.InfoStorageForJob(txn, jobID)
-			return infoStorage.Write(ctx, fmt.Sprintf(infoKey, timeutil.Now().UnixNano()),
-				[]byte(diagURL.String()))
+			return infoStorage.Write(ctx, fmt.Sprintf(profilerconstants.DSPDiagramInfoKeyPrefix+"%d",
+				timeutil.Now().UnixNano()), []byte(diagURL.String()))
 		})
 		if err != nil {
 			log.Warningf(ctx, "failed to generate and write DistSQL diagram for job %d: %v",

@@ -2378,6 +2378,7 @@ var builtinOidsArray = []string{
 	2405: `ts_rank(weights: float[], vector: tsvector, query: tsquery) -> float4`,
 	2406: `crdb_internal.fingerprint(span: bytes[], stripped: bool) -> int`,
 	2407: `crdb_internal.tenant_span() -> bytes[]`,
+	2408: `crdb_internal.job_execution_details(job_id: int) -> jsonb`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
