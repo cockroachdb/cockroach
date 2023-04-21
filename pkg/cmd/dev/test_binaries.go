@@ -89,6 +89,7 @@ func makeTestBinariesCmd(runE func(cmd *cobra.Command, args []string) error) *co
 		RunE:    runE,
 	}
 	testBinariesCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
+	testBinariesCmd.Flags().StringArray(dockerArgsFlag, []string{}, "additional arguments to pass to Docker (only used for cross builds)")
 	testBinariesCmd.Flags().String(outputFlag, "bin/test_binaries.tar.gz", "the file output path of the archived test binaries")
 	testBinariesCmd.Flags().Bool(raceFlag, false, "produce race builds")
 	testBinariesCmd.Flags().Int(batchSizeFlag, 128, "the number of packages to build per batch")
@@ -99,10 +100,11 @@ func makeTestBinariesCmd(runE func(cmd *cobra.Command, args []string) error) *co
 func (d *dev) testBinaries(cmd *cobra.Command, commandLine []string) error {
 	ctx := cmd.Context()
 	var (
-		volume    = mustGetFlagString(cmd, volumeFlag)
-		output    = mustGetFlagString(cmd, outputFlag)
-		race      = mustGetFlagBool(cmd, raceFlag)
-		batchSize = mustGetConstrainedFlagInt(cmd, batchSizeFlag, func(v int) error {
+		extraDockerArgs = mustGetFlagStringArray(cmd, dockerArgsFlag)
+		volume          = mustGetFlagString(cmd, volumeFlag)
+		output          = mustGetFlagString(cmd, outputFlag)
+		race            = mustGetFlagBool(cmd, raceFlag)
+		batchSize       = mustGetConstrainedFlagInt(cmd, batchSizeFlag, func(v int) error {
 			if v <= 0 {
 				return fmt.Errorf("%s must be greater than zero", batchSizeFlag)
 			}
@@ -155,7 +157,7 @@ func (d *dev) testBinaries(cmd *cobra.Command, commandLine []string) error {
 	}
 	binTar := strings.TrimSuffix(output, ".gz")
 
-	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false)
+	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false, extraDockerArgs)
 	if err != nil {
 		return err
 	}
