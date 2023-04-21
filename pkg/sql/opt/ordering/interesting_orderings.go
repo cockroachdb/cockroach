@@ -17,6 +17,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
+// DeriveSimplifiedInterestingOrderings calculates and returns the
+// Relational.Rule.SimplifiedInterestingOrderings property of a relational
+// operator.
+func DeriveSimplifiedInterestingOrderings(e memo.RelExpr) props.OrderingSet {
+	l := e.Relational()
+	fds := &l.FuncDeps
+	if l.IsAvailable(props.SimplifiedInterestingOrderings) {
+		return l.Rule.SimplifiedInterestingOrderings
+	}
+	l.SetAvailable(props.SimplifiedInterestingOrderings)
+
+	// Derive the interesting orderings and simplify them.
+	orders := DeriveInterestingOrderings(e).Copy()
+	old := orders
+	orders = orders[:0]
+	for _, o := range old {
+		newOrd := o.Copy()
+		if o.CanSimplify(fds) {
+			newOrd.Simplify(fds)
+		}
+		if !newOrd.Any() {
+			// This function appends at most one element; it is ok to operate on
+			// the same slice.
+			orders.Add(&newOrd)
+		}
+	}
+
+	l.Rule.SimplifiedInterestingOrderings = orders
+	return orders
+}
+
 // DeriveInterestingOrderings calculates and returns the
 // Relational.Rule.InterestingOrderings property of a relational operator.
 func DeriveInterestingOrderings(e memo.RelExpr) props.OrderingSet {

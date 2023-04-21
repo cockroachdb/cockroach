@@ -1565,7 +1565,6 @@ PREPARE pscs13 AS SELECT $1::bigint, 13
 query T
 SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
 ----
-pscs08
 pscs09
 pscs10
 pscs11
@@ -1582,7 +1581,6 @@ PREPARE pscs14 AS SELECT $1::int, 14
 query T
 SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
 ----
-pscs08
 pscs09
 pscs11
 pscs12
@@ -1608,7 +1606,6 @@ query T
 SELECT name FROM pg_catalog.pg_prepared_statements ORDER BY name
 ----
 pscs11
-pscs13
 pscs14
 pscs15
 pscs16
@@ -1628,7 +1625,7 @@ statement ok
 BEGIN;
 INSERT INTO prep_stmts SELECT 1, name FROM pg_catalog.pg_prepared_statements;
 PREPARE pscs18 AS SELECT $1::inet, 18;
-EXECUTE pscs14(14);
+EXECUTE pscs11(11);
 PREPARE pscs19 AS SELECT $1::string, 19;
 INSERT INTO prep_stmts SELECT 2, name FROM pg_catalog.pg_prepared_statements;
 SELECT IF(nextval('s') <= 3, crdb_internal.force_retry('1 hour'), 0);
@@ -1646,13 +1643,11 @@ query IT
 SELECT which, name FROM prep_stmts ORDER BY which, name
 ----
 1  pscs11
-1  pscs13
 1  pscs14
 1  pscs15
 1  pscs16
 1  pscs17
-2  pscs14
-2  pscs15
+2  pscs11
 2  pscs16
 2  pscs17
 2  pscs18

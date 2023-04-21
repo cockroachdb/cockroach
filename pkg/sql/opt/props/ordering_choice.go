@@ -1085,6 +1085,22 @@ func (os *OrderingSet) RestrictToCols(cols opt.ColSet, fds *FuncDepSet) {
 	}
 }
 
+// RestrictToColsNoSimplify is similar to RestrictToCols but does not call
+// Simplify. It can be used when the ordering set has already been simplified.
+func (os *OrderingSet) RestrictToColsNoSimplify(cols opt.ColSet) {
+	old := *os
+	*os = old[:0]
+	for _, o := range old {
+		newOrd := o.Copy()
+		newOrd.RestrictToCols(cols)
+		if !newOrd.Any() {
+			// This function appends at most one element; it is ok to operate on
+			// the same slice.
+			os.Add(&newOrd)
+		}
+	}
+}
+
 func (os OrderingSet) String() string {
 	var buf bytes.Buffer
 	for i, o := range os {

@@ -57,11 +57,12 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	// We generate MergeJoin expressions based on interesting orderings from the
 	// left side. The CommuteJoin rule will ensure that we actually try both
 	// sides.
-	orders := ordering.DeriveInterestingOrderings(left).Copy()
-	leftCols, leftFDs := leftEq.ToSet(), &left.Relational().FuncDeps
-	orders.RestrictToCols(leftCols, leftFDs)
+	leftCols := leftEq.ToSet()
+	orders := ordering.DeriveSimplifiedInterestingOrderings(left).Copy()
+	orders.RestrictToColsNoSimplify(leftCols)
 
 	var mustGenerateMergeJoin bool
+	leftFDs := &left.Relational().FuncDeps
 	if len(orders) == 0 && leftCols.SubsetOf(leftFDs.ConstantCols()) {
 		// All left equality columns are constant, so we can trivially create
 		// an ordering.
