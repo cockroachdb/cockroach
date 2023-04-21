@@ -137,6 +137,14 @@ func (d *dev) getDockerRunArgs(
 	// is authoritative. This can result in writes to the actual underlying
 	// filesystem to be lost, but it's a cache so we don't care about that.
 	args = append(args, "-v", volume+":/home/roach:delegated")
+
+	// Allow the user to pass extra arguments to the Docker invocation by setting
+	// the BAZEL_SUPPORT_EXTRA_DOCKER_ARGS environment variable.
+	extraDockerArgs := d.os.Getenv("BAZEL_SUPPORT_EXTRA_DOCKER_ARGS")
+	if extraDockerArgs != "" {
+		args = append(args, strings.Split(extraDockerArgs, " ")...)
+	}
+
 	args = append(args, "-u", fmt.Sprintf("%s:%s", uid, gid))
 	args = append(args, bazelImage)
 	return
