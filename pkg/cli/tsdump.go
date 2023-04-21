@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/csv"
+	"encoding/gob"
 	"fmt"
 	"io"
 	"os"
@@ -21,7 +22,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -48,20 +50,19 @@ Dumps all of the raw timeseries values in a cluster. Only the default resolution
 is retrieved, i.e. typically datapoints older than the value of the
 'timeseries.storage.resolution_10s.ttl' cluster setting will be absent from the
 output.
+
+When an input file is provided instead (as an argument), this input file
+must previously have been created with the --format=raw switch. The command
+will then convert it to the --format requested in the current invocation.
 `,
+	Args: cobra.RangeArgs(0, 1),
 	RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		conn, finish, err := getClientGRPCConn(ctx, serverCfg)
-		if err != nil {
-			return err
-		}
-		defer finish()
-
-		names, err := serverpb.GetInternalTimeseriesNamesFromServer(ctx, conn)
-		if err != nil {
-			return err
+		var convertFile string
+		if args[0] != "" {
+			convertFile = args[0]
 		}
 
 		req := &tspb.DumpRequest{
@@ -69,6 +70,18 @@ output.
 			EndNanos:   time.Time(debugTimeSeriesDumpOpts.to).UnixNano(),
 			Names:      names,
 		}
+		var w tsWriter
+		switch debugTimeSeriesDumpOpts.format {
+		case tsDumpRaw:
+			if convertFile != "" {
+				return errors.Errorf("input file is already in raw format")
+			}
+			// Special case, we don't go through the text output code.
+			conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+			if err != nil {
+				return err
+			}
+			defer finish()
 
 		if debugTimeSeriesDumpOpts.format == tsDumpRaw {
 			tsClient := tspb.NewTimeSeriesClient(conn)
@@ -102,14 +115,67 @@ output.
 			return errors.Newf("unknown output format: %v", debugTimeSeriesDumpOpts.format)
 		}
 
-		tsClient := tspb.NewTimeSeriesClient(conn)
-		stream, err := tsClient.Dump(context.Background(), req)
-		if err != nil {
-			return err
+		var recv func() (*tspb.TimeSeriesData, error)
+		if convertFile == "" {
+			conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+			if err != nil {
+				return err
+			}
+			defer finish()
+
+			tsClient := tspb.NewTimeSeriesClient(conn)
+			stream, err := tsClient.Dump(context.Background(), req)
+			if err != nil {
+				return err
+			}
+			recv = stream.Recv
+		} else {
+			f, err := os.Open(args[0])
+			if err != nil {
+				return err
+			}
+			type tup struct {
+				data *tspb.TimeSeriesData
+				err  error
+			}
+
+			dec := gob.NewDecoder(f)
+			gob.Register(&roachpb.KeyValue{})
+			decodeOne := func() (*tspb.TimeSeriesData, error) {
+				var v roachpb.KeyValue
+				err := dec.Decode(&v)
+				if err != nil {
+					return nil, err
+				}
+
+				var data *tspb.TimeSeriesData
+				dumper := ts.DefaultDumper{Send: func(d *tspb.TimeSeriesData) error {
+					data = d
+					return nil
+				}}
+				if err := dumper.Dump(&v); err != nil {
+					return nil, err
+				}
+				return data, nil
+			}
+
+			ch := make(chan tup, 4096)
+			go func() {
+				defer close(ch)
+				for {
+					data, err := decodeOne()
+					ch <- tup{data, err}
+				}
+			}()
+
+			recv = func() (*tspb.TimeSeriesData, error) {
+				r := <-ch
+				return r.data, r.err
+			}
 		}
 
 		for {
-			data, err := stream.Recv()
+			data, err := recv()
 			if err == io.EOF {
 				return w.Flush()
 			}
