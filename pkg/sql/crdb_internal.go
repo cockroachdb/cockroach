@@ -6463,23 +6463,23 @@ var crdbInternalStmtActivityView = virtualSchemaView{
 	schema: `
 CREATE VIEW crdb_internal.statement_activity AS
       SELECT
-          aggregated_ts,
-          fingerprint_id,
-          transaction_fingerprint_id,
-          plan_hash,
-          app_name,
-          agg_interval,
-          metadata,
-          statistics,
-          plan,
-          index_recommendations,
-          indexes_usage,
-          execution_count,
-          service_latency,
-          cpu_sql_nanos,
-          contention_time,
-          total_estimated_execution_time,
-          p99_latency
+				aggregated_ts,
+				fingerprint_id,
+				transaction_fingerprint_id,
+				plan_hash,
+				app_name,
+				agg_interval,
+				metadata,
+				statistics,
+				plan,
+				index_recommendations,
+				execution_count,
+				execution_total_seconds,
+				execution_total_cluster_seconds,
+				contention_time_avg_seconds,
+				cpu_sql_avg_nanos,
+				service_latency_avg_seconds,
+				service_latency_p99_seconds 
       FROM
           system.statement_activity`,
 	resultColumns: colinfo.ResultColumns{
@@ -6493,13 +6493,13 @@ CREATE VIEW crdb_internal.statement_activity AS
 		{Name: "statistics", Typ: types.Jsonb},
 		{Name: "plan", Typ: types.Jsonb},
 		{Name: "index_recommendations", Typ: types.StringArray},
-		{Name: "indexes_usage", Typ: types.Jsonb},
 		{Name: "execution_count", Typ: types.Int},
-		{Name: "service_latency", Typ: types.Float},
-		{Name: "cpu_sql_nanos", Typ: types.Float},
-		{Name: "contention_time", Typ: types.Float},
-		{Name: "total_estimated_execution_time", Typ: types.Float},
-		{Name: "p99_latency", Typ: types.Float},
+		{Name: "execution_total_seconds", Typ: types.Float},
+		{Name: "execution_total_cluster_seconds", Typ: types.Float},
+		{Name: "cpu_sql_avg_nanos", Typ: types.Float},
+		{Name: "contention_time_avg_seconds", Typ: types.Float},
+		{Name: "service_latency_avg_seconds", Typ: types.Float},
+		{Name: "service_latency_p99_seconds", Typ: types.Float},
 	},
 }
 
@@ -6509,18 +6509,20 @@ var crdbInternalTxnActivityView = virtualSchemaView{
 	schema: `
 CREATE VIEW crdb_internal.transaction_activity AS
       SELECT
-        aggregated_ts,
-        fingerprint_id,
-        app_name,
-        agg_interval,
-        metadata,
-        statistics,
-        execution_count,
-        service_latency,
-        cpu_sql_nanos,
-        contention_time,
-        total_estimated_execution_time,
-        p99_latency
+				aggregated_ts,
+				fingerprint_id,
+				app_name,
+				agg_interval,
+				metadata,
+				statistics,
+				query,
+				execution_count,
+				execution_total_seconds,
+				execution_total_cluster_seconds,
+				contention_time_avg_seconds,
+				cpu_sql_avg_nanos,
+				service_latency_avg_seconds,
+				service_latency_p99_seconds
       FROM
         system.transaction_activity`,
 	resultColumns: colinfo.ResultColumns{
@@ -6530,12 +6532,14 @@ CREATE VIEW crdb_internal.transaction_activity AS
 		{Name: "agg_interval", Typ: types.Interval},
 		{Name: "metadata", Typ: types.Jsonb},
 		{Name: "statistics", Typ: types.Jsonb},
+		{Name: "query", Typ: types.String},
 		{Name: "execution_count", Typ: types.Int},
-		{Name: "service_latency", Typ: types.Float},
-		{Name: "cpu_sql_nanos", Typ: types.Float},
-		{Name: "contention_time", Typ: types.Float},
-		{Name: "total_estimated_execution_time", Typ: types.Float},
-		{Name: "p99_latency", Typ: types.Float},
+		{Name: "execution_total_seconds", Typ: types.Float},
+		{Name: "execution_total_cluster_seconds", Typ: types.Float},
+		{Name: "contention_time_avg_seconds", Typ: types.Float},
+		{Name: "cpu_sql_avg_nanos", Typ: types.Float},
+		{Name: "service_latency_avg_seconds", Typ: types.Float},
+		{Name: "service_latency_p99_seconds", Typ: types.Float},
 	},
 }
 

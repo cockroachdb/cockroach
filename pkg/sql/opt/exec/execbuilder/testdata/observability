@@ -12,6 +12,12 @@ INSERT INTO system.users VALUES ('node', NULL, true, 3)
 statement ok
 GRANT node TO root
 
+statement ok
+SELECT * FROM crdb_internal.transaction_activity
+
+statement ok
+SELECT * FROM crdb_internal.statement_activity
+
 # Upsert all transaction_activity
 query T retry
 EXPLAIN (VERBOSE) UPSERT INTO system.public.transaction_activity
