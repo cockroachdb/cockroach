@@ -22,6 +22,7 @@ import (
 )
 
 const volumeFlag = "volume"
+const dockerArgsFlag = "docker-args"
 
 // MakeBuilderCmd constructs the subcommand used to run
 func makeBuilderCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -44,7 +45,7 @@ func (d *dev) builder(cmd *cobra.Command, extraArgs []string) error {
 	if len(extraArgs) == 0 {
 		tty = true
 	}
-	args, err := d.getDockerRunArgs(ctx, volume, tty)
+	args, err := d.getDockerRunArgs(ctx, volume, tty, nil)
 	args = append(args, extraArgs...)
 	if err != nil {
 		return err
@@ -56,7 +57,7 @@ func (d *dev) builder(cmd *cobra.Command, extraArgs []string) error {
 }
 
 func (d *dev) getDockerRunArgs(
-	ctx context.Context, volume string, tty bool,
+	ctx context.Context, volume string, tty bool, extraArgs []string,
 ) (args []string, err error) {
 	err = d.ensureBinaryInPath("docker")
 	if err != nil {
@@ -137,6 +138,7 @@ func (d *dev) getDockerRunArgs(
 	// is authoritative. This can result in writes to the actual underlying
 	// filesystem to be lost, but it's a cache so we don't care about that.
 	args = append(args, "-v", volume+":/home/roach:delegated")
+	args = append(args, extraArgs...)
 	args = append(args, "-u", fmt.Sprintf("%s:%s", uid, gid))
 	args = append(args, bazelImage)
 	return
