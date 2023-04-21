@@ -1629,7 +1629,7 @@ func (c *cliState) handleConnect(
 	cmd []string, loopState, errState cliStateEnum,
 ) (resState cliStateEnum) {
 	if err := c.handleConnectInternal(cmd, false /*omitConnString*/); err != nil {
-		fmt.Fprintln(c.iCtx.stderr, err)
+		clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
 		c.exitErr = err
 		return errState
 	}
