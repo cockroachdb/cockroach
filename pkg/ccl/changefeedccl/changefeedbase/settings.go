@@ -217,7 +217,7 @@ var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	"changefeed.batch_reduction_retry_enabled",
 	"if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes",
 	false,
-)
+).WithPublic()
 
 // UseMuxRangeFeed enables the use of MuxRangeFeed RPC.
 var UseMuxRangeFeed = settings.RegisterBoolSetting(
