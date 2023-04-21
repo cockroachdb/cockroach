@@ -2807,6 +2807,7 @@ null_ordered_last                                     off                 NULL  
 on_update_rehome_row_enabled                          on                  NULL      NULL        NULL        string
 opt_split_scan_limit                                  2048                NULL      NULL        NULL        string
 optimizer_always_use_histograms                       off                 NULL      NULL        NULL        string
+optimizer_hoist_uncorrelated_equality_subqueries      off                 NULL      NULL        NULL        string
 optimizer_use_forecasts                               on                  NULL      NULL        NULL        string
 optimizer_use_histograms                              on                  NULL      NULL        NULL        string
 optimizer_use_improved_disjunction_stats              off                 NULL      NULL        NULL        string
@@ -2952,6 +2953,7 @@ null_ordered_last                                     off                 NULL  
 on_update_rehome_row_enabled                          on                  NULL  user     NULL      on                  on
 opt_split_scan_limit                                  2048                NULL  user     NULL      2048                2048
 optimizer_always_use_histograms                       off                 NULL  user     NULL      off                 off
+optimizer_hoist_uncorrelated_equality_subqueries      off                 NULL  user     NULL      off                 off
 optimizer_use_forecasts                               on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                              on                  NULL  user     NULL      on                  on
 optimizer_use_improved_disjunction_stats              off                 NULL  user     NULL      off                 off
@@ -3095,6 +3097,7 @@ on_update_rehome_row_enabled                          NULL    NULL     NULL     
 opt_split_scan_limit                                  NULL    NULL     NULL     NULL        NULL
 optimizer                                             NULL    NULL     NULL     NULL        NULL
 optimizer_always_use_histograms                       NULL    NULL     NULL     NULL        NULL
+optimizer_hoist_uncorrelated_equality_subqueries      NULL    NULL     NULL     NULL        NULL
 optimizer_use_forecasts                               NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                              NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_disjunction_stats              NULL    NULL     NULL     NULL        NULL

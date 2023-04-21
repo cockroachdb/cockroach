@@ -340,6 +340,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerAlwaysUseHistograms = false
 	notStale()
 
+	// Stale optimizer_hoist_uncorrelated_equality_subqueries.
+	evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries = true
+	stale()
+	evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()

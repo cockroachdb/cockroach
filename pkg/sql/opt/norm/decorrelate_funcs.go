@@ -66,6 +66,20 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 	case *memo.UDFExpr:
 		// Do not attempt to hoist UDFs.
 		return false
+
+	case *memo.EqExpr:
+		// Hoist subqueries in expressions like (Eq (Variable) (Subquery)) if
+		// the corresponding session setting is enabled.
+		// TODO(mgartner): We could hoist if we have an IS NOT DISTINCT FROM
+		// expression. But it won't currently lead to a lookup join due to
+		// #100855 and the plan could be worse, so we avoid it for now.
+		if c.f.evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries {
+			_, isLeftVar := scalar.Child(0).(*memo.VariableExpr)
+			_, isRightSubquery := scalar.Child(1).(*memo.SubqueryExpr)
+			if isLeftVar && isRightSubquery {
+				return true
+			}
+		}
 	}
 
 	// If HasHoistableSubquery is true for any child, then it's true for this
@@ -796,7 +810,14 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 	switch scalar.Op() {
 	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp, opt.ArrayFlattenOp:
 		subquery := scalar.Child(0).(memo.RelExpr)
-		if subquery.Relational().OuterCols.Empty() {
+		// According to the implementation of deriveHasHoistableSubquery,
+		// Exists, Any, and ArrayFlatten expressions are only hoistable if they
+		// are correlated. Uncorrelated subquery expressions are hoistable if
+		// the corresponding session setting is enabled and they are part of an
+		// equality expression with a variable.
+		uncorrelatedHoistAllowed := scalar.Op() == opt.SubqueryOp &&
+			r.f.evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries
+		if subquery.Relational().OuterCols.Empty() && !uncorrelatedHoistAllowed {
 			break
 		}
 
