@@ -566,24 +566,27 @@ SELECT (SELECT 1 AS a, 2 AS b) AS r
 ----
 error (42601): subquery must return only one column, found 2
 
+# Return the same error as Postgres.
 build
 SELECT 1 IN (SELECT 1 AS a, 2 AS b) AS r
 ----
-error (22023): unsupported comparison operator: <int> IN <tuple{tuple{int AS a, int AS b}}>
+error (42601): subquery has too many columns
 
+# Return the same error as Postgres.
 build
 SELECT (1, 2) IN (SELECT 1 AS a) AS r
 ----
-error (22023): unsupported comparison operator: <tuple{int, int}> IN <tuple{int}>
+error (42601): subquery has too few columns
 
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 ----
 
+# Return the same error as Postgres.
 build
 SELECT (1, 2) IN (SELECT * FROM abc) AS r
 ----
-error (22023): unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{int AS a, int AS b, int AS c}}>
+error (42601): subquery has too many columns
 
 build
 SELECT (1, 2) IN (SELECT a, b FROM abc) AS r
@@ -2317,3 +2320,93 @@ scalar-group-by
  └── aggregations
       └── count [as=count:7]
            └── column6:6
+
+exec-ddl
+CREATE TABLE xy (x INT, y INT)
+----
+
+exec-ddl
+CREATE TABLE ab (a INT, b INT)
+----
+
+build
+SELECT * FROM ab WHERE (a, b) IN (SELECT x+1, y+1 FROM xy)
+----
+project
+ ├── columns: a:1 b:2
+ └── select
+      ├── columns: a:1 b:2 ab.rowid:3!null ab.crdb_internal_mvcc_timestamp:4 ab.tableoid:5
+      ├── scan ab
+      │    └── columns: a:1 b:2 ab.rowid:3!null ab.crdb_internal_mvcc_timestamp:4 ab.tableoid:5
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: column13:13
+                │    ├── project
+                │    │    ├── columns: "?column?":11 "?column?":12
+                │    │    ├── scan xy
+                │    │    │    └── columns: x:6 y:7 xy.rowid:8!null xy.crdb_internal_mvcc_timestamp:9 xy.tableoid:10
+                │    │    └── projections
+                │    │         ├── x:6 + 1 [as="?column?":11]
+                │    │         └── y:7 + 1 [as="?column?":12]
+                │    └── projections
+                │         └── ("?column?":11, "?column?":12) [as=column13:13]
+                └── (a:1, b:2)
+
+build
+SELECT * FROM ab WHERE ((a,b), (1, 1)) IN (SELECT (x+1, y+1), (x, y) FROM xy)
+----
+project
+ ├── columns: a:1 b:2
+ └── select
+      ├── columns: a:1 b:2 ab.rowid:3!null ab.crdb_internal_mvcc_timestamp:4 ab.tableoid:5
+      ├── scan ab
+      │    └── columns: a:1 b:2 ab.rowid:3!null ab.crdb_internal_mvcc_timestamp:4 ab.tableoid:5
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: column13:13
+                │    ├── project
+                │    │    ├── columns: "?column?":11 "?column?":12
+                │    │    ├── scan xy
+                │    │    │    └── columns: x:6 y:7 xy.rowid:8!null xy.crdb_internal_mvcc_timestamp:9 xy.tableoid:10
+                │    │    └── projections
+                │    │         ├── (x:6 + 1, y:7 + 1) [as="?column?":11]
+                │    │         └── (x:6, y:7) [as="?column?":12]
+                │    └── projections
+                │         └── ("?column?":11, "?column?":12) [as=column13:13]
+                └── ((a:1, b:2), (1, 1))
+
+build
+SELECT (SELECT 2, 2) IN (SELECT x+1, y+1 FROM xy)
+----
+project
+ ├── columns: "?column?":11
+ ├── values
+ │    └── ()
+ └── projections
+      └── any: eq [as="?column?":11]
+           ├── project
+           │    ├── columns: column9:9
+           │    ├── project
+           │    │    ├── columns: "?column?":7 "?column?":8
+           │    │    ├── scan xy
+           │    │    │    └── columns: x:2 y:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+           │    │    └── projections
+           │    │         ├── x:2 + 1 [as="?column?":7]
+           │    │         └── y:3 + 1 [as="?column?":8]
+           │    └── projections
+           │         └── ("?column?":7, "?column?":8) [as=column9:9]
+           └── subquery
+                └── max1-row
+                     ├── columns: column10:10!null
+                     └── project
+                          ├── columns: column10:10!null
+                          ├── project
+                          │    ├── columns: "?column?":1!null
+                          │    ├── values
+                          │    │    └── ()
+                          │    └── projections
+                          │         └── 2 [as="?column?":1]
+                          └── projections
+                               └── ("?column?":1, "?column?":1) [as=column10:10]

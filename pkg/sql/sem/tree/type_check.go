@@ -2288,7 +2288,11 @@ func typeCheckComparisonOp(
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 		}
 
-		desired := types.MakeTuple([]*types.T{typ})
+		desired := typ
+		if desired.Family() != types.TupleFamily {
+			desired = types.MakeTuple([]*types.T{typ})
+		}
+
 		typedRight, err = foldedRight.TypeCheck(ctx, semaCtx, desired)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
