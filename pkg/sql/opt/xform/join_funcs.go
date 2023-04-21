@@ -58,8 +58,9 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	// left side. The CommuteJoin rule will ensure that we actually try both
 	// sides.
 	leftCols := leftEq.ToSet()
-	orders := ordering.DeriveSimplifiedInterestingOrderings(left).Copy()
-	orders.RestrictToColsNoSimplify(leftCols)
+	// NOTE: leftCols cannot be mutated after this point because it is used as a
+	// key to cache the restricted orderings in left's logical properties.
+	orders := ordering.DeriveRestrictedInterestingOrderings(left, leftCols).Copy()
 
 	var mustGenerateMergeJoin bool
 	leftFDs := &left.Relational().FuncDeps

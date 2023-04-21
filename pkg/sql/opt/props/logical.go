@@ -31,9 +31,9 @@ const (
 	// field is populated.
 	InterestingOrderings
 
-	// SimplifiedInterestingOrderings is set when the
-	// Relational.Rule.SimplifiedInterestingOrderings field is populated.
-	SimplifiedInterestingOrderings
+	// RestrictedInterestingOrderings is set when the
+	// Relational.Rule.RestrictedInterestingOrderings field is populated.
+	RestrictedInterestingOrderings
 
 	// HasHoistableSubquery is set when the Scalar.Rule.HasHoistableSubquery
 	// is populated.
@@ -267,11 +267,10 @@ type Relational struct {
 		// been set.
 		InterestingOrderings OrderingSet
 
-		// SimplifiedInterestingOrderings is similar to InterestingOrderings. It
-		// contains the "interesting" orderings that have been simplified by the
-		// relational expression's functional dependencies. See
-		// OrderingChoice.Simplify.
-		SimplifiedInterestingOrderings OrderingSet
+		// RestrictedInterestingOrderings is similar to InterestingOrderings. It
+		// contains the "interesting" orderings that have been restricted to a
+		// given set of columns. See OrderingSet.RestrictToCols.
+		RestrictedInterestingOrderings []RestrictedInterestingOrdering
 
 		// UnfilteredCols is the set of all columns for which rows from their base
 		// table are guaranteed not to have been filtered. Rows may be duplicated,
@@ -285,6 +284,13 @@ type Relational struct {
 		// is only valid once the Rule.Available.UnfilteredCols bit has been set.
 		UnfilteredCols opt.ColSet
 	}
+}
+
+// RestrictedInterestingOrdering is an interesting ordering that has been
+// restricted to a set of columns. See OrderingSet.RestrictToCols.
+type RestrictedInterestingOrdering struct {
+	OrderingSet
+	Cols opt.ColSet
 }
 
 // Scalar properties are logical properties that are computed for scalar
