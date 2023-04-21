@@ -10,6 +10,14 @@ CREATE EXTENSION bob -- literals removed
 CREATE EXTENSION bob -- identifiers removed
 
 parse
+CREATE EXTENSION "a-b"
+----
+CREATE EXTENSION "a-b"
+CREATE EXTENSION "a-b" -- fully parenthesized
+CREATE EXTENSION "a-b" -- literals removed
+CREATE EXTENSION "a-b" -- identifiers removed
+
+parse
 CREATE EXTENSION IF NOT EXISTS bob
 ----
 CREATE EXTENSION IF NOT EXISTS bob
