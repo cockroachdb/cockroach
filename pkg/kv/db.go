@@ -287,6 +287,11 @@ func (db *DB) Clock() *hlc.Clock {
 	return db.clock
 }
 
+// Context returns the DB's DBContext.
+func (db *DB) Context() DBContext {
+	return db.ctx
+}
+
 // NewDB returns a new DB.
 func NewDB(
 	actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock, stopper *stop.Stopper,
