@@ -349,7 +349,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		// Ensure that the tenant still works and the target
 		// version wasn't reached.
 		initialTenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
-		initialTenantRunner.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
+		initialTenantRunner.CheckQueryResults(t, "SELECT split_part(version, '-', 1) FROM [SHOW CLUSTER SETTING version]",
 			[][]string{{v1.String()}})
 
 		// Restart the tenant and ensure that the version is correct.
