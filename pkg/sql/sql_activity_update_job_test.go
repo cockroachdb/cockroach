@@ -81,6 +81,16 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, count, "statement_statistics: expect:0, actual:%d", count)
 
+	row = db.QueryRowContext(ctx, "SELECT count_rows() FROM crdb_internal.transaction_activity")
+	err = row.Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, 0, count, "crdb_internal.transaction_activity: expect:0, actual:%d", count)
+
+	row = db.QueryRowContext(ctx, "SELECT count_rows() FROM crdb_internal.statement_activity")
+	err = row.Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, 0, count, "crdb_internal.statement_activity: expect:0, actual:%d", count)
+
 	execCfg := srv.ExecutorConfig().(ExecutorConfig)
 	st := cluster.MakeTestingClusterSettings()
 	updater := newSqlActivityUpdater(st, execCfg.InternalDB)
@@ -161,6 +171,18 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
 		"FROM system.public.statement_activity WHERE app_name = $1", appName)
+	err = row.Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, count, 1, "statement_activity after transfer: expect:1, actual:%d", count)
+
+	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
+		"FROM crdb_internal.transaction_activity WHERE app_name = $1", appName)
+	err = row.Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, count, 1, "transaction_activity after transfer: expect:1, actual:%d", count)
+
+	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
+		"FROM crdb_internal.statement_activity WHERE app_name = $1", appName)
 	err = row.Scan(&count)
 	require.NoError(t, err)
 	require.Equal(t, count, 1, "statement_activity after transfer: expect:1, actual:%d", count)
