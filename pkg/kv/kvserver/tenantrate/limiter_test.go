@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -41,7 +40,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 func TestCloser(t *testing.T) {
@@ -54,7 +53,7 @@ func TestCloser(t *testing.T) {
 	timeSource := timeutil.NewManualTime(start)
 	factory := tenantrate.NewLimiterFactory(&st.SV, &tenantrate.TestingKnobs{
 		TimeSource: timeSource,
-	}, tenantcapabilitiesauthorizer.NewNoopAuthorizer())
+	}, fakeAuthorizer{})
 	tenant := roachpb.MustMakeTenantID(2)
 	closer := make(chan struct{})
 	limiter := factory.GetTenant(ctx, tenant, closer)
@@ -78,7 +77,7 @@ func TestUseAfterRelease(t *testing.T) {
 	defer cancel()
 	cs := cluster.MakeTestingClusterSettings()
 
-	factory := tenantrate.NewLimiterFactory(&cs.SV, nil /* knobs */, tenantcapabilitiesauthorizer.NewNoopAuthorizer())
+	factory := tenantrate.NewLimiterFactory(&cs.SV, nil /* knobs */, fakeAuthorizer{})
 	s := stop.NewStopper()
 	defer s.Stop(ctx)
 	ctx, cancel2 := s.WithCancelOnQuiesce(ctx)
@@ -762,3 +761,29 @@ func parseStrings(t *testing.T, d *datadriven.TestData) []string {
 	}
 	return ids
 }
+
+// fakeAuthorizer implements the tenantauthorizer.Authorizer
+// interface, but does not perform cap checks yet pretents the caller
+// is subject to rate limit checks. (For testing in this package.)
+type fakeAuthorizer struct{}
+
+func (fakeAuthorizer) HasNodeStatusCapability(_ context.Context, tenID roachpb.TenantID) error {
+	return nil
+}
+func (fakeAuthorizer) HasTSDBQueryCapability(_ context.Context, tenID roachpb.TenantID) error {
+	return nil
+}
+func (fakeAuthorizer) HasNodelocalStorageCapability(
+	_ context.Context, tenID roachpb.TenantID,
+) error {
+	return nil
+}
+func (fakeAuthorizer) IsExemptFromRateLimiting(_ context.Context, tenID roachpb.TenantID) bool {
+	return false
+}
+func (fakeAuthorizer) HasCapabilityForBatch(
+	_ context.Context, tenID roachpb.TenantID, _ *kvpb.BatchRequest,
+) error {
+	return nil
+}
+func (fakeAuthorizer) BindReader(tenantcapabilities.Reader) {}
