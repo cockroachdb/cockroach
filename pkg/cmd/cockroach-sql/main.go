@@ -191,6 +191,7 @@ func runSQL(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
+	cfg.ShellCtx.CertsDir = copts.CertsDir
 	cfg.ShellCtx.ParseURL = clienturl.MakeURLParserFn(cmd, copts)
 	return cfg.Run(context.Background(), conn)
 }

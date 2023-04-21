@@ -355,6 +355,8 @@ func runDemoInternal(
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
+	_, _, certsDir := c.GetSQLCredentials()
+	sqlCtx.ShellCtx.CertsDir = certsDir
 	sqlCtx.ShellCtx.ParseURL = clienturl.MakeURLParserFn(cmd, cliCtx.clientOpts)
 
 	if err := extraInit(ctx, conn); err != nil {
