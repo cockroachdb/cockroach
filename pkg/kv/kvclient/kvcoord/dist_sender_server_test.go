@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -3179,40 +3180,49 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 			}
 
+			filterFn.Store((func(kvserverbase.FilterArgs) *kvpb.Error)(nil))
 			if tc.filter != nil {
 				filterFn.Store(tc.filter)
-				defer filterFn.Store((func(kvserverbase.FilterArgs) *kvpb.Error)(nil))
 			}
+			refreshSpansCondenseFilter.Store((func() bool)(nil))
 			if tc.refreshSpansCondenseFilter != nil {
 				refreshSpansCondenseFilter.Store(tc.refreshSpansCondenseFilter)
-				defer refreshSpansCondenseFilter.Store((func() bool)(nil))
 			}
 
-			var metrics kvcoord.TxnMetrics
-			var lastAutoRetries int64
-			var hadClientRetry bool
-			epoch := 0
-			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Construct a new DB with a fresh set of TxnMetrics. This allows the test
+			// to precisely assert on the metrics without having to worry about other
+			// transactions in the system affecting them.
+			metrics := kvcoord.MakeTxnMetrics(metric.TestSampleInterval)
+			tcsFactoryCfg := kvcoord.TxnCoordSenderFactoryConfig{
+				AmbientCtx:   s.AmbientCtx(),
+				Settings:     s.ClusterSettings(),
+				Clock:        s.Clock(),
+				Stopper:      s.Stopper(),
+				Metrics:      metrics,
+				TestingKnobs: *s.TestingKnobs().KVClient.(*kvcoord.ClientTestingKnobs),
+			}
+			distSender := s.DistSenderI().(*kvcoord.DistSender)
+			tcsFactory := kvcoord.NewTxnCoordSenderFactory(tcsFactoryCfg, distSender)
+			testDB := kv.NewDBWithContext(s.AmbientCtx(), tcsFactory, s.Clock(), db.Context())
+
+			err := testDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				if txn.Epoch() > 0 {
+					// We expected a new epoch and got it; return success.
+					return nil
+				}
+
+				if tc.tsLeaked {
+					// Read the commit timestamp so the expectation is that
+					// this transaction cannot be restarted internally.
+					_ = txn.CommitTimestamp()
+				}
+
 				if tc.priorReads {
 					_, err := txn.Get(ctx, "prior read")
 					if err != nil {
 						t.Fatalf("unexpected error during prior read: %v", err)
 					}
 				}
-				if tc.tsLeaked {
-					// Read the commit timestamp so the expectation is that
-					// this transaction cannot be restarted internally.
-					_ = txn.CommitTimestamp()
-				}
-				if epoch > 0 {
-					if !tc.clientRetry {
-						t.Fatal("expected txn coord sender to retry, but got client-side retry")
-					}
-					hadClientRetry = true
-					// We expected a new epoch and got it; return success.
-					return nil
-				}
-				defer func() { epoch++ }()
 
 				if tc.afterTxnStart != nil {
 					if err := tc.afterTxnStart(ctx, db); err != nil {
@@ -3220,34 +3230,20 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					}
 				}
 
-				metrics = txn.Sender().(*kvcoord.TxnCoordSender).TxnCoordSenderFactory.Metrics()
-				lastAutoRetries = metrics.RefreshAutoRetries.Count()
-
 				return tc.retryable(ctx, txn)
-			}); err != nil {
-				if len(tc.expFailure) == 0 || !testutils.IsError(err, tc.expFailure) {
-					t.Fatal(err)
-				}
+			})
+
+			// Verify success or failure.
+			if len(tc.expFailure) == 0 {
+				require.NoError(t, err)
 			} else {
-				if len(tc.expFailure) > 0 {
-					t.Errorf("expected failure %q", tc.expFailure)
-				}
+				require.Error(t, err)
+				require.Regexp(t, tc.expFailure, err)
 			}
-			// Verify auto retry metric. Because there's a chance that splits
-			// from the cluster setup are still ongoing and can experience
-			// their own retries, this might increase by more than one, so we
-			// can only check here that it's >= 1.
-			autoRetries := metrics.RefreshAutoRetries.Count() - lastAutoRetries
-			if tc.txnCoordRetry && autoRetries == 0 {
-				t.Errorf("expected [at least] one txn coord sender auto retry; got %d", autoRetries)
-			} else if !tc.txnCoordRetry && autoRetries != 0 {
-				t.Errorf("expected no txn coord sender auto retries; got %d", autoRetries)
-			}
-			if tc.clientRetry && !hadClientRetry {
-				t.Errorf("expected but did not experience client retry")
-			} else if !tc.clientRetry && hadClientRetry {
-				t.Errorf("did not expect but experienced client retry")
-			}
+
+			// Verify metrics.
+			require.Equal(t, tc.txnCoordRetry, metrics.RefreshAutoRetries.Count() != 0)
+			require.Equal(t, tc.clientRetry, metrics.Restarts.TotalSum() != 0)
 		})
 	}
 }
