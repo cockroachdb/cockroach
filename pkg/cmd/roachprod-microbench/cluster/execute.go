@@ -33,10 +33,11 @@ type RemoteCommand struct {
 // A Duration of -1 indicates that the command was cancelled.
 type RemoteResponse struct {
 	RemoteCommand
-	Stdout   string
-	Stderr   string
-	Err      error
-	Duration time.Duration
+	Stdout     string
+	Stderr     string
+	Err        error
+	ExitStatus int
+	Duration   time.Duration
 }
 
 func remoteWorker(
@@ -54,7 +55,7 @@ func remoteWorker(
 		for index, command := range commands {
 			if errors.Is(ctx.Err(), context.Canceled) {
 				for _, cancelCommand := range commands[index:] {
-					response <- RemoteResponse{cancelCommand, "", "", nil, -1}
+					response <- RemoteResponse{cancelCommand, "", "", nil, -1, -1}
 				}
 				break
 			}
@@ -63,12 +64,14 @@ func remoteWorker(
 				"", "", false, command.Args)
 			duration := timeutil.Since(start)
 			var stdout, stderr string
+			var exitStatus int
 			if len(runResult) > 0 {
 				stdout = runResult[0].Stdout
 				stderr = runResult[0].Stderr
+				exitStatus = runResult[0].RemoteExitStatus
 				err = errors.CombineErrors(err, runResult[0].Err)
 			}
-			response <- RemoteResponse{command, stdout, stderr, err, duration}
+			response <- RemoteResponse{command, stdout, stderr, err, exitStatus, duration}
 		}
 	}
 }
