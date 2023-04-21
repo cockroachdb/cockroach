@@ -217,6 +217,9 @@ func (b *Builder) maybeRewriteColumnPrefix(expr tree.Expr) tree.Expr {
 		if scopeCol, ok := colExpr.(*scopeColumn); ok {
 			md := b.factory.Metadata()
 			tblID := md.ColumnMeta(scopeCol.id).Table
+			if tblID == 0 {
+				return false, colExpr, nil
+			}
 			tbl := md.Table(tblID)
 			// If a column is a reference from a real table.
 			if scopeCol.table.CatalogName != "" && scopeCol.table.SchemaName != "" {
