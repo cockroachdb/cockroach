@@ -64,12 +64,14 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 
 // CheckInvalidDescriptors returns an error if there exists any descriptors in
 // the crdb_internal.invalid_objects virtual table.
-func CheckInvalidDescriptors(db *gosql.DB) error {
+func CheckInvalidDescriptors(ctx context.Context, db *gosql.DB) error {
 	// Because crdb_internal.invalid_objects is a virtual table, by default, the
 	// query will take a lease on the database sqlDB is connected to and only run
 	// the query on the given database. The "" prefix prevents this lease
 	// acquisition and allows the query to fetch all descriptors in the cluster.
-	rows, err := db.Query(`SELECT id, obj_name, error FROM "".crdb_internal.invalid_objects`)
+	rows, err := db.QueryContext(ctx, `
+SET statement_timeout = '1m'; 
+SELECT id, obj_name, error FROM "".crdb_internal.invalid_objects`)
 	if err != nil {
 		return err
 	}
