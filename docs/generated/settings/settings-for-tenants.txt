@@ -253,6 +253,7 @@ sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if ena
 sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job
 sql.show_ranges_deprecated_behavior.enabled	boolean	true	if set, SHOW RANGES and crdb_internal.ranges{_no_leases} behave with deprecated pre-v23.1 semantics. NB: the new SHOW RANGES interface has richer WITH options than pre-v23.1 SHOW RANGES.
 sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators
+sql.stats.activity.persisted_rows.max	integer	200000	maximum number of rows of statement and transaction activity that will be persisted in the system tables
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode
 sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh
 sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh
@@ -292,4 +293,4 @@ trace.opentelemetry.collector	string		address of an OpenTelemetry trace collecto
 trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
-version	version	22.2-100	set the active cluster version in the format '<major>.<minor>'
+version	version	22.2-102	set the active cluster version in the format '<major>.<minor>'

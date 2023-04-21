@@ -524,6 +524,11 @@ const (
 	// was introduced.
 	V23_1_TenantIDSequence
 
+	// V23_1CreateSystemActivityUpdateJob is the version at which Cockroach adds a
+	// job that periodically updates the statement_activity and transaction_activity.
+	// tables.
+	V23_1CreateSystemActivityUpdateJob
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -908,6 +913,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_TenantIDSequence,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 100},
+	},
+	{
+		Key:     V23_1CreateSystemActivityUpdateJob,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 102},
 	},
 
 	// *************************************************
