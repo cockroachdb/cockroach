@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/knz/bubbline/editline"
 	"github.com/knz/bubbline/history"
 )
@@ -66,9 +67,10 @@ Query Buffer
 
 Connection
   \info             display server details including connection strings.
-  \c, \connect {[DB] [USER] [HOST] [PORT] | [URL]}
+  \c, \connect {[DB] [USER] [HOST] [PORT] [options] | [URL]}
                     connect to a server or print the current connection URL.
-                    (Omitted values reuse previous parameters. Use '-' to skip a field.)
+                    Omitted values reuse previous parameters. Use '-' to skip a field.
+                    The option "autocerts" attempts to auto-discover TLS client certs.
   \password [USERNAME]
                     securely change the password for a user
 
@@ -1691,10 +1693,21 @@ func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) erro
 		return err
 	}
 
+	var autoCerts bool
+
 	// Parse the arguments to \connect:
 	// it accepts newdb, user, host, port in that order.
 	// Each field can be marked as "-" to reuse the current defaults.
 	switch len(cmd) {
+	case 5:
+		if cmd[4] != "-" {
+			if cmd[4] == "autocerts" {
+				autoCerts = true
+			} else {
+				return errors.Newf(`unknown syntax: \c %s`, strings.Join(cmd, " "))
+			}
+		}
+		fallthrough
 	case 4:
 		if cmd[3] != "-" {
 			if err := newURL.SetOption("port", cmd[3]); err != nil {
@@ -1755,6 +1768,12 @@ func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) erro
 			return err
 		}
 		newURL.WithAuthn(prevAuthn)
+	}
+
+	if autoCerts {
+		if err := autoFillClientCerts(newURL, currURL, c.sqlCtx.CertsDir); err != nil {
+			return err
+		}
 	}
 
 	if err := newURL.Validate(); err != nil {
@@ -2711,4 +2730,101 @@ func (c *cliState) closeOutputFile() error {
 	c.iCtx.queryOutput = c.iCtx.stdout
 	c.iCtx.queryOutputBuf = nil
 	return err
+}
+
+// autoFillClientCerts tries to discover a TLS client certificate and key
+// for use in newURL. This is used from the \connect command with option
+// "autocerts".
+func autoFillClientCerts(newURL, currURL *pgurl.URL, extraCertsDir string) error {
+	username := newURL.GetUsername()
+	// We could use methods from package "certnames" here but we're
+	// avoiding extra package dependencies for the sake of keeping
+	// the standalone shell binary (cockroach-sql) small.
+	desiredKeyFile := "client." + username + ".key"
+	desiredCertFile := "client." + username + ".crt"
+	// Try to discover a TLS client certificate and key.
+	// First we'll try to find them in the directory specified in the shell config.
+	// This is coming from --certs-dir on the command line (of COCKROACH_CERTS_DIR).
+	//
+	// If not found there, we'll try to find the client cert in the
+	// same directory as the cert in the original URL; and the key in
+	// the same directory as the key in the original URL (cert and key
+	// may be in different places).
+	//
+	// If the original URL doesn't have a cert, we'll try to find a
+	// cert in the directory where the CA cert is stored.
+
+	// If all fails, we'll tell the user where we tried to search.
+	candidateDirs := make(map[string]struct{})
+	var newCert, newKey string
+	if extraCertsDir != "" {
+		candidateDirs[extraCertsDir] = struct{}{}
+		if candidateCert := filepath.Join(extraCertsDir, desiredCertFile); fileExists(candidateCert) {
+			newCert = candidateCert
+		}
+		if candidateKey := filepath.Join(extraCertsDir, desiredKeyFile); fileExists(candidateKey) {
+			newKey = candidateKey
+		}
+	}
+	if newCert == "" || newKey == "" {
+		var caCertDir string
+		if tlsUsed, _, caCertPath := currURL.GetTLSOptions(); tlsUsed {
+			caCertDir = filepath.Dir(caCertPath)
+			candidateDirs[caCertDir] = struct{}{}
+		}
+		var prevCertDir, prevKeyDir string
+		if authnCertEnabled, certPath, keyPath := currURL.GetAuthnCert(); authnCertEnabled {
+			prevCertDir = filepath.Dir(certPath)
+			prevKeyDir = filepath.Dir(keyPath)
+			candidateDirs[prevCertDir] = struct{}{}
+			candidateDirs[prevKeyDir] = struct{}{}
+		}
+		if newKey == "" {
+			if candidateKey := filepath.Join(prevKeyDir, desiredKeyFile); fileExists(candidateKey) {
+				newKey = candidateKey
+			} else if candidateKey := filepath.Join(caCertDir, desiredKeyFile); fileExists(candidateKey) {
+				newKey = candidateKey
+			}
+		}
+		if newCert == "" {
+			if candidateCert := filepath.Join(prevCertDir, desiredCertFile); fileExists(candidateCert) {
+				newCert = candidateCert
+			} else if candidateCert := filepath.Join(caCertDir, desiredCertFile); fileExists(candidateCert) {
+				newCert = candidateCert
+			}
+		}
+	}
+	if newCert == "" || newKey == "" {
+		err := errors.Newf("unable to find TLS client cert and key for user %q", username)
+		if len(candidateDirs) == 0 {
+			err = errors.WithHint(err, "No candidate directories; try specifying --certs-dir on the command line.")
+		} else {
+			sortedDirs := make([]string, 0, len(candidateDirs))
+			for dir := range candidateDirs {
+				sortedDirs = append(sortedDirs, dir)
+			}
+			sort.Strings(sortedDirs)
+			err = errors.WithDetailf(err, "Candidate directories:\n- %s", strings.Join(sortedDirs, "\n- "))
+		}
+		return err
+	}
+
+	newURL.WithAuthn(pgurl.AuthnClientCert(newCert, newKey))
+
+	return nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if oserror.IsNotExist(err) {
+		return false
+	}
+	// Stat() returned an error that is not "does not exist".
+	// This is unexpected, but we'll treat it as if the file does exist.
+	// The connection will try to use the file, and then fail with a
+	// more specific error.
+	return true
 }
