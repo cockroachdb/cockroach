@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -54,6 +55,12 @@ func createTestDB(t testing.TB) *localtestcluster.LocalTestCluster {
 func createTestDBWithKnobs(
 	t testing.TB, knobs *kvserver.StoreTestingKnobs,
 ) *localtestcluster.LocalTestCluster {
+	if knobs == nil {
+		knobs = &kvserver.StoreTestingKnobs{}
+	}
+	if knobs.TenantRateKnobs.Authorizer == nil {
+		knobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
+	}
 	s := &localtestcluster.LocalTestCluster{
 		StoreTestingKnobs: knobs,
 	}

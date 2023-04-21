@@ -110,7 +110,7 @@ func TestRotateCerts(t *testing.T) {
 		clientContext,
 		security.CommandTLSSettings{},
 		roachpb.SystemTenantID,
-		tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+		tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
 	)
 	firstClient, err := firstSCtx.GetHTTPClient()
 	if err != nil {
@@ -147,7 +147,7 @@ func TestRotateCerts(t *testing.T) {
 		clientContext,
 		security.CommandTLSSettings{},
 		roachpb.SystemTenantID,
-		tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+		tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
 	)
 	secondClient, err := secondSCtx.GetHTTPClient()
 	if err != nil {
@@ -261,7 +261,7 @@ func TestRotateCerts(t *testing.T) {
 		clientContext,
 		security.CommandTLSSettings{},
 		roachpb.SystemTenantID,
-		tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+		tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
 	)
 	thirdClient, err := thirdSCtx.GetHTTPClient()
 	if err != nil {

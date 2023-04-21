@@ -160,6 +160,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.distsql.drain.cancel_after_wait.enabled":            {},
 	"changefeed.active_protected_timestamps.enabled":         {},
 	"jobs.scheduler.single_node_scheduler.enabled":           {},
+	"tenant_capabilities.authorizer.enabled":                 {},
 	// renamed.
 	"spanconfig.host_coalesce_adjacent.enabled":            {},
 	"sql.defaults.experimental_stream_replication.enabled": {},
