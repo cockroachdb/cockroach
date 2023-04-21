@@ -48,7 +48,7 @@ func (d *dev) compose(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 		volume := mustGetFlagString(cmd, volumeFlag)
-		err = d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume)
+		err = d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume, nil)
 		if err != nil {
 			return err
 		}
