@@ -400,7 +400,7 @@ func (h *Histogram) TotalCountWindowed() int64 {
 	return int64(h.ToPrometheusMetricWindowed().Histogram.GetSampleCount())
 }
 
-// TotalSum returns the (cumulative) number of samples.
+// TotalSum returns the (cumulative) sum of samples.
 func (h *Histogram) TotalSum() float64 {
 	return h.ToPrometheusMetric().Histogram.GetSampleSum()
 }
