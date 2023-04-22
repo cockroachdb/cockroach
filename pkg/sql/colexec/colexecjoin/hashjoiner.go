@@ -277,6 +277,7 @@ func (hj *hashJoiner) Init(ctx context.Context) {
 	hj.ht = colexechash.NewHashTable(
 		ctx,
 		hj.hashTableAllocator,
+		coldata.BatchSize(),
 		hashTableLoadFactor,
 		hj.hashTableInitialNumBuckets,
 		hj.spec.Right.SourceTypes,
