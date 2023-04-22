@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"runtime/pprof"
 	"sort"
 	"testing"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -656,6 +658,73 @@ func TestNodeSendUnknownBatchRequest(t *testing.T) {
 	if _, ok := br.Error.GetDetail().(*kvpb.UnsupportedRequestError); !ok {
 		t.Fatalf("expected unsupported request, not %v", br.Error)
 	}
+}
+
+// TestNodeBatchRequestPProfLabels tests that node.Batch copies pprof labels
+// from the BatchRequest and applies them to the root context if CPU profiling
+// with labels is enabled.
+func TestNodeBatchRequestPProfLabels(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	observedProfileLabels := make(map[string]string)
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, _ *kvpb.BatchResponse) *kvpb.Error {
+					var foundBatch bool
+					for _, ru := range ba.Requests {
+						switch r := ru.GetInner().(type) {
+						case *kvpb.PutRequest:
+							if r.Header().Key.Equal(roachpb.Key("a")) {
+								foundBatch = true
+							}
+						}
+					}
+					if foundBatch {
+						pprof.ForLabels(ctx, func(key, value string) bool {
+							observedProfileLabels[key] = value
+							return true
+						})
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.(*TestServer)
+	n := ts.GetNode()
+
+	var ba kvpb.BatchRequest
+	ba.RangeID = 1
+	ba.Replica.StoreID = 1
+	expectedProfileLabels := map[string]string{"key": "value", "key2": "value2"}
+	ba.ProfileLabels = func() []string {
+		var labels []string
+		for k, v := range expectedProfileLabels {
+			labels = append(labels, k, v)
+		}
+		return labels
+	}()
+
+	gr := kvpb.NewGet(roachpb.Key("a"), false)
+	pr := kvpb.NewPut(gr.Header().Key, roachpb.Value{})
+	ba.Add(gr, pr)
+
+	// If CPU profiling with labels is not enabled, we should not observe any
+	// pprof labels on the context.
+	ctx := context.Background()
+	_, _ = n.Batch(ctx, &ba)
+	require.Equal(t, map[string]string{}, observedProfileLabels)
+
+	require.NoError(t, ts.ClusterSettings().SetCPUProfiling(cluster.CPUProfileWithLabels))
+	_, _ = n.Batch(ctx, &ba)
+
+	require.Len(t, observedProfileLabels, 3)
+	// Delete the labels for the range_str.
+	delete(observedProfileLabels, "range_str")
+	require.Equal(t, expectedProfileLabels, observedProfileLabels)
 }
 
 func TestNodeBatchRequestMetricsInc(t *testing.T) {
