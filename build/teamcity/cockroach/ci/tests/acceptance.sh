@@ -34,6 +34,7 @@ $BAZCI --artifacts_dir=$PWD/artifacts -- \
   --test_arg=-l="$ARTIFACTSDIR" \
   --test_arg=-b=$PWD/artifacts/cockroach \
   --test_env=TZ=America/New_York \
+  --profile=$PWD/artifacts/profile.gz \
   --test_timeout=1800 || status=$?
 
 # Some unit tests test automatic ballast creation. These ballasts can be

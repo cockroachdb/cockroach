@@ -25,16 +25,16 @@ import (
 
 const composeDir = "compose"
 
-func TestComposeGSS(t *testing.T) {
-	testCompose(t, filepath.Join("gss", "docker-compose.yml"), "psql")
-}
-
-func TestComposeGSSPython(t *testing.T) {
-	testCompose(t, filepath.Join("gss", "docker-compose-python.yml"), "python")
-}
-
-func TestComposeFlyway(t *testing.T) {
-	testCompose(t, filepath.Join("flyway", "docker-compose.yml"), "flyway")
+func TestCompose(t *testing.T) {
+	t.Run("ComposeGSS", func(t *testing.T) {
+		testCompose(t, filepath.Join("gss", "docker-compose.yml"), "psql")
+	})
+	t.Run("ComposeGSSPython", func(t *testing.T) {
+		testCompose(t, filepath.Join("gss", "docker-compose-python.yml"), "python")
+	})
+	t.Run("ComposeGSSFlyway", func(t *testing.T) {
+		testCompose(t, filepath.Join("flyway", "docker-compose.yml"), "flyway")
+	})
 }
 
 func testCompose(t *testing.T, path string, exitCodeFrom string) {

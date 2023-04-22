@@ -63,6 +63,12 @@ else
   bazel run pkg/cmd/generate-logictest -- -out-dir="$PWD"
 fi
 
+if files_unchanged_from_upstream WORKSPACE $(find_relevant ./pkg/acceptance -name '*') $(find_relevant ./pkg/cli/interactive_tests -name '*') $(find_relevant ./pkg/cmd/generate-acceptance-tests -name '*'); then
+  echo "Skipping //pkg/cmd/generate-acceptance-tests (relevant files are unchanged from upstream)"
+else
+  bazel run pkg/cmd/generate-acceptance-tests -- -out-dir="$PWD"
+fi
+
 if files_unchanged_from_upstream c-deps/archived.bzl c-deps/REPOSITORIES.bzl DEPS.bzl WORKSPACE $(find_relevant ./pkg/cmd/generate-distdir -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg/build/bazel -name BUILD.bazel -or -name '*.go') $(find_relevant pkg/build/starlarkutil -name BUILD.bazel -or -name '*.go'); then
     echo "Skipping //pkg/cmd/generate-distdir (relevant files are unchanged from upstream)."
 else

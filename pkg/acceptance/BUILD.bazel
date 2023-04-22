@@ -21,6 +21,7 @@ go_library(
         "//pkg/server",  # keep
         "//pkg/testutils",
         "//pkg/testutils/serverutils",  # keep
+        "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",  # keep
         "//pkg/util/log",
         "//pkg/util/randutil",  # keep
@@ -40,6 +41,7 @@ go_test(
         "cli_test.go",
         "compose_test.go",
         "debug_remote_test.go",
+        "generated_cli_test.go",
         "main_test.go",
     ],
     # Note: we overide bazel timeout to 1800s using test_timeout.
@@ -52,6 +54,7 @@ go_test(
     ],
     embed = [":acceptance"],
     gotags = ["acceptance"],
+    shard_count = 16,
     tags = ["integration"],
     deps = [
         "//pkg/acceptance/cluster",
