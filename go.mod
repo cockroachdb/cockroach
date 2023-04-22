@@ -162,7 +162,7 @@ require (
 	github.com/kisielk/gotool v1.0.0
 	github.com/klauspost/compress v1.15.15
 	github.com/klauspost/pgzip v1.2.5
-	github.com/knz/bubbline v0.0.0-20230205122847-05558f88fdc4
+	github.com/knz/bubbline v0.0.0-20230422210153-e176cdfe1c43
 	github.com/knz/go-libedit v1.10.2-0.20230308124748-6f1b59dd42bc
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.3.0
@@ -415,7 +415,7 @@ require (
 )
 
 // Until this PR is merged: https://github.com/charmbracelet/bubbletea/pull/397
-replace github.com/charmbracelet/bubbletea => github.com/cockroachdb/bubbletea v0.0.0-20230108112624-1024a1c3e9ae
+replace github.com/charmbracelet/bubbletea => github.com/cockroachdb/bubbletea v0.23.1-bracketed-paste2
 
 replace github.com/olekukonko/tablewriter => github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847
 
