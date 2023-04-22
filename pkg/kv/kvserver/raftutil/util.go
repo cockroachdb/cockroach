@@ -123,6 +123,9 @@ func (s ReplicaNeedsSnapshotStatus) String() string {
 	}
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (s ReplicaNeedsSnapshotStatus) SafeValue() {}
+
 // ReplicaMayNeedSnapshot determines whether the given peer replica may be in
 // need of a raft snapshot. If this function is called with a raft.Status that
 // indicates that our local replica is not the raft leader, we pessimistically
