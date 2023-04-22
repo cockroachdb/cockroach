@@ -240,9 +240,7 @@ func (h *HdrHistogram) Mean() float64 {
 	return h.mu.cumulative.Mean()
 }
 
+// TotalSum returns the (cumulative) sum of samples.
 func (h *HdrHistogram) TotalSum() float64 {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	return h.ToPrometheusMetric().GetSummary().GetSampleSum()
+	return h.ToPrometheusMetric().Histogram.GetSampleSum()
 }
