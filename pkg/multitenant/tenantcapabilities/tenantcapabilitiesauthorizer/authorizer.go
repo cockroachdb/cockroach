@@ -372,6 +372,7 @@ func (a *Authorizer) getMode(
 		if reader == nil {
 			// The server has started but the reader hasn't started/bound
 			// yet. Block requests that would need specific capabilities.
+			log.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming capability is unavailable", tid)
 			selectedMode = authorizerModeV222
 		} else {
 			// We have a reader. Did we get data from the rangefeed yet?
@@ -380,7 +381,9 @@ func (a *Authorizer) getMode(
 			if !found {
 				// No data from the rangefeed yet. Assume caps are still
 				// unavailable.
-				log.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming capability is unavailable", tid.String())
+				log.VInfof(ctx, 2,
+					"no capability information for tenant %s; requests that require capabilities may be denied",
+					tid)
 				selectedMode = authorizerModeV222
 			}
 		}
