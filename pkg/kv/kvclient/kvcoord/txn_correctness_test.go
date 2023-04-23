@@ -26,12 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -946,6 +946,9 @@ func checkConcurrency(
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
 	defer s.Stop()
+	// Reduce the deadlock detection push delay so that txns that encounter locks
+	// begin deadlock detection immediately. This speeds up tests significantly.
+	concurrency.LockTableDeadlockDetectionPushDelay.Override(context.Background(), &s.Cfg.Settings.SV, 0)
 	verifier.run(isoLevels, s.DB, t)
 }
 
@@ -974,9 +977,8 @@ func checkConcurrency(
 
 // TestTxnDBReadSkewAnomaly verifies that neither SI nor SSI isolation
 // are subject to the read skew anomaly, an example of a database
-// constraint violation known as inconsistent analysis (see
-// http://research.microsoft.com/pubs/69541/tr-95-51.pdf). This anomaly
-// is prevented by REPEATABLE_READ.
+// constraint violation known as inconsistent analysis[^1]. This
+// anomaly is prevented by REPEATABLE_READ.
 //
 // With read skew, there are two concurrent txns. One
 // reads keys A & B, the other reads and then writes keys A & B. The
@@ -985,12 +987,11 @@ func checkConcurrency(
 // Read skew would typically fail with a history such as:
 //
 //	R1(A) R2(B) I2(B) R2(A) I2(A) R1(B) C1 C2
+//
+// [^1]: 1995, https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf
 func TestTxnDBReadSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderShort(t)
-
 	txn1 := "R(A) R(B) W(C,A+B) C"
 	txn2 := "R(A) R(B) I(A) I(B) C"
 	verify := &verifier{
