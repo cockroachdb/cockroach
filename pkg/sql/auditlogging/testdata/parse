@@ -1,3 +1,4 @@
+
 subtest not_enough_inputs
 
 line
@@ -50,14 +51,14 @@ subtest end
 subtest inputs_normalized
 
 line
-TeSt_ROLe DdL,dcL,dMl,TCl
+TeSt_ROLe DdL,dcL,dMl
 ----
 # Original configuration:
-# TeSt_ROLe DdL,dcL,dMl,TCl
+# TeSt_ROLe DdL,dcL,dMl
 #
 # Interpreted configuration:
 # ROLE    STATEMENT_TYPE
-test_role TypeDDL,TypeDCL,TypeDML,TypeTCL
+test_role TypeDDL,TypeDCL,TypeDML
 
 subtest end
 
@@ -67,13 +68,13 @@ subtest invalid_statement_types
 line
 test_role not_a_statement_type
 ----
-error: unknown statement type: "not_a_statement_type" (valid types include: "DDL", "DML", "DCL", "TCL", "ALL", "NONE")
+error: unknown statement type: "not_a_statement_type" (valid types include: "DDL", "DML", "DCL", "ALL", "NONE")
 
 # Multi statement type including unknown
 line
-test_role DDL,DML,DCL,TCL,fake
+test_role DDL,DML,DCL,fake
 ----
-error: unknown statement type: "fake" (valid types include: "DDL", "DML", "DCL", "TCL", "ALL", "NONE")
+error: unknown statement type: "fake" (valid types include: "DDL", "DML", "DCL", "ALL", "NONE")
 
 # Redundant statement types with "ALL"
 line
@@ -92,37 +93,37 @@ subtest end
 subtest quoted_columns
 
 line
-"test_role" DDL,DML,DCL,TCL
+"test_role" DDL,DML,DCL
 ----
 # Original configuration:
-# "test_role" DDL,DML,DCL,TCL
+# "test_role" DDL,DML,DCL
 #
 # Interpreted configuration:
 # ROLE    STATEMENT_TYPE
-test_role TypeDDL,TypeDML,TypeDCL,TypeTCL
+test_role TypeDDL,TypeDML,TypeDCL
 
 # Quoting the collection of statement types is not recognized.
 line
-"test_role" "DDL,DML,DCL,TCL"
+"test_role" "DDL,DML,DCL"
 ----
-error: unknown statement type: "DDL,DML,DCL,TCL" (valid types include: "DDL", "DML", "DCL", "TCL", "ALL", "NONE")
+error: unknown statement type: "DDL,DML,DCL" (valid types include: "DDL", "DML", "DCL", "ALL", "NONE")
 
 # Individually quoted statement types are recognized.
 line
-test_role "DDL","DML","DCL","TCL"
+test_role "DDL","DML","DCL"
 ----
 # Original configuration:
-# test_role "DDL","DML","DCL","TCL"
+# test_role "DDL","DML","DCL"
 #
 # Interpreted configuration:
 # ROLE    STATEMENT_TYPE
-test_role TypeDDL,TypeDML,TypeDCL,TypeTCL
+test_role TypeDDL,TypeDML,TypeDCL
 
 # Single quoted statement types are not recognized.
 line
-test_role 'DDL',DML,DCL,TCL
+test_role 'DDL',DML,DCL
 ----
-error: unknown statement type: "'DDL'" (valid types include: "DDL", "DML", "DCL", "TCL", "ALL", "NONE")
+error: unknown statement type: "'DDL'" (valid types include: "DDL", "DML", "DCL", "ALL", "NONE")
 
 subtest end
 
@@ -136,7 +137,7 @@ test_role ALL
 #
 # Interpreted configuration:
 # ROLE    STATEMENT_TYPE
-test_role TypeDDL,TypeDML,TypeDCL,TypeTCL
+test_role TypeDDL,TypeDML,TypeDCL
 
 line
 test_role NONE
@@ -176,19 +177,19 @@ error: duplicate role listed: test_role
 multiline
 test_role ALL
 anotherRole DML,DCL,DDL
-thirddRole "DML","TCL"
+thirddRole "DML"
 ----
 # String render check:
 # Original configuration:
 # test_role ALL
 # anotherRole DML,DCL,DDL
-# thirddRole "DML","TCL"
+# thirddRole "DML"
 #
 # Interpreted configuration:
 # ROLE      STATEMENT_TYPE
-test_role   TypeDDL,TypeDML,TypeDCL,TypeTCL
+test_role   TypeDDL,TypeDML,TypeDCL
 anotherrole TypeDML,TypeDCL,TypeDDL
-thirddrole  TypeDML,TypeTCL
+thirddrole  TypeDML
 # Detail:
 &auditlogging.AuditConfig{
     Settings: {
@@ -203,12 +204,11 @@ thirddrole  TypeDML,TypeTCL
             StatementTypes: {1, 2, 0},
         },
         {
-            Input:          "thirddRole \"DML\",\"TCL\"",
+            Input:          "thirddRole \"DML\"",
             Role:           username.SQLUsername{u:"thirddrole"},
-            StatementTypes: {1, 3},
+            StatementTypes: {1},
         },
     },
-    SettingsRoleLookup:     {{u:"anotherrole"}:1, {u:"test_role"}:0, {u:"thirddrole"}:2},
     AllRoleAuditSettingIdx: -1,
 }
 
@@ -217,21 +217,21 @@ multiline
 test_role ALL
 anotherRole DML,DCL,DDL
 all ALL
-thirddRole "DML","TCL"
+thirddRole "DML"
 ----
 # String render check:
 # Original configuration:
 # test_role ALL
 # anotherRole DML,DCL,DDL
 # all ALL
-# thirddRole "DML","TCL"
+# thirddRole "DML"
 #
 # Interpreted configuration:
 # ROLE      STATEMENT_TYPE
-test_role   TypeDDL,TypeDML,TypeDCL,TypeTCL
+test_role   TypeDDL,TypeDML,TypeDCL
 anotherrole TypeDML,TypeDCL,TypeDDL
-all         TypeDDL,TypeDML,TypeDCL,TypeTCL
-thirddrole  TypeDML,TypeTCL
+all         TypeDDL,TypeDML,TypeDCL
+thirddrole  TypeDML
 # Detail:
 &auditlogging.AuditConfig{
     Settings: {
@@ -251,12 +251,11 @@ thirddrole  TypeDML,TypeTCL
             StatementTypes: {-1},
         },
         {
-            Input:          "thirddRole \"DML\",\"TCL\"",
+            Input:          "thirddRole \"DML\"",
             Role:           username.SQLUsername{u:"thirddrole"},
-            StatementTypes: {1, 3},
+            StatementTypes: {1},
         },
     },
-    SettingsRoleLookup:     {{u:"all"}:2, {u:"anotherrole"}:1, {u:"test_role"}:0, {u:"thirddrole"}:3},
     AllRoleAuditSettingIdx: 2,
 }
 
@@ -264,22 +263,22 @@ thirddrole  TypeDML,TypeTCL
 multiline
 test_role NONE
 anotherRole DML,DCL,DDL
-thirddRole "DML","TCL"
+thirddRole "DML"
 all ALL
 ----
 # String render check:
 # Original configuration:
 # test_role NONE
 # anotherRole DML,DCL,DDL
-# thirddRole "DML","TCL"
+# thirddRole "DML"
 # all ALL
 #
 # Interpreted configuration:
 # ROLE      STATEMENT_TYPE
 test_role   NONE
 anotherrole TypeDML,TypeDCL,TypeDDL
-thirddrole  TypeDML,TypeTCL
-all         TypeDDL,TypeDML,TypeDCL,TypeTCL
+thirddrole  TypeDML
+all         TypeDDL,TypeDML,TypeDCL
 # Detail:
 &auditlogging.AuditConfig{
     Settings: {
@@ -294,9 +293,9 @@ all         TypeDDL,TypeDML,TypeDCL,TypeTCL
             StatementTypes: {1, 2, 0},
         },
         {
-            Input:          "thirddRole \"DML\",\"TCL\"",
+            Input:          "thirddRole \"DML\"",
             Role:           username.SQLUsername{u:"thirddrole"},
-            StatementTypes: {1, 3},
+            StatementTypes: {1},
         },
         {
             Input:          "all ALL",
@@ -304,7 +303,6 @@ all         TypeDDL,TypeDML,TypeDCL,TypeTCL
             StatementTypes: {-1},
         },
     },
-    SettingsRoleLookup:     {{u:"all"}:3, {u:"anotherrole"}:1, {u:"test_role"}:0, {u:"thirddrole"}:2},
     AllRoleAuditSettingIdx: 3,
 }
 
