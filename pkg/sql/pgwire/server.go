@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -741,6 +742,15 @@ func (s *Server) ServeConn(
 		RemoteAddress: conn.RemoteAddr().String(),
 	}
 
+	s.execCfg.SessionInitCache.UpdateSessionConnCache(
+		preServeStatus.clientParameters.User,
+		sessioninit.SessionConnDetails{
+			RemoteAddr: conn.RemoteAddr().String(),
+			ServerAddr: conn.LocalAddr().String(),
+			ConnMethod: preServeStatus.ConnType.String(),
+		},
+	)
+
 	// Some bookkeeping, for security-minded administrators.
 	// This registers the connection to the authentication log.
 	connStart := timeutil.Now()
@@ -804,12 +814,6 @@ func (s *Server) ServeConn(
 	}
 
 	hbaConf, identMap := s.GetAuthenticationConfiguration()
-
-	// TODO(thomas): add auth metadata info here to the session cache in executor config
-	//	- how do we map this back to a user?
-	//	- from sArgs.User
-	//	- maybe we can read everything from the session args?
-	s.execCfg
 
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.

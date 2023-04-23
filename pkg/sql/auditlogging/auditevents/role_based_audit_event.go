@@ -18,9 +18,12 @@ import (
 )
 
 type RoleBasedAuditEvent struct {
-	Setting       *auditlogging.AuditSetting
-	StatementType string
-	DatabaseName  string
+	Setting        *auditlogging.AuditSetting
+	StatementType  string
+	DatabaseName   string
+	ServerAddress  string
+	RemoteAddress  string
+	ConnectionType string
 }
 
 // BuildAuditEvent implements the auditlogging.AuditEventBuilder interface
@@ -35,5 +38,9 @@ func (f *RoleBasedAuditEvent) BuildAuditEvent(
 		CommonSQLExecDetails:  exec,
 		Role:                  f.Setting.Role.Normalized(),
 		StatementType:         f.StatementType,
+		DatabaseName:          f.DatabaseName,
+		ServerAddress:         f.ServerAddress,
+		RemoteAddress:         f.RemoteAddress,
+		ConnectionType:        f.ConnectionType,
 	}
 }

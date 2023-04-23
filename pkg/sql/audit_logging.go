@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging/auditevents"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -44,6 +45,10 @@ func (p *planner) maybeAuditSensitiveTableAccessEvent(
 func (p *planner) maybeAuditRoleBasedAuditEvent(
 	ctx context.Context,
 ) {
+	// If cluster setting value is empty, return early.
+	if auditlogging.UserAuditLogConfig.Get(&p.execCfg.Settings.SV) == "" {
+		return
+	}
 	if p.shouldNotAuditInternal() {
 		return
 	}
@@ -59,11 +64,16 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(
 	auditSetting := p.AuditConfig().Config.GetMatchingAuditSetting(userRoles)
 	stmtType := p.stmt.AST.StatementType()
 	if auditSetting != nil && auditSetting.CheckMatchingStatementType(stmtType) {
+		sessionConnDetails := p.execCfg.SessionInitCache.ReadSessionConnCache(p.User())
+
 		p.curPlan.auditEventBuilders = append(p.curPlan.auditEventBuilders,
 			&auditevents.RoleBasedAuditEvent{
-				Setting:       auditSetting,
-				StatementType: stmtType.String(),
-				DatabaseName:  p.CurrentDatabase(),
+				Setting:        auditSetting,
+				StatementType:  stmtType.String(),
+				DatabaseName:   p.CurrentDatabase(),
+				ServerAddress:  sessionConnDetails.ServerAddr,
+				RemoteAddress:  sessionConnDetails.RemoteAddr,
+				ConnectionType: sessionConnDetails.ConnMethod,
 			},
 		)
 	}
