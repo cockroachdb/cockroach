@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -41,21 +42,34 @@ func TestRoleBasedAuditLogging(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
 
-	allStmtTypesRole := "all_stmt_types"
-	someStmtTypeRole := "some_stmt_types"
-	noStmtTypeRole := "no_stmt_types"
-
+	// Dummy table/user used by tests.
 	db.Exec(t, `CREATE TABLE u(x int)`)
-	db.Exec(t, fmt.Sprintf("CREATE ROLE %s", allStmtTypesRole))
-	db.Exec(t, fmt.Sprintf("CREATE ROLE %s", someStmtTypeRole))
-	db.Exec(t, fmt.Sprintf("CREATE ROLE %s", noStmtTypeRole))
 	db.Exec(t, `CREATE USER test_user`)
 
+	t.Run("testSingleRoleAuditLogging", func(t *testing.T) {
+		testSingleRoleAuditLogging(t, db)
+	})
+	// Reset audit config between tests.
+	db.Exec(t, `SET CLUSTER SETTING sql.log.user_audit = ''`)
+	t.Run("testMultiRoleAuditLogging", func(t *testing.T) {
+		testMultiRoleAuditLogging(t, db)
+	})
+}
+
+func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 	db.Exec(t, `SET CLUSTER SETTING sql.log.user_audit = '
 		all_stmt_types ALL
 		some_stmt_types DDL,DML
 		no_stmt_types NONE
 	'`)
+
+	allStmtTypesRole := "all_stmt_types"
+	someStmtTypeRole := "some_stmt_types"
+	noStmtTypeRole := "no_stmt_types"
+
+	db.Exec(t, fmt.Sprintf("CREATE ROLE IF NOT EXISTS %s", allStmtTypesRole))
+	db.Exec(t, fmt.Sprintf("CREATE ROLE IF NOT EXISTS %s", someStmtTypeRole))
+	db.Exec(t, fmt.Sprintf("CREATE ROLE IF NOT EXISTS %s", noStmtTypeRole))
 
 	// Queries for all statement types
 	testQueries := []string{
@@ -65,10 +79,6 @@ func TestRoleBasedAuditLogging(t *testing.T) {
 		`GRANT SELECT ON TABLE u TO test_user`,
 		// DML statement
 		`SELECT * FROM u`,
-		// TODO(thomas): not being captured currently
-		// TCL statements
-		`BEGIN`,
-		`COMMIT`,
 	}
 	testData := []struct {
 		name            string
@@ -85,11 +95,9 @@ func TestRoleBasedAuditLogging(t *testing.T) {
 			includesDCL:     false,
 		},
 		{
-			name:    "test-all-stmt-types",
-			role:    allStmtTypesRole,
-			queries: testQueries,
-			//expectedNumLogs: 5,
-			// TODO(thomas): TCL queries aren't being logged
+			name:            "test-all-stmt-types",
+			role:            allStmtTypesRole,
+			queries:         testQueries,
 			expectedNumLogs: 3,
 			includesDCL:     true,
 		},
@@ -152,5 +160,78 @@ func TestRoleBasedAuditLogging(t *testing.T) {
 			expectedNumLogs++
 		}
 		require.Equal(t, expectedNumLogs, numLogs)
+	}
+}
+
+// testMultiRoleAuditLogging tests that we emit the expected audit logs when a user belongs to
+// multiple roles that correspond to audit settings. We ensure that the expected audit logs
+// correspond to *only* the *first matching audit setting* of the user's roles.
+func testMultiRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
+	startTimestamp := timeutil.Now().Unix()
+	roleA := "roleA"
+	roleB := "roleB"
+
+	db.Exec(t, fmt.Sprintf("CREATE ROLE IF NOT EXISTS %s", roleA))
+	db.Exec(t, fmt.Sprintf("CREATE ROLE IF NOT EXISTS %s", roleB))
+	db.Exec(t, fmt.Sprintf("GRANT %s, %s to root", roleA, roleB))
+
+	db.Exec(t, `SET CLUSTER SETTING sql.log.user_audit = '
+		roleA DML
+		roleB DDL,DCL
+	'`)
+
+	// Queries for all statement types
+	testQueries := []string{
+		// DDL statement,
+		`ALTER TABLE u RENAME COLUMN x to x`,
+		// DCL statement
+		`GRANT SELECT ON TABLE u TO test_user`,
+		// DML statement
+		`SELECT * FROM u`,
+	}
+	testData := struct {
+		name               string
+		expectedRoleToLogs map[string]int
+	}{
+		name: "test-multi-role-user",
+		expectedRoleToLogs: map[string]int{
+			// Expect single log from DML query.
+			roleA: 1,
+			// Expect no logs from DDL/DCL queries as we match on roleA first.
+			roleB: 0,
+		},
+	}
+
+	for _, query := range testQueries {
+		db.Exec(t, query)
+	}
+
+	log.Flush()
+
+	entries, err := log.FetchEntriesFromFiles(
+		startTimestamp,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"role_based_audit_event"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal(errors.Newf("no entries found"))
+	}
+
+	roleToLogs := make(map[string]int)
+	for role, expectedNumLogs := range testData.expectedRoleToLogs {
+		for _, entry := range entries {
+			// Lowercase the role string as we normalize it for logs.
+			if strings.Contains(entry.Message, strings.ToLower(role)) {
+				roleToLogs[role]++
+			}
+		}
+		require.Equal(t, expectedNumLogs, roleToLogs[role], "unexpected number of logs for role: '%s'", role)
 	}
 }
