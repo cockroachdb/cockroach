@@ -12,332 +12,395 @@ package lock_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
-// TestCheckLockConflicts ensures the lock conflict semantics, as
-// illustrated in the compatibility matrix in locking.pb.go, are upheld.
-func TestCheckLockConflicts(t *testing.T) {
-	makeTS := func(nanos int64) hlc.Timestamp {
-		return hlc.Timestamp{
-			WallTime: nanos,
+func makeTS(nanos int64) hlc.Timestamp {
+	return hlc.Timestamp{
+		WallTime: nanos,
+	}
+}
+
+func testCheckLockConflicts(
+	t *testing.T, desc string, m1, m2 lock.Mode, st *cluster.Settings, exp bool,
+) {
+	t.Run(desc, func(t *testing.T) {
+		require.Equal(t, exp, lock.Conflicts(m1, m2, &st.SV))
+		// Test for symmetry -- things should work the other way around as well.
+		require.Equal(t, exp, lock.Conflicts(m2, m1, &st.SV))
+	})
+}
+
+// TestCheckLockConflicts_NoneWithNone tests the Conflicts function for all
+// combinations where both modes belong to non-locking reads. We never expect
+// this to happen in practice, as non-locking reads don't acquire locks in the
+// lock table; however, this test ensures interactions are sane, and two
+// non-locking reads never conflict.
+func TestCheckLockConflicts_NoneWithNone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tsBelow := makeTS(1)
+	tsMid := makeTS(2)
+	tsAbove := makeTS(3)
+
+	st := cluster.MakeTestingClusterSettings()
+	for _, ts := range []hlc.Timestamp{tsBelow, tsMid, tsAbove} {
+		for _, iso1 := range isolation.Levels() {
+			for _, iso2 := range isolation.Levels() {
+				if iso2.WeakerThan(iso1) {
+					continue // we only care about unique permutations
+				}
+				r1 := lock.MakeModeNone(tsMid, iso1)
+				r2 := lock.MakeModeNone(ts, iso2)
+				testCheckLockConflicts(
+					t,
+					fmt.Sprintf("exclusive lock(%s)-exclusive lock(%s)", iso1, iso2),
+					r1,
+					r2,
+					st,
+					false, // never conflicts
+				)
+			}
 		}
 	}
+}
+
+// TestCheckLockConflicts_NoneWithSharedUpdateIntent tests the Conflicts
+// function for all combinations of None lock modes with either Shared, or
+// Update, or Intent lock modes. Interactions with None lock mode (although
+// nonsensical) are tested above and interactions with Exclusive locks are
+// tested separately.
+func TestCheckLockConflicts_NoneWithSharedUpdateIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tsBelow := makeTS(1)
+	ts := makeTS(2)
+	tsAbove := makeTS(3)
+
+	testCases := []struct {
+		desc string
+		mode lock.Mode
+		exp  bool
+	}{
+		// A. With Shared locks.
+		{
+			desc: "shared lock",
+			mode: lock.MakeModeShared(),
+			exp:  false,
+		},
+		// B. With Update locks.
+		{
+			desc: "update lock",
+			mode: lock.MakeModeUpdate(),
+			exp:  false,
+		},
+		// C. With Intents.
+		// C1. Below the read timestamp.
+		{
+			desc: "intent below ts",
+			mode: lock.MakeModeIntent(tsBelow),
+			exp:  true,
+		},
+		// C2. At the read timestamp.
+		{
+			desc: "intent at ts",
+			mode: lock.MakeModeIntent(ts),
+			exp:  true,
+		},
+		// C3. Above the read timestamp.
+		{
+			desc: "intent above ts",
+			mode: lock.MakeModeIntent(tsAbove),
+			exp:  false,
+		},
+	}
+	st := cluster.MakeTestingClusterSettings()
+	for _, tc := range testCases {
+		for _, iso := range isolation.Levels() {
+			nonLockingRead := lock.MakeModeNone(ts, iso)
+			testCheckLockConflicts(
+				t,
+				fmt.Sprintf("non-locking read(%s)-%s", iso, tc.desc),
+				nonLockingRead,
+				tc.mode,
+				st,
+				tc.exp,
+			)
+		}
+	}
+}
+
+// TestCheckLockConflicts_NoneWithExclusive tests interactions between
+// non-locking reads and Exclusive locks. It does so both with and without the
+// ExclusiveLocksBlockNonLockingReads cluster setting overridden.
+func TestCheckLockConflicts_NoneWithExclusive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tsBelow := makeTS(1)
 	tsLock := makeTS(2)
 	tsAbove := makeTS(3)
 
+	ctx := context.Background()
+	for _, isoLock := range isolation.Levels() {
+		for _, isoRead := range isolation.Levels() {
+			for i, readTS := range []hlc.Timestamp{tsBelow, tsLock, tsAbove} {
+				exclusiveLock := lock.MakeModeExclusive(tsLock, isoLock)
+				nonLockingRead := lock.MakeModeNone(readTS, isoRead)
+
+				expConflicts := isoLock == isolation.Serializable &&
+					isoRead == isolation.Serializable && (readTS == tsLock || readTS == tsAbove)
+
+				st := cluster.MakeTestingClusterSettings()
+				// Test with the ExclusiveLocksBlockNonLockingReads cluster setting
+				// enabled.
+				lock.ExclusiveLocksBlockNonLockingReads.Override(ctx, &st.SV, true)
+				testCheckLockConflicts(
+					t,
+					fmt.Sprintf("#%d non-locking read(%s) exclusive(%s)", i, isoRead, isoLock),
+					nonLockingRead,
+					exclusiveLock,
+					st,
+					expConflicts,
+				)
+
+				// Now, test with the ExclusiveLocksBlockNonLockingReads cluster setting
+				// disabled, and ensure the two lock modes do not conflict.
+				lock.ExclusiveLocksBlockNonLockingReads.Override(ctx, &st.SV, false)
+				testCheckLockConflicts(
+					t,
+					fmt.Sprintf("#%d non-locking read(%s) exclusive(%s)", i, isoRead, isoLock),
+					nonLockingRead,
+					exclusiveLock,
+					st,
+					false, // should not conflict
+				)
+			}
+		}
+	}
+}
+
+// TestCheckLockConflicts_Shared tests the Conflicts function where one of the
+// lock modes is Shared. It tests these with other Shared, Update, and Intent
+// lock modes. Tests for non-locking reads are already covered above and tests
+// with Exclusive are covered below.
+func TestCheckLockConflicts_Shared(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := makeTS(2)
+
 	testCases := []struct {
-		desc            string
-		heldLockMode    lock.Mode
-		toCheckLockMode lock.Mode
-		// Expectation for when non-locking reads do not block on Exclusive locks.
-		exp bool
-		// Expectation when non-locking reads do block on Exclusive locks. This
-		// distinction is only meaningful when testing for None <-> Exclusive lock
-		// mode interactions.
-		expExclusiveLocksBlockNonLockingReads bool
+		desc string
+		mode lock.Mode
+		exp  bool
 	}{
-		// A. Held lock mode is "Shared".
-		// A1. Shared lock mode is doesn't conflict with non-locking reads.
+		// A. With Shared locks.
 		{
-			desc:                                  "non-locking read, held shared lock",
-			heldLockMode:                          lock.MakeModeShared(),
-			toCheckLockMode:                       lock.MakeModeNone(tsLock),
-			exp:                                   false,
-			expExclusiveLocksBlockNonLockingReads: false,
+			desc: "shared lock",
+			mode: lock.MakeModeShared(),
+			exp:  false,
 		},
-		// A2. Shared lock mode doesn't conflict with itself.
+		// B. With Update locks.
 		{
-			desc:                                  "shared lock acquisition, held shared lock",
-			heldLockMode:                          lock.MakeModeShared(),
-			toCheckLockMode:                       lock.MakeModeShared(),
-			exp:                                   false,
-			expExclusiveLocksBlockNonLockingReads: false,
+			desc: "update lock",
+			mode: lock.MakeModeUpdate(),
+			exp:  false,
 		},
-		// A3. Shared lock mode doesn't conflict with an Update lock mode.
+		// C. With Intents.
 		{
-			desc:                                  "update lock acquisition, held shared lock",
-			heldLockMode:                          lock.MakeModeShared(),
-			toCheckLockMode:                       lock.MakeModeUpdate(),
-			exp:                                   false,
-			expExclusiveLocksBlockNonLockingReads: false,
-		},
-		// A4. Shared lock mode conflicts with Exclusive lock mode.
-		{
-			desc:                                  "exclusive lock acquisition, held shared lock",
-			heldLockMode:                          lock.MakeModeShared(),
-			toCheckLockMode:                       lock.MakeModeExclusive(tsLock),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// A5. Shared lock mode conflicts with Intent lock mode.
-		{
-			desc:                                  "update lock acquisition, held shared lock",
-			heldLockMode:                          lock.MakeModeShared(),
-			toCheckLockMode:                       lock.MakeModeIntent(tsLock),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// B. Held lock mode is "Update".
-		// B1. Update lock mode doesn't conflict with non-locking reads.
-		{
-			desc:                                  "non-locking read, held update lock",
-			heldLockMode:                          lock.MakeModeUpdate(),
-			toCheckLockMode:                       lock.MakeModeNone(tsLock),
-			exp:                                   false,
-			expExclusiveLocksBlockNonLockingReads: false,
-		},
-		// B2. Update lock mode doesn't conflict with Shared lock mode.
-		{
-			desc:                                  "shared lock acquisition, held update lock",
-			heldLockMode:                          lock.MakeModeUpdate(),
-			toCheckLockMode:                       lock.MakeModeShared(),
-			exp:                                   false,
-			expExclusiveLocksBlockNonLockingReads: false,
-		},
-		// B3. Update lock mode conflicts with a concurrent attempt to acquire an
-		// Update lock.
-		{
-			desc:                                  "update lock acquisition, held update lock",
-			heldLockMode:                          lock.MakeModeUpdate(),
-			toCheckLockMode:                       lock.MakeModeUpdate(),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// B4. Update lock mode conflicts with Exclusive lock mode.
-		{
-			desc:                                  "exclusive lock acquisition, held update lock",
-			heldLockMode:                          lock.MakeModeUpdate(),
-			toCheckLockMode:                       lock.MakeModeExclusive(tsLock),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// B5. Update lock mode conflicts with Intent lock mode.
-		{
-			desc:                                  "update lock acquisition, held shared lock",
-			heldLockMode:                          lock.MakeModeUpdate(),
-			toCheckLockMode:                       lock.MakeModeIntent(tsLock),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-
-		// C. Held lock mode is "Exclusive".
-		// C1. Non-locking reads below the timestamp of Exclusive locks should never
-		// conflict.
-		{
-			desc:                                  "non-locking read at lower timestamp, held exclusive lock",
-			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeNone(tsBelow),
-			exp:                                   false,
-			expExclusiveLocksBlockNonLockingReads: false,
-		},
-		// C2. Non-locking reads, at the same timestamp at which an Exclusive lock
-		// is held, conflict depending on the value of the
-		// ExclusiveLocksBlockNonLockingReads cluster setting.
-		{
-			desc:                                  "non-locking read at lock timestamp, held exclusive lock",
-			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeNone(tsLock),
-			exp:                                   false,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// C3. Ditto for non-locking reads above the timestamp of the Exclusive
-		// lock.
-		{
-			desc:                                  "non-locking read at lock timestamp, held exclusive lock",
-			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeNone(tsAbove),
-			exp:                                   false,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// C4. Exclusive lock mode conflicts with Shared lock mode.
-		{
-			desc:                                  "shared lock acquisition, held exclusive lock",
-			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeShared(),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// C5. Exclusive lock mode conflicts with Update lock mode.
-		{
-			desc:                                  "update lock acquisition, held exclusive lock",
-			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeUpdate(),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// C6. Exclusive lock mode conflicts with Exclusive locks at lower
-		// timestamps.
-		{
-			desc:                                  "exclusive lock acquisition, held exclusive lock",
-			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeExclusive(tsBelow),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// C7. Ditto for the "at timestamp" case.
-		{
-			desc:                                  "exclusive lock acquisition, held exclusive lock",
-			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeExclusive(tsLock),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// C8. As well as the "above timestamp" case.
-		{
-			desc:                                  "exclusive lock acquisition, held exclusive lock",
-			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeExclusive(tsAbove),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// C9. Exclusive lock mode conflicts with Intent lock mode at lower
-		// timestamps.
-		{
-			desc:                                  "intent lock mode acquisition, held exclusive lock",
-			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeIntent(tsBelow),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// C10. Ditto for the "at timestamp" case.
-		{
-			desc:                                  "intent lock mode acquisition, held exclusive lock",
-			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeIntent(tsLock),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// C11. As well as the "above timestamp" case.
-		{
-			desc:                                  "intent lock mode acquisition, held exclusive lock",
-			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeIntent(tsAbove),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-
-		// D. Held lock mode is "Intent".
-		// D1. Non-locking reads below the timestamp of the Intent do not conflict.
-		{
-			desc:                                  "non-locking read at lower timestamp, held intent",
-			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeNone(tsBelow),
-			exp:                                   false,
-			expExclusiveLocksBlockNonLockingReads: false,
-		},
-		// D2. However, non-locking reads at the timestamp of the Intent conflict.
-		{
-			desc:                                  "non-locking read at lock timestamp, held intent",
-			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeNone(tsLock),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// D3. Ditto for non-locking reads above the Intent's timestamp.
-		{
-			desc:                                  "non-locking read at lock timestamp, held intent",
-			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeNone(tsAbove),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// D4. Intent lock mode conflicts with Shared lock mode.
-		{
-			desc:                                  "shared lock acquisition, held intent",
-			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeShared(),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// D5. Intent lock mode conflicts with Update lock mode.
-		{
-			desc:                                  "update lock acquisition, held intent",
-			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeUpdate(),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// D6. Intent lock mode conflicts with Exclusive locks at lower
-		// timestamps.
-		{
-			desc:                                  "exclusive lock acquisition, held intent",
-			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeExclusive(tsBelow),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// D7. Ditto for the "at timestamp" case.
-		{
-			desc:                                  "exclusive lock acquisition, held intent",
-			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeExclusive(tsLock),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// D8. As well as the "above timestamp" case.
-		{
-			desc:                                  "exclusive lock acquisition, held intent",
-			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeExclusive(tsAbove),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// D9. Intent lock mode conflicts with another Intent lock mode at a
-		// lower timestamp.
-		{
-			desc:                                  "intent lock mode acquisition, held intent",
-			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeIntent(tsBelow),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// D10. Ditto for the "at timestamp" case.
-		{
-			desc:                                  "intent lock mode acquisition, held intent",
-			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeIntent(tsLock),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
-		},
-		// D11. As well as the "above timestamp" case.
-		{
-			desc:                                  "intent lock mode acquisition, held intent",
-			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeIntent(tsAbove),
-			exp:                                   true,
-			expExclusiveLocksBlockNonLockingReads: true,
+			desc: "intent",
+			mode: lock.MakeModeIntent(ts),
+			exp:  true,
 		},
 	}
-
-	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-
 	for _, tc := range testCases {
-		testutils.RunTrueAndFalse(t,
-			"exclusive-locks-block-non-locking-reads-override",
-			func(t *testing.T, exclusiveLocksBlockNonLockingReadsOverride bool) {
-				t.Run(tc.desc, func(t *testing.T) {
-					lock.ExclusiveLocksBlockNonLockingReads.Override(
-						ctx, &st.SV, exclusiveLocksBlockNonLockingReadsOverride,
-					)
-					exp := tc.exp
-					if exclusiveLocksBlockNonLockingReadsOverride {
-						exp = tc.expExclusiveLocksBlockNonLockingReads
-					}
+		sharedLock := lock.MakeModeShared()
+		testCheckLockConflicts(
+			t,
+			fmt.Sprintf("shared lock-%s", tc.desc),
+			sharedLock,
+			tc.mode,
+			st,
+			tc.exp,
+		)
+	}
+}
 
-					require.Equal(
-						t, exp, tc.heldLockMode.Conflicts(&st.SV, &tc.toCheckLockMode),
-					)
-				})
-			})
+// TestCheckLockConflicts_Update tests the Conflicts function where one of the
+// lock modes is Update. It tests these with other Update and Intent
+// lock modes. Tests for non-locking reads and Shared locks are already covered
+// above, and tests with Exclusive locks are covered below.
+func TestCheckLockConflicts_Update(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := makeTS(2)
+
+	testCases := []struct {
+		desc string
+		mode lock.Mode
+		exp  bool
+	}{
+		// A. With Update locks.
+		{
+			desc: "update lock",
+			mode: lock.MakeModeUpdate(),
+			exp:  true,
+		},
+		// B. With Intents.
+		{
+			desc: "intent",
+			mode: lock.MakeModeIntent(ts),
+			exp:  true,
+		},
+	}
+	st := cluster.MakeTestingClusterSettings()
+	for _, tc := range testCases {
+		updateLock := lock.MakeModeUpdate()
+		testCheckLockConflicts(
+			t,
+			fmt.Sprintf("update lock-%s", tc.desc),
+			updateLock,
+			tc.mode,
+			st,
+			tc.exp,
+		)
+	}
+}
+
+// TestCheckLockConflicts_ExclusiveWithSharedUpdateIntent tests the Conflicts
+// function for all combinations where one of the locks is Exclusive and the
+// other is either Shared or Update or Intent. Tests with non-locking reads are
+// already covered below and Exclusive-Exclusive interactions are covered below.
+func TestCheckLockConflicts_ExclusiveWithSharedUpdateIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tsBelow := makeTS(1)
+	ts := makeTS(2)
+	tsAbove := makeTS(3)
+
+	testCases := []struct {
+		desc string
+		mode lock.Mode
+		exp  bool
+	}{
+		// A. With Shared locks.
+		{
+			desc: "shared lock",
+			mode: lock.MakeModeShared(),
+			exp:  true,
+		},
+		// B. With Update locks.
+		{
+			desc: "update lock",
+			mode: lock.MakeModeUpdate(),
+			exp:  true,
+		},
+		// C. With Intents.
+		// C1. Below the lock timestamp.
+		{
+			desc: "intent below ts",
+			mode: lock.MakeModeIntent(tsBelow),
+			exp:  true,
+		},
+		// C2. At the lock timestamp.
+		{
+			desc: "intent at ts",
+			mode: lock.MakeModeIntent(ts),
+			exp:  true,
+		},
+		// C3. Above the lock timestamp.
+		{
+			desc: "intent above ts",
+			mode: lock.MakeModeIntent(tsAbove),
+			exp:  true,
+		},
+	}
+	st := cluster.MakeTestingClusterSettings()
+	for _, tc := range testCases {
+		for _, iso := range isolation.Levels() {
+			exclusiveLock := lock.MakeModeExclusive(ts, iso)
+			testCheckLockConflicts(
+				t,
+				fmt.Sprintf("exclusive lock(%s)-%s", iso, tc.desc),
+				exclusiveLock,
+				tc.mode,
+				st,
+				tc.exp,
+			)
+		}
+	}
+}
+
+// TestCheckLockConflicts_ExclusiveWithExclusive tests the Conflicts function
+// for all combinations where both the locks have Exclusive lock strength.
+// Exclusive locks always conflict with other Exclusive locks.
+func TestCheckLockConflicts_ExclusiveWithExclusive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tsBelow := makeTS(1)
+	tsLock := makeTS(2)
+	tsAbove := makeTS(3)
+
+	st := cluster.MakeTestingClusterSettings()
+	for _, ts := range []hlc.Timestamp{tsBelow, tsLock, tsAbove} {
+		for _, iso1 := range isolation.Levels() {
+			for _, iso2 := range isolation.Levels() {
+				if iso2.WeakerThan(iso1) {
+					continue // we only care about unique permutations
+				}
+				exclusiveLock := lock.MakeModeExclusive(tsLock, iso1)
+				exclusiveLock2 := lock.MakeModeExclusive(ts, iso2)
+				testCheckLockConflicts(
+					t,
+					fmt.Sprintf("exclusive lock(%s)-exclusive lock(%s)", iso1, iso2),
+					exclusiveLock,
+					exclusiveLock2,
+					st,
+					true, // always conflicts
+				)
+			}
+		}
+	}
+}
+
+// TestCheckLockConflicts_IntentWithIntent tests the Conflicts for all
+// combinations where both the locks have Intent lock strength. Intents always
+// conflict with other Intents.
+func TestCheckLockConflicts_IntentWithIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tsBelow := makeTS(1)
+	tsLock := makeTS(2)
+	tsAbove := makeTS(3)
+
+	st := cluster.MakeTestingClusterSettings()
+	for i, ts := range []hlc.Timestamp{tsBelow, tsLock, tsAbove} {
+		intent1 := lock.MakeModeIntent(tsLock)
+		intent2 := lock.MakeModeIntent(ts)
+		testCheckLockConflicts(
+			t,
+			fmt.Sprintf("%d-intent-intent", i),
+			intent1,
+			intent2,
+			st,
+			true, // always conflicts
+		)
 	}
 }
