@@ -58,12 +58,6 @@ type AuditConfigLock struct {
 type AuditConfig struct {
 	// Settings are the collection of AuditSettings that make up the AuditConfig.
 	Settings []AuditSetting
-	// SettingsRoleLookup provides a way to find an AuditSetting in Settings quickly by username/role.
-	// We return the index of the AuditSetting to handle the case where more than one AuditSetting matches,
-	// in which case we want to identify the AuditSetting that appears *first* in Settings.
-	// Note that we don't have to worry about updating this map after initialization as
-	// Settings is never mutated (Settings only change on config change).
-	SettingsRoleLookup map[username.SQLUsername]int
 	// AllRoleAuditSettingIdx is an index corresponding to an AuditSetting in Settings that applies to all
 	// users, if it exists. Default value -1 (DefaultAllAuditSettingIdx).
 	AllRoleAuditSettingIdx int
@@ -73,7 +67,6 @@ const DefaultAllAuditSettingIdx = -1
 
 func EmptyAuditConfig() *AuditConfig {
 	return &AuditConfig{
-		SettingsRoleLookup:     make(map[username.SQLUsername]int),
 		AllRoleAuditSettingIdx: DefaultAllAuditSettingIdx,
 	}
 }
@@ -83,17 +76,6 @@ func EmptyAuditConfig() *AuditConfig {
 func (c AuditConfig) GetMatchingAuditSetting(
 	userRoles map[username.SQLUsername]bool,
 ) *AuditSetting {
-	// If the number of audit settings is less than the number of user roles,
-	// iterate through the audit settings looking for matches.
-	if len(c.Settings) < len(userRoles) {
-		return c.iterateAuditSettings(userRoles)
-	}
-	// If the number of user roles is less than the number of audit settings,
-	// iterate through the user roles looking for matches.
-	return c.iterateUserRoles(userRoles)
-}
-
-func (c AuditConfig) iterateAuditSettings(userRoles map[username.SQLUsername]bool) *AuditSetting {
 	// If the user matches any Setting, return the corresponding filter.
 	for idx, filter := range c.Settings {
 		// If we have matched an audit setting by role, return the audit setting.
@@ -105,28 +87,6 @@ func (c AuditConfig) iterateAuditSettings(userRoles map[username.SQLUsername]boo
 		if idx == c.AllRoleAuditSettingIdx {
 			return &filter
 		}
-	}
-	// No filter found.
-	return nil
-}
-
-func (c AuditConfig) iterateUserRoles(userRoles map[username.SQLUsername]bool) *AuditSetting {
-	// Initialize the index of the first matching audit setting to AllRoleAuditSettingIdx.
-	// By default, this is -1 (DefaultAllAuditSettingIdx), otherwise, it is the index of the
-	// audit setting that applies to all users.
-	firstMatch := c.AllRoleAuditSettingIdx
-
-	for role := range userRoles {
-		idx, exists := c.SettingsRoleLookup[role]
-		// If there is a corresponding audit setting for the role, update the first
-		// found index if it's earlier.
-		if exists && (firstMatch == -1 || idx < firstMatch) {
-			firstMatch = idx
-		}
-	}
-	// Return the first match if found.
-	if firstMatch != -1 {
-		return &c.Settings[firstMatch]
 	}
 	// No filter found.
 	return nil
@@ -173,7 +133,6 @@ func writeStatementTypes(vals []tree.StatementType) []string {
 				tree.TypeDDL.String(),
 				tree.TypeDML.String(),
 				tree.TypeDCL.String(),
-				tree.TypeTCL.String(),
 			)
 		case AuditNoneStatementConst:
 			stmtTypes = append(stmtTypes, "NONE")
