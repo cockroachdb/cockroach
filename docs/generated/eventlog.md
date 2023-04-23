@@ -450,6 +450,10 @@ cluster setting.
 |--|--|--|
 | `Role` | The configured audit role that emitted this log. | yes |
 | `StatementType` |  | yes |
+| `DatabaseName` |  | yes |
+| `ServerAddress` |  | yes |
+| `RemoteAddress` |  | yes |
+| `ConnectionType` |  | yes |
 
 
 #### Common fields
