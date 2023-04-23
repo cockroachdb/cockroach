@@ -130,6 +130,11 @@ type TxnSender interface {
 	// TxnStatus exports the txn's status.
 	TxnStatus() roachpb.TransactionStatus
 
+	// ClientFinalized returns true is the client has issued an EndTxn
+	// request in an attempt to finalize the transaction. Once finalized,
+	// further batches except EndTxn(commit=false) will be rejected.
+	ClientFinalized() bool
+
 	// CreateSavepoint establishes a savepoint.
 	// This method is only valid when called on RootTxns.
 	//

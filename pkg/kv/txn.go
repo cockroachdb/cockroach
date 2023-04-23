@@ -273,6 +273,14 @@ func (txn *Txn) IsOpen() bool {
 	return txn.statusLocked() == roachpb.PENDING
 }
 
+// isClientFinalized returns true if the client has issued an EndTxn request in
+// an attempt to finalize the transaction.
+func (txn *Txn) isClientFinalized() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.ClientFinalized()
+}
+
 // SetIsoLevel sets the transaction's isolation level. Transactions default to
 // Serializable isolation. The isolation must be set before any operations are
 // performed on the transaction.
@@ -941,10 +949,11 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		}
 		err = fn(ctx, txn)
 
-		// Commit on success, unless the txn has already been committed by the
-		// closure. We allow that, as closure might want to run 1PC transactions.
+		// Commit on success, unless the txn has already been committed or rolled
+		// back by the closure. We allow that, as the closure might want to run 1PC
+		// transactions or might want to rollback on certain conditions.
 		if err == nil {
-			if !txn.IsCommitted() {
+			if !txn.isClientFinalized() {
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "kv.Txn did AutoCommit. err: %v", err)
 				if err != nil {
@@ -975,6 +984,12 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 					// transaction internally and let the error propagate upwards instead
 					// of handling it.
 					return errors.Wrapf(err, "retryable error from another txn")
+				}
+				if txn.isClientFinalized() {
+					// We've already committed or rolled back, so we can't retry. The
+					// closure should not have returned a retryable error in this case.
+					return errors.NewAssertionErrorWithWrappedErrf(err,
+						"client already committed or rolled back")
 				}
 				retryable = true
 			}
