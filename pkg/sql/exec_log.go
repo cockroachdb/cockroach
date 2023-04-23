@@ -163,6 +163,7 @@ func (p *planner) maybeLogStatement(
 	stmtFingerprintID appstatspb.StmtFingerprintID,
 	queryStats *topLevelQueryStats,
 ) {
+	p.maybeAuditRoleBasedAuditEvent(ctx)
 	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter,
 		rows, bulkJobId, err, queryReceived, hasAdminRoleCache,
 		telemetryLoggingMetrics, stmtFingerprintID, queryStats,
