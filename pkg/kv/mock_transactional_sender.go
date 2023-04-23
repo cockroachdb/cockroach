@@ -73,6 +73,11 @@ func (m *MockTransactionalSender) TxnStatus() roachpb.TransactionStatus {
 	return m.txn.Status
 }
 
+// ClientFinalized is part of the TxnSender interface.
+func (m *MockTransactionalSender) ClientFinalized() bool {
+	return m.txn.Status.IsFinalized()
+}
+
 // SetIsoLevel is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetIsoLevel(isoLevel isolation.Level) error {
 	m.txn.IsoLevel = isoLevel
