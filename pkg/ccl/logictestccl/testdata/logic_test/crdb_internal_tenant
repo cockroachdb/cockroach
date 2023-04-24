@@ -93,6 +93,7 @@ crdb_internal  regions                                 table  admin  NULL  NULL
 crdb_internal  schema_changes                          table  admin  NULL  NULL
 crdb_internal  session_trace                           table  admin  NULL  NULL
 crdb_internal  session_variables                       table  admin  NULL  NULL
+crdb_internal  statement_activity                      view   admin  NULL  NULL
 crdb_internal  statement_statistics                    view   admin  NULL  NULL
 crdb_internal  statement_statistics_persisted          view   admin  NULL  NULL
 crdb_internal  statement_statistics_persisted_v22_2    view   admin  NULL  NULL
@@ -104,6 +105,7 @@ crdb_internal  table_row_statistics                    table  admin  NULL  NULL
 crdb_internal  table_spans                             table  admin  NULL  NULL
 crdb_internal  tables                                  table  admin  NULL  NULL
 crdb_internal  tenant_usage_details                    view   admin  NULL  NULL
+crdb_internal  transaction_activity                    view   admin  NULL  NULL
 crdb_internal  transaction_contention_events           table  admin  NULL  NULL
 crdb_internal  transaction_statistics                  view   admin  NULL  NULL
 crdb_internal  transaction_statistics_persisted        view   admin  NULL  NULL
