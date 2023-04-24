@@ -19,16 +19,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// RunningJobExists checks that whether there are any other jobs (matched by
-// payloadPredicate callback) in the pending, running, or paused status that
-// started earlier than the job with provided jobID.
-// If the provided jobID is a jobspb.InvalidJobID, this function checks if
-// exists any jobs that matches the payloadPredicate.
+// RunningJobExists checks that whether there are any job of the given types in
+// the pending, running, or paused status, optionally ignoring the job with the
+// ID specified by ignoreJobID, and any jobs created after it, if it is not
+// InvalidJobID.
 func RunningJobExists(
 	ctx context.Context,
-	jobID jobspb.JobID,
+	ignoreJobID jobspb.JobID,
 	txn isql.Txn,
-	payloadPredicate func(payload *jobspb.Payload) bool,
+	jobTypes ...jobspb.Type,
 ) (exists bool, retErr error) {
 	const stmt = `
 SELECT
@@ -60,9 +59,16 @@ ORDER BY created`
 			return false /* exists */, err
 		}
 
-		if payloadPredicate(payload) {
+		isTyp := false
+		for _, typ := range jobTypes {
+			if payload.Type() == typ {
+				isTyp = true
+				break
+			}
+		}
+		if isTyp {
 			id := jobspb.JobID(*row[0].(*tree.DInt))
-			if id == jobID {
+			if id == ignoreJobID {
 				break
 			}
 
