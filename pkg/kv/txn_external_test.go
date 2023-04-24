@@ -602,22 +602,18 @@ func TestGenerateForcedRetryableErrorAfterRollback(t *testing.T) {
 	}
 	var i int
 	txnErr := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		e1 := txn.Put(ctx, mkKey("a"), 1)
 		i++
-		require.LessOrEqual(t, i, 2)
-		if i == 1 {
-			require.NoError(t, e1)
-			// Prepare an error to return after the rollback.
-			retryErr := txn.GenerateForcedRetryableError(ctx, "force retry")
-			// Rolling back completes the transaction, returning an error is invalid.
-			require.NoError(t, txn.Rollback(ctx))
-			return retryErr
-		} else {
-			require.ErrorContains(t, e1, "TransactionStatusError", i)
-			return nil
-		}
+		require.Equal(t, 1, i)
+		e1 := txn.Put(ctx, mkKey("a"), 1)
+		require.NoError(t, e1)
+		// Prepare an error to return after the rollback.
+		retryErr := txn.GenerateForcedRetryableError(ctx, "force retry")
+		// Rolling back completes the transaction, returning an error is invalid.
+		require.NoError(t, txn.Rollback(ctx))
+		return retryErr
 	})
-	require.ErrorContains(t, txnErr, "TransactionStatusError")
+	require.ErrorContains(t, txnErr, "client already committed or rolled back")
+	require.True(t, errors.IsAssertionFailure(txnErr))
 	checkKey(t, "a", 0)
 }
 
