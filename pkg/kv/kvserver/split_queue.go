@@ -196,7 +196,7 @@ func (sq *splitQueue) shouldQueue(
 		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), confReader)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
-		if splitKey := repl.loadBasedSplitter.MaybeSplitKey(ctx, repl.Clock().PhysicalTime()); splitKey != nil {
+		if splitKey := repl.loadSplitKey(ctx, repl.Clock().PhysicalTime()); splitKey != nil {
 			shouldQ, priority = true, 1.0 // default priority
 		}
 	}
@@ -285,8 +285,7 @@ func (sq *splitQueue) processAttempt(
 	}
 
 	now := r.Clock().PhysicalTime()
-	splitByLoadKey := r.loadBasedSplitter.MaybeSplitKey(ctx, now)
-	if splitByLoadKey != nil {
+	if splitByLoadKey := r.loadSplitKey(ctx, now); splitByLoadKey != nil {
 		loadStats := r.loadStats.Stats()
 		batchHandledQPS := loadStats.QueriesPerSecond
 		raftAppliedQPS := loadStats.WriteKeysPerSecond
