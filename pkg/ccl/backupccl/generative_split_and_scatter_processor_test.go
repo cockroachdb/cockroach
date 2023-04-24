@@ -208,9 +208,10 @@ func TestRunGenerativeSplitAndScatterRandomizedDestOnFailScatter(t *testing.T) {
 		numEntriesByNode[e.node]++
 	}
 
-	// There are at least 10 splits from the original backed up bank table. Plus
-	// the entries from the system table, etc. Sanity check this.
-	require.GreaterOrEqual(t, len(doneEntries), 10)
+	// There are at least 10 splits from the original backed up bank table.
+	// Because file spans are end key inclusive, this should result in at least
+	// 9 import spans. Sanity check this.
+	require.GreaterOrEqual(t, len(doneEntries), 9)
 
 	// The failed scatter chunks should be scattered to the nodes that have been
 	// scattered to before and cached.
