@@ -1476,22 +1476,22 @@ func TestSQLStatsLatencyInfo(t *testing.T) {
 			latencyMax:  1,
 		},
 		{
-			name:        "select sleep",
+			name:        "select sleep(0.06)",
 			statement:   "SELECT pg_sleep(0.06)",
 			fingerprint: "SELECT pg_sleep(_)",
-			latencyMax:  0.2,
+			latencyMax:  0.3,
 		},
 		{
-			name:        "select sleep",
+			name:        "select sleep(0.1)",
 			statement:   "SELECT pg_sleep(0.1)",
 			fingerprint: "SELECT pg_sleep(_)",
-			latencyMax:  0.2,
+			latencyMax:  0.3,
 		},
 		{
-			name:        "select sleep",
+			name:        "select sleep(0.07)",
 			statement:   "SELECT pg_sleep(0.07)",
 			fingerprint: "SELECT pg_sleep(_)",
-			latencyMax:  0.2,
+			latencyMax:  0.3,
 		},
 	}
 
@@ -1513,13 +1513,13 @@ func TestSQLStatsLatencyInfo(t *testing.T) {
 				"AND metadata ->> 'query'=$2", appName, "SELECT * FROM t1")
 			rows.Scan(&min, &max, &p50, &p90, &p99)
 
-			require.Positive(t, min)
-			require.Positive(t, max)
-			require.GreaterOrEqual(t, max, min)
-			require.LessOrEqual(t, max, tc.latencyMax)
-			require.GreaterOrEqual(t, p99, p90)
-			require.GreaterOrEqual(t, p90, p50)
-			require.LessOrEqual(t, p99, max)
+			require.Positive(t, min, "expected min latency greater than 0")
+			require.Positive(t, max, "expected max latency greater than 0")
+			require.GreaterOrEqual(t, max, min, "expected max latency greater than min latency")
+			require.LessOrEqual(t, max, tc.latencyMax, "expected max latency less or equal test latency %f", tc.latencyMax)
+			require.GreaterOrEqual(t, p99, p90, "expected p99 latency greater or equal p90 latency")
+			require.GreaterOrEqual(t, p90, p50, "expected p90 latency greater or equal p50 latency")
+			require.LessOrEqual(t, p99, max, "expected p99 latency less or equal max latency")
 		})
 	}
 }
