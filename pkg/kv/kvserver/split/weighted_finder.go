@@ -16,6 +16,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -121,6 +122,19 @@ func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
 		return
 	} else {
 		idx = f.randSource.Intn(splitKeySampleSize)
+	}
+
+	// We only wish to retain safe split keys as samples, as they are the split
+	// keys that will eventually be returned from Key(). If instead we kept every
+	// key, it is possible for all sample keys to map to the same split key
+	// implicitly with column families.
+	if safeKey, err := keys.EnsureSafeSplitKey(key); err == nil {
+		key = safeKey
+	} else {
+		// If the key is not a safe split key, instead ignore it and don't bump any
+		// counters. This biases the algorithm slightly, as keys which would be
+		// invalid are not sampled, nor their impact recorded if they reach here.
+		return
 	}
 
 	// Note we always use the start key of the span. We could
