@@ -126,9 +126,10 @@ message ProcessorCoreUnion {
   optional GenerativeSplitAndScatterSpec generativeSplitAndScatter = 41;
   optional CloudStorageTestSpec cloudStorageTest = 42;
   optional InsertSpec insert = 43;
+  optional IngestStoppedSpec ingestStopped = 44;
 
   reserved 6, 12, 14, 17, 18, 19, 20;
-  // NEXT ID: 44.
+  // NEXT ID: 45.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
