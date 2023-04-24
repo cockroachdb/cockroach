@@ -1529,6 +1529,21 @@ func (g *Gossip) OnFirstRangeChanged(cb func(*roachpb.RangeDescriptor)) {
 	})
 }
 
+// GetKnownNodeIDs returns list of live node Ids (ie doesn't include decommissioned).
+func (g *Gossip) GetKnownNodeIDs() ([]roachpb.NodeID, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	infos, err := g.mu.is.getMatchedInfos(MakePrefixPattern(KeyNodeDescPrefix))
+	if err != nil {
+		return nil, err
+	}
+	nodeIDs := make([]roachpb.NodeID, len(infos))
+	for idx, info := range infos {
+		nodeIDs[idx] = info.NodeID
+	}
+	return nodeIDs, nil
+}
+
 // MakeOptionalGossip initializes an OptionalGossip instance wrapping a
 // (possibly nil) *Gossip.
 //

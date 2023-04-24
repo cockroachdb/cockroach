@@ -231,6 +231,35 @@ func (is *infoStore) getInfo(key string) *Info {
 	return nil
 }
 
+// getMatchedInfos returns the Info at key. Returns nil when key is not present
+// in the infoStore. Does not modify the infoStore.
+func (is *infoStore) getMatchedInfos(pattern string) ([]*Info, error) {
+	var matcher stringMatcher
+	var infos []*Info
+
+	if pattern == ".*" {
+		matcher = allMatcher{}
+	} else {
+		var err error
+		if matcher, err = regexp.Compile(pattern); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := is.visitInfos(func(key string, i *Info) error {
+		if i.expired(monotonicUnixNano()) {
+			return nil
+		}
+		if matcher.MatchString(key) {
+			infos = append(infos, i)
+		}
+		return nil
+	}, false); err != nil {
+		return nil, err
+	}
+	return infos, nil
+}
+
 // addInfo adds or updates an info in the infos map.
 //
 // Returns nil if info was added; error otherwise.

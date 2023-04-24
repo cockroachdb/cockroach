@@ -1123,6 +1123,48 @@ func TestHotRanges2Response(t *testing.T) {
 	}
 }
 
+func TestNetworkConnectivity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	numNodes := 5
+	testCluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+	ts := testCluster.Server(0)
+
+	var resp serverpb.NetworkConnectivityResponse
+	// Should wait because endpoint relies on Gossip.
+	testutils.SucceedsSoon(t, func() error {
+		if err := postStatusJSONProto(ts, "connectivity", &serverpb.NetworkConnectivityRequest{}, &resp); err != nil {
+			return err
+		}
+		if len(resp.ErrorsByNodeID) > 0 {
+			return errors.Errorf("expected no errors but got: %d", len(resp.ErrorsByNodeID))
+		}
+		if len(resp.Connections) < numNodes {
+			return errors.Errorf("expected results from %d nodes but got: %d", numNodes, len(resp.ErrorsByNodeID))
+		}
+		return nil
+	})
+	// Test when one node is stopped.
+	stoppedNodeID := testCluster.Server(1).NodeID()
+	testCluster.Server(1).Stopper().Stop(ctx)
+
+	testutils.SucceedsSoon(t, func() error {
+		if err := postStatusJSONProto(ts, "connectivity", &serverpb.NetworkConnectivityRequest{}, &resp); err != nil {
+			return err
+		}
+		require.Equal(t, len(resp.Connections), numNodes-1)
+		if resp.Connections[ts.NodeID()].Peers[stoppedNodeID].Status != serverpb.NetworkConnectivityResponse_NOT_CONNECTED {
+			return errors.New("waiting for connection state to be changed.")
+		}
+		if latency := resp.Connections[ts.NodeID()].Peers[stoppedNodeID].Latency; latency > 0 {
+			return errors.Errorf("expected latency to be 0 but got %s", latency.String())
+		}
+		return nil
+	})
+}
+
 func TestHotRanges2ResponseWithViewActivityOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
