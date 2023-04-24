@@ -982,7 +982,7 @@ func getInitialDBForEnterpriseFactory(
 	// Instead of creating enterprise changefeeds on the root connection, we may choose to create
 	// them on a test user connection. This user should have the minimum privileges to create a changefeed,
 	// which means they default to having the CHANGEFEED privilege on all tables.
-	const percentNonRoot = 0.5
+	const percentNonRoot = 1
 	if rand.Float32() < percentNonRoot {
 		user := "EnterpriseFeedUser"
 		password := "hunter2"
@@ -1008,7 +1008,7 @@ func getInitialSinkForSinklessFactory(
 	// Instead of creating sinkless changefeeds on the root connection, we may choose to create
 	// them on a test user connection. This user should have the minimum privileges to create a changefeed,
 	// which means they default to having the SELECT privilege on all tables.
-	const percentNonRoot = 0.5
+	const percentNonRoot = 1
 	if rand.Float32() < percentNonRoot {
 		user := "SinklessFeedUser"
 		password := "hunter2"
