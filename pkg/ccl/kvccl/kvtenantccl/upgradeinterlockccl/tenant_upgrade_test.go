@@ -291,6 +291,9 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 			tenantArgs := base.TestTenantArgs{
 				TenantID: id,
 				TestingKnobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						DisableAutomaticVersionUpgrade: make(chan struct{}),
+					},
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 					UpgradeManager: &upgradebase.TestingKnobs{
 						InterlockPausePoint:               test.pausePoint,
@@ -424,6 +427,11 @@ func TestTenantUpgradeInterlock(t *testing.T) {
 				Stopper:  otherServerStopper,
 				TenantID: tenantID,
 				Settings: otherServerSettings,
+				TestingKnobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						DisableAutomaticVersionUpgrade: make(chan struct{}),
+					},
+				},
 			})
 
 		var otherTenantRunner *sqlutils.SQLRunner

@@ -49,10 +49,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/hintdetail"
 	"github.com/cockroachdb/redact"
 )
+
+var setVersionSettingMu = &syncutil.Mutex{}
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
 type setClusterSettingNode struct {
@@ -469,6 +472,10 @@ func setVersionSetting(
 	forSystemTenant bool,
 	releaseLeases func(context.Context),
 ) error {
+	// setVersionSettingMu prevents data races when setting the
+	// version setting.
+	setVersionSettingMu.Lock()
+	defer setVersionSettingMu.Unlock()
 	// In the special case of the 'version' cluster setting,
 	// we must first read the previous value to validate that the
 	// value change is valid.
