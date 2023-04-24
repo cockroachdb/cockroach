@@ -1051,8 +1051,16 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	visibility := 1.0
 	if notvisible := og.randIntn(20) == 0; notvisible {
 		visibility = 0.0
-		if og.randIntn(2) == 0 {
-			visibility = og.params.rng.Float64()
+		partiallyVisibleIndexNotSupported, err := isClusterVersionLessThan(
+			ctx, tx, clusterversion.ByKey(clusterversion.V23_2_PartiallyVisibleIndexes),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if !partiallyVisibleIndexNotSupported {
+			if og.randIntn(2) == 0 {
+				visibility = og.params.rng.Float64()
+			}
 		}
 	}
 
