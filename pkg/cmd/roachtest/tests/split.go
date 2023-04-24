@@ -38,6 +38,7 @@ type splitParams struct {
 	readPercent   int           // % of queries that are read queries.
 	spanPercent   int           // % of queries that query all the rows.
 	qpsThreshold  int           // QPS Threshold for load based splitting.
+	cpuThreshold  time.Duration // CPU Threshold for load based splitting.
 	minimumRanges int           // Minimum number of ranges expected at the end.
 	maximumRanges int           // Maximum number of ranges expected at the end.
 	sequential    bool          // Sequential distribution.
@@ -149,9 +150,29 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 
 		// TODO(kvoli): Add load split tests which use CPU, similar to the current
 		// QPS ones. Tracked by #97540.
-		t.Status("setting split objective to QPS")
-		if err := setLoadBasedRebalancingObjective(ctx, db, "qps"); err != nil {
-			return err
+		//
+		// Set the objective to QPS or CPU and update the load split threshold
+		// appropriately.
+		if params.qpsThreshold > 0 {
+			t.Status("setting split objective to QPS with threshold %d", params.qpsThreshold)
+			if err := setLoadBasedRebalancingObjective(ctx, db, "qps"); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING kv.range_split.load_qps_threshold = %d",
+				params.qpsThreshold)); err != nil {
+				return err
+			}
+		} else if params.cpuThreshold > 0 {
+			t.Status("setting split objective to CPU with threshold %s", params.cpuThreshold)
+			if err := setLoadBasedRebalancingObjective(ctx, db, "cpu"); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING kv.range_split.load_cpu_threshold = '%s'",
+				params.cpuThreshold)); err != nil {
+				return err
+			}
+		} else {
+			t.Fatal("no CPU or QPS split threshold set")
 		}
 
 		t.Status("increasing range_max_bytes")
@@ -192,11 +213,6 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 			return errors.Errorf("kv.kv table split over multiple ranges.")
 		}
 
-		// Set the QPS threshold for load based splitting before turning it on.
-		if _, err := db.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING kv.range_split.load_qps_threshold = %d",
-			params.qpsThreshold)); err != nil {
-			return err
-		}
 		t.Status("enable load based splitting")
 		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = true`); err != nil {
 			return err
