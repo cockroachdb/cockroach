@@ -9,8 +9,16 @@
 // licenses/APL.txt.
 
 import uPlot, { Plugin } from "uplot";
-import { AxisUnits, formatTimeStamp } from "../utils/domain";
-import { Bytes, Duration, Percentage, Count } from "../../util";
+import { AxisUnits } from "../utils/domain";
+import {
+  Bytes,
+  Duration,
+  Percentage,
+  Count,
+  FormatWithTimezone,
+  DATE_WITH_SECONDS_FORMAT_24_TZ,
+} from "../../util";
+import moment from "moment-timezone";
 
 // Fallback color for series stroke if one is not defined.
 const DEFAULT_STROKE = "#7e89a9";
@@ -96,7 +104,7 @@ function getFormattedValue(value: number, yAxisUnits: AxisUnits): string {
 }
 
 // Tooltip legend plugin for bar charts.
-export function barTooltipPlugin(yAxis: AxisUnits): Plugin {
+export function barTooltipPlugin(yAxis: AxisUnits, timezone: string): Plugin {
   const cursorToolTip = {
     tooltip: document.createElement("div"),
     timeStamp: document.createElement("div"),
@@ -110,7 +118,11 @@ export function barTooltipPlugin(yAxis: AxisUnits): Plugin {
     // get the current timestamp from the x axis and formatting as
     // the Tooltip header.
     const closestDataPointTimeMillis = u.data[0][u.posToIdx(left)];
-    timeStamp.textContent = formatTimeStamp(closestDataPointTimeMillis);
+    timeStamp.textContent = FormatWithTimezone(
+      moment(closestDataPointTimeMillis),
+      DATE_WITH_SECONDS_FORMAT_24_TZ,
+      timezone,
+    );
 
     // Generating the series legend based on current state of µPlot
     generateSeriesLegend(u, seriesLegend, yAxis);

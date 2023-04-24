@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { useContext } from "react";
 import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
@@ -51,6 +51,7 @@ import {
 } from "src/queryFilter";
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "src/tableStatistics";
+import { Timestamp, Timezone } from "../timestamp";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -611,13 +612,16 @@ export class DatabaseDetailsPage extends React.Component<
             placement="bottom"
             title="The last time table statistics were created or updated."
           >
-            Table Stats Last Updated (UTC)
+            Table Stats Last Updated <Timezone />
           </Tooltip>
         ),
-        cell: table =>
-          !table.details.statsLastUpdated
-            ? "No table statistics found"
-            : table.details.statsLastUpdated.format(DATE_FORMAT),
+        cell: table => (
+          <Timestamp
+            time={table.details.statsLastUpdated}
+            format={DATE_FORMAT}
+            fallback={"No table statistics found"}
+          />
+        ),
         sort: table => table.details.statsLastUpdated,
         className: cx("database-table__col--table-stats"),
         name: "tableStatsUpdated",

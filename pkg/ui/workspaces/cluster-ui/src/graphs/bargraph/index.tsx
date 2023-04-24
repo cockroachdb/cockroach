@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect, useRef } from "react";
+import React, { useContext, useEffect, useRef } from "react";
 import classNames from "classnames/bind";
 import { getStackedBarOpts, stack } from "./bars";
 import uPlot, { AlignedData } from "uplot";
@@ -20,6 +20,7 @@ import {
   calculateYAxisDomain,
 } from "../utils/domain";
 import { Options } from "uplot";
+import { TimezoneContext } from "../../contexts";
 
 const cx = classNames.bind(styles);
 
@@ -46,6 +47,7 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
   const graphRef = useRef<HTMLDivElement>(null);
   const samplingIntervalMillis =
     alignedData[0].length > 1 ? alignedData[0][1] - alignedData[0][0] : 1e3;
+  const timezone = useContext(TimezoneContext);
 
   useEffect(() => {
     if (!alignedData) return;
@@ -69,6 +71,7 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
       yAxisDomain,
       yAxisUnits,
       colourPalette,
+      timezone,
     );
 
     const plot = new uPlot(opts, stackedData, graphRef.current);
@@ -82,6 +85,7 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
     uPlotOptions,
     yAxisUnits,
     samplingIntervalMillis,
+    timezone,
   ]);
 
   return (

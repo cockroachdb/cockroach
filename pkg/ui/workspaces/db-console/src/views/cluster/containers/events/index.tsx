@@ -10,7 +10,7 @@
 
 import _ from "lodash";
 import moment from "moment-timezone";
-import React from "react";
+import React, { useContext } from "react";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
@@ -31,6 +31,8 @@ import {
   SortedTable,
   util,
   api as clusterUiApi,
+  TimezoneContext,
+  WithTimezone,
 } from "@cockroachlabs/cluster-ui";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import "./events.styl";
@@ -56,10 +58,17 @@ export interface EventRowProps {
   event: clusterUiApi.EventColumns;
 }
 
-export function getEventInfo(e: clusterUiApi.EventColumns): SimplifiedEvent {
+export function getEventInfo(
+  e: clusterUiApi.EventColumns,
+  timezone: string,
+): SimplifiedEvent {
   return {
-    fromNowString: moment(e.timestamp)
-      .format(util.DATE_FORMAT_24_UTC)
+    fromNowString: util
+      .FormatWithTimezone(
+        moment.utc(e.timestamp),
+        util.DATE_FORMAT_24_TZ,
+        timezone,
+      )
       .replace("second", "sec")
       .replace("minute", "min"),
     content: <span>{getEventDescription(e)}</span>,
@@ -67,22 +76,21 @@ export function getEventInfo(e: clusterUiApi.EventColumns): SimplifiedEvent {
   };
 }
 
-export class EventRow extends React.Component<EventRowProps, {}> {
-  render() {
-    const { event } = this.props;
-    const e = getEventInfo(event);
-    return (
-      <tr>
-        <td>
-          <ToolTipWrapper placement="left" text={e.content}>
-            <div className="events__message">{e.content}</div>
-          </ToolTipWrapper>
-          <div className="events__timestamp">{e.fromNowString}</div>
-        </td>
-      </tr>
-    );
-  }
-}
+export const EventRow = (props: EventRowProps) => {
+  const { event } = props;
+  const timezone = useContext(TimezoneContext);
+  const e = getEventInfo(event, timezone);
+  return (
+    <tr>
+      <td>
+        <ToolTipWrapper placement="left" text={e.content}>
+          <div className="events__message">{e.content}</div>
+        </ToolTipWrapper>
+        <div className="events__timestamp">{e.fromNowString}</div>
+      </td>
+    </tr>
+  );
+};
 
 export interface EventBoxProps {
   events: clusterUiApi.EventsResponse;
@@ -137,6 +145,7 @@ export interface EventPageProps {
   setSort: typeof eventsSortSetting.set;
   lastError: Error;
   maxSizeApiReached: boolean;
+  timezone: string;
 }
 
 export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
@@ -152,7 +161,9 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
 
   renderContent() {
     const { events, sortSetting, maxSizeApiReached } = this.props;
-    const simplifiedEvents = _.map(events, getEventInfo);
+    const simplifiedEvents = _.map(events, event => {
+      return getEventInfo(event, this.props.timezone);
+    });
 
     return (
       <>
@@ -243,7 +254,7 @@ const eventPageConnected = withRouter(
       refreshEvents,
       setSort: eventsSortSetting.set,
     },
-  )(EventPageUnconnected),
+  )(WithTimezone<EventPageProps>(EventPageUnconnected)),
 );
 
 export { eventBoxConnected as EventBox };

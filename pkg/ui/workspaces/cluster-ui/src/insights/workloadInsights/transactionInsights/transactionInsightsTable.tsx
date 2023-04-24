@@ -15,7 +15,10 @@ import {
   SortedTable,
   SortSetting,
 } from "src/sortedtable";
-import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
+import {
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  Duration,
+} from "src/util";
 import {
   InsightExecEnum,
   TransactionStatus,
@@ -30,6 +33,7 @@ import {
 import { Link } from "react-router-dom";
 import { TimeScale } from "../../../timeScaleDropdown";
 import { Badge } from "src/badge";
+import { Timestamp } from "../../../timestamp";
 
 function txnStatusToString(status: TransactionStatus) {
   switch (status) {
@@ -99,8 +103,14 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<TxnInsightEve
       name: "startTime",
       title: insightsTableTitles.startTime(execType),
       cell: item =>
-        item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT) ??
-        "N/A",
+        item.startTime ? (
+          <Timestamp
+            time={item.startTime}
+            format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+          />
+        ) : (
+          <>N/A</>
+        ),
       sort: item => item.startTime?.unix() || 0,
     },
     {

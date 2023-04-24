@@ -88,6 +88,7 @@ export const getStackedBarOpts = (
   yAxisDomain: AxisDomain,
   yyAxisUnits: AxisUnits,
   colourPalette = seriesPalette,
+  timezone: string,
 ): Options => {
   const options = getBarChartOpts(
     userOptions,
@@ -95,6 +96,7 @@ export const getStackedBarOpts = (
     yAxisDomain,
     yyAxisUnits,
     colourPalette,
+    timezone,
   );
 
   options.bands = getStackedBands(unstackedData, () => false);
@@ -141,6 +143,7 @@ export const getBarChartOpts = (
   yAxisDomain: AxisDomain,
   yAxisUnits: AxisUnits,
   colourPalette = seriesPalette,
+  timezone: string,
 ): Options => {
   const { series, ...providedOpts } = userOptions;
   const defaultBars = getBarsBuilder(0.9, 80);
@@ -191,7 +194,7 @@ export const getBarChartOpts = (
         ...s,
       })),
     ],
-    plugins: [barTooltipPlugin(yAxisUnits)],
+    plugins: [barTooltipPlugin(yAxisUnits, timezone)],
   };
 
   const combinedOpts = merge(opts, providedOpts);

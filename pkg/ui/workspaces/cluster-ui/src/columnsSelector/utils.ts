@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { isEmpty } from "lodash";
 import { ColumnDescriptor } from "src/sortedtable/sortedtable";
 
 // We show a column if:
@@ -20,7 +21,7 @@ export const isSelectedColumn = (
   c: ColumnDescriptor<unknown>,
 ): boolean => {
   return (
-    (selectedColumns == null && c.showByDefault !== false) ||
+    (isEmpty(selectedColumns) && c.showByDefault !== false) ||
     (selectedColumns !== null && selectedColumns.includes(c.name)) ||
     c.alwaysShow === true
   );

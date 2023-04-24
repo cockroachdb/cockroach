@@ -20,6 +20,7 @@ import {
 } from "src/util";
 import { Loading } from "src/loading";
 import { InsightsError } from "../insightsErrorComponent";
+import { Timestamp, Timezone } from "../../timestamp";
 
 const stmtColumns: ColumnDescriptor<StmtInsightEvent>[] = [
   {
@@ -52,16 +53,38 @@ const stmtColumns: ColumnDescriptor<StmtInsightEvent>[] = [
   },
   {
     name: "startTime",
-    title: "Start Time (UTC)",
+    title: (
+      <>
+        Start Time <Timezone />
+      </>
+    ),
     cell: (item: StmtInsightEvent) =>
-      item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
+      item.startTime ? (
+        <Timestamp
+          time={item.startTime}
+          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
+        />
+      ) : (
+        <>N/A</>
+      ),
     sort: (item: StmtInsightEvent) => item.startTime.unix(),
   },
   {
     name: "endTime",
-    title: "End Time (UTC)",
+    title: (
+      <>
+        End Time <Timezone />
+      </>
+    ),
     cell: (item: StmtInsightEvent) =>
-      item.endTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
+      item.endTime ? (
+        <Timestamp
+          time={item.endTime}
+          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
+        />
+      ) : (
+        <>N/A</>
+      ),
     sort: (item: StmtInsightEvent) => item.endTime.unix(),
   },
   {
