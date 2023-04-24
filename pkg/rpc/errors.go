@@ -16,11 +16,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// errQuiescing is returned from client interceptors when the server's
+// ErrQuiescing is returned from client interceptors when the server's
 // stopper is quiescing. The error is constructed to return true in
 // `grpcutil.IsConnectionRejected` which prevents infinite retry loops during
 // cluster shutdown, especially in unit testing.
-var errQuiescing = status.Error(codes.PermissionDenied, "refusing to dial; node is quiescing")
+var ErrQuiescing = status.Error(codes.PermissionDenied, "refusing to dial; node is quiescing")
 
 // ErrNotHeartbeated is returned by ConnHealth or Connection.Health when we have
 // not yet performed the first heartbeat. This error will typically only be
