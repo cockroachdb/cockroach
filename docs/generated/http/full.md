@@ -5077,6 +5077,106 @@ Support status: [reserved](#support-status)
 
 
 
+## NetworkConnectivity
+
+`POST /_status/connectivity`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.NetworkConnectivityRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| liveness_by_node_id | [NetworkConnectivityResponse.LivenessByNodeIdEntry](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.LivenessByNodeIdEntry) | repeated |  | [reserved](#support-status) |
+| latencies | [NetworkConnectivityResponse.LatenciesEntry](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.LatenciesEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.LivenessByNodeIdEntry"></a>
+#### NetworkConnectivityResponse.LivenessByNodeIdEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.NetworkConnectivityResponse-int32) |  |  |  |
+| value | [cockroach.kv.kvserver.liveness.livenesspb.Liveness](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.kv.kvserver.liveness.livenesspb.Liveness) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.LatenciesEntry"></a>
+#### NetworkConnectivityResponse.LatenciesEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.NetworkConnectivityResponse-int32) |  |  |  |
+| value | [NetworkConnectivityResponse.NodeLatencies](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.NodeLatencies) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.NodeLatencies"></a>
+#### NetworkConnectivityResponse.NodeLatencies
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| latencies | [NetworkConnectivityResponse.NodeLatencies.LatenciesEntry](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.NodeLatencies.LatenciesEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.NodeLatencies.LatenciesEntry"></a>
+#### NetworkConnectivityResponse.NodeLatencies.LatenciesEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.NetworkConnectivityResponse-int32) |  |  |  |
+| value | [int64](#cockroach.server.serverpb.NetworkConnectivityResponse-int64) |  |  |  |
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`

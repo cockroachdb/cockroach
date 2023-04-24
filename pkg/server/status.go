@@ -1889,6 +1889,101 @@ func (s *statusServer) NodeUI(
 	return &resp, nil
 }
 
+func (s *systemStatusServer) NetworkConnectivity(
+	ctx context.Context, req *serverpb.NetworkConnectivityRequest,
+) (*serverpb.NetworkConnectivityResponse, error) {
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	response := &serverpb.NetworkConnectivityResponse{
+		PeerConnectionStatuses: map[roachpb.NodeID]serverpb.NetworkConnectivityResponse_PeerStatus{},
+		Latencies:              map[roachpb.NodeID]serverpb.NetworkConnectivityResponse_NodeLatencies{},
+	}
+
+	if len(req.NodeID) > 0 {
+		nodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+
+		if local {
+			nodes, err := s.gossip.GetKnownNodeIDs()
+			if err != nil {
+				return nil, serverError(ctx, err)
+			}
+
+			peerStatuses := serverpb.NetworkConnectivityResponse_PeerStatus{
+				Connectivity: map[roachpb.NodeID]serverpb.NetworkConnectivityResponse_IsLive{},
+			}
+
+			for _, id := range nodes {
+				if nodeID == id {
+					continue
+				}
+				node, err := s.gossip.GetNodeDescriptor(id)
+				if err != nil {
+					return nil, serverError(ctx, err)
+				}
+
+				err = s.rpcCtx.ConnHealth(node.Address.AddressField, node.NodeID, rpc.SystemClass)
+				if err != nil {
+					if errors.Is(rpc.ErrNoConnection, err) {
+						peerStatuses.Connectivity[id] = serverpb.NetworkConnectivityResponse_NOT_CONNECTED
+					} else {
+						peerStatuses.Connectivity[id] = serverpb.NetworkConnectivityResponse_PARTITIONED
+					}
+				} else {
+					peerStatuses.Connectivity[id] = serverpb.NetworkConnectivityResponse_LIVE
+				}
+			}
+			response.PeerConnectionStatuses[nodeID] = peerStatuses
+
+			latencies := s.rpcCtx.RemoteClocks.AllLatencies()
+
+			response.Latencies[nodeID] = serverpb.NetworkConnectivityResponse_NodeLatencies{
+				Latencies: latencies,
+			}
+
+			return response, nil
+		}
+		statusClient, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+		return statusClient.NetworkConnectivity(ctx, req)
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		return s.dialNode(ctx, nodeID)
+	}
+	remoteRequest := serverpb.NetworkConnectivityRequest{NodeID: "local"}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.NetworkConnectivity(ctx, &remoteRequest)
+	}
+	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		r := resp.(*serverpb.NetworkConnectivityResponse)
+		response.Latencies[nodeID] = r.Latencies[nodeID]
+		response.PeerConnectionStatuses[nodeID] = r.PeerConnectionStatuses[nodeID]
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		// TODO (koorosh): handle errors
+	}
+
+	if err := s.iterateNodes(ctx, "network connectivity", dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, serverError(ctx, err)
+	}
+
+	return response, nil
+}
+
+func (s *statusServer) NetworkConnectivity(
+	ctx context.Context, _ *serverpb.NetworkConnectivityRequest,
+) (*serverpb.NetworkConnectivityResponse, error) {
+	// TODO (koorosh): implement tenant version
+	return nil, serverErrorf(ctx, "NetworkConnectivity isn't implemented yet")
+}
+
 // Metrics return metrics information for the server specified.
 func (s *statusServer) Metrics(
 	ctx context.Context, req *serverpb.MetricsRequest,
