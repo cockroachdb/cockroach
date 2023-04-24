@@ -15,12 +15,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -249,4 +251,62 @@ func (r *Replica) recordBatchForLoadBasedSplitting(
 	if shouldInitSplit {
 		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
+}
+
+// loadSplitKey returns a suggested load split key for the range if it exists,
+// otherwise it returns nil. If there were any errors encountered when
+// validating the split key, the error is returned as well.
+func (r *Replica) loadSplitKey(ctx context.Context, now time.Time) (roachpb.Key, error) {
+	splitKey := r.loadBasedSplitter.MaybeSplitKey(ctx, now)
+	if splitKey == nil {
+		return nil, nil
+	}
+
+	if err := splitKeyPreCheck(r.Desc().RSpan(), splitKey); err != nil {
+		return nil, err
+	}
+
+	return splitKey, nil
+}
+
+// splitKeyPreCheck checks that a split key is within the bounds of a
+// range, addressable and not the same as the start key. An error is returned
+// if these are not true.
+func splitKeyPreCheck(rspan roachpb.RSpan, splitKey roachpb.Key) error {
+	if safeSplitKey, err := keys.EnsureSafeSplitKey(splitKey); err != nil {
+		return err
+	} else if !safeSplitKey.Equal(splitKey) {
+		// Column family keys should be stripped, we don't want to split in the
+		// middle of a row.
+		return errors.Errorf("split key differs from safe sql split key "+
+			"(split_key=%s safe_split_key=%s)", splitKey, safeSplitKey)
+	}
+
+	splitRKey, err := keys.Addr(splitKey)
+	if err != nil {
+		return err
+	}
+
+	// The split key is outside of the range's key span.
+	if !rspan.ContainsKey(splitRKey) {
+		return errors.Errorf("split key is out of range bounds (split_key=%s span=%s)",
+			splitRKey, rspan)
+	}
+
+	// If the split key is equal to the start key of the range, it is treated as
+	// a no-op in adminSplitWithDescriptor, however it is treated as an error
+	// here because we shouldn't be suggesting split keys that are identical to
+	// the start key of the range.
+	if splitRKey.Equal(rspan.Key) {
+		return errors.Errorf(
+			"split key is equal to range start key (split_key=%s)",
+			splitRKey)
+	}
+
+	if !storage.IsValidSplitKey(splitKey) {
+		return errors.Errorf("split key is in range that cannot split (split_key=%s, span=%s)",
+			splitKey, rspan)
+	}
+
+	return nil
 }

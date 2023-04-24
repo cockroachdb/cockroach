@@ -11,6 +11,7 @@
 package kvserver
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func roachpbKey(key uint32) roachpb.Key {
@@ -294,5 +296,61 @@ func TestGetResponseBoundarySpan(t *testing.T) {
 		responseBoundarySpan := getResponseBoundarySpan(test.ba, test.br)
 		assert.Equal(t, test.expectedResponseBoundarySpan, responseBoundarySpan, "Expected response boundary span %s, got %s in test %d",
 			test.expectedResponseBoundarySpan, responseBoundarySpan, i)
+	}
+}
+
+func TestSplitPreCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sampleSpan := roachpb.RSpan{
+		Key:    roachpb.RKey(roachpbKey(1)),
+		EndKey: roachpb.RKey(roachpbKey(100)),
+	}
+
+	testCases := []struct {
+		splitKey  roachpb.Key
+		span      roachpb.RSpan
+		errPrefix string
+	}{
+		{
+			splitKey:  roachpbKey(50),
+			span:      sampleSpan,
+			errPrefix: "",
+		},
+		{
+			splitKey:  roachpbKey(1),
+			span:      sampleSpan,
+			errPrefix: "split key is equal to range start key ",
+		},
+		{
+			splitKey:  roachpbKey(0),
+			span:      sampleSpan,
+			errPrefix: "split key is out of range bounds",
+		},
+		{
+			splitKey:  roachpbKey(100),
+			span:      sampleSpan,
+			errPrefix: "split key is out of range bounds",
+		},
+		{
+			splitKey:  keys.MakeFamilyKey(roachpbKey(50), 2),
+			span:      sampleSpan,
+			errPrefix: "split key differs from safe sql split",
+		},
+		{
+			splitKey:  keys.MakeFamilyKey(roachpbKey(50), 0),
+			span:      sampleSpan,
+			errPrefix: "",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			err := splitKeyPreCheck(tc.span, tc.splitKey)
+			if tc.errPrefix == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.errPrefix)
+			}
+		})
 	}
 }
