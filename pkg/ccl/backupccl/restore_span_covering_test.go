@@ -123,6 +123,7 @@ func checkRestoreCovering(
 ) error {
 	var expectedPartitions int
 	required := make(map[string]*roachpb.SpanGroup)
+	requiredKey := make(map[string]roachpb.Key)
 
 	introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
 	if err != nil {
@@ -159,13 +160,27 @@ func checkRestoreCovering(
 						expectedPartitions++
 					}
 				}
+
+				if span.ContainsKey(f.Span.EndKey) {
+					// Since file spans are end key inclusive, we have to check
+					// if the end key is in the covering.
+					requiredKey[f.Path] = f.Span.EndKey
+				}
 			}
 		}
 	}
 	var spanIdx int
 	for _, c := range cov {
 		for _, f := range c.Files {
-			required[f.Path].Sub(c.Span)
+			if requireSpan, ok := required[f.Path]; ok {
+				requireSpan.Sub(c.Span)
+			}
+
+			if requireKey, ok := requiredKey[f.Path]; ok {
+				if c.Span.ContainsKey(requireKey) {
+					delete(requiredKey, f.Path)
+				}
+			}
 		}
 		for spans[spanIdx].EndKey.Compare(c.Span.Key) < 0 {
 			spanIdx++
@@ -186,6 +201,11 @@ func checkRestoreCovering(
 	if got := len(cov); got != expectedPartitions && !merged {
 		return errors.Errorf("expected %d partitions, got %d", expectedPartitions, got)
 	}
+
+	for name, uncoveredKey := range requiredKey {
+		return errors.Errorf("file %s was supposed to cover key %s", name, uncoveredKey)
+	}
+
 	return nil
 }
 
@@ -232,9 +252,9 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 
 	cover := makeSimpleImportSpans(spans, backups, nil, emptySpanFrontier, nil, noSpanTargetSize)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
-		{Span: sp("a", "c"), Files: paths("1", "4", "6")},
-		{Span: sp("c", "e"), Files: paths("2", "4", "6")},
-		{Span: sp("e", "f"), Files: paths("6")},
+		{Span: sp("a", "c\x00"), Files: paths("1", "2", "4", "6")},
+		{Span: sp("c\x00", "e\x00"), Files: paths("2", "4", "6")},
+		{Span: sp("e\x00", "f"), Files: paths("6")},
 		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
 		{Span: sp("l", "m"), Files: paths("9")},
 	}, cover)
