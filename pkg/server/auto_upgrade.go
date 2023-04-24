@@ -116,6 +116,7 @@ const (
 	upgradeDisabledByConfiguration
 	upgradeBlockedDueToError
 	upgradeBlockedDueToMixedVersions
+	upgradeBlockedDueToLowStorageClusterVersion
 )
 
 // upgradeStatus lets the main checking loop know if we should do upgrade,

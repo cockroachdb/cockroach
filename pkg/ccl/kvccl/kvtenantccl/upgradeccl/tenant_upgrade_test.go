@@ -25,15 +25,121 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTenantAutoUpgrade(t *testing.T) {
+	// Times out under stress race.
+	skip.UnderStressRace(t)
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		false, // initializeVersion
+	)
+	// Initialize the version to the BinaryMinSupportedVersion.
+	require.NoError(t, clusterversion.Initialize(ctx,
+		clusterversion.TestingBinaryMinSupportedVersion, &settings.SV))
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Test validates tenant behavior. No need for the default test
+			// tenant.
+			DefaultTestTenant: base.TestTenantDisabled,
+			Settings:          settings,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	expectedInitialTenantVersion := clusterversion.TestingBinaryMinSupportedVersion
+	expectedFinalTenantVersion := clusterversion.TestingBinaryVersion
+	connectToTenant := func(t *testing.T, addr string) (_ *gosql.DB, cleanup func()) {
+		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, addr, "Tenant", url.User(username.RootUser))
+		tenantDB, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return tenantDB, func() {
+			tenantDB.Close()
+			cleanupPGUrl()
+		}
+	}
+	mkTenant := func(t *testing.T, id uint64) (tenantDB *gosql.DB, cleanup func()) {
+		settings := cluster.MakeTestingClusterSettingsWithVersions(
+			clusterversion.TestingBinaryVersion,
+			clusterversion.TestingBinaryMinSupportedVersion,
+			false, // initializeVersion
+		)
+		// Initialize the version to the minimum it could be.
+		require.NoError(t, clusterversion.Initialize(ctx,
+			expectedInitialTenantVersion, &settings.SV))
+		tenantArgs := base.TestTenantArgs{
+			TenantID:     roachpb.MustMakeTenantID(id),
+			TestingKnobs: base.TestingKnobs{},
+			Settings:     settings,
+		}
+		tenant, err := tc.Server(0).StartTenant(ctx, tenantArgs)
+		require.NoError(t, err)
+		tenantDB, cleanup = connectToTenant(t, tenant.SQLAddr())
+		return tenantDB, cleanup
+	}
+
+	// Create a tenant before upgrading anything and verify its version.
+	const initialTenantID = 10
+	tenantDB, cleanup := mkTenant(t, initialTenantID)
+	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
+
+	// Ensure that the tenant works.
+	tenantRunner.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
+		[][]string{{expectedInitialTenantVersion.String()}})
+	tenantRunner.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY)")
+	tenantRunner.Exec(t, "INSERT INTO t VALUES (1), (2)")
+
+	// Upgrade the host cluster.
+	sqlutils.MakeSQLRunner(tc.ServerConn(0)).Exec(t,
+		"SET CLUSTER SETTING version = $1",
+		clusterversion.TestingBinaryVersion.String())
+
+	// Ensure that the tenant still works.
+	tenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
+	// Wait for the tenant to auto-finalize.
+	tenantRunner.SucceedsSoonDuration = time.Second * 90
+	if skip.Stress() || util.RaceEnabled {
+		tenantRunner.SucceedsSoonDuration = time.Second * 450
+	}
+	tenantRunner.CheckQueryResultsRetry(t, "SHOW CLUSTER SETTING version",
+		[][]string{{expectedFinalTenantVersion.String()}})
+
+	// Restart the tenant and ensure that the version is correct.
+	cleanup()
+	{
+		tenantServer, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
+			TenantID: roachpb.MustMakeTenantID(initialTenantID),
+		})
+		require.NoError(t, err)
+		tenantDB, cleanup = connectToTenant(t, tenantServer.SQLAddr())
+		defer cleanup()
+		tenantRunner = sqlutils.MakeSQLRunner(tenantDB)
+	}
+	tenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
+	tenantRunner.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
+		[][]string{{expectedFinalTenantVersion.String()}})
+
+}
 
 // TestTenantUpgrade exercises the case where a system tenant is in a
 // non-finalized version state and creates a tenant. The test ensures
@@ -95,9 +201,13 @@ func TestTenantUpgrade(t *testing.T) {
 		require.NoError(t, clusterversion.Initialize(ctx,
 			expectedInitialTenantVersion, &settings.SV))
 		tenantArgs := base.TestTenantArgs{
-			TenantID:     roachpb.MustMakeTenantID(id),
-			TestingKnobs: base.TestingKnobs{},
-			Settings:     settings,
+			TenantID: roachpb.MustMakeTenantID(id),
+			TestingKnobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+			},
+			Settings: settings,
 		}
 		tenant, err := tc.Server(0).StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
@@ -139,6 +249,11 @@ func TestTenantUpgrade(t *testing.T) {
 		{
 			tenantServer, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
 				TenantID: roachpb.MustMakeTenantID(initialTenantID),
+				TestingKnobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						DisableAutomaticVersionUpgrade: make(chan struct{}),
+					},
+				},
 			})
 			require.NoError(t, err)
 			initialTenant, cleanup = connectToTenant(t, tenantServer.SQLAddr())
@@ -274,6 +389,9 @@ func TestTenantUpgradeFailure(t *testing.T) {
 				// the upgrade interlock.
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true,
+				},
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
 					DontUseJobs: true,

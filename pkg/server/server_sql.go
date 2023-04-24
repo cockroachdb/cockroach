@@ -1699,6 +1699,10 @@ func (s *SQLServer) preStart(
 		}
 	}))
 
+	if err := s.startAutoUpgradeLoop(ctx); err != nil {
+		return errors.Wrap(err, "cannot start tenant auto upgrade checker task")
+	}
+
 	return nil
 }
 
