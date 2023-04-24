@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/tracelog"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -87,9 +86,6 @@ type MultiConnPoolCfg struct {
 	// max number of connections per pool.  A value less than 0 skips the
 	// connection warmup phase.
 	WarmupConns int
-
-	// LogLevel specifies the log level (default: warn)
-	LogLevel tracelog.LogLevel
 }
 
 // NewMultiConnPoolCfgFromFlags constructs a new MultiConnPoolCfg object based
@@ -126,35 +122,6 @@ var stringToMethod = map[string]pgx.QueryExecMode{
 	"simple":    pgx.QueryExecModeSimpleProtocol,
 }
 
-// pgxLogger implements the pgx.Logger interface.
-type pgxLogger struct{}
-
-var _ tracelog.Logger = pgxLogger{}
-
-// Log implements the pgx.Logger interface.
-func (p pgxLogger) Log(
-	ctx context.Context, level tracelog.LogLevel, msg string, data map[string]interface{},
-) {
-	if ctx.Err() != nil {
-		// Don't log anything from pgx if the context was canceled by the workload
-		// runner. It would result in spam at the end of every workload.
-		return
-	}
-	if strings.Contains(msg, "restart transaction") {
-		// Our workloads have a lot of contention, so "restart transaction" messages
-		// are expected and noisy.
-		return
-	}
-	// data may contain error with "restart transaction" -- skip those as well.
-	if data != nil {
-		ev := data["err"]
-		if err, ok := ev.(error); ok && strings.Contains(err.Error(), "restart transaction") {
-			return
-		}
-	}
-	log.VInfof(ctx, log.Level(level), "pgx logger [%s]: %s logParams=%v", level.String(), msg, data)
-}
-
 // NewMultiConnPool creates a new MultiConnPool.
 //
 // Each URL gets one or more pools, and each pool has at most MaxConnsPerPool
@@ -168,10 +135,6 @@ func NewMultiConnPool(
 	m := &MultiConnPool{}
 	m.mu.preparedStatements = map[string]string{}
 
-	logLevel := tracelog.LogLevelWarn
-	if cfg.LogLevel != 0 {
-		logLevel = cfg.LogLevel
-	}
 	maxConnLifetime := 300 * time.Second
 	if cfg.MaxConnLifetime > 0 {
 		maxConnLifetime = cfg.MaxConnLifetime
@@ -241,10 +204,6 @@ func NewMultiConnPool(
 
 			connCfg := poolCfg.ConnConfig
 			connCfg.DefaultQueryExecMode = queryMode
-			connCfg.Tracer = &tracelog.TraceLog{
-				Logger:   &pgxLogger{},
-				LogLevel: logLevel,
-			}
 			p, err := pgxpool.NewWithConfig(ctx, poolCfg)
 			if err != nil {
 				return nil, err
