@@ -538,6 +538,10 @@ const (
 	// the process of upgrading from previous supported releases to 23.2.
 	V23_2Start
 
+	// V23_2_PartiallyVisibleIndexes is the version where partially visible
+	// indexes are enabled.
+	V23_2_PartiallyVisibleIndexes
+
 	// *************************************************
 	// Step 1b: Add new version for 23.2 development here.
 	// Do not add new versions to a patch release.
@@ -940,15 +944,19 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_2Start,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 2},
 	},
+	{
+		Key:     V23_2TTLAllowDescPK,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 4},
+	},
+	{
+		Key:     V23_2_PartiallyVisibleIndexes,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 6},
+	},
 
 	// *************************************************
 	// Step 2b: Add new version gates for 23.2 development here.
 	// Do not add new versions to a patch release.
 	// *************************************************
-	{
-		Key:     V23_2TTLAllowDescPK,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 4},
-	},
 }
 
 // developmentBranch must true on the main development branch but
