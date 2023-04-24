@@ -293,9 +293,10 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 			benchSpec.nodes+addlNodeCount+1,
 			specOptions...,
 		),
-		Timeout:           timeout,
-		NonReleaseBlocker: true,
-		Skip:              benchSpec.skip,
+		SkipPostValidations: registry.PostValidationNoDeadNodes,
+		Timeout:             timeout,
+		NonReleaseBlocker:   true,
+		Skip:                benchSpec.skip,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if benchSpec.duration > 0 {
 				runDecommissionBenchLong(ctx, t, c, benchSpec, timeout)

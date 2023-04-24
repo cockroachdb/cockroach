@@ -1526,20 +1526,11 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 		return err
 	}
 
-	isDead := func(msg string) bool {
-		if msg == "" || msg == "skipped" {
-			return false
-		}
-		// A numeric message is a PID and implies that the node is running.
-		_, err := strconv.Atoi(msg)
-		return err != nil
-	}
-
 	deadNodes := 0
 	for n := range ch {
 		// If there's an error, it means either that the monitor command failed
 		// completely, or that it found a dead node worth complaining about.
-		if n.Err != nil || isDead(n.Msg) {
+		if n.Err != nil || strings.HasPrefix(n.Msg, "dead") {
 			deadNodes++
 		}
 

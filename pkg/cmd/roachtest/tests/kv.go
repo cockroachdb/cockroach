@@ -390,10 +390,11 @@ func registerKVContention(r registry.Registry) {
 
 func registerKVQuiescenceDead(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "kv/quiescence/nodes=3",
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(4),
-		Leases:  registry.MetamorphicLeases,
+		Name:                "kv/quiescence/nodes=3",
+		Owner:               registry.OwnerKV,
+		Cluster:             r.MakeClusterSpec(4),
+		SkipPostValidations: registry.PostValidationNoDeadNodes,
+		Leases:              registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))

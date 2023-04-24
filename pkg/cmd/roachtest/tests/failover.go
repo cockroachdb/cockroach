@@ -86,34 +86,41 @@ func registerFailover(r registry.Registry) {
 				}
 				return s
 			}
+			var postValidation registry.PostValidation = 0
+			if failureMode == failureModeDiskStall {
+				postValidation = registry.PostValidationNoDeadNodes
+			}
 			r.Add(registry.TestSpec{
-				Name:      fmt.Sprintf("failover/non-system/%s%s", failureMode, suffix),
-				Owner:     registry.OwnerKV,
-				Benchmark: true,
-				Timeout:   30 * time.Minute,
-				Cluster:   makeSpec(7 /* nodes */, 4 /* cpus */),
+				Name:                fmt.Sprintf("failover/non-system/%s%s", failureMode, suffix),
+				Owner:               registry.OwnerKV,
+				Benchmark:           true,
+				Timeout:             30 * time.Minute,
+				SkipPostValidations: postValidation,
+				Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
 
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverNonSystem(ctx, t, c, failureMode, expirationLeases)
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:      fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
-				Owner:     registry.OwnerKV,
-				Benchmark: true,
-				Timeout:   30 * time.Minute,
-				Cluster:   makeSpec(5 /* nodes */, 4 /* cpus */),
+				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
+				Owner:               registry.OwnerKV,
+				Benchmark:           true,
+				Timeout:             30 * time.Minute,
+				SkipPostValidations: postValidation,
+				Cluster:             makeSpec(5 /* nodes */, 4 /* cpus */),
 
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverLiveness(ctx, t, c, failureMode, expirationLeases)
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:      fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
-				Owner:     registry.OwnerKV,
-				Benchmark: true,
-				Timeout:   30 * time.Minute,
-				Cluster:   makeSpec(7 /* nodes */, 4 /* cpus */),
+				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
+				Owner:               registry.OwnerKV,
+				Benchmark:           true,
+				Timeout:             30 * time.Minute,
+				SkipPostValidations: postValidation,
+				Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
 
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverSystemNonLiveness(ctx, t, c, failureMode, expirationLeases)

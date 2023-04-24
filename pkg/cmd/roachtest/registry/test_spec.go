@@ -118,6 +118,8 @@ const (
 	// PostValidationInvalidDescriptors checks if there exists any descriptors in
 	// the crdb_internal.invalid_objects virtual table.
 	PostValidationInvalidDescriptors
+	// PostValidationNoDeadNodes checks if there are any dead nodes in the cluster.
+	PostValidationNoDeadNodes
 )
 
 // MatchType is the type of match a file has to a TestFilter.

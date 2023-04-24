@@ -54,10 +54,11 @@ func registerDiskStalledDetection(r registry.Registry) {
 	for name, makeStaller := range stallers {
 		name, makeStaller := name, makeStaller
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("disk-stalled/%s", name),
-			Owner:   registry.OwnerStorage,
-			Cluster: makeSpec(),
-			Timeout: 30 * time.Minute,
+			Name:                fmt.Sprintf("disk-stalled/%s", name),
+			Owner:               registry.OwnerStorage,
+			Cluster:             makeSpec(),
+			Timeout:             30 * time.Minute,
+			SkipPostValidations: registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDiskStalledDetection(ctx, t, c, makeStaller(t, c), true /* doStall */)
 			},
