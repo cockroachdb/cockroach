@@ -1051,9 +1051,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	visibility := 1.0
 	if notvisible := og.randIntn(20) == 0; notvisible {
 		visibility = 0.0
-		if og.randIntn(2) == 0 {
-			visibility = og.params.rng.Float64()
-		}
+		// TODO(rytaft): sometimes set visibility in range (0.0, 1.0).
 	}
 
 	def := &tree.CreateIndex{

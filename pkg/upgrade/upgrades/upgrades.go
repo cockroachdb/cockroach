@@ -310,6 +310,12 @@ var upgrades = []upgradebase.Upgrade{
 		createActivityUpdateJobMigration,
 		"create statement_activity and transaction_activity job",
 	),
+	upgrade.NewTenantUpgrade(
+		"enable partially visible indexes",
+		toCV(clusterversion.V23_2_PartiallyVisibleIndexes),
+		upgrade.NoPrecondition,
+		NoTenantUpgradeFunc,
+	),
 }
 
 func init() {
