@@ -69,24 +69,27 @@ import (
 )
 
 type sinklessFeedFactory struct {
-	s           serverutils.TestTenantInterface
-	sink        url.URL
+	s serverutils.TestTenantInterface
+	// postgres url for the test user, used for creating sinkless feeds.
+	sink url.URL
+	// postgres url for the rootURL user, used for test internals.
+	rootURL     url.URL
 	sinkForUser sinkForUser
-	currentDB   func(db *string) error
 }
 
 // makeSinklessFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` uri.
 func makeSinklessFeedFactory(
-	s serverutils.TestTenantInterface, sink url.URL, sinkForUser sinkForUser,
+	s serverutils.TestTenantInterface, sink url.URL, rootConn url.URL, sinkForUser sinkForUser,
 ) cdctest.TestFeedFactory {
-	return &sinklessFeedFactory{s: s, sink: sink, sinkForUser: sinkForUser}
+	return &sinklessFeedFactory{s: s, sink: sink, rootURL: rootConn, sinkForUser: sinkForUser}
 }
 
+// AsUser executes fn as the specified user.
 func (f *sinklessFeedFactory) AsUser(user string, fn func(*sqlutils.SQLRunner)) error {
 	prevSink := f.sink
 	password := `hunter2`
-	if err := setPassword(user, password, f.sink); err != nil {
+	if err := f.setPassword(user, password); err != nil {
 		return err
 	}
 	defer func() { f.sink = prevSink }()
@@ -109,8 +112,8 @@ func (f *sinklessFeedFactory) AsUser(user string, fn func(*sqlutils.SQLRunner)) 
 	return nil
 }
 
-func setPassword(user, password string, uri url.URL) error {
-	rootDB, err := gosql.Open("postgres", uri.String())
+func (f *sinklessFeedFactory) setPassword(user, password string) error {
+	rootDB, err := gosql.Open("postgres", f.rootURL.String())
 	if err != nil {
 		return err
 	}
@@ -123,13 +126,6 @@ func setPassword(user, password string, uri url.URL) error {
 func (f *sinklessFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
 	sink := f.sink
 	sink.RawQuery = sink.Query().Encode()
-	if f.currentDB == nil {
-		sink.Path = `d`
-	} else {
-		if err := f.currentDB(&sink.Path); err != nil {
-			return nil, err
-		}
-	}
 	// Use pgx directly instead of database/sql so we can close the conn
 	// (instead of returning it to the pool).
 	pgxConfig, err := pgx.ParseConfig(sink.String())
@@ -761,7 +757,7 @@ func (e *enterpriseFeedFactory) jobsTableConn() *gosql.DB {
 	return e.rootDB
 }
 
-// AsUser uses the previous (assumed to be root) connection to ensure
+// AsUser uses the previous connection to ensure
 // the user has the ability to authenticate, and saves it to poll
 // job status, then implements TestFeedFactory.AsUser().
 func (e *enterpriseFeedFactory) AsUser(user string, fn func(*sqlutils.SQLRunner)) error {
