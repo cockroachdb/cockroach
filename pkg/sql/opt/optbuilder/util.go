@@ -186,7 +186,7 @@ func (b *Builder) expandStarAndResolveType(
 // example, the query `SELECT (x + 1) AS "x_incr" FROM t` has a projection with
 // a synthesized column "x_incr".
 //
-// scope  The scope is passed in so it can can be updated with the newly bound
+// scope  The scope is passed in so it can be updated with the newly bound
 //
 //	variable.
 //

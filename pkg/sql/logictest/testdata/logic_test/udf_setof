@@ -166,25 +166,36 @@ CREATE FUNCTION all_ab() RETURNS SETOF ab LANGUAGE SQL AS $$
   SELECT a, b FROM ab
 $$
 
-# TODO(mgartner): This should return separate columns, not a tuple. See #97059.
-query T rowsort
+query II rowsort
 SELECT * FROM all_ab()
 ----
-(1,10)
-(2,20)
-(3,30)
-(4,40)
+1 10
+2 20
+3 30
+4 40
 
 statement ok
 CREATE FUNCTION all_ab_tuple() RETURNS SETOF ab LANGUAGE SQL AS $$
   SELECT (a, b) FROM ab
 $$
 
-# TODO(mgartner): This should return separate columns, not a tuple. See #97059.
-query T rowsort
+query II rowsort
 SELECT * FROM all_ab_tuple()
 ----
-(1,10)
-(2,20)
-(3,30)
-(4,40)
+1 10
+2 20
+3 30
+4 40
+
+statement ok
+CREATE FUNCTION all_ab_record() RETURNS SETOF RECORD LANGUAGE SQL AS $$
+  SELECT a, b FROM ab
+$$
+
+query II rowsort
+SELECT * FROM all_ab_tuple()
+----
+1 10
+2 20
+3 30
+4 40

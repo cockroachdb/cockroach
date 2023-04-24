@@ -1166,6 +1166,73 @@ project
                      └── tuple
                           └── const: 1
 
+exec-ddl
+CREATE FUNCTION strict_fn_record(i INT, t TEXT, b BOOl) RETURNS RECORD STRICT LANGUAGE SQL AS 'SELECT i, t, b'
+----
+
+build format=show-scalars
+SELECT * FROM strict_fn_record(1, 'foo', false) as bar(i INT, t TEXT, b BOOl)
+----
+project-set
+ ├── columns: i:7 t:8 b:9
+ ├── values
+ │    └── tuple
+ └── zip
+      └── udf: strict_fn_record
+           ├── strict
+           ├── params: i:1 t:2 b:3
+           ├── args
+           │    ├── const: 1
+           │    ├── const: 'foo'
+           │    └── false
+           └── body
+                └── limit
+                     ├── columns: i:4 t:5 b:6
+                     ├── project
+                     │    ├── columns: i:4 t:5 b:6
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         ├── variable: i:1 [as=i:4]
+                     │         ├── variable: t:2 [as=t:5]
+                     │         └── variable: b:3 [as=b:6]
+                     └── const: 1
+
+build format=show-scalars
+SELECT * FROM (SELECT strict_fn_record(1, 'foo', false)) as bar;
+----
+project
+ ├── columns: strict_fn_record:8
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: strict_fn_record [as=strict_fn_record:8]
+           ├── strict
+           ├── params: i:1 t:2 b:3
+           ├── args
+           │    ├── const: 1
+           │    ├── const: 'foo'
+           │    └── false
+           └── body
+                └── project
+                     ├── columns: column7:7
+                     ├── limit
+                     │    ├── columns: i:4 t:5 b:6
+                     │    ├── project
+                     │    │    ├── columns: i:4 t:5 b:6
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         ├── variable: i:1 [as=i:4]
+                     │    │         ├── variable: t:2 [as=t:5]
+                     │    │         └── variable: b:3 [as=b:6]
+                     │    └── const: 1
+                     └── projections
+                          └── tuple [as=column7:7]
+                               ├── variable: i:4
+                               ├── variable: t:5
+                               └── variable: b:6
+
 
 # --------------------------------------------------
 # UDFs with * expressions.

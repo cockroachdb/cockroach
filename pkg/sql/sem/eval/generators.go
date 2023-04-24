@@ -53,7 +53,7 @@ func GetRoutineGenerator(
 			if args[i] == tree.DNull {
 				// Strict routines (CalledOnNullInput=false) should not be
 				// invoked if any of their arguments are NULL. Return nil so
-				// that the EmptyGenerator is used.
+				// that the EmptyGenerator or NullGenerator is used.
 				return nil, nil
 			}
 		}
