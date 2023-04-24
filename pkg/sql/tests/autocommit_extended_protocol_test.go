@@ -169,12 +169,12 @@ func TestErrorDuringExtendedProtocolCommit(t *testing.T) {
 		},
 		BeforeAutoCommit: func(ctx context.Context, stmt string) error {
 			if shouldErrorOnAutoCommit.Get() {
-				shouldErrorOnAutoCommit.Set(false)
 				// Only inject the error if we're in the same trace as the one we
 				// saw when executing our test query. This is so we know that this
 				// autocommit corresponds to our test qyery rather than an internal
 				// query.
 				if traceID == tracing.SpanFromContext(ctx).TraceID() {
+					shouldErrorOnAutoCommit.Set(false)
 					return errors.New("injected error")
 				}
 			}
