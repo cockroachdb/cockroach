@@ -23,7 +23,7 @@ CREATE DATABASE db REGIONS "us-east1"
 query T noticetrace
 CREATE DATABASE db
 ----
-NOTICE: setting ap-southeast-2 as the PRIMARY REGION as no PRIMARY REGION was specified
+NOTICE: defaulting to 'WITH PRIMARY REGION "ap-southeast-2"' as no primary region was specified
 
 query TTBBT colnames
 SHOW REGIONS FROM DATABASE db

@@ -12,7 +12,10 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -29,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -380,16 +384,15 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 	}
 
 	if primaryRegion == "" && len(regions) == 0 {
-		defaultPrimaryRegion := DefaultPrimaryRegion.Get(&p.execCfg.Settings.SV)
-		if defaultPrimaryRegion == "" {
+		var err error
+		primaryRegion, regions, err = p.getDefaultDatabaseRegions(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if primaryRegion == "" {
 			return nil, nil
 		}
-		primaryRegion = tree.Name(defaultPrimaryRegion)
-		// TODO(#67156): send notice immediately, so it pops up even on error.
-		p.BufferClientNotice(
-			ctx,
-			pgnotice.Newf("setting %s as the PRIMARY REGION as no PRIMARY REGION was specified", primaryRegion),
-		)
+		p.BufferClientNotice(ctx, formatDefaultRegionNotice(primaryRegion, regions))
 	}
 
 	liveRegions, err := p.getLiveClusterRegions(ctx)
@@ -414,6 +417,72 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 	}
 
 	return regionConfig, nil
+}
+
+// formatDefaultRegionNotice formats an error that looks like:
+//
+// defaulting to 'WITH PRIMARY REGION "us-east1" REGIONS "us-west2",
+// "us-central3"' as no primary region was specified
+//
+// The error message is intended to echo sql that is equivalent to the default
+// behavior.
+func formatDefaultRegionNotice(primary tree.Name, regions []tree.Name) pgnotice.Notice {
+	var message strings.Builder
+	fmt.Fprintf(&message, `defaulting to 'WITH PRIMARY REGION "%s"`, primary)
+
+	// Add non-primary regions to the message if present.
+	if 0 < len(regions) {
+		fmt.Fprintf(&message, ` REGIONS`)
+		for i := range regions {
+			fmt.Fprintf(&message, ` "%s"`, regions[i])
+			if i < len(regions)-1 {
+				fmt.Fprint(&message, `,`)
+			}
+		}
+	}
+
+	fmt.Fprint(&message, `' as no primary region was specified`)
+	return pgnotice.Newf("%s", message.String())
+}
+
+// getDefaultDatabaseRegions returns the default primary and nonPrimary regions
+// for a database if the user did not specify a primary region via sql.
+func (p *planner) getDefaultDatabaseRegions(
+	ctx context.Context,
+) (primary tree.Name, nonPrimary []tree.Name, err error) {
+	// If 'sql.defaults.primary_region' is set, use the setting value.
+	defaultPrimaryRegion := DefaultPrimaryRegion.Get(&p.execCfg.Settings.SV)
+	if defaultPrimaryRegion != "" {
+		return tree.Name(defaultPrimaryRegion), nil, nil
+	}
+
+	// Otherwise, retrieve the primary region from the system database's
+	// descriptor and the set of all regions from the system database's region
+	// enum.
+	systemDatabase, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Database(ctx, keys.SystemDatabaseID)
+	if err != nil {
+		return "", nil, errors.NewAssertionErrorWithWrappedErrf(
+			err, "failed to resolve system database for regions",
+		)
+	}
+
+	enumRegions, err := regions.GetDatabaseRegions(ctx, p.txn, systemDatabase, p.Descriptors())
+	if err != nil {
+		return "", nil, err
+	}
+	if len(enumRegions) == 0 {
+		return "", nil, nil
+	}
+
+	primaryRegion := tree.Name(systemDatabase.GetRegionConfig().PrimaryRegion)
+	for region := range enumRegions {
+		nextRegion := tree.Name(region)
+		if nextRegion != primaryRegion {
+			nonPrimary = append(nonPrimary, nextRegion)
+		}
+	}
+
+	return primaryRegion, nonPrimary, nil
 }
 
 // GetImmutableTableInterfaceByID is part of the EvalPlanner interface.
