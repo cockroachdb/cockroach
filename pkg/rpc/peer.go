@@ -241,14 +241,14 @@ func (p *peer) launch(ctx context.Context, report func(error), done func()) {
 		p.run(ctx, report, done)
 	}); err != nil {
 		// Stopper draining. Since we're trying to launch a probe, we know the
-		// breaker is tripped. We overwrite the error since we want errQuiescing
+		// breaker is tripped. We overwrite the error since we want ErrQuiescing
 		// (which has a gRPC status), not kvpb.NodeUnavailableError.
-		err = errQuiescing
+		err = ErrQuiescing
 		report(err)
 		// We also need to resolve connFuture because a caller may be waiting on
 		// (*Connection).ConnectNoBreaker, and they need to be signaled as well
 		// but aren't listening to the stopper.
-		p.mu.c.connFuture.Resolve(nil, errQuiescing)
+		p.mu.c.connFuture.Resolve(nil, ErrQuiescing)
 		done()
 	}
 }
@@ -272,8 +272,8 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 		case <-ctx.Done():
 			// Stopper quiescing, node shutting down. Mirroring what breakerProbe.launch
 			// does when it can't launch an async task: leave the broken connection around,
-			// no need to close initialHeartbeatDone, just report errQuiescing and quit.
-			report(errQuiescing)
+			// no need to close initialHeartbeatDone, just report ErrQuiescing and quit.
+			report(ErrQuiescing)
 			return
 		case <-t.C:
 			t.Read = true
@@ -291,7 +291,7 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 		// If ctx is done, Stopper is draining. Unconditionally override the error
 		// to clean up the logging in this case.
 		if ctx.Err() != nil {
-			err = errQuiescing
+			err = ErrQuiescing
 		}
 
 		// Transition peer into unhealthy state.
@@ -302,7 +302,7 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 		// whether this happened after looping around.
 		p.maybeDelete(ctx, now)
 
-		if errors.Is(err, errQuiescing) {
+		if errors.Is(err, ErrQuiescing) {
 			// Heartbeat loop ended due to shutdown. Exit the probe, it won't be
 			// started again since that means running an async task through the
 			// Stopper.
@@ -567,7 +567,7 @@ func maybeLogOnFailedHeartbeat(
 	snap PeerSnap, // already accounting for `err`
 	every *log.EveryN,
 ) {
-	if errors.Is(err, errQuiescing) {
+	if errors.Is(err, ErrQuiescing) {
 		return
 	}
 	// If the error is wrapped in InitialHeartbeatFailedError, unwrap it because that
