@@ -2263,6 +2263,12 @@ func (b *Builder) filterSuggestionError(
 }
 
 func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err error) {
+	if join.ChildOfLocalityOptimizedSearch {
+		// If this join is a child of a locality-optimized search operation, it
+		// should not be statically errored out. It could dynamically error out if
+		// the query can't be answered by executing the first branch of the LOS.
+		return nil
+	}
 	lookupTableMeta := join.Memo().Metadata().TableMeta(join.Table)
 	lookupTable := lookupTableMeta.Table
 
