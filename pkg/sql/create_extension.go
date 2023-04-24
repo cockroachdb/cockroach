@@ -35,7 +35,7 @@ func (n *createExtensionNode) unimplementedExtensionError(issue int) error {
 	name := n.CreateExtension.Name
 	return unimplemented.NewWithIssueDetailf(
 		issue,
-		"CREATE EXTENSION "+name,
+		"CREATE EXTENSION "+string(name),
 		"extension %q is not yet supported",
 		name,
 	)
@@ -48,7 +48,7 @@ func (n *createExtensionNode) startExec(params runParams) error {
 		"fuzzystrmatch",
 		"pgcrypto",
 		"uuid-ossp":
-		telemetry.Inc(sqltelemetry.CreateExtensionCounter(n.CreateExtension.Name))
+		telemetry.Inc(sqltelemetry.CreateExtensionCounter(string(n.CreateExtension.Name)))
 		return nil
 	case "postgis_raster",
 		"postgis_topology",
@@ -105,7 +105,7 @@ func (n *createExtensionNode) startExec(params runParams) error {
 		"xml2":
 		return n.unimplementedExtensionError(54516)
 	}
-	return pgerror.Newf(pgcode.UndefinedParameter, "unknown extension: %q", n.CreateExtension.Name)
+	return pgerror.Newf(pgcode.UndefinedParameter, "unknown extension: %s", n.CreateExtension.Name)
 }
 
 func (n *createExtensionNode) Next(params runParams) (bool, error) { return false, nil }
