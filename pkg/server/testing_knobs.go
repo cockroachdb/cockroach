@@ -161,6 +161,11 @@ type TestingKnobs struct {
 	// DialNodeCallback is used to mock dial errors when dialing a node. It is
 	// invoked by the dialNode method of server.serverIterator.
 	DialNodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
+
+	TenantAutoUpgradeInfo chan struct {
+		Status    int
+		UpgradeTo roachpb.Version
+	}
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -511,3 +511,7 @@ func (s *SettingsWatcher) GetClusterVersionFromStorage(
 func (s *SettingsWatcher) GetTenantClusterVersion() clusterversion.Handle {
 	return s.settings.Version
 }
+
+func (s *SettingsWatcher) GetPreserveDowngradeVersionSettingValue() string {
+	return clusterversion.PreserveDowngradeVersion.Get(&s.settings.SV)
+}

@@ -1711,6 +1711,12 @@ func (s *SQLServer) preStart(
 		}
 	}))
 
+	if !s.execCfg.Codec.ForSystemTenant() && (s.serviceMode != mtinfopb.ServiceModeExternal) {
+		if err := s.startTenantAutoUpgradeLoop(ctx); err != nil {
+			return errors.Wrap(err, "cannot start tenant auto upgrade checker task")
+		}
+	}
+
 	return nil
 }
 
