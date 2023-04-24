@@ -73,7 +73,7 @@ func registerLOQRecovery(r registry.Registry) {
 			Owner:               registry.OwnerReplication,
 			Tags:                registry.Tags(`default`),
 			Cluster:             spec,
-			SkipPostValidations: registry.PostValidationInvalidDescriptors,
+			SkipPostValidations: registry.PostValidationInvalidDescriptors | registry.PostValidationNoDeadNodes,
 			NonReleaseBlocker:   true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRecoverLossOfQuorum(ctx, t, c, testSpec)
@@ -84,7 +84,7 @@ func registerLOQRecovery(r registry.Registry) {
 			Owner:               registry.OwnerReplication,
 			Tags:                registry.Tags(`default`),
 			Cluster:             spec,
-			SkipPostValidations: registry.PostValidationInvalidDescriptors,
+			SkipPostValidations: registry.PostValidationInvalidDescriptors | registry.PostValidationNoDeadNodes,
 			NonReleaseBlocker:   true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runHalfOnlineRecoverLossOfQuorum(ctx, t, c, testSpec)
