@@ -646,3 +646,11 @@ func (s *SettingsWatcher) getSettingAndValue(key settings.InternalKey) (bool, kv
 	}}
 	return true, payload
 }
+
+func (s *SettingsWatcher) GetPreserveDowngradeVersionSettingValue() string {
+	return clusterversion.PreserveDowngradeVersion.Get(&s.settings.SV)
+}
+
+func (s *SettingsWatcher) GetVirtualClusterAutoUpgradeEnabledSettingValue() bool {
+	return clusterversion.VirtualClusterAutoUpgradeEnabled.Get(&s.settings.SV)
+}
