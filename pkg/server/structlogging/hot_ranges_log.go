@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -67,17 +68,18 @@ func StartHotRangesLoggingScheduler(
 	sServer serverpb.TenantStatusServer,
 	ie sql.InternalExecutor,
 	st *cluster.Settings,
-) {
+) error {
 	scheduler := hotRangesLoggingScheduler{
 		ie:      ie,
 		sServer: sServer,
 		st:      st,
 	}
-	scheduler.start(ctx, stopper)
+
+	return scheduler.start(ctx, stopper)
 }
 
-func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Stopper) {
-	_ = stopper.RunAsyncTask(ctx, "hot-ranges-stats", func(ctx context.Context) {
+func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Stopper) error {
+	return stopper.RunAsyncTask(ctx, "hot-ranges-stats", func(ctx context.Context) {
 		ticker := time.NewTicker(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
 		defer ticker.Stop()
 
@@ -92,7 +94,7 @@ func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Sto
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if !TelemetryHotRangesStatsEnabled.Get(&s.st.SV) {
+				if !logcrash.DiagnosticsReportingEnabled.Get(&s.st.SV) || !TelemetryHotRangesStatsEnabled.Get(&s.st.SV) {
 					continue
 				}
 				resp, err := s.sServer.HotRangesV2(ctx, &serverpb.HotRangesRequest{PageSize: ReportTopHottestRanges})
