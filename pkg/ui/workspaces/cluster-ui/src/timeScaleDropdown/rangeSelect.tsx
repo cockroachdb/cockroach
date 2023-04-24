@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useContext } from "react";
 import { Button, Dropdown } from "antd";
 import "antd/lib/button/style";
 import "antd/lib/dropdown/style";
@@ -19,6 +19,8 @@ import classNames from "classnames/bind";
 
 import styles from "./rangeSelector.module.scss";
 import { TimeWindow } from "./timeScaleTypes";
+import { TimezoneContext } from "../contexts";
+import { Timezone } from "src/timestamp";
 
 const cx = classNames.bind(styles);
 
@@ -88,6 +90,7 @@ const RangeSelect = ({
   selected,
 }: RangeSelectProps): React.ReactElement => {
   const [isVisible, setIsVisible] = useState<boolean>(false);
+  const timezone = useContext(TimezoneContext);
   /**
    * customDropdownOptionWasJustSelected holds whether the user had just clicked the "Custom time interval" option in
    * the dropdown menu.
@@ -224,7 +227,7 @@ const RangeSelect = ({
                         {selected.timeEnd}
                       </span>{" "}
                       <span className={cx("Select-value-label__sufix")}>
-                        (UTC)
+                        <Timezone />
                       </span>
                     </>
                   )}

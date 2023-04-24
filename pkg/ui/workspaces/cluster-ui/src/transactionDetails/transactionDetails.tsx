@@ -77,7 +77,6 @@ import {
   timeScale1hMinOptions,
   TimeScaleDropdown,
   timeScaleRangeToObj,
-  timeScaleToString,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
 import moment from "moment-timezone";
@@ -90,6 +89,7 @@ import {
 } from "../insightsTable/insightsTable";
 import { CockroachCloudContext } from "../contexts";
 import { SqlStatsSortType } from "src/api/statementsApi";
+import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
@@ -288,7 +288,7 @@ export class TransactionDetails extends React.Component<
     const { latestTransactionText } = this.state;
     const statementsForTransaction = this.getStatementsForTransaction();
     const transactionStats = transaction?.stats_data?.stats;
-    const period = timeScaleToString(this.props.timeScale);
+    const period = <FormattedTimescale ts={this.props.timeScale} />;
 
     return (
       <div>
