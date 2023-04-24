@@ -45,13 +45,11 @@ func (p *planner) maybeAuditSensitiveTableAccessEvent(
 func (p *planner) maybeAuditRoleBasedAuditEvent(
 	ctx context.Context,
 ) {
-	// If cluster setting value is empty, return early.
-	if auditlogging.UserAuditLogConfig.Get(&p.execCfg.Settings.SV) == "" {
+	// Avoid doing audit work if not necessary.
+	if p.shouldNotRoleBasedAudit() {
 		return
 	}
-	if p.shouldNotAuditInternal() {
-		return
-	}
+
 	userRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
 	if err != nil {
 		log.Errorf(ctx, "RoleBasedAuditEvent: error getting user role memberships: %v", err)
@@ -79,8 +77,14 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(
 	}
 }
 
+// shouldNotRoleBasedAudit checks if we should do any auditing work for RoleBasedAuditEvents.
+func (p *planner) shouldNotRoleBasedAudit() bool {
+	// Do not do audit work if the cluster setting is empty.
+	return auditlogging.UserAuditLogConfig.Get(&p.execCfg.Settings.SV) == "" || p.shouldNotAuditInternal()
+}
+
 func (p *planner) shouldNotAuditInternal() bool {
-	// Do not emit audit events for reserved users/roles. This does not emit the root user.
+	// Do not emit audit events for reserved users/roles. This does not omit the root user.
 	// Do not emit audit events for internal usage (internal planner/internal executor).
 	return p.User().IsReserved() || p.isInternalPlanner || p.extendedEvalCtx.ExecType == executorTypeInternal
 }
