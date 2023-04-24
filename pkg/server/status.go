@@ -1993,6 +1993,106 @@ func (s *statusServer) NodeUI(
 	return &resp, nil
 }
 
+// NetworkConnectivity collects information about connections statuses across all nodes.
+func (s *systemStatusServer) NetworkConnectivity(
+	ctx context.Context, req *serverpb.NetworkConnectivityRequest,
+) (*serverpb.NetworkConnectivityResponse, error) {
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	response := &serverpb.NetworkConnectivityResponse{
+		Connections:    map[roachpb.NodeID]serverpb.NetworkConnectivityResponse_Connectivity{},
+		ErrorsByNodeID: map[roachpb.NodeID]string{},
+	}
+
+	if len(req.NodeID) > 0 {
+		sourceNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+
+		if local {
+			peers := map[roachpb.NodeID]serverpb.NetworkConnectivityResponse_Peer{}
+			var nodeIDs []roachpb.NodeID
+			err = s.gossip.IterateInfos(gossip.KeyNodeDescPrefix, func(k string, info gossip.Info) error {
+				nodeIDs = append(nodeIDs, info.NodeID)
+				return nil
+			})
+			if err != nil {
+				return nil, serverError(ctx, err)
+			}
+
+			latencies := s.rpcCtx.RemoteClocks.AllLatencies()
+
+			for _, targetNodeId := range nodeIDs {
+				if sourceNodeID == targetNodeId {
+					continue
+				}
+				peer := serverpb.NetworkConnectivityResponse_Peer{}
+				peer.Latency = latencies[targetNodeId]
+
+				node, err := s.gossip.GetNodeDescriptor(targetNodeId)
+				if err != nil {
+					peer.Status = serverpb.NetworkConnectivityResponse_UNKNOWN
+					continue
+				}
+				if err = s.rpcCtx.ConnHealth(node.Address.AddressField, node.NodeID, rpc.SystemClass); err != nil {
+					if errors.Is(rpc.ErrNoConnection, err) || errors.Is(rpc.ErrNotHeartbeated, err) {
+						// TODO (koorosh): currently it catches connection errors to decommissioned nodes.
+						// Use NetworkConnectivityResponse_CLOSED status for decommissioned/stopped nodes when
+						// it is possible to distinguish such cases.
+						peer.Status = serverpb.NetworkConnectivityResponse_NOT_CONNECTED
+						// TODO (koorosh): uncomment below if condition after #99191 PR is merged
+						//} else if IsDecommissionedStatusErr(err) {
+						//	peer.Status = serverpb.NetworkConnectivityResponse_CLOSED
+					} else {
+						peer.Status = serverpb.NetworkConnectivityResponse_PARTITIONED
+					}
+				} else {
+					peer.Status = serverpb.NetworkConnectivityResponse_ESTABLISHED
+				}
+				peer.Address = node.Address.AddressField
+				peer.Locality = &node.Locality
+
+				peers[targetNodeId] = peer
+			}
+
+			response.Connections[sourceNodeID] = serverpb.NetworkConnectivityResponse_Connectivity{
+				Peers: peers,
+			}
+			return response, nil
+		}
+
+		statusClient, err := s.dialNode(ctx, sourceNodeID)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+		return statusClient.NetworkConnectivity(ctx, req)
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		return s.dialNode(ctx, nodeID)
+	}
+	remoteRequest := serverpb.NetworkConnectivityRequest{NodeID: "local"}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.NetworkConnectivity(ctx, &remoteRequest)
+	}
+	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		r := resp.(*serverpb.NetworkConnectivityResponse)
+		response.Connections[nodeID] = r.Connections[nodeID]
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		response.ErrorsByNodeID[nodeID] = err.Error()
+	}
+
+	if err := s.iterateNodes(ctx, "network connectivity", dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, serverError(ctx, err)
+	}
+
+	return response, nil
+}
+
 // Metrics return metrics information for the server specified.
 func (s *statusServer) Metrics(
 	ctx context.Context, req *serverpb.MetricsRequest,
