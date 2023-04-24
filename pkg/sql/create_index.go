@@ -162,6 +162,7 @@ func makeIndexDescriptor(
 
 	// Replace expression index elements with hidden virtual computed columns.
 	// The virtual columns are added as mutation columns to tableDesc.
+	activeVersion := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
 	if err := replaceExpressionElemsWithVirtualCols(
 		params.ctx,
 		tableDesc,
@@ -170,7 +171,7 @@ func makeIndexDescriptor(
 		n.Inverted,
 		false, /* isNewTable */
 		params.p.SemaCtx(),
-		params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+		activeVersion,
 	); err != nil {
 		return nil, err
 	}
@@ -193,6 +194,10 @@ func makeIndexDescriptor(
 		return nil, err
 	}
 
+	if !activeVersion.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
+		n.Invisibility > 0.0 && n.Invisibility < 1.0 {
+		return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
+	}
 	indexDesc := descpb.IndexDescriptor{
 		Name:              string(n.Name),
 		Unique:            n.Unique,
