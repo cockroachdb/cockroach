@@ -712,7 +712,7 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 	}
 	var exists bool
 	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		exists, err = jobs.RunningJobExists(ctx, jobID, txn,
+		exists, err = jobs.RunningJobExists(ctx, jobID, txn, p.ExecCfg().Settings.Version,
 			jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats,
 		)
 		return err
