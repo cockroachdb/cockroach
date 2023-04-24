@@ -28,16 +28,17 @@ func TestDeclarativeRules(t *testing.T) {
 	defer c.Cleanup()
 
 	t.Run("declarative corpus validation standalone command", func(t *testing.T) {
-		version := clusterversion.TestingBinaryVersion
 		invalidOut, err := c.RunWithCapture(fmt.Sprintf("debug declarative-print-rules %s op", "1.1"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		opOut, err := c.RunWithCapture(fmt.Sprintf("debug declarative-print-rules %s op", version.String()))
+		version := clusterversion.TestingBinaryVersion
+		versionString := strings.Split(version.String(), "-")[0]
+		opOut, err := c.RunWithCapture(fmt.Sprintf("debug declarative-print-rules %s op", versionString))
 		if err != nil {
 			t.Fatal(err)
 		}
-		depOut, err := c.RunWithCapture(fmt.Sprintf("debug declarative-print-rules %s dep", version.String()))
+		depOut, err := c.RunWithCapture(fmt.Sprintf("debug declarative-print-rules %s dep", versionString))
 		if err != nil {
 			t.Fatal(err)
 		}
