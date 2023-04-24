@@ -161,6 +161,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 	controller := c.Spec().NodeCount
 	// Nodes that we plan to keep after simulated failure.
 	remaining := []int{1, 4, 5}
+	killed := []int{2, 3}
 	planName := "recover-plan.json"
 	pgURL := fmt.Sprintf("{pgurl:1-%d}", c.Spec().NodeCount-1)
 	dbName := "test_db"
@@ -221,6 +222,8 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		m.ExpectDeaths(int32(c.Spec().NodeCount - 1))
 		stopOpts := option.DefaultStopOpts()
 		c.Stop(ctx, t.L(), stopOpts, nodes)
+		// Wipe nodes planned for removal so not to confuse dead node detector.
+		c.Wipe(ctx, c.Nodes(killed...))
 
 		planArguments := ""
 		for _, node := range remaining {
@@ -352,6 +355,9 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		t.L().Printf("recovery succeeded 🍾 \U0001F973")
 	} else {
 		t.L().Printf("recovery failed with error %s(%d)", outcomeNames[testOutcome], testOutcome)
+		// In case of failure wipe nodes to prevent dead node detector from failing
+		// test.
+		c.Wipe(ctx, c.Nodes(remaining...))
 		if debugFailures && testOutcome > 0 {
 			t.Fatalf("test failed with error %s(%d)", outcomeNames[testOutcome], testOutcome)
 		}
@@ -435,6 +441,8 @@ func runHalfOnlineRecoverLossOfQuorum(
 		m.ExpectDeaths(int32(len(killed)))
 		stopOpts := option.DefaultStopOpts()
 		c.Stop(ctx, t.L(), stopOpts, killedNodes)
+		// Wipe nodes planned for removal so not to confuse dead node detector.
+		c.Wipe(ctx, killedNodes)
 
 		t.L().Printf("running plan creation")
 		addrs, err := c.ExternalAddr(ctx, t.L(), c.Node(1))
@@ -584,6 +592,9 @@ func runHalfOnlineRecoverLossOfQuorum(
 		t.L().Printf("recovery succeeded 🍾 \U0001F973")
 	} else {
 		t.L().Printf("recovery failed with error %s(%d)", outcomeNames[testOutcome], testOutcome)
+		// In case of failure wipe nodes to prevent dead node detector from failing
+		// test.
+		c.Wipe(ctx, c.Nodes(remaining...))
 		if debugFailures && testOutcome > 0 {
 			t.Fatalf("test failed with error %s(%d)", outcomeNames[testOutcome], testOutcome)
 		}
