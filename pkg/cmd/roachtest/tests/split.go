@@ -32,17 +32,65 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type splitLoad interface {
+	// init initializes the split workload.
+	init(context.Context, test.Test, cluster.Cluster) error
+	// run starts the split workload.
+	run(context.Context, test.Test, cluster.Cluster) error
+	// rangeCount returns the range count for the split workload ranges.
+	rangeCount(*gosql.DB) (int, error)
+}
+
+type kvSplitLoad struct {
+	// concurrency is the number of concurrent workers.
+	concurrency int
+	// readPercent is the % of queries that are read queries.
+	readPercent int
+	// spanPercent is the % of queries that query all the rows.
+	spanPercent int
+	// sequential indicates the kv workload will use a sequential distribution.
+	sequential bool
+	// waitDuration is the duration the workload should run for.
+	waitDuration time.Duration
+}
+
+func (ksl kvSplitLoad) init(ctx context.Context, t test.Test, c cluster.Cluster) error {
+	t.Status("running uniform kv workload")
+	return c.RunE(ctx, c.Node(1), fmt.Sprintf("./workload init kv {pgurl:1-%d}", c.Spec().NodeCount))
+}
+
+func (ksl kvSplitLoad) rangeCount(db *gosql.DB) (int, error) {
+	return rangeCountFrom("kv.kv", db)
+}
+
+func (ksl kvSplitLoad) run(ctx context.Context, t test.Test, c cluster.Cluster) error {
+	var extraFlags string
+	if ksl.sequential {
+		extraFlags += "--sequential"
+	}
+	return c.RunE(ctx, c.Node(1), fmt.Sprintf("./workload run kv "+
+		"--init --concurrency=%d --read-percent=%d --span-percent=%d %s {pgurl:1-%d} --duration='%s'",
+		ksl.concurrency, ksl.readPercent, ksl.spanPercent, extraFlags, c.Spec().NodeCount,
+		ksl.waitDuration.String()))
+}
+
+func rangeCountFrom(from string, db *gosql.DB) (int, error) {
+	var ranges int
+	q := fmt.Sprintf("SELECT count(*) FROM [SHOW RANGES FROM TABLE %s]",
+		from)
+	if err := db.QueryRow(q).Scan(&ranges); err != nil {
+		return 0, err
+	}
+	return ranges, nil
+}
+
 type splitParams struct {
+	load          splitLoad
 	maxSize       int           // The maximum size a range is allowed to be.
-	concurrency   int           // Number of concurrent workers.
-	readPercent   int           // % of queries that are read queries.
-	spanPercent   int           // % of queries that query all the rows.
 	qpsThreshold  int           // QPS Threshold for load based splitting.
 	cpuThreshold  time.Duration // CPU Threshold for load based splitting.
 	minimumRanges int           // Minimum number of ranges expected at the end.
 	maximumRanges int           // Maximum number of ranges expected at the end.
-	sequential    bool          // Sequential distribution.
-	waitDuration  time.Duration // Duration the workload should run for.
 }
 
 func registerLoadSplits(r registry.Registry) {
@@ -58,37 +106,39 @@ func registerLoadSplits(r registry.Registry) {
 			expSplits := 10
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30,      // 10 GB
-				concurrency:   64,            // 64 concurrent workers
-				readPercent:   95,            // 95% reads
 				qpsThreshold:  100,           // 100 queries per second
 				minimumRanges: expSplits + 1, // Expected Splits + 1
 				maximumRanges: math.MaxInt32, // We're only checking for minimum.
-				// The calculation of the wait duration is as follows:
-				//
-				// Each split requires at least `split.RecordDurationThreshold` seconds to record
-				// keys in a range. So in the kv default distribution, if we make the assumption
-				// that all load will be uniform across the splits AND that the QPS threshold is
-				// still exceeded for all the splits as the number of splits we're targeting is
-				// "low" - we expect that for `expSplits` splits, it will require:
-				//
-				// Minimum Duration For a Split * log2(expSplits) seconds
-				//
-				// We also add an extra expSplits second(s) for the overhead of creating each one.
-				// If the number of expected splits is increased, this calculation will hold
-				// for uniform distribution as long as the QPS threshold is continually exceeded
-				// even with the expected number of splits. This puts a bound on how high the
-				// `expSplits` value can go.
-				// Add 1s for each split for the overhead of the splitting process.
-				// waitDuration: time.Duration(int64(math.Ceil(math.Ceil(math.Log2(float64(expSplits)))*
-				// 	float64((split.RecordDurationThreshold/time.Second))))+int64(expSplits)) * time.Second,
-				//
-				// NB: the above has proven flaky. Just use a fixed duration
-				// that we think should be good enough. For example, for five
-				// expected splits we get ~35s, for ten ~50s, and for 20 ~1m10s.
-				// These are all pretty short, so any random abnormality will mess
-				// things up.
-				waitDuration: 10 * time.Minute,
-			})
+
+				load: kvSplitLoad{
+					concurrency: 64, // 64 concurrent workers
+					readPercent: 95, // 95% reads
+					// The calculation of the wait duration is as follows:
+					//
+					// Each split requires at least `split.RecordDurationThreshold` seconds to record
+					// keys in a range. So in the kv default distribution, if we make the assumption
+					// that all load will be uniform across the splits AND that the QPS threshold is
+					// still exceeded for all the splits as the number of splits we're targeting is
+					// "low" - we expect that for `expSplits` splits, it will require:
+					//
+					// Minimum Duration For a Split * log2(expSplits) seconds
+					//
+					// We also add an extra expSplits second(s) for the overhead of creating each one.
+					// If the number of expected splits is increased, this calculation will hold
+					// for uniform distribution as long as the QPS threshold is continually exceeded
+					// even with the expected number of splits. This puts a bound on how high the
+					// `expSplits` value can go.
+					// Add 1s for each split for the overhead of the splitting process.
+					// waitDuration: time.Duration(int64(math.Ceil(math.Ceil(math.Log2(float64(expSplits)))*
+					// 	float64((split.RecordDurationThreshold/time.Second))))+int64(expSplits)) * time.Second,
+					//
+					// NB: the above has proven flaky. Just use a fixed duration
+					// that we think should be good enough. For example, for five
+					// expected splits we get ~35s, for ten ~50s, and for 20 ~1m10s.
+					// These are all pretty short, so any random abnormality will mess
+					// things up.
+					waitDuration: 10 * time.Minute,
+				}})
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -98,17 +148,18 @@ func registerLoadSplits(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB
-				concurrency:   64,       // 64 concurrent workers
-				readPercent:   0,        // 0% reads
 				qpsThreshold:  100,      // 100 queries per second
 				minimumRanges: 1,        // We expect no splits so require only 1 range.
 				// We expect no splits so require only 1 range. However, in practice we
 				// sometimes see a split or two early in, presumably when the sampling
 				// gets lucky.
 				maximumRanges: 3,
-				sequential:    true,
-				waitDuration:  60 * time.Second,
-			})
+				load: kvSplitLoad{
+					concurrency:  64, // 64 concurrent workers
+					readPercent:  0,  // 0% reads
+					sequential:   true,
+					waitDuration: 60 * time.Second,
+				}})
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -118,14 +169,15 @@ func registerLoadSplits(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB
-				concurrency:   64,       // 64 concurrent workers
-				readPercent:   0,        // 0% reads
-				spanPercent:   95,       // 95% spanning queries
 				qpsThreshold:  100,      // 100 queries per second
 				minimumRanges: 1,        // We expect no splits so require only 1 range.
 				maximumRanges: 1,        // We expect no splits so require only 1 range.
-				waitDuration:  60 * time.Second,
-			})
+				load: kvSplitLoad{
+					concurrency:  64, // 64 concurrent workers
+					readPercent:  0,  // 0% reads
+					spanPercent:  95, // 95% spanning queries
+					waitDuration: 60 * time.Second,
+				}})
 		},
 	})
 }
@@ -190,26 +242,13 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 		// range unless split by load.
 		setRangeMaxBytes(params.maxSize)
 
-		t.Status("running uniform kv workload")
-		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init kv {pgurl:1-%d}", c.Spec().NodeCount))
+		// Init the split workload.
+		if err := params.load.init(ctx, t, c); err != nil {
+			t.Fatal(err)
+		}
 
 		t.Status("checking initial range count")
-		rangeCount := func() int {
-			var ranges int
-			const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE kv.kv]"
-			if err := db.QueryRow(q).Scan(&ranges); err != nil {
-				// TODO(rafi): Remove experimental_ranges query once we stop testing
-				// 19.1 or earlier.
-				if strings.Contains(err.Error(), "syntax error at or near \"ranges\"") {
-					err = db.QueryRow("SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE kv.kv]").Scan(&ranges)
-				}
-				if err != nil {
-					t.Fatalf("failed to get range count: %v", err)
-				}
-			}
-			return ranges
-		}
-		if rc := rangeCount(); rc != 1 {
+		if rc, _ := params.load.rangeCount(db); rc != 1 {
 			return errors.Errorf("kv.kv table split over multiple ranges.")
 		}
 
@@ -217,17 +256,14 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = true`); err != nil {
 			return err
 		}
-		var extraFlags string
-		if params.sequential {
-			extraFlags += "--sequential"
-		}
-		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload run kv "+
-			"--init --concurrency=%d --read-percent=%d --span-percent=%d %s {pgurl:1-%d} --duration='%s'",
-			params.concurrency, params.readPercent, params.spanPercent, extraFlags, c.Spec().NodeCount,
-			params.waitDuration.String()))
 
+		if err := params.load.run(ctx, t, c); err != nil {
+			return err
+		}
 		t.Status("waiting for splits")
-		if rc := rangeCount(); rc < params.minimumRanges || rc > params.maximumRanges {
+		if rc, err := params.load.rangeCount(db); err != nil {
+			t.Fatal(err)
+		} else if rc < params.minimumRanges || rc > params.maximumRanges {
 			return errors.Errorf("kv.kv has %d ranges, expected between %d and %d splits",
 				rc, params.minimumRanges, params.maximumRanges)
 		}
