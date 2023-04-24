@@ -760,6 +760,13 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	return nil
 }
 
+// ClientFinalized is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) ClientFinalized() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txnState == txnFinalized
+}
+
 // finalizeAndCleanupTxnLocked marks the transaction state as finalized and
 // closes all interceptors.
 func (tc *TxnCoordSender) finalizeAndCleanupTxnLocked(ctx context.Context) {
