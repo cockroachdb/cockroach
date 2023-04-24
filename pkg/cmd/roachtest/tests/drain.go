@@ -55,9 +55,10 @@ func registerDrain(r registry.Registry) {
 		})
 
 		r.Add(registry.TestSpec{
-			Name:    "drain/not-at-quorum",
-			Owner:   registry.OwnerSQLSessions,
-			Cluster: r.MakeClusterSpec(3),
+			Name:                "drain/not-at-quorum",
+			Owner:               registry.OwnerSQLSessions,
+			Cluster:             r.MakeClusterSpec(3),
+			SkipPostValidations: registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClusterNotAtQuorum(ctx, t, c)
 			},
