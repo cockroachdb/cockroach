@@ -13,6 +13,7 @@ package rowenc_test
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"testing"
@@ -1257,4 +1258,36 @@ func TestDecodeKeyVals(t *testing.T) {
 			require.Equal(t, tc.expectedNumVals, actualNumVals)
 		})
 	}
+}
+
+func TestDecodeIndexKeyToDatums(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	keyBytes, err := hex.DecodeString("f389fd08c48e96c53997ff12434f4e")
+	require.NoError(t, err)
+	codec := keys.SystemSQLCodec
+	typs := []*types.T{
+		types.Int,
+		types.String,
+		types.String,
+		types.Int,
+		types.Int,
+	}
+	dirs := []catenumpb.IndexColumn_Direction{
+		catenumpb.IndexColumn_ASC,
+		catenumpb.IndexColumn_ASC,
+		catenumpb.IndexColumn_ASC,
+		catenumpb.IndexColumn_ASC,
+		catenumpb.IndexColumn_ASC,
+	}
+	var alloc tree.DatumAlloc
+	datums, err := DecodeIndexKeyToDatums(
+		codec,
+		typs,
+		dirs,
+		keyBytes,
+		&alloc,
+	)
+	require.NoError(t, err) // failing
+	_ = datums
 }
