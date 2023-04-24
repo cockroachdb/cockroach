@@ -11,11 +11,13 @@
 package scbuildstmt
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -79,6 +81,11 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		if len(n.Columns) > 0 {
 			b.IncrementSchemaChangeIndexCounter("multi_column_inverted_index")
 		}
+	}
+	activeVersion := b.EvalCtx().Settings.Version.ActiveVersion(context.TODO())
+	if !activeVersion.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
+		n.Invisibility > 0.0 && n.Invisibility < 1.0 {
+		panic(unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported"))
 	}
 	var idxSpec indexSpec
 	idxSpec.secondary = &scpb.SecondaryIndex{
