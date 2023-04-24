@@ -7,6 +7,7 @@ go_test(
         "tenant_upgrade_test.go",
     ],
     args = ["-test.timeout=295s"],
+    shard_count = 5,
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
@@ -28,6 +29,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/upgrade",
         "//pkg/upgrade/upgradebase",
+        "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",

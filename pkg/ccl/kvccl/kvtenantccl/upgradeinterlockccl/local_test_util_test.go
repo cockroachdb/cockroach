@@ -162,6 +162,9 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		tenantArgs := base.TestTenantArgs{
 			TenantID: id,
 			TestingKnobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				UpgradeManager: &upgradebase.TestingKnobs{
 					InterlockPausePoint:               test.PausePoint,
@@ -295,6 +298,11 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 			Stopper:  otherServerStopper,
 			TenantID: tenantID,
 			Settings: otherServerSettings,
+			TestingKnobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+			},
 		})
 
 	var otherTenantRunner *sqlutils.SQLRunner
