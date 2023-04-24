@@ -11,20 +11,22 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { MemoryRouter } from "react-router-dom";
-import { cloneDeep, noop, extend } from "lodash";
+import { cloneDeep, extend, noop } from "lodash";
 import {
-  data,
-  nodeRegions,
   columns,
-  routeProps,
-  timeScale,
-  sortSetting,
+  data,
   filters,
   lastUpdated,
+  nodeRegions,
+  routeProps,
+  sortSetting,
+  timeScale,
 } from "./transactions.fixture";
 
 import { TransactionsPage } from ".";
 import { RequestError } from "../util";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import StatsSortOptions = cockroach.server.serverpb.StatsSortOptions;
 
 const getEmptyData = () =>
   extend({}, data, { transactions: [], statements: [] });
@@ -53,6 +55,12 @@ storiesOf("Transactions Page", module)
       search={""}
       sortSetting={sortSetting}
       lastUpdated={lastUpdated}
+      limit={100}
+      reqSortSetting={StatsSortOptions.SERVICE_LAT}
+      isReqInFlight={false}
+      onChangeLimit={noop}
+      onChangeReqSort={noop}
+      onApplySearchCriteria={noop}
     />
   ))
   .add("without data", () => {
@@ -75,6 +83,12 @@ storiesOf("Transactions Page", module)
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        limit={100}
+        reqSortSetting={StatsSortOptions.SERVICE_LAT}
+        isReqInFlight={false}
+        onChangeLimit={noop}
+        onChangeReqSort={noop}
+        onApplySearchCriteria={noop}
       />
     );
   })
@@ -105,6 +119,12 @@ storiesOf("Transactions Page", module)
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        limit={100}
+        reqSortSetting={StatsSortOptions.SERVICE_LAT}
+        isReqInFlight={false}
+        onChangeLimit={noop}
+        onChangeReqSort={noop}
+        onApplySearchCriteria={noop}
       />
     );
   })
@@ -128,6 +148,12 @@ storiesOf("Transactions Page", module)
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        limit={100}
+        reqSortSetting={StatsSortOptions.SERVICE_LAT}
+        isReqInFlight={false}
+        onChangeLimit={noop}
+        onChangeReqSort={noop}
+        onApplySearchCriteria={noop}
       />
     );
   })
@@ -158,6 +184,12 @@ storiesOf("Transactions Page", module)
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        limit={100}
+        reqSortSetting={StatsSortOptions.SERVICE_LAT}
+        isReqInFlight={false}
+        onChangeLimit={noop}
+        onChangeReqSort={noop}
+        onApplySearchCriteria={noop}
       />
     );
   });

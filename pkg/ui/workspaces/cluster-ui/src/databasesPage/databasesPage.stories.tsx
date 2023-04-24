@@ -37,7 +37,6 @@ const withLoadingIndicator: DatabasesPageProps = {
   refreshDatabases: () => {},
   refreshSettings: () => {},
   refreshDatabaseDetails: () => {},
-  refreshTableStats: () => {},
   location: history.location,
   history,
   match: {
@@ -65,7 +64,6 @@ const withoutData: DatabasesPageProps = {
   refreshDatabases: () => {},
   refreshSettings: () => {},
   refreshDatabaseDetails: () => {},
-  refreshTableStats: () => {},
   location: history.location,
   history,
   match: {
@@ -111,7 +109,6 @@ const withData: DatabasesPageProps = {
   refreshDatabases: () => {},
   refreshSettings: () => {},
   refreshDatabaseDetails: () => {},
-  refreshTableStats: () => {},
   location: history.location,
   history,
   match: {
