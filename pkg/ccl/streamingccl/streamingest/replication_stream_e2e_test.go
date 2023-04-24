@@ -196,7 +196,7 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 
 	// Check dest has caught up the previous updates.
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime())
+	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime(), false)
 	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 	// Ingestion happened one more time after resuming the ingestion job.
@@ -285,7 +285,7 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 
 	cutoverTime := c.DestSysServer.Clock().Now()
 	c.WaitUntilHighWatermark(cutoverTime, jobspb.JobID(ingestionJobID))
-	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime())
+	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
 	cutoverFingerprint := c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 
 	// Clients should never be started prior to a checkpointed timestamp
@@ -673,7 +673,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
 
 	cutoverTime := c.DestSysServer.Clock().Now()
-	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime())
+	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
 	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 
 	// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
@@ -797,7 +797,7 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 			jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 			var cutoverTime time.Time
 			c.DestSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
-			c.Cutover(producerJobID, replicationJobID, cutoverTime)
+			c.Cutover(producerJobID, replicationJobID, cutoverTime, false)
 		}
 
 		// Set GC TTL low, so that the GC job completes quickly in the test.
