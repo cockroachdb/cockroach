@@ -26,12 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -230,6 +230,11 @@ func commitCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 	return txn.Commit(ctx)
 }
 
+// abortCmd aborts the transaction.
+func abortCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
+	return txn.Rollback(ctx)
+}
+
 type cmdSpec struct {
 	fn func(ctx context.Context, c *cmd, txn *kv.Txn) error
 	re *regexp.Regexp
@@ -248,7 +253,6 @@ var cmdSpecs = []*cmdSpec{
 		deleteCmd,
 		regexp.MustCompile(`(D)\(([A-Z]+)\)`),
 	},
-
 	{
 		deleteRngCmd,
 		regexp.MustCompile(`(DR)\(([A-Z]+)-([A-Z]+)\)`),
@@ -264,6 +268,10 @@ var cmdSpecs = []*cmdSpec{
 	{
 		commitCmd,
 		regexp.MustCompile(`(C)`),
+	},
+	{
+		abortCmd,
+		regexp.MustCompile(`(A)`),
 	},
 }
 
@@ -946,6 +954,9 @@ func checkConcurrency(
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
 	defer s.Stop()
+	// Reduce the deadlock detection push delay so that txns that encounter locks
+	// begin deadlock detection immediately. This speeds up tests significantly.
+	concurrency.LockTableDeadlockDetectionPushDelay.Override(context.Background(), &s.Cfg.Settings.SV, 0)
 	verifier.run(isoLevels, s.DB, t)
 }
 
@@ -962,6 +973,7 @@ func checkConcurrency(
 //   W(x,y+z+...) - writes sum of values y+z+... to x
 //   I(x) - increment key "x" by 1 (shorthand for W(x,x+1)
 //   C - commit
+//   A - abort ("rollback")
 //
 // Notation for actual histories:
 //   Rn.m(x) - read from txn "n" ("m"th retry) of key "x"
@@ -971,12 +983,114 @@ func checkConcurrency(
 //   Wn.m(x,y+z+...) - write sum of values y+z+... to x from txn "n" ("m"th retry)
 //   In.m(x) - increment from txn "n" ("m"th retry) of key "x"
 //   Cn.m - commit of txn "n" ("m"th retry)
+//   An.m - abort of txn "n" ("m"th retry)
+
+// TestTxnDBDirtyWriteAnomaly verifies that none of RC, SI, or SSI
+// isolation are subject to the dirty write anomaly.
+//
+// With dirty writes, two transactions concurrently write to the same
+// key(s). If one transaction then rolls back, the final state must
+// reflect the write performed by the committing transaction. Crucially,
+// the rollback must not interfere with the write from the committing
+// transaction.
+//
+// Two closely related cases are when both transactions roll back and
+// when both transactions commit. In the first case, the final state
+// must reflect neither write. In the second case, the final state must
+// reflect a consistent commit order across keys, such that all written
+// keys reflect writes from the second transaction to commit.
+//
+// Dirty writes would typically fail with a history such as:
+//
+//	W1(A) W2(A) (C1 or A1) (C2 or A2)
+func TestTxnDBDirtyWriteAnomaly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	t.Run("one abort, one commit", testTxnDBDirtyWriteAnomalyOneAbortOneCommit)
+	t.Run("both abort", testTxnDBDirtyWriteAnomalyBothAbort)
+	t.Run("both commit", testTxnDBDirtyWriteAnomalyBothCommit)
+}
+
+func testTxnDBDirtyWriteAnomalyOneAbortOneCommit(t *testing.T) {
+	txn1 := "W(A,1) W(B,1) A"
+	txn2 := "W(A,2) W(B,2) C"
+	verify := &verifier{
+		history: "R(A) R(B)",
+		checkFn: func(env map[string]int64) error {
+			if env["A"] != 2 || env["B"] != 2 {
+				return errors.Errorf("expected A=2 and B=2, got A=%d and B=%d", env["A"], env["B"])
+			}
+			return nil
+		},
+	}
+	checkConcurrency("dirty write", allLevels, []string{txn1, txn2}, verify, t)
+}
+
+func testTxnDBDirtyWriteAnomalyBothAbort(t *testing.T) {
+	txn1 := "W(A,1) W(B,1) A"
+	txn2 := "W(A,2) W(B,2) A"
+	verify := &verifier{
+		history: "R(A) R(B)",
+		checkFn: func(env map[string]int64) error {
+			if env["A"] != 0 || env["B"] != 0 {
+				return errors.Errorf("expected A=0 and B=0, got A=%d and B=%d", env["A"], env["B"])
+			}
+			return nil
+		},
+	}
+	checkConcurrency("dirty write", allLevels, []string{txn1, txn2}, verify, t)
+}
+
+func testTxnDBDirtyWriteAnomalyBothCommit(t *testing.T) {
+	txn1 := "W(A,1) W(B,1) C"
+	txn2 := "W(A,2) W(B,2) C"
+	verify := &verifier{
+		history: "R(A) R(B)",
+		checkFn: func(env map[string]int64) error {
+			if env["A"] != 1 && env["A"] != 2 {
+				return errors.Errorf("expected A=1 or A=2, got %d", env["A"])
+			}
+			if env["A"] != env["B"] {
+				return errors.Errorf("expected A == B (%d != %d)", env["A"], env["B"])
+			}
+			return nil
+		},
+	}
+	checkConcurrency("dirty write", allLevels, []string{txn1, txn2}, verify, t)
+}
+
+// TestTxnDBDirtyReadAnomaly verifies that none of RC, SI, or SSI
+// isolation are subject to the dirty read anomaly.
+//
+// With dirty reads, a transaction writes to a key while a concurrent
+// transaction reads from that key. The writing transaction then rolls
+// back. If the reading transaction observes the write, either before or
+// after the rollback, it has experienced a dirty read.
+//
+// Dirty reads would typically fail with a history such as:
+//
+//	W1(A) R2(A) A1 C2
+func TestTxnDBDirtyReadAnomaly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	txn1 := "W(A,1) A"
+	txn2 := "R(A) W(B,A) C"
+	verify := &verifier{
+		history: "R(B)",
+		checkFn: func(env map[string]int64) error {
+			if env["B"] != 0 {
+				return errors.Errorf("expected B=0, got %d", env["B"])
+			}
+			return nil
+		},
+	}
+	checkConcurrency("dirty read", allLevels, []string{txn1, txn2}, verify, t)
+}
 
 // TestTxnDBReadSkewAnomaly verifies that neither SI nor SSI isolation
 // are subject to the read skew anomaly, an example of a database
-// constraint violation known as inconsistent analysis (see
-// http://research.microsoft.com/pubs/69541/tr-95-51.pdf). This anomaly
-// is prevented by REPEATABLE_READ.
+// constraint violation known as inconsistent analysis[^1]. This
+// anomaly is prevented by REPEATABLE_READ.
 //
 // With read skew, there are two concurrent txns. One
 // reads keys A & B, the other reads and then writes keys A & B. The
@@ -985,12 +1099,11 @@ func checkConcurrency(
 // Read skew would typically fail with a history such as:
 //
 //	R1(A) R2(B) I2(B) R2(A) I2(A) R1(B) C1 C2
+//
+// [^1]: 1995, https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf
 func TestTxnDBReadSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderShort(t)
-
 	txn1 := "R(A) R(B) W(C,A+B) C"
 	txn2 := "R(A) R(B) I(A) I(B) C"
 	verify := &verifier{
