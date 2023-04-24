@@ -4175,10 +4175,10 @@ create_stmt:
 create_extension_stmt:
   CREATE EXTENSION IF NOT EXISTS name
   {
-    $$.val = &tree.CreateExtension{IfNotExists: true, Name: $6}
+    $$.val = &tree.CreateExtension{IfNotExists: true, Name: tree.Name($6)}
   }
 | CREATE EXTENSION name {
-    $$.val = &tree.CreateExtension{Name: $3}
+    $$.val = &tree.CreateExtension{Name: tree.Name($3)}
   }
 | CREATE EXTENSION IF NOT EXISTS name WITH error
   {

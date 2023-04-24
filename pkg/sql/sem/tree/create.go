@@ -2132,7 +2132,7 @@ func (o *CreateStatsOptions) CombineWith(other *CreateStatsOptions) error {
 
 // CreateExtension represents a CREATE EXTENSION statement.
 type CreateExtension struct {
-	Name        string
+	Name        Name
 	IfNotExists bool
 }
 
@@ -2147,7 +2147,9 @@ func (node *CreateExtension) Format(ctx *FmtCtx) {
 	// do not contain sensitive information and
 	// 2) we want to get telemetry on which extensions
 	// users attempt to load.
-	ctx.WriteString(node.Name)
+	ctx.WithFlags(ctx.flags&^FmtAnonymize, func() {
+		ctx.FormatNode(&node.Name)
+	})
 }
 
 // CreateExternalConnection represents a CREATE EXTERNAL CONNECTION statement.
