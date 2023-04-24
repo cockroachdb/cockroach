@@ -34,6 +34,10 @@ type MultiConnPool struct {
 		// are prepared whenever a new connection is acquired from the pool.
 		preparedStatements map[string]string
 	}
+
+	// NOTE(seanc@): method is on the hot-path, therefore make all reads to the
+	// query exec mode a dirty read.
+	method pgx.QueryExecMode
 }
 
 // MultiConnPoolCfg encapsulates the knobs passed to NewMultiConnPool.
@@ -98,7 +102,15 @@ func NewMultiConnPool(
 		maxConnsPerPool = cfg.MaxTotalConnections
 	}
 
-	var warmupConns [][]*pgxpool.Conn
+	// See
+	// https://github.com/jackc/pgx/blob/fa5fbed497bc75acee05c1667a8760ce0d634cba/conn.go#L578-L612
+	// for details on the specifics of each query mode.
+	queryMode, ok := stringToMethod[strings.ToLower(cfg.Method)]
+	if !ok {
+		return nil, errors.Errorf("unknown method %s", cfg.Method)
+	}
+	m.method = queryMode
+
 	for i := range urls {
 		connsPerPool := distributeMax(connsPerURL[i], maxConnsPerPool)
 		for _, numConns := range connsPerPool {
@@ -200,6 +212,100 @@ func (m *MultiConnPool) Close() {
 	}
 }
 
+// Method returns the query execution mode of the connection pool.
+func (m *MultiConnPool) Method() pgx.QueryExecMode {
+	return m.method
+}
+
+// WarmupConns warms up numConns connections across all pools contained within
+// MultiConnPool.  The max number of connections are warmed up if numConns is
+// set to 0.
+func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
+	if numConns < 0 {
+		return nil
+	}
+
+	// NOTE(seanc@): see context cancellation note below.
+	warmupCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// "Warm up" the pools so we don't have to establish connections later (which
+	// would affect the observed latencies of the first requests, especially when
+	// prepared statements are used). We do this by
+	// acquiring connections (in parallel), then releasing them back to the
+	// pool.
+	var g errgroup.Group
+
+	// Limit concurrent connection establishment. Allowing this to run
+	// at maximum parallelism would trigger syn flood protection on the
+	// host, which combined with any packet loss could cause Acquire to
+	// return an error and fail the whole function. The value 100 is
+	// chosen because it is less than the default value for SOMAXCONN
+	// (128).
+	g.SetLimit(100)
+
+	var warmupConnsPerPool []int
+	if numConns == 0 {
+		warmupConnsPerPool = make([]int, len(m.Pools))
+		for i, p := range m.Pools {
+			warmupConnsPerPool[i] = int(p.Config().MaxConns)
+		}
+	} else {
+		warmupConnsPerPool = distribute(numConns, len(m.Pools))
+		for i, p := range m.Pools {
+			poolMaxConns := int(p.Config().MaxConns)
+			if warmupConnsPerPool[i] > poolMaxConns {
+				warmupConnsPerPool[i] = poolMaxConns
+			}
+		}
+	}
+
+	var numWarmupConns int
+	for _, n := range warmupConnsPerPool {
+		numWarmupConns += n
+	}
+	warmupConns := make(chan *pgxpool.Conn, numWarmupConns)
+	for i, p := range m.Pools {
+		p := p
+		for k := 0; k < warmupConnsPerPool[i]; k++ {
+			g.Go(func() error {
+				conn, err := p.Acquire(warmupCtx)
+				if err != nil {
+					return err
+				}
+				warmupConns <- conn
+				return nil
+			})
+		}
+	}
+
+	estConns := make([]*pgxpool.Conn, 0, numWarmupConns)
+	defer func() {
+		for _, conn := range estConns {
+			// NOTE(seanc@): Release() connections before canceling the warmupCtx to
+			// prevent partially established connections from being Acquire()'ed.
+			conn.Release()
+		}
+	}()
+
+WARMUP:
+	for i := 0; i < numWarmupConns; i++ {
+		select {
+		case conn := <-warmupConns:
+			estConns = append(estConns, conn)
+		case <-warmupCtx.Done():
+			if err := warmupCtx.Err(); err != nil {
+				return err
+			}
+
+			break WARMUP
+		}
+	}
+
+	return nil
+}
+
+>>>>>>> 17bde242f86 (workload: fix performance regresion from accessing query execution mode)
 // distribute returns a slice of <num> integers that add up to <total> and are
 // within +/-1 of each other.
 func distribute(total, num int) []int {
