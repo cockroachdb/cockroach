@@ -4,6 +4,7 @@ package parser
 import (
   "fmt"
 
+  "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/lexbase"
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
   "github.com/cockroachdb/errors"
