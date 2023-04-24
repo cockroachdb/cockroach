@@ -123,7 +123,7 @@ func TestSendKVBatch(t *testing.T) {
 		require.JSONEq(t, jsonResponse, output)
 
 		// Check that a structured log event was emitted.
-		log.Flush()
+		log.FlushFileSinks()
 		entries, err := log.FetchEntriesFromFiles(start.UnixNano(), timeutil.Now().UnixNano(), 1,
 			regexp.MustCompile("debug_send_kv_batch"), log.WithFlattenedSensitiveData)
 		require.NoError(t, err)
