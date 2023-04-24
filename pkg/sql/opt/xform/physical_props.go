@@ -284,6 +284,15 @@ func BuildChildPhysicalPropsScalar(mem *memo.Memo, parent opt.Expr, nth int) *ph
 				},
 			}
 		}
+	case opt.UniqueChecksItemOp, opt.FKChecksItemOp:
+		enforceHomeRegion := mem.EvalContext().Planner.EnforceHomeRegion()
+		if !enforceHomeRegion {
+			return physical.MinRequired
+		}
+		// If enforcing a home region, require the root distribution of the
+		// uniqueness and foreign key checks of mutation ops, as enforcement is
+		// typically done when the DistributeOp is built in the execbuilder.
+		childProps.Distribution = mem.RootProps().Distribution
 	default:
 		return physical.MinRequired
 	}
