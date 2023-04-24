@@ -191,17 +191,8 @@ func updateRunningStatusInternal(
 }
 
 func completeIngestion(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	ingestionJob *jobs.Job,
-	client streamclient.Client,
+	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
 ) error {
-	log.Infof(ctx,
-		"reverting to the specified cutover timestamp for stream ingestion job %d",
-		ingestionJob.ID())
-	if err := revertToCutoverTimestamp(ctx, execCtx, ingestionJob); err != nil {
-		return err
-	}
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	log.Infof(ctx, "activating destination tenant %d", details.DestinationTenantID)
 	if err := activateTenant(ctx, execCtx, details.DestinationTenantID); err != nil {
@@ -218,7 +209,7 @@ func completeIngestion(
 	// cannot complete the producer job.
 	if err := contextutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
 		func(ctx context.Context) error {
-			return client.Complete(ctx, streampb.StreamID(streamID), true /* successfulIngestion */)
+			return completeProducerJob(ctx, ingestionJob, execCtx.ExecCfg().InternalDB)
 		},
 	); err != nil {
 		log.Warningf(ctx, "encountered error when completing the source cluster producer job %d: %s", streamID, err.Error())
@@ -239,6 +230,19 @@ func completeIngestion(
 	}
 	return nil
 }
+
+func completeProducerJob(
+	ctx context.Context, ingestionJob *jobs.Job, internalDB *sql.InternalDB,
+) error {
+	client, err := connectToActiveClient(ctx, ingestionJob, internalDB)
+	if err != nil {
+		return err
+	}
+	streamID := ingestionJob.Details().(jobspb.StreamIngestionDetails).StreamID
+	return errors.CombineErrors(client.Complete(ctx, streampb.StreamID(streamID),
+		true /* successfulIngestion */), client.Close(ctx))
+}
+
 func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job) error {
 	// Cutover should be the *first* thing checked upon resumption as it is the
 	// most critical task in disaster recovery.
@@ -248,30 +252,25 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	}
 	if reverted {
 		log.Infof(ctx, "job completed cutover on resume")
-		return nil
+		return completeIngestion(ctx, execCtx, ingestionJob)
 	}
 	if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.BeforeIngestionStart != nil {
 		if err := knobs.BeforeIngestionStart(ctx); err != nil {
 			return err
 		}
 	}
-	client, err := connectToActiveClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := client.Close(ctx); err != nil {
-			log.Warningf(ctx, "stream ingestion client did not shut down properly: %s", err.Error())
-		}
-	}()
-	if err = startDistIngestion(ctx, execCtx, ingestionJob, client); err != nil {
+
+	if err = startDistIngestion(ctx, execCtx, ingestionJob); err != nil {
 		return err
 	}
 	// A nil error is only possible if the job was signaled to cutover and the
 	// processors shut down gracefully, i.e stopped ingesting any additional
 	// events from the replication stream. At this point it is safe to revert to
 	// the cutoff time to leave the cluster in a consistent state.
-	return completeIngestion(ctx, execCtx, ingestionJob, client)
+	if err := revertToCutoverTimestamp(ctx, execCtx, ingestionJob); err != nil {
+		return err
+	}
+	return completeIngestion(ctx, execCtx, ingestionJob)
 }
 
 func ingestWithRetries(
@@ -453,6 +452,7 @@ func cutoverTimeIsEligibleForCutover(
 func maybeRevertToCutoverTimestamp(
 	ctx context.Context, p sql.JobExecContext, ingestionJob *jobs.Job,
 ) (bool, error) {
+
 	ctx, span := tracing.ChildSpan(ctx, "streamingest.revertToCutoverTimestamp")
 	defer span.Finish()
 
@@ -500,7 +500,9 @@ func maybeRevertToCutoverTimestamp(
 	if !shouldRevertToCutover {
 		return false, nil
 	}
-
+	log.Infof(ctx,
+		"reverting to cutover timestamp %s for stream ingestion job %d",
+		cutoverTimestamp, ingestionJob.ID())
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
 		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
 	}
