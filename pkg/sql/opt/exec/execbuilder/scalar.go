@@ -695,6 +695,8 @@ func (b *Builder) buildExistsSubquery(
 				types.Bool,
 				false, /* enableStepping */
 				true,  /* calledOnNullInput */
+				false, /* multiColOutput */
+				false, /* generator */
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -803,6 +805,8 @@ func (b *Builder) buildSubquery(
 			subquery.Typ,
 			false, /* enableStepping */
 			true,  /* calledOnNullInput */
+			false, /* multiColOutput */
+			false, /* generator */
 		), nil
 	}
 
@@ -855,6 +859,8 @@ func (b *Builder) buildSubquery(
 			subquery.Typ,
 			false, /* enableStepping */
 			true,  /* calledOnNullInput */
+			false, /* multiColOutput */
+			false, /* generator */
 		), nil
 	}
 
@@ -937,6 +943,8 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Typ,
 		enableStepping,
 		udf.CalledOnNullInput,
+		udf.MultiColDataSource,
+		udf.SetReturning,
 	), nil
 }
 
