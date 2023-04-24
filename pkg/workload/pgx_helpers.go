@@ -17,8 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -52,35 +53,72 @@ type MultiConnPoolCfg struct {
 	// If 0, there is no per-pool maximum (other than the total maximum number of
 	// connections which still applies).
 	MaxConnsPerPool int
+
+	// ConnHealthCheckPeriod specifies the amount of time between connection
+	// health checks.  Defaults to 10% of MaxConnLifetime.
+	ConnHealthCheckPeriod time.Duration
+
+	// MaxConnIdleTime specifies the amount of time a connection will be idle
+	// before being closed by the health checker.  Defaults to 50% of the
+	// MaxConnLifetime.
+	MaxConnIdleTime time.Duration
+
+	// MaxConnLifetime specifies the max age of individual connections in
+	// connection pools.  If 0, a default value of 5 minutes is used.
+	MaxConnLifetime time.Duration
+
+	// MaxConnLifetimeJitter shortens the max age of a connection by a random
+	// duration less than the specified jitter.  If 0, default to 50% of
+	// MaxConnLifetime.
+	MaxConnLifetimeJitter time.Duration
+
+	// Method specifies the query type to use for the  PG wire protocol.
+	Method string
+
+	// MinConns is the minimum number of connections the connection pool will
+	// attempt to keep.  Connection count may dip below this value periodically,
+	// see pgxpool documentation for details.
+	MinConns int
+
+	// WarmupConns specifies the number of connections to prewarm when
+	// initializing a MultiConnPool.  A value of 0 automatically initialize the
+	// max number of connections per pool.  A value less than 0 skips the
+	// connection warmup phase.
+	WarmupConns int
 }
 
-// pgxLogger implements the pgx.Logger interface.
-type pgxLogger struct{}
+// NewMultiConnPoolCfgFromFlags constructs a new MultiConnPoolCfg object based
+// on the connection flags.
+func NewMultiConnPoolCfgFromFlags(cf *ConnFlags) MultiConnPoolCfg {
+	return MultiConnPoolCfg{
+		ConnHealthCheckPeriod: cf.ConnHealthCheckPeriod,
+		MaxConnIdleTime:       cf.MaxConnIdleTime,
+		MaxConnLifetime:       cf.MaxConnLifetime,
+		MaxConnLifetimeJitter: cf.MaxConnLifetimeJitter,
+		MaxConnsPerPool:       cf.Concurrency,
+		MaxTotalConnections:   cf.Concurrency,
+		Method:                cf.Method,
+		MinConns:              cf.MinConns,
+		WarmupConns:           cf.WarmupConns,
+	}
+}
 
-var _ pgx.Logger = pgxLogger{}
+// String values taken from pgx.ParseConfigWithOptions() to maintain
+// compatibility with pgx.  See [1] and [2] for additional details.
+//
+// [1] https://github.com/jackc/pgx/blob/fa5fbed497bc75acee05c1667a8760ce0d634cba/conn.go#L167-L182
+// [2] https://github.com/jackc/pgx/blob/fa5fbed497bc75acee05c1667a8760ce0d634cba/conn.go#L578-L612
+var stringToMethod = map[string]pgx.QueryExecMode{
+	"cache_statement": pgx.QueryExecModeCacheStatement,
+	"cache_describe":  pgx.QueryExecModeCacheDescribe,
+	"describe_exec":   pgx.QueryExecModeDescribeExec,
+	"exec":            pgx.QueryExecModeExec,
+	"simple_protocol": pgx.QueryExecModeSimpleProtocol,
 
-// Log implements the pgx.Logger interface.
-func (p pgxLogger) Log(
-	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
-) {
-	if ctx.Err() != nil {
-		// Don't log anything from pgx if the context was canceled by the workload
-		// runner. It would result in spam at the end of every workload.
-		return
-	}
-	if strings.Contains(msg, "restart transaction") {
-		// Our workloads have a lot of contention, so "restart transaction" messages
-		// are expected and noisy.
-		return
-	}
-	// data may contain error with "restart transaction" -- skip those as well.
-	if data != nil {
-		ev := data["err"]
-		if err, ok := ev.(error); ok && strings.Contains(err.Error(), "restart transaction") {
-			return
-		}
-	}
-	log.Infof(ctx, "pgx logger [%s]: %s logParams=%v", level.String(), msg, data)
+	// Preserve backward compatibility with original workload --method's
+	"prepare":   pgx.QueryExecModeCacheStatement,
+	"noprepare": pgx.QueryExecModeExec,
+	"simple":    pgx.QueryExecModeSimpleProtocol,
 }
 
 // NewMultiConnPool creates a new MultiConnPool.
@@ -95,6 +133,27 @@ func NewMultiConnPool(
 ) (*MultiConnPool, error) {
 	m := &MultiConnPool{}
 	m.mu.preparedStatements = map[string]string{}
+
+	maxConnLifetime := 300 * time.Second
+	if cfg.MaxConnLifetime > 0 {
+		maxConnLifetime = cfg.MaxConnLifetime
+	}
+	maxConnLifetimeJitter := time.Duration(0.5 * float64(maxConnLifetime))
+	if cfg.MaxConnLifetimeJitter > 0 {
+		maxConnLifetimeJitter = cfg.MaxConnLifetimeJitter
+	}
+	connHealthCheckPeriod := time.Duration(0.1 * float64(maxConnLifetime))
+	if cfg.ConnHealthCheckPeriod > 0 {
+		connHealthCheckPeriod = cfg.ConnHealthCheckPeriod
+	}
+	maxConnIdleTime := time.Duration(0.5 * float64(maxConnLifetime))
+	if cfg.MaxConnIdleTime > 0 {
+		maxConnIdleTime = cfg.MaxConnIdleTime
+	}
+	minConns := 0
+	if cfg.MinConns > 0 {
+		minConns = cfg.MinConns
+	}
 
 	connsPerURL := distribute(cfg.MaxTotalConnections, len(urls))
 	maxConnsPerPool := cfg.MaxConnsPerPool
@@ -138,7 +197,10 @@ func NewMultiConnPool(
 				}
 				return true
 			}
-			p, err := pgxpool.ConnectConfig(ctx, connCfg)
+
+			connCfg := poolCfg.ConnConfig
+			connCfg.DefaultQueryExecMode = queryMode
+			p, err := pgxpool.NewWithConfig(ctx, poolCfg)
 			if err != nil {
 				return nil, err
 			}
@@ -305,7 +367,6 @@ WARMUP:
 	return nil
 }
 
->>>>>>> 17bde242f86 (workload: fix performance regresion from accessing query execution mode)
 // distribute returns a slice of <num> integers that add up to <total> and are
 // within +/-1 of each other.
 func distribute(total, num int) []int {
