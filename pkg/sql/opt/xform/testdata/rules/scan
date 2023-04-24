@@ -1038,9 +1038,11 @@ distribute
                      │         ├── cardinality: [0 - 1]
                      │         ├── key: ()
                      │         ├── fd: ()-->(18)
+                     │         ├── distribution: east
                      │         ├── locality-optimized-search
                      │         │    ├── cardinality: [0 - 1]
                      │         │    ├── key: ()
+                     │         │    ├── distribution: east
                      │         │    ├── scan abc_part@b_idx
                      │         │    │    ├── constraint: /19/22: [/'east' - /'east']
                      │         │    │    ├── limit: 1

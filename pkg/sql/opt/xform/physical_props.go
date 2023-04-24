@@ -269,6 +269,7 @@ func distinctOnLimitHint(distinctCount, neededRows float64) float64 {
 // when the parent is a scalar expression.
 func BuildChildPhysicalPropsScalar(mem *memo.Memo, parent opt.Expr, nth int) *physical.Required {
 	var childProps physical.Required
+	_, childIsRelExpr := parent.Child(nth).(memo.RelExpr)
 	switch parent.Op() {
 	case opt.ArrayFlattenOp:
 		if nth == 0 {
@@ -285,7 +286,15 @@ func BuildChildPhysicalPropsScalar(mem *memo.Memo, parent opt.Expr, nth int) *ph
 			}
 		}
 	default:
-		return physical.MinRequired
+		if !childIsRelExpr {
+			return physical.MinRequired
+		}
+	}
+	if childIsRelExpr && mem.RootProps() != nil {
+		// A relational expression whose parent is a scalar expression should
+		// require the distribution of the root, because the result ends up in the
+		// local gateway region.
+		childProps.Distribution = mem.RootProps().Distribution
 	}
 	return mem.InternPhysicalProps(&childProps)
 }
