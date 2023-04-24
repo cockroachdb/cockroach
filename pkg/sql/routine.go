@@ -28,6 +28,16 @@ import (
 func (p *planner) EvalRoutineExpr(
 	ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 ) (result tree.Datum, err error) {
+	// Strict routines (CalledOnNullInput=false) should not be invoked and they
+	// should immediately return NULL if any of their arguments are NULL.
+	if !expr.CalledOnNullInput {
+		for i := range args {
+			if args[i] == tree.DNull {
+				return tree.DNull, nil
+			}
+		}
+	}
+
 	// Return the cached result if it exists.
 	if expr.CachedResult != nil {
 		return expr.CachedResult, nil
