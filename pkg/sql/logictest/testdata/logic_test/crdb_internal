@@ -371,6 +371,59 @@ SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
 id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
 
+# Accessing the tables should error for a user without a privilege.
+user testuser
+
+statement error user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
+
+statement error user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+# Now testuser can query transactions since it has the VIEWACTIVITY privilege.
+user testuser
+
+query TITTTTIIIT colnames
+SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+
+query TITTTTIIIT colnames
+SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITY FROM testuser
+
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
+
+# testuser can query transactions since it has the VIEWACTIVITYREDACTED privilege.
+user testuser
+
+query TITTTTIIIT colnames
+SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+
+query TITTTTIIIT colnames
+SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
+
 query ITTTTTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
 ----
