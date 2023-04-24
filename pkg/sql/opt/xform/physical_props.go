@@ -283,9 +283,16 @@ func BuildChildPhysicalPropsScalar(mem *memo.Memo, parent opt.Expr, nth int) *ph
 					ID:    af.RequestedCol,
 				},
 			}
+			childProps.Distribution = mem.RootProps().Distribution
 		}
 	default:
-		return physical.MinRequired
+		if _, ok := parent.Child(nth).(memo.RelExpr); !ok {
+			return physical.MinRequired
+		}
+		// A relational expression whose parent is a scalar expression should
+		// require the distribution of the root, because the result ends up in the
+		// local gateway region.
+		childProps.Distribution = mem.RootProps().Distribution
 	}
 	return mem.InternPhysicalProps(&childProps)
 }
