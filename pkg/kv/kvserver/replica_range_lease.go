@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,7 +80,9 @@ var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.expiration_leases_only.enabled",
 	"only use expiration-based leases, never epoch-based ones (experimental, affects performance)",
-	util.ConstantWithMetamorphicTestBool("kv.expiration_leases_only.enabled", false),
+	false,
+	// TODO(erikgrinaker): enable metamorphism when test flakes are addressed.
+	//util.ConstantWithMetamorphicTestBool("kv.expiration_leases_only.enabled", false),
 )
 
 var leaseStatusLogLimiter = func() *log.EveryN {
