@@ -306,3 +306,13 @@ func MakeMetricsAndRegisterOnVersionChangeCallback(sv *settings.Values) Metrics 
 		PreserveDowngradeLastUpdated: gauge,
 	}
 }
+
+// VirtualClusterAutoUpgradeEnabled is used to enable and disable automatic upgrade.
+var VirtualClusterAutoUpgradeEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"virtual_cluster.auto_upgrade.enabled",
+	"disable automatic cluster version upgrade (for virtual clusters) until reset",
+	true,
+	settings.WithReportable(true),
+	settings.WithPublic,
+)
