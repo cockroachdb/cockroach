@@ -12,9 +12,7 @@ package sql
 
 import (
 	"context"
-	"sort"
 	"strconv"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
@@ -22,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -189,7 +186,11 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	nodes := util.CombineUnique(getNodesFromPlanner(planner), []int64{nodeID})
-	regions := getRegionsForNodes(ctx, nodes, planner.DistSQLPlanner().sqlAddressResolver)
+
+	regions := []string{}
+	if region, ok := ex.server.cfg.Locality.Find("region"); ok {
+		regions = append(regions, region)
+	}
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{
 		SessionID:            ex.sessionID,
@@ -326,50 +327,4 @@ func getNodesFromPlanner(planner *planner) []int64 {
 		})
 	}
 	return nodes
-}
-
-var regionsPool = sync.Pool{
-	New: func() interface{} {
-		return make(map[string]struct{})
-	},
-}
-
-func getRegionsForNodes(
-	ctx context.Context, nodeIDs []int64, resolver sqlinstance.AddressResolver,
-) []string {
-	if resolver == nil {
-		return nil
-	}
-
-	instances, err := resolver.GetAllInstances(ctx)
-	if err != nil {
-		return nil
-	}
-
-	regions := regionsPool.Get().(map[string]struct{})
-	defer func() {
-		for region := range regions {
-			delete(regions, region)
-		}
-		regionsPool.Put(regions)
-	}()
-
-	for _, instance := range instances {
-		for _, node := range nodeIDs {
-			// TODO(todd): Using int64 for nodeIDs was inappropriate, see #95088.
-			if int32(instance.InstanceID) == int32(node) {
-				if region, ok := instance.Locality.Find("region"); ok {
-					regions[region] = struct{}{}
-				}
-				break
-			}
-		}
-	}
-
-	result := make([]string, 0, len(regions))
-	for region := range regions {
-		result = append(result, region)
-	}
-	sort.Strings(result)
-	return result
 }
