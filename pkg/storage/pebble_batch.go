@@ -624,6 +624,11 @@ func (p *pebbleBatch) Repr() []byte {
 	return reprCopy
 }
 
+// CommitStats implements the Batch interface.
+func (p *pebbleBatch) CommitStats() BatchCommitStats {
+	return BatchCommitStats{BatchCommitStats: p.batch.CommitStats()}
+}
+
 // ShouldWriteLocalTimestamps implements the Writer interface.
 func (p *pebbleBatch) ShouldWriteLocalTimestamps(ctx context.Context) bool {
 	// pebbleBatch is short-lived, so cache the value for performance.

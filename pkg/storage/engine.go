@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
@@ -1024,6 +1025,35 @@ type WriteBatch interface {
 	// Repr returns the underlying representation of the batch and can be used to
 	// reconstitute the batch on a remote node using Writer.ApplyBatchRepr().
 	Repr() []byte
+	// CommitStats returns stats related to committing the batch. Should be
+	// called after Batch.Commit. If CommitNoSyncWait is used, it should be
+	// called after the call to SyncWait.
+	CommitStats() BatchCommitStats
+}
+
+type BatchCommitStats struct {
+	pebble.BatchCommitStats
+}
+
+// SafeFormat implements redact.SafeFormatter. It does not print the total
+// duration.
+func (stats BatchCommitStats) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.Printf("commit-wait %s", stats.CommitWaitDuration)
+	if stats.WALQueueWaitDuration > 0 {
+		p.Printf(" wal-q %s", stats.WALQueueWaitDuration)
+	}
+	if stats.MemTableWriteStallDuration > 0 {
+		p.Printf(" mem-stall %s", stats.MemTableWriteStallDuration)
+	}
+	if stats.L0ReadAmpWriteStallDuration > 0 {
+		p.Printf(" l0-stall %s", stats.L0ReadAmpWriteStallDuration)
+	}
+	if stats.WALRotationDuration > 0 {
+		p.Printf(" wal-rot %s", stats.WALRotationDuration)
+	}
+	if stats.SemaphoreWaitDuration > 0 {
+		p.Printf(" sem %s", stats.SemaphoreWaitDuration)
+	}
 }
 
 // Metrics is a set of Engine metrics. Most are contained in the embedded
