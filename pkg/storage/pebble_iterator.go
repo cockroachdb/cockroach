@@ -49,7 +49,7 @@ type pebbleIterator struct {
 	// statsReporter is used to sum iterator stats across all the iterators
 	// during the lifetime of the Engine when the iterator is closed or its
 	// stats reset. It's intended to be used with (*Pebble). It must not be nil.
-	statsReporter statsReporter
+	statsReporter iterStatsReporter
 
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC/Engine key when true.
@@ -75,7 +75,7 @@ type pebbleIterator struct {
 	mvccDone bool
 }
 
-type statsReporter interface {
+type iterStatsReporter interface {
 	aggregateIterStats(IteratorStats)
 }
 
@@ -99,7 +99,7 @@ func newPebbleIterator(
 	handle pebble.Reader,
 	opts IterOptions,
 	durability DurabilityRequirement,
-	statsReporter statsReporter,
+	statsReporter iterStatsReporter,
 ) *pebbleIterator {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
@@ -158,7 +158,7 @@ func (p *pebbleIterator) init(
 	iter pebbleiter.Iterator,
 	opts IterOptions,
 	durability DurabilityRequirement,
-	statsReporter statsReporter,
+	statsReporter iterStatsReporter,
 ) {
 	*p = pebbleIterator{
 		iter:               iter,
@@ -185,7 +185,7 @@ func (p *pebbleIterator) initReuseOrCreate(
 	clone bool,
 	opts IterOptions,
 	durability DurabilityRequirement,
-	statsReporter statsReporter,
+	statsReporter iterStatsReporter,
 ) {
 	if iter != nil && !clone {
 		p.init(iter, opts, durability, statsReporter)
