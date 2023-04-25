@@ -230,6 +230,10 @@ func (r *Replica) leasePostApplyLocked(
 	// Everything we do before then doesn't need to worry about requests being
 	// evaluated under the new lease.
 
+	// maybeSplit is true if we may have been called during splitPostApply, where
+	// prevLease equals newLease and we're applying the RHS lease.
+	var maybeSplit bool
+
 	// Sanity check to make sure that the lease sequence is moving in the right
 	// direction.
 	if s1, s2 := prevLease.Sequence, newLease.Sequence; s1 != 0 {
@@ -247,6 +251,7 @@ func (r *Replica) leasePostApplyLocked(
 				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
 					redact.Safe(prevLease), redact.Safe(newLease))
 			}
+			maybeSplit = prevLease.Equal(newLease)
 		case s2 == s1+1:
 			// Lease sequence incremented by 1. Expected case.
 		case s2 > s1+1 && jumpOpt == assertNoLeaseJump:
@@ -357,7 +362,7 @@ func (r *Replica) leasePostApplyLocked(
 	// Whenever we first acquire an expiration-based lease, notify the lease
 	// renewer worker that we want it to keep proactively renewing the lease
 	// before it expires.
-	if leaseChangingHands && iAmTheLeaseHolder && expirationBasedLease && r.ownsValidLeaseRLocked(ctx, now) {
+	if (leaseChangingHands || maybeSplit) && iAmTheLeaseHolder && expirationBasedLease {
 		r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
 		select {
 		case r.store.renewableLeasesSignal <- struct{}{}:
