@@ -688,6 +688,9 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 			p.Printf(", snapshot ignored")
 		}
 	}
+	if !(s.append.PebbleCommitStats == storage.BatchCommitStats{}) {
+		p.Printf(" pebble stats: [%s]", s.append.PebbleCommitStats)
+	}
 }
 
 func (s handleRaftReadyStats) String() string {
@@ -1515,9 +1518,15 @@ func (r *Replica) maybeCoalesceHeartbeat(
 // replicaSyncCallback implements the logstore.SyncCallback interface.
 type replicaSyncCallback Replica
 
-func (r *replicaSyncCallback) OnLogSync(ctx context.Context, msgs []raftpb.Message) {
+func (r *replicaSyncCallback) OnLogSync(
+	ctx context.Context, msgs []raftpb.Message, commitStats storage.BatchCommitStats,
+) {
+	repl := (*Replica)(r)
 	// Send MsgStorageAppend's responses.
-	(*Replica)(r).sendRaftMessages(ctx, msgs, nil /* blocked */, false /* willDeliverLocal */)
+	repl.sendRaftMessages(ctx, msgs, nil /* blocked */, false /* willDeliverLocal */)
+	if commitStats.TotalDuration > defaultReplicaRaftMuWarnThreshold {
+		log.Infof(repl.raftCtx, "slow non-blocking raft commit: %s", commitStats)
+	}
 }
 
 // sendRaftMessages sends a slice of Raft messages.

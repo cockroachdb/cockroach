@@ -87,6 +87,9 @@ type AppendStats struct {
 	PebbleBegin time.Time
 	PebbleEnd   time.Time
 	PebbleBytes int64
+	// Only set when !NonBlocking, which means almost never, since
+	// kv.raft_log.non_blocking_synchronization.enabled defaults to true.
+	PebbleCommitStats storage.BatchCommitStats
 
 	Sync bool
 	// If true, PebbleEnd-PebbleBegin does not include the sync time.
@@ -113,8 +116,9 @@ type LogStore struct {
 // SyncCallback is a callback that is notified when a raft log write has been
 // durably committed to disk. The function is handed the response messages that
 // are associated with the MsgStorageAppend that triggered the fsync.
+// commitStats is populated iff this was a non-blocking sync.
 type SyncCallback interface {
-	OnLogSync(context.Context, []raftpb.Message)
+	OnLogSync(context.Context, []raftpb.Message, storage.BatchCommitStats)
 }
 
 func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
@@ -257,6 +261,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 			ctx:            ctx,
 			cb:             cb,
 			msgs:           m.Responses,
+			batch:          batch,
 			metrics:        s.Metrics,
 			logCommitBegin: stats.PebbleBegin,
 		}
@@ -269,10 +274,11 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 			return RaftState{}, errors.Wrap(err, expl)
 		}
 		stats.PebbleEnd = timeutil.Now()
+		stats.PebbleCommitStats = batch.CommitStats()
 		if wantsSync {
 			logCommitEnd := stats.PebbleEnd
 			s.Metrics.RaftLogCommitLatency.RecordValue(logCommitEnd.Sub(stats.PebbleBegin).Nanoseconds())
-			cb.OnLogSync(ctx, m.Responses)
+			cb.OnLogSync(ctx, m.Responses, storage.BatchCommitStats{})
 		}
 	}
 	stats.Sync = wantsSync
@@ -325,6 +331,8 @@ type nonBlockingSyncWaiterCallback struct {
 	ctx  context.Context
 	cb   SyncCallback
 	msgs []raftpb.Message
+	// Used to extract stats. This is the batch that has been synced.
+	batch storage.WriteBatch
 	// Used to record Metrics.
 	metrics        Metrics
 	logCommitBegin time.Time
@@ -334,7 +342,8 @@ type nonBlockingSyncWaiterCallback struct {
 func (cb *nonBlockingSyncWaiterCallback) run() {
 	dur := timeutil.Since(cb.logCommitBegin).Nanoseconds()
 	cb.metrics.RaftLogCommitLatency.RecordValue(dur)
-	cb.cb.OnLogSync(cb.ctx, cb.msgs)
+	commitStats := cb.batch.CommitStats()
+	cb.cb.OnLogSync(cb.ctx, cb.msgs, commitStats)
 	cb.release()
 }
 

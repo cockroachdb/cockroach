@@ -785,6 +785,10 @@ func (s spanSetBatch) Repr() []byte {
 	return s.b.Repr()
 }
 
+func (s spanSetBatch) CommitStats() storage.BatchCommitStats {
+	return s.b.CommitStats()
+}
+
 // NewBatch returns a storage.Batch that asserts access of the underlying
 // Batch against the given SpanSet. We only consider span boundaries, associated
 // timestamps are not considered.
