@@ -843,14 +843,10 @@ func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) error {
 	if p == nil {
 		return nil
 	}
-	if p.storeIDPebbleLog != nil {
-		p.storeIDPebbleLog.Set(ctx, storeID)
-	}
+	p.storeIDPebbleLog.Set(ctx, storeID)
 	// Note that SetCreatorID only does something if shared storage is configured
 	// in the pebble options. The version gate protects against accidentally
 	// setting the creator ID on an older store.
-	// TODO(radu): we don't yet have a complete story about how we will transition
-	// an existing store to use shared storage.
 	if storeID != base.TempStoreID && p.minVersion.AtLeast(clusterversion.ByKey(clusterversion.V23_1SetPebbleCreatorID)) {
 		if err := p.db.SetCreatorID(uint64(storeID)); err != nil {
 			return err
@@ -1997,6 +1993,15 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	// provided cluster version.
 	if err := writeMinVersionFile(p.unencryptedFS, p.path, version); err != nil {
 		return err
+	}
+
+	// Set the shared object creator ID if the version is high enough. See SetStoreID().
+	if version.AtLeast(clusterversion.ByKey(clusterversion.V23_1SetPebbleCreatorID)) {
+		if storeID := p.storeIDPebbleLog.Get(); storeID != 0 && storeID != base.TempStoreID {
+			if err := p.db.SetCreatorID(uint64(storeID)); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Pebble has a concept of format major versions, similar to cluster
