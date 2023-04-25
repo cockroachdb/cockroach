@@ -25,6 +25,81 @@ CREATE DATABASE multi_region_test_db PRIMARY REGION "ap-southeast-2" REGIONS "ca
 statement ok
 USE multi_region_test_db
 
+statement ok
+CREATE TABLE employees (
+  emp_no     INT8 NOT NULL,
+  birth_date DATE NOT NULL,
+  first_name VARCHAR(14) NOT NULL,
+  last_name  VARCHAR(16) NOT NULL,
+  gender     CHAR NOT NULL,
+  hire_date  DATE NOT NULL,
+  email      STRING NOT NULL,
+  zip_code   STRING NOT NULL,
+  UNIQUE (email),
+  UNIQUE (last_name, first_name, zip_code, birth_date),
+  PRIMARY KEY (emp_no)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_random_text(
+    length integer
+)
+RETURNS text AS
+$body$
+SELECT string_agg(_char, '')
+FROM (SELECT _char FROM (SELECT unnest(string_to_array('A B C D E F G H I J K L M N O P Q R S T U V W X Y Z 0 1 2 3 4 5 6 7 8 9', ' ')) AS _char) chars ORDER BY random() LIMIT $1) charlist;
+$body$
+LANGUAGE sql;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_random_gender()
+RETURNS char AS
+$body$
+SELECT string_agg(_char, '')
+FROM (SELECT _char FROM (SELECT unnest(string_to_array('M F N', ' ')) AS _char) chars ORDER BY random() LIMIT 1) charlist;
+$body$
+LANGUAGE sql;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_random_date()
+RETURNS date AS
+$body$
+SELECT date(now() - trunc(random() * 365)::int * '1 day'::interval - trunc(random() * 100)::int * '1 year'::interval)
+$body$
+LANGUAGE sql;
+
+statement ok
+CREATE OR REPLACE FUNCTION f_random_zip_code()
+RETURNS text AS
+$body$
+SELECT string_agg(_char, '')
+FROM (SELECT _char FROM (SELECT unnest(string_to_array('0 1 2 3 4 5 6 7 8 9', ' ')) AS _char) chars ORDER BY random() LIMIT 5) charlist;
+$body$
+LANGUAGE sql;
+
+statement ok
+INSERT INTO employees (
+  crdb_region,
+  emp_no,
+  birth_date,
+  first_name,
+  last_name,
+  gender,
+  hire_date,
+  email,
+  zip_code
+)
+  SELECT
+    CASE trunc(random() * 10) % 3 WHEN 0 THEN 'ap-southeast-2' WHEN 1 THEN 'ca-central-1' ELSE 'us-east-1' END,
+    generate_series(0, 100),
+    (now() - trunc(random() * 365)::int * '1 day'::interval - 20 * '1 year'::interval - trunc(random() * 60)::int * '1 year'::interval)::date,
+    f_random_text(10),
+    f_random_text(10),
+    f_random_gender(),
+    (now() - trunc(random() * 365)::int * '1 day'::interval - trunc(random() * 10)::int * '1 year'::interval)::date,
+    f_random_text(10) || '@cockroachlabs.com',
+    f_random_zip_code();
+
 query T
 SELECT gateway_region();
 ----
@@ -33,8 +108,19 @@ ap-southeast-2
 statement ok
 CREATE TABLE xy (
   x INT NOT NULL,
-  y INT NOT NULL
+  y INT NOT NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
 );
+
+statement ok
+CREATE TABLE xyz (
+  x INT NOT NULL,
+  y INT NOT NULL,
+  z INT NOT NULL
+) LOCALITY REGIONAL BY TABLE;
+
+statement ok
+INSERT INTO xyz VALUES (1,1,1);
 
 statement ok
 ALTER TABLE xy ADD COLUMN region crdb_internal_region
@@ -64,7 +150,7 @@ statement ok
 ALTER TABLE xy SET LOCALITY REGIONAL BY ROW AS region;
 
 statement ok
-INSERT INTO xy (x, y, z) VALUES (0, 0, 0), (2, 2, 2);
+INSERT INTO xy (x, y, z) VALUES (0, 0, 0), (1, 1, 1), (2, 2, 2);
 
 statement ok
 CREATE TABLE t1 (a INT, b INT, c INT, primary key(a)) LOCALITY REGIONAL BY ROW;
@@ -239,8 +325,29 @@ SET enforce_home_region = true
 statement ok
 SET enforce_home_region_follower_reads_enabled = true
 
-# A lookup join with a CTE as input should succeed.
-statement ok
+# An insert with uniqueness checks which access all regions should error out.
+retry
+statement error pq: Query has no home region\. Try adding a filter on employees\.crdb_region and/or on key column \(employees\.emp_no\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+EXPLAIN INSERT INTO employees
+SELECT
+    10001,
+    (now() - trunc(random() * 365)::int * '1 day'::interval - 20 * '1 year'::interval - trunc(random() * 60)::int * '1 year'::interval)::date,
+    f_random_text(10),
+    f_random_text(10),
+    f_random_gender(),
+    (now() - trunc(random() * 365)::int * '1 day'::interval - trunc(random() * 10)::int * '1 year'::interval)::date,
+    f_random_text(10) || '@cockroachlabs.com',
+    f_random_zip_code();
+
+# A local lookup join with a CTE as input should succeed.
+query IT
+WITH vtab AS (SELECT * FROM messages_rbt)
+SELECT vtab.account_id, vtab.message FROM vtab
+  INNER LOOKUP JOIN messages_rbr rbr on vtab.account_id = rbr.account_id and rbr.crdb_region = 'ap-southeast-2'
+----
+
+# A CTE built from an INSERT which must access remote rows should fail.
+statement error pq: Query has no home region\. Try adding a filter on parent\.crdb_region and/or on key column \(parent\.p_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 WITH vtab AS (INSERT INTO parent VALUES (6) RETURNING p_id)
 SELECT * FROM vtab
   INNER LOOKUP JOIN messages_rbt rbt on vtab.p_id = rbt.account_id
@@ -253,8 +360,8 @@ SELECT * FROM (SELECT 1, 'Hello, Dude!') vtab(account_id, message)
 
 # A scalar subquery with no home region should fail.
 retry
-statement error pq: Query has no home region\. Try adding a LIMIT clause\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-SELECT * FROM (SELECT (SELECT max(account_id) FROM messages_rbr), 'Hello, Dude!') vtab(account_id, message)
+statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT * FROM (SELECT (SELECT max(account_id) FROM messages_rbr rbr), 'Hello, Dude!') vtab(account_id, message)
   INNER LOOKUP JOIN messages_rbt rbt on vtab.account_id = rbt.account_id
 
 # A scalar subquery with a home region other than the gateway should fail.
@@ -279,7 +386,7 @@ SELECT rbr()
 
 # An EXISTS subquery with no home region should fail.
 retry
-statement error pq: Query has no home region\. Try adding a LIMIT clause\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT * FROM (SELECT 1 WHERE EXISTS (SELECT max(account_id) FROM messages_rbr))
 
 # An apply join with no home region should fail.
@@ -303,17 +410,17 @@ SELECT ARRAY[rbr(),rbr()]
 
 # An ALL subquery with no home region should fail.
 retry
-statement error pq: Query has no home region\. Try adding a LIMIT clause\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT 1 WHERE 1 > ALL (SELECT max(account_id) FROM messages_rbr)
 
 # An ANY subquery with no home region should fail.
 retry
-statement error pq: Query has no home region\. Try adding a LIMIT clause\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT 1 WHERE 1 > ANY (SELECT max(account_id) FROM messages_rbr)
 
 # A SOME subquery with no home region should fail.
 retry
-statement error pq: Query has no home region\. Try adding a LIMIT clause\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT 1 WHERE 1 > ANY (SELECT max(account_id) FROM messages_rbr)
 
 ### Regression tests for issue #89875
@@ -374,9 +481,11 @@ retry
 statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 INSERT INTO messages_rbt SELECT * FROM messages_rbr
 
-# Insert into an RBR table should succeed. New rows are placed in the gateway region.
+# Insert into an RBR table fails because the uniqueness check can't use
+# locality-optimized join due to the presence of the generated
+# `crdb_region_default <> crdb_region` predicate.
 retry
-statement ok
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 INSERT INTO messages_rbr SELECT * FROM messages_rbt
 
 # Upsert into an RBR table should succeed.
@@ -460,6 +569,20 @@ SELECT * FROM [EXPLAIN SELECT * FROM parent p, child c WHERE p_id = c_p_id LIMIT
                   missing stats
                   table: child@child_pkey
                   spans: FULL SCAN (SOFT LIMIT)
+
+# Locality-optimized search of locality-optimized join and lookup join should
+# not error out if fulfilled locally.
+retry
+query III
+SELECT * FROM parent p, child c WHERE p_id = c_p_id LIMIT 1;
+----
+1  10  1
+
+# Locality-optimized search of locality-optimized join and lookup join should
+# error out if not fulfilled locally.
+retry
+statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT * FROM parent p, child c WHERE p_id = c_p_id LIMIT 2;
 
 # Locality optimized lookup join should not error out in phase 1.
 query TT retry
@@ -1331,19 +1454,22 @@ SET sql_safe_updates = false;
 
 # Unconstrained delete should fail.
 retry
-statement error pq: Query has no home region\. Try adding a filter on xy\.region and/or on key column \(xy\.rowid\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try adding a filter on xy\.region and/or on key column \(xy\.id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 DELETE FROM xy;
-
-# Insert should error on inserting to a remote region.
-statement error pq: Query has no home region\. Try running the query from region 'ca-central-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-INSERT INTO xy (z, x, y) VALUES (0, 0, 0);
 
 # Insert should not error on inserting to the local region.
 statement ok
-INSERT INTO xy (z, x, y) VALUES (1, 1, 1);
+INSERT INTO xy (z, x, y) SELECT z, x, y FROM xyz;
 
 statement ok
-ALTER TABLE xy ALTER PRIMARY KEY USING COLUMNS (x);
+DELETE FROM xy WHERE x=1;
+
+statement ok
+INSERT INTO xyz VALUES (0, 0, 0);
+
+# Insert should error on inserting to a remote region.
+statement error pq: Query has no home region\. Try running the query from region 'ca-central-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+INSERT INTO xy (z, x, y) SELECT z, x, y FROM xyz WHERE x < 1;
 
 # Insert fast-path should error on inserting to a remote region.
 retry
@@ -1352,17 +1478,13 @@ INSERT INTO xy (z, x, y) VALUES (0, 0, 0);
 
 # Upsert should error on looking up the matching row.
 retry
-statement error pq: Query has no home region\. Try adding a filter on xy\.region and/or on key column \(xy\.x\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try using a lower LIMIT value or running the query from a different region\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 UPSERT INTO xy (z, x, y) VALUES (0, 0, 0);
 
 # Attempt to delete remote row fails.
 retry
 statement error pq: Query is not running in its home region\. Try running the query from region 'us-east-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 DELETE FROM xy WHERE x = 2;
-
-# Deleting a local row is allowed.
-statement ok
-DELETE FROM xy WHERE x = 1;
 
 # Insert fast-path should not error on inserting to the local region.
 retry
@@ -1383,6 +1505,10 @@ UPDATE xy set z=5 WHERE x = 1;
 retry
 statement error pq: Query has no home region\. Try running the query from region 'us-east-1'\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 UPDATE xy set x=3 WHERE x = 1;
+
+# Deleting a local row is allowed.
+statement ok
+DELETE FROM xy WHERE x = 1;
 
 statement ok
 RESET enforce_home_region

@@ -189,11 +189,7 @@ const (
 
 	// LargeDistributeCost is the cost to use for Distribute operations when a
 	// session mode is set to error out on access of rows from remote regions.
-	// hugeCost cannot be used for this because index hinting used hugeCost to
-	// "force" use of an index. If a LargeDistributeCost of hugeCost were added to
-	// a plan with the forced index, it may cause a plan with different index to
-	// get selected, and error out.
-	LargeDistributeCost = hugeCost / 100
+	LargeDistributeCost = hugeCost
 
 	// LargeDistributeCostWithHomeRegion is the cost to use for Distribute
 	// operations when a session mode is set to error out on access of rows from
