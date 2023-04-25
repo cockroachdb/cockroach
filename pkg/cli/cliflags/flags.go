@@ -1644,6 +1644,14 @@ necessary to support CockroachDB.
 `,
 	}
 
+	ZipIncludeRangeInfo = FlagInfo{
+		Name: "include-range-info",
+		Description: `
+Include information about each individual range in nodes/*/ranges/*.json files.
+For large clusters, this can dramatically increase debug zip size/file count.
+`,
+	}
+
 	ZipCPUProfileDuration = FlagInfo{
 		Name: "cpu-profile-duration",
 		Description: `
