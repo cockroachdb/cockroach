@@ -2429,6 +2429,9 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 	if count, ok := desc.HistogramBucketsCount(); ok {
 		appendStorageParam(`sql_stats_histogram_buckets_count`, fmt.Sprintf("%d", count))
 	}
+	if desc.IsSchemaLocked() {
+		appendStorageParam(`schema_locked`, `true`)
+	}
 	return storageParams
 }
 
