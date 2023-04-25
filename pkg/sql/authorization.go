@@ -956,14 +956,23 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context)
 	} else if hasView {
 		return true, nil
 	}
-	if hasViewRedacted, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED, p.User()); err != nil {
+	if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY); err != nil {
+		return false, err
+	} else if hasView {
+		return true, nil
+	}
+	if hasViewRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
 		return false, err
 	} else if hasViewRedacted {
 		return true, nil
 	}
-	if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY); err != nil {
+	return false, nil
+}
+
+func (p *planner) HasViewActivityRedacted(ctx context.Context) (bool, error) {
+	if hasViewRedacted, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED, p.User()); err != nil {
 		return false, err
-	} else if hasView {
+	} else if hasViewRedacted {
 		return true, nil
 	}
 	if hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED); err != nil {
