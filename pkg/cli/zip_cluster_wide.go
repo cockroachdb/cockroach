@@ -158,7 +158,7 @@ func (zc *debugZipContext) collectClusterData(
 		}
 	}
 
-	{
+	if zipCtx.includeRangeInfo {
 		var tenantRanges *serverpb.TenantRangesResponse
 		s := zc.clusterPrinter.start("requesting tenant ranges")
 		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
