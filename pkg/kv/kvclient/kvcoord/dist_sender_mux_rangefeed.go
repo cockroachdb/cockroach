@@ -164,8 +164,7 @@ type activeMuxRangeFeed struct {
 	// (meaning: catchup scan completes).
 	catchupRes catchupAlloc
 
-	// State pertaining to execution of rangefeed call, along with
-	// the state needed to manage retries.
+	// State pertaining to execution of rangefeed call.
 	token     rangecache.EvictionToken
 	transport Transport
 }
