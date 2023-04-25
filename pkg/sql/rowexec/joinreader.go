@@ -458,10 +458,9 @@ func newJoinReader(
 	}
 
 	// Initialize memory monitors and bound account for data structures in the joinReader.
-	jr.MemMonitor = mon.NewMonitorInheritWithLimit(
-		"joinreader-mem" /* name */, memoryLimit, flowCtx.Mon,
+	jr.MemMonitor = execinfra.NewLimitedMonitorWithLowerBound(
+		ctx, flowCtx, "joinreader-mem" /* name */, minMemoryLimit,
 	)
-	jr.MemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 	jr.memAcc = jr.MemMonitor.MakeBoundAccount()
 
 	if err := jr.initJoinReaderStrategy(ctx, flowCtx, rightTypes, readerType); err != nil {

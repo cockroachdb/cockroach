@@ -115,7 +115,16 @@ func newSamplerProcessor(
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will disable histogram collection if this limit is not
 	// enough.
-	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "sampler-mem")
+	//
+	// sampler doesn't spill to disk, so ensure some reasonable lower bound on
+	// the workmem limit.
+	var minMemoryLimit int64 = 8 << 20 // 8MiB
+	if flowCtx.Cfg.TestingKnobs.MemoryLimitBytes != 0 {
+		minMemoryLimit = flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
+	}
+	memMonitor := execinfra.NewLimitedMonitorWithLowerBound(
+		ctx, flowCtx, "sampler-mem", minMemoryLimit,
+	)
 	s := &samplerProcessor{
 		input:           input,
 		memAcc:          memMonitor.MakeBoundAccount(),
