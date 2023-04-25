@@ -681,6 +681,9 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 			p.Printf(", snapshot ignored")
 		}
 	}
+	if !(s.append.PebbleCommitStats == storage.BatchCommitStats{}) {
+		p.Printf("pebble stats: [%s]", s.append.PebbleCommitStats)
+	}
 }
 
 func (s handleRaftReadyStats) String() string {

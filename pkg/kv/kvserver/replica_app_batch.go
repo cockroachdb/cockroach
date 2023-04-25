@@ -562,6 +562,12 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	if err := b.batch.Commit(sync); err != nil {
 		return errors.Wrapf(err, "unable to commit Raft entry batch")
 	}
+	// TODO(sumeer): Plumb BatchCommitStats into appBatchStats. appBatchStats
+	// seems to be used as the stats for a single batch (replicaAppBatch.ab) and
+	// for multiple batches (as member of applyCommittedEntriesStats). We need
+	// to split the 2 roles. For the aggregation of durations encoded in
+	// BatchCommitStats, across multiple commits, a histogram is probably
+	// overkill -- a max aggregation should suffice.
 	b.batch.Close()
 	b.batch = nil
 

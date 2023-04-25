@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -83,9 +84,10 @@ type AppendStats struct {
 	SideloadedEntries int
 	SideloadedBytes   int64
 
-	PebbleBegin time.Time
-	PebbleEnd   time.Time
-	PebbleBytes int64
+	PebbleBegin       time.Time
+	PebbleEnd         time.Time
+	PebbleBytes       int64
+	PebbleCommitStats storage.BatchCommitStats
 
 	Sync bool
 	// If true, PebbleEnd-PebbleBegin does not include the sync time.
@@ -256,6 +258,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 			ctx:            ctx,
 			cb:             cb,
 			msgs:           m.Responses,
+			batch:          batch,
 			metrics:        s.Metrics,
 			logCommitBegin: stats.PebbleBegin,
 		}
@@ -268,6 +271,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 			return RaftState{}, errors.Wrap(err, expl)
 		}
 		stats.PebbleEnd = timeutil.Now()
+		stats.PebbleCommitStats = batch.CommitStats()
 		if wantsSync {
 			logCommitEnd := stats.PebbleEnd
 			s.Metrics.RaftLogCommitLatency.RecordValue(logCommitEnd.Sub(stats.PebbleBegin).Nanoseconds())
@@ -324,6 +328,8 @@ type nonBlockingSyncWaiterCallback struct {
 	ctx  context.Context
 	cb   SyncCallback
 	msgs []raftpb.Message
+	// Used to extract stats. This is the batch that has been synced.
+	batch storage.WriteBatch
 	// Used to record Metrics.
 	metrics        Metrics
 	logCommitBegin time.Time
@@ -334,6 +340,14 @@ func (cb *nonBlockingSyncWaiterCallback) run() {
 	dur := timeutil.Since(cb.logCommitBegin).Nanoseconds()
 	cb.metrics.RaftLogCommitLatency.RecordValue(dur)
 	cb.cb.OnLogSync(cb.ctx, cb.msgs)
+	commitStats := cb.batch.CommitStats()
+	// TODO(sumeer): this is the same as
+	// kvserver.defaultReplicaRaftMuWarnThreshold. Move to this package and
+	// export after confirming that this instrumentation point is reasonable.
+	if commitStats.TotalDuration > 500*time.Millisecond {
+		// TODO(sumeer): Replica.raftCtx?
+		log.Infof(context.Background(), "slow non-blocking raft commit: %s", commitStats)
+	}
 	cb.release()
 }
 
