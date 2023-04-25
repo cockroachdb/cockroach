@@ -5,19 +5,13 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "catalog",
-    srcs = [
-        "catalog_generator.go",
-        "chart_catalog.go",
-        "metrics.go",
-    ],
+    srcs = ["catalog_generator.go"],
     embed = [":catalog_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ts/catalog",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/jobs/jobspb",
         "//pkg/ts/tspb",
         "//pkg/util/metric",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_prometheus_client_model//go",
     ],
 )
