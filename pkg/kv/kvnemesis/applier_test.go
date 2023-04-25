@@ -146,9 +146,6 @@ func TestApplier(t *testing.T) {
 			"txn-rollback", step(closureTxn(ClosureTxnType_Rollback, put(k5, 5))),
 		},
 		{
-			"txn-error", step(closureTxn(ClosureTxnType_Rollback, put(k5, 5))),
-		},
-		{
 			"split", step(split(k2)),
 		},
 		{
