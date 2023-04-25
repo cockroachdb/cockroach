@@ -81,8 +81,8 @@ func (d *anomalyDetector) isSlow(stmt *Statement) (decision bool) {
 
 	d.withFingerprintLatencySummary(stmt, func(latencySummary *quantile.Stream) {
 		latencySummary.Insert(stmt.LatencyInSeconds)
-		p50 := latencySummary.Query(0.5)
-		p99 := latencySummary.Query(0.99)
+		p50 := latencySummary.Query(0.5, true)
+		p99 := latencySummary.Query(0.99, true)
 		decision = stmt.LatencyInSeconds >= p99 &&
 			stmt.LatencyInSeconds >= 2*p50 &&
 			stmt.LatencyInSeconds >= AnomalyDetectionLatencyThreshold.Get(&d.settings.SV).Seconds()
@@ -91,7 +91,9 @@ func (d *anomalyDetector) isSlow(stmt *Statement) (decision bool) {
 	return
 }
 
-func (d *anomalyDetector) GetPercentileValues(id appstatspb.StmtFingerprintID) PercentileValues {
+func (d *anomalyDetector) GetPercentileValues(
+	id appstatspb.StmtFingerprintID, shouldFlush bool,
+) PercentileValues {
 	// latencySummary.Query might modify its own state (Stream.flush), so a read-write lock is necessary.
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -100,9 +102,9 @@ func (d *anomalyDetector) GetPercentileValues(id appstatspb.StmtFingerprintID) P
 		latencySummary := entry.Value.(latencySummaryEntry).value
 		// If more percentiles are added, update the value of `desiredQuantiles` above
 		// to include the new keys.
-		latencies.P50 = latencySummary.Query(0.5)
-		latencies.P90 = latencySummary.Query(0.9)
-		latencies.P99 = latencySummary.Query(0.99)
+		latencies.P50 = latencySummary.Query(0.5, shouldFlush)
+		latencies.P90 = latencySummary.Query(0.9, shouldFlush)
+		latencies.P99 = latencySummary.Query(0.99, shouldFlush)
 	}
 	return latencies
 }

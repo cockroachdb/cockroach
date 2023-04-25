@@ -61,7 +61,7 @@ func verifyPercsWithAbsoluteEpsilon(t *testing.T, a []float64, s *Stream) {
 			upper = len(a)
 		}
 		w, min, max := a[k-1], a[lower-1], a[upper-1]
-		if g := s.Query(quantile); g < min || g > max {
+		if g := s.Query(quantile, true); g < min || g > max {
 			t.Errorf("q=%f: want %v [%f,%f], got %v", quantile, w, min, max, g)
 		}
 	}
@@ -76,7 +76,7 @@ func verifyLowPercsWithRelativeEpsilon(t *testing.T, a []float64, s *Stream) {
 		lowerRank := int((1 - RelativeEpsilon) * qu * n)
 		upperRank := int(math.Ceil((1 + RelativeEpsilon) * qu * n))
 		w, min, max := a[k-1], a[lowerRank-1], a[upperRank-1]
-		if g := s.Query(qu); g < min || g > max {
+		if g := s.Query(qu, true); g < min || g > max {
 			t.Errorf("q=%f: want %v [%f,%f], got %v", qu, w, min, max, g)
 		}
 	}
@@ -91,7 +91,7 @@ func verifyHighPercsWithRelativeEpsilon(t *testing.T, a []float64, s *Stream) {
 		lowerRank := int((1 - (1+RelativeEpsilon)*(1-qu)) * n)
 		upperRank := int(math.Ceil((1 - (1-RelativeEpsilon)*(1-qu)) * n))
 		w, min, max := a[k-1], a[lowerRank-1], a[upperRank-1]
-		if g := s.Query(qu); g < min || g > max {
+		if g := s.Query(qu, true); g < min || g > max {
 			t.Errorf("q=%f: want %v [%f,%f], got %v", qu, w, min, max, g)
 		}
 	}
@@ -135,7 +135,7 @@ func TestTargetedQuerySmallSampleSize(t *testing.T) {
 			0.90: 5,
 			0.99: 5,
 		} {
-			if got := s.Query(φ); got != want {
+			if got := s.Query(φ, true); got != want {
 				t.Errorf("want %f for φ=%f, got %f", want, φ, got)
 			}
 		}
@@ -200,7 +200,7 @@ func TestUncompressed(t *testing.T) {
 	// Before compression, Query should have 100% accuracy.
 	for quantile := range Targets {
 		w := quantile * 100
-		if g := q.Query(quantile); g != w {
+		if g := q.Query(quantile, true); g != w {
 			t.Errorf("want %f, got %f", w, g)
 		}
 	}
@@ -219,13 +219,13 @@ func TestUncompressedSamples(t *testing.T) {
 func TestUncompressedOne(t *testing.T) {
 	q := NewTargeted(map[float64]float64{0.99: 0.01})
 	q.Insert(3.14)
-	if g := q.Query(0.90); g != 3.14 {
+	if g := q.Query(0.90, true); g != 3.14 {
 		t.Error("want PI, got", g)
 	}
 }
 
 func TestDefaults(t *testing.T) {
-	if g := NewTargeted(map[float64]float64{0.99: 0.001}).Query(0.99); g != 0 {
+	if g := NewTargeted(map[float64]float64{0.99: 0.001}).Query(0.99, true); g != 0 {
 		t.Errorf("want 0, got %f", g)
 	}
 }
