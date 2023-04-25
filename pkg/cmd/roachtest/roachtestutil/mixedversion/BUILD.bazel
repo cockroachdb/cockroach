@@ -22,6 +22,7 @@ go_library(
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "//pkg/util/version",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -415,6 +416,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		*histogramsMaxLatency,
 		gen.Meta().Name,
 	)
+	reg.Registerer().MustRegister(collectors.NewGoCollector())
 	// Expose the prometheus gatherer.
 	go func() {
 		if err := http.ListenAndServe(
