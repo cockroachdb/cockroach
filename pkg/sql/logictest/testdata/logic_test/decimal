@@ -58,6 +58,15 @@ SELECT 'NaN'::FLOAT::DECIMAL, 'NaN'::DECIMAL
 ----
 NaN NaN
 
+# Test decimal returns correctly for exponents > -6.
+# We must *also* convert it to string, as the display driver (lib/pq) will
+# display the incorrect E-7, E-16 values.
+# Regression test for https://github.com/cockroachdb/cockroach/issues/102217.
+query TTTT
+SELECT 0::DECIMAL(19,0)::text, 0::DECIMAL(19,6)::text, 0::DECIMAL(19,7)::text, 0::DECIMAL(19,16)::text
+----
+0  0.000000  0.0000000  0.0000000000000000
+
 # Ensure trailing zeros are kept for decimal types with no listed scale,
 # and enforced when the scale is listed.
 

@@ -1186,7 +1186,22 @@ func (d *DDecimal) Format(ctx *FmtCtx) {
 	if quote {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(d.Decimal.String())
+
+	// Special case for 0 - PG does not match GDA spec, so we do the same here.
+	// Write out the zeroes by hand, instead of using d.Decimal.String() which
+	// follows the GDA spec.
+	// Having a 0 bitlen means we are a zero co-efficient.
+	// GDA Spec: https://speleotrove.com/decimal/daconvs.html#reftostr.
+	// See also: https://github.com/cockroachdb/cockroach/issues/102217.
+	if d.Form == apd.Finite && d.Decimal.Coeff.BitLen() == 0 && d.Decimal.Exponent < 0 {
+		ctx.WriteByte('0')
+		ctx.WriteByte('.')
+		for i := int32(0); i < -d.Exponent; i++ {
+			ctx.WriteByte('0')
+		}
+	} else {
+		ctx.WriteString(d.Decimal.String())
+	}
 	if quote {
 		ctx.WriteByte('\'')
 	}
