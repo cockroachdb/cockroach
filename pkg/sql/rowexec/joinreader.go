@@ -452,16 +452,11 @@ func newJoinReader(
 	if jr.usesStreamer {
 		minMemoryLimit = 100 << 10
 	}
-	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
-	if memoryLimit < minMemoryLimit {
-		memoryLimit = minMemoryLimit
-	}
 
 	// Initialize memory monitors and bound account for data structures in the joinReader.
-	jr.MemMonitor = mon.NewMonitorInheritWithLimit(
-		"joinreader-mem" /* name */, memoryLimit, flowCtx.Mon,
+	jr.MemMonitor = execinfra.NewLimitedMonitorWithLowerBound(
+		ctx, flowCtx, "joinreader-mem" /* name */, minMemoryLimit,
 	)
-	jr.MemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 	jr.memAcc = jr.MemMonitor.MakeBoundAccount()
 
 	if err := jr.initJoinReaderStrategy(ctx, flowCtx, rightTypes, readerType); err != nil {
@@ -469,6 +464,10 @@ func newJoinReader(
 	}
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint(flowCtx.EvalCtx.SessionData())
 
+	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
+	if memoryLimit < minMemoryLimit {
+		memoryLimit = minMemoryLimit
+	}
 	var streamingKVFetcher *row.KVFetcher
 	if jr.usesStreamer {
 		// NOTE: this comment should only be considered in a case of low workmem

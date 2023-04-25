@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -195,6 +196,7 @@ type testCase struct {
 
 func TestSampler(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, tc := range []testCase{
 		// Check distribution when capacity is held steady.
@@ -211,6 +213,7 @@ func TestSampler(t *testing.T) {
 
 func TestSamplerMemoryLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, tc := range []testCase{
 		// While holding numSamples and minNumSamples fixed, increase the memory
@@ -242,6 +245,7 @@ func TestSamplerMemoryLimit(t *testing.T) {
 
 func TestSamplerSketch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		typs          []*types.T
