@@ -848,7 +848,6 @@ GO_TARGETS = [
     "//pkg/ccl/storageccl:storageccl",
     "//pkg/ccl/storageccl:storageccl_test",
     "//pkg/ccl/streamingccl/replicationtestutils:replicationtestutils",
-    "//pkg/ccl/streamingccl/replicationtestutils:streamingtest",
     "//pkg/ccl/streamingccl/replicationutils:replicationutils",
     "//pkg/ccl/streamingccl/replicationutils:replicationutils_test",
     "//pkg/ccl/streamingccl/streamclient:streamclient",
