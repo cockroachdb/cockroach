@@ -115,7 +115,15 @@ func newSamplerProcessor(
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will disable histogram collection if this limit is not
 	// enough.
-	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "sampler-mem")
+	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
+	// sampler doesn't spill to disk, so ensure some reasonable lower bound on
+	// the workmem limit.
+	const minMemoryLimit = 8 << 20 // 8MiB
+	if memoryLimit < minMemoryLimit {
+		memoryLimit = minMemoryLimit
+	}
+	memMonitor := mon.NewMonitorInheritWithLimit("sampler-mem", memoryLimit, flowCtx.Mon)
+	memMonitor.StartNoReserved(ctx, flowCtx.Mon)
 	s := &samplerProcessor{
 		input:           input,
 		memAcc:          memMonitor.MakeBoundAccount(),
