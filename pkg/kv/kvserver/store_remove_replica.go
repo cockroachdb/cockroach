@@ -88,63 +88,66 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 	}
 
-	// Sanity checks before committing to the removal by setting the
-	// destroy status.
-	var desc *roachpb.RangeDescriptor
+	// Another sanity check that the Replica that we're planning to remove is
+	// still the one in the Store.
 	{
+		existing, err := s.GetReplica(rep.RangeID)
+		if err != nil {
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "cannot remove replica which does not exist")
+		} else if existing != rep {
+			return nil, errors.AssertionFailedf("replica %v replaced by %v before being removed",
+				rep, existing)
+		}
+	}
+
+	// Run sanity checks and on success commit to the removal by setting the
+	// destroy status.
+	desc, err := func() (*roachpb.RangeDescriptor, error) {
 		rep.readOnlyCmdMu.Lock()
+		defer rep.readOnlyCmdMu.Unlock()
 		rep.mu.Lock()
+		defer rep.mu.Unlock()
 
 		if opts.DestroyData {
 			// Detect if we were already removed.
 			if rep.mu.destroyStatus.Removed() {
-				rep.mu.Unlock()
-				rep.readOnlyCmdMu.Unlock()
 				return nil, nil // already removed, noop
 			}
 		} else {
 			// If the caller doesn't want to destroy the data because it already
 			// has done so, then it must have already also set the destroyStatus.
 			if !rep.mu.destroyStatus.Removed() {
-				rep.mu.Unlock()
-				rep.readOnlyCmdMu.Unlock()
-				log.Fatalf(ctx, "replica not marked as destroyed but data already destroyed: %v", rep)
+				return nil, errors.AssertionFailedf("replica not marked as destroyed but data already destroyed: %v", rep)
 			}
 		}
 
-		desc = rep.mu.state.Desc
+		desc := rep.mu.state.Desc
 		if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= nextReplicaID {
-			rep.mu.Unlock()
-			rep.readOnlyCmdMu.Unlock()
 			// NB: This should not in any way be possible starting in 20.1.
-			log.Fatalf(ctx, "replica descriptor's ID has changed (%s >= %s)",
+			return nil, errors.AssertionFailedf("replica descriptor's ID has changed (%s >= %s)",
 				repDesc.ReplicaID, nextReplicaID)
 		}
 
 		// This is a fatal error as an initialized replica can never become
 		// uninitialized.
 		if !rep.IsInitialized() {
-			rep.mu.Unlock()
-			rep.readOnlyCmdMu.Unlock()
-			log.Fatalf(ctx, "uninitialized replica cannot be removed with removeInitializedReplica: %v", rep)
+			return nil, errors.AssertionFailedf("uninitialized replica cannot be removed with removeInitializedReplica: %v", rep)
 		}
 
-		// Mark the replica as removed before deleting data.
+		// Sanity checks passed. Mark the replica as removed before deleting data.
 		rep.mu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
 			destroyReasonRemoved)
-		rep.mu.Unlock()
-		rep.readOnlyCmdMu.Unlock()
-	}
-	// Proceed with the removal, all errors encountered from here down are fatal.
-
-	// Another sanity check that this replica is a part of this store.
-	existing, err := s.GetReplica(rep.RangeID)
+		return desc, nil
+	}()
 	if err != nil {
-		log.Fatalf(ctx, "cannot remove replica which does not exist: %v", err)
-	} else if existing != rep {
-		log.Fatalf(ctx, "replica %v replaced by %v before being removed",
-			rep, existing)
+		return nil, err
 	}
+	if desc == nil {
+		// Already removed/removing, no-op.
+		return nil, nil
+	}
+
+	// Proceed with the removal, all errors encountered from here down are fatal.
 
 	// During merges, the context might have the subsuming range, so we explicitly
 	// log the replica to be removed.
