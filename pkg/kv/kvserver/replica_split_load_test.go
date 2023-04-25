@@ -11,6 +11,7 @@
 package kvserver
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func roachpbKey(key uint32) roachpb.Key {
@@ -294,5 +296,65 @@ func TestGetResponseBoundarySpan(t *testing.T) {
 		responseBoundarySpan := getResponseBoundarySpan(test.ba, test.br)
 		assert.Equal(t, test.expectedResponseBoundarySpan, responseBoundarySpan, "Expected response boundary span %s, got %s in test %d",
 			test.expectedResponseBoundarySpan, responseBoundarySpan, i)
+	}
+}
+
+func TestSplitPreCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sampleSpan := roachpb.RSpan{
+		Key:    roachpb.RKey(roachpbKey(1)),
+		EndKey: roachpb.RKey(roachpbKey(100)),
+	}
+
+	testCases := []struct {
+		splitKey roachpb.Key
+		span     roachpb.RSpan
+		err      string
+	}{
+		{
+			splitKey: roachpbKey(50),
+			span:     sampleSpan,
+			err:      "",
+		},
+		{
+			splitKey: roachpbKey(1),
+			span:     sampleSpan,
+			err:      "split key is equal to range start key ",
+		},
+		{
+			// Key is outside of range bounds in the next two tests, however this
+			// isn't checked in the pre-check.
+			splitKey: roachpbKey(0),
+			span:     sampleSpan,
+			err:      "",
+		},
+		{
+			splitKey: roachpbKey(100),
+			span:     sampleSpan,
+			err:      "",
+		},
+		{
+			// We also don't check that the returned key is a safe split key in the
+			// pre-check.
+			splitKey: keys.MakeFamilyKey(roachpbKey(50), 2),
+			span:     sampleSpan,
+			err:      "",
+		},
+		{
+			splitKey: keys.MakeFamilyKey(roachpbKey(50), 0),
+			span:     sampleSpan,
+			err:      "",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			err := splitKeyPreCheck(tc.span, tc.splitKey)
+			if tc.err == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.err)
+			}
+		})
 	}
 }
