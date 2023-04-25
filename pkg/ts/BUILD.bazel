@@ -30,7 +30,6 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/storage",
-        "//pkg/ts/catalog",
         "//pkg/ts/tspb",
         "//pkg/ts/tsutil",
         "//pkg/util/contextutil",
