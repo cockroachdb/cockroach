@@ -2789,7 +2789,7 @@ var crdbInternalLocalContentionEventsTable = virtualSchemaTable{
 		if err != nil {
 			return err
 		}
-		return populateContentionEventsTable(ctx, addRow, response)
+		return populateContentionEventsTable(ctx, p, addRow, response)
 	},
 }
 
@@ -2803,15 +2803,36 @@ var crdbInternalClusterContentionEventsTable = virtualSchemaTable{
 		if err != nil {
 			return err
 		}
-		return populateContentionEventsTable(ctx, addRow, response)
+		return populateContentionEventsTable(ctx, p, addRow, response)
 	},
 }
 
 func populateContentionEventsTable(
 	ctx context.Context,
+	p *planner,
 	addRow func(...tree.Datum) error,
 	response *serverpb.ListContentionEventsResponse,
 ) error {
+	// Validate users have correct permission/role.
+	hasPermission, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	if err != nil {
+		return err
+	}
+	if !hasPermission {
+		return noViewActivityOrViewActivityRedactedRoleError(p.User())
+	}
+	isAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	var shouldRedactKey bool
+	if !isAdmin {
+		shouldRedactKey, err = p.HasViewActivityRedacted(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	key := tree.NewDBytes("")
 	for _, ice := range response.Events.IndexContentionEvents {
 		for _, skc := range ice.Events {
 			for _, stc := range skc.Txns {
@@ -2819,12 +2840,15 @@ func populateContentionEventsTable(
 					duration.MakeDuration(ice.CumulativeContentionTime.Nanoseconds(), 0 /* days */, 0 /* months */),
 					types.DefaultIntervalTypeMetadata,
 				)
+				if !shouldRedactKey {
+					key = tree.NewDBytes(tree.DBytes(skc.Key))
+				}
 				if err := addRow(
 					tree.NewDInt(tree.DInt(ice.TableID)),             // table_id
 					tree.NewDInt(tree.DInt(ice.IndexID)),             // index_id
 					tree.NewDInt(tree.DInt(ice.NumContentionEvents)), // num_contention_events
 					cumulativeContentionTime,                         // cumulative_contention_time
-					tree.NewDBytes(tree.DBytes(skc.Key)),             // key
+					key,                                              // key
 					tree.NewDUuid(tree.DUuid{UUID: stc.TxnID}),       // txn_id
 					tree.NewDInt(tree.DInt(stc.Count)),               // count
 				); err != nil {
@@ -2833,20 +2857,24 @@ func populateContentionEventsTable(
 			}
 		}
 	}
+	key = tree.NewDBytes("")
 	for _, nkc := range response.Events.NonSQLKeysContention {
 		for _, stc := range nkc.Txns {
 			cumulativeContentionTime := tree.NewDInterval(
 				duration.MakeDuration(nkc.CumulativeContentionTime.Nanoseconds(), 0 /* days */, 0 /* months */),
 				types.DefaultIntervalTypeMetadata,
 			)
+			if !shouldRedactKey {
+				key = tree.NewDBytes(tree.DBytes(nkc.Key))
+			}
 			if err := addRow(
 				tree.DNull, // table_id
 				tree.DNull, // index_id
 				tree.NewDInt(tree.DInt(nkc.NumContentionEvents)), // num_contention_events
 				cumulativeContentionTime,                         // cumulative_contention_time
-				tree.NewDBytes(tree.DBytes(nkc.Key)),             // key
-				tree.NewDUuid(tree.DUuid{UUID: stc.TxnID}),       // txn_id
-				tree.NewDInt(tree.DInt(stc.Count)),               // count
+				key,                                              // key
+				tree.NewDUuid(tree.DUuid{UUID: stc.TxnID}), // txn_id
+				tree.NewDInt(tree.DInt(stc.Count)),         // count
 			); err != nil {
 				return err
 			}
@@ -6994,7 +7022,7 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 
 		shouldRedactContendingKey := false
 		if !isAdmin {
-			shouldRedactContendingKey, err = p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
+			shouldRedactContendingKey, err = p.HasViewActivityRedacted(ctx)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -7274,7 +7302,7 @@ func genClusterLocksGenerator(
 		}
 		shouldRedactKeys := false
 		if !hasAdmin {
-			shouldRedactKeys, err = p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
+			shouldRedactKeys, err = p.HasViewActivityRedacted(ctx)
 			if err != nil {
 				return nil, nil, err
 			}
