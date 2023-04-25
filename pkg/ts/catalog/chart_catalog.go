@@ -3306,6 +3306,26 @@ var charts = []sectionDescription{
 				},
 				AxisLabel: "Ops",
 			},
+			{
+				Title: "Batch Commit Duration",
+				Metrics: []string{
+					"storage.batch-commit.duration",
+					"storage.batch-commit.sem-wait.duration",
+					"storage.batch-commit.wal-queue-wait.duration",
+					"storage.batch-commit.mem-stall.duration",
+					"storage.batch-commit.l0-stall.duration",
+					"storage.batch-commit.wal-rotation.duration",
+					"storage.batch-commit.commit-wait.duration",
+				},
+				AxisLabel: "Total Duration (nanoseconds)",
+			},
+			{
+				Title: "Batch Commit Count",
+				Metrics: []string{
+					"storage.batch-commit.count",
+				},
+				AxisLabel: "Ops",
+			},
 		},
 	},
 	{
