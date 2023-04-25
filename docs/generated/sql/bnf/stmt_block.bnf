@@ -1044,6 +1044,7 @@ unreserved_keyword ::=
 	| 'BUNDLE'
 	| 'BY'
 	| 'CACHE'
+	| 'CALL'
 	| 'CALLED'
 	| 'CANCEL'
 	| 'CANCELQUERY'
@@ -1300,6 +1301,7 @@ unreserved_keyword ::=
 	| 'PRIOR'
 	| 'PRIORITY'
 	| 'PRIVILEGES'
+	| 'PROCEDURE'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'
@@ -3467,7 +3469,7 @@ func_param_with_default ::=
 	| func_param '=' a_expr
 
 create_func_opt_item ::=
-	'AS' func_as
+	'AS' func_as opt_link_sym
 	| 'LANGUAGE' non_reserved_word_or_sconst
 	| common_func_opt_item
 
@@ -3521,6 +3523,7 @@ bare_label_keywords ::=
 	| 'BUNDLE'
 	| 'BY'
 	| 'CACHE'
+	| 'CALL'
 	| 'CALLED'
 	| 'CANCEL'
 	| 'CANCELQUERY'
@@ -3850,6 +3853,7 @@ bare_label_keywords ::=
 	| 'PRIOR'
 	| 'PRIORITY'
 	| 'PRIVILEGES'
+	| 'PROCEDURE'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'
@@ -4345,6 +4349,10 @@ create_as_constraint_elem ::=
 
 func_as ::=
 	'SCONST'
+
+opt_link_sym ::=
+	',' 'SCONST'
+	| 
 
 col_def_list_no_types ::=
 	( name ) ( ( ',' name ) )*
