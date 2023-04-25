@@ -308,7 +308,7 @@ find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 			}
 
 			// A script to summarize the hottest ranges for a storage server's range reports.
-			{
+			if zipCtx.includeRangeInfo {
 				s := zc.clusterPrinter.start("hot range summary script")
 				if err := z.createRaw(s, zc.prefix+"/hot-ranges.sh", []byte(`#!/bin/sh
 for stat in "queries" "writes" "reads" "write_bytes" "read_bytes" "cpu_time"; do
@@ -321,7 +321,7 @@ done
 			}
 
 			// A script to summarize the hottest ranges for a tenant's range report.
-			{
+			if zipCtx.includeRangeInfo {
 				s := zc.clusterPrinter.start("tenant hot range summary script")
 				if err := z.createRaw(s, zc.prefix+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
 for stat in "queries" "writes" "reads" "write_bytes" "read_bytes" "cpu_time"; do
