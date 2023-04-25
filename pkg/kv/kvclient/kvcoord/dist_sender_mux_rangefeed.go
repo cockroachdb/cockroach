@@ -129,7 +129,7 @@ type muxStreamOrError struct {
 // range feed.
 // The lifetime of a single range feed is as follows:
 //
-// ┌─* muxRangeFeed
+//      ┌─* muxRangeFeed
 // ┌───►├─► divideSpanOnRangeBoundaries
 // │    │   Divide target span(s) on range boundaries
 // │    ├─► startSingleRangeFeed
