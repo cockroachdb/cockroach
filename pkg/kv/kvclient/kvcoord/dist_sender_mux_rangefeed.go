@@ -240,7 +240,7 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 // If the routine/transport information are not valid, performs lookup to refresh this
 // information.
 // Transient errors while establishing RPCs are retried with backoff.
-// Certain non-recoverable errors (such as  grpcutil.IsAuthError(err)) are propagated to the
+// Certain non-recoverable errors (such as grpcutil.IsAuthError(err)) are propagated to the
 // caller and will cause the whole rangefeed to terminate.
 // Upon successfully establishing RPC stream, the ownership of the activeMuxRangeFeed
 // gets transferred to the node event loop go routine (receiveEventsFromNode).
