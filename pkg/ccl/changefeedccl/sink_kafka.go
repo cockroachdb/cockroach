@@ -9,6 +9,7 @@
 package changefeedccl
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -141,6 +142,8 @@ func (s *kafkaSink) getConcreteType() sinkType {
 	return sinkTypeKafka
 }
 
+type compressionCodec sarama.CompressionCodec
+
 var saramaCompressionCodecOptions = map[string]sarama.CompressionCodec{
 	"NONE":   sarama.CompressionNone,
 	"GZIP":   sarama.CompressionGZIP,
@@ -149,26 +152,22 @@ var saramaCompressionCodecOptions = map[string]sarama.CompressionCodec{
 	"ZSTD":   sarama.CompressionZSTD,
 }
 
-func validateCompressionCodec(s string) (sarama.CompressionCodec, error) {
-	codec, ok := saramaCompressionCodecOptions[s]
-	if !ok {
-		return -1, errors.Newf("could not validate compression codec '%s'", s)
+func getValidCompressionCodecs() (codecs string) {
+	for codec := range saramaCompressionCodecOptions {
+		if codecs != "" {
+			codecs += ", "
+		}
+		codecs += codec
 	}
-	return codec, nil
+	return codecs
 }
 
-type compressionCodec sarama.CompressionCodec
-
-func (j *compressionCodec) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
+func (j *compressionCodec) UnmarshalText(b []byte) error {
+	var c sarama.CompressionCodec
+	if err := c.UnmarshalText(bytes.ToLower(b)); err != nil {
+		return errors.WithHintf(err, "supported compression codecs are %s", getValidCompressionCodecs())
 	}
-	codec, err := validateCompressionCodec(s)
-	if err != nil {
-		return err
-	}
-	*j = compressionCodec(codec)
+	*j = compressionCodec(c)
 	return nil
 }
 
@@ -825,7 +824,7 @@ func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 }
 
 func parseRequiredAcks(a string) (sarama.RequiredAcks, error) {
-	switch a {
+	switch strings.ToUpper(a) {
 	case "0", "NONE":
 		return sarama.NoResponse, nil
 	case "1", "ONE":
