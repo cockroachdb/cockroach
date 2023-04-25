@@ -185,11 +185,8 @@ func (m *Manager) createAndStartJobIfNoneExists(ctx context.Context) (bool, erro
 
 	var job *jobs.Job
 	if err := m.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		exists, err := jobs.RunningJobExists(ctx, jobspb.InvalidJobID, txn,
-			func(payload *jobspb.Payload) bool {
-				return payload.Type() == jobspb.TypeAutoSpanConfigReconciliation
-			},
-		)
+		exists, err := jobs.RunningJobExists(ctx, jobspb.InvalidJobID, txn, m.settings.Version,
+			jobspb.TypeAutoSpanConfigReconciliation)
 		if err != nil {
 			return err
 		}
