@@ -1027,6 +1027,14 @@ func validateDetailsAndOptions(
 		}
 	}
 
+	encodingOpts, err := opts.GetEncodingOptions()
+	if err != nil {
+		return err
+	}
+	if opts.TotalOrdering() && encodingOpts.Format == changefeedbase.OptFormatParquet {
+		return errors.Errorf(`total ordering is unsupported for the parquet format`)
+	}
+
 	{
 		if details.Select != "" {
 			if len(details.TargetSpecifications) != 1 {

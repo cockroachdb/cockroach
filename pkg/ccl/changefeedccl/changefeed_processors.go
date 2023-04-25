@@ -9,6 +9,7 @@
 package changefeedccl
 
 import (
+	"container/heap"
 	"context"
 	"fmt"
 	"time"
@@ -47,9 +48,10 @@ import (
 type changeAggregator struct {
 	execinfra.ProcessorBase
 
-	flowCtx *execinfra.FlowCtx
-	spec    execinfrapb.ChangeAggregatorSpec
-	memAcc  mon.BoundAccount
+	flowCtx     *execinfra.FlowCtx
+	spec        execinfrapb.ChangeAggregatorSpec
+	memAcc      mon.BoundAccount
+	processorID int32
 
 	// cancel shuts down the processor, both the `Next()` flow and the kvfeed.
 	cancel func()
@@ -79,6 +81,10 @@ type changeAggregator struct {
 	// information during aggregator shutdown.
 	shutdownCheckpointEmitted bool
 
+	// orderedRowsBuf, if non-nil, contains batches of changed rows to be emitted.
+	// Anything in `resolvedSpanBuf` is dependent on these having been emitted.
+	orderedRowsBuf *encDatumAllocRowBuffer
+
 	// recentKVCount contains the number of emits since the last time a resolved
 	// span was forwarded to the frontier
 	recentKVCount uint64
@@ -106,7 +112,7 @@ type timestampLowerBoundOracle interface {
 	inclusiveLowerBoundTS() hlc.Timestamp
 }
 
-type changeAggregatorLowerBoundOracle struct {
+type changefeedLowerBoundOracle struct {
 	sf                         *span.Frontier
 	initialInclusiveLowerBound hlc.Timestamp
 }
@@ -116,7 +122,7 @@ type changeAggregatorLowerBoundOracle struct {
 // changefeed job hasn't yet seen any resolved timestamps) or the successor timestamp to
 // the local span frontier. This convention is chosen to preserve CDC's ordering
 // guarantees. See comment on cloudStorageSink for more details.
-func (o *changeAggregatorLowerBoundOracle) inclusiveLowerBoundTS() hlc.Timestamp {
+func (o *changefeedLowerBoundOracle) inclusiveLowerBoundTS() hlc.Timestamp {
 	if frontier := o.sf.Frontier(); !frontier.IsEmpty() {
 		// We call `Next()` here on the frontier because this allows us
 		// to name files using a timestamp that is an inclusive lower bound
@@ -143,9 +149,10 @@ func newChangeAggregatorProcessor(
 ) (execinfra.Processor, error) {
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, "changeagg-mem")
 	ca := &changeAggregator{
-		flowCtx: flowCtx,
-		spec:    spec,
-		memAcc:  memMonitor.MakeBoundAccount(),
+		flowCtx:     flowCtx,
+		spec:        spec,
+		memAcc:      memMonitor.MakeBoundAccount(),
+		processorID: processorID,
 	}
 	if err := ca.Init(
 		ctx,
@@ -240,7 +247,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
-	timestampOracle := &changeAggregatorLowerBoundOracle{
+	timestampOracle := &changefeedLowerBoundOracle{
 		sf:                         ca.frontier.SpanFrontier(),
 		initialInclusiveLowerBound: feed.ScanTime,
 	}
@@ -297,6 +304,17 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	// type.
 	if b, ok := ca.sink.(*bufferSink); ok {
 		ca.changedRowBuf = &b.buf
+	}
+
+	if opts.TotalOrdering() {
+		sink := &orderedSink{
+			wrapped:     ca.sink,
+			processorID: ca.processorID,
+			metrics:     ca.sliMetrics,
+			frontier:    ca.frontier,
+		}
+		ca.orderedRowsBuf = &sink.forwardingBuf
+		ca.sink = sink
 	}
 
 	// If the initial scan was disabled the highwater would've already been forwarded
@@ -562,6 +580,8 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 		if !ca.changedRowBuf.IsEmpty() {
 			ca.lastPush = timeutil.Now()
 			return ca.ProcessRowHelper(ca.changedRowBuf.Pop()), nil
+		} else if !ca.orderedRowsBuf.IsEmpty() {
+			return ca.ProcessRowHelper(ca.orderedRowsBuf.Pop(ca.Ctx())), nil
 		} else if !ca.resolvedSpanBuf.IsEmpty() {
 			ca.lastPush = timeutil.Now()
 			return ca.ProcessRowHelper(ca.resolvedSpanBuf.Pop()), nil
@@ -680,6 +700,15 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return err
 	}
 
+	usingTotalOrdering := ca.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal)
+	// Under total ordering, resolved progress may unblock some messages from being able to be emitted.
+	if usingTotalOrdering && (advanced || resolved.Timestamp.Equal(ca.frontier.BackfillTS())) {
+		err := ca.sink.Flush(ca.Ctx())
+		if err != nil {
+			return err
+		}
+	}
+
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
 	checkpointFrontier := advanced &&
@@ -711,7 +740,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 
 // flushFrontier flushes sink and emits resolved timestamp if needed.
 func (ca *changeAggregator) flushFrontier() error {
-	// Make sure to the sink before forwarding resolved spans,
+	// Make sure to flush the sink before forwarding resolved spans,
 	// otherwise, we could lose buffered messages and violate the
 	// at-least-once guarantee. This is also true for checkpointing the
 	// resolved spans in the job progress.
@@ -754,6 +783,7 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 		rowenc.EncDatum{Datum: tree.DNull}, // topic
 		rowenc.EncDatum{Datum: tree.DNull}, // key
 		rowenc.EncDatum{Datum: tree.DNull}, // value
+		rowenc.EncDatum{Datum: tree.DNull}, // ordered rows
 	})
 	ca.metrics.ResolvedMessages.Inc(1)
 
@@ -787,6 +817,9 @@ type changeFrontier struct {
 	// input returns rows from one or more changeAggregator processors
 	input execinfra.RowSource
 
+	// orderedRowMerger handles merging OrderedRows for totally ordered changefeeds
+	orderedRowMerger *orderedRowMerger
+
 	// frontier contains the current resolved timestamp high-water for the tracked
 	// span set.
 	frontier *schemaChangeFrontier
@@ -799,9 +832,9 @@ type changeFrontier struct {
 
 	// encoder is the Encoder to use for resolved timestamp serialization.
 	encoder Encoder
-	// sink is the Sink to write resolved timestamps to. Rows are never written
-	// by changeFrontier.
-	sink ResolvedTimestampSink
+	// sink is the Sink to write resolved timestamps to. Rows are only sent by the
+	// changeFrontier when using ordering=total.
+	sink Sink
 	// freqEmitResolved, if >= 0, is a lower bound on the duration between
 	// resolved timestamp emits.
 	freqEmitResolved time.Duration
@@ -978,6 +1011,7 @@ func newChangeFrontierProcessor(
 	if err != nil {
 		return nil, err
 	}
+	sf.initialHighWater = spec.Feed.StatementTime
 
 	cf := &changeFrontier{
 		flowCtx:       flowCtx,
@@ -1010,8 +1044,8 @@ func newChangeFrontierProcessor(
 	); err != nil {
 		return nil, err
 	}
-	opts := changefeedbase.MakeStatementOptions(cf.spec.Feed.Opts)
 
+	opts := changefeedbase.MakeStatementOptions(cf.spec.Feed.Opts)
 	freq, emitResolved, err := opts.GetResolvedTimestampInterval()
 	if err != nil {
 		return nil, err
@@ -1068,9 +1102,6 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// TODO(yevgeniy): Figure out how to inject replication stream metrics.
 	cf.metrics = cf.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 
-	// Pass a nil oracle because this sink is only used to emit resolved timestamps
-	// but the oracle is only used when emitting row updates.
-	var nilOracle timestampLowerBoundOracle
 	var err error
 	sli, err := cf.metrics.getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
 	if err != nil {
@@ -1078,7 +1109,18 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		return
 	}
 	cf.sliMetrics = sli
-	cf.sink, err = getResolvedTimestampSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
+
+	// Only with totalOrdering does the frontier do any emitting of events other
+	// than resolved timestamps, so the oracle can normally be nil.
+	var timestampOracle timestampLowerBoundOracle
+	if cf.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal) {
+		timestampOracle = &changefeedLowerBoundOracle{
+			sf:                         cf.frontier.SpanFrontier(),
+			initialInclusiveLowerBound: cf.spec.Feed.StatementTime,
+		}
+	}
+
+	cf.sink, err = getAndDialSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, timestampOracle,
 		cf.spec.User(), cf.spec.JobID, sli)
 
 	if err != nil {
@@ -1092,6 +1134,21 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	}
 
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
+
+	opts := changefeedbase.MakeStatementOptions(cf.spec.Feed.Opts)
+	if opts.TotalOrdering() {
+		memLimit := changefeedbase.PerChangefeedMemLimit.Get(&cf.flowCtx.Cfg.Settings.SV)
+		cf.orderedRowMerger = &orderedRowMerger{
+			orderedRows:        make(map[int32][]jobspb.OrderedRows_Row),
+			bufferedBytesLimit: int(memLimit),
+			frontier:           cf.frontier,
+			sink:               cf.sink,
+			metrics:            cf.sliMetrics,
+		}
+		if cf.isSinkless() {
+			cf.orderedRowMerger.passthroughBuf = &cf.passthroughBuf
+		}
+	}
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
 	if cf.EvalCtx.ChangefeedState == nil {
@@ -1241,7 +1298,17 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			break
 		}
 
-		if row[0].IsNull() {
+		if !row[0].IsNull() {
+			if err := cf.noteAggregatorProgress(row[0]); err != nil {
+				cf.MoveToDraining(err)
+				break
+			}
+		} else if !row[4].IsNull() {
+			if err := cf.noteOrderedRows(row[4]); err != nil {
+				cf.MoveToDraining(err)
+				break
+			}
+		} else if row[0].IsNull() {
 			// In changefeeds with a sink, this will never happen. But in the
 			// core changefeed, which returns changed rows directly via pgwire,
 			// a row with a null resolved_span field is a changed row that needs
@@ -1249,13 +1316,60 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			cf.passthroughBuf.Push(row)
 			continue
 		}
-
-		if err := cf.noteAggregatorProgress(row[0]); err != nil {
-			cf.MoveToDraining(err)
-			break
-		}
 	}
 	return nil, cf.DrainHelper()
+}
+
+func (cf *changeFrontier) noteOrderedRows(d rowenc.EncDatum) error {
+	if cf.orderedRowMerger == nil {
+		return nil
+	}
+
+	if err := d.EnsureDecoded(changefeedResultTypes[4], &cf.a); err != nil {
+		return err
+	}
+	raw, ok := d.Datum.(*tree.DBytes)
+	if !ok {
+		return errors.AssertionFailedf(`unexpected datum type %T: %s`, d.Datum, d.Datum)
+	}
+
+	var payload jobspb.OrderedRows
+	if err := protoutil.Unmarshal([]byte(*raw), &payload); err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err,
+			`unmarshalling aggregator progress update: %x`, raw)
+	}
+
+	return cf.orderedRowMerger.Append(cf.Ctx(), payload)
+}
+
+type RowHeapEntry struct {
+	source int32
+	row    jobspb.OrderedRows_Row
+}
+
+type RowHeap []RowHeapEntry
+
+func (h RowHeap) Len() int           { return len(h) }
+func (h RowHeap) Less(i, j int) bool { return h[i].row.Updated.Less(h[j].row.Updated) }
+func (h RowHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+
+func (h *RowHeap) Peek() *RowHeapEntry {
+	if h == nil || len(*h) == 0 {
+		return nil
+	}
+	return &(*h)[0]
+}
+
+func (h *RowHeap) Push(x interface{}) {
+	*h = append(*h, x.(RowHeapEntry))
+}
+
+func (h *RowHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
 }
 
 func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
@@ -1298,12 +1412,28 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 }
 
 func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
+	if cf.knobs.FilterFrontierResolvedSpan != nil && cf.knobs.FilterFrontierResolvedSpan() {
+		return nil
+	}
+
 	frontierChanged, err := cf.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
 	}
 
 	cf.maybeLogBehindSpan(frontierChanged)
+
+	if cf.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal) {
+		// Normally a "resolved" event means the aggregator has successfully flushed
+		// the events to the sink, however under total ordering the resolved event
+		// simply means that the aggregator has forwarded the event to the frontier,
+		// so before checkpointing anything we must first ensure these messages have
+		// all been fully flushed.
+		err = cf.orderedRowMerger.Flush(cf.Ctx())
+		if err != nil {
+			return err
+		}
+	}
 
 	// If frontier changed, we emit resolved timestamp.
 	emitResolved := frontierChanged
@@ -1319,6 +1449,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	emitResolved = checkpointed
 
 	if emitResolved {
+
 		// Keeping this after the checkpointJobProgress call will avoid
 		// some duplicates if a restart happens.
 		newResolved := cf.frontier.Frontier()
@@ -1732,8 +1863,9 @@ func (f *schemaChangeFrontier) getCheckpointSpans(
 }
 
 // BackfillTS returns the timestamp of the incoming spans for an ongoing
-// Backfill (either an Initial Scan backfill or a Schema Change backfill).
-// If no Backfill is occurring, an empty timestamp is returned.
+// Backfill (either an Initial Scan backfill or a Schema Change backfill where
+// all other events up to that boundary timestamp have been resolved). If no
+// Backfill is occurring, an empty timestamp is returned.
 func (f *schemaChangeFrontier) BackfillTS() hlc.Timestamp {
 	frontier := f.Frontier()
 
@@ -1779,4 +1911,124 @@ func (f *schemaChangeFrontier) hasLaggingSpans(
 		frontier = defaultIfEmpty
 	}
 	return frontier.Add(lagThresholdNanos, 0).Less(f.latestTs)
+}
+
+// orderedRowMerger takes payloads of rows ordered ascending by updated
+// timestamp for different processors and flushes out elements to an underlying
+// sink in timestamp order by storing the sorted rows for each processor in
+// separate lists and keeping a min heap of the earliest entry in each row to
+// determine the earliest across all nodes .
+type orderedRowMerger struct {
+	// orderedRows stores a map of processorID -> sorted ascending list of pending
+	// rows to be emitted.
+	orderedRows map[int32][]jobspb.OrderedRows_Row
+
+	// minHeap is a min heap storing the head of every orderedRows list in order
+	// to determine the earliest row across all processors.  Entries in the
+	// minHeap still remain in the orderedRows list, as that allows us to just
+	// check the first element of an orderedRows entry for a processor to know if
+	// that processor already has its element in the min heap or not.
+	minHeap RowHeap
+
+	rowsBuffered       int
+	bytesBuffered      int
+	bufferedBytesLimit int
+
+	// Set only when using a core changefeed
+	passthroughBuf *encDatumRowBuffer
+	alloc          tree.DatumAlloc
+
+	frontier *schemaChangeFrontier
+	sink     EventSink
+	metrics  *sliMetrics
+}
+
+func (m *orderedRowMerger) Append(ctx context.Context, rows jobspb.OrderedRows) error {
+	backfillTs := m.frontier.BackfillTS()
+
+	for _, row := range rows.Rows {
+		m.bytesBuffered += row.Size()
+		m.rowsBuffered += 1
+
+		// If the row is part of an ongoing backfill it can be directly emitted
+		// without wasting cycles on the minHeap Push/Pop.
+		if row.Updated.Equal(backfillTs) {
+			err := m.emitRow(ctx, row)
+			if err != nil {
+				return err
+			}
+		} else {
+			if len(m.orderedRows[rows.SourceProcessorID]) == 0 {
+				heap.Push(&m.minHeap, RowHeapEntry{source: rows.SourceProcessorID, row: row})
+			}
+			m.orderedRows[rows.SourceProcessorID] = append(m.orderedRows[rows.SourceProcessorID], row)
+		}
+	}
+	if m.bytesBuffered > m.bufferedBytesLimit {
+		return errors.Newf("ordered row buffer exceeded maximum byte limit (%d > %d)", m.bytesBuffered, m.bufferedBytesLimit)
+	}
+
+	return m.emitUntilFrontier(ctx)
+}
+
+func (m *orderedRowMerger) emitRow(ctx context.Context, row jobspb.OrderedRows_Row) error {
+	defer func() {
+		m.bytesBuffered -= row.Size()
+		m.rowsBuffered -= 1
+	}()
+
+	if m.passthroughBuf != nil {
+		// Core changefeeds emit via the passthroughBuf
+		m.passthroughBuf.Push(rowenc.EncDatumRow{
+			{Datum: tree.DNull}, // resolved span
+			{Datum: m.alloc.NewDString(tree.DString(row.TopicName))},
+			{Datum: m.alloc.NewDBytes(tree.DBytes(row.Key))},   // key
+			{Datum: m.alloc.NewDBytes(tree.DBytes(row.Value))}, // value
+			{Datum: tree.DNull}, // ordered rows
+		})
+		return nil
+	} else {
+		return m.sink.EmitRow(ctx, row.Key, row.Value, sinkTopic{name: row.TopicName, version: row.TopicVersion}, row.Updated, row.Mvcc, kvevent.Alloc{})
+	}
+}
+
+// emitUntilFrontier emits all rows buffered in the orderedRowMerger that are
+// valid to be Emitted to the sink, i.e. either they do not exceed the frontier
+// or they are for an ongoing backfill.
+func (m *orderedRowMerger) emitUntilFrontier(ctx context.Context) error {
+	defer m.metrics.TotalOrderingBufferedFrontierEvents.Update(int64(m.rowsBuffered))
+
+	for {
+		if m.minHeap.Peek() == nil {
+			break
+		}
+
+		nextTs := m.minHeap.Peek().row.Updated
+		if nextTs.LessEq(m.frontier.Frontier()) || nextTs.Equal(m.frontier.BackfillTS()) {
+			next := heap.Pop(&m.minHeap).(RowHeapEntry)
+			m.orderedRows[next.source] = m.orderedRows[next.source][1:]
+
+			err := m.emitRow(ctx, next.row)
+			if err != nil {
+				return err
+			}
+
+			// The next earliest value for that aggregator can now be added to the minHeap
+			remainingRows := m.orderedRows[next.source]
+			if len(remainingRows) > 0 {
+				heap.Push(&m.minHeap, RowHeapEntry{source: next.source, row: remainingRows[0]})
+			}
+		} else {
+			break
+		}
+	}
+
+	return nil
+}
+
+func (m *orderedRowMerger) Flush(ctx context.Context) error {
+	if err := m.emitUntilFrontier(ctx); err != nil {
+		return err
+	}
+	return m.sink.Flush(ctx)
 }

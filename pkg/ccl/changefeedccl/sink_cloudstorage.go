@@ -321,6 +321,8 @@ type cloudStorageSink struct {
 	testingKnobs *TestingKnobs
 }
 
+var _ Sink = (*cloudStorageSink)(nil)
+
 type flushRequest struct {
 	file  *cloudStorageSinkFile
 	dest  string
@@ -488,11 +490,14 @@ func makeCloudStorageSink(
 	return s, nil
 }
 
+func (s *cloudStorageSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return s.topicNamer.Name(topic)
+}
+
 func (s *cloudStorageSink) getOrCreateFile(
-	topic TopicDescriptor, eventMVCC hlc.Timestamp,
+	topic sinkTopic, eventMVCC hlc.Timestamp,
 ) (*cloudStorageSinkFile, error) {
-	name, _ := s.topicNamer.Name(topic)
-	key := cloudStorageSinkKey{name, int64(topic.GetVersion())}
+	key := cloudStorageSinkKey{topic.name, int64(topic.version)}
 	if item := s.files.Get(key); item != nil {
 		f := item.(*cloudStorageSinkFile)
 		if eventMVCC.Less(f.oldestMVCC) {
@@ -520,8 +525,8 @@ func (s *cloudStorageSink) getOrCreateFile(
 // EmitRow implements the Sink interface.
 func (s *cloudStorageSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {

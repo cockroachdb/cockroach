@@ -38,6 +38,9 @@ type StatementOptions struct {
 // EnvelopeType configures the information in the changefeed events for a row.
 type EnvelopeType string
 
+// OrderingType configures the ordering guarantees for emitted rows.
+type OrderingType string
+
 // FormatType configures the encoding format.
 type FormatType string
 
@@ -97,6 +100,7 @@ const (
 	OptWebhookClientTimeout    = `webhook_client_timeout`
 	OptOnError                 = `on_error`
 	OptMetricsScope            = `metrics_label`
+	OptOrdering                = `ordering`
 	OptUnordered               = `unordered`
 	OptVirtualColumns          = `virtual_columns`
 	OptExecutionLocality       = `execution_locality`
@@ -145,6 +149,10 @@ const (
 	OptEnvelopeDeprecatedRow EnvelopeType = `deprecated_row`
 	OptEnvelopeWrapped       EnvelopeType = `wrapped`
 	OptEnvelopeBare          EnvelopeType = `bare`
+
+	OptOrderingTotal OrderingType = "total"
+	OptOrderingKey   OrderingType = "key"
+	OptOrderingNone  OrderingType = "none"
 
 	OptFormatJSON    FormatType = `json`
 	OptFormatAvro    FormatType = `avro`
@@ -342,6 +350,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptWebhookClientTimeout:               durationOption,
 	OptOnError:                            enum("pause", "fail"),
 	OptMetricsScope:                       stringOption,
+	OptOrdering:                           enum("total", "key").orEmptyMeans("key"),
 	OptUnordered:                          flagOption,
 	OptVirtualColumns:                     enum("omitted", "null"),
 	OptExecutionLocality:                  stringOption,
@@ -355,7 +364,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptMVCCTimestamps, OptDiff, OptSplitColumnFamilies,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptOnError,
-	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptUnordered, OptCustomKeyColumn,
+	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptOrdering, OptUnordered, OptCustomKeyColumn,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
 	OptExecutionLocality,
 )
@@ -946,6 +955,11 @@ func (s StatementOptions) IncludeVirtual() bool {
 // KeyOnly returns true if we are using the 'key_only' envelope.
 func (s StatementOptions) KeyOnly() bool {
 	return s.m[OptEnvelope] == string(OptEnvelopeKeyOnly)
+}
+
+// TotalOrdering returns true if we are using ordering='total'
+func (s StatementOptions) TotalOrdering() bool {
+	return s.m[OptOrdering] == string(OptOrderingTotal)
 }
 
 // GetMinCheckpointFrequency returns the minimum frequency with which checkpoints should be

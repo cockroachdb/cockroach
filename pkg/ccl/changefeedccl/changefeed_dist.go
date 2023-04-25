@@ -166,6 +166,7 @@ var changefeedResultTypes = []*types.T{
 	types.String, // topic
 	types.Bytes,  // key
 	types.Bytes,  // value
+	types.Bytes,  // ordered rows update
 }
 
 // fetchSpansForTable returns the set of spans for the specified table.

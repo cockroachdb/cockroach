@@ -222,7 +222,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			})
 		}
 
-		sinkURI = kafka.sinkURL(ct.ctx)
+		sinkURI = kafka.sinkURL(ct.ctx) + "?topic_prefix=cockroachdb_cdc_"
 	default:
 		ct.t.Fatalf("unknown sink provided: %s", args.sinkType)
 	}
@@ -1264,6 +1264,59 @@ func registerCDC(r registry.Registry) {
 				},
 			})
 
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+			})
+
+			ct.waitForWorkload()
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:            "cdc/kafka-flush-config",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "240m"})
+
+			ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"diff":              "",
+					"full_table_name":   "",
+					"updated":           "",
+					"kafka_sink_config": `'{"Flush": { "Messages": 1, "Frequency": "1s", "Bytes": 1000000}}'`,
+				},
+			})
+
+			ct.waitForWorkload()
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:            "cdc/total-ordering",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"ordering":     "'total'",
+					"initial_scan": "'yes'",
+					"updated":      "",
+					"resolved":     "'5s'",
+				},
+			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
 			})

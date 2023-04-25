@@ -393,7 +393,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	schemaTS hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	topic, err := c.topicForEvent(updatedRow.Metadata)
+	topicDesc, err := c.topicForEvent(updatedRow.Metadata)
 	if err != nil {
 		return err
 	}
@@ -416,7 +416,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	}
 
 	if c.topicNamer != nil {
-		topic, err := c.topicNamer.Name(topic)
+		topic, err := c.topicNamer.Name(topicDesc)
 		if err != nil {
 			return err
 		}
@@ -427,6 +427,15 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		if err := c.knobs.BeforeEmitRow(ctx); err != nil {
 			return err
 		}
+	}
+
+	topicName, err := c.sink.NameTopic(topicDesc)
+	if err != nil {
+		return err
+	}
+	topic := sinkTopic{
+		name:    topicName,
+		version: topicDesc.GetVersion(),
 	}
 
 	if c.encodingFormat == changefeedbase.OptFormatParquet {
@@ -453,7 +462,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
 
 	if err := c.sink.EmitRow(
-		ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
+		ctx, keyCopy, valueCopy, topic, schemaTS, updatedRow.MvccTimestamp, alloc,
 	); err != nil {
 		return err
 	}
@@ -476,7 +485,7 @@ func (c *kvEventToRowConsumer) encodeForParquet(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
 	prevRow cdcevent.Row,
-	topic TopicDescriptor,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {

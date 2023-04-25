@@ -628,10 +628,15 @@ func (s *deprecatedWebhookSink) sinkError() error {
 	}
 }
 
+// Webhook sink does not support topics.
+func (s *deprecatedWebhookSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return "", nil
+}
+
 func (s *deprecatedWebhookSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {

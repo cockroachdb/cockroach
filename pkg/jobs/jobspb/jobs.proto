@@ -1021,6 +1021,22 @@ message ResolvedSpans {
   Stats stats = 2 [(gogoproto.nullable) = false];
 }
 
+message OrderedRows {
+  int32 source_processor_id = 1 [(gogoproto.customname) = "SourceProcessorID"];
+
+  message Row {
+    bytes key = 1;
+    bytes value = 2;
+    string topic_name = 3;
+    uint64 topic_version = 4 [
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.DescriptorVersion"
+    ];
+    util.hlc.Timestamp updated = 5 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp mvcc = 6 [(gogoproto.nullable) = false];
+  }
+  repeated Row rows = 2 [(gogoproto.nullable) = false];
+}
+
 message ChangefeedProgress {
   reserved 1;
 

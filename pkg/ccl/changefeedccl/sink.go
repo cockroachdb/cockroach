@@ -14,6 +14,7 @@ import (
 	"math"
 	"net/url"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,8 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -86,11 +90,14 @@ type EventSink interface {
 	// error may be returned if a previously enqueued message has failed.
 	EmitRow(
 		ctx context.Context,
-		topic TopicDescriptor,
 		key, value []byte,
+		topic sinkTopic,
 		updated, mvcc hlc.Timestamp,
-		alloc kvevent.Alloc,
+		loc kvevent.Alloc,
 	) error
+
+	// NameTopic constructs the formatted topic string for a topic descriptor.
+	NameTopic(topic TopicDescriptor) (string, error)
 
 	// Flush blocks until every message enqueued by EmitRow
 	// has been acknowledged by the sink. If an error is
@@ -114,6 +121,15 @@ type ResolvedTimestampSink interface {
 // the topics that a changefeed will emit to.
 type SinkWithTopics interface {
 	Topics() []string
+}
+
+type sinkTopic struct {
+	name string
+
+	// Topics are often based on a descriptor like a table name, and different
+	// versions of the same table may be treated differently (see
+	// sink_cloudstorage).
+	version descpb.DescriptorVersion
 }
 
 func getEventSink(
@@ -240,7 +256,7 @@ func getSink(
 			if WebhookV2Enabled.Get(&serverCfg.Settings.SV) {
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 					return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
+						numSinkIOWorkers(serverCfg, opts), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
 				})
 			} else {
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
@@ -255,7 +271,7 @@ func getSink(
 			}
 			if PubsubV2Enabled.Get(&serverCfg.Settings.SV) {
 				return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered),
-					numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder, testingKnobs)
+					numSinkIOWorkers(serverCfg, opts), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder, testingKnobs)
 			} else {
 				return makeDeprecatedPubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered), metricsBuilder, testingKnobs)
 			}
@@ -399,6 +415,8 @@ type errorWrapperSink struct {
 	wrapped externalResource
 }
 
+var _ Sink = (*errorWrapperSink)(nil)
+
 func (s *errorWrapperSink) getConcreteType() sinkType {
 	return s.wrapped.getConcreteType()
 }
@@ -406,12 +424,12 @@ func (s *errorWrapperSink) getConcreteType() sinkType {
 // EmitRow implements Sink interface.
 func (s errorWrapperSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
+	if err := s.wrapped.(EventSink).EmitRow(ctx, key, value, topic, updated, mvcc, alloc); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -435,6 +453,11 @@ func (s errorWrapperSink) Flush(ctx context.Context) error {
 	return nil
 }
 
+// NameTopic implements Sink interface.
+func (s errorWrapperSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return s.wrapped.(EventSink).NameTopic(topic)
+}
+
 // Close implements Sink interface.
 func (s errorWrapperSink) Close() error {
 	if err := s.wrapped.Close(); err != nil {
@@ -448,7 +471,7 @@ func (s errorWrapperSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
 	prevRow cdcevent.Row,
-	topic TopicDescriptor,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
@@ -481,6 +504,25 @@ func (b *encDatumRowBuffer) Pop() rowenc.EncDatumRow {
 	return ret
 }
 
+type allocRow struct {
+	row   rowenc.EncDatumRow
+	alloc kvevent.Alloc
+}
+type encDatumAllocRowBuffer []allocRow
+
+func (b *encDatumAllocRowBuffer) IsEmpty() bool {
+	return b == nil || len(*b) == 0
+}
+func (b *encDatumAllocRowBuffer) Push(r rowenc.EncDatumRow, alloc kvevent.Alloc) {
+	*b = append(*b, allocRow{r, alloc})
+}
+func (b *encDatumAllocRowBuffer) Pop(ctx context.Context) rowenc.EncDatumRow {
+	ret := (*b)[0]
+	*b = (*b)[1:]
+	ret.alloc.Release(ctx)
+	return ret.row
+}
+
 type bufferSink struct {
 	buf     encDatumRowBuffer
 	alloc   tree.DatumAlloc
@@ -489,6 +531,8 @@ type bufferSink struct {
 	metrics metricsRecorder
 }
 
+var _ EventSink = (*bufferSink)(nil)
+
 func (s *bufferSink) getConcreteType() sinkType {
 	return sinkTypeSinklessBuffer
 }
@@ -496,8 +540,8 @@ func (s *bufferSink) getConcreteType() sinkType {
 // EmitRow implements the Sink interface.
 func (s *bufferSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
 ) error {
@@ -510,9 +554,10 @@ func (s *bufferSink) EmitRow(
 
 	s.buf.Push(rowenc.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
-		{Datum: s.getTopicDatum(topic)},
+		{Datum: s.alloc.NewDString(tree.DString(topic.name))},
 		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},   // key
 		{Datum: s.alloc.NewDBytes(tree.DBytes(value))}, // value
+		{Datum: tree.DNull}, // ordered rows
 	})
 	return nil
 }
@@ -537,6 +582,7 @@ func (s *bufferSink) EmitResolvedTimestamp(
 		{Datum: tree.DNull}, // topic
 		{Datum: tree.DNull}, // key
 		{Datum: s.alloc.NewDBytes(tree.DBytes(payload))}, // value
+		{Datum: tree.DNull}, // ordered rows
 	})
 	return nil
 }
@@ -558,15 +604,13 @@ func (s *bufferSink) Dial() error {
 	return nil
 }
 
-// TODO (zinger): Make this a tuple or array datum if it can be
-// done without breaking backwards compatibility.
-func (s *bufferSink) getTopicDatum(t TopicDescriptor) *tree.DString {
+func (s *bufferSink) NameTopic(t TopicDescriptor) (string, error) {
 	name, components := t.GetNameComponents()
 	if len(components) == 0 {
-		return s.alloc.NewDString(tree.DString(name))
+		return string(name), nil
 	}
 	strs := append([]string{string(name)}, components...)
-	return s.alloc.NewDString(tree.DString(strings.Join(strs, ".")))
+	return strings.Join(strs, "."), nil
 }
 
 type nullSink struct {
@@ -607,8 +651,8 @@ func (n *nullSink) pace(ctx context.Context) error {
 // EmitRow implements Sink interface.
 func (n *nullSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
 ) error {
@@ -621,6 +665,10 @@ func (n *nullSink) EmitRow(
 		log.Infof(ctx, "emitting row %s@%s", key, updated.String())
 	}
 	return nil
+}
+
+func (n *nullSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return "", nil
 }
 
 // EmitResolvedTimestamp implements Sink interface.
@@ -683,16 +731,22 @@ func (s *safeSink) Close() error {
 	return s.wrapped.Close()
 }
 
+func (s *safeSink) NameTopic(topic TopicDescriptor) (string, error) {
+	s.Lock()
+	defer s.Unlock()
+	return s.wrapped.NameTopic(topic)
+}
+
 func (s *safeSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	s.Lock()
 	defer s.Unlock()
-	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc)
+	return s.wrapped.EmitRow(ctx, key, value, topic, updated, mvcc, alloc)
 }
 
 func (s *safeSink) Flush(ctx context.Context) error {
@@ -714,7 +768,7 @@ type SinkWithEncoder interface {
 		ctx context.Context,
 		updatedRow cdcevent.Row,
 		prevRow cdcevent.Row,
-		topic TopicDescriptor,
+		topic sinkTopic,
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
 	) error
@@ -824,7 +878,11 @@ func (j *jsonMaxRetries) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func numSinkIOWorkers(cfg *execinfra.ServerConfig) int {
+func numSinkIOWorkers(cfg *execinfra.ServerConfig, opts changefeedbase.StatementOptions) int {
+	if opts.TotalOrdering() {
+		return 1
+	}
+
 	numWorkers := changefeedbase.SinkIOWorkers.Get(&cfg.Settings.SV)
 	if numWorkers > 0 {
 		return int(numWorkers)
@@ -900,4 +958,129 @@ func shouldFlushBatch(bytes int, messages int, config sinkBatchConfig) bool {
 func sinkSupportsConcurrentEmits(sink EventSink) bool {
 	_, ok := sink.(*batchingSink)
 	return ok
+}
+
+type orderedSinkRow struct {
+	alloc kvevent.Alloc
+	row   jobspb.OrderedRows_Row
+}
+
+// OrderedSinkRowSlice stores a list of rows and their allocations, implementing
+// sorting methods to sort in ascending order.
+type OrderedSinkRowSlice []orderedSinkRow
+
+func (p OrderedSinkRowSlice) Len() int           { return len(p) }
+func (p OrderedSinkRowSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p OrderedSinkRowSlice) Less(i, j int) bool { return p[i].row.Updated.Less(p[j].row.Updated) }
+
+// orderedSink collects rows in memory, and upon a call to Flush
+// sorts the rows and emits the sorted rows to the forwardingBuf
+type orderedSink struct {
+	processorID   int32
+	forwardingBuf encDatumAllocRowBuffer
+	unorderedBuf  OrderedSinkRowSlice
+	alloc         tree.DatumAlloc
+	metrics       *sliMetrics
+	frontier      *schemaChangeFrontier
+	wrapped       EventSink
+}
+
+var _ EventSink = (*orderedSink)(nil)
+
+func (s *orderedSink) getConcreteType() sinkType {
+	return s.wrapped.getConcreteType()
+}
+
+func (s *orderedSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return s.wrapped.NameTopic(topic)
+}
+
+// EmitRow implements the Sink interface.
+func (s *orderedSink) EmitRow(
+	ctx context.Context,
+	key, value []byte,
+	topic sinkTopic,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+	s.unorderedBuf = append(s.unorderedBuf, orderedSinkRow{
+		alloc: alloc,
+		row: jobspb.OrderedRows_Row{
+			Key:          key,
+			Value:        value,
+			Updated:      updated,
+			Mvcc:         mvcc,
+			TopicName:    topic.name,
+			TopicVersion: topic.version,
+		},
+	})
+	return nil
+}
+
+// Can't have the payload being sent through distsql being too large
+var maxOrderedRowsPayloadBytes = envutil.EnvOrDefaultInt(
+	"COCKROACH_CHANGEFEED_ORDERED_ROWS_PAYLOAD_BYTES", 1<<20, // 1 MiB
+)
+
+// Flush implements the Sink interface.
+func (s *orderedSink) Flush(ctx context.Context) error {
+	defer s.metrics.TotalOrderingBufferedAggEvents.Update(int64(len(s.unorderedBuf)))
+
+	if len(s.unorderedBuf) == 0 {
+		return nil
+	}
+	sort.Sort(s.unorderedBuf) // Orders from lowest to highest updated timestamp
+
+	// Until all messages have reached the frontier (the point where we know our
+	// sorted list isn't missing any events), forward messages to the coordinator
+	// node, and do so while sending payloads that aren't too large.
+	for {
+		var toRelease kvevent.Alloc
+		orderedUpdate := jobspb.OrderedRows{
+			Rows:              make([]jobspb.OrderedRows_Row, 0, len(s.unorderedBuf)),
+			SourceProcessorID: s.processorID,
+		}
+
+		rowBytes := 0
+		for _, r := range s.unorderedBuf {
+			pastByteLimit := rowBytes > 0 && rowBytes+r.row.Size() > maxOrderedRowsPayloadBytes
+			pastFrontierLimit := s.frontier.Frontier().Less(r.row.Updated) && !r.row.Updated.Equal(s.frontier.BackfillTS())
+			if pastByteLimit || pastFrontierLimit {
+				break
+			}
+			orderedUpdate.Rows = append(orderedUpdate.Rows, r.row)
+			rowBytes += r.row.Size()
+			toRelease.Merge(&r.alloc)
+		}
+		if len(orderedUpdate.Rows) == 0 {
+			break
+		}
+		s.unorderedBuf = s.unorderedBuf[len(orderedUpdate.Rows):]
+
+		updateBytes, err := protoutil.Marshal(&orderedUpdate)
+		if err != nil {
+			return err
+		}
+
+		datumRow := rowenc.EncDatumRow{
+			{Datum: tree.DNull}, // resolved span
+			{Datum: tree.DNull}, // topic
+			{Datum: tree.DNull}, // key
+			{Datum: tree.DNull}, // value
+			{Datum: s.alloc.NewDBytes(tree.DBytes(updateBytes))}, // ordered rows
+		}
+
+		s.forwardingBuf.Push(datumRow, toRelease)
+	}
+	return nil
+}
+
+// Close implements the Sink interface.
+func (s *orderedSink) Close() error {
+	return s.wrapped.Close()
+}
+
+// Dial implements the Sink interface.
+func (s *orderedSink) Dial() error {
+	return nil
 }

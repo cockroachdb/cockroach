@@ -181,26 +181,50 @@ func checkPerKeyOrdering(payloads []cdctest.TestFeedMessage) (bool, error) {
 	return true, nil
 }
 
+func checkTotalOrdering(payloads []cdctest.TestFeedMessage) (bool, error) {
+	lastTimestamp := 0.0
+	for _, msg := range payloads {
+		updatedTimestamp, err := extractUpdatedFromValue(msg.Value)
+		if err != nil {
+			return false, err
+		}
+		if updatedTimestamp < lastTimestamp {
+			return false, nil
+		}
+		lastTimestamp = updatedTimestamp
+	}
+	return true, nil
+}
+
 func assertPayloadsBase(
-	t testing.TB, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
+	t testing.TB,
+	f cdctest.TestFeed,
+	expected []string,
+	stripTs bool,
+	ordering changefeedbase.OrderingType,
 ) {
 	t.Helper()
 	timeout := assertPayloadsTimeout()
 	if len(expected) > 100 {
 		// Webhook sink is very slow; We have few tests that read 1000 messages.
 		timeout += time.Duration(math.Log(float64(len(expected)))) * time.Minute
+
 	}
 
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) (err error) {
-				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered)
+				return assertPayloadsBaseErr(ctx, f, expected, stripTs, ordering)
 			},
 		))
 }
 
 func assertPayloadsBaseErr(
-	ctx context.Context, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
+	ctx context.Context,
+	f cdctest.TestFeed,
+	expected []string,
+	stripTs bool,
+	ordering changefeedbase.OrderingType,
 ) error {
 	actual, err := readNextMessages(ctx, f, len(expected))
 	if err != nil {
@@ -212,13 +236,22 @@ func assertPayloadsBaseErr(
 		actualFormatted = append(actualFormatted, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value))
 	}
 
-	if perKeyOrdered {
+	if ordering == changefeedbase.OptOrderingKey {
 		ordered, err := checkPerKeyOrdering(actual)
 		if err != nil {
 			return err
 		}
 		if !ordered {
 			return errors.Newf("payloads violate CDC per-key ordering guarantees:\n  %s",
+				strings.Join(actualFormatted, "\n  "))
+		}
+	} else if ordering == changefeedbase.OptOrderingTotal {
+		ordered, err := checkTotalOrdering(actual)
+		if err != nil {
+			return err
+		}
+		if !ordered {
+			return errors.Newf("payloads violate total ordering guarantee:\n  %s",
 				strings.Join(actualFormatted, "\n  "))
 		}
 	}
@@ -232,8 +265,10 @@ func assertPayloadsBaseErr(
 		}
 	}
 
-	sort.Strings(expected)
-	sort.Strings(actualFormatted)
+	if ordering != changefeedbase.OptOrderingTotal {
+		sort.Strings(expected)
+		sort.Strings(actualFormatted)
+	}
 	if !reflect.DeepEqual(expected, actualFormatted) {
 		return errors.Newf("expected\n  %s\ngot\n  %s",
 			strings.Join(expected, "\n  "), strings.Join(actualFormatted, "\n  "))
@@ -266,19 +301,24 @@ func withTimeout(
 
 func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, false, false)
+	assertPayloadsBase(t, f, expected, false, changefeedbase.OptOrderingNone)
+}
+
+func assertPayloadsTotalOrdering(t testing.TB, f cdctest.TestFeed, expected []string) {
+	t.Helper()
+	assertPayloadsBase(t, f, expected, true, changefeedbase.OptOrderingTotal)
 }
 
 func assertPayloadsStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, true, false)
+	assertPayloadsBase(t, f, expected, true, changefeedbase.OptOrderingNone)
 }
 
 // assert that the messages received by the sink maintain per-key ordering guarantees. then,
 // strip the timestamp from the messages and compare them to the expected payloads.
 func assertPayloadsPerKeyOrderedStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, true, true)
+	assertPayloadsBase(t, f, expected, true, changefeedbase.OptOrderingKey)
 }
 
 func avroToJSON(t testing.TB, reg *cdctest.SchemaRegistry, avroBytes []byte) []byte {
