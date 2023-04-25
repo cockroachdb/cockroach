@@ -262,6 +262,35 @@ func TestChangefeedBasics(t *testing.T) {
 	// cloudStorageTest is a regression test for #36994.
 }
 
+func TestChangefeedTotalOrdering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH ordering='total'`)
+		for i := 0; i < 1000; i++ {
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+		}
+
+		actual, err := readNextMessages(context.Background(), foo, 1000)
+		require.NoError(t, err)
+		var actualFormatted []string
+		for _, m := range actual {
+			actualFormatted = append(actualFormatted, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value))
+		}
+
+		for _, m := range actualFormatted {
+			fmt.Printf("\x1b[34m %s \x1b[0m\n", m)
+		}
+
+		t.FailNow()
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
+}
+
 func TestChangefeedBasicQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

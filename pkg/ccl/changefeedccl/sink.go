@@ -11,9 +11,11 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/url"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -53,6 +56,7 @@ type sinkType int
 
 const (
 	sinkTypeSinklessBuffer sinkType = iota
+	sinkTypeOrdering
 	sinkTypeNull
 	sinkTypeKafka
 	sinkTypeWebhook
@@ -163,7 +167,8 @@ var WebhookV2Enabled = settings.RegisterBoolSetting(
 	"changefeed.new_webhook_sink_enabled",
 	"if enabled, this setting enables a new implementation of the webhook sink"+
 		" that allows for a much higher throughput",
-	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
+	// util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
+	false,
 )
 
 // PubsubV2Enabled determines whether or not the refactored Webhook sink
@@ -891,4 +896,103 @@ func shouldFlushBatch(bytes int, messages int, config sinkBatchConfig) bool {
 func sinkSupportsConcurrentEmits(sink EventSink) bool {
 	_, ok := sink.(*batchingSink)
 	return ok
+}
+
+type OrderedSinkRow struct {
+	alloc kvevent.Alloc
+	row   jobspb.OrderedRows_Row
+}
+
+type OrderedSinkRowSlice []OrderedSinkRow
+
+func (p OrderedSinkRowSlice) Len() int           { return len(p) }
+func (p OrderedSinkRowSlice) Less(i, j int) bool { return p[i].row.Mvcc.Less(p[j].row.Mvcc) }
+func (p OrderedSinkRowSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+
+type orderedSink struct {
+	processorID   int32
+	forwardingBuf encDatumRowBuffer
+	unorderedBuf  OrderedSinkRowSlice
+	alloc         tree.DatumAlloc
+	metrics       metricsRecorder
+}
+
+var _ EventSink = (*orderedSink)(nil)
+
+func (s *orderedSink) getConcreteType() sinkType {
+	return sinkTypeOrdering
+}
+
+// EmitRow implements the Sink interface.
+func (s *orderedSink) EmitRow(
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+	fmt.Printf("\n\x1b[33mAPPENDING TO UNORDERD BUF %s\x1b[0m\n", string(key))
+	s.unorderedBuf = append(s.unorderedBuf, OrderedSinkRow{
+		alloc: alloc,
+		row: jobspb.OrderedRows_Row{
+			Key:   key,
+			Value: value,
+			Mvcc:  mvcc,
+		},
+	})
+	return nil
+}
+
+// EmitResolvedTimestamp implements the Sink interface.
+func (s *orderedSink) EmitUpToResolved(
+	ctx context.Context, resolved hlc.Timestamp,
+) error {
+	fmt.Printf("\n\x1b[33mEMITTING UP TO RESOLVED (%+v)\x1b[0m\n", resolved)
+	sort.Sort(s.unorderedBuf)
+
+	orderedUpdate := jobspb.OrderedRows{
+		Rows:              make([]jobspb.OrderedRows_Row, 0, len(s.unorderedBuf)),
+		SourceProcessorID: s.processorID,
+	}
+
+	var toRelease kvevent.Alloc
+	defer toRelease.Release(ctx)
+
+	for _, r := range s.unorderedBuf {
+		if resolved.Less(r.row.Mvcc) {
+			break
+		}
+		orderedUpdate.Rows = append(orderedUpdate.Rows, r.row)
+		toRelease.Merge(&r.alloc)
+	}
+	s.unorderedBuf = s.unorderedBuf[len(orderedUpdate.Rows):]
+	fmt.Printf("\n\x1b[33m ORDERED UPDATE (%+v) \x1b[0m\n", orderedUpdate)
+
+	updateBytes, err := protoutil.Marshal(&orderedUpdate)
+	if err != nil {
+		return err
+	}
+	s.forwardingBuf.Push(rowenc.EncDatumRow{
+		{Datum: tree.DNull}, // resolved span
+		{Datum: tree.DNull}, // topic
+		{Datum: tree.DNull}, // key
+		{Datum: tree.DNull}, // value
+		{Datum: s.alloc.NewDBytes(tree.DBytes(updateBytes))}, // value
+	})
+	return nil
+}
+
+// Flush implements the Sink interface.
+func (s *orderedSink) Flush(_ context.Context) error {
+	return nil
+}
+
+// Close implements the Sink interface.
+func (s *orderedSink) Close() error {
+	return nil
+}
+
+// Dial implements the Sink interface.
+func (s *orderedSink) Dial() error {
+	return nil
 }

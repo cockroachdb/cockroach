@@ -9,6 +9,7 @@
 package changefeedccl
 
 import (
+	"container/heap"
 	"context"
 	"fmt"
 	"time"
@@ -47,9 +48,10 @@ import (
 type changeAggregator struct {
 	execinfra.ProcessorBase
 
-	flowCtx *execinfra.FlowCtx
-	spec    execinfrapb.ChangeAggregatorSpec
-	memAcc  mon.BoundAccount
+	flowCtx     *execinfra.FlowCtx
+	spec        execinfrapb.ChangeAggregatorSpec
+	memAcc      mon.BoundAccount
+	processorID int32
 
 	// cancel shuts down the processor, both the `Next()` flow and the kvfeed.
 	cancel func()
@@ -134,9 +136,10 @@ func newChangeAggregatorProcessor(
 ) (execinfra.Processor, error) {
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, "changeagg-mem")
 	ca := &changeAggregator{
-		flowCtx: flowCtx,
-		spec:    spec,
-		memAcc:  memMonitor.MakeBoundAccount(),
+		flowCtx:     flowCtx,
+		spec:        spec,
+		memAcc:      memMonitor.MakeBoundAccount(),
+		processorID: processorID,
 	}
 	if err := ca.Init(
 		ctx,
@@ -274,14 +277,24 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		}
 	}
 
-	ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), ca.spec.JobID, recorder)
-	if err != nil {
-		err = changefeedbase.MarkRetryableError(err)
-		// Early abort in the case that there is an error creating the sink.
-		ca.MoveToDraining(err)
-		ca.cancel()
-		return
+	if opts.TotalOrdering() {
+		fmt.Printf("\n\x1b[33mMAKING ORDERING SINK\x1b[0m\n")
+		sink := &orderedSink{
+			processorID: ca.processorID,
+			metrics:     recorder,
+		}
+		ca.changedRowBuf = &sink.forwardingBuf
+		ca.sink = sink
+	} else {
+		ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
+			ca.spec.User(), ca.spec.JobID, recorder)
+		if err != nil {
+			err = changefeedbase.MarkRetryableError(err)
+			// Early abort in the case that there is an error creating the sink.
+			ca.MoveToDraining(err)
+			ca.cancel()
+			return
+		}
 	}
 
 	// This is the correct point to set up certain hooks depending on the sink
@@ -624,12 +637,23 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 
 // flushFrontier flushes sink and emits resolved timestamp if needed.
 func (ca *changeAggregator) flushFrontier() error {
-	// Make sure to the sink before forwarding resolved spans,
+	// Make sure to flush the sink before forwarding resolved spans,
 	// otherwise, we could lose buffered messages and violate the
 	// at-least-once guarantee. This is also true for checkpointing the
 	// resolved spans in the job progress.
 	if err := ca.flushBufferedEvents(); err != nil {
 		return err
+	}
+
+	fmt.Printf("\n\x1b[31mFLUSH FRONTIER\x1b[0m\n")
+	if o, ok := ca.sink.(*safeSink).wrapped.(*errorWrapperSink).wrapped.(*orderedSink); ok {
+		fmt.Printf("\n\x1b[31mEMIT UP TO RESOLVED\x1b[0m\n")
+		err := o.EmitUpToResolved(ca.Ctx(), ca.frontier.Frontier())
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Printf("\n\x1b[31mNOT ORDERING SINK?? (%+v)\x1b[0m\n", ca.sink.getConcreteType())
 	}
 
 	// Iterate frontier spans and build a list of spans to emit.
@@ -667,6 +691,7 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 		rowenc.EncDatum{Datum: tree.DNull}, // topic
 		rowenc.EncDatum{Datum: tree.DNull}, // key
 		rowenc.EncDatum{Datum: tree.DNull}, // value
+		rowenc.EncDatum{Datum: tree.DNull}, // ordered rows
 	})
 	ca.metrics.ResolvedMessages.Inc(1)
 
@@ -700,6 +725,10 @@ type changeFrontier struct {
 	// input returns rows from one or more changeAggregator processors
 	input execinfra.RowSource
 
+	// orderedRows stores a map of processID -> sorted ascending list of pending
+	// rows to be emitted.  This is only used when we require total ordering.
+	orderedRows map[int32][]jobspb.OrderedRows_Row
+
 	// frontier contains the current resolved timestamp high-water for the tracked
 	// span set.
 	frontier *schemaChangeFrontier
@@ -707,7 +736,7 @@ type changeFrontier struct {
 	encoder Encoder
 	// sink is the Sink to write resolved timestamps to. Rows are never written
 	// by changeFrontier.
-	sink ResolvedTimestampSink
+	sink Sink
 	// freqEmitResolved, if >= 0, is a lower bound on the duration between
 	// resolved timestamp emits.
 	freqEmitResolved time.Duration
@@ -889,6 +918,7 @@ func newChangeFrontierProcessor(
 		input:         input,
 		frontier:      sf,
 		slowLogEveryN: log.Every(slowSpanMaxFrequency),
+		orderedRows:   make(map[int32][]jobspb.OrderedRows_Row),
 	}
 
 	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
@@ -981,7 +1011,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		return
 	}
 	cf.sliMetrics = sli
-	cf.sink, err = getResolvedTimestampSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
+	cf.sink, err = getAndDialSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
 		cf.spec.User(), cf.spec.JobID, sli)
 
 	if err != nil {
@@ -1134,7 +1164,18 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			break
 		}
 
-		if row[0].IsNull() {
+		if !row[0].IsNull() {
+			if err := cf.noteAggregatorProgress(row[0]); err != nil {
+				cf.MoveToDraining(err)
+				break
+			}
+		} else if !row[4].IsNull() {
+			// Ordered Rows
+			if err := cf.noteOrderedRows(row[4]); err != nil {
+				cf.MoveToDraining(err)
+				break
+			}
+		} else if row[0].IsNull() {
 			// In changefeeds with a sink, this will never happen. But in the
 			// core changefeed, which returns changed rows directly via pgwire,
 			// a row with a null resolved_span field is a changed row that needs
@@ -1142,13 +1183,83 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			cf.passthroughBuf.Push(row)
 			continue
 		}
-
-		if err := cf.noteAggregatorProgress(row[0]); err != nil {
-			cf.MoveToDraining(err)
-			break
-		}
 	}
 	return nil, cf.DrainHelper()
+}
+
+func (cf *changeFrontier) noteOrderedRows(d rowenc.EncDatum) error {
+	if err := d.EnsureDecoded(changefeedResultTypes[4], &cf.a); err != nil {
+		return err
+	}
+	raw, ok := d.Datum.(*tree.DBytes)
+	if !ok {
+		return errors.AssertionFailedf(`unexpected datum type %T: %s`, d.Datum, d.Datum)
+	}
+
+	var payload jobspb.OrderedRows
+	if err := protoutil.Unmarshal([]byte(*raw), &payload); err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err,
+			`unmarshalling aggregator progress update: %x`, raw)
+	}
+
+	cf.orderedRows[payload.SourceProcessorID] = append(cf.orderedRows[payload.SourceProcessorID], payload.Rows...)
+	return nil
+}
+
+type RowHeapEntry struct {
+	source int32
+	row    jobspb.OrderedRows_Row
+}
+
+type RowHeap []RowHeapEntry
+
+func (h RowHeap) Len() int           { return len(h) }
+func (h RowHeap) Less(i, j int) bool { return h[i].row.Mvcc.Less(h[j].row.Mvcc) }
+func (h RowHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+
+func (h *RowHeap) Push(x interface{}) {
+	*h = append(*h, x.(RowHeapEntry))
+}
+
+func (h *RowHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
+func (cf *changeFrontier) flushOrderedRows(ts hlc.Timestamp) error {
+	var rowHeap RowHeap
+	pendingQueues := 0
+	for id, msgs := range cf.orderedRows {
+		if len(msgs) > 0 && msgs[0].Mvcc.LessEq(ts) {
+			heap.Push(&rowHeap, RowHeapEntry{source: id, row: msgs[0]})
+			cf.orderedRows[id] = msgs[1:]
+			if len(cf.orderedRows[id]) > 0 {
+				pendingQueues += 1
+			}
+		}
+	}
+	fmt.Printf("\n\x1b[32m HEAP: (%+v)\x1b[0m\n", rowHeap)
+
+	for len(rowHeap) > 0 {
+		next := heap.Pop(&rowHeap).(RowHeapEntry)
+		fmt.Printf("\n\x1b[32m EMITTING ROW %s\x1b[0m\n", string(next.row.Key))
+		err := cf.sink.EmitRow(cf.Ctx(), nil, next.row.Key, next.row.Value, hlc.Timestamp{}, next.row.Mvcc, kvevent.Alloc{})
+		if err != nil {
+			return err
+		}
+
+		if len(cf.orderedRows[next.source]) > 0 {
+			heap.Push(&rowHeap, RowHeapEntry{source: next.source, row: cf.orderedRows[next.source][0]})
+			cf.orderedRows[next.source] = cf.orderedRows[next.source][1:]
+		} else {
+			pendingQueues--
+		}
+	}
+
+	return cf.sink.Flush(cf.Ctx())
 }
 
 func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
@@ -1197,6 +1308,13 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	}
 
 	cf.maybeLogBehindSpan(frontierChanged)
+
+	if frontierChanged && cf.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal) {
+		fmt.Printf("\n\x1b[32mFLUSHING ORDERED ROWS (%+v)\x1b[0m\n", cf.orderedRows)
+		if err := cf.flushOrderedRows(cf.frontier.Frontier()); err != nil {
+			return err
+		}
+	}
 
 	// If frontier changed, we emit resolved timestamp.
 	emitResolved := frontierChanged

@@ -1016,6 +1016,18 @@ message ResolvedSpans {
   Stats stats = 2 [(gogoproto.nullable) = false];
 }
 
+message OrderedRows {
+  int32 source_processor_id = 1 [(gogoproto.customname) = "SourceProcessorID"];
+
+  message Row {
+    bytes key = 1;
+    bytes value = 2;
+    bytes topic = 3;
+    util.hlc.Timestamp mvcc = 4 [(gogoproto.nullable) = false];
+  }
+  repeated Row rows = 2 [(gogoproto.nullable) = false];
+}
+
 message ChangefeedProgress {
   reserved 1;
 
