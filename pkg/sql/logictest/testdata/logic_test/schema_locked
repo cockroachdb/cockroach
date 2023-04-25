@@ -1,0 +1,117 @@
+# "schema_locked" can only be set/reset when the cluster version is at least 23.1
+# LogicTest: !local-mixed-22.2-23.1
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY) WITH (schema_locked = t);
+
+query TT
+show create table t
+----
+t  CREATE TABLE public.t (
+     i INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (i ASC)
+   ) WITH (schema_locked = true)
+
+statement ok
+ALTER TABLE t RESET (schema_locked);
+
+query TT
+show create table t
+----
+t  CREATE TABLE public.t (
+     i INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (i ASC)
+   )
+
+statement ok
+ALTER TABLE t SET (schema_locked = true);
+
+query TT
+show create table t
+----
+t  CREATE TABLE public.t (
+     i INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (i ASC)
+   ) WITH (schema_locked = true)
+
+statement ok
+DROP TABLE t;
+
+# This subtest ensures storage parameter "schema_locked" can only be set/reset
+# in a single-statement implicit transaction.
+subtest set_reset_in_single_stmt_implicit_txn
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY) WITH (schema_locked = t);
+
+statement error pq: "schema_locked" can only be set/reset on its own without other parameters in a single-statement implicit transaction.
+ALTER TABLE t SET (schema_locked=f, exclude_data_from_backup=t);
+
+statement error pq: "schema_locked" can only be set/reset on its own without other parameters in a single-statement implicit transaction.
+ALTER TABLE t RESET (exclude_data_from_backup, schema_locked);
+
+statement error pq: "schema_locked" can only be set/reset on its own without other parameters in a single-statement implicit transaction.
+ALTER TABLE t SET (schema_locked=f); CREATE TABLE t2 (i INT PRIMARY KEY);
+
+statement ok
+BEGIN;
+
+statement error pq: "schema_locked" can only be set/reset on its own without other parameters in a single-statement implicit transaction.
+ALTER TABLE t SET (schema_locked=f);
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP TABLE t
+
+# This subtest ensures schema changes are disallowed if the table is schema locked.
+#
+# N.B. We do allow certain schema changes (e.g. GRANT, COMMENT) even when the
+# schema is locked.
+subtest disallow_schema_changes_when_schema_is_locked
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY, j INT, INDEX idx (j)) WITH (schema_locked = t);
+
+statement ok
+INSERT INTO t SELECT i, i+1 FROM generate_series(1,10) AS tmp(i);
+
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+ALTER TABLE t ADD COLUMN k INT DEFAULT 30;
+
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+ALTER TABLE t DROP COLUMN j;
+
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+ALTER TABLE t RENAME TO t2;
+
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+ALTER TABLE t RENAME COLUMN j TO j2;
+
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+ALTER INDEX idx RENAME TO idx2;
+
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+ALTER INDEX idx INVISIBLE;
+
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+DROP INDEX idx;
+
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+CREATE INDEX idx2 ON t(j);
+
+statement ok
+GRANT DELETE ON TABLE t TO testuser WITH GRANT OPTION;
+
+statement ok
+COMMENT ON TABLE t IS 't is a table';
+COMMENT ON INDEX t@idx IS 'idx is an index';
+COMMENT ON COLUMN t.i IS 'i is a column';
+
+statement ok
+DROP TABLE t;
+
+
+
+

@@ -373,6 +373,9 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	if tbl.IsPhysicalTable() {
 		w.ev(scpb.Status_PUBLIC, &scpb.TableData{TableID: tbl.GetID(), DatabaseID: tbl.GetParentID()})
 	}
+	if tbl.IsSchemaLocked() {
+		w.ev(scpb.Status_PUBLIC, &scpb.TableSchemaLocked{TableID: tbl.GetID()})
+	}
 }
 
 func (w *walkCtx) walkLocality(tbl catalog.TableDescriptor, l *catpb.LocalityConfig) {

@@ -48,6 +48,12 @@ func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode,
 	if err != nil {
 		return nil, err
 	}
+
+	// Disallow schema changes if this table's schema is locked.
+	if err := checkTableSchemaUnlocked(tableDesc); err != nil {
+		return nil, err
+	}
+
 	return &alterIndexNode{n: n, tableDesc: tableDesc, index: index}, nil
 }
 

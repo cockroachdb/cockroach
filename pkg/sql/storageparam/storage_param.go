@@ -15,6 +15,7 @@ package storageparam
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -25,12 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // Setter applies a storage parameter to an underlying item.
 type Setter interface {
 	// Set is called during CREATE [TABLE | INDEX] ... WITH (...) or
-	// ALTER [TABLE | INDEX] ... WITH (...).
+	// ALTER [TABLE | INDEX] ... SET (...).
 	Set(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
 	// Reset is called during ALTER [TABLE | INDEX] ... RESET (...)
 	Reset(ctx context.Context, evalCtx *eval.Context, key string) error
@@ -49,6 +51,9 @@ func Set(
 	params tree.StorageParams,
 	setter Setter,
 ) error {
+	if err := storageParamPreChecks(ctx, evalCtx, params, nil /* resetParams */); err != nil {
+		return err
+	}
 	for _, sp := range params {
 		key := string(sp.Key)
 		if sp.Value == nil {
@@ -85,6 +90,9 @@ func Set(
 func Reset(
 	ctx context.Context, evalCtx *eval.Context, params tree.NameList, paramObserver Setter,
 ) error {
+	if err := storageParamPreChecks(ctx, evalCtx, nil /* setParam */, params); err != nil {
+		return err
+	}
 	for _, p := range params {
 		telemetry.Inc(sqltelemetry.ResetTableStorageParameter(string(p)))
 		if err := paramObserver.Reset(ctx, evalCtx, string(p)); err != nil {
@@ -109,6 +117,48 @@ func SetFillFactor(ctx context.Context, evalCtx *eval.Context, key string, datum
 			ctx,
 			pgnotice.Newf("storage parameter %q is ignored", key),
 		)
+	}
+	return nil
+}
+
+// storageParamPreChecks is where we specify pre-conditions for setting/resetting
+// storage parameters `param`.
+func storageParamPreChecks(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	setParams tree.StorageParams,
+	resetParams tree.NameList,
+) error {
+	if setParams != nil && resetParams != nil {
+		return errors.AssertionFailedf("only one of setParams and resetParams should be non-nil.")
+	}
+
+	var keys []string
+	for _, param := range setParams {
+		keys = append(keys, string(param.Key))
+	}
+	for _, param := range resetParams {
+		keys = append(keys, string(param))
+	}
+
+	for _, key := range keys {
+		if key == `schema_locked` {
+			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1) {
+				return pgerror.Newf(pgcode.FeatureNotSupported, "cannot set/reset "+
+					"storage parameter %q until the cluster version is at least 23.1", key)
+			}
+			// We only allow setting/resetting `schema_locked` storage parameter in
+			// single-statement implicit transaction with no other storage params.
+			// This is an over-constraining but simple way to ensure that if we are
+			// setting or resetting this bit in the descriptor, this is the ONLY
+			// change we make to the descriptor in the transaction, so we can uphold
+			// the "one-version invariant" as discussed further in RFC
+			// https://github.com/ajwerner/cockroach/blob/ajwerner/low-latency-rfc-take-3/docs/RFCS/20230328_low_latency_changefeeds.md
+			if len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt {
+				return pgerror.Newf(pgcode.InvalidParameterValue, "%q can only be set/reset on "+
+					"its own without other parameters in a single-statement implicit transaction.", key)
+			}
+		}
 	}
 	return nil
 }
