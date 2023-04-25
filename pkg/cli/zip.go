@@ -142,7 +142,7 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 
-	timeout := 10 * time.Second
+	timeout := 60 * time.Second
 	if cliCtx.cmdTimeout != 0 {
 		timeout = cliCtx.cmdTimeout
 	}
