@@ -1205,20 +1205,37 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 }
 
 func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
+	if err := params.p.alterDatabaseSurvivalGoal(
+		params.ctx, n.desc, n.n.SurvivalGoal, tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	if n.desc.GetID() == keys.SystemDatabaseID {
+		return nil
+	}
+	return params.p.maybeUpdateSystemDBSurvivalGoal(params.ctx)
+}
+
+// alterDatabaseSurvivalGoal modifies a multi-region database's survival goal,
+// it could potentially cause a change to the system database's survival goal.
+func (p *planner) alterDatabaseSurvivalGoal(
+	ctx context.Context, db *dbdesc.Mutable, targetSurvivalGoal tree.SurvivalGoal, jobDesc string,
+) error {
 	// If the database is not a multi-region database, the survival goal cannot be changed.
-	if !n.desc.IsMultiRegion() {
+	if !db.IsMultiRegion() {
 		return errors.WithHintf(
 			pgerror.New(pgcode.InvalidName,
 				"database must have associated regions before a survival goal can be set",
 			),
 			"you must first add a primary region to the database using "+
 				"ALTER DATABASE %s PRIMARY REGION <region_name>",
-			n.n.Name.String(),
+			db.GetName(),
 		)
 	}
 
-	if n.n.SurvivalGoal == tree.SurvivalGoalRegionFailure &&
-		n.desc.RegionConfig.Placement == descpb.DataPlacement_RESTRICTED {
+	if targetSurvivalGoal == tree.SurvivalGoalRegionFailure &&
+		db.RegionConfig.Placement == descpb.DataPlacement_RESTRICTED {
 		return errors.WithDetailf(
 			pgerror.New(pgcode.InvalidParameterValue,
 				"a region-survivable database cannot also have a restricted placement policy"),
@@ -1226,8 +1243,8 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		)
 	}
 
-	if n.n.SurvivalGoal == tree.SurvivalGoalRegionFailure {
-		superRegions, err := params.p.getSuperRegionsForDatabase(params.ctx, n.desc)
+	if targetSurvivalGoal == tree.SurvivalGoalRegionFailure {
+		superRegions, err := p.getSuperRegionsForDatabase(ctx, db)
 		if err != nil {
 			return err
 		}
@@ -1238,67 +1255,129 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
-		params.ctx,
-		n.desc,
+	if err := p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
+		ctx,
+		db,
 	); err != nil {
 		return err
 	}
 
 	telemetry.Inc(
 		sqltelemetry.AlterDatabaseSurvivalGoalCounter(
-			n.n.SurvivalGoal.TelemetryName(),
+			targetSurvivalGoal.TelemetryName(),
 		),
 	)
 
 	// Update the survival goal in the database descriptor
-	survivalGoal, err := TranslateSurvivalGoal(n.n.SurvivalGoal)
+	survivalGoal, err := TranslateSurvivalGoal(targetSurvivalGoal)
 	if err != nil {
 		return err
 	}
-	n.desc.RegionConfig.SurvivalGoal = survivalGoal
+	db.RegionConfig.SurvivalGoal = survivalGoal
 
-	if err := params.p.writeNonDropDatabaseChange(
-		params.ctx,
-		n.desc,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
-	); err != nil {
+	if err := p.writeNonDropDatabaseChange(ctx, db, jobDesc); err != nil {
 		return err
 	}
 
-	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, db.ID, p.Descriptors())
 	if err != nil {
 		return err
 	}
 
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
-		params.ctx,
-		n.desc.ID,
+		ctx,
+		db.ID,
 		regionConfig,
-		params.p.InternalSQLTxn(),
-		params.p.execCfg,
+		p.InternalSQLTxn(),
+		p.execCfg,
 		true, /* validateLocalities */
-		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
 
 	// Update all REGIONAL BY TABLE tables' zone configurations. This is required as replica
 	// placement for REGIONAL BY TABLE tables is dependant on the survival goal.
-	if err := params.p.refreshZoneConfigsForTables(params.ctx, n.desc); err != nil {
+	if err := p.refreshZoneConfigsForTables(ctx, db); err != nil {
 		return err
 	}
 
 	// Log Alter Database Survival Goal event. This is an auditable log event and
 	// is recorded in the same transaction as the database descriptor, and zone
 	// configuration updates.
-	return params.p.logEvent(params.ctx,
-		n.desc.GetID(),
+	return p.logEvent(ctx,
+		db.GetID(),
 		&eventpb.AlterDatabaseSurvivalGoal{
-			DatabaseName: n.desc.GetName(),
+			DatabaseName: db.GetName(),
 			SurvivalGoal: survivalGoal.String(),
 		},
+	)
+}
+
+// maybeUpdateSystemDBSurvivalGoal updates the survival goal of system database
+// to the max survival goal of all non-system databases, which means that the
+// survival goal could be either upgraded or downgraded.
+func (p *planner) maybeUpdateSystemDBSurvivalGoal(ctx context.Context) error {
+	sysDB, err := p.Descriptors().MutableByID(p.Txn()).Database(ctx, keys.SystemDatabaseID)
+	if err != nil {
+		return err
+	}
+
+	if !sysDB.IsMultiRegion() {
+		return nil
+	}
+
+	var maxSurvivalGoal descpb.SurvivalGoal
+	maybeUpdateMaxGoal := func(db catalog.DatabaseDescriptor) {
+		// Skip if it's a system db.
+		if db.GetID() == keys.SystemDatabaseID {
+			return
+		}
+		if !db.IsMultiRegion() {
+			return
+		}
+		curGoal := db.GetRegionConfig().SurvivalGoal
+		if curGoal > maxSurvivalGoal {
+			maxSurvivalGoal = curGoal
+		}
+	}
+
+	dbs, err := p.Descriptors().GetAllDatabases(ctx, p.Txn())
+	if err != nil {
+		return err
+	}
+
+	if err := dbs.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		db, ok := desc.(catalog.DatabaseDescriptor)
+		if !ok {
+			return errors.WithDetailf(
+				errors.AssertionFailedf(
+					"got unexpected non-database %T while iterating databases",
+					desc,
+				),
+				"unexpected descriptor: %v", desc)
+		}
+		maybeUpdateMaxGoal(db)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	cfg := sysDB.GetRegionConfig()
+	if cfg.SurvivalGoal == maxSurvivalGoal {
+		return nil
+	}
+
+	targetSurvivalGoal, err := TranslateProtoSurvivalGoal(maxSurvivalGoal)
+	if err != nil {
+		return err
+	}
+	return p.alterDatabaseSurvivalGoal(
+		ctx,
+		sysDB,
+		targetSurvivalGoal,
+		"update system database survival goal to max non-system db survival goal", /* jobDesc */
 	)
 }
 
