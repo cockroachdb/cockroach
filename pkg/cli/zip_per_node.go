@@ -524,28 +524,30 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 	}
 
-	var ranges *serverpb.RangesResponse
-	s = nodePrinter.start("requesting ranges")
-	if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
-		var err error
-		ranges, err = zc.status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id})
-		return err
-	}); requestErr != nil {
-		if err := zc.z.createError(s, prefix+"/ranges", requestErr); err != nil {
+	if zipCtx.includeRangeInfo {
+		var ranges *serverpb.RangesResponse
+		s = nodePrinter.start("requesting ranges")
+		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
+			var err error
+			ranges, err = zc.status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id})
 			return err
-		}
-	} else {
-		s.done()
-		nodePrinter.info("%d ranges found", len(ranges.Ranges))
-		sort.Slice(ranges.Ranges, func(i, j int) bool {
-			return ranges.Ranges[i].State.Desc.RangeID <
-				ranges.Ranges[j].State.Desc.RangeID
-		})
-		for _, r := range ranges.Ranges {
-			s := nodePrinter.start("writing range %d", r.State.Desc.RangeID)
-			name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
-			if err := zc.z.createJSON(s, name+".json", r); err != nil {
+		}); requestErr != nil {
+			if err := zc.z.createError(s, prefix+"/ranges", requestErr); err != nil {
 				return err
+			}
+		} else {
+			s.done()
+			nodePrinter.info("%d ranges found", len(ranges.Ranges))
+			sort.Slice(ranges.Ranges, func(i, j int) bool {
+				return ranges.Ranges[i].State.Desc.RangeID <
+					ranges.Ranges[j].State.Desc.RangeID
+			})
+			for _, r := range ranges.Ranges {
+				s := nodePrinter.start("writing range %d", r.State.Desc.RangeID)
+				name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
+				if err := zc.z.createJSON(s, name+".json", r); err != nil {
+					return err
+				}
 			}
 		}
 	}
