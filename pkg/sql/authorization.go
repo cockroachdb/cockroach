@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -887,29 +886,37 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context)
 	hasAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
 		return hasAdmin, err
+	} else if hasAdmin {
+		return true, nil
 	}
-	if !hasAdmin {
-		hasView := false
-		hasViewRedacted := false
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-			hasView = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
-			hasViewRedacted = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED) == nil
-		}
-		if !hasView && !hasViewRedacted {
-			hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
-			if err != nil {
-				return hasView, err
-			}
-			hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
-			if err != nil {
-				return hasViewRedacted, err
-			}
-			if !hasView && !hasViewRedacted {
-				return false, nil
-			}
-		}
+	hasView := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
+	if hasView {
+		return true, nil
 	}
+	if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY); err != nil {
+		return false, err
+	} else if hasView {
+		return true, nil
+	}
+	if hasViewRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+		return false, err
+	} else if hasViewRedacted {
+		return true, nil
+	}
+	return false, nil
+}
 
+func (p *planner) HasViewActivityRedacted(ctx context.Context) (bool, error) {
+	hasViewRedacted := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED) == nil
+	if !hasViewRedacted {
+		hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
+		if err != nil {
+			return true, err
+		}
+		if !hasViewRedacted {
+			return false, nil
+		}
+	}
 	return true, nil
 }
 
