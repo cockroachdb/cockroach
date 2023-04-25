@@ -55,7 +55,8 @@ type pebbleBatch struct {
 	// scratch space for wrappedIntentWriter.
 	scratch []byte
 
-	statsReporter                    statsReporter
+	iterStatsReporter                iterStatsReporter
+	batchStatsReporter               batchStatsReporter
 	settings                         *cluster.Settings
 	shouldWriteLocalTimestamps       bool
 	shouldWriteLocalTimestampsCached bool
@@ -69,13 +70,18 @@ var pebbleBatchPool = sync.Pool{
 	},
 }
 
+type batchStatsReporter interface {
+	aggregateBatchCommitStats(stats BatchCommitStats)
+}
+
 // Instantiates a new pebbleBatch.
 func newPebbleBatch(
 	db *pebble.DB,
 	batch *pebble.Batch,
 	writeOnly bool,
 	settings *cluster.Settings,
-	statsReporter statsReporter,
+	iterStatsReporter iterStatsReporter,
+	batchStatsReporter batchStatsReporter,
 ) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
 	*pb = pebbleBatch{
@@ -102,9 +108,10 @@ func newPebbleBatch(
 			upperBoundBuf: pb.normalEngineIter.upperBoundBuf,
 			reusable:      true,
 		},
-		writeOnly:     writeOnly,
-		statsReporter: statsReporter,
-		settings:      settings,
+		writeOnly:          writeOnly,
+		iterStatsReporter:  iterStatsReporter,
+		batchStatsReporter: batchStatsReporter,
+		settings:           settings,
 	}
 	pb.wrappedIntentWriter = wrapIntentWriter(pb)
 	return pb
@@ -185,14 +192,14 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	if iter.inuse {
 		return newPebbleIteratorByCloning(CloneContext{
 			rawIter:       p.iter,
-			statsReporter: p.statsReporter,
+			statsReporter: p.iterStatsReporter,
 		}, opts, StandardDurability)
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, StandardDurability)
 	} else {
-		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability, p.statsReporter)
+		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability, p.iterStatsReporter)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -221,14 +228,14 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.inuse {
 		return newPebbleIteratorByCloning(CloneContext{
 			rawIter:       p.iter,
-			statsReporter: p.statsReporter,
+			statsReporter: p.iterStatsReporter,
 		}, opts, StandardDurability)
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, StandardDurability)
 	} else {
-		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability, p.statsReporter)
+		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability, p.iterStatsReporter)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -557,6 +564,8 @@ func (p *pebbleBatch) Commit(sync bool) error {
 		// or don't have after they receive an error from this method.
 		panic(err)
 	}
+	p.batchStatsReporter.aggregateBatchCommitStats(
+		BatchCommitStats{p.batch.CommitStats()})
 	return err
 }
 
@@ -595,6 +604,9 @@ func (p *pebbleBatch) SyncWait() error {
 		// or don't have after they receive an error from this method.
 		panic(err)
 	}
+	p.batchStatsReporter.aggregateBatchCommitStats(
+		BatchCommitStats{p.batch.CommitStats()})
+
 	return err
 }
 
@@ -622,6 +634,11 @@ func (p *pebbleBatch) Repr() []byte {
 	reprCopy := make([]byte, len(repr))
 	copy(reprCopy, repr)
 	return reprCopy
+}
+
+// CommitStats implements the Batch interface.
+func (p *pebbleBatch) CommitStats() BatchCommitStats {
+	return BatchCommitStats{BatchCommitStats: p.batch.CommitStats()}
 }
 
 // ShouldWriteLocalTimestamps implements the Writer interface.
