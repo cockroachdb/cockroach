@@ -15,7 +15,9 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -26,10 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -1111,4 +1115,114 @@ func TestParquetEncoder(t *testing.T) {
 		}
 	}
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}
+
+func TestJsonRountrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rng, _ := randutil.NewTestRand()
+
+	isFloatOrDecimal := func(typ *types.T) bool {
+		return typ == types.Float4 || typ == types.Float || typ == types.Decimal
+	}
+
+	type test struct {
+		name   string
+		schema string
+		datum  tree.Datum
+	}
+	tests := make([]test, 0)
+
+	typesToTest := make([]*types.T, 0, 256)
+
+	// Start with a set of all scalar types.
+	for _, typ := range randgen.SeedTypes {
+		switch typ.Family() {
+		case types.ArrayFamily, types.TupleFamily:
+		case types.VoidFamily, types.AnyFamily:
+		default:
+			typesToTest = append(typesToTest, typ)
+		}
+	}
+
+	// Add arrays of all the scalar types which are supported.
+	arrayTypesToTest := make([]*types.T, 0, 256)
+	for oid := range types.ArrayOids {
+		arrayTyp := types.OidToType[oid]
+		for _, typ := range typesToTest {
+			switch typ {
+			case types.Jsonb:
+				// Unsupported by sql/catalog/colinfo
+			case types.TSQuery, types.TSVector:
+				// Unsupported by pkg/sql/parser
+			default:
+				if arrayTyp.InternalType.ArrayContents == typ {
+					arrayTypesToTest = append(arrayTypesToTest, arrayTyp)
+				}
+			}
+		}
+	}
+	typesToTest = append(typesToTest, arrayTypesToTest...)
+
+	// Add enums.
+	testEnum := createEnum(
+		tree.EnumValueList{`open`, `closed`},
+		tree.MakeUnqualifiedTypeName(`switch`),
+	)
+	typesToTest = append(typesToTest, testEnum)
+
+	// Generate a test for each type with a random datum of that type.
+	for _, typ := range typesToTest {
+		datum := randgen.RandDatum(rng, typ, true /* nullOk */)
+
+		// name can be "char" (with quotes), so needs to be escaped.
+		escapedName := fmt.Sprintf("%s_table", strings.Replace(typ.String(), "\"", "", -1))
+
+		randTypeTest := test{
+			name:   escapedName,
+			schema: fmt.Sprintf(`(a INT PRIMARY KEY, b %s)`, typ.SQLString()),
+			datum:  datum,
+		}
+		tests = append(tests, randTypeTest)
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tableDesc, err := parseTableDesc(
+				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.schema))
+			require.NoError(t, err)
+
+			dRow := rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(1)}, rowenc.EncDatum{Datum: test.datum}}
+			cdcRow := cdcevent.TestingMakeEventRow(tableDesc, 0, dRow, false)
+
+			encoder, err := makeJSONEncoder(jsonEncoderOptions{})
+			require.NoError(t, err)
+
+			// Encode the value to a string and parse it. Assert that the parsed json matches the
+			// datum as JSON.
+			bytes, err := encoder.EncodeValue(context.Background(), eventContext{}, cdcRow, cdcevent.Row{})
+			require.NoError(t, err)
+
+			j, err := json.ParseJSON(string(bytes))
+			require.NoError(t, err)
+
+			d, err := j.FetchValKey("b")
+			require.NoError(t, err)
+
+			j, err = tree.AsJSON(test.datum, sessiondatapb.DataConversionConfig{}, time.UTC)
+			require.NoError(t, err)
+
+			// Using JSON.Compare for Infinity or NaN equality does not work well.
+			// In this case, we can just compare strings.
+			if isFloatOrDecimal(test.datum.ResolvedType()) {
+				require.Equal(t, d.String(), j.String())
+			} else if dArr, ok := tree.AsDArray(test.datum); ok && isFloatOrDecimal(dArr.ParamTyp) {
+				require.Equal(t, d.String(), j.String())
+			} else {
+				cmp, err := d.Compare(j)
+				require.NoError(t, err)
+				require.Equal(t, cmp, 0)
+			}
+		})
+	}
 }
