@@ -26,7 +26,7 @@ import RangeSelect from "./rangeSelect";
 import { timeFormat as customMenuTimeFormat } from "../dateRangeMenu";
 import { assert } from "chai";
 import { TimeWindow, ArrowDirection, TimeScale } from "./timeScaleTypes";
-import { render } from "@testing-library/react";
+import { getAllByText, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 /**
@@ -188,7 +188,7 @@ describe("<TimeScaleDropdown> component", function () {
 
   it("opens directly to the custom menu when a custom time interval is currently selected", () => {
     const mockSetTimeScale = jest.fn();
-    const { getByText, getByRole } = render(
+    const { getAllByText, getByText, getByRole } = render(
       <MemoryRouter>
         <TimeScaleDropdownWrapper
           currentScale={new timescale.TimeScaleState().scale}
@@ -216,8 +216,8 @@ describe("<TimeScaleDropdown> component", function () {
       "10m",
     );
     userEvent.click(getByText(expectedText[0]));
-    getByText("Start (UTC)");
-    getByText("End (UTC)");
+    getAllByText("Start (UTC)");
+    getAllByText("End (UTC)");
 
     // Clicking "Preset time intervals" should bring the dropdown back to the preset options.
     userEvent.click(getByText("Preset time intervals"));
@@ -290,6 +290,7 @@ describe("TimeScaleDropdown functions", function () {
       const title = formatRangeSelectSelected(
         currentWindow,
         state.currentScale,
+        "UTC",
       );
       assert.deepEqual(title, {
         key: "Past 10 Minutes",
@@ -300,7 +301,11 @@ describe("TimeScaleDropdown functions", function () {
 
     it("returns custom Title with Time part only for current day", () => {
       const currentScale = { ...state.currentScale, key: "Custom" };
-      const title = formatRangeSelectSelected(currentWindow, currentScale);
+      const title = formatRangeSelectSelected(
+        currentWindow,
+        currentScale,
+        "UTC",
+      );
       const timeStart = moment
         .utc(currentWindow.start)
         .format(dropdownTimeFormat);
@@ -335,7 +340,7 @@ describe("TimeScaleDropdown functions", function () {
         ),
         key: "Custom",
       };
-      const title = formatRangeSelectSelected(window, currentScale);
+      const title = formatRangeSelectSelected(window, currentScale, "UTC");
       const timeStart = moment.utc(window.start).format(dropdownTimeFormat);
       const timeEnd = moment.utc(window.end).format(dropdownTimeFormat);
       const dateStart = moment.utc(window.start).format(dropdownDateFormat);

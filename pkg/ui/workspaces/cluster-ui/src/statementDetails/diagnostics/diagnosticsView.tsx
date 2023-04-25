@@ -10,7 +10,6 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
-import moment from "moment-timezone";
 import classnames from "classnames/bind";
 import { Button, Icon } from "@cockroachlabs/ui-components";
 import { Button as CancelButton } from "src/button";
@@ -24,13 +23,15 @@ import { filterByTimeScale, getDiagnosticsStatus } from "./diagnosticsUtils";
 import { EmptyTable } from "src/empty";
 import styles from "./diagnosticsView.module.scss";
 import { getBasePath, StatementDiagnosticsReport } from "../../api";
-import { DATE_FORMAT_24_UTC } from "../../util";
 import {
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
 } from "src/timeScaleDropdown";
 import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
+import { DATE_FORMAT_24_TZ } from "../../util";
+import { Timestamp } from "../../timestamp";
+import moment from "moment-timezone";
 
 export interface DiagnosticsViewStateProps {
   hasData: boolean;
@@ -126,8 +127,9 @@ export class DiagnosticsView extends React.Component<
       name: "activatedOn",
       title: "Activated on",
       hideTitleUnderline: true,
-      cell: (diagnostic: StatementDiagnosticsReport) =>
-        moment.utc(diagnostic.requested_at).format(DATE_FORMAT_24_UTC),
+      cell: (diagnostic: StatementDiagnosticsReport) => (
+        <Timestamp time={diagnostic.requested_at} format={DATE_FORMAT_24_TZ} />
+      ),
       sort: (diagnostic: StatementDiagnosticsReport) =>
         moment(diagnostic.requested_at)?.unix(),
     },
