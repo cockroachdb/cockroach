@@ -14,7 +14,7 @@ import { createContext, useContext } from "react";
 export const CoordinatedUniversalTime = "Etc/UTC";
 export const TimezoneContext = createContext<string>(CoordinatedUniversalTime);
 
-interface WithTimezoneProps {
+export interface WithTimezoneProps {
   timezone: string;
 }
 
@@ -23,7 +23,7 @@ interface WithTimezoneProps {
 export function WithTimezone<T>(
   Component: React.ComponentType<T & WithTimezoneProps>,
 ) {
-  return (props: T) => {
+  return (props: React.PropsWithChildren<T>) => {
     // This lambda is a React function component.
     // It is safe to call a hook here.
     // eslint-disable-next-line

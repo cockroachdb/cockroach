@@ -10,7 +10,7 @@
 
 import React from "react";
 
-import { LineGraph } from "src/views/cluster/components/linegraph";
+import LineGraph from "src/views/cluster/components/linegraph";
 import { Axis, Metric } from "src/views/shared/components/metricQuery";
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
