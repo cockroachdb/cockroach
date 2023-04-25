@@ -707,9 +707,9 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 	}
 	var exists bool
 	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		exists, err = jobs.RunningJobExists(ctx, jobID, txn, func(payload *jobspb.Payload) bool {
-			return payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats
-		})
+		exists, err = jobs.RunningJobExists(ctx, jobID, txn, p.ExecCfg().Settings.Version,
+			jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats,
+		)
 		return err
 	}); err != nil {
 		return err
