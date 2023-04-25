@@ -1662,9 +1662,10 @@ func TestAlterChangefeedAccessControl(t *testing.T) {
 		closeCf()
 
 		// No one can modify changefeeds created by admins, except for admins.
-		// In this case, the root user creates the changefeed.
-		currentFeed, closeCf = createFeed(`CREATE CHANGEFEED FOR table_a, table_b`)
-		asUser(t, f, `adminUser`, func(userDB *sqlutils.SQLRunner) {
+		asUser(t, f, `adminUser`, func(_ *sqlutils.SQLRunner) {
+			currentFeed, closeCf = createFeed(`CREATE CHANGEFEED FOR table_a, table_b`)
+		})
+		asUser(t, f, `otherAdminUser`, func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
 			require.NoError(t, currentFeed.WaitForStatus(func(s jobs.Status) bool {
 				return s == jobs.StatusPaused

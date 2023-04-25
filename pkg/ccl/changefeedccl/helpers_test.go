@@ -918,25 +918,39 @@ func makeFeedFactoryWithOptions(
 	switch sinkType {
 	case "kafka":
 		f := makeKafkaFeedFactory(srvOrCluster, db)
-		return f, func() {}
+		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db)
+		f.(*kafkaFeedFactory).configureUserDB(userDB)
+		return f, func() { cleanup() }
 	case "cloudstorage":
 		if options.externalIODir == "" {
 			t.Fatalf("expected externalIODir option to be set")
 		}
 		f := makeCloudFeedFactory(srvOrCluster, db, options.externalIODir)
+		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db)
+		f.(*cloudFeedFactory).configureUserDB(userDB)
 		return f, func() {
 			TestingSetIncludeParquetMetadata()()
+			cleanup()
 		}
 	case "enterprise":
 		sink, cleanup := pgURLForUser(username.RootUser)
 		f := makeTableFeedFactory(srvOrCluster, db, sink)
-		return f, cleanup
+		userDB, cleanupUserDB := getInitialDBForEnterpriseFactory(t, s, db)
+		f.(*tableFeedFactory).configureUserDB(userDB)
+		return f, func() {
+			cleanup()
+			cleanupUserDB()
+		}
 	case "webhook":
 		f := makeWebhookFeedFactory(srvOrCluster, db)
-		return f, func() {}
+		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db)
+		f.(*webhookFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
+		return f, func() { cleanup() }
 	case "pubsub":
 		f := makePubsubFeedFactory(srvOrCluster, db)
-		return f, func() {}
+		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db)
+		f.(*pubsubFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
+		return f, func() { cleanup() }
 	case "sinkless":
 		pgURLForUserSinkless := func(u string, pass ...string) (url.URL, func()) {
 			t.Logf("pgURL %s %s", sinkType, u)
@@ -960,6 +974,32 @@ func makeFeedFactoryWithOptions(
 	}
 	t.Fatalf("unhandled sink type %s", sinkType)
 	return nil, nil
+}
+
+func getInitialDBForEnterpriseFactory(
+	t *testing.T, s serverutils.TestTenantInterface, rootDB *gosql.DB,
+) (*gosql.DB, func()) {
+	// Instead of creating enterprise changefeeds on the root connection, we may choose to create
+	// them on a test user connection. This user should have the minimum privileges to create a changefeed,
+	// which means they default to having the CHANGEFEED privilege on all tables.
+	const percentNonRoot = 0.5
+	if rand.Float32() < percentNonRoot {
+		user := "EnterpriseFeedUser"
+		password := "hunter2"
+		createUserWithDefaultPrivilege(t, rootDB, user, password, "CHANGEFEED")
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(user, password),
+			Host:   s.SQLAddr(),
+			Path:   `d`,
+		}
+		userDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return userDB, func() { _ = userDB.Close() }
+	}
+	return rootDB, func() {}
 }
 
 func getInitialSinkForSinklessFactory(
@@ -1262,6 +1302,9 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 
 		`CREATE USER adminUser`,
 		`GRANT ADMIN TO adminUser`,
+
+		`CREATE USER otherAdminUser`,
+		`GRANT ADMIN TO otherAdminUser`,
 
 		`CREATE USER feedCreator`,
 		`GRANT CHANGEFEED ON table_a TO feedCreator`,
