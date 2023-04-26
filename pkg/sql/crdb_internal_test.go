@@ -635,14 +635,10 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 	})
 
 	t.Log("checking the virtual tables")
-	const (
-		clusterScope  = "cluster"
-		nodeScope     = "node"
-		runningStatus = "running"
-		queuedStatus  = "queued"
-	)
-	getNum := func(db *sqlutils.SQLRunner, scope, status string) int {
-		querySuffix := fmt.Sprintf("FROM crdb_internal.%s_distsql_flows WHERE status = '%s'", scope, status)
+	const clusterScope = "cluster"
+	const nodeScope = "node"
+	getNum := func(db *sqlutils.SQLRunner, scope string) int {
+		querySuffix := fmt.Sprintf("FROM crdb_internal.%s_distsql_flows", scope)
 		// Check that all remote flows (if any) correspond to the expected
 		// statement.
 		stmts := db.QueryStr(t, "SELECT stmt "+querySuffix)
@@ -658,28 +654,20 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(conn)
 
 		// Check cluster level table.
-		expRunning, expQueued := 2, 0
-		gotRunning, gotQueued := getNum(db, clusterScope, runningStatus), getNum(db, clusterScope, queuedStatus)
-		if gotRunning != expRunning {
-			t.Fatalf("unexpected output from cluster_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
-		}
-		if gotQueued != expQueued {
-			t.Fatalf("unexpected output from cluster_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+		actual := getNum(db, clusterScope)
+		if actual != 2 {
+			t.Fatalf("unexpected output from cluster_distsql_flows on node %d (found %d)", nodeID+1, actual)
 		}
 
 		// Check node level table.
 		if nodeID == gatewayNodeID {
-			if getNum(db, nodeScope, runningStatus) != 0 || getNum(db, nodeScope, queuedStatus) != 0 {
+			if getNum(db, nodeScope) != 0 {
 				t.Fatal("unexpectedly non empty output from node_distsql_flows on the gateway")
 			}
 		} else {
-			expRunning, expQueued = 1, 0
-			gotRunning, gotQueued = getNum(db, nodeScope, runningStatus), getNum(db, nodeScope, queuedStatus)
-			if gotRunning != expRunning {
-				t.Fatalf("unexpected output from node_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
-			}
-			if gotQueued != expQueued {
-				t.Fatalf("unexpected output from node_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+			actual = getNum(db, nodeScope)
+			if actual != 1 {
+				t.Fatalf("unexpected output from node_distsql_flows on node %d (found %d)", nodeID+1, actual)
 			}
 		}
 	}
