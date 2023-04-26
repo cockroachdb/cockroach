@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -94,7 +93,7 @@ func ValidateTTLExpirationExpr(desc catalog.TableDescriptor) error {
 // ValidateTTLExpirationColumn validates that the ttl_expire_after setting, if
 // any, is in a valid state. It requires that the TTLDefaultExpirationColumn
 // exists and has DEFAULT/ON UPDATE clauses.
-func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
+func ValidateTTLExpirationColumn(desc catalog.TableDescriptor, allowDescPK bool) error {
 	if !desc.HasRowLevelTTL() {
 		return nil
 	}
@@ -102,16 +101,16 @@ func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
 		return nil
 	}
 	intervalExpr := desc.GetRowLevelTTL().DurationExpr
-	col, err := catalog.MustFindColumnByTreeName(desc, colinfo.TTLDefaultExpirationColumnName)
+	col, err := catalog.MustFindColumnByTreeName(desc, catpb.TTLDefaultExpirationColumnName)
 	if err != nil {
-		return errors.Wrapf(err, "expected column %s", colinfo.TTLDefaultExpirationColumnName)
+		return errors.Wrapf(err, "expected column %s", catpb.TTLDefaultExpirationColumnName)
 	}
 	expectedStr := `current_timestamp():::TIMESTAMPTZ + ` + string(intervalExpr)
 	if col.GetDefaultExpr() != expectedStr {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"expected DEFAULT expression of %s to be %s",
-			colinfo.TTLDefaultExpirationColumnName,
+			catpb.TTLDefaultExpirationColumnName,
 			expectedStr,
 		)
 	}
@@ -119,20 +118,22 @@ func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"expected ON UPDATE expression of %s to be %s",
-			colinfo.TTLDefaultExpirationColumnName,
+			catpb.TTLDefaultExpirationColumnName,
 			expectedStr,
 		)
 	}
 
 	// For row-level TTL, only ascending PKs are permitted.
-	pk := desc.GetPrimaryIndex()
-	for i := 0; i < pk.NumKeyColumns(); i++ {
-		dir := pk.GetKeyColumnDirection(i)
-		if dir != catenumpb.IndexColumn_ASC {
-			return unimplemented.NewWithIssuef(
-				76912,
-				`non-ascending ordering on PRIMARY KEYs are not supported with row-level TTL`,
-			)
+	if !allowDescPK {
+		pk := desc.GetPrimaryIndex()
+		for i := 0; i < pk.NumKeyColumns(); i++ {
+			dir := pk.GetKeyColumnDirection(i)
+			if dir != catenumpb.IndexColumn_ASC {
+				return unimplemented.NewWithIssuef(
+					76912,
+					`non-ascending ordering on PRIMARY KEYs are not supported with row-level TTL`,
+				)
+			}
 		}
 	}
 

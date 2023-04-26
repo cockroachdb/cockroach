@@ -155,7 +155,7 @@ type Reader interface {
 }
 
 type LatencyInformation interface {
-	GetPercentileValues(fingerprintID appstatspb.StmtFingerprintID) PercentileValues
+	GetPercentileValues(fingerprintID appstatspb.StmtFingerprintID, shouldFlush bool) PercentileValues
 }
 
 type PercentileValues struct {

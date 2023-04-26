@@ -50,7 +50,7 @@ const (
 	// must add a justification for this in the map.
 	todoIAmKnowinglyAddingTechDebt
 	// iSolemnlySwearThisFieldIsValidated means that a field was added to a
-	//validate method.
+	// validate method.
 	iSolemnlySwearThisFieldIsValidated
 )
 
@@ -386,24 +386,25 @@ func TestValidateTableDesc(t *testing.T) {
 	}
 
 	testData := []struct {
-		err  string
-		desc descpb.TableDescriptor
+		err     string
+		desc    descpb.TableDescriptor
+		version clusterversion.Key
 	}{
-		{`empty relation name`,
-			descpb.TableDescriptor{}},
-		{`invalid table ID 0`,
-			descpb.TableDescriptor{ID: 0, Name: "foo"}},
-		{`invalid parent ID 0`,
-			descpb.TableDescriptor{ID: 2, Name: "foo"}},
-		{`table must contain at least 1 column`,
-			descpb.TableDescriptor{
+		{err: `empty relation name`,
+			desc: descpb.TableDescriptor{}},
+		{err: `invalid table ID 0`,
+			desc: descpb.TableDescriptor{ID: 0, Name: "foo"}},
+		{err: `invalid parent ID 0`,
+			desc: descpb.TableDescriptor{ID: 2, Name: "foo"}},
+		{err: `table must contain at least 1 column`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
 				FormatVersion: descpb.InterleavedFormatVersion,
 			}},
-		{`empty column name`,
-			descpb.TableDescriptor{
+		{err: `empty column name`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -413,8 +414,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`table is encoded using using version 0, but this client only supports version 3`,
-			descpb.TableDescriptor{
+		{err: `table is encoded using using version 0, but this client only supports version 3`,
+			desc: descpb.TableDescriptor{
 				ID:       2,
 				ParentID: 1,
 				Name:     "foo",
@@ -423,8 +424,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`virtual column "virt" is not computed`,
-			descpb.TableDescriptor{
+		{err: `virtual column "virt" is not computed`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -435,8 +436,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`invalid column ID 0`,
-			descpb.TableDescriptor{
+		{err: `invalid column ID 0`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -446,8 +447,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`table must contain a primary key`,
-			descpb.TableDescriptor{
+		{err: `table must contain a primary key`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -461,8 +462,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`duplicate column name: "bar"`,
-			descpb.TableDescriptor{
+		{err: `duplicate column name: "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -473,8 +474,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`duplicate column name: "bar"`,
-			descpb.TableDescriptor{
+		{err: `duplicate column name: "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            catconstants.CrdbInternalBackwardDependenciesTableID,
 				ParentID:      0,
 				Name:          "foo",
@@ -485,8 +486,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`column "blah" duplicate ID of column "bar": 1`,
-			descpb.TableDescriptor{
+		{err: `column "blah" duplicate ID of column "bar": 1`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -497,8 +498,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`at least 1 column family must be specified`,
-			descpb.TableDescriptor{
+		{err: `at least 1 column family must be specified`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -508,8 +509,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`column "bar" cannot be hidden and inaccessible`,
-			descpb.TableDescriptor{
+		{err: `column "bar" cannot be hidden and inaccessible`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -519,8 +520,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`the 0th family must have ID 0`,
-			descpb.TableDescriptor{
+		{err: `the 0th family must have ID 0`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -533,8 +534,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`duplicate family name: "baz"`,
-			descpb.TableDescriptor{
+		{err: `duplicate family name: "baz"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -549,8 +550,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 2,
 			}},
-		{`family "qux" duplicate ID of family "baz": 0`,
-			descpb.TableDescriptor{
+		{err: `family "qux" duplicate ID of family "baz": 0`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -565,8 +566,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 2,
 			}},
-		{`duplicate family name: "baz"`,
-			descpb.TableDescriptor{
+		{err: `duplicate family name: "baz"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -581,8 +582,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 2,
 			}},
-		{`mismatched column ID size (1) and name size (0)`,
-			descpb.TableDescriptor{
+		{err: `mismatched column ID size (1) and name size (0)`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -596,8 +597,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`family "baz" contains column reference "bar" with unknown ID 2`,
-			descpb.TableDescriptor{
+		{err: `family "baz" contains column reference "bar" with unknown ID 2`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -611,8 +612,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`family "baz" column 1 should have name "bar", but found name "qux"`,
-			descpb.TableDescriptor{
+		{err: `family "baz" column 1 should have name "bar", but found name "qux"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -626,8 +627,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`column "bar" is not in any column family`,
-			descpb.TableDescriptor{
+		{err: `column "bar" is not in any column family`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -641,8 +642,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`column 1 is in both family 0 and 1`,
-			descpb.TableDescriptor{
+		{err: `column 1 is in both family 0 and 1`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -657,8 +658,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 2,
 			}},
-		{`virtual computed column "virt" cannot be part of a family`,
-			descpb.TableDescriptor{
+		{err: `virtual computed column "virt" cannot be part of a family`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -674,8 +675,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 3,
 				NextFamilyID: 2,
 			}},
-		{`table must contain a primary key`,
-			descpb.TableDescriptor{
+		{err: `table must contain a primary key`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -692,8 +693,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`primary index "p_idx" cannot be not visible`,
-			descpb.TableDescriptor{
+		{err: `primary index "p_idx" cannot be not visible`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -724,8 +725,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID:     1,
 				NextIndexID:      2,
 			}},
-		{`invalid index ID 0`,
-			descpb.TableDescriptor{
+		{err: `invalid index ID 0`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -746,8 +747,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID:     1,
 				NextConstraintID: 2,
 			}},
-		{`index "bar" must contain at least 1 column`,
-			descpb.TableDescriptor{
+		{err: `index "bar" must contain at least 1 column`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -776,8 +777,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
-		{`mismatched column IDs (1) and names (0)`,
-			descpb.TableDescriptor{
+		{err: `mismatched column IDs (1) and names (0)`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -799,8 +800,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      2,
 				NextConstraintID: 2,
 			}},
-		{`mismatched column IDs (1) and names (2)`,
-			descpb.TableDescriptor{
+		{err: `mismatched column IDs (1) and names (2)`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -821,8 +822,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      2,
 				NextConstraintID: 2,
 			}},
-		{`duplicate index name: "bar"`,
-			descpb.TableDescriptor{
+		{err: `duplicate index name: "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -850,8 +851,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
-		{`index "blah" duplicate ID of index "bar": 1`,
-			descpb.TableDescriptor{
+		{err: `index "blah" duplicate ID of index "bar": 1`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -880,8 +881,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      2,
 				NextConstraintID: 2,
 			}},
-		{`index "bar" contains key column "bar" with unknown ID 2`,
-			descpb.TableDescriptor{
+		{err: `index "bar" contains key column "bar" with unknown ID 2`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -905,8 +906,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      2,
 				NextConstraintID: 2,
 			}},
-		{`index "bar" key column ID 1 should have name "bar", but found name "blah"`,
-			descpb.TableDescriptor{
+		{err: `index "bar" key column ID 1 should have name "bar", but found name "blah"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -930,8 +931,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      2,
 				NextConstraintID: 2,
 			}},
-		{`mismatched column IDs (1) and directions (0)`,
-			descpb.TableDescriptor{
+		{err: `mismatched column IDs (1) and directions (0)`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -951,8 +952,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      2,
 				NextConstraintID: 2,
 			}},
-		{`mismatched STORING column IDs (1) and names (0)`,
-			descpb.TableDescriptor{
+		{err: `mismatched STORING column IDs (1) and names (0)`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -981,8 +982,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      2,
 				NextConstraintID: 2,
 			}},
-		{`index "secondary" contains stored column "quux" with unknown ID 123`,
-			descpb.TableDescriptor{
+		{err: `index "secondary" contains stored column "quux" with unknown ID 123`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1018,8 +1019,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
-		{`index "secondary" stored column ID 2 should have name "baz", but found name "quux"`,
-			descpb.TableDescriptor{
+		{err: `index "secondary" stored column ID 2 should have name "baz", but found name "quux"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1060,8 +1061,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
-		{`index "secondary" key suffix column ID 123 is invalid`,
-			descpb.TableDescriptor{
+		{err: `index "secondary" key suffix column ID 123 is invalid`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1096,8 +1097,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
-		{`index "primary" contains deprecated foreign key representation`,
-			descpb.TableDescriptor{
+		{err: `index "primary" contains deprecated foreign key representation`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1121,10 +1122,10 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      2,
 				NextConstraintID: 2,
 			}},
-		{`at least one of LIST or RANGE partitioning must be used`,
+		{err: `at least one of LIST or RANGE partitioning must be used`,
 			// Verify that validatePartitioning is hooked up. The rest of these
 			// tests are in TestValidatePartitionion.
-			descpb.TableDescriptor{
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1150,8 +1151,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
-		{`index "foo_crdb_internal_bar_shard_5_bar_idx" refers to non-existent shard column "does not exist"`,
-			descpb.TableDescriptor{
+		{err: `index "foo_crdb_internal_bar_shard_5_bar_idx" refers to non-existent shard column "does not exist"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1196,8 +1197,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
-		{`TableID mismatch for unique without index constraint "bar_unique": "1" doesn't match descriptor: "2"`,
-			descpb.TableDescriptor{
+		{err: `TableID mismatch for unique without index constraint "bar_unique": "1" doesn't match descriptor: "2"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1223,8 +1224,8 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 			}},
-		{`unique without index constraint "bar_unique" contains unknown column "2"`,
-			descpb.TableDescriptor{
+		{err: `unique without index constraint "bar_unique" contains unknown column "2"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1250,8 +1251,8 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 			}},
-		{`unique without index constraint "bar_unique" contains duplicate column "1"`,
-			descpb.TableDescriptor{
+		{err: `unique without index constraint "bar_unique" contains duplicate column "1"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1277,8 +1278,8 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 			}},
-		{`empty constraint name`,
-			descpb.TableDescriptor{
+		{err: `empty constraint name`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1308,8 +1309,8 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 			}},
-		{`index "sec" cannot store virtual column "c3"`,
-			descpb.TableDescriptor{
+		{err: `index "sec" cannot store virtual column "c3"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1348,8 +1349,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
-		{"",
-			descpb.TableDescriptor{
+		{err: ``,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1432,8 +1433,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextConstraintID: 3,
 				Privileges:       catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 			}},
-		{`index "sec" cannot store virtual column "c3"`,
-			descpb.TableDescriptor{
+		{err: `index "sec" cannot store virtual column "c3"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1516,8 +1517,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextConstraintID: 3,
 				Privileges:       catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 			}},
-		{`index "new_sec" cannot store virtual column "c3"`,
-			descpb.TableDescriptor{
+		{err: `index "new_sec" cannot store virtual column "c3"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1600,8 +1601,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextConstraintID: 3,
 				Privileges:       catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 			}},
-		{`index "sec" cannot store virtual column "v"`,
-			descpb.TableDescriptor{
+		{err: `index "sec" cannot store virtual column "v"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1635,8 +1636,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
-		{`index "sec" has column ID 2 present in: [KeyColumnIDs StoreColumnIDs]`,
-			descpb.TableDescriptor{
+		{err: `index "sec" has column ID 2 present in: [KeyColumnIDs StoreColumnIDs]`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1670,8 +1671,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
-		{`computed column "bar" cannot also have an ON UPDATE expression`,
-			descpb.TableDescriptor{
+		{err: `computed column "bar" cannot also have an ON UPDATE expression`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1690,8 +1691,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`both generated identity and on update expression specified for column "bar"`,
-			descpb.TableDescriptor{
+		{err: `both generated identity and on update expression specified for column "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1710,8 +1711,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`both generated identity and on update expression specified for column "bar"`,
-			descpb.TableDescriptor{
+		{err: `both generated identity and on update expression specified for column "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1730,8 +1731,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`conflicting NULL/NOT NULL declarations for column "bar"`,
-			descpb.TableDescriptor{
+		{err: `conflicting NULL/NOT NULL declarations for column "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1743,8 +1744,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`conflicting NULL/NOT NULL declarations for column "bar"`,
-			descpb.TableDescriptor{
+		{err: `conflicting NULL/NOT NULL declarations for column "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1756,8 +1757,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`both generated identity and computed expression specified for column "bar"`,
-			descpb.TableDescriptor{
+		{err: `both generated identity and computed expression specified for column "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1768,8 +1769,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`both generated identity and computed expression specified for column "bar"`,
-			descpb.TableDescriptor{
+		{err: `both generated identity and computed expression specified for column "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1780,8 +1781,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`conflicting NULL/NOT NULL declarations for column "bar"`,
-			descpb.TableDescriptor{
+		{err: `conflicting NULL/NOT NULL declarations for column "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1794,8 +1795,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`conflicting NULL/NOT NULL declarations for column "bar"`,
-			descpb.TableDescriptor{
+		{err: `conflicting NULL/NOT NULL declarations for column "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1808,8 +1809,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`both generated identity and computed expression specified for column "bar"`,
-			descpb.TableDescriptor{
+		{err: `both generated identity and computed expression specified for column "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1821,8 +1822,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`both generated identity and computed expression specified for column "bar"`,
-			descpb.TableDescriptor{
+		{err: `both generated identity and computed expression specified for column "bar"`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1834,8 +1835,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`computed column "bar" cannot also have a DEFAULT expression`,
-			descpb.TableDescriptor{
+		{err: `computed column "bar" cannot also have a DEFAULT expression`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1850,8 +1851,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`computed column "bar" cannot also have an ON UPDATE expression`,
-			descpb.TableDescriptor{
+		{err: `computed column "bar" cannot also have an ON UPDATE expression`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1866,8 +1867,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`non-index mutation in state BACKFILLING`,
-			descpb.TableDescriptor{
+		{err: `non-index mutation in state BACKFILLING`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1889,8 +1890,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`non-index mutation in state MERGING`,
-			descpb.TableDescriptor{
+		{err: `non-index mutation in state MERGING`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1912,8 +1913,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`public index "ruroh" is using the delete preserving encoding`,
-			descpb.TableDescriptor{
+		{err: `public index "ruroh" is using the delete preserving encoding`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1952,8 +1953,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID:     1,
 				NextConstraintID: 2,
 			}},
-		{`public index "primary" is using the delete preserving encoding`,
-			descpb.TableDescriptor{
+		{err: `public index "primary" is using the delete preserving encoding`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -1983,8 +1984,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextConstraintID: 2,
 			},
 		},
-		{`column ID 123 found in depended-on-by references, no such column in this relation`,
-			descpb.TableDescriptor{
+		{err: `column ID 123 found in depended-on-by references, no such column in this relation`,
+			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
@@ -2003,8 +2004,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 			},
 		},
-		{`index ID 123 found in depended-on-by references, no such index in this relation`,
-			descpb.TableDescriptor{
+		{err: `index ID 123 found in depended-on-by references, no such index in this relation`,
+			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
@@ -2023,8 +2024,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 			},
 		},
-		{`Setting sql_stats_automatic_collection_enabled may not be set on virtual table`,
-			descpb.TableDescriptor{
+		{err: `Setting sql_stats_automatic_collection_enabled may not be set on virtual table`,
+			desc: descpb.TableDescriptor{
 				ID:            catconstants.MinVirtualID,
 				ParentID:      1,
 				Name:          "foo",
@@ -2035,8 +2036,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID:      2,
 				AutoStatsSettings: &catpb.AutoStatsSettings{Enabled: &boolTrue},
 			}},
-		{`Setting sql_stats_automatic_collection_enabled may not be set on a view or sequence`,
-			descpb.TableDescriptor{
+		{err: `Setting sql_stats_automatic_collection_enabled may not be set on a view or sequence`,
+			desc: descpb.TableDescriptor{
 				Name:                    "bar",
 				ID:                      52,
 				ParentID:                1,
@@ -2051,8 +2052,8 @@ func TestValidateTableDesc(t *testing.T) {
 				Privileges:        catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 				AutoStatsSettings: &catpb.AutoStatsSettings{Enabled: &boolTrue},
 			}},
-		{`Setting sql_stats_automatic_collection_enabled may not be set on a view or sequence`,
-			descpb.TableDescriptor{
+		{err: `Setting sql_stats_automatic_collection_enabled may not be set on a view or sequence`,
+			desc: descpb.TableDescriptor{
 				ID:            51,
 				ParentID:      1,
 				Name:          "foo",
@@ -2088,8 +2089,8 @@ func TestValidateTableDesc(t *testing.T) {
 				AutoStatsSettings: &catpb.AutoStatsSettings{Enabled: &boolTrue},
 			},
 		},
-		{`invalid integer value for sql_stats_automatic_collection_min_stale_rows: cannot be set to a negative value: -1`,
-			descpb.TableDescriptor{
+		{err: `invalid integer value for sql_stats_automatic_collection_min_stale_rows: cannot be set to a negative value: -1`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2100,8 +2101,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID:      2,
 				AutoStatsSettings: &catpb.AutoStatsSettings{MinStaleRows: &negativeOne},
 			}},
-		{`invalid float value for sql_stats_automatic_collection_fraction_stale_rows: cannot set to a negative value: -1.000000`,
-			descpb.TableDescriptor{
+		{err: `invalid float value for sql_stats_automatic_collection_fraction_stale_rows: cannot set to a negative value: -1.000000`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2112,8 +2113,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID:      2,
 				AutoStatsSettings: &catpb.AutoStatsSettings{FractionStaleRows: &negativeOneFloat},
 			}},
-		{`row-level TTL expiration expression "missing_col" refers to unknown columns`,
-			descpb.TableDescriptor{
+		{err: `row-level TTL expiration expression "missing_col" refers to unknown columns`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2143,8 +2144,8 @@ func TestValidateTableDesc(t *testing.T) {
 					ExpirationExpr: catpb.Expression("missing_col"),
 				},
 			}},
-		{`"ttl_expire_after" and/or "ttl_expiration_expression" must be set`,
-			descpb.TableDescriptor{
+		{err: `"ttl_expire_after" and/or "ttl_expiration_expression" must be set`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2174,8 +2175,8 @@ func TestValidateTableDesc(t *testing.T) {
 					SelectBatchSize: 5,
 				},
 			}},
-		{`expected column crdb_internal_expiration: column "crdb_internal_expiration" does not exist`,
-			descpb.TableDescriptor{
+		{err: `expected column crdb_internal_expiration: column "crdb_internal_expiration" does not exist`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2205,8 +2206,8 @@ func TestValidateTableDesc(t *testing.T) {
 					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
 				},
 			}},
-		{`expected DEFAULT expression of crdb_internal_expiration to be current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'`,
-			descpb.TableDescriptor{
+		{err: `expected DEFAULT expression of crdb_internal_expiration to be current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2242,8 +2243,8 @@ func TestValidateTableDesc(t *testing.T) {
 					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
 				},
 			}},
-		{`expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'`,
-			descpb.TableDescriptor{
+		{err: `expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2279,8 +2280,8 @@ func TestValidateTableDesc(t *testing.T) {
 					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
 				},
 			}},
-		{`"ttl_select_batch_size" must be at least 1`,
-			descpb.TableDescriptor{
+		{err: `"ttl_select_batch_size" must be at least 1`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2318,8 +2319,8 @@ func TestValidateTableDesc(t *testing.T) {
 					SelectBatchSize: -2,
 				},
 			}},
-		{`unimplemented: non-ascending ordering on PRIMARY KEYs are not supported with row-level TTL`,
-			descpb.TableDescriptor{
+		{err: `unimplemented: non-ascending ordering on PRIMARY KEYs are not supported with row-level TTL`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2355,9 +2356,10 @@ func TestValidateTableDesc(t *testing.T) {
 				RowLevelTTL: &catpb.RowLevelTTL{
 					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
 				},
-			}},
-		{`unknown mutation ID 123 associated with job ID 456`,
-			descpb.TableDescriptor{
+			},
+			version: clusterversion.V22_2},
+		{err: `unknown mutation ID 123 associated with job ID 456`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2377,8 +2379,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`two job IDs 12345 and 45678 mapped to the same mutation ID 1`,
-			descpb.TableDescriptor{
+		{err: `two job IDs 12345 and 45678 mapped to the same mutation ID 1`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2419,8 +2421,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`invisibility is incompatible with value for not_visible`,
-			descpb.TableDescriptor{
+		{err: `invisibility is incompatible with value for not_visible`,
+			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
@@ -2456,7 +2458,14 @@ func TestValidateTableDesc(t *testing.T) {
 			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(username.RootUserName())
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
-			err := validate.Self(clusterversion.TestingClusterVersion, desc)
+			clusterVersion := clusterversion.TestingClusterVersion
+			version := d.version
+			if version != 0 {
+				clusterVersion = clusterversion.ClusterVersion{
+					Version: clusterversion.ByKey(version),
+				}
+			}
+			err := validate.Self(clusterVersion, desc)
 			if d.err == "" && err != nil {
 				t.Errorf("%d: expected success, but found error: \"%+v\"", i, err)
 			} else if d.err != "" && err == nil {

@@ -483,15 +483,15 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 	// If we are to join an in-progress acquisition, it needs to be an acquisition
 	// initiated after this point.
 	// So, we handle two cases:
-	// 1. The first DoChan() call tells us that we didn't join an in-progress
-	//     acquisition. Great, the lease that's being acquired is good.
-	// 2. The first DoChan() call tells us that we did join an in-progress acq.
-	//     We have to wait this acquisition out; it's not good for us. But any
-	//     future acquisition is good, so the next time around the loop it doesn't
-	//     matter if we initiate a request or join an in-progress one.
-	// In both cases, we need to check if the lease we want is still valid because
-	// lease acquisition is done without holding the descriptorState lock, so anything
-	// can happen in between lease acquisition and us getting control again.
+	// 1. The first acquireNodeLease(..) call tells us that we didn't join an
+	//    in-progress acquisition but rather initiated one. Great, the lease
+	//    that's being acquired is good.
+	// 2. The first acquireNodeLease(..) call tells us that we did join an
+	//    in-progress acquisition;
+	//    We have to wait this acquisition out; it's not good for us. But any
+	//    future acquisition is good, so the next time around the loop it doesn't
+	//    matter if we initiate a request or join an in-progress one (because
+	//    either way, it's an acquisition performed after this call).
 	attemptsMade := 0
 	for {
 		// Acquire a fresh lease.
@@ -501,12 +501,11 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 		}
 
 		if didAcquire {
-			// Case 1: we didn't join an in-progress call and the lease is still
-			// valid.
+			// Case 1: we initiated a lease acquisition call.
 			break
-		} else if attemptsMade > 1 {
-			// Case 2: more than one acquisition has happened and the lease is still
-			// valid.
+		} else if attemptsMade > 0 {
+			// Case 2: we joined an in-progress lease acquisition call but that call
+			//         was initiated after we entered this function.
 			break
 		}
 		attemptsMade++

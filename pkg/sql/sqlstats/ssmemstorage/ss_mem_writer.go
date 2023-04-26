@@ -144,7 +144,9 @@ func (s *Container) RecordStatement(
 
 	// Percentile latencies are only being sampled if the latency was above the
 	// AnomalyDetectionLatencyThreshold.
-	latencies := s.latencyInformation.GetPercentileValues(stmtFingerprintID)
+	// The Insights detector already does a flush when detecting for anomaly latency,
+	// so there is no need to force a flush when retrieving the data during this step.
+	latencies := s.latencyInformation.GetPercentileValues(stmtFingerprintID, false)
 	latencyInfo := appstatspb.LatencyInfo{
 		Min: value.ServiceLatency,
 		Max: value.ServiceLatency,
