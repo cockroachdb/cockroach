@@ -62,16 +62,11 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(
 	auditSetting := p.AuditConfig().Config.GetMatchingAuditSetting(userRoles)
 	stmtType := p.stmt.AST.StatementType()
 	if auditSetting != nil && auditSetting.CheckMatchingStatementType(stmtType) {
-		sessionConnDetails := p.execCfg.SessionInitCache.ReadSessionConnCache(p.User())
-
 		p.curPlan.auditEventBuilders = append(p.curPlan.auditEventBuilders,
 			&auditevents.RoleBasedAuditEvent{
-				Setting:        auditSetting,
-				StatementType:  stmtType.String(),
-				DatabaseName:   p.CurrentDatabase(),
-				ServerAddress:  sessionConnDetails.ServerAddr,
-				RemoteAddress:  sessionConnDetails.RemoteAddr,
-				ConnectionType: sessionConnDetails.ConnMethod,
+				Setting:       auditSetting,
+				StatementType: stmtType.String(),
+				DatabaseName:  p.CurrentDatabase(),
 			},
 		)
 	}

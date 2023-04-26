@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -742,15 +741,6 @@ func (s *Server) ServeConn(
 		RemoteAddress: conn.RemoteAddr().String(),
 	}
 
-	s.execCfg.SessionInitCache.UpdateSessionConnCache(
-		preServeStatus.clientParameters.User,
-		sessioninit.SessionConnDetails{
-			RemoteAddr: conn.RemoteAddr().String(),
-			ServerAddr: conn.LocalAddr().String(),
-			ConnMethod: preServeStatus.ConnType.String(),
-		},
-	)
-
 	// Some bookkeeping, for security-minded administrators.
 	// This registers the connection to the authentication log.
 	connStart := timeutil.Now()
@@ -804,6 +794,7 @@ func (s *Server) ServeConn(
 	connDetails.RemoteAddress = sArgs.RemoteAddr.String()
 	sp := tracing.SpanFromContext(ctx)
 	ctx = logtags.AddTag(ctx, "client", log.SafeOperational(connDetails.RemoteAddress))
+	ctx = logtags.AddTag(ctx, preServeStatus.ConnType.String(), nil)
 	sp.SetTag("conn_type", attribute.StringValue(preServeStatus.ConnType.String()))
 	sp.SetTag("client", attribute.StringValue(connDetails.RemoteAddress))
 
