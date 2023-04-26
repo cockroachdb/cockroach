@@ -81,7 +81,7 @@ const (
 	rows5GiB   = rows100GiB / 20
 	rows3GiB   = rows30GiB / 10
 
-	initBankPayloadBytes = 2 << 20
+	initBankPayloadBytes = 10240
 )
 
 func destinationName(c cluster.Cluster) string {
@@ -918,10 +918,10 @@ func registerBackup(r registry.Registry) {
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 
-			//warehouses := 100
+			warehouses := 100
 			maxSleepAfterWorkloadBegins := 300 * time.Second
 			backupDir := "gs://cockroachdb-backup-testing/" + c.Name() + "?AUTH=implicit"
-			bankInitRows := 10
+			bankInitRows := 10000
 
 			if c.IsLocal() {
 				//warehouses = 10
@@ -941,7 +941,7 @@ func registerBackup(r registry.Registry) {
 				return nil
 			}
 
-			/*t.Status(`tpcc init`)
+			t.Status(`tpcc init`)
 			c.Run(ctx, workloadNode, fmt.Sprintf(
 				"./workload init tpcc --warehouses=%d {pgurl%s}",
 				warehouses, roachNodes))
@@ -951,13 +951,10 @@ func registerBackup(r registry.Registry) {
 				return runCancellableWorkload(fmt.Sprintf(
 					"./workload run tpcc --warehouses=%d --tolerate-errors {pgurl%s}",
 					warehouses, roachNodes))
-			})*/
+			})
 
 			t.L().Printf(`init bank`)
 			runImportBankDataSplit(ctx, bankInitRows, 0, t, c)
-			//c.Run(ctx, workloadNode, fmt.Sprintf(
-			//	"./workload init bank --rows %d --payload-bytes=%d {pgurl%s}",
-			//	bankInitRows, bankPayloadBytes, roachNodes))
 			t.L().Printf(`run bank`)
 			m.Go(func(ctx context.Context) error {
 				return runCancellableWorkload(fmt.Sprintf(
@@ -965,22 +962,24 @@ func registerBackup(r registry.Registry) {
 					roachNodes))
 			})
 
+			conn := c.Conn(ctx, t.L(), 1)
+			_, err := conn.Exec(`SET CLUSTER SETTING admission.elastic_cpu.enabled=true`)
+			require.NoError(t, err)
+
 			workloadStart := timeutil.Now()
-			minWorkloadDuration := 10 * time.Minute
+			minWorkloadDuration := 5 * time.Minute
 			t.L().Printf("workload start: %s", workloadStart)
 			sleepyTime := time.Duration(rng.Intn(int(maxSleepAfterWorkloadBegins.Seconds())))*time.
 				Second + minWorkloadDuration
 			t.L().Printf("Letting the workload run for %0.2f seconds", sleepyTime.Seconds())
 			time.Sleep(sleepyTime)
 
-			conn := c.Conn(ctx, t.L(), 1)
-
 			backupTime := pickRandomTimeBetween(workloadStart.Add(minWorkloadDuration), timeutil.Now(),
 				rng)
 			backupAOST := reformatToAOST(backupTime)
 			t.L().Printf("Backup AOST %s", backupTime)
 
-			_, err := conn.ExecContext(ctx,
+			_, err = conn.ExecContext(ctx,
 				fmt.Sprintf(`BACKUP INTO %q AS OF SYSTEM TIME '%s' WITH revision_history`,
 					backupDir, backupAOST))
 			require.NoError(t, err)
@@ -1047,10 +1046,8 @@ func registerBackup(r registry.Registry) {
 				require.NoError(t, err)
 				require.Equal(t, backupFingerprint, restoreFingerprint, "fingerprint mismatch")
 			}
-			//restoreAndFingerprint("tpcc", restoreAOST)
+			restoreAndFingerprint("tpcc", restoreAOST)
 			restoreAndFingerprint("bank", restoreAOST)
-			one := 2
-			require.Equal(t, 1, one)
 		},
 	})
 
