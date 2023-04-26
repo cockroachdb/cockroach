@@ -28,12 +28,6 @@ sc1
 ----
 BackReferencedIDs:
 ElementState:
-- Schema:
-    isPublic: false
-    isTemporary: false
-    isVirtual: false
-    schemaId: 106
-  Status: PUBLIC
 - Namespace:
     databaseId: 104
     descriptorId: 106
@@ -43,6 +37,20 @@ ElementState:
 - Owner:
     descriptorId: 106
     owner: root
+  Status: PUBLIC
+- Schema:
+    isPublic: false
+    isTemporary: false
+    isVirtual: false
+    schemaId: 106
+  Status: PUBLIC
+- SchemaComment:
+    comment: sc1 is good
+    schemaId: 106
+  Status: PUBLIC
+- SchemaParent:
+    parentDatabaseId: 104
+    schemaId: 106
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 106
@@ -56,26 +64,12 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- SchemaParent:
-    parentDatabaseId: 104
-    schemaId: 106
-  Status: PUBLIC
-- SchemaComment:
-    comment: sc1 is good
-    schemaId: 106
-  Status: PUBLIC
 
 decompose
 public
 ----
 BackReferencedIDs:
 ElementState:
-- Schema:
-    isPublic: true
-    isTemporary: false
-    isVirtual: false
-    schemaId: 105
-  Status: PUBLIC
 - Namespace:
     databaseId: 104
     descriptorId: 105
@@ -85,6 +79,16 @@ ElementState:
 - Owner:
     descriptorId: 105
     owner: admin
+  Status: PUBLIC
+- Schema:
+    isPublic: true
+    isTemporary: false
+    isVirtual: false
+    schemaId: 105
+  Status: PUBLIC
+- SchemaParent:
+    parentDatabaseId: 104
+    schemaId: 105
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
@@ -104,10 +108,6 @@ ElementState:
     userName: public
     withGrantOption: "0"
   Status: PUBLIC
-- SchemaParent:
-    parentDatabaseId: 104
-    schemaId: 105
-  Status: PUBLIC
 
 decompose
 db1
@@ -118,6 +118,17 @@ BackReferencedIDs:
 ElementState:
 - Database:
     databaseId: 104
+  Status: PUBLIC
+- DatabaseComment:
+    comment: db1 is good
+    databaseId: 104
+  Status: PUBLIC
+- DatabaseData:
+    databaseId: 104
+  Status: PUBLIC
+- DatabaseRoleSetting:
+    databaseId: 104
+    roleName: __placeholder_role_name__
   Status: PUBLIC
 - Namespace:
     databaseId: 0
@@ -147,17 +158,6 @@ ElementState:
     userName: public
     withGrantOption: "0"
   Status: PUBLIC
-- DatabaseRoleSetting:
-    databaseId: 104
-    roleName: __placeholder_role_name__
-  Status: PUBLIC
-- DatabaseComment:
-    comment: db1 is good
-    databaseId: 104
-  Status: PUBLIC
-- DatabaseData:
-    databaseId: 104
-  Status: PUBLIC
 
 decompose
 typ
@@ -170,6 +170,11 @@ ElementState:
     isMultiRegion: false
     typeId: 110
   Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: a
+    physicalRepresentation: gA==
+    typeId: 110
+  Status: PUBLIC
 - Namespace:
     databaseId: 104
     descriptorId: 110
@@ -179,6 +184,10 @@ ElementState:
 - Owner:
     descriptorId: 110
     owner: root
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 110
+    schemaId: 106
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110
@@ -198,15 +207,6 @@ ElementState:
     userName: public
     withGrantOption: "0"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 110
-    schemaId: 106
-  Status: PUBLIC
-- EnumTypeValue:
-    logicalRepresentation: a
-    physicalRepresentation: gA==
-    typeId: 110
-  Status: PUBLIC
 
 decompose
 v1
@@ -214,19 +214,6 @@ v1
 BackReferencedIDs:
   - 113
 ElementState:
-- View:
-    forwardReferences:
-    - columnIds:
-      - 1
-      indexId: 0
-      toId: 109
-    isMaterialized: false
-    isTemporary: false
-    usesRelationIds:
-    - 109
-    usesTypeIds: []
-    viewId: 112
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -363,6 +350,10 @@ ElementState:
     descriptorId: 112
     owner: root
   Status: PUBLIC
+- SchemaChild:
+    childObjectId: 112
+    schemaId: 106
+  Status: PUBLIC
 - UserPrivileges:
     descriptorId: 112
     privileges: "2"
@@ -375,9 +366,18 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 112
-    schemaId: 106
+- View:
+    forwardReferences:
+    - columnIds:
+      - 1
+      indexId: 0
+      toId: 109
+    isMaterialized: false
+    isTemporary: false
+    usesRelationIds:
+    - 109
+    usesTypeIds: []
+    viewId: 112
   Status: PUBLIC
 
 decompose
@@ -385,21 +385,6 @@ v2
 ----
 BackReferencedIDs:
 ElementState:
-- View:
-    forwardReferences:
-    - columnIds:
-      - 1
-      indexId: 0
-      toId: 112
-    isMaterialized: false
-    isTemporary: false
-    usesRelationIds:
-    - 112
-    usesTypeIds:
-    - 110
-    - 111
-    viewId: 113
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -578,6 +563,10 @@ ElementState:
     descriptorId: 113
     owner: root
   Status: PUBLIC
+- SchemaChild:
+    childObjectId: 113
+    schemaId: 106
+  Status: PUBLIC
 - UserPrivileges:
     descriptorId: 113
     privileges: "2"
@@ -590,7 +579,18 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 113
-    schemaId: 106
+- View:
+    forwardReferences:
+    - columnIds:
+      - 1
+      indexId: 0
+      toId: 112
+    isMaterialized: false
+    isTemporary: false
+    usesRelationIds:
+    - 112
+    usesTypeIds:
+    - 110
+    - 111
+    viewId: 113
   Status: PUBLIC

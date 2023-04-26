@@ -62,12 +62,19 @@ func run(in, out string) error {
 
 package scpb
 
+import "fmt"
+
 type ElementStatusIterator interface {
 	ForEachElementStatus(fn func(current Status, target TargetStatus, e Element))
 }
 {{ range . }}
 
 func (e {{ . }}) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_{{ . }}) Element() Element {
+	return e.{{ . }}
+}
 
 // ForEach{{ . }} iterates over elements of type {{ . }}.
 func ForEach{{ . }}(
@@ -99,6 +106,47 @@ func Find{{ . }}(b ElementStatusIterator) (current Status, target TargetStatus, 
 }
 
 {{- end -}}
+//
+// SetElements sets the element inside the protobuf.
+func (e* ElementProto) SetElement(element Element) {
+	switch t := element.(type) {
+		default:
+			panic(fmt.Sprintf("unknown type %T", t))
+{{ range . }}
+		case *{{ . }}:
+			e.ElementOneOf = &ElementProto_{{ . }}{ {{ . }}: t}
+{{- end -}}
+	}
+}
+//
+// GetElementOneOfProtos returns all one of protos.
+func GetElementOneOfProtos() []interface{} {
+	return []interface{} {
+{{ range . }}
+	((*ElementProto_{{ . }})(nil)),
+{{- end -}}
+	}
+}
+//
+// GetElementTypes returns all element types. 
+func GetElementTypes() []interface{} {
+
+	return []interface{} {
+{{ range . }}
+	((*{{ . }})(nil)),
+{{- end -}}
+}
+}
+//
+// ForEachElementType loops over each element type
+func ForEachElementType(fn func(e Element) error) error {
+	for _, e := range GetElementTypes() {
+		if err := fn(e.(Element)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 `)).Execute(&buf, elementNames); err != nil {
 		return err
 	}
@@ -116,7 +164,7 @@ func getElementNames(inProtoFile string) (names []string, _ error) {
 		elementFieldPat     = `\s*(?P<type>\w+)\s+(?P<name>\w+)\s+=\s+\d+` +
 			elementProtoBufMeta + `;`
 		elementProtoRegexp = regexp.MustCompile(`(?s)message ElementProto {
-  option \(gogoproto.onlyone\) = true;
+  oneof element_one_of {
 (?P<fields>(` + elementFieldPat + "\n)+)" +
 			"\\s*}",
 		)

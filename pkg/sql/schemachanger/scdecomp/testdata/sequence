@@ -15,14 +15,6 @@ seq
 BackReferencedIDs:
   - 105
 ElementState:
-- Sequence:
-    isTemporary: false
-    sequenceId: 104
-  Status: PUBLIC
-- TableData:
-    databaseId: 100
-    tableId: 104
-  Status: PUBLIC
 - Namespace:
     databaseId: 100
     descriptorId: 104
@@ -32,6 +24,18 @@ ElementState:
 - Owner:
     descriptorId: 104
     owner: root
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 104
+    schemaId: 101
+  Status: PUBLIC
+- Sequence:
+    isTemporary: false
+    sequenceId: 104
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 104
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
@@ -44,10 +48,6 @@ ElementState:
     privileges: "2"
     userName: root
     withGrantOption: "2"
-  Status: PUBLIC
-- SchemaChild:
-    childObjectId: 104
-    schemaId: 101
   Status: PUBLIC
 
 setup
@@ -60,14 +60,6 @@ otherseq
 BackReferencedIDs:
   - 105
 ElementState:
-- Sequence:
-    isTemporary: false
-    sequenceId: 106
-  Status: PUBLIC
-- TableData:
-    databaseId: 100
-    tableId: 106
-  Status: PUBLIC
 - Namespace:
     databaseId: 100
     descriptorId: 106
@@ -77,6 +69,18 @@ ElementState:
 - Owner:
     descriptorId: 106
     owner: root
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 106
+    schemaId: 101
+  Status: PUBLIC
+- Sequence:
+    isTemporary: false
+    sequenceId: 106
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 106
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 106
@@ -90,25 +94,12 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 106
-    schemaId: 101
-  Status: PUBLIC
 
 decompose
 tbl
 ----
 BackReferencedIDs:
 ElementState:
-- Table:
-    isTemporary: false
-    tableId: 105
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
-    tableId: 105
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -149,27 +140,25 @@ ElementState:
     pgAttributeNum: 4.294967295e+09
     tableId: 105
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    invisibility: 0
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
-    tableId: 105
-    temporaryIndexId: 0
-  Status: PUBLIC
-- TableComment:
-    comment: tbl is good table
+- ColumnComment:
+    columnId: 1
+    comment: id is a identifier
+    pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
-- TableData:
-    databaseId: 100
+- ColumnDefaultExpression:
+    columnId: 2
+    expr: nextval(104:::REGCLASS)
+    referencedColumnIds: []
+    tableId: 105
+    usesFunctionIds: []
+    usesSequenceIds:
+    - 104
+    usesTypeIds: []
+  Status: PUBLIC
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 105
   Status: PUBLIC
 - ColumnName:
@@ -191,6 +180,20 @@ ElementState:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
     tableId: 105
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 105
+  Status: PUBLIC
+- ColumnOnUpdateExpression:
+    columnId: 2
+    expr: 123:::INT8
+    referencedColumnIds: []
+    tableId: 105
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -300,51 +303,6 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnDefaultExpression:
-    columnId: 2
-    expr: nextval(104:::REGCLASS)
-    referencedColumnIds: []
-    tableId: 105
-    usesFunctionIds: []
-    usesSequenceIds:
-    - 104
-    usesTypeIds: []
-  Status: PUBLIC
-- ColumnOnUpdateExpression:
-    columnId: 2
-    expr: 123:::INT8
-    referencedColumnIds: []
-    tableId: 105
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- SequenceOwner:
-    columnId: 2
-    sequenceId: 106
-    tableId: 105
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: id is a identifier
-    pgAttributeNum: 1
-    tableId: 105
-  Status: PUBLIC
-- ColumnNotNull:
-    columnId: 1
-    indexIdForValidation: 0
-    tableId: 105
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: tbl_pkey
-    tableId: 105
-  Status: PUBLIC
-- IndexComment:
-    comment: tbl_pkey is a primary key
-    indexId: 1
-    tableId: 105
-  Status: PUBLIC
 - IndexColumn:
     columnId: 1
     direction: ASC
@@ -365,8 +323,18 @@ ElementState:
     ordinalInKind: 0
     tableId: 105
   Status: PUBLIC
+- IndexComment:
+    comment: tbl_pkey is a primary key
+    indexId: 1
+    tableId: 105
+  Status: PUBLIC
 - IndexData:
     indexId: 1
+    tableId: 105
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: tbl_pkey
     tableId: 105
   Status: PUBLIC
 - Namespace:
@@ -379,6 +347,42 @@ ElementState:
     descriptorId: 105
     owner: root
   Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    invisibility: 0
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 105
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 105
+    schemaId: 101
+  Status: PUBLIC
+- SequenceOwner:
+    columnId: 2
+    sequenceId: 106
+    tableId: 105
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 105
+  Status: PUBLIC
+- TableComment:
+    comment: tbl is good table
+    tableId: 105
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 105
+  Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
     privileges: "2"
@@ -390,10 +394,6 @@ ElementState:
     privileges: "2"
     userName: root
     withGrantOption: "2"
-  Status: PUBLIC
-- SchemaChild:
-    childObjectId: 105
-    schemaId: 101
   Status: PUBLIC
 
 setup
@@ -407,15 +407,6 @@ tbl
 ----
 BackReferencedIDs:
 ElementState:
-- Table:
-    isTemporary: false
-    tableId: 105
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
-    tableId: 105
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -456,27 +447,15 @@ ElementState:
     pgAttributeNum: 4.294967295e+09
     tableId: 105
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    invisibility: 0
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
-    tableId: 105
-    temporaryIndexId: 0
-  Status: PUBLIC
-- TableComment:
-    comment: tbl is good table
+- ColumnComment:
+    columnId: 1
+    comment: id is a identifier
+    pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
-- TableData:
-    databaseId: 100
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 105
   Status: PUBLIC
 - ColumnName:
@@ -497,6 +476,11 @@ ElementState:
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
+    tableId: 105
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
     tableId: 105
   Status: PUBLIC
 - ColumnType:
@@ -607,27 +591,6 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: id is a identifier
-    pgAttributeNum: 1
-    tableId: 105
-  Status: PUBLIC
-- ColumnNotNull:
-    columnId: 1
-    indexIdForValidation: 0
-    tableId: 105
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: tbl_pkey
-    tableId: 105
-  Status: PUBLIC
-- IndexComment:
-    comment: tbl_pkey is a primary key
-    indexId: 1
-    tableId: 105
-  Status: PUBLIC
 - IndexColumn:
     columnId: 1
     direction: ASC
@@ -648,8 +611,18 @@ ElementState:
     ordinalInKind: 0
     tableId: 105
   Status: PUBLIC
+- IndexComment:
+    comment: tbl_pkey is a primary key
+    indexId: 1
+    tableId: 105
+  Status: PUBLIC
 - IndexData:
     indexId: 1
+    tableId: 105
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: tbl_pkey
     tableId: 105
   Status: PUBLIC
 - Namespace:
@@ -662,6 +635,37 @@ ElementState:
     descriptorId: 105
     owner: root
   Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    invisibility: 0
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 105
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 105
+    schemaId: 101
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 105
+  Status: PUBLIC
+- TableComment:
+    comment: tbl is good table
+    tableId: 105
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 105
+  Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
     privileges: "2"
@@ -674,24 +678,12 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 105
-    schemaId: 101
-  Status: PUBLIC
 
 decompose
 seq
 ----
 BackReferencedIDs:
 ElementState:
-- Sequence:
-    isTemporary: false
-    sequenceId: 104
-  Status: PUBLIC
-- TableData:
-    databaseId: 100
-    tableId: 104
-  Status: PUBLIC
 - Namespace:
     databaseId: 100
     descriptorId: 104
@@ -702,6 +694,18 @@ ElementState:
     descriptorId: 104
     owner: root
   Status: PUBLIC
+- SchemaChild:
+    childObjectId: 104
+    schemaId: 101
+  Status: PUBLIC
+- Sequence:
+    isTemporary: false
+    sequenceId: 104
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 104
+  Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
     privileges: "2"
@@ -713,8 +717,4 @@ ElementState:
     privileges: "2"
     userName: root
     withGrantOption: "2"
-  Status: PUBLIC
-- SchemaChild:
-    childObjectId: 104
-    schemaId: 101
   Status: PUBLIC

@@ -42,6 +42,13 @@ func EntityAttr(a Attr, selectors ...string) EntityMappingOption {
 	return attrMapping{a: a, selectors: selectors}
 }
 
+// EntityAttrOneOf defines a mapping of selector[s] to Attr for an entity.
+// The entity is a one of, so the selector covers all possible types of the
+// one of under the same name.
+func EntityAttrOneOf(a Attr, selector string, selectorTypes ...reflect.Type) EntityMappingOption {
+	return attrMapping{a: a, selectors: []string{selector}, selectorTypes: selectorTypes, isOneOfElement: true}
+}
+
 // schemaMappings defines how to map data types to Attr.
 type schemaMappings struct {
 
@@ -91,8 +98,10 @@ func (t entityMapping) apply(mappings *schemaMappings) {
 // attrMapping is used in mappings to describe how attributes are mapped to
 // struct fields as part of an entityMapping.
 type attrMapping struct {
-	a         Attr
-	selectors []string
+	a              Attr
+	selectors      []string
+	selectorTypes  []reflect.Type
+	isOneOfElement bool
 }
 
 func (a attrMapping) apply(tm *entityMapping) {

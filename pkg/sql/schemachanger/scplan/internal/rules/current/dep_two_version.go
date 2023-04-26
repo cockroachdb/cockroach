@@ -103,7 +103,7 @@ func init() {
 			panic(err)
 		}
 	}
-	_ = ForEachElement(func(el scpb.Element) error {
+	_ = scpb.ForEachElementType(func(el scpb.Element) error {
 		if !isSubjectTo2VersionInvariant(el) {
 			return nil
 		}

@@ -29,15 +29,6 @@ table_implicit
 ----
 BackReferencedIDs:
 ElementState:
-- Table:
-    isTemporary: false
-    tableId: 104
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: fam_0_pk_a_j
-    tableId: 104
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -88,43 +79,15 @@ ElementState:
     pgAttributeNum: 4.294967295e+09
     tableId: 104
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    invisibility: 0
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
-    tableId: 104
-    temporaryIndexId: 0
-  Status: PUBLIC
-- SecondaryIndex:
-    constraintId: 0
-    embeddedExpr: null
-    geoConfig: null
-    indexId: 2
-    invisibility: 0
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: true
-    isNotVisible: false
-    isUnique: false
-    sharding: null
-    sourceIndexId: 0
-    tableId: 104
-    temporaryIndexId: 0
-  Status: PUBLIC
-- TableComment:
-    comment: implicit partitioning is good
+- ColumnComment:
+    columnId: 2
+    comment: a is good
+    pgAttributeNum: 2
     tableId: 104
   Status: PUBLIC
-- TableData:
-    databaseId: 100
+- ColumnFamily:
+    familyId: 0
+    name: fam_0_pk_a_j
     tableId: 104
   Status: PUBLIC
 - ColumnName:
@@ -150,6 +113,16 @@ ElementState:
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
+    tableId: 104
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 104
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 2
+    indexIdForValidation: 0
     tableId: 104
   Status: PUBLIC
 - ColumnType:
@@ -287,71 +260,6 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: a is good
-    pgAttributeNum: 2
-    tableId: 104
-  Status: PUBLIC
-- ColumnNotNull:
-    columnId: 1
-    indexIdForValidation: 0
-    tableId: 104
-  Status: PUBLIC
-- ColumnNotNull:
-    columnId: 2
-    indexIdForValidation: 0
-    tableId: 104
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: table_implicit_pkey
-    tableId: 104
-  Status: PUBLIC
-- IndexName:
-    indexId: 2
-    name: table_implicit_j_idx
-    tableId: 104
-  Status: PUBLIC
-- IndexPartitioning:
-    indexId: 1
-    partitioning:
-      list:
-      - name: pk_implicit
-        subpartitioning:
-          list: []
-          numColumns: 0
-          numImplicitColumns: 0
-          range: []
-        values:
-        - AwI=
-      numColumns: 1
-      numImplicitColumns: 1
-      range: []
-    tableId: 104
-  Status: PUBLIC
-- IndexPartitioning:
-    indexId: 2
-    partitioning:
-      list:
-      - name: j_implicit
-        subpartitioning:
-          list: []
-          numColumns: 0
-          numImplicitColumns: 0
-          range: []
-        values:
-        - Awo=
-      numColumns: 1
-      numImplicitColumns: 1
-      range: []
-    tableId: 104
-  Status: PUBLIC
-- IndexComment:
-    comment: pkey is good
-    indexId: 1
-    tableId: 104
-  Status: PUBLIC
 - IndexColumn:
     columnId: 1
     direction: ASC
@@ -412,12 +320,61 @@ ElementState:
     ordinalInKind: 1
     tableId: 104
   Status: PUBLIC
+- IndexComment:
+    comment: pkey is good
+    indexId: 1
+    tableId: 104
+  Status: PUBLIC
 - IndexData:
     indexId: 1
     tableId: 104
   Status: PUBLIC
 - IndexData:
     indexId: 2
+    tableId: 104
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: table_implicit_pkey
+    tableId: 104
+  Status: PUBLIC
+- IndexName:
+    indexId: 2
+    name: table_implicit_j_idx
+    tableId: 104
+  Status: PUBLIC
+- IndexPartitioning:
+    indexId: 1
+    partitioning:
+      list:
+      - name: pk_implicit
+        subpartitioning:
+          list: []
+          numColumns: 0
+          numImplicitColumns: 0
+          range: []
+        values:
+        - AwI=
+      numColumns: 1
+      numImplicitColumns: 1
+      range: []
+    tableId: 104
+  Status: PUBLIC
+- IndexPartitioning:
+    indexId: 2
+    partitioning:
+      list:
+      - name: j_implicit
+        subpartitioning:
+          list: []
+          numColumns: 0
+          numImplicitColumns: 0
+          range: []
+        values:
+        - Awo=
+      numColumns: 1
+      numImplicitColumns: 1
+      range: []
     tableId: 104
   Status: PUBLIC
 - Namespace:
@@ -429,6 +386,53 @@ ElementState:
 - Owner:
     descriptorId: 104
     owner: root
+  Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    invisibility: 0
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 104
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 104
+    schemaId: 101
+  Status: PUBLIC
+- SecondaryIndex:
+    constraintId: 0
+    embeddedExpr: null
+    geoConfig: null
+    indexId: 2
+    invisibility: 0
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: true
+    isNotVisible: false
+    isUnique: false
+    sharding: null
+    sourceIndexId: 0
+    tableId: 104
+    temporaryIndexId: 0
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 104
+  Status: PUBLIC
+- TableComment:
+    comment: implicit partitioning is good
+    tableId: 104
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 104
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
@@ -442,25 +446,12 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 104
-    schemaId: 101
-  Status: PUBLIC
 
 decompose
 table_partitioned_index
 ----
 BackReferencedIDs:
 ElementState:
-- Table:
-    isTemporary: false
-    tableId: 105
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
-    tableId: 105
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -501,39 +492,9 @@ ElementState:
     pgAttributeNum: 4.294967295e+09
     tableId: 105
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 2
-    geoConfig: null
-    indexId: 1
-    invisibility: 0
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
-    tableId: 105
-    temporaryIndexId: 0
-  Status: PUBLIC
-- SecondaryIndex:
-    constraintId: 1
-    embeddedExpr: null
-    geoConfig: null
-    indexId: 2
-    invisibility: 0
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
-    tableId: 105
-    temporaryIndexId: 0
-  Status: PUBLIC
-- TableData:
-    databaseId: 100
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 105
   Status: PUBLIC
 - ColumnName:
@@ -554,6 +515,11 @@ ElementState:
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
+    tableId: 105
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
     tableId: 105
   Status: PUBLIC
 - ColumnType:
@@ -664,38 +630,6 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnNotNull:
-    columnId: 1
-    indexIdForValidation: 0
-    tableId: 105
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: table_partitioned_index_pkey
-    tableId: 105
-  Status: PUBLIC
-- IndexName:
-    indexId: 2
-    name: table_partitioned_index_b_key
-    tableId: 105
-  Status: PUBLIC
-- IndexPartitioning:
-    indexId: 2
-    partitioning:
-      list:
-      - name: p1
-        subpartitioning:
-          list: []
-          numColumns: 0
-          numImplicitColumns: 0
-          range: []
-        values:
-        - AwI=
-      numColumns: 1
-      numImplicitColumns: 0
-      range: []
-    tableId: 105
-  Status: PUBLIC
 - IndexColumn:
     columnId: 1
     direction: ASC
@@ -744,6 +678,33 @@ ElementState:
     indexId: 2
     tableId: 105
   Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: table_partitioned_index_pkey
+    tableId: 105
+  Status: PUBLIC
+- IndexName:
+    indexId: 2
+    name: table_partitioned_index_b_key
+    tableId: 105
+  Status: PUBLIC
+- IndexPartitioning:
+    indexId: 2
+    partitioning:
+      list:
+      - name: p1
+        subpartitioning:
+          list: []
+          numColumns: 0
+          numImplicitColumns: 0
+          range: []
+        values:
+        - AwI=
+      numColumns: 1
+      numImplicitColumns: 0
+      range: []
+    tableId: 105
+  Status: PUBLIC
 - Namespace:
     databaseId: 100
     descriptorId: 105
@@ -753,6 +714,49 @@ ElementState:
 - Owner:
     descriptorId: 105
     owner: root
+  Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 2
+    geoConfig: null
+    indexId: 1
+    invisibility: 0
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 105
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 105
+    schemaId: 101
+  Status: PUBLIC
+- SecondaryIndex:
+    constraintId: 1
+    embeddedExpr: null
+    geoConfig: null
+    indexId: 2
+    invisibility: 0
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 105
+    temporaryIndexId: 0
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 105
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 105
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
@@ -765,8 +769,4 @@ ElementState:
     privileges: "2"
     userName: root
     withGrantOption: "2"
-  Status: PUBLIC
-- SchemaChild:
-    childObjectId: 105
-    schemaId: 101
   Status: PUBLIC

@@ -31,14 +31,14 @@ import (
 func TestWalk(t *testing.T) {
 	// Sanity check that we don't panic or anything dumb on all the elements.
 	t.Run("all elements work", func(t *testing.T) {
-		typ := reflect.TypeOf((*scpb.ElementProto)(nil)).Elem()
-		for i := 0; i < typ.NumField(); i++ {
-			f := typ.Field(i)
-			elem := reflect.New(f.Type.Elem()).Interface().(scpb.Element)
+		_ = scpb.ForEachElementType(func(e scpb.Element) error {
+			typ := reflect.TypeOf(e)
+			elem := reflect.New(typ.Elem()).Interface().(scpb.Element)
 			require.NoError(t, WalkDescIDs(elem, func(id *catid.DescID) error { return nil }))
 			require.NoError(t, WalkTypes(elem, func(id *types.T) error { return nil }))
 			require.NoError(t, WalkExpressions(elem, func(id *catpb.Expression) error { return nil }))
-		}
+			return nil
+		})
 	})
 
 	t.Run("errors propagate", func(t *testing.T) {
