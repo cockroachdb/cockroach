@@ -73,11 +73,11 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 		return nil, nil, err
 	}
 	// Because we're not going through the normal pathways, we have to set up the
-	// planCtx.nodeStatuses map ourselves. checkInstanceHealthAndVersionSystem() will
+	// planCtx.nodeStatuses map ourselves. checkInstanceHealthSystem() will
 	// populate it.
 	for _, node := range resp.Nodes {
 		if ok, _ := node.Desc.Locality.Matches(localityFilter); ok {
-			_ /* NodeStatus */ = dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
+			_ /* NodeStatus */ = dsp.checkInstanceHealthSystem(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
 		}
 	}
 	nodes := make([]base.SQLInstanceID, 0, len(planCtx.nodeStatuses))

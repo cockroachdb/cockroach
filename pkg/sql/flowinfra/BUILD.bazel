@@ -70,7 +70,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",
-        "//pkg/gossip",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",

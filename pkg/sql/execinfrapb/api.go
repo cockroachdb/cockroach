@@ -48,6 +48,8 @@ func (f FlowID) IsUnset() bool {
 }
 
 // DistSQLVersion identifies DistSQL engine versions.
+// TODO(yuzefovich): remove this once compatibility with 23.2 is no longer
+// needed.
 type DistSQLVersion uint32
 
 // MakeEvalContext serializes some of the fields of a eval.Context into a

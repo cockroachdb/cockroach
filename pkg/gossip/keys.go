@@ -76,10 +76,6 @@ const (
 	// release, delete this key.
 	KeyDeprecatedSystemConfig = "system-db"
 
-	// KeyDistSQLNodeVersionKeyPrefix is key prefix for each node's DistSQL
-	// version.
-	KeyDistSQLNodeVersionKeyPrefix = "distsql-version"
-
 	// KeyDistSQLDrainingPrefix is the key prefix for each node's DistSQL
 	// draining state.
 	KeyDistSQLDrainingPrefix = "distsql-draining"
@@ -154,11 +150,6 @@ func DecodeStoreDescKey(storeKey string) (roachpb.StoreID, error) {
 		return 0, errors.Wrapf(err, "failed parsing StoreID from key %q", storeKey)
 	}
 	return roachpb.StoreID(storeID), nil
-}
-
-// MakeDistSQLNodeVersionKey returns the gossip key for the given store.
-func MakeDistSQLNodeVersionKey(instanceID base.SQLInstanceID) string {
-	return MakeKey(KeyDistSQLNodeVersionKeyPrefix, instanceID.String())
 }
 
 // MakeDistSQLDrainingKey returns the gossip key for the given node's distsql

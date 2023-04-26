@@ -10,7 +10,6 @@ func _() {
 	var x [1]struct{}
 	_ = x[NodeOK-0]
 	_ = x[NodeUnhealthy-1]
-	_ = x[NodeDistSQLVersionIncompatible-2]
 }
 
 func (i NodeStatus) String() string {
@@ -19,8 +18,6 @@ func (i NodeStatus) String() string {
 		return "NodeOK"
 	case NodeUnhealthy:
 		return "NodeUnhealthy"
-	case NodeDistSQLVersionIncompatible:
-		return "NodeDistSQLVersionIncompatible"
 	default:
 		return "NodeStatus(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
