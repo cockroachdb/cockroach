@@ -81,8 +81,10 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 	s.acc = s.mon.MakeBoundAccount()
 
-	// errCh consumed by ValueGenerator and is signaled when go routines encounter error.
-	s.errCh = make(chan error)
+	// errCh is buffered to ensure the sender can send an error to
+	// the buffer, without waiting, when the channel receiver is not waiting on
+	// the channel.
+	s.errCh = make(chan error, 1)
 
 	// Events channel gets RangeFeedEvents and is consumed by ValueGenerator.
 	s.eventsCh = make(chan kvcoord.RangeFeedMessage)
@@ -159,6 +161,9 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 }
 
 func (s *eventStream) maybeSetError(err error) {
+	// Only send the error if the channel is empty, else it's ok to swallow the
+	// error because the first error in the channel will shut down the event
+	// stream.
 	select {
 	case s.errCh <- err:
 	default:
@@ -223,7 +228,6 @@ func (s *eventStream) Close(ctx context.Context) {
 		// Note: error in close is normal; we expect to be terminated with context canceled.
 		log.Errorf(ctx, "partition stream %d terminated with error %v", s.streamID, err)
 	}
-
 	s.sp.Finish()
 }
 
