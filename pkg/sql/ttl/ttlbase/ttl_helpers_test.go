@@ -51,7 +51,7 @@ AND (
   (col0 > $3)
 )
 AND (
-  (col0 < $2)
+  (col0 <= $2)
 )
 ORDER BY col0 ASC
 LIMIT 2`,
@@ -71,7 +71,7 @@ AND (
   (col0 < $3)
 )
 AND (
-  (col0 > $2)
+  (col0 >= $2)
 )
 ORDER BY col0 DESC
 LIMIT 2`,
@@ -121,7 +121,7 @@ AND (
   (col0 >= $3)
 )
 AND (
-  (col0 < $2)
+  (col0 <= $2)
 )
 ORDER BY col0 ASC
 LIMIT 2`,
@@ -142,7 +142,7 @@ AND (
   (col0 <= $3)
 )
 AND (
-  (col0 > $2)
+  (col0 >= $2)
 )
 ORDER BY col0 DESC
 LIMIT 2`,
@@ -165,7 +165,7 @@ AND (
 )
 AND (
   (col0 < $2) OR
-  (col0 = $2 AND col1 < $3)
+  (col0 = $2 AND col1 <= $3)
 )
 ORDER BY col0 ASC, col1 ASC
 LIMIT 2`,
@@ -187,7 +187,7 @@ AND (
 )
 AND (
   (col0 < $2) OR
-  (col0 = $2 AND col1 < $3)
+  (col0 = $2 AND col1 <= $3)
 )
 ORDER BY col0 ASC, col1 ASC
 LIMIT 2`,
@@ -209,7 +209,7 @@ AND (
   (col0 = $3 AND col1 > $4)
 )
 AND (
-  (col0 < $2)
+  (col0 <= $2)
 )
 ORDER BY col0 ASC, col1 ASC
 LIMIT 2`,
@@ -232,7 +232,7 @@ AND (
 )
 AND (
   (col0 > $2) OR
-  (col0 = $2 AND col1 > $3)
+  (col0 = $2 AND col1 >= $3)
 )
 ORDER BY col0 DESC, col1 DESC
 LIMIT 2`,
@@ -254,7 +254,7 @@ AND (
 )
 AND (
   (col0 > $2) OR
-  (col0 = $2 AND col1 > $3)
+  (col0 = $2 AND col1 >= $3)
 )
 ORDER BY col0 DESC, col1 DESC
 LIMIT 2`,
@@ -276,7 +276,7 @@ AND (
   (col0 = $3 AND col1 < $4)
 )
 AND (
-  (col0 > $2)
+  (col0 >= $2)
 )
 ORDER BY col0 DESC, col1 DESC
 LIMIT 2`,
@@ -302,7 +302,7 @@ AND (
 AND (
   (col0 < $2) OR
   (col0 = $2 AND col1 > $3) OR
-  (col0 = $2 AND col1 = $3 AND col2 < $4)
+  (col0 = $2 AND col1 = $3 AND col2 <= $4)
 )
 ORDER BY col0 ASC, col1 DESC, col2 ASC
 LIMIT 2`,
@@ -328,7 +328,7 @@ AND (
 AND (
   (col0 > $2) OR
   (col0 = $2 AND col1 < $3) OR
-  (col0 = $2 AND col1 = $3 AND col2 > $4)
+  (col0 = $2 AND col1 = $3 AND col2 >= $4)
 )
 ORDER BY col0 DESC, col1 ASC, col2 DESC
 LIMIT 2`,

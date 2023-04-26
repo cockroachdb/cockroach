@@ -58,6 +58,7 @@ go_test(
     name = "ttljob_test",
     srcs = [
         "main_test.go",
+        "ttljob_processor_test.go",
         "ttljob_query_builder_test.go",
         "ttljob_test.go",
     ],
@@ -66,6 +67,7 @@ go_test(
         ":ttljob",
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",
+        "//pkg/ccl/streamingccl/replicationtestutils",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",
@@ -85,6 +87,7 @@ go_test(
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
+        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/ttl/ttlbase",
         "//pkg/sql/types",
