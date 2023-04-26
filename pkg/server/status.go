@@ -375,7 +375,6 @@ func (b *baseStatusServer) ListLocalDistSQLFlows(
 			Infos: []serverpb.DistSQLRemoteFlows_Info{{
 				NodeID:    nodeIDOrZero,
 				Timestamp: f.Timestamp,
-				Status:    serverpb.DistSQLRemoteFlows_RUNNING,
 				Stmt:      f.StatementSQL,
 			}},
 		})

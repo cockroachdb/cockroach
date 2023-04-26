@@ -2858,14 +2858,12 @@ func populateContentionEventsTable(
 	return nil
 }
 
-// TODO(yuzefovich): remove 'status' column in 23.2.
 const distSQLFlowsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   flow_id UUID NOT NULL,
   node_id INT NOT NULL,
   stmt    STRING NULL,
-  since   TIMESTAMPTZ NOT NULL,
-  status  STRING NOT NULL
+  since   TIMESTAMPTZ NOT NULL
 )
 `
 
@@ -2914,8 +2912,7 @@ func populateDistSQLFlowsTable(
 			if err != nil {
 				return err
 			}
-			status := tree.NewDString(strings.ToLower(info.Status.String()))
-			if err = addRow(flowID, nodeID, stmt, since, status); err != nil {
+			if err = addRow(flowID, nodeID, stmt, since); err != nil {
 				return err
 			}
 		}
