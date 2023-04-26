@@ -40,6 +40,10 @@ var (
 	// TimeseriesSpan holds all the timeseries data in the cluster.
 	TimeseriesSpan = roachpb.Span{Key: TimeseriesPrefix, EndKey: TimeseriesKeyMax}
 
+	// ScratchSpan is used in tests to write arbitrary data without
+	// 	overlapping with meta, system or tenant ranges.
+	ScratchSpan = roachpb.Span{Key: ScratchRangeMin, EndKey: ScratchRangeMax}
+
 	// SystemSpanConfigSpan is part of the system keyspace that is used to carve
 	// out spans for system span configurations. No data is stored in these spans,
 	// instead, special meaning is assigned to them when stored in

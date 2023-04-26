@@ -234,14 +234,19 @@ package kvflowcontrol
 // I5. What happens when the leaseholder and/or the raft leader changes? When
 //     the raft leader is not the same as the leaseholder?
 // - The per-replica kvflowcontrol.Handle is tied to the lifetime of a
-//   leaseholder replica having raft leadership. When leadership is lost, or the
-//   lease changes hands, we release all held flow tokens.
+//   replica having raft leadership. When leadership is lost we release all held
+//   flow tokens. Tokens are only deducted at proposal time when the proposing
+//   replica is both the raft leader and leaseholder (the latter is tautological
+//   since only leaseholders propose). We're relying on timely acquisition of
+//   raft leadership by the leaseholder to not be persistently over admitting.
+//   - Even if the lease transfers but raft leadership remains, and there's
+//     later admission of writes for which tokens were originally deducted at
+//     the raft leader, it's the raft leader that's informed of that admission
+//     who then releases those tokens.
 //   - Avoiding double returns on subsequent AdmittedRaftLogEntries for these
-//     already released flow tokens is easier for raft leadership changes since
+//     already released flow tokens is easy for raft leadership changes since
 //     there's a term change, and all earlier/stale AdmittedRaftLogEntries with
-//     the lower term can be discarded. We do a similar thing for leases -- when
-//     being granted a lease, the low water mark in kvflowcontrol.Handle is at
-//     least as high as the command that transferred the lease.
+//     the lower term can be discarded.
 //
 // I6. What happens during replica GC?
 // - It's unlikely that a replica gets GC-ed without first going through the

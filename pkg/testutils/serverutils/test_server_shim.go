@@ -296,6 +296,13 @@ type TestServerInterface interface {
 	// the server.
 	SpanConfigKVSubscriber() interface{}
 
+	// KVFlowController returns the embedded kvflowcontrol.Controller for the
+	// server.
+	KVFlowController() interface{}
+
+	// KVFlowHandles returns the embedded kvflowcontrol.Handles for the server.
+	KVFlowHandles() interface{}
+
 	// TestTenants returns the test tenants associated with the server
 	TestTenants() []TestTenantInterface
 
