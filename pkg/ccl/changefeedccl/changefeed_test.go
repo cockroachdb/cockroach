@@ -269,23 +269,20 @@ func TestChangefeedTotalOrdering(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH ordering='total'`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, ordering='total'`)
+		defer closeFeed(t, foo)
 		for i := 0; i < 1000; i++ {
 			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
 		}
 
-		actual, err := readNextMessages(context.Background(), foo, 1000)
-		require.NoError(t, err)
-		var actualFormatted []string
-		for _, m := range actual {
-			actualFormatted = append(actualFormatted, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value))
+		var expectedMessages []string
+		for i := 0; i < 1000; i++ {
+			expectedMessages = append(expectedMessages, fmt.Sprintf(
+				`foo: [%d]->{"after": {"a": %d}}`, i, i,
+			))
 		}
 
-		for _, m := range actualFormatted {
-			fmt.Printf("\x1b[34m %s \x1b[0m\n", m)
-		}
-
-		t.FailNow()
+		assertPayloadsTotalOrdering(t, foo, expectedMessages)
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("webhook"))
@@ -1115,7 +1112,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			for i, id := range expectedRowIDs {
 				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
 			}
-			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
+			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, changefeedbase.OptOrderingNone)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
 				t.Error(err)
@@ -8080,7 +8077,7 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 					nada, expectTimeout,
 					func(ctx context.Context) error {
 						return assertPayloadsBaseErr(
-							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false)
+							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, changefeedbase.OptOrderingNone)
 					})
 				return nil
 			}, 20*expectTimeout))

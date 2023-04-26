@@ -258,8 +258,10 @@ func assertPayloadsBaseErr(
 		}
 	}
 
-	sort.Strings(expected)
-	sort.Strings(actualFormatted)
+	if ordering != changefeedbase.OptOrderingTotal {
+		sort.Strings(expected)
+		sort.Strings(actualFormatted)
+	}
 	if !reflect.DeepEqual(expected, actualFormatted) {
 		return errors.Newf("expected\n  %s\ngot\n  %s",
 			strings.Join(expected, "\n  "), strings.Join(actualFormatted, "\n  "))
@@ -297,7 +299,7 @@ func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
 
 func assertPayloadsTotalOrdering(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, false, changefeedbase.OptOrderingTotal)
+	assertPayloadsBase(t, f, expected, true, changefeedbase.OptOrderingTotal)
 }
 
 func assertPayloadsStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {

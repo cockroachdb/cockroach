@@ -485,7 +485,10 @@ func (s *cloudStorageSink) getOrCreateFile(
 	topic TopicDescriptor, eventMVCC hlc.Timestamp,
 ) (*cloudStorageSinkFile, error) {
 	name, _ := s.topicNamer.Name(topic)
-	key := cloudStorageSinkKey{name, int64(topic.GetVersion())}
+	var key cloudStorageSinkKey
+	if topic != nil {
+		key = cloudStorageSinkKey{name, int64(topic.GetVersion())}
+	}
 	if item := s.files.Get(key); item != nil {
 		f := item.(*cloudStorageSinkFile)
 		if eventMVCC.Less(f.oldestMVCC) {
@@ -631,7 +634,9 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		return err
 	}
 	s.files.Clear(true /* addNodesToFreeList */)
-	s.setDataFileTimestamp()
+	if s.timestampOracle != nil {
+		s.setDataFileTimestamp()
+	}
 	return s.waitAsyncFlush(ctx)
 }
 

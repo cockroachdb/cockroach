@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
 	"net/url"
 	"runtime"
@@ -168,7 +167,7 @@ var WebhookV2Enabled = settings.RegisterBoolSetting(
 	"if enabled, this setting enables a new implementation of the webhook sink"+
 		" that allows for a much higher throughput",
 	// util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
-	false,
+	true,
 )
 
 // PubsubV2Enabled determines whether or not the refactored Webhook sink
@@ -245,7 +244,7 @@ func getSink(
 			if WebhookV2Enabled.Get(&serverCfg.Settings.SV) {
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 					return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
+						numSinkIOWorkers(serverCfg, opts), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
 				})
 			} else {
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
@@ -260,7 +259,7 @@ func getSink(
 			}
 			if PubsubV2Enabled.Get(&serverCfg.Settings.SV) {
 				return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered),
-					numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder, testingKnobs)
+					numSinkIOWorkers(serverCfg, opts), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder, testingKnobs)
 			} else {
 				return makeDeprecatedPubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered), metricsBuilder, testingKnobs)
 			}
@@ -820,7 +819,11 @@ func (j *jsonMaxRetries) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func numSinkIOWorkers(cfg *execinfra.ServerConfig) int {
+func numSinkIOWorkers(cfg *execinfra.ServerConfig, opts changefeedbase.StatementOptions) int {
+	if opts.TotalOrdering() {
+		return 1
+	}
+
 	numWorkers := changefeedbase.SinkIOWorkers.Get(&cfg.Settings.SV)
 	if numWorkers > 0 {
 		return int(numWorkers)
@@ -905,9 +908,11 @@ type OrderedSinkRow struct {
 
 type OrderedSinkRowSlice []OrderedSinkRow
 
-func (p OrderedSinkRowSlice) Len() int           { return len(p) }
-func (p OrderedSinkRowSlice) Less(i, j int) bool { return p[i].row.Mvcc.Less(p[j].row.Mvcc) }
-func (p OrderedSinkRowSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p OrderedSinkRowSlice) Len() int      { return len(p) }
+func (p OrderedSinkRowSlice) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+
+// Sorts by mvcc timestamp in *descending* order
+func (p OrderedSinkRowSlice) Less(i, j int) bool { return p[j].row.Mvcc.Less(p[i].row.Mvcc) }
 
 type orderedSink struct {
 	processorID   int32
@@ -931,7 +936,6 @@ func (s *orderedSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	fmt.Printf("\n\x1b[33mAPPENDING TO UNORDERD BUF %s\x1b[0m\n", string(key))
 	s.unorderedBuf = append(s.unorderedBuf, OrderedSinkRow{
 		alloc: alloc,
 		row: jobspb.OrderedRows_Row{
@@ -947,7 +951,9 @@ func (s *orderedSink) EmitRow(
 func (s *orderedSink) EmitUpToResolved(
 	ctx context.Context, resolved hlc.Timestamp,
 ) error {
-	fmt.Printf("\n\x1b[33mEMITTING UP TO RESOLVED (%+v)\x1b[0m\n", resolved)
+	if len(s.unorderedBuf) == 0 {
+		return nil
+	}
 	sort.Sort(s.unorderedBuf)
 
 	orderedUpdate := jobspb.OrderedRows{
@@ -966,7 +972,6 @@ func (s *orderedSink) EmitUpToResolved(
 		toRelease.Merge(&r.alloc)
 	}
 	s.unorderedBuf = s.unorderedBuf[len(orderedUpdate.Rows):]
-	fmt.Printf("\n\x1b[33m ORDERED UPDATE (%+v) \x1b[0m\n", orderedUpdate)
 
 	updateBytes, err := protoutil.Marshal(&orderedUpdate)
 	if err != nil {

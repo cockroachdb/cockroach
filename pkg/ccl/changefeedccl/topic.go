@@ -140,6 +140,9 @@ const familyPlaceholder = "{family}"
 
 // Name generates (with caching) a sink's topic identifier string.
 func (tn *TopicNamer) Name(td TopicDescriptor) (string, error) {
+	if td == nil {
+		return "foo", nil
+	}
 	if name, ok := tn.FullNames[td.GetTopicIdentifier()]; ok {
 		return name, nil
 	}
