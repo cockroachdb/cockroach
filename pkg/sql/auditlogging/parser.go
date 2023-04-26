@@ -43,7 +43,7 @@ func parse(input string) (*AuditConfig, error) {
 		}
 		settingsRoleMap[setting.Role] = i
 		config.Settings[i] = setting
-		if setting.Role.Normalized() == AllUserRole {
+		if setting.Role.Normalized() == allUserRole {
 			config.AllRoleAuditSettingIdx = i
 		}
 	}
