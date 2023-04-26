@@ -116,7 +116,7 @@ func TestFlowControlReplicaIntegration(t *testing.T) {
 
 						mockHandleFactory = newMockFlowHandleFactory(t, logger)
 						mockReplica = newMockReplicaForFlowControl(t, rangeID, tenantID, replID)
-						integration = newReplicaFlowControlIntegration(mockReplica, mockHandleFactory)
+						integration = newReplicaFlowControlIntegration(mockReplica, mockHandleFactory, nil /* knobs */)
 						return ""
 
 					case "state":
