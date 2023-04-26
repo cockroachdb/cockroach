@@ -19,12 +19,16 @@ func init() {
 	opRegistry.register((*scpb.Schema)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
-			to(scpb.Status_DROPPED,
-				emit(func(this *scpb.Schema) *scop.NotImplemented {
-					return notImplemented(this)
+			equiv(scpb.Status_DROPPED),
+			to(scpb.Status_DESCRIPTOR_ADDED,
+				emit(func(this *scpb.Schema) *scop.CreateSchemaDescriptor {
+					return &scop.CreateSchemaDescriptor{
+						SchemaID: this.SchemaID,
+					}
 				}),
 			),
 			to(scpb.Status_PUBLIC,
+				revertible(false),
 				emit(func(this *scpb.Schema) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
 						DescriptorID: this.SchemaID,
@@ -33,6 +37,7 @@ func init() {
 			),
 		),
 		toAbsent(scpb.Status_PUBLIC,
+			equiv(scpb.Status_DESCRIPTOR_ADDED),
 			to(scpb.Status_DROPPED,
 				revertible(false),
 				emit(func(this *scpb.Schema) *scop.MarkDescriptorAsDropped {

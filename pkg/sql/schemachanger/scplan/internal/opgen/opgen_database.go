@@ -26,6 +26,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
+				revertible(false),
 				emit(func(this *scpb.Database) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
 						DescriptorID: this.DatabaseID,

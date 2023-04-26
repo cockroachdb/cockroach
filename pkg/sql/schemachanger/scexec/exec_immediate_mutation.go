@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
+	"github.com/cockroachdb/errors"
 )
 
 type immediateState struct {
@@ -26,6 +27,7 @@ type immediateState struct {
 	descriptorsToDelete catalog.DescriptorIDSet
 	commentsToUpdate    []commentToUpdate
 	newDescriptors      map[descpb.ID]catalog.MutableDescriptor
+	addedNames          map[descpb.ID]descpb.NameInfo
 	withReset           bool
 }
 
@@ -88,6 +90,17 @@ func (s *immediateState) DeleteName(id descpb.ID, nameInfo descpb.NameInfo) {
 	s.drainedNames[id] = append(s.drainedNames[id], nameInfo)
 }
 
+func (s *immediateState) AddName(id descpb.ID, nameInfo descpb.NameInfo) {
+	if s.addedNames == nil {
+		s.addedNames = make(map[descpb.ID]descpb.NameInfo)
+	}
+	if info, ok := s.addedNames[id]; ok {
+		panic(errors.AssertionFailedf("descriptor %v already has a to-be-added name %v; get"+
+			"a request to add another name %v for it", id, info.String(), nameInfo.String()))
+	}
+	s.addedNames[id] = nameInfo
+}
+
 func (s *immediateState) CreateDescriptor(desc catalog.MutableDescriptor) {
 	if s.newDescriptors == nil {
 		s.newDescriptors = make(map[descpb.ID]catalog.MutableDescriptor)
@@ -129,6 +142,11 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 			if err := c.DeleteName(ctx, name, id); err != nil {
 				return err
 			}
+		}
+	}
+	for id, name := range s.addedNames {
+		if err := c.AddName(ctx, name, id); err != nil {
+			return err
 		}
 	}
 	for _, u := range s.commentsToUpdate {

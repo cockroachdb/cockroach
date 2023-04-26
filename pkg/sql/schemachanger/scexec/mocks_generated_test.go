@@ -42,6 +42,20 @@ func (m *MockCatalog) EXPECT() *MockCatalogMockRecorder {
 	return m.recorder
 }
 
+// AddName mocks base method.
+func (m *MockCatalog) AddName(arg0 context.Context, arg1 descpb.NameInfo, arg2 catid.DescID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddName", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddName indicates an expected call of AddName.
+func (mr *MockCatalogMockRecorder) AddName(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddName", reflect.TypeOf((*MockCatalog)(nil).AddName), arg0, arg1, arg2)
+}
+
 // CreateOrUpdateDescriptor mocks base method.
 func (m *MockCatalog) CreateOrUpdateDescriptor(arg0 context.Context, arg1 catalog.MutableDescriptor) error {
 	m.ctrl.T.Helper()
