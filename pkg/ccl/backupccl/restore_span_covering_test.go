@@ -163,6 +163,7 @@ func checkRestoreCovering(
 	storageFactory cloud.ExternalStorageFactory,
 ) error {
 	required := make(map[string]*roachpb.SpanGroup)
+	requiredKey := make(map[string]roachpb.Key)
 
 	introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
 	if err != nil {
@@ -214,13 +215,27 @@ func checkRestoreCovering(
 						last = sp.EndKey
 					}
 				}
+
+				if span.ContainsKey(f.Span.EndKey) {
+					// Since file spans are end key inclusive, we have to check
+					// if the end key is in the covering.
+					requiredKey[f.Path] = f.Span.EndKey
+				}
 			}
 		}
 	}
 	var spanIdx int
 	for _, c := range cov {
 		for _, f := range c.Files {
-			required[f.Path].Sub(c.Span)
+			if requireSpan, ok := required[f.Path]; ok {
+				requireSpan.Sub(c.Span)
+			}
+
+			if requireKey, ok := requiredKey[f.Path]; ok {
+				if c.Span.ContainsKey(requireKey) {
+					delete(requiredKey, f.Path)
+				}
+			}
 		}
 		for spans[spanIdx].EndKey.Compare(c.Span.Key) < 0 {
 			spanIdx++
@@ -238,6 +253,11 @@ func checkRestoreCovering(
 			return errors.Errorf("file %s was supposed to cover span %s", name, missing)
 		}
 	}
+
+	for name, uncoveredKey := range requiredKey {
+		return errors.Errorf("file %s was supposed to cover key %s", name, uncoveredKey)
+	}
+
 	return nil
 }
 
@@ -407,11 +427,10 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
 			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
-			{Span: c.sp("b", "c"), Files: c.paths("1", "4", "6")},
-			{Span: c.sp("c", "f"), Files: c.paths("2", "4", "6")},
+			{Span: c.sp("b", "f"), Files: c.paths("2", "1", "4", "6")},
 			{Span: c.sp("f", "g"), Files: c.paths("6")},
 			{Span: c.sp("g", "h"), Files: c.paths("5", "6")},
-			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
+			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "6", "8")},
 			{Span: c.sp("l", "m"), Files: c.paths("9")},
 		}), reduce(cover))
 		coverSimple, err := makeImportSpans(
@@ -426,9 +445,9 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			true)
 		require.NoError(t, err)
 		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
-			{Span: c.sp("a", "c"), Files: c.paths("1", "4", "6")},
-			{Span: c.sp("c", "e"), Files: c.paths("2", "4", "6")},
-			{Span: c.sp("e", "f"), Files: c.paths("6")},
+			{Span: c.sp("a", "c\x00"), Files: c.paths("1", "2", "4", "6")},
+			{Span: c.sp("c\x00", "e\x00"), Files: c.paths("2", "4", "6")},
+			{Span: c.sp("e\x00", "f"), Files: c.paths("6")},
 			{Span: c.sp("f", "i"), Files: c.paths("3", "5", "6", "8")},
 			{Span: c.sp("l", "m"), Files: c.paths("9")},
 		}), reduce(coverSimple))
@@ -448,10 +467,9 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
 			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
-			{Span: c.sp("b", "c"), Files: c.paths("1", "4", "6")},
-			{Span: c.sp("c", "f"), Files: c.paths("2", "4", "6")},
+			{Span: c.sp("b", "f"), Files: c.paths("2", "1", "4", "6")},
 			{Span: c.sp("f", "h"), Files: c.paths("5", "6")},
-			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
+			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "6", "8")},
 			{Span: c.sp("l", "m"), Files: c.paths("9")},
 		}), reduce(coverSized))
 
@@ -492,7 +510,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			{Span: c.sp("a", "f"), Files: c.paths("6")},
 			{Span: c.sp("f", "g"), Files: c.paths("6")},
 			{Span: c.sp("g", "h"), Files: c.paths("5", "6")},
-			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
+			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "6", "8")},
 			{Span: c.sp("l", "m"), Files: c.paths("9")},
 		}), reduce(coverIntroduced))
 
@@ -537,7 +555,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
 			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
-			{Span: c.sp("c", "f"), Files: c.paths("2", "4", "6")},
+			{Span: c.sp("c", "f"), Files: c.paths("2", "1", "4", "6")},
 			{Span: c.sp("f", "g"), Files: c.paths("6")},
 			{Span: c.sp("l", "m"), Files: c.paths("9")},
 		}), reduce(coverCompleted))
@@ -555,8 +573,9 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
 			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
-			{Span: c.sp("c", "e"), Files: c.paths("2", "4", "6")},
-			{Span: c.sp("e", "f"), Files: c.paths("6")},
+			{Span: c.sp("c", "c\x00"), Files: c.paths("1", "2", "4", "6")},
+			{Span: c.sp("c\x00", "e\x00"), Files: c.paths("2", "4", "6")},
+			{Span: c.sp("e\x00", "f"), Files: c.paths("6")},
 			{Span: c.sp("f", "g"), Files: c.paths("6")},
 			{Span: c.sp("l", "m"), Files: c.paths("9")},
 		}), reduce(coverCompletedSimple))
@@ -578,27 +597,27 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 		expectedError string
 	}
 
-	for _, sp := range []testSpec{
+	for i, sp := range []testSpec{
 		{
 			// adjacent and disjoint files.
 			manifestFiles: []roachpb.Spans{
-				{c.sp("a", "b"), c.sp("c", "d"), c.sp("d", "e")},
+				{c.sp("a", "b"), c.sp("c", "d"), c.sp("d\x00", "e")},
 			},
-			keysSurfaced: []string{"a", "b", "c", "d", "e"},
+			keysSurfaced: []string{"a", "b\x00", "c", "d\x00", "e\x00"},
 		},
 		{
 			// shadow start key (b) if another span covers it.
 			manifestFiles: []roachpb.Spans{
 				{c.sp("a", "c"), c.sp("b", "d")},
 			},
-			keysSurfaced: []string{"a", "c", "d"},
+			keysSurfaced: []string{"a", "c\x00", "d\x00"},
 		},
 		{
 			// swap the file order and expect an error.
 			manifestFiles: []roachpb.Spans{
 				{c.sp("b", "d"), c.sp("a", "c")},
 			},
-			keysSurfaced:  []string{"b", "d", "a", "c"},
+			keysSurfaced:  []string{"b", "d\x00", "a", "c\x00"},
 			expectedError: "out of order backup keys",
 		},
 		{
@@ -606,7 +625,7 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 			manifestFiles: []roachpb.Spans{
 				{c.sp("b", "f"), c.sp("c", "d"), c.sp("e", "g")},
 			},
-			keysSurfaced: []string{"b", "f", "g"},
+			keysSurfaced: []string{"b", "f\x00", "g\x00"},
 		},
 		{
 			// overlapping files within and across levels.
@@ -614,7 +633,7 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 				{c.sp("a", "e"), c.sp("d", "f")},
 				{c.sp("b", "c")},
 			},
-			keysSurfaced: []string{"a", "b", "c", "e", "f"},
+			keysSurfaced: []string{"a", "b", "c\x00", "e\x00", "f\x00"},
 		},
 		{
 			// overlapping start key in one level, but non overlapping in another level.
@@ -622,7 +641,7 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 				{c.sp("a", "c"), c.sp("b", "d")},
 				{c.sp("b", "c")},
 			},
-			keysSurfaced: []string{"a", "b", "c", "d"},
+			keysSurfaced: []string{"a", "b", "c\x00", "d\x00"},
 		},
 		{
 			// overlapping files in both levels.
@@ -630,7 +649,7 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 				{c.sp("b", "e"), c.sp("d", "i")},
 				{c.sp("a", "c"), c.sp("b", "h")},
 			},
-			keysSurfaced: []string{"a", "b", "c", "e", "h", "i"},
+			keysSurfaced: []string{"a", "b", "c\x00", "e\x00", "h\x00", "i\x00"},
 		},
 		{
 			// ensure everything works with 3 layers.
@@ -639,7 +658,7 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 				{c.sp("b", "e"), c.sp("e", "f")},
 				{c.sp("c", "e"), c.sp("d", "f")},
 			},
-			keysSurfaced: []string{"a", "b", "c", "e", "f"},
+			keysSurfaced: []string{"a", "b", "c", "e\x00", "f\x00"},
 		},
 	} {
 		backups := c.makeManifests(sp.manifestFiles)
@@ -663,12 +682,12 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 		for _, expectedKey := range sp.keysSurfaced {
 			if ok, err := startEndKeyIt.valid(); !ok {
 				if err != nil {
-					require.Error(t, err, sp.expectedError)
+					require.Error(t, err, sp.expectedError, "test case %d", i)
 				}
 				break
 			}
 			expected := roachpb.Key(expectedKey)
-			require.Equal(t, expected, startEndKeyIt.value())
+			require.Equal(t, expected, startEndKeyIt.value(), "test case %d", i)
 			startEndKeyIt.next()
 		}
 	}
