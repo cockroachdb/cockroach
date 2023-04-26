@@ -321,6 +321,9 @@ func combineOverloads(a, b []QualifiedOverload) []QualifiedOverload {
 // method, function is resolved to one overload, so that we can get rid of this
 // function and similar methods below.
 func (fd *ResolvedFunctionDefinition) GetClass() (FunctionClass, error) {
+	if len(fd.Overloads) < 1 {
+		return 0, errors.AssertionFailedf("no overloads found for function %s", fd.Name)
+	}
 	ret := fd.Overloads[0].Class
 	for i := range fd.Overloads {
 		if fd.Overloads[i].Class != ret {
@@ -336,6 +339,9 @@ func (fd *ResolvedFunctionDefinition) GetClass() (FunctionClass, error) {
 // different length. This is good enough since we don't create UDF with
 // ReturnLabel.
 func (fd *ResolvedFunctionDefinition) GetReturnLabel() ([]string, error) {
+	if len(fd.Overloads) < 1 {
+		return nil, errors.AssertionFailedf("no overloads found for function %s", fd.Name)
+	}
 	ret := fd.Overloads[0].ReturnLabels
 	for i := range fd.Overloads {
 		if len(ret) != len(fd.Overloads[i].ReturnLabels) {
@@ -349,6 +355,9 @@ func (fd *ResolvedFunctionDefinition) GetReturnLabel() ([]string, error) {
 // checking each overload's HasSequenceArguments flag. Ambiguous error is
 // returned if there is any overload has a different flag.
 func (fd *ResolvedFunctionDefinition) GetHasSequenceArguments() (bool, error) {
+	if len(fd.Overloads) < 1 {
+		return false, errors.AssertionFailedf("no overloads found for function %s", fd.Name)
+	}
 	ret := fd.Overloads[0].HasSequenceArguments
 	for i := range fd.Overloads {
 		if ret != fd.Overloads[i].HasSequenceArguments {
