@@ -906,6 +906,10 @@ func (q *WorkQueue) adjustTenantTokens(tenantID roachpb.TenantID, additionalToke
 	}
 }
 
+func (q *WorkQueue) Metrics() *WorkQueueMetrics {
+	return q.metrics
+}
+
 func (q *WorkQueue) String() string {
 	return redact.StringWithoutMarkers(q)
 }
@@ -1632,6 +1636,18 @@ var (
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
+	preemptedMeta = metric.Metadata{
+		Name:        "admission.preempted",
+		Help:        "Number of requests preempted",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	pacedMeta = metric.Metadata{
+		Name:        "admission.paced",
+		Help:        "Amount of time by which work was paced",
+		Measurement: "Paced time Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 func addName(name string, meta metric.Metadata) metric.Metadata {
@@ -1676,6 +1692,8 @@ func (m *WorkQueueMetrics) getOrCreate(priority admissionpb.WorkPriority) workQu
 type workQueueMetricsSingle struct {
 	Requested       *metric.Counter
 	Admitted        *metric.Counter
+	Preempted       *metric.Counter
+	PacedDuration   metric.IHistogram
 	Errored         *metric.Counter
 	WaitDurations   metric.IHistogram
 	WaitQueueLength *metric.Gauge
@@ -1689,6 +1707,12 @@ func (m *WorkQueueMetrics) incRequested(priority admissionpb.WorkPriority) {
 func (m *WorkQueueMetrics) incAdmitted(priority admissionpb.WorkPriority) {
 	m.total.Admitted.Inc(1)
 	m.getOrCreate(priority).Admitted.Inc(1)
+}
+
+// IncPreempted records that work run via the associated queue was preempted.
+func (m *WorkQueueMetrics) IncPreempted(priority admissionpb.WorkPriority) {
+	m.total.Preempted.Inc(1)
+	m.getOrCreate(priority).Preempted.Inc(1)
 }
 
 func (m *WorkQueueMetrics) incErrored(priority admissionpb.WorkPriority) {
@@ -1708,6 +1732,12 @@ func (m *WorkQueueMetrics) recordFinishWait(priority admissionpb.WorkPriority, d
 	priorityStats := m.getOrCreate(priority)
 	priorityStats.WaitQueueLength.Dec(1)
 	priorityStats.WaitDurations.RecordValue(dur.Nanoseconds())
+}
+
+// RecordPacing records amount by which work run via associated queue was paced.
+func (m *WorkQueueMetrics) RecordPacing(priority admissionpb.WorkPriority, dur time.Duration) {
+	m.total.PacedDuration.RecordValue(dur.Nanoseconds())
+	m.getOrCreate(priority).PacedDuration.RecordValue(dur.Nanoseconds())
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -1737,10 +1767,17 @@ func makeWorkQueueMetricsSingle(name string) workQueueMetricsSingle {
 	return workQueueMetricsSingle{
 		Requested: metric.NewCounter(addName(name, requestedMeta)),
 		Admitted:  metric.NewCounter(addName(name, admittedMeta)),
+		Preempted: metric.NewCounter(addName(name, preemptedMeta)),
 		Errored:   metric.NewCounter(addName(name, erroredMeta)),
 		WaitDurations: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: addName(name, waitDurationsMeta),
+			Duration: base.DefaultHistogramWindowInterval(),
+			Buckets:  metric.IOLatencyBuckets,
+		}),
+		PacedDuration: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: addName(name, pacedMeta),
 			Duration: base.DefaultHistogramWindowInterval(),
 			Buckets:  metric.IOLatencyBuckets,
 		}),

@@ -122,6 +122,8 @@ type Controller interface {
 	// AdmitRaftEntry informs admission control of a raft log entry being
 	// written to storage.
 	AdmitRaftEntry(context.Context, roachpb.TenantID, roachpb.StoreID, roachpb.RangeID, raftpb.Entry)
+	// KVMetrics returns WorkQueueMetrics related to KV work admissions.
+	KVMetrics() *admission.WorkQueueMetrics
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -467,6 +469,14 @@ func (n *controllerImpl) AdmitRaftEntry(
 	if handle.UseAdmittedWorkDone() {
 		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
 	}
+}
+
+// KVMetrics returns the WorkQueueMetrics associated with the KV work queue.
+func (n *controllerImpl) KVMetrics() *admission.WorkQueueMetrics {
+	if n.kvAdmissionQ == nil {
+		return nil
+	}
+	return n.kvAdmissionQ.Metrics()
 }
 
 // FollowerStoreWriteBytes captures stats about writes done to a store by a

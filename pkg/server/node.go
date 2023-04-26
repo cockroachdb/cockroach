@@ -1182,6 +1182,15 @@ func (n *Node) batchInternal(
 
 	var writeBytes *kvadmission.StoreWriteBytes
 	defer func() {
+		if handle.ElasticCPUWorkHandle != nil {
+			pri := admissionpb.WorkPriority(args.AdmissionHeader.Priority)
+			if m := n.storeCfg.KVAdmissionController.KVMetrics(); m != nil {
+				if handle.ElasticCPUWorkHandle.PreemptedWork() {
+					m.IncPreempted(pri)
+				}
+				m.RecordPacing(pri, handle.ElasticCPUWorkHandle.PacedWork())
+			}
+		}
 		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
 		writeBytes.Release()
 	}()
