@@ -166,7 +166,11 @@ func (s *Stream) insert(sample Sample) {
 // Query returns the computed qth percentiles value. If s was created with
 // NewTargeted, and q is not in the set of quantiles provided a priori, Query
 // will return an unspecified result.
-func (s *Stream) Query(q float64) float64 {
+// flush can be a heavy operation, but is required on cases where you need high precision
+// of the data because new data was just added (shouldFlush = true).
+// If is okay to have some delay on the data or no new data was added the flush
+// can be skipped (shouldFlush = false).
+func (s *Stream) Query(q float64, shouldFlush bool) float64 {
 	if !s.flushed() {
 		// Fast path when there hasn't been enough data for a flush;
 		// this also yields better accuracy for small sets of data.
@@ -181,7 +185,9 @@ func (s *Stream) Query(q float64) float64 {
 		s.maybeSort()
 		return s.b[i].Value
 	}
-	s.flush()
+	if shouldFlush {
+		s.flush()
+	}
 	return s.stream.query(q)
 }
 
