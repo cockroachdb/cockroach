@@ -117,6 +117,7 @@ go_library(
         "pgx.go",
         "pgx_blocklist.go",
         "pop.go",
+        "process_lock.go",
         "psycopg.go",
         "psycopg_blocklist.go",
         "query_comparison_util.go",

@@ -97,6 +97,7 @@ func RegisterTests(r registry.Registry) {
 	registerPgjdbc(r)
 	registerPgx(r)
 	registerPop(r)
+	registerProcessLock(r)
 	registerPsycopg(r)
 	registerQueue(r)
 	registerQuitTransfersLeases(r)
