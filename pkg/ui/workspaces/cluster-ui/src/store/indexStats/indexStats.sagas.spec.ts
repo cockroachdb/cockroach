@@ -41,7 +41,7 @@ describe("IndexStats sagas", () => {
   const database = "test_db";
   const table = "test_table";
   const requestAction: PayloadAction<TableIndexStatsRequest> = {
-    payload: cockroach.server.serverpb.TableIndexStatsRequest.create({
+    payload: new cockroach.server.serverpb.TableIndexStatsRequest({
       database: database,
       table: table,
     }),
