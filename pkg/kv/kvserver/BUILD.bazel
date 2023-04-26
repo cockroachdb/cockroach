@@ -273,6 +273,7 @@ go_test(
         "debug_print_test.go",
         "errors_test.go",
         "flow_control_raft_transport_test.go",
+        "flow_control_replica_integration_test.go",
         "gossip_test.go",
         "helpers_test.go",
         "intent_resolver_integration_test.go",
