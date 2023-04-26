@@ -105,7 +105,13 @@ export function shortStatement(
 function formatStringArray(databases: string): string {
   try {
     // Case where the database is returned as an array in a string form.
-    return JSON.parse(databases).join(", ");
+    const d = JSON.parse(databases);
+    try {
+      // Case where the database is returned as an array of array in a string form.
+      return JSON.parse(d).join(", ");
+    } catch (e) {
+      return d.join(", ");
+    }
   } catch (e) {
     // Case where the database is a single value as a string.
     return databases;

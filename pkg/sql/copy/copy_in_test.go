@@ -160,6 +160,8 @@ func TestCopyFromRandom(t *testing.T) {
 			cs TEXT COLLATE en_us_u_ks_level2,
 			o BOOL,
 			i INT,
+			i2 INT2,
+			i4 INT4,
 			f FLOAT,
 			e DECIMAL,
 			t TIME,
@@ -184,7 +186,7 @@ func TestCopyFromRandom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "cs", "o", "i", "f", "e", "t", "ttz", "ts", "s", "b", "u", "ip", "tz", "geography", "geometry", "box2d"))
+	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "cs", "o", "i", "i2", "i4", "f", "e", "t", "ttz", "ts", "s", "b", "u", "ip", "tz", "geography", "geometry", "box2d"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,6 +198,8 @@ func TestCopyFromRandom(t *testing.T) {
 		types.MakeCollatedString(types.String, "en_us_u_ks_level2"),
 		types.Bool,
 		types.Int,
+		types.Int2,
+		types.Int4,
 		types.Float,
 		types.Decimal,
 		types.Time,
