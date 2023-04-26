@@ -377,8 +377,8 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
   };
 
   isOptionSelected = (option: string, field: string): boolean => {
-    const selection = field.split(",");
-    return selection.length > 0 && selection.includes(option);
+    const selection = field?.split(",");
+    return selection?.length > 0 && selection?.includes(option);
   };
 
   render(): React.ReactElement {
@@ -419,7 +419,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         }))
       : [];
     const appValue = appsOptions.filter(option => {
-      return filters.app.split(",").includes(option.label);
+      return filters.app?.split(",").includes(option.label);
     });
     const appFilter = (
       <div>
@@ -608,7 +608,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       : [];
 
     const sqlTypeValue = sqlTypes.filter(option => {
-      return filters.sqlType.split(",").includes(option.label);
+      return filters.sqlType?.split(",").includes(option.label);
     });
     const sqlTypeFilter = (
       <div>
