@@ -59,4 +59,6 @@ type Test interface {
 	// DeprecatedWorkload returns the path to the workload binary.
 	// Don't use this, invoke `./cockroach workload` instead.
 	DeprecatedWorkload() string
+
+	GetCliOverride(key, defaultVal string) string
 }

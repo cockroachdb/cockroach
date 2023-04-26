@@ -111,10 +111,23 @@ type testImpl struct {
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
 	skipInit               bool
+
+	// cliOverrides is a map containing user defined CLI overrides that can be used
+	// in a roachtest. This will contain *all* overrides defined via the CLI, not just
+	// ones intended for this test. It is up to the user to ensure that the overrides
+	// are intended for this test.
+	cliOverrides map[string]string
 }
 
 func newFailure(squashedErr error, errs []error) failure {
 	return failure{squashedErr: squashedErr, errors: errs}
+}
+
+func (t *testImpl) GetCliOverride(key, defaultValue string) string {
+	if v, ok := t.cliOverrides[key]; ok {
+		return v
+	}
+	return defaultValue
 }
 
 // BuildVersion exposes the build version of the cluster

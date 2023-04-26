@@ -94,6 +94,7 @@ func main() {
 	var clusterID string
 	var count = 1
 	var versionsBinaryOverride map[string]string
+	var testOverrides map[string]string
 	var enableFIPS bool
 
 	cobra.EnableCommandSorting = false
@@ -258,6 +259,7 @@ runner itself.
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
 				enableFIPS:             enableFIPS,
+				testOverrides:          testOverrides,
 			})
 		},
 	}
@@ -348,6 +350,9 @@ runner itself.
 				"is present in the list,"+"the respective binary will be used when a "+
 				"multi-version test asks for the respective binary, instead of "+
 				"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
+		cmd.Flags().StringToStringVarP(
+			&testOverrides, "test-overrides", "o", nil,
+			"List of key=value parameters which are passed to the test.")
 		cmd.Flags().BoolVar(
 			&enableFIPS, "fips", false, "Run tests in enableFIPS mode")
 	}
@@ -402,9 +407,16 @@ type cliCfg struct {
 	clusterID              string
 	versionsBinaryOverride map[string]string
 	enableFIPS             bool
+	testOverrides          map[string]string
 }
 
 func runTests(register func(registry.Registry), cfg cliCfg) error {
+	if len(cfg.testOverrides) > 0 {
+		fmt.Printf("test overrides:\n")
+		for s := range cfg.testOverrides {
+			fmt.Printf(" %s=%s\n", s, cfg.testOverrides[s])
+		}
+	}
 	if cfg.count <= 0 {
 		return fmt.Errorf("--count (%d) must by greater than 0", cfg.count)
 	}
@@ -435,7 +447,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		}
 	}
 
-	opt := clustersOpt{
+	clusterOpt := clustersOpt{
 		typ:         clusterType,
 		clusterName: clusterName,
 		user:        getUser(cfg.user),
@@ -457,7 +469,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		// stdout/stderr.
 		cfg.parallelism = n * cfg.count
 	}
-	if opt.debugMode == DebugKeepAlways && n > 1 {
+	if clusterOpt.debugMode == DebugKeepAlways && n > 1 {
 		return errors.Newf("--debug-always is only allowed when running a single test")
 	}
 
@@ -488,9 +500,10 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	defer cancel()
 	CtrlC(ctx, l, cancel, cr)
 	err := runner.Run(
-		ctx, tests, cfg.count, cfg.parallelism, opt,
+		ctx, tests, cfg.count, cfg.parallelism, clusterOpt,
 		testOpts{
 			versionsBinaryOverride: cfg.versionsBinaryOverride,
+			testOverrides:          cfg.testOverrides,
 			skipInit:               cfg.skipInit,
 		},
 		lopt, nil /* clusterAllocator */)

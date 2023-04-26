@@ -199,6 +199,7 @@ func (c clustersOpt) validate() error {
 
 type testOpts struct {
 	versionsBinaryOverride map[string]string
+	testOverrides          map[string]string
 	skipInit               bool
 }
 
@@ -664,6 +665,7 @@ func (r *testRunner) runWorker(
 			versionsBinaryOverride: topt.versionsBinaryOverride,
 			skipInit:               topt.skipInit,
 			debug:                  debugMode.IsDebug(),
+			cliOverrides:           topt.testOverrides,
 		}
 		// Now run the test.
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)

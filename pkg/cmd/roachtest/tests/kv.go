@@ -140,6 +140,15 @@ func registerKV(r registry.Registry) {
 			if opts.duration == 0 {
 				opts.duration = 30 * time.Minute
 			}
+			durationOverride := t.GetCliOverride("kv.duration", "")
+			if durationOverride != "" {
+				var err error
+				opts.duration, err = time.ParseDuration(durationOverride)
+				if err != nil {
+					return err
+				}
+			}
+
 			duration := " --duration=" + ifLocal(c, "10s", opts.duration.String())
 			var readPercent string
 			if opts.spanReads {
