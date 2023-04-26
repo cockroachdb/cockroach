@@ -160,6 +160,8 @@ func resolveColumnForDropColumn(
 		}
 		return nil, nil, true
 	}
+	// Block drops on system columns.
+	panicIfSystemColumn(col, n.Column.String())
 	return col, elts, false
 }
 
