@@ -89,6 +89,7 @@ type TestState struct {
 type catalogChanges struct {
 	descs               []catalog.Descriptor
 	namesToDelete       map[descpb.NameInfo]descpb.ID
+	namesToAdd          map[descpb.NameInfo]descpb.ID
 	descriptorsToDelete catalog.DescriptorIDSet
 	zoneConfigsToDelete catalog.DescriptorIDSet
 	commentsToUpdate    map[catalogkeys.CommentKey]string

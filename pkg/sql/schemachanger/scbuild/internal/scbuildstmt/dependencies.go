@@ -77,6 +77,7 @@ type BuilderState interface {
 	PrivilegeChecker
 	TableHelpers
 	FunctionHelpers
+	SchemaHelpers
 
 	// QueryByID returns all elements sharing the given descriptor ID.
 	QueryByID(descID catid.DescID) ElementResultSet
@@ -98,8 +99,10 @@ type BuilderState interface {
 	// BuildUserPrivilegesFromDefaultPrivileges generates owner and user
 	// privileges elements from default privileges of the given database
 	// and schemas for the given descriptor and object type.
+	// `sc` can be nil if this is for building the schema itself (`descID` will
+	// be the schema ID then).
 	BuildUserPrivilegesFromDefaultPrivileges(
-		db *scpb.Database, sc *scpb.Schema, descID descpb.ID, objType privilege.TargetObjectType,
+		db *scpb.Database, sc *scpb.Schema, descID descpb.ID, objType privilege.TargetObjectType, owner username.SQLUsername,
 	) (*scpb.Owner, []*scpb.UserPrivileges)
 }
 
@@ -265,6 +268,10 @@ type FunctionHelpers interface {
 	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language, provider ReferenceProvider) *scpb.FunctionBody
 }
 
+type SchemaHelpers interface {
+	ResolveDatabasePrefix(schemaPrefix *tree.ObjectNamePrefix)
+}
+
 // ElementResultSet wraps the results of an element query.
 type ElementResultSet interface {
 	scpb.ElementStatusIterator
@@ -304,6 +311,10 @@ type ResolveParams struct {
 	// RequireOwnership if set to true, requires current user be the owner of the
 	// resolved descriptor. It preempts RequiredPrivilege.
 	RequireOwnership bool
+
+	// WithOffline, if set, instructs the catalog reader to include offline
+	// descriptors.
+	WithOffline bool
 }
 
 // NameResolver looks up elements in the catalog by name, and vice-versa.

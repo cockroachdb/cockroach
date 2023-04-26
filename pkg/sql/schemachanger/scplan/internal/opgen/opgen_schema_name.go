@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -13,17 +13,17 @@ package opgen
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
-	opRegistry.register((*scpb.SchemaParent)(nil),
+	opRegistry.register((*scpb.SchemaName)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.SchemaParent) *scop.AddSchemaParent {
-					return &scop.AddSchemaParent{
-						Parent: *protoutil.Clone(this).(*scpb.SchemaParent),
+				emit(func(this *scpb.SchemaName) *scop.SetSchemaName {
+					return &scop.SetSchemaName{
+						SchemaID: this.SchemaID,
+						Name:     this.Name,
 					}
 				}),
 			),
@@ -31,12 +31,8 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				// TODO(postamar): remove revertibility constraint when possible
-				revertible(false),
-				emit(func(this *scpb.SchemaParent) *scop.RemoveSchemaParent {
-					return &scop.RemoveSchemaParent{
-						Parent: *protoutil.Clone(this).(*scpb.SchemaParent),
-					}
+				emit(func(this *scpb.SchemaName) *scop.NotImplementedForPublicObjects {
+					return notImplementedForPublicObjects(this)
 				}),
 			),
 		),

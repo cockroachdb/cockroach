@@ -285,6 +285,11 @@ object SchemaComment
 SchemaComment :  SchemaID
 SchemaComment :  Comment
 
+object SchemaName
+
+SchemaName :  SchemaID
+SchemaName :  Name
+
 object SchemaParent
 
 SchemaParent :  SchemaID
@@ -465,6 +470,7 @@ Table <|-- SchemaChild
 View <|-- SchemaChild
 Sequence <|-- SchemaChild
 Schema <|-- SchemaComment
+Schema <|-- SchemaName
 Schema <|-- SchemaParent
 Table <|-- SecondaryIndex
 View <|-- SecondaryIndex

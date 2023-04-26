@@ -115,6 +115,18 @@ type txnDeps struct {
 	settings            *cluster.Settings
 }
 
+type nameEntry struct {
+	descpb.NameInfo
+	id descpb.ID
+}
+
+var _ catalog.NameEntry = &nameEntry{}
+
+// GetID is part of the catalog.NameEntry interface.
+func (t nameEntry) GetID() descpb.ID {
+	return t.id
+}
+
 func (d *txnDeps) UpdateSchemaChangeJob(
 	ctx context.Context, id jobspb.JobID, callback scexec.JobUpdateCallback,
 ) error {
@@ -189,6 +201,11 @@ func (d *txnDeps) CreateOrUpdateDescriptor(
 // DeleteName implements the scexec.Catalog interface.
 func (d *txnDeps) DeleteName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error {
 	return d.descsCollection.DeleteNamespaceEntryToBatch(ctx, d.kvTrace, &nameInfo, d.getOrCreateBatch())
+}
+
+// AddName implements the scexec.Catalog interface.
+func (d *txnDeps) AddName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error {
+	return d.descsCollection.InsertNamespaceEntryToBatch(ctx, d.kvTrace, &nameEntry{nameInfo, id}, d.getOrCreateBatch())
 }
 
 // DeleteDescriptor implements the scexec.Catalog interface.

@@ -42,17 +42,6 @@ func (d *deferredVisitor) CreateGCJobForIndex(
 	return nil
 }
 
-func (i *immediateVisitor) MarkDescriptorAsPublic(
-	ctx context.Context, op scop.MarkDescriptorAsPublic,
-) error {
-	desc, err := i.checkOutDescriptor(ctx, op.DescriptorID)
-	if err != nil {
-		return err
-	}
-	desc.SetPublic()
-	return nil
-}
-
 func (i *immediateVisitor) MarkDescriptorAsDropped(
 	ctx context.Context, op scop.MarkDescriptorAsDropped,
 ) error {

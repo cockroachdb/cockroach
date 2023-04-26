@@ -33,8 +33,30 @@ func (i *immediateVisitor) RemoveSchemaParent(
 	for name, info := range db.Schemas {
 		if info.ID == op.Parent.SchemaID {
 			delete(db.Schemas, name)
+			break
 		}
 	}
+	return nil
+}
+
+func (i *immediateVisitor) AddSchemaParent(ctx context.Context, op scop.AddSchemaParent) error {
+	db, err := i.checkOutDatabase(ctx, op.Parent.ParentDatabaseID)
+	if err != nil {
+		return err
+	}
+	sc, err := i.checkOutSchema(ctx, op.Parent.SchemaID)
+	if err != nil {
+		return err
+	}
+	sc.ParentID = op.Parent.ParentDatabaseID
+
+	if sc.Name == "" {
+		return errors.AssertionFailedf("schema name is empty")
+	}
+	if _, ok := db.Schemas[sc.Name]; ok {
+		return errors.AssertionFailedf("schema %v already exists in database %v", sc.Name, db.Name)
+	}
+	db.Schemas[sc.Name] = descpb.DatabaseDescriptor_SchemaInfo{ID: sc.ID}
 	return nil
 }
 
