@@ -1007,6 +1007,11 @@ func (p *Pebble) async(fn func()) {
 
 func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventListener {
 	return pebble.EventListener{
+		BackgroundError: func(err error) {
+			if errors.Is(err, pebble.ErrCorruption) {
+				log.Fatalf(ctx, "local corruption detected: %v", err)
+			}
+		},
 		WriteStallBegin: func(info pebble.WriteStallBeginInfo) {
 			atomic.AddInt64(&p.writeStallCount, 1)
 			startNanos := timeutil.Now().UnixNano()
