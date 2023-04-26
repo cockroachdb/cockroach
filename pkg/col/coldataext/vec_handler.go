@@ -37,7 +37,14 @@ func MakeVecHandler(vec coldata.Vec) tree.ValueHandler {
 	case types.DecimalFamily:
 		v.decimals = vec.Decimal()
 	case types.IntFamily:
-		v.ints = vec.Int64()
+		switch vec.Type().Width() {
+		case 16:
+			v.int16s = vec.Int16()
+		case 32:
+			v.int32s = vec.Int32()
+		default:
+			v.ints = vec.Int64()
+		}
 	case types.FloatFamily:
 		v.floats = vec.Float64()
 	case types.TimestampTZFamily:
@@ -55,13 +62,12 @@ func MakeVecHandler(vec coldata.Vec) tree.ValueHandler {
 }
 
 type vecHandler struct {
-	nulls    *coldata.Nulls
-	bools    coldata.Bools
-	bytes    *coldata.Bytes
-	decimals coldata.Decimals
-	// TODO(cucaroach): implement small int types
-	//int16s     coldata.Int16s
-	//int32s     coldata.Int32s
+	nulls      *coldata.Nulls
+	bools      coldata.Bools
+	bytes      *coldata.Bytes
+	decimals   coldata.Decimals
+	int16s     coldata.Int16s
+	int32s     coldata.Int32s
 	ints       coldata.Int64s
 	floats     coldata.Float64s
 	timestamps coldata.Times
@@ -131,6 +137,18 @@ func (v *vecHandler) Bytes(b []byte) {
 // Float is part of the tree.ValueHandler interface.
 func (v *vecHandler) Float(f float64) {
 	v.floats[v.row] = f
+	v.row++
+}
+
+// Int16 is part of the tree.ValueHandler interface.
+func (v *vecHandler) Int16(i int16) {
+	v.int16s[v.row] = i
+	v.row++
+}
+
+// Int32 is part of the tree.ValueHandler interface.
+func (v *vecHandler) Int32(i int32) {
+	v.int32s[v.row] = i
 	v.row++
 }
 

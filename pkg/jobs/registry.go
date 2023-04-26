@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -150,6 +151,10 @@ type Registry struct {
 		// access this to make per-job decisions about what to
 		// do.
 		draining bool
+
+		// ingestingJobs is a map of jobs which are actively ingesting on this node
+		// including via a processor.
+		ingestingJobs map[jobspb.JobID]struct{}
 	}
 
 	drainJobs                chan struct{}
@@ -296,6 +301,9 @@ const (
 
 	// AutoConfigRunnerJobID A static job ID is used for the auto config runner job.
 	AutoConfigRunnerJobID = jobspb.JobID(102)
+
+	// SqlActivityUpdaterJobID A static job ID is used for the SQL activity tables.
+	SqlActivityUpdaterJobID = jobspb.JobID(103)
 )
 
 // MakeJobID generates a new job ID.
@@ -685,6 +693,44 @@ func (r *Registry) CreateJobWithTxn(
 		return nil, err
 	}
 	return j, nil
+}
+
+// CreateIfNotExistAdoptableJobWithTxn checks if a job already exists in
+// the system.jobs table, and if it does not it will create the job. The job
+// will be adopted for execution at a later time by some node in the cluster.
+func (r *Registry) CreateIfNotExistAdoptableJobWithTxn(
+	ctx context.Context, record Record, txn isql.Txn,
+) error {
+	if record.JobID == 0 {
+		return fmt.Errorf("invalid record.JobID value: %d", record.JobID)
+	}
+
+	if txn == nil {
+		return fmt.Errorf("txn is required for job: %d", record.JobID)
+	}
+
+	// Make sure job with id doesn't already exist in system.jobs.
+	// Use a txn to avoid race conditions
+	row, err := txn.QueryRowEx(
+		ctx,
+		"check if job exists",
+		txn.KV(),
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		"SELECT id FROM system.jobs WHERE id = $1",
+		record.JobID,
+	)
+	if err != nil {
+		return err
+	}
+
+	// If there isn't a row for the job, create the job.
+	if row == nil {
+		if _, err = r.CreateAdoptableJobWithTxn(ctx, record, record.JobID, txn); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // CreateAdoptableJobWithTxn creates a job which will be adopted for execution
@@ -1955,4 +2001,33 @@ func (r *Registry) TestingIsJobIdle(jobID jobspb.JobID) bool {
 	defer r.mu.Unlock()
 	adoptedJob := r.mu.adoptedJobs[jobID]
 	return adoptedJob != nil && adoptedJob.isIdle
+}
+
+// MarkAsIngesting records a given jobID as actively ingesting data on the node
+// in which this Registry resides, either directly or via a processor running on
+// behalf of a job being run by a different registry. The returned function is
+// to be called when this node is no longer ingesting for that jobID, typically
+// by deferring it when calling this method. See IsIngesting.
+func (r *Registry) MarkAsIngesting(jobID catpb.JobID) func() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.mu.ingestingJobs == nil {
+		r.mu.ingestingJobs = make(map[catpb.JobID]struct{})
+	}
+	r.mu.ingestingJobs[jobID] = struct{}{}
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		delete(r.mu.ingestingJobs, jobID)
+	}
+}
+
+// IsIngesting returns true if a given job has indicated it is ingesting at this
+// time on this node. See MarkAsIngesting.
+func (r *Registry) IsIngesting(jobID catpb.JobID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.mu.ingestingJobs[jobID]
+	return ok
 }

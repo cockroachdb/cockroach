@@ -40,43 +40,15 @@ var ScalarFmtInterceptor func(f *ExprFmtCtx, expr opt.ScalarExpr) string
 // formatted output.
 type ExprFmtFlags int
 
-// ExprFmtFlags takes advantages of bit masking and iota. If you want to add a
-// flag here, you should only add flags to hide things but not to show things.
-// Also, you have to add the flag after ExprFmtHideMiscProps and before
-// ExprFmtHideAll.
-
-// iota is initialized as 0 at the start of const and increments by 1 every time
-// a new const is declared. In addition, expressions are also implicitly repeated.
-// For example,
-// const (                              // const (
-//	First  int = iota // 0              // 	First  int = iota * 3 // 0 * 3
-//	Second            // 1              // 	Second                // 1 * 3
-//	Third             // 2              // )
-//	Fourth            // 3
-// )
-
-// In our example here, 1 means the flag is on and 0 means the flag is off.
-// const (
+// ExprFmtFlags is a bitmask that can contain any of the flags below. The zero
+// value represents showing all possible information when formatting an
+// expression. Flags are used to hide information. For example, to hide
+// constraints and functional dependencies, you can combine the flags
+// ExprFmtHideConstraints and ExprFmtHideFuncDeps:
 //
-//		ExprFmtShowAll int = 0 // iota is 0, but it's not used    0000 0000
-//		ExprFmtHideMiscProps int = 1 << (iota - 1)
-//	                            // iota is 1, 1 << (1 - 1) 0000 0001 = 1
-//		ExprFmtHideConstraints     // iota is 2, 1 << (2 - 1) 0000 0010 = 2
-//		ExprFmtHideFuncDeps        // iota is 3, 1 << (3 - 1) 0000 0100 = 4
-//	 ...
-//	 ExprFmtHideAll             // (1 << iota) - 1
+//	myFlag := ExprFmtHideConstraints|ExprFmtHideFuncDeps
 //
-// )
-// If we want to set ExprFmtHideMiscProps and ExprFmtHideConstraints on, we
-// would have f := ExprFmtHideMiscProps | ExprFmtHideConstraints 0000 0011.
-// ExprFmtShowAll has all 0000 0000. This is because all flags represent when
-// something is hiding. If every bit is 0, that just means everything is
-// showing. ExprFmtHideAll is (1 << iota) - 1. For example, if the last const
-// iota is 4, ExprFmtHideAll would have (1 << 4) - 1 which is 0001 0000 - 1 =
-// 0000 1111 which is just setting all flags on => hiding everything. If we have
-// a flag that show things, ShowAll = 0000..000 would actually turn this flag
-// off. Thus, in order for ExprFmtShowAll and ExprFmtHideAll to be correct, we
-// can only add flags to hide things but not flags to show things.
+// New flags should be added before the ExprFmtHideAll flag.
 const (
 	// ExprFmtShowAll shows all properties of the expression.
 	ExprFmtShowAll ExprFmtFlags = 0
@@ -948,6 +920,9 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 ) {
 	formatUDFInputAndBody := func(udf *UDFExpr, tp treeprinter.Node) {
 		var n treeprinter.Node
+		if !udf.CalledOnNullInput {
+			tp.Child("strict")
+		}
 		if len(udf.Params) > 0 {
 			f.formatColList(tp, "params:", udf.Params, opt.ColSet{} /* notNullCols */)
 			n = tp.Child("args")

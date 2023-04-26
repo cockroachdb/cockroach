@@ -116,9 +116,10 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 		if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
 			return false, nil
 		}
-		if repl.hasOutstandingSnapshotInFlightToStore(repDesc.StoreID) {
-			// There is a snapshot being transferred. It's probably an INITIAL snap,
-			// so bail for now and try again later.
+		// NB: we could pass `false` for initialOnly as well, but we are the "other"
+		// possible sender.
+		if _, ok := repl.hasOutstandingSnapshotInFlightToStore(repDesc.StoreID, true /* initialOnly */); ok {
+			// There is an INITIAL snapshot being transferred, so bail for now and try again later.
 			err := errors.Errorf(
 				"skipping snapshot; replica is likely a %s in the process of being added: %s",
 				typ,

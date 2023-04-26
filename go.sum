@@ -457,8 +457,8 @@ github.com/cockroachdb/apd v1.1.0 h1:3LFP3629v+1aKXU5Q37mxmRxX/pIu1nijXydLShEq5I
 github.com/cockroachdb/apd v1.1.0/go.mod h1:8Sl8LxpKi29FqWXR16WEFZRNSz3SoPzUzeMeY4+DwBQ=
 github.com/cockroachdb/apd/v3 v3.1.2 h1:DDFeYj70f6yWcWlfGNwZ7z6NSpkOZAKsse1VmBtf+zs=
 github.com/cockroachdb/apd/v3 v3.1.2/go.mod h1:klXJcjp+FffLTHlhIG69tezTDvdP065naDsHzKhYSqc=
-github.com/cockroachdb/bubbletea v0.0.0-20230108112624-1024a1c3e9ae h1:Pp/48WoPVVhTUwzQYl4oyPqwUJNFKKS4ICa84o9XnIA=
-github.com/cockroachdb/bubbletea v0.0.0-20230108112624-1024a1c3e9ae/go.mod h1:JAfGK/3/pPKHTnAS8JIE2u9f61BjWTQY57RbT25aMXU=
+github.com/cockroachdb/bubbletea v0.23.1-bracketed-paste2 h1:OmQDBlTg1DU5OaKjIuEBt4K+40i9RqtxAwK1P/0OVjI=
+github.com/cockroachdb/bubbletea v0.23.1-bracketed-paste2/go.mod h1:JAfGK/3/pPKHTnAS8JIE2u9f61BjWTQY57RbT25aMXU=
 github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible h1:u3uQ4oAKM5g2eODBAsDdDSrTs7zRWXtvu+nvSDA9098=
 github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible/go.mod h1:v3T8+rm/HmCL0D1BwDcGaHHAQDuFPW7EsnYs2nBRqUo=
 github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292 h1:dzj1/xcivGjNPwwifh/dWTczkwcuqsXXFHY1X/TZMtw=
@@ -479,8 +479,8 @@ github.com/cockroachdb/gostdlib v1.19.0/go.mod h1:+dqqpARXbE/gRDEhCak6dm0l14AaTy
 github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b h1:r6VH0faHjZeQy818SGhaone5OnYfxFR/+AzdY3sf5aE=
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
-github.com/cockroachdb/pebble v0.0.0-20230412152713-8a10d6a00fb6 h1:IDJCNw9cRQG3QCHuc8CXmEPsEz0UA9JiWvlB4JW2qFw=
-github.com/cockroachdb/pebble v0.0.0-20230412152713-8a10d6a00fb6/go.mod h1:9lRMC4XN3/BLPtIp6kAKwIaHu369NOf2rMucPzipz50=
+github.com/cockroachdb/pebble v0.0.0-20230424170805-19e93883c4d2 h1:qwg2ITXbQAs1SBn/fGlukKGZ5nE1yUJxwVbCRZHnTdQ=
+github.com/cockroachdb/pebble v0.0.0-20230424170805-19e93883c4d2/go.mod h1:9lRMC4XN3/BLPtIp6kAKwIaHu369NOf2rMucPzipz50=
 github.com/cockroachdb/redact v1.1.3 h1:AKZds10rFSIj7qADf0g46UixK8NNLwWTNdCIGS5wfSQ=
 github.com/cockroachdb/redact v1.1.3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd h1:KFOt5I9nEKZgCnOSmy8r4Oykh8BYQO8bFOTgHDS8YZA=
@@ -1494,8 +1494,8 @@ github.com/klauspost/pgzip v1.0.2-0.20170402124221-0bf5dcad4ada/go.mod h1:Ch1tH6
 github.com/klauspost/pgzip v1.2.4/go.mod h1:Ch1tH69qFZu15pkjo5kYi6mth2Zzwzt50oCQKQE9RUs=
 github.com/klauspost/pgzip v1.2.5 h1:qnWYvvKqedOF2ulHpMG72XQol4ILEJ8k2wwRl/Km8oE=
 github.com/klauspost/pgzip v1.2.5/go.mod h1:Ch1tH69qFZu15pkjo5kYi6mth2Zzwzt50oCQKQE9RUs=
-github.com/knz/bubbline v0.0.0-20230205122847-05558f88fdc4 h1:WT5NrWC3UParTXCijOl/PyfgZ9HhxCa2lAFfvxDxcIY=
-github.com/knz/bubbline v0.0.0-20230205122847-05558f88fdc4/go.mod h1:ucXvyrucVy4jp/4afdKWNW1TVO73GMI72VNINzyT678=
+github.com/knz/bubbline v0.0.0-20230422210153-e176cdfe1c43 h1:uhwfuoL9LDMUGlxcs3Rbt35L3YoqGUd+YWgaL9EFl0A=
+github.com/knz/bubbline v0.0.0-20230422210153-e176cdfe1c43/go.mod h1:ucXvyrucVy4jp/4afdKWNW1TVO73GMI72VNINzyT678=
 github.com/knz/catwalk v0.1.4 h1:GgCxHbPp+nzyZBJcNL/CJd1aba4ACoeuI1lnsshAPkY=
 github.com/knz/catwalk v0.1.4/go.mod h1:Q+Yj4ny4AXgrOOyWyDGY/HJzmbGH8MFnsUqvCAiUT5s=
 github.com/knz/go-libedit v1.10.2-0.20230308124748-6f1b59dd42bc h1:I7VuCOZXntHLQVZhEj/nrDqUl853RzJhef3Mwx7/iqI=

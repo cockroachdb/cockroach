@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -555,15 +554,18 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	memoryMonitor := mon.NewMonitor(
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
+	getMemoryMonitor := func() *mon.BytesMonitor {
+		return mon.NewMonitor(
+			"test-mem",
+			mon.MemoryResource,
+			nil,           /* curCount */
+			nil,           /* maxHist */
+			-1,            /* increment */
+			math.MaxInt64, /* noteworthy */
+			st,
+		)
+	}
+	memoryMonitor := getMemoryMonitor()
 	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
@@ -580,7 +582,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 	newOrdering := colinfo.ColumnOrdering{{ColIdx: 1, Direction: encoding.Ascending}}
 
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
 	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
@@ -758,10 +760,11 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 				sortedRows.rows = append(sortedRows.rows, IndexedRow{Idx: len(sortedRows.rows), Row: row})
 			}
 
-			memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(budget))
-			defer memoryMonitor.Stop(ctx)
-			diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-			defer diskMonitor.Stop(ctx)
+			// Use a separate memory monitor so that we could start it with a
+			// fixed small budget.
+			memMonitor := getMemoryMonitor()
+			memMonitor.Start(ctx, nil, mon.NewStandaloneBudget(budget))
+			defer memMonitor.Stop(ctx)
 
 			sorter := rowsSorter{evalCtx: &evalCtx, rows: sortedRows, ordering: ordering}
 			sort.Sort(&sorter)
@@ -770,7 +773,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			}
 
 			func() {
-				rc := NewDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
+				rc := NewDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, memMonitor, diskMonitor)
 				defer rc.Close(ctx)
 				if err := rc.SpillToDisk(ctx); err != nil {
 					t.Fatal(err)
@@ -977,7 +980,7 @@ func compareIndexedRows(
 // accessed by GetRow(). The goal is to simulate an access pattern that would
 // resemble a real one that might occur while window functions are computed.
 func generateAccessPattern(numRows int) []int {
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(42))
 	const avgPeerGroupSize = 100
 	accessPattern := make([]int, 0, 2*numRows)
 	nextPeerGroupStart := 0

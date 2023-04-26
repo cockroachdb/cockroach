@@ -218,6 +218,30 @@ func (s *subquery) buildSubquery(desiredTypes []*types.T) {
 	// We must push() here so that the columns in s.scope are correctly identified
 	// as outer columns.
 	outScope := s.scope.builder.buildStmt(s.Subquery.Select, desiredTypes, s.scope.push())
+
+	desireAnyType := len(desiredTypes) == 0 ||
+		(len(desiredTypes) == 1 && desiredTypes[0].Family() == types.AnyFamily)
+	// If the SELECT list expressions are not allowed to be any number of items
+	// (as detected from the desiredTypes slice), count the number of items
+	// "desired" and the actual number of selected items, and error out if they
+	// don't match.
+	numSubqueryCols := len(outScope.cols)
+	if !desireAnyType && len(desiredTypes) != numSubqueryCols {
+		if s.wrapInTuple && numSubqueryCols == 1 {
+			if tupleExpr, ok := outScope.cols[0].scalar.(*memo.TupleExpr); ok {
+				numSubqueryCols = len(tupleExpr.Elems)
+			}
+		}
+		if len(desiredTypes) != numSubqueryCols {
+			qualifier := "few"
+			if numSubqueryCols > len(desiredTypes) {
+				qualifier = "many"
+			}
+			panic(pgerror.Newf(pgcode.Syntax,
+				"subquery has too %s columns", qualifier))
+		}
+	}
+
 	ord := outScope.ordering
 
 	// Treat the subquery result as an anonymous data source (i.e. column names

@@ -28,6 +28,16 @@ import (
 func (p *planner) EvalRoutineExpr(
 	ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 ) (result tree.Datum, err error) {
+	// Strict routines (CalledOnNullInput=false) should not be invoked and they
+	// should immediately return NULL if any of their arguments are NULL.
+	if !expr.CalledOnNullInput {
+		for i := range args {
+			if args[i] == tree.DNull {
+				return tree.DNull, nil
+			}
+		}
+	}
+
 	// Return the cached result if it exists.
 	if expr.CachedResult != nil {
 		return expr.CachedResult, nil
@@ -208,8 +218,8 @@ func (d *droppingResultWriter) AddRow(ctx context.Context, row tree.Datums) erro
 	return nil
 }
 
-// IncrementRowsAffected is part of the rowResultWriter interface.
-func (d *droppingResultWriter) IncrementRowsAffected(ctx context.Context, n int) {}
+// SetRowsAffected is part of the rowResultWriter interface.
+func (d *droppingResultWriter) SetRowsAffected(ctx context.Context, n int) {}
 
 // SetError is part of the rowResultWriter interface.
 func (d *droppingResultWriter) SetError(err error) {

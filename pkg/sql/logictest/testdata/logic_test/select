@@ -447,7 +447,7 @@ SELECT (1, NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 ----
 NULL
 
-query error unsupported comparison operator: <unknown> IN <tuple{tuple{int AS a, int AS b}}>
+query error subquery has too many columns
 SELECT NULL IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b));
 
 query error unsupported comparison operator: <tuple> IN <tuple{int}>
@@ -459,7 +459,7 @@ SELECT () IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 query error unsupported comparison operator: <tuple{string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
 SELECT ('string', NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 
-query error unsupported comparison operator: <tuple{int, string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
+query error subquery has too few columns
 SELECT (2, 'string', NULL) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 
 query B
@@ -487,7 +487,7 @@ SELECT NULL NOT IN (SELECT * FROM (VALUES (1)) AS t(a))
 ----
 NULL
 
-query error unsupported comparison operator: <unknown> IN <tuple{tuple{int AS a, int AS b}}>
+query error subquery has too many columns
 SELECT NULL NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 
 query error unsupported comparison operator: <tuple> IN <tuple{int}>
@@ -499,7 +499,7 @@ SELECT () NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 query error unsupported comparison operator: <tuple{string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
 SELECT ('string', NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 
-query error unsupported comparison operator: <tuple{int, string, unknown}> IN <tuple{tuple{int AS a, int AS b}}>
+query error subquery has too few columns
 SELECT (2, 'string', NULL) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
 
 query B

@@ -198,8 +198,8 @@ func (n *recursiveCTENode) AddRow(ctx context.Context, row tree.Datums) error {
 	return n.workingRows.AddRow(ctx, row)
 }
 
-// IncrementRowsAffected is part of the rowResultWriter interface.
-func (n *recursiveCTENode) IncrementRowsAffected(context.Context, int) {
+// SetRowsAffected is part of the rowResultWriter interface.
+func (n *recursiveCTENode) SetRowsAffected(context.Context, int) {
 }
 
 // SetError is part of the rowResultWriter interface.

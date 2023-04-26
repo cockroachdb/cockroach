@@ -23,6 +23,7 @@ import {
   statementsSql,
   writtenToDisk,
 } from "src/util";
+import { Timezone } from "src/timestamp";
 
 export type NodeNames = { [nodeId: string]: string };
 
@@ -37,7 +38,7 @@ export const statisticsColumnLabels = {
   database: "Database",
   diagnostics: "Diagnostics",
   executionCount: "Execution Count",
-  lastExecTimestamp: "Last Execution Time (UTC)",
+  lastExecTimestamp: "Last Execution Time",
   latencyMax: "Max Latency",
   latencyMin: "Min Latency",
   latencyP50: "P50 Latency",
@@ -56,10 +57,10 @@ export const statisticsColumnLabels = {
   rowsProcessed: "Rows Processed",
   sessionActiveDuration: "Session Active Duration",
   sessionDuration: "Session Duration",
-  sessionStart: "Session Start Time (UTC)",
+  sessionStart: "Session Start Time",
   sessionTxnCount: "Transaction Count",
   statementFingerprintId: "Statement Fingerprint ID",
-  statementStartTime: "Statement Start Time (UTC)",
+  statementStartTime: "Statement Start Time",
   statements: "Statements",
   statementsCount: "Statements",
   status: "Status",
@@ -129,7 +130,9 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         placement="bottom"
         content={"The timestamp at which the session started."}
       >
-        {getLabel("sessionStart")}
+        <>
+          {getLabel("sessionStart")} <Timezone />
+        </>
       </Tooltip>
     );
   },
@@ -201,7 +204,9 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         placement="bottom"
         content={"The timestamp at which the statement started."}
       >
-        {getLabel("statementStartTime")}
+        <>
+          {getLabel("statementStartTime")} <Timezone />
+        </>
       </Tooltip>
     );
   },
@@ -469,7 +474,9 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           <p>Last time stamp on which the {contentModifier} was executed.</p>
         }
       >
-        {getLabel("lastExecTimestamp")}
+        <>
+          {getLabel("lastExecTimestamp")} <Timezone />
+        </>
       </Tooltip>
     );
   },

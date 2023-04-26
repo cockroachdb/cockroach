@@ -143,10 +143,12 @@ true
 query error pgcode 42601 subquery must return only one column, found 2
 SELECT (SELECT 1, 2)
 
-query error unsupported comparison operator: <int> IN <tuple{tuple{int AS a, int AS b}}>
+# Outer query has 1 column, subquery has 2.
+query error pgcode 42601 subquery has too many columns
 SELECT 1 IN (SELECT 1 AS a, 2 AS b)
 
-query error unsupported comparison operator: <tuple{int, int}> IN <tuple{int}>
+# Outer query has 2 columns, subquery has 1.
+query error pgcode 42601 subquery has too few columns
 SELECT (1, 2) IN (SELECT 1 AS a)
 
 statement ok
@@ -162,7 +164,8 @@ INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 # statement ok
 # ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
 
-query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{int AS a, int AS b, int AS c}}>
+# Outer query has 2 columns, subquery has 3.
+query error pgcode 42601 subquery has too many columns
 SELECT (1, 2) IN (SELECT * FROM abc)
 
 query B
@@ -897,3 +900,72 @@ query B
 select lower((select session_id from [show session_id])) = lower('$session_id')
 ----
 true
+
+subtest expressionInSubquery
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+statement ok
+CREATE TABLE ab (a INT, b INT);
+
+statement ok
+INSERT INTO xy VALUES (1,1), (2,2); INSERT INTO ab VALUES (2,2);
+
+# The outer (a, b) is already a tuple, so shouldn't be wrapped in another
+# tuple before comparison. This should succeed.
+query II
+SELECT * FROM ab WHERE (a, b) IN (SELECT x+1, y+1 FROM xy);
+----
+2  2
+
+# The outer ROW(ROW(a, b)) is already a tuple, so shouldn't be wrapped in
+# another tuple before comparison. But the comparison should fail due to
+# mismatched types.
+query error pgcode 22023 unsupported binary operator: <int> \+ <int> \(desired <tuple\{int, int\}>\)
+SELECT * FROM ab WHERE ROW(ROW(a, b)) IN (SELECT x+1 FROM xy);
+
+# The outer ROW(ROW(a, b)) is already a tuple, so shouldn't be wrapped in
+# another tuple before comparison. But the comparison should fail due to
+# mismatched types. Could this case possibly be supported?
+query error pgcode 22023 unsupported comparison operator: <tuple\{tuple\{int, int\}\}> IN <tuple\{tuple\{int, int\}\}>
+SELECT * FROM ab WHERE ROW(ROW(a, b)) IN (SELECT (x, y) FROM xy);
+
+# A similar case to the previous one, but this time matching on 2 tuple
+# expressions works.
+query II
+SELECT * FROM ab WHERE ((a,b), (1, 1)) IN (SELECT (x+1, y+1), (x, y) FROM xy)
+----
+2  2
+
+# Verify the above case with a single tuple comparison also works.
+query II
+SELECT * FROM ab WHERE ((a,b)) IN (SELECT (x+1, y+1) FROM xy)
+----
+2  2
+
+# The outer (2, 2) is already a tuple, so shouldn't be wrapped in another
+# tuple before comparison. This should succeed.
+query B
+SELECT (SELECT 2, 2) IN (SELECT x+1, y+1 FROM xy)
+----
+true
+
+query B
+SELECT (2, 2) IN (SELECT x+1, y+1 FROM xy)
+----
+true
+
+# The outer ((2, 2), (3, 3)) is already a tuple, so shouldn't be wrapped in
+# another tuple before comparison. But the comparison should fail due to
+# mismatched types.
+query error pgcode 22023 unsupported binary operator: <int> \+ <int> \(desired \<tuple\{int\, int\}>\)
+SELECT (SELECT (2, 2), (3, 3)) IN (SELECT x+1, y+1 FROM xy)
+
+# Outer scalar is a tuple with 2 elements. Subquery has only 1 column.
+query error pgcode 42601 subquery has too few columns
+SELECT (SELECT 2, 2) IN (SELECT x+1 FROM xy)
+
+# Outer scalar is a tuple with 2 elements. Subquery has 3 columns.
+query error pgcode 42601 subquery has too many columns
+SELECT (SELECT 2, 2) IN (SELECT x+1, y+1, x+y FROM xy)

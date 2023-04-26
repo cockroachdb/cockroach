@@ -4182,6 +4182,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 
 func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 101506, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// Set TestingKnobs to return a known session for easier

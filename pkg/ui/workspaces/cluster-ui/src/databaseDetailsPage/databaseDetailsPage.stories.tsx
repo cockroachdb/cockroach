@@ -49,7 +49,6 @@ const withLoadingIndicator: DatabaseDetailsPageProps = {
   onSortingGrantsChange: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
-  refreshTableStats: () => {},
   search: null,
   filters: defaultFilters,
   nodeRegions: {},
@@ -82,7 +81,6 @@ const withoutData: DatabaseDetailsPageProps = {
   onSortingGrantsChange: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
-  refreshTableStats: () => {},
   search: null,
   filters: defaultFilters,
   nodeRegions: {},
@@ -103,11 +101,11 @@ function createTable(): DatabaseDetailsPageDataTable {
   );
 
   return {
+    loading: false,
+    loaded: true,
+    lastError: null,
     name: randomName(),
     details: {
-      loading: false,
-      loaded: true,
-      lastError: null,
       columnCount: _.random(5, 42),
       indexCount: _.random(1, 6),
       userCount: roles.length,
@@ -118,15 +116,8 @@ function createTable(): DatabaseDetailsPageDataTable {
       livePercentage: _.random(0, 100),
       liveBytes: _.random(0, 10000),
       totalBytes: _.random(0, 10000),
-    },
-    stats: {
-      loading: false,
-      loaded: true,
-      lastError: null,
-      replicationSizeInBytes: _.random(1000.0) * 1024 ** _.random(1, 2),
-      rangeCount: _.random(50, 500),
-      nodesByRegionString:
-        "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
+      replicationSizeInBytes: _.random(0, 10000),
+      rangeCount: _.random(0, 10000),
     },
   };
 }
@@ -150,7 +141,6 @@ const withData: DatabaseDetailsPageProps = {
   onSortingGrantsChange: () => {},
   refreshDatabaseDetails: () => {},
   refreshTableDetails: () => {},
-  refreshTableStats: () => {},
   search: null,
   filters: defaultFilters,
   nodeRegions: {},

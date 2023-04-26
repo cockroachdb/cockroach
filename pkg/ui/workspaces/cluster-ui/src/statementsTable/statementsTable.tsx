@@ -53,6 +53,7 @@ type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 import styles from "./statementsTable.module.scss";
 import { StatementDiagnosticsReport } from "../api";
+import { Timestamp } from "../timestamp";
 const cx = classNames.bind(styles);
 
 export interface AggregateStatistics {
@@ -104,7 +105,13 @@ export function shortStatement(
 function formatStringArray(databases: string): string {
   try {
     // Case where the database is returned as an array in a string form.
-    return JSON.parse(databases).join(", ");
+    const d = JSON.parse(databases);
+    try {
+      // Case where the database is returned as an array of array in a string form.
+      return JSON.parse(d).join(", ");
+    } catch (e) {
+      return d.join(", ");
+    }
   } catch (e) {
     // Case where the database is a single value as a string.
     return databases;
@@ -318,8 +325,12 @@ export function makeStatementsColumns(
     {
       name: "lastExecTimestamp",
       title: statisticsTableTitles.lastExecTimestamp(statType),
-      cell: (stmt: AggregateStatistics) =>
-        TimestampToMoment(stmt.stats.last_exec_timestamp).format(DATE_FORMAT),
+      cell: (stmt: AggregateStatistics) => (
+        <Timestamp
+          time={TimestampToMoment(stmt.stats.last_exec_timestamp)}
+          format={DATE_FORMAT}
+        />
+      ),
       sort: (stmt: AggregateStatistics) =>
         TimestampToNumber(stmt.stats.last_exec_timestamp),
       showByDefault: false,

@@ -1779,11 +1779,10 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 	}
 
 	// Attempt to delete non-inline key at zero timestamp; should fail.
-	const writeTooOldErrString = "WriteTooOldError"
 	if _, _, _, err := MVCCDeleteRange(ctx, engine, nil, testKey6, keyMax,
 		1, hlc.Timestamp{Logical: 0}, hlc.ClockTimestamp{}, nil, true,
-	); !testutils.IsError(err, writeTooOldErrString) {
-		t.Fatalf("got error %v, expected error with text '%s'", err, writeTooOldErrString)
+	); !testutils.IsError(err, inlineMismatchErrString) {
+		t.Fatalf("got error %v, expected error with text '%s'", err, inlineMismatchErrString)
 	}
 
 	// Attempt to delete inline keys in a transaction; should fail.
