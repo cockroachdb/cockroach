@@ -646,6 +646,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being dropped", t.GetColumn())
 			}
+			// Block modification on system columns.
+			if col.IsSystemColumn() {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot alter system column %q", col.GetName())
+			}
 			columnName := col.GetName()
 			if columnName == colinfo.TTLDefaultExpirationColumnName &&
 				tableDesc.HasRowLevelTTL() &&
@@ -1606,6 +1612,13 @@ func dropColumnImpl(
 	}
 	if colToDrop.Dropped() {
 		return nil, nil
+	}
+
+	// Block modification on system columns.
+	if colToDrop.IsSystemColumn() {
+		return nil, pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot alter system column %q", colToDrop.GetName())
 	}
 
 	if colToDrop.IsInaccessible() {
