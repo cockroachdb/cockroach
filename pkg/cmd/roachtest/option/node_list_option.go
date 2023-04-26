@@ -73,6 +73,11 @@ func (n NodeListOption) RandNode() NodeListOption {
 	return NodeListOption{n[rand.Intn(len(n))]}
 }
 
+// SeededRandNode returns a random node from the NodeListOption using a seeded rand object.
+func (n NodeListOption) SeededRandNode(rand *rand.Rand) NodeListOption {
+	return NodeListOption{n[rand.Intn(len(n))]}
+}
+
 // NodeIDsString returns the nodes in the NodeListOption, separated by spaces.
 func (n NodeListOption) NodeIDsString() string {
 	result := ""
