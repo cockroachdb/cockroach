@@ -960,6 +960,21 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
 	r.mu.conf, r.mu.spanConfigExplicitlySet = conf, true
 }
 
+// IsScratchRange returns true if this is range is a scratch range (i.e.
+// overlaps with the scratch span and has a start key <= keys.ScratchRangeMin).
+func (r *Replica) IsScratchRange() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isScratchRangeRLocked()
+}
+
+func (r *Replica) isScratchRangeRLocked() bool {
+	rangeKeySpan := r.descRLocked().KeySpan()
+	rangeStartKey := rangeKeySpan.Key
+	return rangeKeySpan.AsRawSpanWithNoLocals().Overlaps(keys.ScratchSpan) &&
+		roachpb.RKey(keys.ScratchRangeMin).Compare(rangeStartKey) <= 0
+}
+
 // IsFirstRange returns true if this is the first range.
 func (r *Replica) IsFirstRange() bool {
 	return r.RangeID == 1

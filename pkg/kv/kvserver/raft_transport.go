@@ -676,6 +676,10 @@ func (t *RaftTransport) processQueue(
 
 	var raftIdleTimer timeutil.Timer
 	defer raftIdleTimer.Stop()
+	idleTimeout := raftIdleTimeout
+	if overrideFn := t.knobs.OverrideIdleTimeout; overrideFn != nil {
+		idleTimeout = overrideFn()
+	}
 
 	var dispatchPendingFlowTokensTimer timeutil.Timer
 	defer dispatchPendingFlowTokensTimer.Stop()
@@ -688,7 +692,7 @@ func (t *RaftTransport) processQueue(
 
 	batch := &kvserverpb.RaftMessageRequestBatch{}
 	for {
-		raftIdleTimer.Reset(raftIdleTimeout)
+		raftIdleTimer.Reset(idleTimeout)
 
 		select {
 		case <-t.stopper.ShouldQuiesce():
@@ -706,21 +710,25 @@ func (t *RaftTransport) processQueue(
 			q.bytes.Add(-size)
 			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - size
 
-			// Piggyback any pending flow token dispatches on raft transport
-			// messages already bound for the remote node. If the stream
-			// over which we're returning these flow tokens breaks, this is
-			// detected by the remote node, where tokens were originally
-			// deducted, who then frees up all held tokens (see I1 from
-			// kvflowcontrol/doc.go). If the stream is culled because it's
-			// idle, that's deducted remotely using the same stream-break
-			// mechanism. If there are no open streams to a given node and
-			// there's still pending flow tokens, we'll drop those tokens to
-			// reclaim memory in dropFlowTokensForDisconnectedNodes. For
-			// idle-but-not-culled connections, we have a fallback timer to
-			// periodically transmit one-off RaftMessageRequests for timely
-			// token returns.
-			pendingDispatches := t.kvflowControl.dispatchReader.PendingDispatchFor(q.nodeID)
-			maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
+			var pendingDispatches []kvflowcontrolpb.AdmittedRaftLogEntries
+			if disableFn := t.knobs.DisablePiggyBackedFlowTokenDispatch; disableFn == nil || !disableFn() {
+				// Piggyback any pending flow token dispatches on raft transport
+				// messages already bound for the remote node. If the stream
+				// over which we're returning these flow tokens breaks, this is
+				// detected by the remote node, where tokens were originally
+				// deducted, who then frees up all held tokens (see I1 from
+				// kvflowcontrol/doc.go). If the stream is culled because it's
+				// idle, that's deducted remotely using the same stream-break
+				// mechanism. If there are no open streams to a given node and
+				// there's still pending flow tokens, we'll drop those tokens to
+				// reclaim memory in dropFlowTokensForDisconnectedNodes. For
+				// idle-but-not-culled connections, we have a fallback timer to
+				// periodically transmit one-off RaftMessageRequests for timely
+				// token returns.
+				pendingDispatches = t.kvflowControl.dispatchReader.PendingDispatchFor(q.nodeID)
+				maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
+			}
+
 			batch.Requests = append(batch.Requests, *req)
 			releaseRaftMessageRequest(req)
 
@@ -749,6 +757,10 @@ func (t *RaftTransport) processQueue(
 		case <-dispatchPendingFlowTokensCh:
 			dispatchPendingFlowTokensTimer.Read = true
 			dispatchPendingFlowTokensTimer.Reset(kvadmission.FlowTokenDispatchInterval.Get(&t.st.SV))
+
+			if disableFn := t.knobs.DisableFallbackFlowTokenDispatch; disableFn != nil && disableFn() {
+				continue // nothing to do
+			}
 
 			pendingDispatches := t.kvflowControl.dispatchReader.PendingDispatchFor(q.nodeID)
 			if len(pendingDispatches) == 0 {
@@ -1140,6 +1152,16 @@ type RaftTransportTestingKnobs struct {
 	// OnFallbackDispatch is invoked whenever the fallback token dispatch
 	// mechanism is used.
 	OnFallbackDispatch func()
+	// OverrideIdleTimeout overrides the raftIdleTimeout, which controls how
+	// long until an instance of processQueue winds down after not observing any
+	// messages.
+	OverrideIdleTimeout func() time.Duration
+	// DisableFallbackFlowTokenDispatch disables the fallback mechanism when
+	// dispatching flow tokens.
+	DisableFallbackFlowTokenDispatch func() bool
+	// DisablePiggyBackedFlowTokenDispatch disables the piggybacked mechanism
+	// when dispatching flow tokens.
+	DisablePiggyBackedFlowTokenDispatch func() bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

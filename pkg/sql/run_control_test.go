@@ -881,7 +881,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	params := base.TestServerArgs{
 		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{
-			AdmissionControl: &admission.Options{
+			AdmissionControlOptions: &admission.Options{
 				MaxCPUSlots: numBlockers,
 				// During testing if CPU isn't responsive and skipEnforcement
 				// turns off admission control queuing behavior, for this test

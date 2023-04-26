@@ -309,8 +309,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
 	}
 
-	if params.Knobs.AdmissionControl == nil {
-		cfg.TestingKnobs.AdmissionControl = &admission.Options{}
+	if params.Knobs.AdmissionControlOptions == nil {
+		cfg.TestingKnobs.AdmissionControlOptions = &admission.Options{}
 	}
 
 	cfg.ObsServiceAddr = params.ObsServiceAddr
@@ -1800,6 +1800,16 @@ func (ts *TestServer) SpanConfigKVSubscriber() interface{} {
 // SystemConfigProvider is part of the TestServerInterface.
 func (ts *TestServer) SystemConfigProvider() config.SystemConfigProvider {
 	return ts.node.storeCfg.SystemConfigProvider
+}
+
+// KVFlowController is part of the TestServerInterface.
+func (ts *TestServer) KVFlowController() interface{} {
+	return ts.node.storeCfg.KVFlowController
+}
+
+// KVFlowHandles is part of the TestServerInterface.
+func (ts *TestServer) KVFlowHandles() interface{} {
+	return ts.node.storeCfg.KVFlowHandles
 }
 
 func (ts *TestServer) Codec() keys.SQLCodec {
