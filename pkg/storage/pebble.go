@@ -1899,11 +1899,6 @@ func (p *Pebble) IngestExternalFilesWithStats(
 	return p.db.IngestWithStats(paths)
 }
 
-// PreIngestDelay implements the Engine interface.
-func (p *Pebble) PreIngestDelay(ctx context.Context) {
-	preIngestDelay(ctx, p, p.settings)
-}
-
 // ApproximateDiskBytes implements the Engine interface.
 func (p *Pebble) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 	fromEncoded := EngineKey{Key: from}.Encode()
