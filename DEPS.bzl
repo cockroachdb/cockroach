@@ -1256,12 +1256,14 @@ def go_deps():
     )
     go_repository(
         name = "com_github_cockroachdb_errors",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/cockroachdb/errors",
-        patch_args = ["-p1"],
-        patches = [
-            "@cockroach//build/patches:com_github_cockroachdb_errors.patch",
+        build_directives = [
+            "gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto",
+            "gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto",
+            "gazelle:go_proto_compilers @cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler",
+            "gazelle:go_grpc_compilers @cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
         ],
+        build_file_proto_mode = "default",
+        importpath = "github.com/cockroachdb/errors",
         sha256 = "ff3814544271799c80da14dadfe408efc4f66e02cbdf17b73e81614ed9f7ae43",
         strip_prefix = "github.com/cockroachdb/errors@v1.9.0",
         urls = [
@@ -1300,7 +1302,9 @@ def go_deps():
     )
     go_repository(
         name = "com_github_cockroachdb_pebble",
-        build_directives = ["gazelle:build_tags invariants"],
+        build_directives = [
+            "gazelle:build_tags invariants",
+        ],
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
         patch_args = ["-p1"],
@@ -6607,12 +6611,11 @@ def go_deps():
     )
     go_repository(
         name = "com_github_prometheus_client_model",
-        build_file_proto_mode = "package",
-        importpath = "github.com/prometheus/client_model",
-        patch_args = ["-p1"],
-        patches = [
-            "@cockroach//build/patches:com_github_prometheus_client_model.patch",
+        build_directives = [
+            "gazelle:resolve go go github.com/golang/protobuf/ptypes/timestamp @com_github_golang_protobuf//ptypes/timestamp:go_default_library",
         ],
+        build_file_proto_mode = "default",
+        importpath = "github.com/prometheus/client_model",
         sha256 = "44fc58fe25ed9b122b6755e8d356d5f199592f959af3b87a3b636c6eb82b43c5",
         strip_prefix = "github.com/prometheus/client_model@v0.2.1-0.20210607210712-147c58e9608a",
         urls = [
@@ -8535,12 +8538,15 @@ def go_deps():
     )
     go_repository(
         name = "io_etcd_go_etcd_raft_v3",
-        build_file_proto_mode = "disable_global",
-        importpath = "go.etcd.io/etcd/raft/v3",
-        patch_args = ["-p1"],
-        patches = [
-            "@cockroach//build/patches:io_etcd_go_etcd_raft_v3.patch",
+        build_directives = [
+            "gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto",
+            "gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto",
+            "gazelle:go_proto_compilers @cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler",
+            "gazelle:go_grpc_compilers @cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+            "gazelle:proto_import_prefix etcd/raft/v3",
         ],
+        build_file_proto_mode = "default",
+        importpath = "go.etcd.io/etcd/raft/v3",
         sha256 = "62faedd81e10061a4e0d7476865a62b84121ea462514afeaa1b9d66cc53b5a4b",
         strip_prefix = "go.etcd.io/etcd/raft/v3@v3.0.0-20210320072418-e51c697ec6e8",
         urls = [
@@ -8869,12 +8875,11 @@ def go_deps():
     )
     go_repository(
         name = "io_opentelemetry_go_proto_otlp",
+        build_directives = [
+            "gazelle:resolve go go github.com/golang/protobuf/descriptor @com_github_golang_protobuf//descriptor:go_default_library_gen",
+        ],
         build_file_proto_mode = "disable_global",
         importpath = "go.opentelemetry.io/proto/otlp",
-        patch_args = ["-p1"],
-        patches = [
-            "@cockroach//build/patches:io_opentelemetry_go_proto_otlp.patch",
-        ],
         sha256 = "1a91376c923da07bee23439e8430c32736f6330532df85d3bd1ada90305097d7",
         strip_prefix = "go.opentelemetry.io/proto/otlp@v0.9.0",
         urls = [
