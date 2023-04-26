@@ -267,10 +267,10 @@ func (t *Trace) trimSpans(maxSpans int) {
 	if t.NumSpans <= maxSpans {
 		return
 	}
-	t.trimSpansRecursive(t.NumSpans - maxSpans)
+	t.trimSpansRecursive(t.NumSpans-maxSpans, true /* isRoot */)
 }
 
-func (t *Trace) trimSpansRecursive(toDrop int) {
+func (t *Trace) trimSpansRecursive(toDrop int, isRoot bool) {
 	if toDrop <= 0 {
 		toDrop := toDrop // copy escaping to the heap
 		panic(fmt.Sprintf("invalid toDrop < 0: %d", toDrop))
@@ -314,15 +314,33 @@ func (t *Trace) trimSpansRecursive(toDrop int) {
 		if t.Children[recurseIdx].NumSpans < toDropFromNextChild {
 			panic("expected next child to have enough spans")
 		}
-		t.Children[recurseIdx].trimSpansRecursive(toDropFromNextChild)
+		t.Children[recurseIdx].trimSpansRecursive(toDropFromNextChild, false /* isRoot */)
 		t.NumSpans -= toDropFromNextChild
 		t.DroppedIndirectChildren = true
-		t.Root.EnsureTagGroup(tracingpb.AnonymousTagGroupName).AddTag("_dropped_indirect_children", "")
+		if isRoot {
+			// The original recursive root Trace `t`'s Root member is expected to have independently allocated
+			// tags structures. However, child spans are potentially share memory for tags, logs, and stats
+			// information across goroutines which are not protected by a mutex. See (*Trace).PartialClone for
+			// more details - deep copying these structures is avoided to reduce allocations.
+			//
+			// To avoid multiple goroutines racing to add tags to child spans with unprotected tags structures,
+			// we only indicate on the recursive root Trace's Root member that indirect children have been dropped.
+			t.Root.EnsureTagGroup(tracingpb.AnonymousTagGroupName).AddTag("_dropped_indirect_children", "")
+		}
 	}
 
 	if spansToDrop > 0 {
 		t.DroppedDirectChildren = true
-		t.Root.EnsureTagGroup(tracingpb.AnonymousTagGroupName).AddTag("_dropped_children", "")
+		if isRoot {
+			// The original recursive root Trace `t`'s Root member is expected to have independently allocated
+			// tags structures. However, child spans are potentially share memory for tags, logs, and stats
+			// information across goroutines which are not protected by a mutex. See (*Trace).PartialClone for
+			// more details - deep copying these structures is avoided to reduce allocations.
+			//
+			// To avoid multiple goroutines racing to add tags to child spans with unprotected tags structures,
+			// we only indicate on the recursive root Trace's Root member that children have been dropped.
+			t.Root.EnsureTagGroup(tracingpb.AnonymousTagGroupName).AddTag("_dropped_children", "")
+		}
 		// We're going to drop the fattest spansToDrop spans.
 		childrenToDropIdx := childrenIdx[:spansToDrop]
 
