@@ -141,6 +141,7 @@ func RegisterTests(r registry.Registry) {
 	registerVersion(r)
 	registerYCSB(r)
 	registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r)
+	registerTenantSpanStatsMixedVersion(r)
 }
 
 // RegisterBenchmarks registers all benchmarks to the registry. This powers `roachtest bench`.
