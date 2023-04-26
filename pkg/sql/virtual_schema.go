@@ -935,12 +935,17 @@ func NewVirtualSchemaHolder(
 		defs := make(map[string]*virtualDefEntry, len(schema.tableDefs))
 		orderedDefNames := make([]string, 0, len(schema.tableDefs))
 
-		doTheWork := func(id descpb.ID, def virtualSchemaDef) (tb descpb.TableDescriptor, de *virtualDefEntry, err error) {
+		doTheWork := func(id descpb.ID, def virtualSchemaDef, bumpVersion bool) (tb descpb.TableDescriptor, de *virtualDefEntry, err error) {
 			tableDesc, err := def.initVirtualTableDesc(ctx, st, scDesc, id)
-
 			if err != nil {
 				return tb, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to initialize %s", errors.Safe(def.getSchema()))
+			}
+
+			// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
+			// Remove in v23.2.
+			if bumpVersion {
+				tableDesc.Version++
 			}
 
 			if schema.tableValidator != nil {
@@ -967,7 +972,7 @@ func NewVirtualSchemaHolder(
 		}
 
 		for id, def := range schema.tableDefs {
-			tableDesc, entry, err := doTheWork(id, def)
+			tableDesc, entry, err := doTheWork(id, def, false /* bumpVersion */)
 			if err != nil {
 				return nil, err
 			}
@@ -978,11 +983,11 @@ func NewVirtualSchemaHolder(
 
 		sort.Strings(orderedDefNames)
 
-		_, extra1, err := doTheWork(catconstants.CrdbInternalRangesViewID, crdbInternalRangesViewDEPRECATED)
+		_, extra1, err := doTheWork(catconstants.CrdbInternalRangesViewID, crdbInternalRangesViewDEPRECATED, true /* bumpVersion */)
 		if err != nil {
 			return nil, err
 		}
-		_, extra2, err := doTheWork(catconstants.CrdbInternalRangesNoLeasesTableID, crdbInternalRangesNoLeasesTableDEPRECATED)
+		_, extra2, err := doTheWork(catconstants.CrdbInternalRangesNoLeasesTableID, crdbInternalRangesNoLeasesTableDEPRECATED, true /* bumpVersion */)
 		if err != nil {
 			return nil, err
 		}
