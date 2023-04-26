@@ -32,11 +32,11 @@ func MustQuery(clauses ...rel.Clause) *rel.Query {
 	return q
 }
 
-var elementProtoElementSelectors = func() (selectors []string) {
-	elementProtoType := reflect.TypeOf((*scpb.ElementProto)(nil)).Elem()
-	selectors = make([]string, elementProtoType.NumField())
-	for i := 0; i < elementProtoType.NumField(); i++ {
-		selectors[i] = elementProtoType.Field(i).Name
+var elementProtoElementTypes = func() (selectors []reflect.Type) {
+	oneOfProtos := scpb.GetElementOneOfProtos()
+	selectors = make([]reflect.Type, 0, len(oneOfProtos))
+	for _, proto := range oneOfProtos {
+		selectors = append(selectors, reflect.TypeOf(proto))
 	}
 	return selectors
 }()
@@ -402,7 +402,7 @@ var Schema = rel.MustSchema("screl", append(
 	),
 	rel.EntityMapping(t((*scpb.Target)(nil)),
 		rel.EntityAttr(TargetStatus, "TargetStatus"),
-		rel.EntityAttr(Element, elementProtoElementSelectors...),
+		rel.EntityAttrOneOf(Element, "ElementOneOf", elementProtoElementTypes...),
 	),
 )...)
 

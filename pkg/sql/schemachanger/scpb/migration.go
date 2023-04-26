@@ -16,7 +16,7 @@ import "github.com/cockroachdb/cockroach/pkg/clusterversion"
 // for deprecation.
 func HasDeprecatedElements(version clusterversion.ClusterVersion, target Target) bool {
 	if version.IsActive(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates) &&
-		target.SecondaryIndexPartial != nil {
+		target.GetSecondaryIndexPartial() != nil {
 		return true
 	}
 	return false
@@ -28,11 +28,11 @@ func migrateTargetElement(targets []Target, idx int) {
 	switch t := targetToMigrate.Element().(type) {
 	case *SecondaryIndexPartial:
 		for _, target := range targets {
-			if target.SecondaryIndex != nil &&
-				target.SecondaryIndex.TableID == t.TableID &&
-				target.SecondaryIndex.IndexID == t.IndexID &&
+			if secondaryIndex := target.GetSecondaryIndex(); secondaryIndex != nil &&
+				secondaryIndex.TableID == t.TableID &&
+				secondaryIndex.IndexID == t.IndexID &&
 				target.TargetStatus == targetToMigrate.TargetStatus {
-				target.SecondaryIndex.EmbeddedExpr = &t.Expression
+				secondaryIndex.EmbeddedExpr = &t.Expression
 				break
 			}
 		}
