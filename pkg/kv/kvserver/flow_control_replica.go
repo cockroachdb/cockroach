@@ -34,7 +34,8 @@ type replicaForFlowControl interface {
 	isRaftTransportConnectedTo(roachpb.StoreID) bool
 	withReplicaProgress(f func(roachpb.ReplicaID, rafttracker.Progress))
 
-	assertLocked() // only affects test builds
+	assertLocked()        // only affects test builds
+	isScratchRange() bool // only used in tests
 }
 
 // replicaFlowControl is a concrete implementation of the replicaForFlowControl
@@ -105,3 +106,10 @@ func (rf *replicaFlowControl) withReplicaProgress(f func(roachpb.ReplicaID, raft
 		f(roachpb.ReplicaID(id), progress)
 	})
 }
+
+func (rf *replicaFlowControl) isScratchRange() bool {
+	rf.mu.AssertHeld()
+	r := (*Replica)(rf)
+	return r.isScratchRangeRLocked()
+}
+
