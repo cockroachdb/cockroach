@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
@@ -91,25 +90,13 @@ func (s *Store) SendWithWriteBytes(
 	// Update our clock with the incoming request timestamp. This advances the
 	// local node's clock to a high water mark from all nodes with which it has
 	// interacted.
-	baClockTS := ba.Now
-	if baClockTS.IsEmpty() && !s.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2LocalTimestamps) {
-		// TODO(nvanbenschoten): remove this in v23.1. v21.2 nodes will still send
-		// requests without a Now field. This is not necessary for correctness now
-		// that local timestamps pulled from the leaseholder's own HLC are used in
-		// conjunction with observed timestamps to prevent stale reads, but using
-		// this timestamp when available can help stabilize HLCs.
-		//
-		// NOTE: we version gate this so that no test hits this branch and relies on
-		// this behavior.
-		baClockTS, _ = ba.Timestamp.DeprecatedTryToClockTimestamp()
-	}
-	if !baClockTS.IsEmpty() {
+	if !ba.Now.IsEmpty() {
 		if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
-			s.cfg.Clock.Update(baClockTS)
+			s.cfg.Clock.Update(ba.Now)
 		} else {
 			// If the command appears to come from a node with a bad clock,
 			// reject it instead of updating the local clock and proceeding.
-			if err := s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, baClockTS); err != nil {
+			if err := s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Now); err != nil {
 				return nil, nil, kvpb.NewError(err)
 			}
 		}
