@@ -229,7 +229,7 @@ func (d *Decider) recordLocked(
 	if d.mu.splitFinder != nil && n != 0 {
 		s := span()
 		if s.Key != nil {
-			d.mu.splitFinder.Record(span(), 1)
+			d.mu.splitFinder.Record(span(), float64(n))
 		}
 		if d.mu.splitFinder.Ready(now) {
 			if d.mu.splitFinder.Key() != nil {
