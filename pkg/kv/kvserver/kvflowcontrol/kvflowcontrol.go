@@ -225,9 +225,25 @@ type Handle interface {
 // typically held on replicas initiating replication traffic, so on a given node
 // they're uniquely identified by their range ID.
 type Handles interface {
+	// Lookup the kvflowcontrol.Handle for the specific range (or rather, the
+	// replica of the specific range that's locally held).
 	Lookup(roachpb.RangeID) (Handle, bool)
+	// ResetStreams resets all underlying streams for all underlying
+	// kvflowcontrol.Handles, i.e. disconnect and reconnect each one. It
+	// effectively unblocks all requests waiting in Admit().
 	ResetStreams(ctx context.Context)
+	// Inspect returns the set of ranges that have an embedded
+	// kvflowcontrol.Handle. It's used to power /inspectz.
 	Inspect() []roachpb.RangeID
+	// TODO(irfansharif): When fixing I1 and I2 from kvflowcontrol/node.go,
+	// we'll want to disconnect all streams for a specific node. Expose
+	// something like the following to disconnect all replication streams bound
+	// to the specific node. Back it by a reverse-lookup dictionary, keyed by
+	// StoreID (or NodeID, if we also maintain a mapping between NodeID ->
+	// []StoreID) and the set of Handles currently connected to it. Do it as
+	// part of #95563.
+	//
+	//   Iterate(roachpb.StoreID, func(context.Context, Handle, Stream))
 }
 
 // HandleFactory is used to construct new Handles.
