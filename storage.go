@@ -48,10 +48,28 @@ type Storage interface {
 
 	// InitialState returns the saved HardState and ConfState information.
 	InitialState() (pb.HardState, pb.ConfState, error)
-	// Entries returns a slice of log entries in the range [lo,hi).
-	// MaxSize limits the total size of the log entries returned, but
-	// Entries returns at least one entry if any.
+
+	// Entries returns a slice of consecutive log entries in the range [lo, hi),
+	// starting from lo. The maxSize limits the total size of the log entries
+	// returned, but Entries returns at least one entry if any.
+	//
+	// The caller of Entries owns the returned slice, and may append to it. The
+	// individual entries in the slice must not be mutated, neither by the Storage
+	// implementation nor the caller. Note that raft may forward these entries
+	// back to the application via Ready struct, so the corresponding handler must
+	// not mutate entries either (see comments in Ready struct).
+	//
+	// Since the caller may append to the returned slice, Storage implementation
+	// must protect its state from corruption that such appends may cause. For
+	// example, common ways to do so are:
+	//  - allocate the slice before returning it (safest option),
+	//  - return a slice protected by Go full slice expression, which causes
+	//  copying on appends (see MemoryStorage).
+	//
+	// Returns ErrCompacted if entry lo has been compacted, or ErrUnavailable if
+	// encountered an unavailable entry in [lo, hi).
 	Entries(lo, hi, maxSize uint64) ([]pb.Entry, error)
+
 	// Term returns the term of entry i, which must be in the range
 	// [FirstIndex()-1, LastIndex()]. The term of the entry before
 	// FirstIndex is retained for matching purposes even though the
@@ -130,8 +148,11 @@ func (ms *MemoryStorage) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
 		return nil, ErrUnavailable
 	}
 
-	ents := ms.ents[lo-offset : hi-offset]
-	return limitSize(ents, entryEncodingSize(maxSize)), nil
+	ents := limitSize(ms.ents[lo-offset:hi-offset], entryEncodingSize(maxSize))
+	// NB: use the full slice expression to limit what the caller can do with the
+	// returned slice. For example, an append will reallocate and copy this slice
+	// instead of corrupting the neighbouring ms.ents.
+	return ents[:len(ents):len(ents)], nil
 }
 
 // Term implements the Storage interface.
@@ -239,7 +260,10 @@ func (ms *MemoryStorage) Compact(compactIndex uint64) error {
 	}
 
 	i := compactIndex - offset
-	ents := make([]pb.Entry, 1, 1+uint64(len(ms.ents))-i)
+	// NB: allocate a new slice instead of reusing the old ms.ents. Entries in
+	// ms.ents are immutable, and can be referenced from outside MemoryStorage
+	// through slices returned by ms.Entries().
+	ents := make([]pb.Entry, 1, uint64(len(ms.ents))-i)
 	ents[0].Index = ms.ents[i].Index
 	ents[0].Term = ms.ents[i].Term
 	ents = append(ents, ms.ents[i+1:]...)
@@ -273,8 +297,9 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 	offset := entries[0].Index - ms.ents[0].Index
 	switch {
 	case uint64(len(ms.ents)) > offset:
-		ms.ents = append([]pb.Entry{}, ms.ents[:offset]...)
-		ms.ents = append(ms.ents, entries...)
+		// NB: full slice expression protects ms.ents at index >= offset from
+		// rewrites, as they may still be referenced from outside MemoryStorage.
+		ms.ents = append(ms.ents[:offset:offset], entries...)
 	case uint64(len(ms.ents)) == offset:
 		ms.ents = append(ms.ents, entries...)
 	default:
