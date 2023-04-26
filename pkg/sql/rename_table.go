@@ -90,6 +90,11 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		}
 	}
 
+	// Disallow schema changes if this table's schema is locked.
+	if err := checkTableSchemaUnlocked(tableDesc); err != nil {
+		return nil, err
+	}
+
 	return &renameTableNode{n: n, oldTn: &oldTn, newTn: &newTn, tableDesc: tableDesc}, nil
 }
 

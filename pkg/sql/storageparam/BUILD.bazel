@@ -7,6 +7,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/storageparam",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/server/telemetry",
         "//pkg/sql/paramparse",
         "//pkg/sql/pgwire/pgcode",
@@ -17,6 +18,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
