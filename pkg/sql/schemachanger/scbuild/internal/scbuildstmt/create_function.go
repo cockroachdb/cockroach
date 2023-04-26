@@ -136,6 +136,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 		sc,
 		fnID,
 		privilege.Functions,
+		b.CurrentUser(),
 	)
 	b.Add(owner)
 	for _, up := range ups {
