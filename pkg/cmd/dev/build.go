@@ -65,6 +65,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 	buildCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
 	buildCmd.Flags().String(crossFlag, "", "cross-compiles using the builder image (options: linux, linuxarm, macos, macosarm, windows)")
 	buildCmd.Flags().Lookup(crossFlag).NoOptDefVal = "linux"
+	buildCmd.Flags().StringArray(dockerArgsFlag, []string{}, "additional arguments to pass to Docker (only used for cross builds)")
 	addCommonBuildFlags(buildCmd)
 	return buildCmd
 }
@@ -145,6 +146,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
+	dockerArgs := mustGetFlagStringArray(cmd, dockerArgsFlag)
 
 	// Set up dev cache unless it's disabled via the environment variable or the
 	// testing knob.
@@ -185,15 +187,20 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	}
 	volume := mustGetFlagString(cmd, volumeFlag)
 	cross = "cross" + cross
-	return d.crossBuild(ctx, args, buildTargets, cross, volume)
+	return d.crossBuild(ctx, args, buildTargets, cross, volume, dockerArgs)
 }
 
 func (d *dev) crossBuild(
-	ctx context.Context, bazelArgs []string, targets []buildTarget, crossConfig string, volume string,
+	ctx context.Context,
+	bazelArgs []string,
+	targets []buildTarget,
+	crossConfig string,
+	volume string,
+	dockerArgs []string,
 ) error {
 	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=ci")
 	configArgs := getConfigArgs(bazelArgs)
-	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false)
+	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false, dockerArgs)
 	if err != nil {
 		return err
 	}

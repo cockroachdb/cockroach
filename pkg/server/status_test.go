@@ -2659,15 +2659,15 @@ func TestMergeDistSQLRemoteFlows(t *testing.T) {
 				{
 					FlowID: flowIDs[0],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
-						{NodeID: 2, Timestamp: ts[2], Status: serverpb.DistSQLRemoteFlows_QUEUED},
-						{NodeID: 3, Timestamp: ts[3], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 1, Timestamp: ts[1]},
+						{NodeID: 2, Timestamp: ts[2]},
+						{NodeID: 3, Timestamp: ts[3]},
 					},
 				},
 				{
 					FlowID: flowIDs[1],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 1, Timestamp: ts[1]},
 					},
 				},
 			},
@@ -2675,15 +2675,15 @@ func TestMergeDistSQLRemoteFlows(t *testing.T) {
 				{
 					FlowID: flowIDs[0],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
-						{NodeID: 2, Timestamp: ts[2], Status: serverpb.DistSQLRemoteFlows_QUEUED},
-						{NodeID: 3, Timestamp: ts[3], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 1, Timestamp: ts[1]},
+						{NodeID: 2, Timestamp: ts[2]},
+						{NodeID: 3, Timestamp: ts[3]},
 					},
 				},
 				{
 					FlowID: flowIDs[1],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 1, Timestamp: ts[1]},
 					},
 				},
 			},
@@ -2694,15 +2694,15 @@ func TestMergeDistSQLRemoteFlows(t *testing.T) {
 				{
 					FlowID: flowIDs[0],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
-						{NodeID: 2, Timestamp: ts[2], Status: serverpb.DistSQLRemoteFlows_QUEUED},
-						{NodeID: 3, Timestamp: ts[3], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 1, Timestamp: ts[1]},
+						{NodeID: 2, Timestamp: ts[2]},
+						{NodeID: 3, Timestamp: ts[3]},
 					},
 				},
 				{
 					FlowID: flowIDs[1],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 1, Timestamp: ts[1]},
 					},
 				},
 			},
@@ -2711,15 +2711,15 @@ func TestMergeDistSQLRemoteFlows(t *testing.T) {
 				{
 					FlowID: flowIDs[0],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
-						{NodeID: 2, Timestamp: ts[2], Status: serverpb.DistSQLRemoteFlows_QUEUED},
-						{NodeID: 3, Timestamp: ts[3], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 1, Timestamp: ts[1]},
+						{NodeID: 2, Timestamp: ts[2]},
+						{NodeID: 3, Timestamp: ts[3]},
 					},
 				},
 				{
 					FlowID: flowIDs[1],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 1, Timestamp: ts[1]},
 					},
 				},
 			},
@@ -2730,21 +2730,21 @@ func TestMergeDistSQLRemoteFlows(t *testing.T) {
 				{
 					FlowID: flowIDs[0],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
-						{NodeID: 2, Timestamp: ts[2], Status: serverpb.DistSQLRemoteFlows_QUEUED},
-						{NodeID: 3, Timestamp: ts[3], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 1, Timestamp: ts[1]},
+						{NodeID: 2, Timestamp: ts[2]},
+						{NodeID: 3, Timestamp: ts[3]},
 					},
 				},
 				{
 					FlowID: flowIDs[2],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 3, Timestamp: ts[3], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 3, Timestamp: ts[3]},
 					},
 				},
 				{
 					FlowID: flowIDs[3],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 0, Timestamp: ts[0], Status: serverpb.DistSQLRemoteFlows_QUEUED},
+						{NodeID: 0, Timestamp: ts[0]},
 					},
 				},
 			},
@@ -2752,22 +2752,22 @@ func TestMergeDistSQLRemoteFlows(t *testing.T) {
 				{
 					FlowID: flowIDs[0],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 0, Timestamp: ts[0], Status: serverpb.DistSQLRemoteFlows_QUEUED},
+						{NodeID: 0, Timestamp: ts[0]},
 					},
 				},
 				{
 					FlowID: flowIDs[1],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 0, Timestamp: ts[0], Status: serverpb.DistSQLRemoteFlows_QUEUED},
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
-						{NodeID: 2, Timestamp: ts[2], Status: serverpb.DistSQLRemoteFlows_QUEUED},
+						{NodeID: 0, Timestamp: ts[0]},
+						{NodeID: 1, Timestamp: ts[1]},
+						{NodeID: 2, Timestamp: ts[2]},
 					},
 				},
 				{
 					FlowID: flowIDs[3],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
-						{NodeID: 2, Timestamp: ts[2], Status: serverpb.DistSQLRemoteFlows_QUEUED},
+						{NodeID: 1, Timestamp: ts[1]},
+						{NodeID: 2, Timestamp: ts[2]},
 					},
 				},
 			},
@@ -2775,32 +2775,32 @@ func TestMergeDistSQLRemoteFlows(t *testing.T) {
 				{
 					FlowID: flowIDs[0],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 0, Timestamp: ts[0], Status: serverpb.DistSQLRemoteFlows_QUEUED},
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
-						{NodeID: 2, Timestamp: ts[2], Status: serverpb.DistSQLRemoteFlows_QUEUED},
-						{NodeID: 3, Timestamp: ts[3], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 0, Timestamp: ts[0]},
+						{NodeID: 1, Timestamp: ts[1]},
+						{NodeID: 2, Timestamp: ts[2]},
+						{NodeID: 3, Timestamp: ts[3]},
 					},
 				},
 				{
 					FlowID: flowIDs[1],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 0, Timestamp: ts[0], Status: serverpb.DistSQLRemoteFlows_QUEUED},
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
-						{NodeID: 2, Timestamp: ts[2], Status: serverpb.DistSQLRemoteFlows_QUEUED},
+						{NodeID: 0, Timestamp: ts[0]},
+						{NodeID: 1, Timestamp: ts[1]},
+						{NodeID: 2, Timestamp: ts[2]},
 					},
 				},
 				{
 					FlowID: flowIDs[2],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 3, Timestamp: ts[3], Status: serverpb.DistSQLRemoteFlows_RUNNING},
+						{NodeID: 3, Timestamp: ts[3]},
 					},
 				},
 				{
 					FlowID: flowIDs[3],
 					Infos: []serverpb.DistSQLRemoteFlows_Info{
-						{NodeID: 0, Timestamp: ts[0], Status: serverpb.DistSQLRemoteFlows_QUEUED},
-						{NodeID: 1, Timestamp: ts[1], Status: serverpb.DistSQLRemoteFlows_RUNNING},
-						{NodeID: 2, Timestamp: ts[2], Status: serverpb.DistSQLRemoteFlows_QUEUED},
+						{NodeID: 0, Timestamp: ts[0]},
+						{NodeID: 1, Timestamp: ts[1]},
+						{NodeID: 2, Timestamp: ts[2]},
 					},
 				},
 			},
