@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/stringmap"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -199,7 +200,7 @@ func (c clustersOpt) validate() error {
 
 type testOpts struct {
 	versionsBinaryOverride map[string]string
-	testOverrides          map[string]string
+	testOverrides          stringmap.StringMap
 	skipInit               bool
 }
 
@@ -665,7 +666,7 @@ func (r *testRunner) runWorker(
 			versionsBinaryOverride: topt.versionsBinaryOverride,
 			skipInit:               topt.skipInit,
 			debug:                  debugMode.IsDebug(),
-			cliOverrides:           topt.testOverrides,
+			cliOverrides:           &topt.testOverrides,
 		}
 		// Now run the test.
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)

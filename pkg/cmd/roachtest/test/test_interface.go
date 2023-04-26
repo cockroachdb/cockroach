@@ -11,6 +11,7 @@
 package test
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/stringmap"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -60,5 +61,5 @@ type Test interface {
 	// Don't use this, invoke `./cockroach workload` instead.
 	DeprecatedWorkload() string
 
-	GetCliOverride(key, defaultVal string) string
+	CLIOverrides() *stringmap.StringMap
 }

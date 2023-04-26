@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/stringmap"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -412,7 +413,7 @@ type cliCfg struct {
 
 func runTests(register func(registry.Registry), cfg cliCfg) error {
 	if len(cfg.testOverrides) > 0 {
-		fmt.Printf("test overrides:\n")
+		fmt.Printf("running tests with CLI overrides:\n")
 		for s := range cfg.testOverrides {
 			fmt.Printf(" %s=%s\n", s, cfg.testOverrides[s])
 		}
@@ -503,7 +504,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		ctx, tests, cfg.count, cfg.parallelism, clusterOpt,
 		testOpts{
 			versionsBinaryOverride: cfg.versionsBinaryOverride,
-			testOverrides:          cfg.testOverrides,
+			testOverrides:          stringmap.StringMap{StringMap: cfg.testOverrides},
 			skipInit:               cfg.skipInit,
 		},
 		lopt, nil /* clusterAllocator */)
