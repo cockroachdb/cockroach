@@ -1334,9 +1334,9 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	// periods of time on a single range without making progress, which can stall
 	// other operations that they are expected to perform (see
 	// https://github.com/cockroachdb/cockroach/issues/79249 for example).
-	if r.hasOutstandingLearnerSnapshotInFlight() {
+	if err := r.errOnOutstandingLearnerSnapshotInflight(); err != nil {
 		return nil /* desc */, 0, /* learnersRemoved */
-			errCannotRemoveLearnerWhileSnapshotInFlight
+			errors.WithSecondaryError(errCannotRemoveLearnerWhileSnapshotInFlight, err)
 	}
 
 	if fn := r.store.TestingKnobs().BeforeRemovingDemotedLearner; fn != nil {
@@ -1839,7 +1839,7 @@ func (r *Replica) lockLearnerSnapshot(
 	var cleanups []func()
 	for _, addition := range additions {
 		lockUUID := uuid.MakeV4()
-		_, cleanup := r.addSnapshotLogTruncationConstraint(ctx, lockUUID, addition.StoreID)
+		_, cleanup := r.addSnapshotLogTruncationConstraint(ctx, lockUUID, true /* initial */, addition.StoreID)
 		cleanups = append(cleanups, cleanup)
 	}
 	return func() {
@@ -2793,7 +2793,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		senderQueuePriority = 0
 	}
 	snapUUID := uuid.MakeV4()
-	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, recipient.StoreID)
+	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, snapType == kvserverpb.SnapshotRequest_INITIAL, recipient.StoreID)
 	// The cleanup function needs to be called regardless of success or failure of
 	// sending to release the log truncation constraint.
 	defer cleanup()
