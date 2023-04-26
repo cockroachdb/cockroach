@@ -47,7 +47,9 @@ const (
 	AuditNoneStatementConst tree.StatementType = -2
 )
 
-const AllUserRole = "all"
+// allUserRole is a special role value for an audit setting, it designates that
+// the audit setting applies to all users.
+const allUserRole = "all"
 
 type AuditConfigLock struct {
 	syncutil.RWMutex
