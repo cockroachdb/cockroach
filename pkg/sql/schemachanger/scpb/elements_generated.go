@@ -12,12 +12,19 @@
 
 package scpb
 
+import "fmt"
+
 type ElementStatusIterator interface {
 	ForEachElementStatus(fn func(current Status, target TargetStatus, e Element))
 }
 
 
 func (e AliasType) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_AliasType) Element() Element {
+	return e.AliasType
+}
 
 // ForEachAliasType iterates over elements of type AliasType.
 func ForEachAliasType(
@@ -50,6 +57,11 @@ func FindAliasType(b ElementStatusIterator) (current Status, target TargetStatus
 
 func (e CheckConstraint) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_CheckConstraint) Element() Element {
+	return e.CheckConstraint
+}
+
 // ForEachCheckConstraint iterates over elements of type CheckConstraint.
 func ForEachCheckConstraint(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CheckConstraint),
@@ -80,6 +92,11 @@ func FindCheckConstraint(b ElementStatusIterator) (current Status, target Target
 }
 
 func (e CheckConstraintUnvalidated) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_CheckConstraintUnvalidated) Element() Element {
+	return e.CheckConstraintUnvalidated
+}
 
 // ForEachCheckConstraintUnvalidated iterates over elements of type CheckConstraintUnvalidated.
 func ForEachCheckConstraintUnvalidated(
@@ -112,6 +129,11 @@ func FindCheckConstraintUnvalidated(b ElementStatusIterator) (current Status, ta
 
 func (e Column) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_Column) Element() Element {
+	return e.Column
+}
+
 // ForEachColumn iterates over elements of type Column.
 func ForEachColumn(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Column),
@@ -142,6 +164,11 @@ func FindColumn(b ElementStatusIterator) (current Status, target TargetStatus, e
 }
 
 func (e ColumnComment) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_ColumnComment) Element() Element {
+	return e.ColumnComment
+}
 
 // ForEachColumnComment iterates over elements of type ColumnComment.
 func ForEachColumnComment(
@@ -174,6 +201,11 @@ func FindColumnComment(b ElementStatusIterator) (current Status, target TargetSt
 
 func (e ColumnDefaultExpression) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_ColumnDefaultExpression) Element() Element {
+	return e.ColumnDefaultExpression
+}
+
 // ForEachColumnDefaultExpression iterates over elements of type ColumnDefaultExpression.
 func ForEachColumnDefaultExpression(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnDefaultExpression),
@@ -204,6 +236,11 @@ func FindColumnDefaultExpression(b ElementStatusIterator) (current Status, targe
 }
 
 func (e ColumnFamily) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_ColumnFamily) Element() Element {
+	return e.ColumnFamily
+}
 
 // ForEachColumnFamily iterates over elements of type ColumnFamily.
 func ForEachColumnFamily(
@@ -236,6 +273,11 @@ func FindColumnFamily(b ElementStatusIterator) (current Status, target TargetSta
 
 func (e ColumnName) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_ColumnName) Element() Element {
+	return e.ColumnName
+}
+
 // ForEachColumnName iterates over elements of type ColumnName.
 func ForEachColumnName(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnName),
@@ -266,6 +308,11 @@ func FindColumnName(b ElementStatusIterator) (current Status, target TargetStatu
 }
 
 func (e ColumnNotNull) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_ColumnNotNull) Element() Element {
+	return e.ColumnNotNull
+}
 
 // ForEachColumnNotNull iterates over elements of type ColumnNotNull.
 func ForEachColumnNotNull(
@@ -298,6 +345,11 @@ func FindColumnNotNull(b ElementStatusIterator) (current Status, target TargetSt
 
 func (e ColumnOnUpdateExpression) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_ColumnOnUpdateExpression) Element() Element {
+	return e.ColumnOnUpdateExpression
+}
+
 // ForEachColumnOnUpdateExpression iterates over elements of type ColumnOnUpdateExpression.
 func ForEachColumnOnUpdateExpression(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnOnUpdateExpression),
@@ -328,6 +380,11 @@ func FindColumnOnUpdateExpression(b ElementStatusIterator) (current Status, targ
 }
 
 func (e ColumnType) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_ColumnType) Element() Element {
+	return e.ColumnType
+}
 
 // ForEachColumnType iterates over elements of type ColumnType.
 func ForEachColumnType(
@@ -360,6 +417,11 @@ func FindColumnType(b ElementStatusIterator) (current Status, target TargetStatu
 
 func (e CompositeType) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_CompositeType) Element() Element {
+	return e.CompositeType
+}
+
 // ForEachCompositeType iterates over elements of type CompositeType.
 func ForEachCompositeType(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeType),
@@ -390,6 +452,11 @@ func FindCompositeType(b ElementStatusIterator) (current Status, target TargetSt
 }
 
 func (e CompositeTypeAttrName) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_CompositeTypeAttrName) Element() Element {
+	return e.CompositeTypeAttrName
+}
 
 // ForEachCompositeTypeAttrName iterates over elements of type CompositeTypeAttrName.
 func ForEachCompositeTypeAttrName(
@@ -422,6 +489,11 @@ func FindCompositeTypeAttrName(b ElementStatusIterator) (current Status, target 
 
 func (e CompositeTypeAttrType) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_CompositeTypeAttrType) Element() Element {
+	return e.CompositeTypeAttrType
+}
+
 // ForEachCompositeTypeAttrType iterates over elements of type CompositeTypeAttrType.
 func ForEachCompositeTypeAttrType(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeTypeAttrType),
@@ -452,6 +524,11 @@ func FindCompositeTypeAttrType(b ElementStatusIterator) (current Status, target 
 }
 
 func (e ConstraintComment) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_ConstraintComment) Element() Element {
+	return e.ConstraintComment
+}
 
 // ForEachConstraintComment iterates over elements of type ConstraintComment.
 func ForEachConstraintComment(
@@ -484,6 +561,11 @@ func FindConstraintComment(b ElementStatusIterator) (current Status, target Targ
 
 func (e ConstraintWithoutIndexName) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_ConstraintWithoutIndexName) Element() Element {
+	return e.ConstraintWithoutIndexName
+}
+
 // ForEachConstraintWithoutIndexName iterates over elements of type ConstraintWithoutIndexName.
 func ForEachConstraintWithoutIndexName(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ConstraintWithoutIndexName),
@@ -514,6 +596,11 @@ func FindConstraintWithoutIndexName(b ElementStatusIterator) (current Status, ta
 }
 
 func (e Database) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_Database) Element() Element {
+	return e.Database
+}
 
 // ForEachDatabase iterates over elements of type Database.
 func ForEachDatabase(
@@ -546,6 +633,11 @@ func FindDatabase(b ElementStatusIterator) (current Status, target TargetStatus,
 
 func (e DatabaseComment) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_DatabaseComment) Element() Element {
+	return e.DatabaseComment
+}
+
 // ForEachDatabaseComment iterates over elements of type DatabaseComment.
 func ForEachDatabaseComment(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseComment),
@@ -576,6 +668,11 @@ func FindDatabaseComment(b ElementStatusIterator) (current Status, target Target
 }
 
 func (e DatabaseData) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_DatabaseData) Element() Element {
+	return e.DatabaseData
+}
 
 // ForEachDatabaseData iterates over elements of type DatabaseData.
 func ForEachDatabaseData(
@@ -608,6 +705,11 @@ func FindDatabaseData(b ElementStatusIterator) (current Status, target TargetSta
 
 func (e DatabaseRegionConfig) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_DatabaseRegionConfig) Element() Element {
+	return e.DatabaseRegionConfig
+}
+
 // ForEachDatabaseRegionConfig iterates over elements of type DatabaseRegionConfig.
 func ForEachDatabaseRegionConfig(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseRegionConfig),
@@ -638,6 +740,11 @@ func FindDatabaseRegionConfig(b ElementStatusIterator) (current Status, target T
 }
 
 func (e DatabaseRoleSetting) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_DatabaseRoleSetting) Element() Element {
+	return e.DatabaseRoleSetting
+}
 
 // ForEachDatabaseRoleSetting iterates over elements of type DatabaseRoleSetting.
 func ForEachDatabaseRoleSetting(
@@ -670,6 +777,11 @@ func FindDatabaseRoleSetting(b ElementStatusIterator) (current Status, target Ta
 
 func (e EnumType) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_EnumType) Element() Element {
+	return e.EnumType
+}
+
 // ForEachEnumType iterates over elements of type EnumType.
 func ForEachEnumType(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *EnumType),
@@ -700,6 +812,11 @@ func FindEnumType(b ElementStatusIterator) (current Status, target TargetStatus,
 }
 
 func (e EnumTypeValue) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_EnumTypeValue) Element() Element {
+	return e.EnumTypeValue
+}
 
 // ForEachEnumTypeValue iterates over elements of type EnumTypeValue.
 func ForEachEnumTypeValue(
@@ -732,6 +849,11 @@ func FindEnumTypeValue(b ElementStatusIterator) (current Status, target TargetSt
 
 func (e ForeignKeyConstraint) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_ForeignKeyConstraint) Element() Element {
+	return e.ForeignKeyConstraint
+}
+
 // ForEachForeignKeyConstraint iterates over elements of type ForeignKeyConstraint.
 func ForEachForeignKeyConstraint(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ForeignKeyConstraint),
@@ -762,6 +884,11 @@ func FindForeignKeyConstraint(b ElementStatusIterator) (current Status, target T
 }
 
 func (e ForeignKeyConstraintUnvalidated) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_ForeignKeyConstraintUnvalidated) Element() Element {
+	return e.ForeignKeyConstraintUnvalidated
+}
 
 // ForEachForeignKeyConstraintUnvalidated iterates over elements of type ForeignKeyConstraintUnvalidated.
 func ForEachForeignKeyConstraintUnvalidated(
@@ -794,6 +921,11 @@ func FindForeignKeyConstraintUnvalidated(b ElementStatusIterator) (current Statu
 
 func (e Function) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_Function) Element() Element {
+	return e.Function
+}
+
 // ForEachFunction iterates over elements of type Function.
 func ForEachFunction(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Function),
@@ -824,6 +956,11 @@ func FindFunction(b ElementStatusIterator) (current Status, target TargetStatus,
 }
 
 func (e FunctionBody) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_FunctionBody) Element() Element {
+	return e.FunctionBody
+}
 
 // ForEachFunctionBody iterates over elements of type FunctionBody.
 func ForEachFunctionBody(
@@ -856,6 +993,11 @@ func FindFunctionBody(b ElementStatusIterator) (current Status, target TargetSta
 
 func (e FunctionLeakProof) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_FunctionLeakProof) Element() Element {
+	return e.FunctionLeakProof
+}
+
 // ForEachFunctionLeakProof iterates over elements of type FunctionLeakProof.
 func ForEachFunctionLeakProof(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionLeakProof),
@@ -886,6 +1028,11 @@ func FindFunctionLeakProof(b ElementStatusIterator) (current Status, target Targ
 }
 
 func (e FunctionName) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_FunctionName) Element() Element {
+	return e.FunctionName
+}
 
 // ForEachFunctionName iterates over elements of type FunctionName.
 func ForEachFunctionName(
@@ -918,6 +1065,11 @@ func FindFunctionName(b ElementStatusIterator) (current Status, target TargetSta
 
 func (e FunctionNullInputBehavior) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_FunctionNullInputBehavior) Element() Element {
+	return e.FunctionNullInputBehavior
+}
+
 // ForEachFunctionNullInputBehavior iterates over elements of type FunctionNullInputBehavior.
 func ForEachFunctionNullInputBehavior(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionNullInputBehavior),
@@ -948,6 +1100,11 @@ func FindFunctionNullInputBehavior(b ElementStatusIterator) (current Status, tar
 }
 
 func (e FunctionParamDefaultExpression) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_FunctionParamDefaultExpression) Element() Element {
+	return e.FunctionParamDefaultExpression
+}
 
 // ForEachFunctionParamDefaultExpression iterates over elements of type FunctionParamDefaultExpression.
 func ForEachFunctionParamDefaultExpression(
@@ -980,6 +1137,11 @@ func FindFunctionParamDefaultExpression(b ElementStatusIterator) (current Status
 
 func (e FunctionVolatility) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_FunctionVolatility) Element() Element {
+	return e.FunctionVolatility
+}
+
 // ForEachFunctionVolatility iterates over elements of type FunctionVolatility.
 func ForEachFunctionVolatility(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionVolatility),
@@ -1010,6 +1172,11 @@ func FindFunctionVolatility(b ElementStatusIterator) (current Status, target Tar
 }
 
 func (e IndexColumn) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_IndexColumn) Element() Element {
+	return e.IndexColumn
+}
 
 // ForEachIndexColumn iterates over elements of type IndexColumn.
 func ForEachIndexColumn(
@@ -1042,6 +1209,11 @@ func FindIndexColumn(b ElementStatusIterator) (current Status, target TargetStat
 
 func (e IndexComment) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_IndexComment) Element() Element {
+	return e.IndexComment
+}
+
 // ForEachIndexComment iterates over elements of type IndexComment.
 func ForEachIndexComment(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexComment),
@@ -1072,6 +1244,11 @@ func FindIndexComment(b ElementStatusIterator) (current Status, target TargetSta
 }
 
 func (e IndexData) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_IndexData) Element() Element {
+	return e.IndexData
+}
 
 // ForEachIndexData iterates over elements of type IndexData.
 func ForEachIndexData(
@@ -1104,6 +1281,11 @@ func FindIndexData(b ElementStatusIterator) (current Status, target TargetStatus
 
 func (e IndexName) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_IndexName) Element() Element {
+	return e.IndexName
+}
+
 // ForEachIndexName iterates over elements of type IndexName.
 func ForEachIndexName(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexName),
@@ -1134,6 +1316,11 @@ func FindIndexName(b ElementStatusIterator) (current Status, target TargetStatus
 }
 
 func (e IndexPartitioning) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_IndexPartitioning) Element() Element {
+	return e.IndexPartitioning
+}
 
 // ForEachIndexPartitioning iterates over elements of type IndexPartitioning.
 func ForEachIndexPartitioning(
@@ -1166,6 +1353,11 @@ func FindIndexPartitioning(b ElementStatusIterator) (current Status, target Targ
 
 func (e IndexZoneConfig) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_IndexZoneConfig) Element() Element {
+	return e.IndexZoneConfig
+}
+
 // ForEachIndexZoneConfig iterates over elements of type IndexZoneConfig.
 func ForEachIndexZoneConfig(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexZoneConfig),
@@ -1196,6 +1388,11 @@ func FindIndexZoneConfig(b ElementStatusIterator) (current Status, target Target
 }
 
 func (e Namespace) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_Namespace) Element() Element {
+	return e.Namespace
+}
 
 // ForEachNamespace iterates over elements of type Namespace.
 func ForEachNamespace(
@@ -1228,6 +1425,11 @@ func FindNamespace(b ElementStatusIterator) (current Status, target TargetStatus
 
 func (e Owner) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_Owner) Element() Element {
+	return e.Owner
+}
+
 // ForEachOwner iterates over elements of type Owner.
 func ForEachOwner(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Owner),
@@ -1258,6 +1460,11 @@ func FindOwner(b ElementStatusIterator) (current Status, target TargetStatus, el
 }
 
 func (e PrimaryIndex) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_PrimaryIndex) Element() Element {
+	return e.PrimaryIndex
+}
 
 // ForEachPrimaryIndex iterates over elements of type PrimaryIndex.
 func ForEachPrimaryIndex(
@@ -1290,6 +1497,11 @@ func FindPrimaryIndex(b ElementStatusIterator) (current Status, target TargetSta
 
 func (e RowLevelTTL) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_RowLevelTTL) Element() Element {
+	return e.RowLevelTTL
+}
+
 // ForEachRowLevelTTL iterates over elements of type RowLevelTTL.
 func ForEachRowLevelTTL(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *RowLevelTTL),
@@ -1320,6 +1532,11 @@ func FindRowLevelTTL(b ElementStatusIterator) (current Status, target TargetStat
 }
 
 func (e Schema) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_Schema) Element() Element {
+	return e.Schema
+}
 
 // ForEachSchema iterates over elements of type Schema.
 func ForEachSchema(
@@ -1352,6 +1569,11 @@ func FindSchema(b ElementStatusIterator) (current Status, target TargetStatus, e
 
 func (e SchemaChild) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_SchemaChild) Element() Element {
+	return e.SchemaChild
+}
+
 // ForEachSchemaChild iterates over elements of type SchemaChild.
 func ForEachSchemaChild(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SchemaChild),
@@ -1382,6 +1604,11 @@ func FindSchemaChild(b ElementStatusIterator) (current Status, target TargetStat
 }
 
 func (e SchemaComment) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_SchemaComment) Element() Element {
+	return e.SchemaComment
+}
 
 // ForEachSchemaComment iterates over elements of type SchemaComment.
 func ForEachSchemaComment(
@@ -1414,6 +1641,11 @@ func FindSchemaComment(b ElementStatusIterator) (current Status, target TargetSt
 
 func (e SchemaParent) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_SchemaParent) Element() Element {
+	return e.SchemaParent
+}
+
 // ForEachSchemaParent iterates over elements of type SchemaParent.
 func ForEachSchemaParent(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SchemaParent),
@@ -1444,6 +1676,11 @@ func FindSchemaParent(b ElementStatusIterator) (current Status, target TargetSta
 }
 
 func (e SecondaryIndex) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_SecondaryIndex) Element() Element {
+	return e.SecondaryIndex
+}
 
 // ForEachSecondaryIndex iterates over elements of type SecondaryIndex.
 func ForEachSecondaryIndex(
@@ -1476,6 +1713,11 @@ func FindSecondaryIndex(b ElementStatusIterator) (current Status, target TargetS
 
 func (e SecondaryIndexPartial) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_SecondaryIndexPartial) Element() Element {
+	return e.SecondaryIndexPartial
+}
+
 // ForEachSecondaryIndexPartial iterates over elements of type SecondaryIndexPartial.
 func ForEachSecondaryIndexPartial(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SecondaryIndexPartial),
@@ -1506,6 +1748,11 @@ func FindSecondaryIndexPartial(b ElementStatusIterator) (current Status, target 
 }
 
 func (e Sequence) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_Sequence) Element() Element {
+	return e.Sequence
+}
 
 // ForEachSequence iterates over elements of type Sequence.
 func ForEachSequence(
@@ -1538,6 +1785,11 @@ func FindSequence(b ElementStatusIterator) (current Status, target TargetStatus,
 
 func (e SequenceOwner) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_SequenceOwner) Element() Element {
+	return e.SequenceOwner
+}
+
 // ForEachSequenceOwner iterates over elements of type SequenceOwner.
 func ForEachSequenceOwner(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SequenceOwner),
@@ -1568,6 +1820,11 @@ func FindSequenceOwner(b ElementStatusIterator) (current Status, target TargetSt
 }
 
 func (e Table) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_Table) Element() Element {
+	return e.Table
+}
 
 // ForEachTable iterates over elements of type Table.
 func ForEachTable(
@@ -1600,6 +1857,11 @@ func FindTable(b ElementStatusIterator) (current Status, target TargetStatus, el
 
 func (e TableComment) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_TableComment) Element() Element {
+	return e.TableComment
+}
+
 // ForEachTableComment iterates over elements of type TableComment.
 func ForEachTableComment(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableComment),
@@ -1630,6 +1892,11 @@ func FindTableComment(b ElementStatusIterator) (current Status, target TargetSta
 }
 
 func (e TableData) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TableData) Element() Element {
+	return e.TableData
+}
 
 // ForEachTableData iterates over elements of type TableData.
 func ForEachTableData(
@@ -1662,6 +1929,11 @@ func FindTableData(b ElementStatusIterator) (current Status, target TargetStatus
 
 func (e TableLocalityGlobal) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_TableLocalityGlobal) Element() Element {
+	return e.TableLocalityGlobal
+}
+
 // ForEachTableLocalityGlobal iterates over elements of type TableLocalityGlobal.
 func ForEachTableLocalityGlobal(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableLocalityGlobal),
@@ -1692,6 +1964,11 @@ func FindTableLocalityGlobal(b ElementStatusIterator) (current Status, target Ta
 }
 
 func (e TableLocalityPrimaryRegion) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TableLocalityPrimaryRegion) Element() Element {
+	return e.TableLocalityPrimaryRegion
+}
 
 // ForEachTableLocalityPrimaryRegion iterates over elements of type TableLocalityPrimaryRegion.
 func ForEachTableLocalityPrimaryRegion(
@@ -1724,6 +2001,11 @@ func FindTableLocalityPrimaryRegion(b ElementStatusIterator) (current Status, ta
 
 func (e TableLocalityRegionalByRow) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_TableLocalityRegionalByRow) Element() Element {
+	return e.TableLocalityRegionalByRow
+}
+
 // ForEachTableLocalityRegionalByRow iterates over elements of type TableLocalityRegionalByRow.
 func ForEachTableLocalityRegionalByRow(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableLocalityRegionalByRow),
@@ -1754,6 +2036,11 @@ func FindTableLocalityRegionalByRow(b ElementStatusIterator) (current Status, ta
 }
 
 func (e TableLocalitySecondaryRegion) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TableLocalitySecondaryRegion) Element() Element {
+	return e.TableLocalitySecondaryRegion
+}
 
 // ForEachTableLocalitySecondaryRegion iterates over elements of type TableLocalitySecondaryRegion.
 func ForEachTableLocalitySecondaryRegion(
@@ -1786,6 +2073,11 @@ func FindTableLocalitySecondaryRegion(b ElementStatusIterator) (current Status, 
 
 func (e TablePartitioning) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_TablePartitioning) Element() Element {
+	return e.TablePartitioning
+}
+
 // ForEachTablePartitioning iterates over elements of type TablePartitioning.
 func ForEachTablePartitioning(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TablePartitioning),
@@ -1816,6 +2108,11 @@ func FindTablePartitioning(b ElementStatusIterator) (current Status, target Targ
 }
 
 func (e TableSchemaLocked) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TableSchemaLocked) Element() Element {
+	return e.TableSchemaLocked
+}
 
 // ForEachTableSchemaLocked iterates over elements of type TableSchemaLocked.
 func ForEachTableSchemaLocked(
@@ -1848,6 +2145,11 @@ func FindTableSchemaLocked(b ElementStatusIterator) (current Status, target Targ
 
 func (e TableZoneConfig) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_TableZoneConfig) Element() Element {
+	return e.TableZoneConfig
+}
+
 // ForEachTableZoneConfig iterates over elements of type TableZoneConfig.
 func ForEachTableZoneConfig(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableZoneConfig),
@@ -1878,6 +2180,11 @@ func FindTableZoneConfig(b ElementStatusIterator) (current Status, target Target
 }
 
 func (e TemporaryIndex) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TemporaryIndex) Element() Element {
+	return e.TemporaryIndex
+}
 
 // ForEachTemporaryIndex iterates over elements of type TemporaryIndex.
 func ForEachTemporaryIndex(
@@ -1910,6 +2217,11 @@ func FindTemporaryIndex(b ElementStatusIterator) (current Status, target TargetS
 
 func (e UniqueWithoutIndexConstraint) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_UniqueWithoutIndexConstraint) Element() Element {
+	return e.UniqueWithoutIndexConstraint
+}
+
 // ForEachUniqueWithoutIndexConstraint iterates over elements of type UniqueWithoutIndexConstraint.
 func ForEachUniqueWithoutIndexConstraint(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *UniqueWithoutIndexConstraint),
@@ -1940,6 +2252,11 @@ func FindUniqueWithoutIndexConstraint(b ElementStatusIterator) (current Status, 
 }
 
 func (e UniqueWithoutIndexConstraintUnvalidated) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_UniqueWithoutIndexConstraintUnvalidated) Element() Element {
+	return e.UniqueWithoutIndexConstraintUnvalidated
+}
 
 // ForEachUniqueWithoutIndexConstraintUnvalidated iterates over elements of type UniqueWithoutIndexConstraintUnvalidated.
 func ForEachUniqueWithoutIndexConstraintUnvalidated(
@@ -1972,6 +2289,11 @@ func FindUniqueWithoutIndexConstraintUnvalidated(b ElementStatusIterator) (curre
 
 func (e UserPrivileges) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_UserPrivileges) Element() Element {
+	return e.UserPrivileges
+}
+
 // ForEachUserPrivileges iterates over elements of type UserPrivileges.
 func ForEachUserPrivileges(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *UserPrivileges),
@@ -2003,6 +2325,11 @@ func FindUserPrivileges(b ElementStatusIterator) (current Status, target TargetS
 
 func (e View) element() {}
 
+// Element implements ElementGetter.
+func (e * ElementProto_View) Element() Element {
+	return e.View
+}
+
 // ForEachView iterates over elements of type View.
 func ForEachView(
 	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *View),
@@ -2030,4 +2357,294 @@ func FindView(b ElementStatusIterator) (current Status, target TargetStatus, ele
 		}
 	})
 	return current, target, element
+}//
+// SetElements sets the element inside the protobuf.
+func (e* ElementProto) SetElement(element Element) {
+	switch t := element.(type) {
+		default:
+			panic(fmt.Sprintf("unknown type %T", t))
+
+		case *AliasType:
+			e.ElementOneOf = &ElementProto_AliasType{ AliasType: t}
+		case *CheckConstraint:
+			e.ElementOneOf = &ElementProto_CheckConstraint{ CheckConstraint: t}
+		case *CheckConstraintUnvalidated:
+			e.ElementOneOf = &ElementProto_CheckConstraintUnvalidated{ CheckConstraintUnvalidated: t}
+		case *Column:
+			e.ElementOneOf = &ElementProto_Column{ Column: t}
+		case *ColumnComment:
+			e.ElementOneOf = &ElementProto_ColumnComment{ ColumnComment: t}
+		case *ColumnDefaultExpression:
+			e.ElementOneOf = &ElementProto_ColumnDefaultExpression{ ColumnDefaultExpression: t}
+		case *ColumnFamily:
+			e.ElementOneOf = &ElementProto_ColumnFamily{ ColumnFamily: t}
+		case *ColumnName:
+			e.ElementOneOf = &ElementProto_ColumnName{ ColumnName: t}
+		case *ColumnNotNull:
+			e.ElementOneOf = &ElementProto_ColumnNotNull{ ColumnNotNull: t}
+		case *ColumnOnUpdateExpression:
+			e.ElementOneOf = &ElementProto_ColumnOnUpdateExpression{ ColumnOnUpdateExpression: t}
+		case *ColumnType:
+			e.ElementOneOf = &ElementProto_ColumnType{ ColumnType: t}
+		case *CompositeType:
+			e.ElementOneOf = &ElementProto_CompositeType{ CompositeType: t}
+		case *CompositeTypeAttrName:
+			e.ElementOneOf = &ElementProto_CompositeTypeAttrName{ CompositeTypeAttrName: t}
+		case *CompositeTypeAttrType:
+			e.ElementOneOf = &ElementProto_CompositeTypeAttrType{ CompositeTypeAttrType: t}
+		case *ConstraintComment:
+			e.ElementOneOf = &ElementProto_ConstraintComment{ ConstraintComment: t}
+		case *ConstraintWithoutIndexName:
+			e.ElementOneOf = &ElementProto_ConstraintWithoutIndexName{ ConstraintWithoutIndexName: t}
+		case *Database:
+			e.ElementOneOf = &ElementProto_Database{ Database: t}
+		case *DatabaseComment:
+			e.ElementOneOf = &ElementProto_DatabaseComment{ DatabaseComment: t}
+		case *DatabaseData:
+			e.ElementOneOf = &ElementProto_DatabaseData{ DatabaseData: t}
+		case *DatabaseRegionConfig:
+			e.ElementOneOf = &ElementProto_DatabaseRegionConfig{ DatabaseRegionConfig: t}
+		case *DatabaseRoleSetting:
+			e.ElementOneOf = &ElementProto_DatabaseRoleSetting{ DatabaseRoleSetting: t}
+		case *EnumType:
+			e.ElementOneOf = &ElementProto_EnumType{ EnumType: t}
+		case *EnumTypeValue:
+			e.ElementOneOf = &ElementProto_EnumTypeValue{ EnumTypeValue: t}
+		case *ForeignKeyConstraint:
+			e.ElementOneOf = &ElementProto_ForeignKeyConstraint{ ForeignKeyConstraint: t}
+		case *ForeignKeyConstraintUnvalidated:
+			e.ElementOneOf = &ElementProto_ForeignKeyConstraintUnvalidated{ ForeignKeyConstraintUnvalidated: t}
+		case *Function:
+			e.ElementOneOf = &ElementProto_Function{ Function: t}
+		case *FunctionBody:
+			e.ElementOneOf = &ElementProto_FunctionBody{ FunctionBody: t}
+		case *FunctionLeakProof:
+			e.ElementOneOf = &ElementProto_FunctionLeakProof{ FunctionLeakProof: t}
+		case *FunctionName:
+			e.ElementOneOf = &ElementProto_FunctionName{ FunctionName: t}
+		case *FunctionNullInputBehavior:
+			e.ElementOneOf = &ElementProto_FunctionNullInputBehavior{ FunctionNullInputBehavior: t}
+		case *FunctionParamDefaultExpression:
+			e.ElementOneOf = &ElementProto_FunctionParamDefaultExpression{ FunctionParamDefaultExpression: t}
+		case *FunctionVolatility:
+			e.ElementOneOf = &ElementProto_FunctionVolatility{ FunctionVolatility: t}
+		case *IndexColumn:
+			e.ElementOneOf = &ElementProto_IndexColumn{ IndexColumn: t}
+		case *IndexComment:
+			e.ElementOneOf = &ElementProto_IndexComment{ IndexComment: t}
+		case *IndexData:
+			e.ElementOneOf = &ElementProto_IndexData{ IndexData: t}
+		case *IndexName:
+			e.ElementOneOf = &ElementProto_IndexName{ IndexName: t}
+		case *IndexPartitioning:
+			e.ElementOneOf = &ElementProto_IndexPartitioning{ IndexPartitioning: t}
+		case *IndexZoneConfig:
+			e.ElementOneOf = &ElementProto_IndexZoneConfig{ IndexZoneConfig: t}
+		case *Namespace:
+			e.ElementOneOf = &ElementProto_Namespace{ Namespace: t}
+		case *Owner:
+			e.ElementOneOf = &ElementProto_Owner{ Owner: t}
+		case *PrimaryIndex:
+			e.ElementOneOf = &ElementProto_PrimaryIndex{ PrimaryIndex: t}
+		case *RowLevelTTL:
+			e.ElementOneOf = &ElementProto_RowLevelTTL{ RowLevelTTL: t}
+		case *Schema:
+			e.ElementOneOf = &ElementProto_Schema{ Schema: t}
+		case *SchemaChild:
+			e.ElementOneOf = &ElementProto_SchemaChild{ SchemaChild: t}
+		case *SchemaComment:
+			e.ElementOneOf = &ElementProto_SchemaComment{ SchemaComment: t}
+		case *SchemaParent:
+			e.ElementOneOf = &ElementProto_SchemaParent{ SchemaParent: t}
+		case *SecondaryIndex:
+			e.ElementOneOf = &ElementProto_SecondaryIndex{ SecondaryIndex: t}
+		case *SecondaryIndexPartial:
+			e.ElementOneOf = &ElementProto_SecondaryIndexPartial{ SecondaryIndexPartial: t}
+		case *Sequence:
+			e.ElementOneOf = &ElementProto_Sequence{ Sequence: t}
+		case *SequenceOwner:
+			e.ElementOneOf = &ElementProto_SequenceOwner{ SequenceOwner: t}
+		case *Table:
+			e.ElementOneOf = &ElementProto_Table{ Table: t}
+		case *TableComment:
+			e.ElementOneOf = &ElementProto_TableComment{ TableComment: t}
+		case *TableData:
+			e.ElementOneOf = &ElementProto_TableData{ TableData: t}
+		case *TableLocalityGlobal:
+			e.ElementOneOf = &ElementProto_TableLocalityGlobal{ TableLocalityGlobal: t}
+		case *TableLocalityPrimaryRegion:
+			e.ElementOneOf = &ElementProto_TableLocalityPrimaryRegion{ TableLocalityPrimaryRegion: t}
+		case *TableLocalityRegionalByRow:
+			e.ElementOneOf = &ElementProto_TableLocalityRegionalByRow{ TableLocalityRegionalByRow: t}
+		case *TableLocalitySecondaryRegion:
+			e.ElementOneOf = &ElementProto_TableLocalitySecondaryRegion{ TableLocalitySecondaryRegion: t}
+		case *TablePartitioning:
+			e.ElementOneOf = &ElementProto_TablePartitioning{ TablePartitioning: t}
+		case *TableSchemaLocked:
+			e.ElementOneOf = &ElementProto_TableSchemaLocked{ TableSchemaLocked: t}
+		case *TableZoneConfig:
+			e.ElementOneOf = &ElementProto_TableZoneConfig{ TableZoneConfig: t}
+		case *TemporaryIndex:
+			e.ElementOneOf = &ElementProto_TemporaryIndex{ TemporaryIndex: t}
+		case *UniqueWithoutIndexConstraint:
+			e.ElementOneOf = &ElementProto_UniqueWithoutIndexConstraint{ UniqueWithoutIndexConstraint: t}
+		case *UniqueWithoutIndexConstraintUnvalidated:
+			e.ElementOneOf = &ElementProto_UniqueWithoutIndexConstraintUnvalidated{ UniqueWithoutIndexConstraintUnvalidated: t}
+		case *UserPrivileges:
+			e.ElementOneOf = &ElementProto_UserPrivileges{ UserPrivileges: t}
+		case *View:
+			e.ElementOneOf = &ElementProto_View{ View: t}}
+}
+//
+// GetElementOneOfProtos returns all one of protos.
+func GetElementOneOfProtos() []interface{} {
+	return []interface{} {
+
+	((*ElementProto_AliasType)(nil)),
+	((*ElementProto_CheckConstraint)(nil)),
+	((*ElementProto_CheckConstraintUnvalidated)(nil)),
+	((*ElementProto_Column)(nil)),
+	((*ElementProto_ColumnComment)(nil)),
+	((*ElementProto_ColumnDefaultExpression)(nil)),
+	((*ElementProto_ColumnFamily)(nil)),
+	((*ElementProto_ColumnName)(nil)),
+	((*ElementProto_ColumnNotNull)(nil)),
+	((*ElementProto_ColumnOnUpdateExpression)(nil)),
+	((*ElementProto_ColumnType)(nil)),
+	((*ElementProto_CompositeType)(nil)),
+	((*ElementProto_CompositeTypeAttrName)(nil)),
+	((*ElementProto_CompositeTypeAttrType)(nil)),
+	((*ElementProto_ConstraintComment)(nil)),
+	((*ElementProto_ConstraintWithoutIndexName)(nil)),
+	((*ElementProto_Database)(nil)),
+	((*ElementProto_DatabaseComment)(nil)),
+	((*ElementProto_DatabaseData)(nil)),
+	((*ElementProto_DatabaseRegionConfig)(nil)),
+	((*ElementProto_DatabaseRoleSetting)(nil)),
+	((*ElementProto_EnumType)(nil)),
+	((*ElementProto_EnumTypeValue)(nil)),
+	((*ElementProto_ForeignKeyConstraint)(nil)),
+	((*ElementProto_ForeignKeyConstraintUnvalidated)(nil)),
+	((*ElementProto_Function)(nil)),
+	((*ElementProto_FunctionBody)(nil)),
+	((*ElementProto_FunctionLeakProof)(nil)),
+	((*ElementProto_FunctionName)(nil)),
+	((*ElementProto_FunctionNullInputBehavior)(nil)),
+	((*ElementProto_FunctionParamDefaultExpression)(nil)),
+	((*ElementProto_FunctionVolatility)(nil)),
+	((*ElementProto_IndexColumn)(nil)),
+	((*ElementProto_IndexComment)(nil)),
+	((*ElementProto_IndexData)(nil)),
+	((*ElementProto_IndexName)(nil)),
+	((*ElementProto_IndexPartitioning)(nil)),
+	((*ElementProto_IndexZoneConfig)(nil)),
+	((*ElementProto_Namespace)(nil)),
+	((*ElementProto_Owner)(nil)),
+	((*ElementProto_PrimaryIndex)(nil)),
+	((*ElementProto_RowLevelTTL)(nil)),
+	((*ElementProto_Schema)(nil)),
+	((*ElementProto_SchemaChild)(nil)),
+	((*ElementProto_SchemaComment)(nil)),
+	((*ElementProto_SchemaParent)(nil)),
+	((*ElementProto_SecondaryIndex)(nil)),
+	((*ElementProto_SecondaryIndexPartial)(nil)),
+	((*ElementProto_Sequence)(nil)),
+	((*ElementProto_SequenceOwner)(nil)),
+	((*ElementProto_Table)(nil)),
+	((*ElementProto_TableComment)(nil)),
+	((*ElementProto_TableData)(nil)),
+	((*ElementProto_TableLocalityGlobal)(nil)),
+	((*ElementProto_TableLocalityPrimaryRegion)(nil)),
+	((*ElementProto_TableLocalityRegionalByRow)(nil)),
+	((*ElementProto_TableLocalitySecondaryRegion)(nil)),
+	((*ElementProto_TablePartitioning)(nil)),
+	((*ElementProto_TableSchemaLocked)(nil)),
+	((*ElementProto_TableZoneConfig)(nil)),
+	((*ElementProto_TemporaryIndex)(nil)),
+	((*ElementProto_UniqueWithoutIndexConstraint)(nil)),
+	((*ElementProto_UniqueWithoutIndexConstraintUnvalidated)(nil)),
+	((*ElementProto_UserPrivileges)(nil)),
+	((*ElementProto_View)(nil)),}
+}
+//
+// GetElementTypes returns all element types. 
+func GetElementTypes() []interface{} {
+
+	return []interface{} {
+
+	((*AliasType)(nil)),
+	((*CheckConstraint)(nil)),
+	((*CheckConstraintUnvalidated)(nil)),
+	((*Column)(nil)),
+	((*ColumnComment)(nil)),
+	((*ColumnDefaultExpression)(nil)),
+	((*ColumnFamily)(nil)),
+	((*ColumnName)(nil)),
+	((*ColumnNotNull)(nil)),
+	((*ColumnOnUpdateExpression)(nil)),
+	((*ColumnType)(nil)),
+	((*CompositeType)(nil)),
+	((*CompositeTypeAttrName)(nil)),
+	((*CompositeTypeAttrType)(nil)),
+	((*ConstraintComment)(nil)),
+	((*ConstraintWithoutIndexName)(nil)),
+	((*Database)(nil)),
+	((*DatabaseComment)(nil)),
+	((*DatabaseData)(nil)),
+	((*DatabaseRegionConfig)(nil)),
+	((*DatabaseRoleSetting)(nil)),
+	((*EnumType)(nil)),
+	((*EnumTypeValue)(nil)),
+	((*ForeignKeyConstraint)(nil)),
+	((*ForeignKeyConstraintUnvalidated)(nil)),
+	((*Function)(nil)),
+	((*FunctionBody)(nil)),
+	((*FunctionLeakProof)(nil)),
+	((*FunctionName)(nil)),
+	((*FunctionNullInputBehavior)(nil)),
+	((*FunctionParamDefaultExpression)(nil)),
+	((*FunctionVolatility)(nil)),
+	((*IndexColumn)(nil)),
+	((*IndexComment)(nil)),
+	((*IndexData)(nil)),
+	((*IndexName)(nil)),
+	((*IndexPartitioning)(nil)),
+	((*IndexZoneConfig)(nil)),
+	((*Namespace)(nil)),
+	((*Owner)(nil)),
+	((*PrimaryIndex)(nil)),
+	((*RowLevelTTL)(nil)),
+	((*Schema)(nil)),
+	((*SchemaChild)(nil)),
+	((*SchemaComment)(nil)),
+	((*SchemaParent)(nil)),
+	((*SecondaryIndex)(nil)),
+	((*SecondaryIndexPartial)(nil)),
+	((*Sequence)(nil)),
+	((*SequenceOwner)(nil)),
+	((*Table)(nil)),
+	((*TableComment)(nil)),
+	((*TableData)(nil)),
+	((*TableLocalityGlobal)(nil)),
+	((*TableLocalityPrimaryRegion)(nil)),
+	((*TableLocalityRegionalByRow)(nil)),
+	((*TableLocalitySecondaryRegion)(nil)),
+	((*TablePartitioning)(nil)),
+	((*TableSchemaLocked)(nil)),
+	((*TableZoneConfig)(nil)),
+	((*TemporaryIndex)(nil)),
+	((*UniqueWithoutIndexConstraint)(nil)),
+	((*UniqueWithoutIndexConstraintUnvalidated)(nil)),
+	((*UserPrivileges)(nil)),
+	((*View)(nil)),}
+}
+//
+// ForEachElementType loops over each element type
+func ForEachElementType(fn func(e Element) error) error {
+	for _, e := range GetElementTypes() {
+		if err := fn(e.(Element)); err != nil {
+			return err
+		}
+	}
+	return nil
 }

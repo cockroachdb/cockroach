@@ -310,7 +310,7 @@ func pkChangeMutationExists(desc catalog.TableDescriptor) bool {
 	// a primary index.
 	if desc.GetDeclarativeSchemaChangerState() != nil {
 		for idx, target := range desc.GetDeclarativeSchemaChangerState().Targets {
-			if target.PrimaryIndex != nil &&
+			if target.GetPrimaryIndex() != nil &&
 				desc.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] != scpb.Status_PUBLIC {
 				return true
 			}

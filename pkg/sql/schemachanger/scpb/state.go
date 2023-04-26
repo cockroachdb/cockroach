@@ -128,12 +128,16 @@ type Element interface {
 	element()
 }
 
+type ElementGetter interface {
+	Element() Element
+}
+
 //go:generate go run element_generator.go --in elements.proto --out elements_generated.go
 //go:generate go run element_uml_generator.go --out uml/table.puml
 
 // Element returns an Element from its wrapper for serialization.
 func (e *ElementProto) Element() Element {
-	return e.GetValue().(Element)
+	return e.GetElementOneOf().(ElementGetter).Element()
 }
 
 // MakeTarget constructs a new Target. The passed elem must be one of the oneOf
@@ -145,9 +149,7 @@ func MakeTarget(status TargetStatus, elem Element, metadata *TargetMetadata) Tar
 	if metadata != nil {
 		t.Metadata = *protoutil.Clone(metadata).(*TargetMetadata)
 	}
-	if !t.SetValue(elem) {
-		panic(errors.Errorf("unknown element type %T", elem))
-	}
+	t.SetElement(elem)
 	return t
 }
 
