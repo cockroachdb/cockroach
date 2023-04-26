@@ -64,6 +64,9 @@ type ImmediateMutationStateUpdater interface {
 	// DeleteName marks a namespace entry as being drained.
 	DeleteName(id descpb.ID, nameInfo descpb.NameInfo)
 
+	// AddName adds a namespace entry.
+	AddName(id descpb.ID, nameInfo descpb.NameInfo)
+
 	// CreateDescriptor adds a descriptor for creation.
 	CreateDescriptor(desc catalog.MutableDescriptor)
 

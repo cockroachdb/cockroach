@@ -22,8 +22,10 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.Namespace) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.Namespace) *scop.AddDescriptorName {
+					return &scop.AddDescriptorName{
+						Namespace: *protoutil.Clone(this).(*scpb.Namespace),
+					}
 				}),
 			),
 		),

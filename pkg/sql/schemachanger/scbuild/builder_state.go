@@ -755,14 +755,14 @@ func (b *builderState) ResolveDatabase(
 func (b *builderState) ResolveSchema(
 	name tree.ObjectNamePrefix, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
-	_, sc := b.cr.MayResolveSchema(b.ctx, name)
+	_, sc := b.cr.MayResolveSchema(b.ctx, name, p.WithOffline)
 	if sc == nil {
 		if p.IsExistenceOptional {
 			return nil
 		}
 		panic(sqlerrors.NewUndefinedSchemaError(name.Schema()))
 	}
-	b.mustBeValidSchema(name, sc, p)
+	b.checkOwnershipOrPrivilegesOnSchemaDesc(name, sc, p)
 	return b.descCache[sc.GetID()].ers
 }
 
@@ -773,11 +773,16 @@ func (b *builderState) ResolvePrefix(
 	db, sc := b.cr.MustResolvePrefix(b.ctx, prefix)
 	b.ensureDescriptor(db.GetID())
 	b.ensureDescriptor(sc.GetID())
-	b.mustBeValidSchema(prefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})
+	b.checkOwnershipOrPrivilegesOnSchemaDesc(prefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})
 	return b.descCache[db.GetID()].ers, b.descCache[sc.GetID()].ers
 }
 
-func (b *builderState) mustBeValidSchema(
+// checkOwnershipOrPrivilegesOnSchemaDesc checks ownership or privileges
+// specified in `p` of current user on schema descriptor `sc`.
+//
+// Note: Virtual schemas and temporary schemas are descriptor-less concepts
+// and will cause a panic.
+func (b *builderState) checkOwnershipOrPrivilegesOnSchemaDesc(
 	name tree.ObjectNamePrefix, sc catalog.SchemaDescriptor, p scbuildstmt.ResolveParams,
 ) {
 	switch sc.SchemaKind() {
@@ -1284,21 +1289,32 @@ func (b *builderState) BuildReferenceProvider(stmt tree.Statement) scbuildstmt.R
 }
 
 func (b *builderState) BuildUserPrivilegesFromDefaultPrivileges(
-	db *scpb.Database, sc *scpb.Schema, descID descpb.ID, objType privilege.TargetObjectType,
+	db *scpb.Database,
+	sc *scpb.Schema,
+	descID descpb.ID,
+	objType privilege.TargetObjectType,
+	owner username.SQLUsername,
 ) (*scpb.Owner, []*scpb.UserPrivileges) {
 	b.ensureDescriptor(db.DatabaseID)
-	b.ensureDescriptor(sc.SchemaID)
 	dbDesc, err := catalog.AsDatabaseDescriptor(b.descCache[db.DatabaseID].desc)
 	if err != nil {
 		panic(err)
 	}
-	scDesc, err := catalog.AsSchemaDescriptor(b.descCache[sc.SchemaID].desc)
-	if err != nil {
-		panic(err)
+	dbDefaultPrivDesc := dbDesc.GetDefaultPrivilegeDescriptor()
+
+	var scDefaultPrivDesc catalog.DefaultPrivilegeDescriptor
+	if sc != nil {
+		b.ensureDescriptor(sc.SchemaID)
+		scDesc, err := catalog.AsSchemaDescriptor(b.descCache[sc.SchemaID].desc)
+		if err != nil {
+			panic(err)
+		}
+		scDefaultPrivDesc = scDesc.GetDefaultPrivilegeDescriptor()
 	}
+
 	pd, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
-		dbDesc.GetDefaultPrivilegeDescriptor(),
-		scDesc.GetDefaultPrivilegeDescriptor(),
+		dbDefaultPrivDesc,
+		scDefaultPrivDesc,
 		db.DatabaseID,
 		b.CurrentUser(),
 		objType,
@@ -1306,25 +1322,26 @@ func (b *builderState) BuildUserPrivilegesFromDefaultPrivileges(
 	if err != nil {
 		panic(err)
 	}
+	pd.SetOwner(owner)
 
-	owner := &scpb.Owner{
+	ownerElem := &scpb.Owner{
 		DescriptorID: descID,
 		Owner:        pd.Owner().Normalized(),
 	}
 
-	ups := make([]*scpb.UserPrivileges, 0, len(pd.Users))
+	upsElems := make([]*scpb.UserPrivileges, 0, len(pd.Users))
 	for _, up := range pd.Users {
-		ups = append(ups, &scpb.UserPrivileges{
+		upsElems = append(upsElems, &scpb.UserPrivileges{
 			DescriptorID:    descID,
 			UserName:        up.User().Normalized(),
 			Privileges:      up.Privileges,
 			WithGrantOption: up.WithGrantOption,
 		})
 	}
-	sort.Slice(ups, func(i, j int) bool {
-		return ups[i].UserName < ups[j].UserName
+	sort.Slice(upsElems, func(i, j int) bool {
+		return upsElems[i].UserName < upsElems[j].UserName
 	})
-	return owner, ups
+	return ownerElem, upsElems
 }
 
 func (b *builderState) WrapFunctionBody(
@@ -1490,6 +1507,17 @@ func (b *builderState) serializeUserDefinedTypes(queryStr string) string {
 	}
 	return fmtCtx.CloseAndGetString()
 
+}
+
+func (b *builderState) ResolveDatabasePrefix(schemaPrefix *tree.ObjectNamePrefix) {
+	if schemaPrefix.SchemaName == "" || !schemaPrefix.ExplicitSchema {
+		panic(errors.AssertionFailedf("schema name empty when resolving database prefix for a " +
+			"schema name"))
+	}
+	if schemaPrefix.CatalogName == "" {
+		schemaPrefix.CatalogName = tree.Name(b.cr.CurrentDatabase())
+		schemaPrefix.ExplicitCatalog = true
+	}
 }
 
 type elementResultSet struct {

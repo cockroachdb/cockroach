@@ -132,6 +132,25 @@ func fullyQualifiedName(b buildCtx, e scpb.Element) string {
 	).FQString()
 }
 
+// ownerName finds the owner of the descriptor that element `e` belongs to.
+// `e` must therefore have a DescID attr.
+func ownerName(b buildCtx, e scpb.Element) string {
+	descID := screl.GetDescID(e)
+	var ownerElem *scpb.Owner
+	scpb.ForEachOwner(
+		b.QueryByID(descID),
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.Owner) {
+			if ownerElem == nil || target != scpb.ToAbsent {
+				ownerElem = e
+			}
+		},
+	)
+	if ownerElem == nil {
+		panic(errors.AssertionFailedf("missing Owner element for descriptor #%d", descID))
+	}
+	return ownerElem.Owner
+}
+
 func indexName(b buildCtx, e scpb.Element) string {
 	tableID := screl.GetDescID(e)
 	indexID, err := screl.Schema.GetAttribute(screl.IndexID, e)
@@ -241,7 +260,10 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 		}
 	case *scpb.Schema:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
-			return nil
+			return &eventpb.CreateSchema{
+				SchemaName: fullyQualifiedName(b, e),
+				Owner:      ownerName(b, e),
+			}
 		} else {
 			return &eventpb.DropSchema{
 				SchemaName: fullyQualifiedName(b, e),
@@ -344,8 +366,12 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			NullComment:    pb.TargetStatus != scpb.Status_PUBLIC,
 		}
 	case *scpb.Function:
-		return &eventpb.DropFunction{
-			FunctionName: fullyQualifiedName(b, e),
+		if pb.TargetStatus == scpb.Status_PUBLIC {
+			return nil
+		} else {
+			return &eventpb.DropFunction{
+				FunctionName: fullyQualifiedName(b, e),
+			}
 		}
 	}
 	if _, _, tbl := scpb.FindTable(b.QueryByID(screl.GetDescID(pb.Element()))); tbl != nil {

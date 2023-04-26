@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 )
 
 func (i *immediateVisitor) CreateFunctionDescriptor(
@@ -106,5 +108,29 @@ func (i *immediateVisitor) SetFunctionParamDefaultExpr(
 	// TODO(chengxiong): when default parameter value is supported, we need to
 	// address references here because functions, types and sequences can be used
 	// with a default value expression.
+	return nil
+}
+
+func (i *immediateVisitor) CreateSchemaDescriptor(
+	ctx context.Context, op scop.CreateSchemaDescriptor,
+) error {
+	mut := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+		ParentID:   catid.InvalidDescID, // Set by `SchemaParent` element
+		Name:       "",                  // Set by `Namespace` element
+		ID:         op.SchemaID,
+		Privileges: &catpb.PrivilegeDescriptor{Version: catpb.Version21_2}, // Populated by `UserPrivileges` elements and `Owner` element
+		Version:    1,
+	}).BuildCreatedMutableSchema()
+	mut.State = descpb.DescriptorState_ADD
+	i.CreateDescriptor(mut)
+	return nil
+}
+
+func (i *immediateVisitor) SetSchemaName(ctx context.Context, op scop.SetSchemaName) error {
+	sc, err := i.checkOutSchema(ctx, op.SchemaID)
+	if err != nil {
+		return err
+	}
+	sc.SetName(op.Name)
 	return nil
 }

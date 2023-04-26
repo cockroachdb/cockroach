@@ -80,6 +80,16 @@ func (i *immediateVisitor) DrainDescriptorName(
 	return nil
 }
 
+func (i *immediateVisitor) AddDescriptorName(_ context.Context, op scop.AddDescriptorName) error {
+	nameDetails := descpb.NameInfo{
+		ParentID:       op.Namespace.DatabaseID,
+		ParentSchemaID: op.Namespace.SchemaID,
+		Name:           op.Namespace.Name,
+	}
+	i.AddName(op.Namespace.DescriptorID, nameDetails)
+	return nil
+}
+
 func (i *immediateVisitor) DeleteDescriptor(_ context.Context, op scop.DeleteDescriptor) error {
 	i.ImmediateMutationStateUpdater.DeleteDescriptor(op.DescriptorID)
 	return nil
