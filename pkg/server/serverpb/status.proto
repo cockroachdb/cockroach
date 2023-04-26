@@ -1136,11 +1136,6 @@ message ListDistSQLFlowsRequest {}
 // same physical plan. The gateway node that initiated the execution of the plan
 // isn't included.
 message DistSQLRemoteFlows {
-  enum Status {
-    RUNNING = 0;
-    QUEUED = 1;
-  }
-
   // Info contains an information about a single DistSQL remote flow.
   message Info {
     // NodeID is the node on which this remote flow is either running or queued.
@@ -1152,9 +1147,7 @@ message DistSQLRemoteFlows {
       (gogoproto.nullable) = false, (gogoproto.stdtime) = true
     ];
 
-    // Status is the current status of this remote flow.
-    // TODO(yuzefovich): remove this in 23.2.
-    Status status = 3;
+    reserved 3;
 
     // Stmt is the SQL statement for which this flow is executing.
     string stmt = 4;

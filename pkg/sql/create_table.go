@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1788,6 +1789,10 @@ func NewTableDesc(
 			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted); err != nil {
 				return nil, err
 			}
+			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
+				d.Invisibility > 0.0 && d.Invisibility < 1.0 {
+				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
+			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
@@ -1899,6 +1904,10 @@ func NewTableDesc(
 				version,
 			); err != nil {
 				return nil, err
+			}
+			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
+				d.Invisibility > 0.0 && d.Invisibility < 1.0 {
+				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
