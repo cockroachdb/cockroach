@@ -780,6 +780,7 @@ go_test(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/clusterunique",
         "//pkg/sql/contentionpb",
+        "//pkg/sql/deprecatedshowranges",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
