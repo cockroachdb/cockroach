@@ -280,6 +280,10 @@ package kvflowcontrol
 //     re-acquire on another attempt), or that it simply free up all tokens for
 //     this replication stream. This could also apply to dropped messages on the
 //     sender side queue, where we just free up all held tokens.
+//   - In addition to relying on higher log positions getting admitted or
+//     proposals getting abandoned to return deducted tokens when proposals are
+//     dropped from full send queues, we could also intercept every dropped
+//     proposal and return whatever tokens were deducted for it specifically.
 // - If messages containing the entry gets dropped from the raft transport
 //   receive queue, we rely on raft re-transmitting said entries. Similar to
 //   above, we're relying on the logical admission of some entry with log

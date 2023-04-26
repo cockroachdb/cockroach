@@ -31,8 +31,6 @@ import (
 // leader will still see follower as active and not disconnect streams. Has this
 // changed with us upgrading asymmetric partitions to bidirectional ones?
 
-// TODO(irfansharif): Write data-driven unit tests for this interface.
-
 // replicaFlowControlIntegration is used to integrate with replication flow
 // control. It's intercepts various points in a replica's lifecycle, like it
 // acquiring raft leadership or losing it, or its raft membership changing, etc.
