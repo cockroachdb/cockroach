@@ -15,7 +15,6 @@ import (
 	"sort"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/docs"
@@ -97,19 +96,30 @@ var StrictGCEnforcement = settings.RegisterBoolSetting(
 	true,
 )
 
+type atomicDescInfo struct {
+	full           redact.RedactableString
+	fullUnredacted string // `full.StripMarkers()` for use in String() without extra allocs
+	idOnly         string // "<RangeID>/<ReplicaID>" only
+}
+
 type atomicDescString struct {
-	strPtr unsafe.Pointer
+	v atomic.Value // *atomicDescInfo
 }
 
 // store atomically updates d.strPtr with the string representation of desc.
 func (d *atomicDescString) store(replicaID roachpb.ReplicaID, desc *roachpb.RangeDescriptor) {
-	str := redact.Sprintfn(func(w redact.SafePrinter) {
+	printRid := func(w redact.SafePrinter) {
 		w.Printf("%d/", desc.RangeID)
 		if replicaID == 0 {
-			w.SafeString("?:")
+			w.SafeString("?")
 		} else {
-			w.Printf("%d:", replicaID)
+			w.Printf("%d", replicaID)
 		}
+	}
+
+	str := redact.Sprintfn(func(w redact.SafePrinter) {
+		printRid(w)
+		w.SafeString(":")
 
 		if !desc.IsInitialized() {
 			w.SafeString("{-}")
@@ -120,24 +130,37 @@ func (d *atomicDescString) store(replicaID roachpb.ReplicaID, desc *roachpb.Rang
 		}
 	})
 
-	atomic.StorePointer(&d.strPtr, unsafe.Pointer(&str))
+	ridOnly := redact.Sprintfn(func(w redact.SafePrinter) {
+		printRid(w)
+	}).StripMarkers()
+
+	d.v.Store(&atomicDescInfo{
+		full:           str,
+		fullUnredacted: str.StripMarkers(),
+		idOnly:         ridOnly,
+	})
 }
 
 // String returns the string representation of the range; since we are not
 // using a lock, the copy might be inconsistent.
 func (d *atomicDescString) String() string {
-	return d.get().StripMarkers()
+	return d.get().fullUnredacted
+}
+
+// ID returns `rX/Y`, i.e. omits the key range portion.
+func (d *atomicDescString) ID() string {
+	return d.get().idOnly
 }
 
 // SafeFormat renders the string safely.
 func (d *atomicDescString) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Print(d.get())
+	w.Print(d.get().full)
 }
 
 // Get returns the string representation of the range; since we are not
 // using a lock, the copy might be inconsistent.
-func (d *atomicDescString) get() redact.RedactableString {
-	return *(*redact.RedactableString)(atomic.LoadPointer(&d.strPtr))
+func (d *atomicDescString) get() *atomicDescInfo {
+	return d.v.Load().(*atomicDescInfo)
 }
 
 // atomicConnectionClass stores an rpc.ConnectionClass atomically.
