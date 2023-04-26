@@ -719,6 +719,23 @@ func (tc *TestCluster) SplitRangeOrFatal(
 	return lhsDesc, rhsDesc
 }
 
+// MergeRanges merges the range containing leftKey with the range to its right.
+func (tc *TestCluster) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor, error) {
+	return tc.Servers[0].MergeRanges(leftKey)
+}
+
+// MergeRangesOrFatal is the same as MergeRanges but will Fatal the test on
+// error.
+func (tc *TestCluster) MergeRangesOrFatal(
+	t testing.TB, leftKey roachpb.Key,
+) roachpb.RangeDescriptor {
+	mergedDesc, err := tc.MergeRanges(leftKey)
+	if err != nil {
+		t.Fatalf(`merging at %s: %+v`, leftKey, err)
+	}
+	return mergedDesc
+}
+
 // Target returns a ReplicationTarget for the specified server.
 func (tc *TestCluster) Target(serverIdx int) roachpb.ReplicationTarget {
 	s := tc.Servers[serverIdx]
