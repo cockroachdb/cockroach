@@ -186,6 +186,10 @@ func makePlan(
 			execinfrapb.Ordering{},
 		)
 
+		// NB: We schedule the frontier processor on the
+		// gateway node. The frontier process assumes this is
+		// the case so that it can load the current job with
+		// claim information.
 		gatewayNodeID, err := execCtx.ExecCfg().NodeInfo.NodeID.OptionalNodeIDErr(48274)
 		if err != nil {
 			return nil, nil, err

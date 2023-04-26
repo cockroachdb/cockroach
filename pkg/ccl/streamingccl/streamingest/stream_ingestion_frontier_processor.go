@@ -410,9 +410,12 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 
 	sf.lastPartitionUpdate = timeutil.Now()
 
-	if err := registry.UpdateJobWithTxn(ctx, jobID, nil, false, func(
-		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
-	) error {
+	job, err := registry.LoadClaimedJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
+
+	err = job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -459,7 +462,8 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 			return ptp.UpdateTimestamp(ctx, *replicationDetails.ProtectedTimestampRecordID, newProtectAbove)
 		}
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 	sf.metrics.JobProgressUpdates.Inc(1)
