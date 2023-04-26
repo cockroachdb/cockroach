@@ -151,6 +151,8 @@ func (a *anyHandler) Bool(b bool)                  { a.val = b }
 func (a *anyHandler) Bytes(b []byte)               { a.val = b }
 func (a *anyHandler) Decimal() *apd.Decimal        { return &a.dec }
 func (a *anyHandler) Float(f float64)              { a.val = f }
+func (a *anyHandler) Int16(i int16)                { a.val = i }
+func (a *anyHandler) Int32(i int32)                { a.val = i }
 func (a *anyHandler) Int(i int64)                  { a.val = i }
 func (a *anyHandler) Duration(d duration.Duration) { a.val = d }
 func (a *anyHandler) JSON(j json.JSON)             { a.val = j }
