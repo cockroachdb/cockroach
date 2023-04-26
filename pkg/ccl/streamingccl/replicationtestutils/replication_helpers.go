@@ -141,11 +141,11 @@ func (rf *ReplicationFeed) consumeUntil(
 			for {
 				msg, haveMoreRows := rf.f.Next()
 				if !haveMoreRows {
-					if rf.f.Error() != nil {
-						if errPred(rf.f.Error()) {
+					if err := rf.f.Error(); err != nil {
+						if errPred(err) {
 							return nil
 						}
-						return rf.f.Error()
+						return err
 					}
 					return errors.Newf("ran out of rows after processing %d rows", rowCount)
 				}
