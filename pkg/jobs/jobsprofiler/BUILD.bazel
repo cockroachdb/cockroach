@@ -16,6 +16,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -27,14 +28,17 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     deps = [
+        ":jobsprofiler",
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/jobs/jobsprofiler/profilerconstants",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
+        "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
@@ -42,6 +46,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
