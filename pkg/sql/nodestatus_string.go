@@ -10,12 +10,11 @@ func _() {
 	var x [1]struct{}
 	_ = x[NodeOK-0]
 	_ = x[NodeUnhealthy-1]
-	_ = x[NodeDistSQLVersionIncompatible-2]
 }
 
-const _NodeStatus_name = "NodeOKNodeUnhealthyNodeDistSQLVersionIncompatible"
+const _NodeStatus_name = "NodeOKNodeUnhealthy"
 
-var _NodeStatus_index = [...]uint8{0, 6, 19, 49}
+var _NodeStatus_index = [...]uint8{0, 6, 19}
 
 func (i NodeStatus) String() string {
 	if i < 0 || i >= NodeStatus(len(_NodeStatus_index)-1) {

@@ -166,8 +166,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			// go to scattering the chunk. We also expect an entry scattered to the
 			// 5th node will go to stream 0 (default stream), since that node does not
 			// have a corresponding stream. This may be the case where we don't want
-			// to plan a specific processor on a node (perhaps due to incompatible
-			// distsql versions).
+			// to plan a specific processor on a node.
 			expectedDistribution: map[int]int{
 				0: 3, // Entry 1, Entry 5 (redirected here), Entry 6
 				1: 2, // Entry 2, Entry 7

@@ -414,7 +414,6 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// TODO(yuzefovich): avoid populating some fields of the SetupFlowRequest
 		// for local plans.
 		LeafTxnInputState: leafInputState,
-		Version:           execinfra.Version,
 		EvalContext:       execinfrapb.MakeEvalContext(&evalCtx.Context),
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
