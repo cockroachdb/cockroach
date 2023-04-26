@@ -51,14 +51,14 @@ const HotRangesPage = () => {
 
   useEffect(() => {
     if (!isValid) {
-      dispatch(refreshHotRanges(HotRangesRequest.create()));
+      dispatch(refreshHotRanges(new HotRangesRequest()));
     }
   }, [dispatch, isValid]);
 
   useEffect(() => {
     dispatch(
       refreshHotRanges(
-        HotRangesRequest.create({
+        new HotRangesRequest({
           page_size: 1000,
         }),
       ),

@@ -50,7 +50,6 @@ export const idleSession: SessionInfo = {
     num_txns_executed: 1,
     txn_fingerprint_ids: [],
     status: Status.IDLE,
-    toJSON: () => ({}),
   },
 };
 
@@ -90,7 +89,6 @@ export const idleTransactionSession: SessionInfo = {
     num_txns_executed: 1,
     txn_fingerprint_ids: [],
     status: Status.IDLE,
-    toJSON: () => ({}),
   },
 };
 
@@ -144,7 +142,6 @@ export const activeSession: SessionInfo = {
     status: Status.ACTIVE,
     num_txns_executed: 1,
     txn_fingerprint_ids: [],
-    toJSON: () => ({}),
   },
 };
 
@@ -171,7 +168,6 @@ export const closedSession: SessionInfo = {
     status: Status.CLOSED,
     num_txns_executed: 1,
     txn_fingerprint_ids: [],
-    toJSON: () => ({}),
   },
 };
 
