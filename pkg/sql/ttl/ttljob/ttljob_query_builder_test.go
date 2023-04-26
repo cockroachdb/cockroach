@@ -161,7 +161,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 				catenumpb.IndexColumn_ASC,
 			},
 			bounds: ttljob.QueryBounds{
-				End: intsToDatums(1),
+				End: intsToDatums(0),
 			},
 			iterations: [][][]int{
 				{
@@ -189,7 +189,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 				catenumpb.IndexColumn_DESC,
 			},
 			bounds: ttljob.QueryBounds{
-				End: intsToDatums(0),
+				End: intsToDatums(1),
 			},
 			iterations: [][][]int{
 				{
