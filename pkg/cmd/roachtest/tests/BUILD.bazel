@@ -96,6 +96,7 @@ go_library(
         "mixed_version_job_compatibility_in_declarative_schema_changer.go",
         "mixed_version_jobs.go",
         "mixed_version_schemachange.go",
+        "mixed_version_tenant_span_stats.go",
         "multitenant.go",
         "multitenant_distsql.go",
         "multitenant_shared_process.go",
