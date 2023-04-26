@@ -148,12 +148,14 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalSessionTraceTableID:                crdbInternalSessionTraceTable,
 		catconstants.CrdbInternalSessionVariablesTableID:            crdbInternalSessionVariablesTable,
 		catconstants.CrdbInternalStmtStatsTableID:                   crdbInternalStmtStatsView,
+		catconstants.CrdbInternalStmtStatsPersistedTableID:          crdbInternalStmtStatsPersistedView,
 		catconstants.CrdbInternalTableColumnsTableID:                crdbInternalTableColumnsTable,
 		catconstants.CrdbInternalTableIndexesTableID:                crdbInternalTableIndexesTable,
 		catconstants.CrdbInternalTablesTableLastStatsID:             crdbInternalTablesTableLastStats,
 		catconstants.CrdbInternalTablesTableID:                      crdbInternalTablesTable,
 		catconstants.CrdbInternalClusterTxnStatsTableID:             crdbInternalClusterTxnStatsTable,
 		catconstants.CrdbInternalTxnStatsTableID:                    crdbInternalTxnStatsView,
+		catconstants.CrdbInternalTxnStatsPersistedTableID:           crdbInternalTxnStatsPersistedView,
 		catconstants.CrdbInternalTransactionStatsTableID:            crdbInternalTransactionStatisticsTable,
 		catconstants.CrdbInternalZonesTableID:                       crdbInternalZonesTable,
 		catconstants.CrdbInternalInvalidDescriptorsTableID:          crdbInternalInvalidDescriptorsTable,
@@ -5522,6 +5524,39 @@ GROUP BY
 	},
 }
 
+// crdb_internal.statement_statistics_persisted view selects persisted statement
+// statistics from the system table. This view is primarily used to query statement
+// stats info by date range.
+var crdbInternalStmtStatsPersistedView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.statement_statistics_persisted AS
+      SELECT
+          aggregated_ts,
+          fingerprint_id,
+          transaction_fingerprint_id,
+          plan_hash,
+          app_name,
+          node_id,
+          agg_interval,
+          metadata,
+          statistics,
+          plan
+      FROM
+          system.statement_statistics`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "aggregated_ts", Typ: types.TimestampTZ},
+		{Name: "fingerprint_id", Typ: types.Bytes},
+		{Name: "transaction_fingerprint_id", Typ: types.Bytes},
+		{Name: "plan_hash", Typ: types.Bytes},
+		{Name: "app_name", Typ: types.String},
+		{Name: "node_id", Typ: types.Int},
+		{Name: "agg_interval", Typ: types.Interval},
+		{Name: "metadata", Typ: types.Jsonb},
+		{Name: "statistics", Typ: types.Jsonb},
+		{Name: "plan", Typ: types.Jsonb},
+	},
+}
+
 var crdbInternalActiveRangeFeedsTable = virtualSchemaTable{
 	comment: `node-level table listing all currently running range feeds`,
 	schema: `
@@ -5716,6 +5751,33 @@ GROUP BY
 		{Name: "metadata", Typ: types.Jsonb},
 		{Name: "statistics", Typ: types.Jsonb},
 		{Name: "aggregation_interval", Typ: types.Interval},
+	},
+}
+
+// crdb_internal.transaction_statistics_persisted view selects persisted transaction
+// statistics from the system table. This view is primarily used to query transaction
+// stats info by date range.
+var crdbInternalTxnStatsPersistedView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.transaction_statistics_persisted AS
+      SELECT
+        aggregated_ts,
+        fingerprint_id,
+        app_name,
+        node_id,
+        agg_interval,
+        metadata,
+        statistics
+      FROM
+        system.transaction_statistics`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "aggregated_ts", Typ: types.TimestampTZ},
+		{Name: "fingerprint_id", Typ: types.Bytes},
+		{Name: "app_name", Typ: types.String},
+		{Name: "node_id", Typ: types.Int},
+		{Name: "agg_interval", Typ: types.Interval},
+		{Name: "metadata", Typ: types.Jsonb},
+		{Name: "statistics", Typ: types.Jsonb},
 	},
 }
 
