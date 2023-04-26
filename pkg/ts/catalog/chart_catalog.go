@@ -305,6 +305,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Restarted Ranges",
+				Metrics: []string{
+					"distsender.rangefeed.restart_ranges",
+				},
+			},
+			{
 				Title: "RPCs",
 				Metrics: []string{
 					"distsender.rpc.sent.local",
