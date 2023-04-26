@@ -192,11 +192,13 @@ scope because this would require more intricate changes to DB
 Console. Also, users can still access their SQL metrics for each
 tenant by switching the tenant of their DB Console screen.
 
+^ Should this be removed // TODO(aaditya)
+
 # Technical design
 
 At a high-level we will perform the following changes:
 
-- we will introduce a tenant ID prefix for only those timeseries that
+- we will introduce a tenant ID label for only those timeseries that
   are scoped to a tenant (i.e. KV-level timeseries will not be
   prefixed, but SQL-level timeseries will).
 
@@ -273,7 +275,7 @@ Instead, we will leverage the existing `metric.Registry` infrastructure:
   `metric.Registry` object for the SQL-level structures (`sql.Server`,
   `pgwire.Server`, `server.httpServer`, etc).
 
-We will introduce the ID as prefix only for metrics defined in the 2nd
+We will introduce the ID as suffix only for metrics defined in the 2nd
 registry (as explained below), leaving those from the 1st registry unchanged.
 
 ## `MetricRecorder` changes
@@ -325,8 +327,8 @@ will be extended to also collect metrics from the `sqlRegistries`:
 - for the `nodeRegistry` and `storeRegistres`, it will continue
   to encode metric names as usual, without a tenant ID prefix.
 
-- for the `sqlRegistries` it will include the tenant ID prefix
-  for each metric name.
+- for the `tenantRegistries` it will include the tenant ID suffix
+  for each metric source.
 
 The remainder of the low-level logic in `(*ts.DB).StoreData()` remains
 unchanged.
@@ -394,6 +396,8 @@ In a nutshell, we want a new architecture where there is one `MetricRecorder` pe
 tenant SQL server, and where the cross-tenant services are implemented
 by new components:
 
+// We have 1 metric recorder on the system tenant, and then we have secondary tenant registries. 
+
 - a NEW `ExternalExporter`, which will be linked to the tenants'
   `MetricRecorder`s, and contain the logic for the instant metric
   export (`/_status/vars`, Prometheus/Graphite export: `PrintAsText`,
@@ -407,7 +411,7 @@ by new components:
   metric collection and the `GetNodeStatus()` / `WriteNodeStatus()` logic.
 
   This also implements the `ts.DataSource` interface for the node/store
-  metrics, *without* a tenant ID prefix on the metric names.
+  metrics, *without* a tenant ID suffix on the source names.
 
 - a NEW `MetadataExporter`, which will be linked to the tenant-scoped
   `MetricRecorder`s and, optionally, the KV-scoped
@@ -415,6 +419,8 @@ by new components:
   them to implement `GetMetricMetadata()`. The KV-scoped metric
   metadata will only be included if the requesting tenant has the
   capability READ_SYSTEM_TIMESERIES.
+
+^ not sure if we ever created the new items
 
 The remaining `MetricRecorder` only contains 1 `metric.Registry` for
 tenant-scoped metrics and implements the `ts.DataSource` for it,
@@ -482,8 +488,8 @@ We are going to extend this as follows:
     name is SQL-level or not. If it is, it will inject the tenant ID
     of the current tenant into the query. Otherwise (KV-level
     queries), it will not. Then it will forward the query
-	to the internal `(*ts.DB) Query()` as usual, which will
-	remain unchanged.
+  to the internal `(*ts.DB) Query()` as usual, which will
+  remain unchanged. // TODO(aaditya): talk about system tenant aggregation
 
 - on the KV side, the tenant connector will start accepting
   requests for timeseries for tenants:
@@ -521,7 +527,7 @@ topic of migrating existing workload from single-tenancy to multi-tenancy.
   - `ExternalExporter`: introduce tenant name label in `/_status/vars` and other instant metric exporters for
     SQL-bound metrics; and no label for KV-level metrics.
   - `MetadataExporter`: include KV-level metrics in `GetMetricsMetadata()` only if the
-    requesting tenant has the (new) READ_SYSTEM_TIMESERIES capability.
+    requesting tenant has the (new) READ_SYSTEM_TIMESERIES capability. // I don't believe we ever implemented this?
   - `NodeMetricRecorder`: new `GetTimeSeriesData()` (`ts.DataSource`) that collects node/store metrics.
   - (optional? TBD) `NodeMetricRecorder`: also include system/admin tenant SQL metrics in `GenerateNodeStatus()`.
 
@@ -529,7 +535,7 @@ topic of migrating existing workload from single-tenancy to multi-tenancy.
   - Define new capabilities READ_SYSTEM_TIMESERIES and WRITE_TENANT_TIMESERIES.
     (see [this proposal](https://github.com/cockroachdb/cockroach/pull/85954))
   - Allow `Scan` requests from tenants to non-prefixed
-    timeseries via the new READ_SYSTEM_TIMESERIES capability.
+    timeseries via the new READ_SYSTEM_TIMESERIES capability. // TODO(aaditya): I dont beleive this exists. A tenant can eiter view tenant scoped metrics or no metrics.
   - Allow `Scan` requests from tenants to prefixed timeseries, if the tenant ID
     matches.
   - Allow `Merge`/`DeleteRange` requests to non-prefixed
