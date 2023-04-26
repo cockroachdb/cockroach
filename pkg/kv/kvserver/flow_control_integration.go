@@ -31,8 +31,6 @@ import (
 // leader will still see follower as active and not disconnect streams. Has this
 // changed with us upgrading asymmetric partitions to bidirectional ones?
 
-// TODO(irfansharif): Write data-driven unit tests for this interface.
-
 // replicaFlowControlIntegration is used to integrate with replication flow
 // control. It's intercepts various points in a replica's lifecycle, like it
 // acquiring raft leadership or losing it, or its raft membership changing, etc.
@@ -364,7 +362,16 @@ func (f *replicaFlowControlIntegrationImpl) tryReconnect(ctx context.Context) {
 	pausedFollowers := f.replicaForFlowControl.pausedFollowers()
 	notActivelyReplicatingTo := f.notActivelyReplicatingTo()
 	appliedLogPosition := f.replicaForFlowControl.appliedLogPosition()
-	for replID, stream := range f.disconnectedStreams {
+
+	var disconnectedRepls []roachpb.ReplicaID
+	for replID := range f.disconnectedStreams {
+		disconnectedRepls = append(disconnectedRepls, replID)
+	}
+	sort.Slice(disconnectedRepls, func(i, j int) bool { // for determinism in tests
+		return disconnectedRepls[i] < disconnectedRepls[j]
+	})
+	for _, replID := range disconnectedRepls {
+		stream := f.disconnectedStreams[replID]
 		if _, ok := pausedFollowers[replID]; ok {
 			continue // still paused, nothing to reconnect
 		}
