@@ -98,6 +98,7 @@ func TestHandleAdmit(t *testing.T) {
 				clock,
 				roachpb.RangeID(1),
 				roachpb.SystemTenantID,
+				nil, /* knobs */
 			)
 
 			// Connect a single stream at pos=0 and deplete all 16MiB of regular
@@ -179,6 +180,7 @@ func TestFlowControlMode(t *testing.T) {
 				clock,
 				roachpb.RangeID(1),
 				roachpb.SystemTenantID,
+				nil, /* knobs */
 			)
 			defer handle.Close(ctx)
 
@@ -258,6 +260,7 @@ func TestInspectHandle(t *testing.T) {
 		clock,
 		roachpb.RangeID(1),
 		roachpb.SystemTenantID,
+		nil, /* knobs */
 	)
 	marshaller := jsonpb.Marshaler{
 		Indent:       "  ",

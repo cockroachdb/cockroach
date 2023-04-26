@@ -274,7 +274,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	idContainer := base.NewSQLIDContainerForNode(nodeIDContainer)
 
 	admissionOptions := admission.DefaultOptions
-	if opts, ok := cfg.TestingKnobs.AdmissionControl.(*admission.Options); ok {
+	if opts, ok := cfg.TestingKnobs.AdmissionControlOptions.(*admission.Options); ok {
 		admissionOptions.Override(opts)
 	}
 
@@ -549,12 +549,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storesForFlowControl := kvserver.MakeStoresForFlowControl(stores)
 	kvflowTokenDispatch := kvflowdispatch.New(registry, storesForFlowControl, nodeIDContainer)
 	admittedEntryAdaptor := newAdmittedLogEntryAdaptor(kvflowTokenDispatch)
+	admissionKnobs, ok := cfg.TestingKnobs.AdmissionControl.(*admission.TestingKnobs)
+	if !ok {
+		admissionKnobs = &admission.TestingKnobs{}
+	}
 	gcoords := admission.NewGrantCoordinators(
 		cfg.AmbientCtx,
 		st,
 		admissionOptions,
 		registry,
 		admittedEntryAdaptor,
+		admissionKnobs,
 	)
 	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
 	cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
@@ -589,6 +594,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		admissionControl.storesFlowControl.ResetStreams(ctx)
 	})
 
+	var raftTransportKnobs *kvserver.RaftTransportTestingKnobs
+	if knobs := cfg.TestingKnobs.RaftTransport; knobs != nil {
+		raftTransportKnobs = knobs.(*kvserver.RaftTransportTestingKnobs)
+	}
 	raftTransport := kvserver.NewRaftTransport(
 		cfg.AmbientCtx,
 		st,
@@ -599,7 +608,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		admissionControl.kvflowTokenDispatch,
 		admissionControl.storesFlowControl,
 		admissionControl.storesFlowControl,
-		nil, /* knobs */
+		raftTransportKnobs,
 	)
 	registry.AddMetricStruct(raftTransport.Metrics())
 
