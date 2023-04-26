@@ -133,6 +133,7 @@ func (d *partitionStreamDecoder) decode() {
 func (f *pgConnReplicationFeedSource) Next() (streamingccl.Event, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// First check if there exists a decoded event.
 	if e := f.mu.codec.pop(); e != nil {
 		return e, true
 	}
@@ -342,9 +343,7 @@ func TestStreamPartition(t *testing.T) {
 	srcTenant.SQL.Exec(t, `
 CREATE DATABASE d;
 CREATE TABLE d.t1(i int primary key, a string, b string);
-CREATE TABLE d.t2(i int primary key, a string, b string);
 INSERT INTO d.t1 (i) VALUES (42);
-INSERT INTO d.t2 (i) VALUES (42);
 USE d;
 `)
 
@@ -355,18 +354,22 @@ USE d;
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
 	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t1")
-	t2Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t2")
 
 	t.Run("stream-table-cursor-error", func(t *testing.T) {
-		skip.WithIssue(t, 102286)
+
+		srcTenant.SQL.Exec(t, `
+CREATE TABLE d.t2(i int primary key, a string, b string);
+INSERT INTO d.t2 (i) VALUES (42);
+`)
 		_, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
 			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp, hlc.Timestamp{}, "t2"))
 		defer feed.Close(ctx)
+		t2Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t2")
+		expected := replicationtestutils.EncodeKV(t, srcTenant.Codec, t2Descr, 42)
+		feed.ObserveKey(ctx, expected.Key)
 
 		subscribedSpan := h.TableSpan(srcTenant.Codec, "t2")
 		// Send a ClearRange to trigger rows cursor to return internal error from rangefeed.
-		// Choose 't2' so that it doesn't trigger error on other registered span in rangefeeds,
-		// affecting other tests.
 		_, err := kv.SendWrapped(ctx, h.SysServer.DB().NonTransactionalSender(), &kvpb.ClearRangeRequest{
 			RequestHeader: kvpb.RequestHeader{
 				Key:    subscribedSpan.Key,
@@ -375,13 +378,8 @@ USE d;
 		})
 		require.Nil(t, err)
 
-		expected := replicationtestutils.EncodeKV(t, srcTenant.Codec, t2Descr, 42)
-		feed.ObserveKey(ctx, expected.Key)
 		feed.ObserveError(ctx, func(err error) bool {
-			return strings.Contains(err.Error(), "unexpected MVCC history mutation") ||
-				// TODO(casper): disabled this once we figured out why we have context cancellation
-				// emitted from ingestion side.
-				strings.Contains(err.Error(), "context canceled")
+			return strings.Contains(err.Error(), "unexpected MVCC history mutation")
 		})
 	})
 
