@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// SensitiveTableAccessEvent identifies accesses on tables that have been configured
+// for auditing. See EXPERIMENTAL_AUDIT.
 type SensitiveTableAccessEvent struct {
 	TableDesc catalog.TableDescriptor
 	Writing   bool

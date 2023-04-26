@@ -1369,6 +1369,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		&execCfg.Settings.SV, func(ctx context.Context) {
 			auditlogging.UpdateAuditConfigOnChange(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings)
 		})
+	auditlogging.UpdateAuditConfigOnChange(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings)
 
 	return &SQLServer{
 		ambientCtx:                     cfg.BaseConfig.AmbientCtx,

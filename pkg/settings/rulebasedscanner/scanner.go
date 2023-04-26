@@ -11,9 +11,10 @@
 package rulebasedscanner
 
 import (
-	"github.com/cockroachdb/errors"
 	"regexp"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 // This file contains a scanner for the pg_hba.conf token syntax (rule-based).
