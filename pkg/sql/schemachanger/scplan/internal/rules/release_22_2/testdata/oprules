@@ -14,7 +14,7 @@ ToPublicOrTransient($target1, $target2):
     - $target2[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
 descriptorIsNotBeingDropped-22.2($element):
     not-join:
-        - $descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
+        - $descriptor[Type] IN ['*scpb.AliasType', '*scpb.Database', '*scpb.EnumType', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
         - joinTarget($descriptor, $descriptor-Target)
         - joinOnDescID($descriptor, $element, $id)
         - $descriptor-Target[TargetStatus] = ABSENT
@@ -162,7 +162,7 @@ oprules
 - name: skip element removal ops on descriptor drop
   from: dep-Node
   query:
-    - $desc[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
+    - $desc[Type] IN ['*scpb.AliasType', '*scpb.Database', '*scpb.EnumType', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
     - $dep[Type] IN ['*scpb.ColumnFamily', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.EnumTypeValue']
     - joinOnDescID($desc, $dep, $desc-id)
     - joinTarget($desc, $desc-Target)

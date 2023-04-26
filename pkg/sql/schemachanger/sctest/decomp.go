@@ -107,10 +107,10 @@ func marshalResult(
 			// Compute the struct field index of the element in the ElementProto
 			// to sort the elements in order of appearance in that message.
 			var ep scpb.ElementProto
-			ep.SetValue(e)
-			v := reflect.ValueOf(ep)
-			for i := 0; i < v.NumField(); i++ {
-				if !v.Field(i).IsNil() {
+			ep.SetElement(e)
+			v := reflect.ValueOf(ep.ElementOneOf).Elem()
+			for i, elemTypes := range scpb.GetElementOneOfProtos() {
+				if reflect.TypeOf(elemTypes).Elem() == v.Type() {
 					rank[e] = i
 					break
 				}

@@ -23,6 +23,21 @@ ElementState:
 - Database:
     databaseId: 104
   Status: PUBLIC
+- DatabaseComment:
+    comment: multi region db is good
+    databaseId: 104
+  Status: PUBLIC
+- DatabaseData:
+    databaseId: 104
+  Status: PUBLIC
+- DatabaseRegionConfig:
+    databaseId: 104
+    regionEnumTypeId: 106
+  Status: PUBLIC
+- DatabaseRoleSetting:
+    databaseId: 104
+    roleName: __placeholder_role_name__
+  Status: PUBLIC
 - Namespace:
     databaseId: 0
     descriptorId: 104
@@ -51,36 +66,12 @@ ElementState:
     userName: public
     withGrantOption: "0"
   Status: PUBLIC
-- DatabaseRegionConfig:
-    databaseId: 104
-    regionEnumTypeId: 106
-  Status: PUBLIC
-- DatabaseRoleSetting:
-    databaseId: 104
-    roleName: __placeholder_role_name__
-  Status: PUBLIC
-- DatabaseComment:
-    comment: multi region db is good
-    databaseId: 104
-  Status: PUBLIC
-- DatabaseData:
-    databaseId: 104
-  Status: PUBLIC
 
 decompose
 table_global
 ----
 BackReferencedIDs:
 ElementState:
-- Table:
-    isTemporary: false
-    tableId: 110
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
-    tableId: 110
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -121,28 +112,18 @@ ElementState:
     pgAttributeNum: 4.294967295e+09
     tableId: 110
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
+- ColumnDefaultExpression:
+    columnId: 2
+    expr: unique_rowid()
+    referencedColumnIds: []
     tableId: 110
-    temporaryIndexId: 0
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
-- TableZoneConfig:
-    tableId: 110
-  Status: PUBLIC
-- TableData:
-    databaseId: 104
-    tableId: 110
-  Status: PUBLIC
-- TableLocalityGlobal:
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 110
   Status: PUBLIC
 - ColumnName:
@@ -165,6 +146,11 @@ ElementState:
     name: crdb_internal_mvcc_timestamp
     tableId: 110
   Status: PUBLIC
+- ColumnNotNull:
+    columnId: 2
+    indexIdForValidation: 0
+    tableId: 110
+  Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
     columnId: 1
@@ -273,25 +259,6 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnDefaultExpression:
-    columnId: 2
-    expr: unique_rowid()
-    referencedColumnIds: []
-    tableId: 110
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- ColumnNotNull:
-    columnId: 2
-    indexIdForValidation: 0
-    tableId: 110
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: table_global_pkey
-    tableId: 110
-  Status: PUBLIC
 - IndexColumn:
     columnId: 1
     direction: ASC
@@ -316,6 +283,11 @@ ElementState:
     indexId: 1
     tableId: 110
   Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: table_global_pkey
+    tableId: 110
+  Status: PUBLIC
 - Namespace:
     databaseId: 104
     descriptorId: 110
@@ -325,6 +297,38 @@ ElementState:
 - Owner:
     descriptorId: 110
     owner: root
+  Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 110
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 110
+    schemaId: 105
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 110
+  Status: PUBLIC
+- TableData:
+    databaseId: 104
+    tableId: 110
+  Status: PUBLIC
+- TableLocalityGlobal:
+    tableId: 110
+  Status: PUBLIC
+- TableZoneConfig:
+    tableId: 110
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110
@@ -338,25 +342,12 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 110
-    schemaId: 105
-  Status: PUBLIC
 
 decompose
 table_regional_by_table
 ----
 BackReferencedIDs:
 ElementState:
-- Table:
-    isTemporary: false
-    tableId: 109
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
-    tableId: 109
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -397,30 +388,18 @@ ElementState:
     pgAttributeNum: 4.294967295e+09
     tableId: 109
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
+- ColumnDefaultExpression:
+    columnId: 2
+    expr: unique_rowid()
+    referencedColumnIds: []
     tableId: 109
-    temporaryIndexId: 0
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
-- TableZoneConfig:
-    tableId: 109
-  Status: PUBLIC
-- TableData:
-    databaseId: 104
-    tableId: 109
-  Status: PUBLIC
-- TableLocalitySecondaryRegion:
-    regionEnumTypeId: 106
-    regionName: us-east2
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 109
   Status: PUBLIC
 - ColumnName:
@@ -441,6 +420,11 @@ ElementState:
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
+    tableId: 109
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 2
+    indexIdForValidation: 0
     tableId: 109
   Status: PUBLIC
 - ColumnType:
@@ -551,25 +535,6 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnDefaultExpression:
-    columnId: 2
-    expr: unique_rowid()
-    referencedColumnIds: []
-    tableId: 109
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- ColumnNotNull:
-    columnId: 2
-    indexIdForValidation: 0
-    tableId: 109
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: table_regional_by_table_pkey
-    tableId: 109
-  Status: PUBLIC
 - IndexColumn:
     columnId: 1
     direction: ASC
@@ -594,6 +559,11 @@ ElementState:
     indexId: 1
     tableId: 109
   Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: table_regional_by_table_pkey
+    tableId: 109
+  Status: PUBLIC
 - Namespace:
     databaseId: 104
     descriptorId: 109
@@ -603,6 +573,40 @@ ElementState:
 - Owner:
     descriptorId: 109
     owner: root
+  Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 109
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 109
+    schemaId: 105
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 109
+  Status: PUBLIC
+- TableData:
+    databaseId: 104
+    tableId: 109
+  Status: PUBLIC
+- TableLocalitySecondaryRegion:
+    regionEnumTypeId: 106
+    regionName: us-east2
+    tableId: 109
+  Status: PUBLIC
+- TableZoneConfig:
+    tableId: 109
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 109
@@ -616,25 +620,12 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 109
-    schemaId: 105
-  Status: PUBLIC
 
 decompose
 table_regional_by_row
 ----
 BackReferencedIDs:
 ElementState:
-- Table:
-    isTemporary: false
-    tableId: 108
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
-    tableId: 108
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -685,51 +676,26 @@ ElementState:
     pgAttributeNum: 4.294967295e+09
     tableId: 108
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
-    tableId: 108
-    temporaryIndexId: 0
-  Status: PUBLIC
-- TableComment:
-    comment: regional by row is good
+- ColumnComment:
+    columnId: 1
+    comment: k is good
+    pgAttributeNum: 1
     tableId: 108
   Status: PUBLIC
-- TableZoneConfig:
+- ColumnDefaultExpression:
+    columnId: 3
+    expr: default_to_database_primary_region(gateway_region())::@100106
+    referencedColumnIds: []
     tableId: 108
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds:
+    - 106
+    - 107
   Status: PUBLIC
-- IndexZoneConfig:
-    indexId: 1
-    partitionName: us-east1
-    tableId: 108
-  Status: PUBLIC
-- IndexZoneConfig:
-    indexId: 1
-    partitionName: us-east2
-    tableId: 108
-  Status: PUBLIC
-- IndexZoneConfig:
-    indexId: 1
-    partitionName: us-east3
-    tableId: 108
-  Status: PUBLIC
-- TableData:
-    databaseId: 104
-    tableId: 108
-  Status: PUBLIC
-- TablePartitioning:
-    tableId: 108
-  Status: PUBLIC
-- TableLocalityRegionalByRow:
-    as: ""
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 108
   Status: PUBLIC
 - ColumnName:
@@ -755,6 +721,16 @@ ElementState:
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
+    tableId: 108
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 108
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 3
+    indexIdForValidation: 0
     tableId: 108
   Status: PUBLIC
 - ColumnType:
@@ -895,31 +871,43 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnDefaultExpression:
-    columnId: 3
-    expr: default_to_database_primary_region(gateway_region())::@100106
-    referencedColumnIds: []
-    tableId: 108
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds:
-    - 106
-    - 107
-  Status: PUBLIC
-- ColumnComment:
+- IndexColumn:
     columnId: 1
-    comment: k is good
-    pgAttributeNum: 1
+    direction: ASC
+    implicit: false
+    indexId: 1
+    invertedKind: 0
+    kind: KEY
+    ordinalInKind: 1
     tableId: 108
   Status: PUBLIC
-- ColumnNotNull:
-    columnId: 1
-    indexIdForValidation: 0
+- IndexColumn:
+    columnId: 2
+    direction: ASC
+    implicit: false
+    indexId: 1
+    invertedKind: 0
+    kind: STORED
+    ordinalInKind: 0
     tableId: 108
   Status: PUBLIC
-- ColumnNotNull:
+- IndexColumn:
     columnId: 3
-    indexIdForValidation: 0
+    direction: ASC
+    implicit: true
+    indexId: 1
+    invertedKind: 0
+    kind: KEY
+    ordinalInKind: 0
+    tableId: 108
+  Status: PUBLIC
+- IndexComment:
+    comment: pkey is good
+    indexId: 1
+    tableId: 108
+  Status: PUBLIC
+- IndexData:
+    indexId: 1
     tableId: 108
   Status: PUBLIC
 - IndexName:
@@ -960,43 +948,19 @@ ElementState:
       range: []
     tableId: 108
   Status: PUBLIC
-- IndexComment:
-    comment: pkey is good
+- IndexZoneConfig:
     indexId: 1
+    partitionName: us-east1
     tableId: 108
   Status: PUBLIC
-- IndexColumn:
-    columnId: 1
-    direction: ASC
-    implicit: false
+- IndexZoneConfig:
     indexId: 1
-    invertedKind: 0
-    kind: KEY
-    ordinalInKind: 1
+    partitionName: us-east2
     tableId: 108
   Status: PUBLIC
-- IndexColumn:
-    columnId: 2
-    direction: ASC
-    implicit: false
+- IndexZoneConfig:
     indexId: 1
-    invertedKind: 0
-    kind: STORED
-    ordinalInKind: 0
-    tableId: 108
-  Status: PUBLIC
-- IndexColumn:
-    columnId: 3
-    direction: ASC
-    implicit: true
-    indexId: 1
-    invertedKind: 0
-    kind: KEY
-    ordinalInKind: 0
-    tableId: 108
-  Status: PUBLIC
-- IndexData:
-    indexId: 1
+    partitionName: us-east3
     tableId: 108
   Status: PUBLIC
 - Namespace:
@@ -1009,6 +973,46 @@ ElementState:
     descriptorId: 108
     owner: root
   Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 108
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 108
+    schemaId: 105
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 108
+  Status: PUBLIC
+- TableComment:
+    comment: regional by row is good
+    tableId: 108
+  Status: PUBLIC
+- TableData:
+    databaseId: 104
+    tableId: 108
+  Status: PUBLIC
+- TableLocalityRegionalByRow:
+    as: ""
+    tableId: 108
+  Status: PUBLIC
+- TablePartitioning:
+    tableId: 108
+  Status: PUBLIC
+- TableZoneConfig:
+    tableId: 108
+  Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
     privileges: "2"
@@ -1020,10 +1024,6 @@ ElementState:
     privileges: "2"
     userName: root
     withGrantOption: "2"
-  Status: PUBLIC
-- SchemaChild:
-    childObjectId: 108
-    schemaId: 105
   Status: PUBLIC
 
 decompose
@@ -1038,6 +1038,21 @@ ElementState:
     isMultiRegion: true
     typeId: 106
   Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: us-east1
+    physicalRepresentation: QA==
+    typeId: 106
+  Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: us-east2
+    physicalRepresentation: gA==
+    typeId: 106
+  Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: us-east3
+    physicalRepresentation: wA==
+    typeId: 106
+  Status: PUBLIC
 - Namespace:
     databaseId: 104
     descriptorId: 106
@@ -1047,6 +1062,10 @@ ElementState:
 - Owner:
     descriptorId: 106
     owner: root
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 106
+    schemaId: 105
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 106
@@ -1065,23 +1084,4 @@ ElementState:
     privileges: "512"
     userName: public
     withGrantOption: "0"
-  Status: PUBLIC
-- SchemaChild:
-    childObjectId: 106
-    schemaId: 105
-  Status: PUBLIC
-- EnumTypeValue:
-    logicalRepresentation: us-east1
-    physicalRepresentation: QA==
-    typeId: 106
-  Status: PUBLIC
-- EnumTypeValue:
-    logicalRepresentation: us-east2
-    physicalRepresentation: gA==
-    typeId: 106
-  Status: PUBLIC
-- EnumTypeValue:
-    logicalRepresentation: us-east3
-    physicalRepresentation: wA==
-    typeId: 106
   Status: PUBLIC
