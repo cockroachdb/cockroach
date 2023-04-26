@@ -18,12 +18,12 @@ import (
 )
 
 const (
-	projectID     = "cockroach-shared"
-	bucketName    = "cockroach-snowflake-costfuzz"
-	encodedKeyTag = "e_key"
-	sfUser        = "SFUSER"
-	sfPassword    = "SFPASSWORD"
-	nonJoinRatio  = 0.5
+	projectID    = "e2e-infra-381422"
+	bucketName   = "roachtest-snowflake-costfuzz"
+	keyTag       = "GOOGLE_EPHEMERAL_CREDENTIALS"
+	sfUser       = "SFUSER"
+	sfPassword   = "SFPASSWORD"
+	nonJoinRatio = 0.5
 )
 
 // getConnect makes connection to snowflake and returns the connection.
@@ -58,11 +58,13 @@ func getConnect(schema string) (*sql.DB, context.Context, context.CancelFunc) {
 // writeRowsGCS writes data in rows to google cloud storage file.
 // We write to gcs so we can import data from gcs cvs files to cockroachdb.
 func writeRowsGCS(ctx context.Context, filename string, rows *sql.Rows) string {
-	encodedKey, ok := os.LookupEnv(encodedKeyTag)
+	credKey, ok := os.LookupEnv(keyTag)
 	if !ok {
-		log.Fatalf("%s not set\n", encodedKeyTag)
+		log.Fatalf("%s not set\n", keyTag)
 		return ""
 	}
+
+	encodedKey := base64.StdEncoding.EncodeToString([]byte(credKey))
 	encodedCredByte, err := base64.StdEncoding.DecodeString(encodedKey)
 	if err != nil {
 		log.Fatal("error:", err)
@@ -113,10 +115,10 @@ func ChooseRandomQuery(log *os.File) (string, map[string][]string) {
 	// to non join representation.
 	if rndNumber <= nonJoinRatio {
 		fmt.Fprint(log, "NON JOIN QUERY")
-		query = "select a.statement,replace(regexp_replace(lower(replace(statement,'\"','')),concat('[\\\\\\S]*\\\\\\.[\\\\\\S]*\\\\\\.',lower(b.table_name)),lower(b.table_name)),'..','') statement_2,ifnull(a.database_name,'') database_name,a.CID,a.TID,a.schema_name,b.table_name,b.table_signature,b.cockroachdb_schema cockroachdb_schema from (select * from (select * from (select *,rank() over (partition by statement,schema_name,database_name,cid,tid order by run_date desc) as rnk from (select * from DATA_ENG.TEST_CONFIG.QUERYBANK where not contains(lower(statement),'join'))) where rnk=1)  sample (1 rows))  a inner join (select * from (select *,rank() over (partition by table_signature,schema_name,database_name,cid,tid  order by run_date desc) as rnk from DATA_ENG.TEST_CONFIG.TABLE_SIGNATURES) where rnk=1) b on a.SCHEMA_NAME=b.SCHEMA_NAME and contains(lower(statement),lower(table_name)) "
+		query = "select a.statement,replace(regexp_replace(lower(replace(statement,'\"','')),concat('[\\\\\\S]*\\\\\\.[\\\\\\S]*\\\\\\.',lower(b.table_name)),lower(b.table_name)),'..','') statement_2,ifnull(a.database_name,'') database_name,a.CID,a.TID,a.schema_name,b.table_name,b.table_signature,b.cockroachdb_schema cockroachdb_schema from (select * from (select * from (select *,rank() over (partition by statement,schema_name,database_name,cid,tid order by run_date desc) as rnk from (select * from DATA_ENG.TEST_CONFIG.QUERYBANK where not contains(lower(statement),'join') and disqualify=0)) where rnk=1)  sample (1 rows))  a inner join (select * from (select *,rank() over (partition by table_signature,schema_name,database_name,cid,tid  order by run_date desc) as rnk from DATA_ENG.TEST_CONFIG.TABLE_SIGNATURES) where rnk=1) b on a.SCHEMA_NAME=b.SCHEMA_NAME and contains(lower(statement),lower(table_name)) "
 	} else {
 		fmt.Fprint(log, "JOIN QUERY")
-		query = "select a.statement,replace(regexp_replace(lower(replace(statement,'\"','')),concat('[\\\\\\S]*\\\\\\.[\\\\\\S]*\\\\\\.',lower(b.table_name)),lower(b.table_name)),'..','') statement_2,ifnull(a.database_name,'') database_name,a.CID,a.TID,a.schema_name,b.table_name,b.table_signature,b.cockroachdb_schema cockroachdb_schema from (select * from (select * from (select *,rank() over (partition by statement,schema_name,database_name,cid,tid order by run_date desc) as rnk from (select * from DATA_ENG.TEST_CONFIG.QUERYBANK_SELECT )) where rnk=1)  sample (1 rows))  a inner join (select * from (select *,rank() over (partition by table_signature,schema_name,database_name,cid,tid  order by run_date desc) as rnk from DATA_ENG.TEST_CONFIG.TABLE_SIGNATURES) where rnk=1) b on a.SCHEMA_NAME=b.SCHEMA_NAME and contains(lower(statement),lower(table_name)) "
+		query = "select a.statement,replace(regexp_replace(lower(replace(statement,'\"','')),concat('[\\\\\\S]*\\\\\\.[\\\\\\S]*\\\\\\.',lower(b.table_name)),lower(b.table_name)),'..','') statement_2,ifnull(a.database_name,'') database_name,a.CID,a.TID,a.schema_name,b.table_name,b.table_signature,b.cockroachdb_schema cockroachdb_schema from (select * from (select * from (select *,rank() over (partition by statement,schema_name,database_name,cid,tid order by run_date desc) as rnk from (select * from DATA_ENG.TEST_CONFIG.QUERYBANK_SELECT where disqualify=0)) where rnk=1)  sample (1 rows))  a inner join (select * from (select *,rank() over (partition by table_signature,schema_name,database_name,cid,tid  order by run_date desc) as rnk from DATA_ENG.TEST_CONFIG.TABLE_SIGNATURES) where rnk=1) b on a.SCHEMA_NAME=b.SCHEMA_NAME and contains(lower(statement),lower(table_name)) "
 
 	}
 

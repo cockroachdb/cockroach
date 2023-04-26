@@ -29,16 +29,21 @@ func registerCostFuzz(r registry.Registry) {
 	for _, setupName := range []string{"workload-replay", sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
 		setupName := setupName
 		var clusterSpec spec.ClusterSpec
+		timeOut := time.Hour * 1
 		switch setupName {
 		case sqlsmith.SeedMultiRegionSetupName:
 			clusterSpec = r.MakeClusterSpec(9, spec.Geo(), spec.GatherCores())
+		case "workload-replay":
+			clusterSpec = r.MakeClusterSpec(1)
+			timeOut = time.Hour * 2
 		default:
 			clusterSpec = r.MakeClusterSpec(1)
+
 		}
 		r.Add(registry.TestSpec{
 			Name:            fmt.Sprintf("costfuzz/%s", setupName),
 			Owner:           registry.OwnerSQLQueries,
-			Timeout:         time.Hour * 1,
+			Timeout:         timeOut,
 			RequiresLicense: true,
 			Tags:            nil,
 			Cluster:         clusterSpec,
