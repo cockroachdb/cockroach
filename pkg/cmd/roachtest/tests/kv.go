@@ -141,12 +141,7 @@ func registerKV(r registry.Registry) {
 				opts.duration = 30 * time.Minute
 			}
 
-			durationOverride, err := t.CLIOverrides().AsDuration("test.duration", opts.duration)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			opts.duration = durationOverride
+			opts.duration = t.CLIOverrides().AsDuration("test.duration", opts.duration)
 
 			duration := " --duration=" + ifLocal(c, "10s", opts.duration.String())
 			var readPercent string

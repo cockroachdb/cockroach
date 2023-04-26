@@ -11,13 +11,18 @@
 package stringmap
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 )
 
 // StringMap Until generics are ok to use, we'll provide this convenience map
 // to allow for easy conversion of string values passed from the CLI to other types.
+//
+// Current implementation is opinionated and will return the default value if
+// the key is not present, or if the value is not a valid representation of the
+// requested type.
+//
+// TODO: log errors, signatures which return errors
 type StringMap struct {
 	StringMap map[string]string
 }
@@ -30,41 +35,41 @@ func (m StringMap) AsString(key string, dflt string) string {
 	return strVal
 }
 
-func (m StringMap) AsDuration(key string, dflt time.Duration) (time.Duration, error) {
+func (m StringMap) AsDuration(key string, dflt time.Duration) time.Duration {
 	strVal, ok := m.StringMap[key]
 	if !ok {
-		return dflt, nil
+		return dflt
 	}
 
 	duration, err := time.ParseDuration(strVal)
 	if err != nil {
-		return 0, fmt.Errorf("invalid duration %q for key %q: %w", strVal, key, err)
+		return dflt
 	}
-	return duration, nil
+	return duration
 }
 
-func (m StringMap) AsInt(key string, dflt int) (int, error) {
+func (m StringMap) AsInt(key string, dflt int) int {
 	strVal, ok := m.StringMap[key]
 	if !ok {
-		return dflt, nil
+		return dflt
 	}
 
 	intVal, err := strconv.Atoi(strVal)
 	if err != nil {
-		return 0, fmt.Errorf("invalid int %q for key %q: %w", strVal, key, err)
+		return dflt
 	}
-	return intVal, nil
+	return intVal
 }
 
-func (m StringMap) AsBoolean(key string, dflt bool) (bool, error) {
+func (m StringMap) AsBoolean(key string, dflt bool) bool {
 	strVal, ok := m.StringMap[key]
 	if !ok {
-		return dflt, nil
+		return dflt
 	}
 
 	boolVal, err := strconv.ParseBool(strVal)
 	if err != nil {
-		return false, fmt.Errorf("invalid boolean %q for key %q: %w", strVal, key, err)
+		return dflt
 	}
-	return boolVal, nil
+	return boolVal
 }
