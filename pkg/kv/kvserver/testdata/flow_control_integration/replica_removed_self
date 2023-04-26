@@ -6,7 +6,7 @@
 init tenant=t1 range=r1 replid=1
 ----
 
-state descriptor=(1,2,3) applied=1/10
+state descriptor=(1,2,3) applied=1/10 connected=(1,2,3)
 ----
 
 # Set up replid=1 (declared in init above) to be the raft leader. It should

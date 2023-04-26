@@ -92,6 +92,24 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 
 			return nil
 		}
+		if !h.dropReq(req) && log.V(1) {
+			// Debug logging, even if requests aren't dropped. This is a
+			// convenient way to observe all raft messages in unit tests when
+			// run using --vmodule='client_raft_helpers_test=1'.
+			var prefix string
+			if h.name != "" {
+				prefix = fmt.Sprintf("[%s] ", h.name)
+			}
+			log.Infof(
+				ctx,
+				"%s [raft] r%d Raft message %s",
+				prefix,
+				req.RangeID,
+				raft.DescribeMessage(req.Message, func([]byte) string {
+					return "<omitted>"
+				}),
+			)
+		}
 	}
 	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 }

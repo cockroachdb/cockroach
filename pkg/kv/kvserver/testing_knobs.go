@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
@@ -474,6 +475,10 @@ type StoreTestingKnobs struct {
 
 	// RangeLeaseAcquireTimeoutOverride overrides RaftConfig.RangeLeaseAcquireTimeout().
 	RangeLeaseAcquireTimeoutOverride time.Duration
+
+	// FlowControlTestingKnobs provide fine-grained control over the various
+	// kvflowcontrol components for testing.
+	FlowControlTestingKnobs *kvflowcontrol.TestingKnobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

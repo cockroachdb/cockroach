@@ -20,17 +20,6 @@ import (
 	rafttracker "go.etcd.io/raft/v3/tracker"
 )
 
-// TODO(irfansharif): Write integration tests, walking through
-// kvflowcontrol/doc.go. Do this as part of #95563. Randomize an in-memory
-// workload with various chaos events, like nodes dying, streams breaking,
-// splits, merges, etc. and assert stable flow tokens. Leader replica removing
-// itself from descriptor. Uninitialized replica below raft for which we've
-// deducted flow tokens for (dealt with by looking at StateReplicate). Dropped
-// proposals -- we should only be deducting tokens once submitting to raft. But
-// if leader's raft messages to follower get dropped (and not vice versa),
-// leader will still see follower as active and not disconnect streams. Has this
-// changed with us upgrading asymmetric partitions to bidirectional ones?
-
 // replicaFlowControlIntegration is used to integrate with replication flow
 // control. It's intercepts various points in a replica's lifecycle, like it
 // acquiring raft leadership or losing it, or its raft membership changing, etc.
@@ -54,6 +43,7 @@ type replicaFlowControlIntegrationImpl struct {
 	raftTransportForFlowControl raftTransportForFlowControl
 	replicaForFlowControl       replicaForFlowControl
 	handleFactory               kvflowcontrol.HandleFactory
+	knobs                       *kvflowcontrol.TestingKnobs
 
 	innerHandle         kvflowcontrol.Handle
 	lastKnownReplicas   roachpb.ReplicaSet
@@ -64,11 +54,16 @@ func newFlowControlIntegrationImpl(
 	raftTransportForFlowControl raftTransportForFlowControl,
 	replicaForFlowControl replicaForFlowControl,
 	handleFactory kvflowcontrol.HandleFactory,
+	knobs *kvflowcontrol.TestingKnobs,
 ) *replicaFlowControlIntegrationImpl {
+	if knobs == nil {
+		knobs = &kvflowcontrol.TestingKnobs{}
+	}
 	return &replicaFlowControlIntegrationImpl{
 		raftTransportForFlowControl: raftTransportForFlowControl,
 		replicaForFlowControl:       replicaForFlowControl,
 		handleFactory:               handleFactory,
+		knobs:                       knobs,
 	}
 }
 
@@ -84,6 +79,10 @@ func (f *replicaFlowControlIntegrationImpl) onBecameLeader(ctx context.Context) 
 	}
 	if !f.replicaForFlowControl.getTenantID().IsSet() {
 		log.Fatal(ctx, "unset tenant ID")
+	}
+
+	if f.knobs.UseOnlyForScratchRanges && !f.replicaForFlowControl.isScratchRange() {
+		return
 	}
 
 	// See I5 from kvflowcontrol/doc.go. The per-replica kvflowcontrol.Handle is
@@ -275,6 +274,9 @@ func (f *replicaFlowControlIntegrationImpl) onProposalQuotaUpdated(ctx context.C
 			// likely unintentional, but we paper over it here.
 			continue // nothing to do
 		}
+		if fn := f.knobs.MaintainStreamsForInactiveFollowers; fn != nil && fn() {
+			continue // nothing to do
+		}
 		toDisconnect = append(toDisconnect, repl)
 	}
 	f.disconnectStreams(ctx, toDisconnect, "inactive followers")
@@ -334,6 +336,9 @@ func (f *replicaFlowControlIntegrationImpl) notActivelyReplicatingTo() []roachpb
 		}
 
 		if !f.raftTransportForFlowControl.IsConnected(repl.StoreID) {
+			if fn := f.knobs.MaintainStreamsForBrokenRaftTransport; fn != nil && fn() {
+				return // nothing to do
+			}
 			res = append(res, replID)
 		}
 	})
@@ -414,6 +419,10 @@ func (f *replicaFlowControlIntegrationImpl) OnRaftTransportDisconnected(
 ) {
 	f.replicaForFlowControl.assertLocked()
 	if f.innerHandle == nil {
+		return // nothing to do
+	}
+
+	if fn := f.knobs.MaintainStreamsForBrokenRaftTransport; fn != nil && fn() {
 		return // nothing to do
 	}
 

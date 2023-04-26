@@ -33,6 +33,7 @@ type replicaForFlowControl interface {
 	isFollowerActive(context.Context, roachpb.ReplicaID) bool
 	appliedLogPosition() kvflowcontrolpb.RaftLogPosition
 	withReplicaProgress(f func(roachpb.ReplicaID, rafttracker.Progress))
+	isScratchRange() bool
 }
 
 // replicaFlowControl is a concrete implementation of the replicaForFlowControl
@@ -81,6 +82,12 @@ func (rf *replicaFlowControl) isFollowerActive(ctx context.Context, replID roach
 		timeutil.Now(),
 		rf.store.cfg.RangeLeaseDuration,
 	)
+}
+
+func (rf *replicaFlowControl) isScratchRange() bool {
+	rf.mu.AssertHeld()
+	r := (*Replica)(rf)
+	return r.isScratchRangeRLocked()
 }
 
 func (rf *replicaFlowControl) appliedLogPosition() kvflowcontrolpb.RaftLogPosition {

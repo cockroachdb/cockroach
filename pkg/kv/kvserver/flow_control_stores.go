@@ -120,6 +120,12 @@ func (sh *storeForFlowControlImpl) Lookup(
 		return nil, false
 	}
 
+	if knobs := s.TestingKnobs().FlowControlTestingKnobs; knobs != nil &&
+		knobs.UseOnlyForScratchRanges &&
+		!repl.IsScratchRange() {
+		return nil, false
+	}
+
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
 	return repl.mu.replicaFlowControlIntegration.handle()
@@ -180,12 +186,17 @@ func (shf *storeFlowControlHandleFactory) NewHandle(
 	rangeID roachpb.RangeID, tenantID roachpb.TenantID,
 ) kvflowcontrol.Handle {
 	s := (*Store)(shf)
+	var knobs *kvflowcontrol.TestingKnobs
+	if s.TestingKnobs() != nil {
+		knobs = s.TestingKnobs().FlowControlTestingKnobs
+	}
 	return kvflowhandle.New(
 		s.cfg.KVFlowController,
 		s.cfg.KVFlowHandleMetrics,
 		s.cfg.Clock,
 		rangeID,
 		tenantID,
+		knobs,
 	)
 }
 
