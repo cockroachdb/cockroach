@@ -17,13 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
+// RoleBasedAuditEvent identifies query executions on roles that have been configured
+// for auditing. See the 'sql.log.user_audit' cluster setting.
 type RoleBasedAuditEvent struct {
-	Setting        *auditlogging.AuditSetting
-	StatementType  string
-	DatabaseName   string
-	ServerAddress  string
-	RemoteAddress  string
-	ConnectionType string
+	Setting       *auditlogging.AuditSetting
+	StatementType string
+	DatabaseName  string
 }
 
 // BuildAuditEvent implements the auditlogging.AuditEventBuilder interface
@@ -39,8 +38,5 @@ func (f *RoleBasedAuditEvent) BuildAuditEvent(
 		Role:                  f.Setting.Role.Normalized(),
 		StatementType:         f.StatementType,
 		DatabaseName:          f.DatabaseName,
-		ServerAddress:         f.ServerAddress,
-		RemoteAddress:         f.RemoteAddress,
-		ConnectionType:        f.ConnectionType,
 	}
 }

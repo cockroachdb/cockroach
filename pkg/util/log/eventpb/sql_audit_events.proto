@@ -87,11 +87,9 @@ message RoleBasedAuditEvent {
   CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The configured audit role that emitted this log.
   string role = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // The statement type of the query.
   string statement_type = 5 [(gogoproto.jsontag) = ",omitempty"];
   string database_name = 6 [(gogoproto.jsontag) = ",omitempty"];
-  string server_address = 7 [(gogoproto.jsontag) = ",omitempty"];
-  string remote_address = 8 [(gogoproto.jsontag) = ",omitempty"];
-  string connection_type = 9 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // Category: SQL Slow Query Log

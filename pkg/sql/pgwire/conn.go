@@ -310,9 +310,6 @@ func (c *conn) serveImpl(
 	authOpt authOptions,
 ) {
 	defer func() { _ = c.conn.Close() }()
-	defer func() {
-		sqlServer.GetExecutorConfig().SessionInitCache.RemoveFromSessionConnCache(c.sessionArgs.User)
-	}()
 
 	if c.sessionArgs.User.IsRootUser() || c.sessionArgs.User.IsNodeUser() {
 		ctx = logtags.AddTag(ctx, "user", redact.Safe(c.sessionArgs.User))
