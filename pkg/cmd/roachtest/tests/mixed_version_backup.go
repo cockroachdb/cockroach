@@ -950,10 +950,14 @@ func newBackupCollection(name string, btype backupType, options []backupOption) 
 
 func (bc *backupCollection) uri() string {
 	// Append the `nonce` to the backup name since we are now sharing a
-	// global namespace represented by the cockroachdb-backup-testing
+	// global namespace represented by the BACKUP_TESTING_BUCKET
 	// bucket. The nonce allows multiple people (or TeamCity builds) to
 	// be running this test without interfering with one another.
-	return fmt.Sprintf("gs://cockroachdb-backup-testing/mixed-version/%s_%s?AUTH=implicit", bc.name, bc.nonce)
+	gcsBackupTestingBucket := os.Getenv("BACKUP_TESTING_BUCKET")
+	if gcsBackupTestingBucket == "" {
+		gcsBackupTestingBucket = "cockroachdb-backup-testing"
+	}
+	return fmt.Sprintf("gs://"+gcsBackupTestingBucket+"/mixed-version/%s_%s?AUTH=implicit", bc.name, bc.nonce)
 }
 
 func (bc *backupCollection) encryptionOption() *encryptionPassphrase {
