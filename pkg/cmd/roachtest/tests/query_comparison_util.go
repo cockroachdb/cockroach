@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	b64 "encoding/base64"
 	"fmt"
 	"math/rand"
 	"os"
@@ -34,8 +35,8 @@ import (
 )
 
 const (
-	bucketName    = "cockroach-snowflake-costfuzz"
-	encodedKeyTag = "e_key"
+	bucketName = "roachtest-snowflake-costfuzz"
+	keyTag     = "GOOGLE_EPHEMERAL_CREDENTIALS"
 )
 
 type queryComparisonTest struct {
@@ -128,6 +129,7 @@ func runOneRoundQueryComparison(
 
 	logPath := filepath.Join(t.ArtifactsDir(), fmt.Sprintf("%s%03d.log", qct.name, iter))
 	log, err := os.Create(logPath)
+	fmt.Println(logPath)
 	if err != nil {
 		t.Fatalf("could not create %s%03d.log: %v", qct.name, iter, err)
 	}
@@ -192,11 +194,12 @@ func runOneRoundQueryComparison(
 		var signatures map[string][]string
 
 		for {
-
+			t.L().Printf("Choosing Random Query")
 			finalStmt, signatures = workloadreplay.ChooseRandomQuery(log)
 			if finalStmt == "" {
 				continue
 			}
+			t.L().Printf("Generating Random Data in Snowflake")
 			schemaMap := workloadreplay.CreateRandomDataSnowflake(signatures, log)
 			if schemaMap == nil {
 				continue
@@ -216,12 +219,12 @@ func runOneRoundQueryComparison(
 			importStr := ""
 			for tableName, schemaInfo := range schemaMap {
 				t.L().Printf("inserting rows into table:" + tableName)
-				encodedKey, ok := os.LookupEnv(encodedKeyTag)
+				credKey, ok := os.LookupEnv(keyTag)
 				if !ok {
-					t.L().Printf("%s not set\n", encodedKeyTag)
+					t.L().Printf("%s not set\n", keyTag)
 					return
 				}
-
+				encodedKey := b64.StdEncoding.EncodeToString([]byte(credKey))
 				importStr = "IMPORT INTO " + tableName + " (" + schemaInfo[1] + ")\n"
 				csvStr := " CSV DATA ('gs://" + bucketName + "/" + schemaInfo[0] + "?AUTH=specified&CREDENTIALS=" + encodedKey + "');"
 				queryStr := importStr + csvStr
