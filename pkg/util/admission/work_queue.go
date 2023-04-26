@@ -311,6 +311,7 @@ type WorkQueue struct {
 	stopCh       chan struct{}
 
 	timeSource timeutil.TimeSource
+	knobs      *TestingKnobs
 }
 
 var _ requester = &WorkQueue{}
@@ -352,7 +353,7 @@ func makeWorkQueue(
 	opts workQueueOptions,
 ) requester {
 	q := &WorkQueue{}
-	initWorkQueue(q, ambientCtx, workKind, granter, settings, metrics, opts)
+	initWorkQueue(q, ambientCtx, workKind, granter, settings, metrics, opts, nil)
 	return q
 }
 
@@ -364,7 +365,11 @@ func initWorkQueue(
 	settings *cluster.Settings,
 	metrics *WorkQueueMetrics,
 	opts workQueueOptions,
+	knobs *TestingKnobs,
 ) {
+	if knobs == nil {
+		knobs = &TestingKnobs{}
+	}
 	stopCh := make(chan struct{})
 
 	timeSource := opts.timeSource
@@ -383,6 +388,7 @@ func initWorkQueue(
 	q.metrics = metrics
 	q.stopCh = stopCh
 	q.timeSource = timeSource
+	q.knobs = knobs
 
 	func() {
 		q.mu.Lock()
@@ -609,7 +615,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	// threshold for LIFO queueing based on observed admission latency.
 	tenant.priorityStates.requestAtPriority(info.Priority)
 
-	if len(q.mu.tenantHeap) == 0 {
+	if len(q.mu.tenantHeap) == 0 && !q.knobs.DisableWorkQueueFastPath {
 		// Fast-path. Try to grab token/slot.
 		// Optimistically update used to avoid locking again.
 		tenant.used += uint64(info.RequestedCount)
@@ -845,6 +851,10 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	now := q.timeNow()
 	q.mu.Lock()
 	if len(q.mu.tenantHeap) == 0 {
+		q.mu.Unlock()
+		return 0
+	}
+	if fn := q.knobs.DisableWorkQueueGranting; fn != nil && fn() {
 		q.mu.Unlock()
 		return 0
 	}
@@ -2134,7 +2144,7 @@ func makeStoreWorkQueue(
 
 	opts.usesAsyncAdmit = true
 	for i := range q.q {
-		initWorkQueue(&q.q[i], ambientCtx, KVWork, granters[i], settings, metrics, opts)
+		initWorkQueue(&q.q[i], ambientCtx, KVWork, granters[i], settings, metrics, opts, knobs)
 		q.q[i].onAdmittedReplicatedWork = q
 	}
 	// Arbitrary initial value. This will be replaced before any meaningful

@@ -176,7 +176,7 @@ func TestUsingSimulation(t *testing.T) {
 					for _, line := range strings.Split(d.Input, "\n") {
 						name := strings.TrimPrefix(strings.TrimSpace(line), "handle=")
 						replicaHandles[name] = &replicaHandle{
-							handle:             kvflowhandle.New(controller, hmetrics, clock, roachpb.RangeID(0), roachpb.TenantID{}),
+							handle:             kvflowhandle.New(controller, hmetrics, clock, roachpb.RangeID(0), roachpb.TenantID{}, nil /* knobs */),
 							deductionTracker:   make(map[kvflowcontrol.Stream]*kvflowtokentracker.Tracker),
 							outstandingReturns: make(map[kvflowcontrol.Stream]kvflowcontrol.Tokens),
 							snapshots:          make([]snapshot, 0),

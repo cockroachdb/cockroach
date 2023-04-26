@@ -164,6 +164,7 @@ func newUninitializedReplica(
 	r.mu.replicaFlowControlIntegration = newReplicaFlowControlIntegration(
 		(*replicaFlowControl)(r),
 		makeStoreFlowControlHandleFactory(r.store),
+		r.store.TestingKnobs().FlowControlTestingKnobs,
 	)
 	return r
 }
