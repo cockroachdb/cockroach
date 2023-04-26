@@ -35,23 +35,32 @@ import (
 // offers the following commands:
 //
 //   - "init" tenant=t<int> range=r<int> replid=<int>
+//     ----
 //     Initializes the flow control integration interface, using a replica for
 //     the given range+tenant and the given replica ID.
 //
 //   - "state" [applied=<int>/<int>] [descriptor=(<int>[,<int]*)] \
 //     [paused=([<int>][,<int>]*) [inactive=([<int>][,<int>]*) \
-//     [progress=([<int>@<int>:[probe | replicate | snapshot]:[!,]active:[!,]paused]*]
-//     Set up relevant state of the underlying replica. Specifically, its
-//     applied state (term/index), descriptor (set of replica IDs), paused
-//     and/or inactive replicas, and per-replica raft progress.
-//     The raft progress syntax is structured as
-//     progress=(replid@match:<state>:<active>:<paused>,...) where <state> is
-//     one of {probe,replicate,snapshot}, <active> is {active,!inactive}, and
-//     <paused> is {paused,!paused}.
+//     [progress=([<int>@<int>:[probe | replicate | snapshot]:[!,]active:[!,]paused]*] \
+//     [connected=([<int>][,<int>]*)]
+//     ----
+//     Set up relevant state of the underlying replica and/or raft transport.
+//
+//     A. For replicas, we can control the applied state (term/index),
+//     descriptor (set of replica IDs), paused and/or inactive replicas, and
+//     per-replica raft progress. The raft progress syntax is structured as
+//     follows:
+//     => progress=(replid@match:<state>:<active>:<paused>,...)
+//     Where <state> is one of {probe,replicate,snapshot}, <active> is
+//     {active,!inactive}, and <paused> is {paused,!paused}.
+//
+//     B. For the raft transport, we can specify the set of store IDs we're
+//     connected to.
 //
 //   - "integration" op=[became-leader | became-follower | desc-changed |
 //     followers-paused |replica-destroyed |
 //     proposal-quota-updated]
+//     ----
 //     Invoke the specific APIs integration interface, informing it of the
 //     underlying replica acquire raft leadership, losing it, its range
 //     descriptor changing, a change in the set of paused followers, it being
@@ -64,6 +73,7 @@ func TestFlowControlIntegration(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "flow_control_integration"),
 		func(t *testing.T, path string) {
 			var mockReplica *mockReplicaForFlowControl
+			var mockRaftTransport *mockRaftTransportForFlowControl
 			var mockHandleFactory *mockFlowHandleFactory
 			var integration replicaFlowControlIntegration
 			var logger *testLogger
@@ -71,11 +81,13 @@ func TestFlowControlIntegration(t *testing.T) {
 				func(t *testing.T, d *datadriven.TestData) string {
 					if d.Cmd == "init" {
 						require.Nil(t, mockReplica)
+						require.Nil(t, mockRaftTransport)
 						require.Nil(t, mockHandleFactory)
 						require.Nil(t, integration)
 						require.Nil(t, logger)
 					} else {
 						require.NotNil(t, mockReplica)
+						require.NotNil(t, mockRaftTransport)
 						require.NotNil(t, mockHandleFactory)
 						require.NotNil(t, integration)
 						require.NotNil(t, logger)
@@ -107,13 +119,15 @@ func TestFlowControlIntegration(t *testing.T) {
 
 						mockHandleFactory = newMockFlowHandleFactory(t, logger)
 						mockReplica = newMockReplicaForFlowControl(t, rangeID, tenantID, replID)
-						integration = newFlowControlIntegrationImpl(mockReplica, mockHandleFactory)
+						mockRaftTransport = newMockRaftTransportForFlowControl()
+						integration = newFlowControlIntegrationImpl(mockRaftTransport, mockReplica, mockHandleFactory, nil /* knobs */)
 						return ""
 
 					case "state":
 						for _, arg := range d.CmdArgs {
 							replicas := roachpb.MakeReplicaSet(nil)
 							progress := make(map[roachpb.ReplicaID]tracker.Progress)
+							connected := make(map[roachpb.StoreID]struct{})
 							for i := range arg.Vals {
 								if arg.Vals[i] == "" {
 									continue // we support syntax like inactive=(); there's nothing to do
@@ -182,6 +196,12 @@ func TestFlowControlIntegration(t *testing.T) {
 								case "applied":
 									// Fall through.
 
+								case "connected":
+									// Parse key=(<int>,<int>,...).
+									var id uint64
+									arg.Scan(t, i, &id)
+									connected[roachpb.StoreID(id)] = struct{}{}
+
 								default:
 									t.Fatalf("unknown: %s", arg.Key)
 								}
@@ -209,6 +229,9 @@ func TestFlowControlIntegration(t *testing.T) {
 							case "applied":
 								// Parse applied=<int>/<int>.
 								mockReplica.applied = parseLogPosition(t, arg.Vals[0])
+
+							case "connected":
+								mockRaftTransport.m = connected
 
 							default:
 								t.Fatalf("unknown: %s", arg.Key)
@@ -327,6 +350,10 @@ func (m *mockReplicaForFlowControl) withReplicaProgress(
 	}
 }
 
+func (m *mockReplicaForFlowControl) isScratchRange() bool {
+	return false
+}
+
 func (m *mockReplicaForFlowControl) getReplicaDescriptor() roachpb.ReplicaDescriptor {
 	return roachpb.ReplicaDescriptor{
 		ReplicaID: m.replicaID,
@@ -334,6 +361,21 @@ func (m *mockReplicaForFlowControl) getReplicaDescriptor() roachpb.ReplicaDescri
 		StoreID:   roachpb.StoreID(m.replicaID),
 		Type:      roachpb.VOTER_FULL,
 	}
+}
+
+type mockRaftTransportForFlowControl struct {
+	m map[roachpb.StoreID]struct{}
+}
+
+var _ raftTransportForFlowControl = &mockRaftTransportForFlowControl{}
+
+func newMockRaftTransportForFlowControl() *mockRaftTransportForFlowControl {
+	return &mockRaftTransportForFlowControl{m: make(map[roachpb.StoreID]struct{})}
+}
+
+func (m *mockRaftTransportForFlowControl) IsConnected(storeID roachpb.StoreID) bool {
+	_, found := m.m[storeID]
+	return found
 }
 
 type mockFlowHandleFactory struct {

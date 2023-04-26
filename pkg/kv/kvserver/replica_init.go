@@ -166,6 +166,7 @@ func newUninitializedReplica(
 		(*raftTransportFlowControl)(r.store.cfg.Transport),
 		(*replicaFlowControl)(r),
 		makeStoreFlowControlHandleFactory(r.store),
+		r.store.TestingKnobs().FlowControlTestingKnobs,
 	)
 	return r
 }
