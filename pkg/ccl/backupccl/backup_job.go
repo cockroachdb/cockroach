@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -262,6 +263,22 @@ func backup(
 				requestFinishedCh <- struct{}{}
 			}
 
+			// Store the per node, per processor progress in the `system.job_info`
+			// table.
+			perComponentProgress := make(map[execinfrapb.ComponentID]float32)
+			component := execinfrapb.ComponentID{
+				SQLInstanceID: progress.NodeID,
+				FlowID:        progress.FlowID,
+				Type:          execinfrapb.ComponentID_PROCESSOR,
+			}
+			for processorID, fraction := range progress.CompletedFraction {
+				component.ID = processorID
+				perComponentProgress[component] = fraction
+			}
+			jobsprofiler.StorePerNodeProcessorProgressFraction(ctx, execCtx.ExecCfg().InternalDB,
+				job.ID(), perComponentProgress)
+
+			// Check if we should persist a checkpoint backup manifest.
 			interval := BackupCheckpointInterval.Get(&execCtx.ExecCfg().Settings.SV)
 			if timeutil.Since(lastCheckpoint) > interval {
 				resumerSpan.RecordStructured(&backuppb.BackupProgressTraceEvent{

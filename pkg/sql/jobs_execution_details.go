@@ -58,7 +58,8 @@ func constructDefaultExecutionDetails(
 	err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Populate the latest DSP diagram URL.
 		infoStorage := jobs.InfoStorageForJob(txn, jobID)
-		err := infoStorage.GetLast(ctx, profilerconstants.DSPDiagramInfoKeyPrefix, func(infoKey string, value []byte) error {
+		dspKey := profilerconstants.MakeDSPDiagramInfoKey()
+		err := infoStorage.GetLast(ctx, dspKey.KeyPrefix(), func(infoKey string, value []byte) error {
 			executionDetails.PlanDiagram = string(value)
 			return nil
 		})

@@ -67,8 +67,9 @@ func checkForPlanDiagram(ctx context.Context, t *testing.T, db isql.DB, jobID jo
 	testutils.SucceedsSoon(t, func() error {
 		return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			infoStorage := jobs.InfoStorageForJob(txn, jobID)
+			dspKey := profilerconstants.MakeDSPDiagramInfoKey()
 			var found bool
-			err := infoStorage.GetLast(ctx, profilerconstants.DSPDiagramInfoKeyPrefix,
+			err := infoStorage.GetLast(ctx, dspKey.KeyPrefix(),
 				func(infoKey string, value []byte) error {
 					found = true
 					return nil

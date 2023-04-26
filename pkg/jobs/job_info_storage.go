@@ -37,11 +37,25 @@ func (j *Job) InfoStorage(txn isql.Txn) InfoStorage {
 	return InfoStorage{j: j, txn: txn}
 }
 
-// InfoStorageForJobID returns a new InfoStorage with the passed in
+// InfoStorageForJob returns a new InfoStorage with the passed in
 // job ID and txn. It avoids loading the job record. The resulting
 // job_info writes will not check the job session ID.
 func InfoStorageForJob(txn isql.Txn, jobID jobspb.JobID) InfoStorage {
 	return InfoStorage{j: &Job{id: jobID}, txn: txn}
+}
+
+// InfoKey is the interface that describes the info_key column in the
+// system.job_info table.
+type InfoKey interface {
+	// MakeKey returns a fully constructed info_key with the parts appended to the
+	// prefix.
+	MakeKey(parts ...any) (string, error)
+	// KeyPrefix returns the fixed prefix of the info_key without the variable
+	// parts.
+	KeyPrefix() string
+	// GetParts returns the variable parts of the info_key without the fixed
+	// prefix.
+	GetParts(infoKey string) []string
 }
 
 func (i InfoStorage) checkClaimSession(ctx context.Context) error {
