@@ -37,7 +37,7 @@ func registerCostFuzz(r registry.Registry) {
 		case "workload-replay":
 			clusterSpec = r.MakeClusterSpec(1)
 			timeOut = time.Hour * 2
-			redactResults = true
+      redactResults = true
 		default:
 			clusterSpec = r.MakeClusterSpec(1)
 		}

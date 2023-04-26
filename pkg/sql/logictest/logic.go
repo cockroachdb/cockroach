@@ -2297,7 +2297,7 @@ func (t *logicTest) maybeBackupRestore(
 		}
 	}
 
-	backupLocation := fmt.Sprintf("gs://cockroachdb-backup-testing/logic-test-backup-restore-nightly/%s?AUTH=implicit",
+	backupLocation := fmt.Sprintf("gs://cockroach-backup-testing-private/logic-test-backup-restore-nightly/%s?AUTH=implicit",
 		strconv.FormatInt(timeutil.Now().UnixNano(), 10))
 
 	// Perform the backup and restore as root.
