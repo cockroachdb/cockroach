@@ -62,8 +62,6 @@ type Cache struct {
 	// AuditConfig is the cluster's audit configuration.
 	AuditConfig *auditlogging.AuditConfigLock
 
-	SessionConnCache map[username.SQLUsername]SessionConnDetails
-
 	populateCacheGroup *singleflight.Group
 	stopper            *stop.Stopper
 }
@@ -110,29 +108,7 @@ func NewCache(account mon.BoundAccount, stopper *stop.Stopper) *Cache {
 		AuditConfig: &auditlogging.AuditConfigLock{
 			Config: auditlogging.EmptyAuditConfig(),
 		},
-		SessionConnCache: make(map[username.SQLUsername]SessionConnDetails),
 	}
-}
-
-func (a *Cache) ReadSessionConnCache(name username.SQLUsername) SessionConnDetails {
-	a.Lock()
-	defer a.Unlock()
-
-	return a.SessionConnCache[name]
-}
-
-func (a *Cache) UpdateSessionConnCache(name username.SQLUsername, details SessionConnDetails) {
-	a.Lock()
-	defer a.Unlock()
-
-	a.SessionConnCache[name] = details
-}
-
-func (a *Cache) RemoveFromSessionConnCache(name username.SQLUsername) {
-	a.Lock()
-	defer a.Unlock()
-
-	delete(a.SessionConnCache, name)
 }
 
 // GetAuthInfo consults the sessioninit.Cache and returns the AuthInfo for the
