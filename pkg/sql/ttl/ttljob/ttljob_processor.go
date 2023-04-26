@@ -213,17 +213,20 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		// Iterate over every span to feed work for the goroutine processors.
 		var alloc tree.DatumAlloc
 		for i, span := range ttlSpec.Spans {
-			bounds, err := SpanToQueryBounds(
+			if bounds, hasRows, err := SpanToQueryBounds(
+				ctx,
+				db,
 				codec,
 				pkColTypes,
 				pkColDirs,
 				span,
 				&alloc,
-			)
-			if err != nil {
+			); err != nil {
 				return errors.Wrapf(err, "SpanToQueryBounds error index=%d span=%s", i, span)
+			} else if hasRows {
+				// Only process bounds from spans with rows inside them.
+				boundsChan <- bounds
 			}
-			boundsChan <- bounds
 		}
 		return nil
 	}()
@@ -438,23 +441,46 @@ func newTTLProcessor(
 // SpanToQueryBounds converts the span output of the DistSQL planner to
 // QueryBounds to generate SELECT statements.
 func SpanToQueryBounds(
+	ctx context.Context,
+	kvDB *kv.DB,
 	codec keys.SQLCodec,
 	pkColTypes []*types.T,
 	pkColDirs []catpb.IndexColumn_Direction,
 	span roachpb.Span,
 	alloc *tree.DatumAlloc,
-) (bounds QueryBounds, err error) {
-	startKey := span.Key
+) (bounds QueryBounds, hasRows bool, _ error) {
+	const maxRows = 1
+	partialStartKey := span.Key
+	partialEndKey := span.EndKey
+	startKeyValues, err := kvDB.Scan(ctx, partialStartKey, partialEndKey, maxRows)
+	if err != nil {
+		return bounds, false, errors.Wrapf(err, "scan error startKey=%x endKey=%x", []byte(partialStartKey), []byte(partialEndKey))
+	}
+	// If span has 0 rows then return early - it will not be processed.
+	if len(startKeyValues) == 0 {
+		return bounds, false, nil
+	}
+	endKeyValues, err := kvDB.ReverseScan(ctx, partialStartKey, partialEndKey, maxRows)
+	if err != nil {
+		return bounds, false, errors.Wrapf(err, "reverse scan error startKey=%x endKey=%x", []byte(partialStartKey), []byte(partialEndKey))
+	}
+	// If span has 0 rows then return early - it will not be processed. This is
+	// checked again here because the calls to Scan and ReverseScan are
+	// non-transactional so the row could have been deleted between the calls.
+	if len(endKeyValues) == 0 {
+		return bounds, false, nil
+	}
+	startKey := startKeyValues[0].Key
 	bounds.Start, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, startKey, alloc)
 	if err != nil {
-		return bounds, errors.Wrapf(err, "decode startKey error key=%x", []byte(startKey))
+		return bounds, false, errors.Wrapf(err, "decode startKey error key=%x", []byte(startKey))
 	}
-	endKey := span.EndKey
+	endKey := endKeyValues[0].Key
 	bounds.End, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, endKey, alloc)
 	if err != nil {
-		return bounds, errors.Wrapf(err, "decode endKey error key=%x", []byte(endKey))
+		return bounds, false, errors.Wrapf(err, "decode endKey error key=%x", []byte(endKey))
 	}
-	return bounds, nil
+	return bounds, true, nil
 }
 
 // GetPKColumnTypes returns tableDesc's primary key column types.

@@ -26,8 +26,25 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// QueryBounds stores the start and end bounds for the SELECT query that the
+// SelectQueryBuilder will run.
 type QueryBounds struct {
-	Start, End tree.Datums
+	// Start represent the lower bounds in the SELECT statement. After each
+	// SelectQueryBuilder.Run, the start bounds increase to exclude the rows
+	// selected in the previous SelectQueryBuilder.Run.
+	//
+	// For the first SELECT in a span, the start bounds are inclusive because the
+	// start bounds are based on the first row >= Span.Key. That row must be
+	// included in the first SELECT. For subsequent SELECTS, the start bounds
+	// are exclusive to avoid re-selecting the last row from the previous SELECT.
+	Start tree.Datums
+	// End represents the upper bounds in the SELECT statement. The end bounds
+	// never change between each SelectQueryBuilder.Run.
+	//
+	// For all SELECTS in a span, the end bounds are inclusive even though a
+	// span's end key is exclusive because the end bounds are based on the first
+	// row < Span.EndKey.
+	End tree.Datums
 }
 
 // SelectQueryBuilder is responsible for maintaining state around the SELECT
