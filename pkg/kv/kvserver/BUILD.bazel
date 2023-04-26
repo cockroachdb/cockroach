@@ -271,6 +271,7 @@ go_test(
         "consistency_queue_test.go",
         "debug_print_test.go",
         "flow_control_raft_transport_test.go",
+        "flow_control_replica_integration_test.go",
         "gossip_test.go",
         "helpers_test.go",
         "intent_resolver_integration_test.go",
