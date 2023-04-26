@@ -18,12 +18,12 @@ import (
 )
 
 const (
-	projectID     = "cockroach-shared"
-	bucketName    = "cockroach-snowflake-costfuzz"
-	encodedKeyTag = "e_key"
-	sfUser        = "SFUSER"
-	sfPassword    = "SFPASSWORD"
-	nonJoinRatio  = 0.5
+	projectID    = "e2e-infra-381422"
+	bucketName   = "roachtest-snowflake-costfuzz"
+	keyTag       = "GOOGLE_EPHEMERAL_CREDENTIALS"
+	sfUser       = "SFUSER"
+	sfPassword   = "SFPASSWORD"
+	nonJoinRatio = 0.5
 )
 
 // getConnect makes connection to snowflake and returns the connection.
@@ -58,11 +58,13 @@ func getConnect(schema string) (*sql.DB, context.Context, context.CancelFunc) {
 // writeRowsGCS writes data in rows to google cloud storage file.
 // We write to gcs so we can import data from gcs cvs files to cockroachdb.
 func writeRowsGCS(ctx context.Context, filename string, rows *sql.Rows) string {
-	encodedKey, ok := os.LookupEnv(encodedKeyTag)
+	credKey, ok := os.LookupEnv(keyTag)
 	if !ok {
-		log.Fatalf("%s not set\n", encodedKeyTag)
+		log.Fatalf("%s not set\n", keyTag)
 		return ""
 	}
+
+	encodedKey := base64.StdEncoding.EncodeToString([]byte(credKey))
 	encodedCredByte, err := base64.StdEncoding.DecodeString(encodedKey)
 	if err != nil {
 		log.Fatal("error:", err)
