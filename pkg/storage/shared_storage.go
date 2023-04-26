@@ -80,6 +80,12 @@ type externalStorageWrapper struct {
 	ctx context.Context
 }
 
+// MakeExternalStorageWrapper returns a shared.Storage implementation that wraps
+// cloud.ExternalStorage.
+func MakeExternalStorageWrapper(ctx context.Context, es cloud.ExternalStorage) shared.Storage {
+	return &externalStorageWrapper{p: &Pebble{}, es: es, ctx: ctx}
+}
+
 var _ shared.Storage = &externalStorageWrapper{}
 
 // Close implements the shared.Storage interface.
