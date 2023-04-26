@@ -564,6 +564,24 @@ SELECT
   CASE WHEN k < 5 THEN (SELECT array(SELECT 1) FROM corr tmp WHERE k*10 = corr.k) END
 FROM corr
 
+# Regression test for #101980.
+# Case where a correlated exists subquery contains an uncorrelated ANY subquery.
+# We do not currently plan uncorrelated ANY subqueries as lazily-evaluated
+# routines, so this should cause a decorrelation error, not an internal error.
+statement ok
+CREATE TABLE t101980a (a INT);
+CREATE TABLE t101980b (b INT);
+INSERT INTO t101980a VALUES (1);
+INSERT INTO t101980b VALUES (1);
+
+statement error could not decorrelate subquery
+SELECT b FROM t101980a
+FULL JOIN t101980b ON b IN (
+  SELECT b FROM t101980b, t101980a
+  WHERE a = 0
+    OR b IN (SELECT b FROM t101980b)
+);
+
 subtest expressionInSubquery
 
 statement ok
