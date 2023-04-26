@@ -26,6 +26,14 @@ func alterTableSetNotNull(
 	if isColNotNull(b, tbl.TableID, columnID) {
 		return
 	}
+	// Block alters on system columns.
+	scpb.ForEachColumn(b, func(current scpb.Status, target scpb.TargetStatus, e *scpb.Column) {
+		if e.TableID == tbl.TableID &&
+			e.ColumnID == columnID {
+			// Block drops on system columns.
+			panicIfSystemColumn(e, t.Column.String())
+		}
+	})
 	b.Add(&scpb.ColumnNotNull{
 		TableID:  tbl.TableID,
 		ColumnID: columnID,

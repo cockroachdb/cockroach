@@ -918,3 +918,13 @@ func panicIfSchemaIsLocked(tableElements ElementResultSet) {
 		panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
 	}
 }
+
+// panicIfSystemColumn blocks alter operations on system columns.
+func panicIfSystemColumn(column *scpb.Column, columnName string) {
+	if column.IsSystemColumn {
+		// Block alter operations on system columns.
+		panic(pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot alter system column %q", columnName))
+	}
+}
