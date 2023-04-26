@@ -42,6 +42,9 @@ type ElasticCPUWorkHandle struct {
 	// between that running time and what this handle was allotted.
 	runningTimeAtLastCheck, differenceWithAllottedAtLastCheck time.Duration
 
+	preemptedWork bool
+	pacedWork     time.Duration
+
 	testingOverrideRunningTime func() time.Duration
 
 	testingOverrideOverLimit func() (bool, time.Duration)
@@ -115,6 +118,32 @@ func (h *ElasticCPUWorkHandle) overLimitInner() (overLimit bool, difference time
 	h.runningTimeAtLastCheck, h.differenceWithAllottedAtLastCheck = runningTime, grunning.Difference(runningTime, h.allotted)
 	h.itersSinceLastCheck = 0
 	return false, h.differenceWithAllottedAtLastCheck
+}
+
+// NoteWorkPreempted record the fact that this handle going over limit preempted
+// work at least once.
+func (h *ElasticCPUWorkHandle) NoteWorkPreempted() {
+	h.preemptedWork = true
+}
+
+// NoteWorkPreempted record the fact that this handle going over limit preempted
+// work at least once.
+func (h *ElasticCPUWorkHandle) NoteWorkPaced(delay time.Duration) {
+	h.pacedWork += delay
+}
+
+// PacedWork returns whether or not work using this handle reported being
+// preempted due to Overlimit (NB: this may be false even if `Overlimit()` was
+// called and returned true, in the case that the caller elected to ignore it
+// and continue working rather than be preempted).
+func (h *ElasticCPUWorkHandle) PreemptedWork() bool {
+	return h.preemptedWork
+}
+
+// PacedWork returns the total amount of time spent being paced that any work
+// using this handle reported.
+func (h *ElasticCPUWorkHandle) PacedWork() time.Duration {
+	return h.pacedWork
 }
 
 // TestingOverrideOverLimit allows tests to override the behaviour of
