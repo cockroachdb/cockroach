@@ -1312,7 +1312,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 				}
 
 				if _, err := acquireNodeLease(ctx, m, id, AcquireBackground); err != nil {
-					log.Infof(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
+					log.Errorf(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
 
 					if errors.Is(err, catalog.ErrDescriptorNotFound) {
 						// Lease renewal failed due to removed descriptor; Remove this descriptor from cache.

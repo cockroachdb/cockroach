@@ -48,7 +48,9 @@ type TestingKnobs struct {
 	DialerKnobs                    ModuleTestingKnobs
 	ProtectedTS                    ModuleTestingKnobs
 	CapturedIndexUsageStatsKnobs   ModuleTestingKnobs
+	AdmissionControlOptions        ModuleTestingKnobs // TODO(irfansharif): Remove.
 	AdmissionControl               ModuleTestingKnobs
+	RaftTransport                  ModuleTestingKnobs
 	UnusedIndexRecommendKnobs      ModuleTestingKnobs
 	ExternalConnection             ModuleTestingKnobs
 	EventExporter                  ModuleTestingKnobs

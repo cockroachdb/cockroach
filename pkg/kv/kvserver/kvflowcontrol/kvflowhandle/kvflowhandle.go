@@ -46,6 +46,7 @@ type Handle struct {
 		perStreamTokenTracker map[kvflowcontrol.Stream]*kvflowtokentracker.Tracker
 		closed                bool
 	}
+	knobs *kvflowcontrol.TestingKnobs
 }
 
 // New constructs a new Handle.
@@ -55,9 +56,13 @@ func New(
 	clock *hlc.Clock,
 	rangeID roachpb.RangeID,
 	tenantID roachpb.TenantID,
+	knobs *kvflowcontrol.TestingKnobs,
 ) *Handle {
 	if metrics == nil { // only nil in tests
 		metrics = NewMetrics(nil)
+	}
+	if knobs == nil {
+		knobs = &kvflowcontrol.TestingKnobs{}
 	}
 	h := &Handle{
 		controller: controller,
@@ -65,6 +70,7 @@ func New(
 		clock:      clock,
 		rangeID:    rangeID,
 		tenantID:   tenantID,
+		knobs:      knobs,
 	}
 	h.mu.perStreamTokenTracker = map[kvflowcontrol.Stream]*kvflowtokentracker.Tracker{}
 	return h
@@ -138,6 +144,10 @@ func (h *Handle) deductTokensForInner(
 	if h.mu.closed {
 		log.Errorf(ctx, "operating on a closed handle")
 		return nil // unused return value in production code
+	}
+
+	if h.knobs.OverrideTokenDeduction != nil {
+		tokens = h.knobs.OverrideTokenDeduction()
 	}
 
 	for _, c := range h.mu.connections {
@@ -234,7 +244,7 @@ func (h *Handle) connectStreamLocked(
 		// that case, this sorting will help avoid deadlocks.
 		return h.mu.connections[i].Stream().StoreID < h.mu.connections[j].Stream().StoreID
 	})
-	h.mu.perStreamTokenTracker[stream] = kvflowtokentracker.New(pos, stream, nil /* knobs */)
+	h.mu.perStreamTokenTracker[stream] = kvflowtokentracker.New(pos, stream, h.knobs)
 	h.metrics.StreamsConnected.Inc(1)
 	log.VInfof(ctx, 1, "connected to stream: %s", stream)
 }
