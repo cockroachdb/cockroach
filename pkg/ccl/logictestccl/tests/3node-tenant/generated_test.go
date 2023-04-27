@@ -2173,6 +2173,13 @@ func TestTenantLogic_upsert(
 	runLogicTest(t, "upsert")
 }
 
+func TestTenantLogic_upsert_non_metamorphic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "upsert_non_metamorphic")
+}
+
 func TestTenantLogic_user(
 	t *testing.T,
 ) {
