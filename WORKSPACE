@@ -648,8 +648,8 @@ new_local_repository(
 go_download_sdk(
     name = "go_sdk_fips",
     sdks = {
-        "linux_amd64": ("go1.19.5fips.linux-amd64.tar.gz", "b143b3c384d70700f3ad171dcf9fa1a4b434efa0012c4b1d4ebfb6a0cb7a50b6"),
+        "linux_amd64": ("go1.19.8fips.linux-amd64.tar.gz", "8170fd871cb61dc771ec1f309451b31a73d5aca3410dfa9d952672ae2be4ac9e"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go-fips/20230207-040328/{}"],
-    version = "1.19.5fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20230427-165819/{}"],
+    version = "1.19.8fips",
 )
