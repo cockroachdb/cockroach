@@ -53,10 +53,14 @@ func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, is
 
 	var projColID int
 	var mentions []string
+	var extraLabels []string
 	if len(teams) > 0 {
 		projColID = teams[0].TriageColumnID
 		for _, team := range teams {
 			mentions = append(mentions, "@"+string(team.Name()))
+			if team.Label != "" {
+				extraLabels = append(extraLabels, team.Label)
+			}
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{
@@ -67,6 +71,7 @@ func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, is
 		HelpCommand:     issues.UnitTestHelpCommand(repro),
 		MentionOnCreate: mentions,
 		ProjectColumnID: projColID,
+		ExtraLabels:     extraLabels,
 	}
 }
 
