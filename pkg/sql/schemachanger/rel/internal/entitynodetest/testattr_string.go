@@ -17,13 +17,23 @@ func _() {
 	_ = x[i16ref-6]
 }
 
-const _testAttr_name = "i8pi8i16valueleftrighti16ref"
-
-var _testAttr_index = [...]uint8{0, 2, 5, 8, 13, 17, 22, 28}
-
 func (i testAttr) String() string {
-	if i < 0 || i >= testAttr(len(_testAttr_index)-1) {
+	switch i {
+	case i8:
+		return "i8"
+	case pi8:
+		return "pi8"
+	case i16:
+		return "i16"
+	case value:
+		return "value"
+	case left:
+		return "left"
+	case right:
+		return "right"
+	case i16ref:
+		return "i16ref"
+	default:
 		return "testAttr(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _testAttr_name[_testAttr_index[i]:_testAttr_index[i+1]]
 }

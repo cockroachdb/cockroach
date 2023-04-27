@@ -423,6 +423,7 @@ go_test(
 stringer(
     name = "gen-keytype-stringer",
     src = "flags_util.go",
+    additional_args = ["--stringtovaluemapname=_keyTypes"],
     typ = "keyType",
 )
 

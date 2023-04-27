@@ -13,13 +13,15 @@ func _() {
 	_ = x[NodeDistSQLVersionIncompatible-2]
 }
 
-const _NodeStatus_name = "NodeOKNodeUnhealthyNodeDistSQLVersionIncompatible"
-
-var _NodeStatus_index = [...]uint8{0, 6, 19, 49}
-
 func (i NodeStatus) String() string {
-	if i < 0 || i >= NodeStatus(len(_NodeStatus_index)-1) {
+	switch i {
+	case NodeOK:
+		return "NodeOK"
+	case NodeUnhealthy:
+		return "NodeUnhealthy"
+	case NodeDistSQLVersionIncompatible:
+		return "NodeDistSQLVersionIncompatible"
+	default:
 		return "NodeStatus(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _NodeStatus_name[_NodeStatus_index[i]:_NodeStatus_index[i+1]]
 }
