@@ -229,6 +229,19 @@ func (kr *KeyRewriter) RewriteKey(key []byte, wallTime int64) ([]byte, bool, err
 	// in which case we are restoring as a system tenant.
 	if kr.fromSystemTenant && bytes.HasPrefix(key, keys.TenantPrefix) {
 		k, ok := kr.tenants.rewriteKey(key)
+		if ok {
+			// Skip keys from ephemeral cluster status tables so that the restored
+			// cluster does not observe stale leases/liveness until it expires.
+			noTenantPrefix, _, err := keys.DecodeTenantPrefix(key)
+			if err != nil {
+				return nil, false, err
+			}
+			_, tableID, _ := keys.SystemSQLCodec.DecodeTablePrefix(noTenantPrefix)
+
+			if tableID == keys.SQLInstancesTableID || tableID == keys.SqllivenessID || tableID == keys.LeaseTableID {
+				return k, false, nil
+			}
+		}
 		return k, ok, nil
 	}
 
@@ -281,6 +294,12 @@ func (kr *KeyRewriter) checkAndRewriteTableKey(key []byte, wallTime int64) ([]by
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
 	_, tableID, _ := keys.SystemSQLCodec.DecodeTablePrefix(key)
+
+	// Skip keys from ephemeral cluster status tables so that the restored cluster
+	// does not observe stale leases/liveness until it expires.
+	if tableID == keys.SQLInstancesTableID || tableID == keys.SqllivenessID || tableID == keys.LeaseTableID {
+		return key, false, nil
+	}
 
 	desc := kr.descs[descpb.ID(tableID)]
 	if desc == nil {
