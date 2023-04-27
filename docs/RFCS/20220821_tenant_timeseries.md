@@ -1,5 +1,5 @@
 - Feature Name: Timeseries access for secondary tenants
-- Status: superseded (FIXME: add link to new RFC PR after created)
+- Status: superseded ([#102436](https://github.com/cockroachdb/cockroach/pull/102436))
 - Start Date: 2022-08-21
 - Authors: knz
 - RFC PR: [#86524](https://github.com/cockroachdb/cockroach/pull/86524)
