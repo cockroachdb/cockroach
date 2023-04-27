@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -572,7 +573,8 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 
 	// Re-get the list of migrations in case any of them were completed between
 	// our initial check and our grabbing of the lease.
-	completedMigrations, err := getCompletedMigrations(ctx, m.db.Scan, m.codec)
+	completedMigrations, err := getCompletedMigrations(ctx, m.stopper.ShouldQuiesce(), m.db.Scan,
+		m.codec)
 	if err != nil {
 		return err
 	}
@@ -620,7 +622,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 func (m *Manager) checkIfAllMigrationsAreComplete(
 	ctx context.Context, bootstrapVersion roachpb.Version, scan scanFunc,
 ) (completedAll bool, _ error) {
-	completedMigrations, err := getCompletedMigrations(ctx, scan, m.codec)
+	completedMigrations, err := getCompletedMigrations(ctx, m.stopper.ShouldQuiesce(), scan, m.codec)
 	if err != nil {
 		return false, err
 	}
@@ -664,14 +666,23 @@ func (m *Manager) shouldRunMigration(
 
 type scanFunc = func(_ context.Context, from, to interface{}, maxRows int64) ([]kv.KeyValue, error)
 
+// This method has baked in startup retry and should not be called on a non
+// startup path. This is different from master/23.1 and changes that would reuse
+// this in other places are unlikely, but care must be taken in case some fixes
+// are backported.
 func getCompletedMigrations(
-	ctx context.Context, scan scanFunc, codec keys.SQLCodec,
+	ctx context.Context, quiesce <-chan struct{}, scan scanFunc, codec keys.SQLCodec,
 ) (map[string]struct{}, error) {
 	if log.V(1) {
 		log.Info(ctx, "trying to get the list of completed migrations")
 	}
 	prefix := codec.StartupMigrationKeyPrefix()
-	keyvals, err := scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
+	var keyvals []kv.KeyValue
+	err := startup.RunIdempotentWithRetry(ctx, quiesce, "get completed migrations",
+		func(ctx context.Context) (err error) {
+			keyvals, err = scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
+			return err
+		})
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get list of completed migrations")
 	}

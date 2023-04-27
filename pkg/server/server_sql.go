@@ -112,6 +112,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1347,9 +1348,13 @@ func (s *SQLServer) preStart(
 
 	var bootstrapVersion roachpb.Version
 	if s.execCfg.Codec.ForSystemTenant() {
-		if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
-		}); err != nil {
+		if err := startup.RunIdempotentWithRetry(ctx,
+			s.stopper.ShouldQuiesce(),
+			"sql get cluster version", func(ctx context.Context) error {
+				return s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
+				})
+			}); err != nil {
 			return err
 		}
 	} else {

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -1397,6 +1398,36 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	return nil
 }
 
+// WaitFor5NodeReplication ensures that zone configs are applied and
+// up-replication is performed with new zone configs. This is the case for 5+
+// node clusters.
+// TODO: This code should be moved into WaitForFullReplication once #99812 is
+// fixed so that all test would benefit from this check implicitly.
+// This bug currently prevents LastUpdated to tick in metamorphic tests
+// with kv.expiration_leases_only.enabled = true.
+func (tc *TestCluster) WaitFor5NodeReplication() error {
+	if len(tc.Servers) > 4 && tc.ReplicationMode() == base.ReplicationAuto {
+		// We need to wait for zone config propagations before we could check
+		// conformance since zone configs are propagated synchronously.
+		// Generous timeout is added to allow rangefeeds to catch up. On startup
+		// they could get delayed making test to fail.
+		now := tc.Server(0).Clock().Now()
+		for _, s := range tc.Servers {
+			scs := s.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
+			if err := testutils.SucceedsSoonError(func() error {
+				if scs.LastUpdated().Less(now) {
+					return errors.New("zone configs not propagated")
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return tc.WaitForFullReplication()
+	}
+	return nil
+}
+
 // WaitForNodeStatuses waits until a NodeStatus is persisted for every node and
 // store in the cluster.
 func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
@@ -1549,21 +1580,23 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	}
 	serverArgs := tc.serverArgs[idx]
 
-	if idx == 0 {
-		// If it's the first server, then we need to restart the RPC listener by hand.
-		// Look at NewTestCluster for more details.
-		listener, err := net.Listen("tcp", serverArgs.Listener.Addr().String())
-		if err != nil {
-			return err
-		}
-		serverArgs.Listener = listener
-		serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = serverArgs.Listener
-	} else {
-		serverArgs.Addr = ""
-		// Try and point the server to a live server in the cluster to join.
-		for i := range tc.Servers {
-			if !tc.ServerStopped(i) {
-				serverArgs.JoinAddr = tc.Servers[i].ServingRPCAddr()
+	if !tc.clusterArgs.ReusableListeners {
+		if idx == 0 {
+			// If it's the first server, then we need to restart the RPC listener by hand.
+			// Look at NewTestCluster for more details.
+			listener, err := net.Listen("tcp", serverArgs.Listener.Addr().String())
+			if err != nil {
+				return err
+			}
+			serverArgs.Listener = listener
+			serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = serverArgs.Listener
+		} else {
+			serverArgs.Addr = ""
+			// Try and point the server to a live server in the cluster to join.
+			for i := range tc.Servers {
+				if !tc.ServerStopped(i) {
+					serverArgs.JoinAddr = tc.Servers[i].ServingRPCAddr()
+				}
 			}
 		}
 	}
