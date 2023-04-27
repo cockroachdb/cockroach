@@ -1,113 +1,107 @@
-Setting	Type	Default	Description
-admission.epoch_lifo.enabled	boolean	false	when true, epoch-LIFO behavior is enabled when there is significant delay in admission
-admission.epoch_lifo.epoch_closing_delta_duration	duration	5ms	the delta duration before closing an epoch, for epoch-LIFO admission control ordering
-admission.epoch_lifo.epoch_duration	duration	100ms	the duration of an epoch, for epoch-LIFO admission control ordering
-admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo	duration	105ms	the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering
-admission.sql_kv_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a KV response is subject to admission control
-admission.sql_sql_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control
-bulkio.backup.deprecated_full_backup_with_subdir.enabled	boolean	false	when true, a backup command with a user specified subdirectory will create a full backup at the subdirectory if no backup already exists at that subdirectory.
-bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP
-bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail
-bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads
-bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up
-changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request
-changefeed.balance_range_distribution.enable	boolean	false	if enabled, the ranges are balanced equally among all nodes
-changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer
-changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled
-changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation
-changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds
-changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables
-cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload
-cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage
-cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations
-cluster.organization	string		organization name
-cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset
-diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which the reported SQL Stats are reset even if not collected by telemetry reporter. It has a max value of 24H.
-diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs
-diagnostics.reporting.interval	duration	1h0m0s	interval at which diagnostics data should be reported
-enterprise.license	string		the encoded cluster license
-external.graphite.endpoint	string		if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port
-external.graphite.interval	duration	10s	the interval at which metrics are pushed to Graphite (if enabled)
-feature.backup.enabled	boolean	true	set to true to enable backups, false to disable; default is true
-feature.changefeed.enabled	boolean	true	set to true to enable changefeeds, false to disable; default is true
-feature.export.enabled	boolean	true	set to true to enable exports, false to disable; default is true
-feature.import.enabled	boolean	true	set to true to enable imports, false to disable; default is true
-feature.restore.enabled	boolean	true	set to true to enable restore, false to disable; default is true
-feature.schema_change.enabled	boolean	true	set to true to enable schema changes, false to disable; default is true
-feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true
-jobs.retention_time	duration	336h0m0s	the amount of time to retain records for completed jobs before
-kv.bulk_io_write.max_rate	byte size	1.0 TiB	the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops
-kv.bulk_sst.max_allowed_overage	byte size	64 MiB	if positive, allowed size in excess of target size for SSTs from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory
-kv.bulk_sst.target_size	byte size	16 MiB	target size for SSTs emitted from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory
-kv.closed_timestamp.follower_reads_enabled	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information
-kv.log_range_and_node_events.enabled	boolean	true	set to true to transactionally log range events (e.g., split, merge, add/remove voter/non-voter) into system.rangelogand node join and restart events into system.eventolog
-kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records
-kv.range_split.by_load_enabled	boolean	true	allow automatic splits of ranges based on where load is concentrated
-kv.range_split.load_qps_threshold	integer	2500	the QPS over which, the range becomes a candidate for load based splitting
-kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled
-kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.closed_timestamp.side_transport_interval takes precedence)
-kv.replica_stats.addsst_request_size_factor	integer	50000	the divisor that is applied to addsstable request sizes, then recorded in a leaseholders QPS; 0 means all requests are treated as cost 1
-kv.replication_reports.interval	duration	1m0s	the frequency for generating the replication_constraint_stats, replication_stats_report and replication_critical_localities reports (set to 0 to disable)
-kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions
-kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions
-kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed
-schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule
-security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]
-security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable
-server.auth_log.sql_connections.enabled	boolean	false	if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)
-server.auth_log.sql_sessions.enabled	boolean	false	if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)
-server.authentication_cache.enabled	boolean	true	enables a cache used during authentication to avoid lookups to system tables when retrieving per-user authentication-related information
-server.child_metrics.enabled	boolean	false	enables the exporting of child metrics, additional prometheus time series with extra labels
-server.clock.forward_jump_check_enabled	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic
-server.clock.persist_upper_bound_interval	duration	0s	the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.
-server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog
-server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
-server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication
-server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with all HTTP requests. The headers will contain a max-age setting of one year. Browsers honoring the header will always use HTTPS to access the DB Console. Ensure that TLS is correctly configured prior to enabling.
-server.identity_map.configuration	string		system-identity to database-username mappings
-server.max_connections_per_gateway	integer	-1	the maximum number of non-superuser SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.
-server.oidc_authentication.autologin	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint
-server.oidc_authentication.button_text	string	Login with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)
-server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)
-server.oidc_authentication.client_id	string		sets OIDC client id
-server.oidc_authentication.client_secret	string		sets OIDC client secret
-server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console
-server.oidc_authentication.principal_regex	string	(.+)	regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract)
-server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)
-server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback) 
-server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)
-server.rangelog.ttl	duration	720h0m0s	if nonzero, range log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
-server.shutdown.connection_wait	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
-server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.drain_wait is to set the wait time for health probes to notice that the node is not ready.)
-server.shutdown.lease_transfer_wait	duration	5s	the timeout for a single iteration of the range lease transfer phase of draining (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
-server.shutdown.query_wait	duration	10s	the timeout for waiting for active queries to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
-server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead
-server.user_login.cert_password_method.auto_scram_promotion.enabled	boolean	true	whether to automatically promote cert-password authentication to use SCRAM
-server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled	boolean	true	if server.user_login.password_encryption=crdb-bcrypt, this controls whether to automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt
-server.user_login.min_password_length	integer	1	the minimum length accepted for passwords set in cleartext via SQL. Note that a value lower than 1 is ignored: passwords cannot be empty in any case.
-server.user_login.password_encryption	enumeration	scram-sha-256	which hash method to use to encode cleartext passwords passed via ALTER/CREATE USER/ROLE WITH PASSWORD [crdb-bcrypt = 2, scram-sha-256 = 3]
-server.user_login.password_hashes.default_cost.crdb_bcrypt	integer	10	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method crdb-bcrypt (allowed range: 4-31)
-server.user_login.password_hashes.default_cost.scram_sha_256	integer	10610	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method scram-sha-256 (allowed range: 4096-240000000000)
-server.user_login.rehash_scram_stored_passwords_on_cost_change.enabled	boolean	true	if server.user_login.password_hashes.default_cost.scram_sha_256 differs from, the cost in a stored hash, this controls whether to automatically re-encode stored passwords using scram-sha-256 with the new default cost
-server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)
-server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	if server.user_login.password_encryption=scram-sha-256, this controls whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256
-server.web_session.auto_logout.timeout	duration	168h0m0s	the duration that web sessions will survive before being periodically purged, since they were last used
-server.web_session.purge.max_deletions_per_cycle	integer	10	the maximum number of old sessions to delete for each purge
-server.web_session.purge.period	duration	1h0m0s	the time until old sessions are deleted
-server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged
-server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid
-sql.auth.change_own_password.enabled	boolean	false	controls whether a user is allowed to change their own password, even if they have no other privileges
-sql.auth.modify_cluster_setting_applies_to_all.enabled	boolean	true	a bool which indicates whether MODIFYCLUSTERSETTING is able to set all cluster settings or only settings with the sql.defaults prefix
-sql.auth.resolve_membership_single_scan.enabled	boolean	true	determines whether to populate the role membership cache with a single scan
-sql.closed_session_cache.capacity	integer	1000	the maximum number of sessions in the cache
-sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in seconds
-sql.contention.event_store.capacity	byte size	64 MiB	the in-memory storage capacity per-node of contention event store
-sql.contention.event_store.duration_threshold	duration	0s	minimum contention duration to cause the contention events to be collected into crdb_internal.transaction_contention_events
-sql.contention.txn_id_cache.max_size	byte size	64 MiB	the maximum byte size TxnID cache will use (set to 0 to disable)
-sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references across databases is allowed
-sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed
-sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed
-sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed
+Setting	Type	Default	Description	Class
+admission.epoch_lifo.enabled	boolean	false	when true, epoch-LIFO behavior is enabled when there is significant delay in admission	tenant-rw
+admission.epoch_lifo.epoch_closing_delta_duration	duration	5ms	the delta duration before closing an epoch, for epoch-LIFO admission control ordering	tenant-rw
+admission.epoch_lifo.epoch_duration	duration	100ms	the duration of an epoch, for epoch-LIFO admission control ordering	tenant-rw
+admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo	duration	105ms	the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering	tenant-rw
+admission.sql_kv_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a KV response is subject to admission control	tenant-rw
+admission.sql_sql_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control	tenant-rw
+bulkio.backup.deprecated_full_backup_with_subdir.enabled	boolean	false	when true, a backup command with a user specified subdirectory will create a full backup at the subdirectory if no backup already exists at that subdirectory.	tenant-rw
+bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP	tenant-rw
+bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail	tenant-rw
+bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads	tenant-rw
+bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up	tenant-rw
+changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	tenant-rw
+changefeed.balance_range_distribution.enable	boolean	false	if enabled, the ranges are balanced equally among all nodes	tenant-rw
+changefeed.batch_reduction_retry_enabled	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	tenant-rw
+changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer	tenant-rw
+changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	tenant-rw
+changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation	tenant-rw
+changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds	tenant-rw
+changefeed.protect_timestamp.max_age	duration	96h0m0s	fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration	tenant-rw
+changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables	tenant-rw
+changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value.	tenant-rw
+cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload	tenant-rw
+cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage	tenant-rw
+cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations	tenant-rw
+cluster.organization	string		organization name	tenant-rw
+cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset	tenant-rw
+diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which the reported SQL Stats are reset even if not collected by telemetry reporter. It has a max value of 24H.	tenant-rw
+diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs	tenant-rw
+diagnostics.reporting.interval	duration	1h0m0s	interval at which diagnostics data should be reported	tenant-rw
+enterprise.license	string		the encoded cluster license	tenant-rw
+external.graphite.endpoint	string		if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port	tenant-rw
+external.graphite.interval	duration	10s	the interval at which metrics are pushed to Graphite (if enabled)	tenant-rw
+feature.backup.enabled	boolean	true	set to true to enable backups, false to disable; default is true	tenant-rw
+feature.changefeed.enabled	boolean	true	set to true to enable changefeeds, false to disable; default is true	tenant-rw
+feature.export.enabled	boolean	true	set to true to enable exports, false to disable; default is true	tenant-rw
+feature.import.enabled	boolean	true	set to true to enable imports, false to disable; default is true	tenant-rw
+feature.restore.enabled	boolean	true	set to true to enable restore, false to disable; default is true	tenant-rw
+feature.schema_change.enabled	boolean	true	set to true to enable schema changes, false to disable; default is true	tenant-rw
+feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true	tenant-rw
+jobs.retention_time	duration	336h0m0s	the amount of time for which records for completed jobs are retained	tenant-rw
+kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records	tenant-ro
+kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled	tenant-rw
+kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.closed_timestamp.side_transport_interval takes precedence)	tenant-rw
+kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions	tenant-rw
+kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions	tenant-rw
+kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed	tenant-rw
+schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	tenant-rw
+security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	tenant-rw
+security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable	tenant-rw
+server.auth_log.sql_connections.enabled	boolean	false	if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)	tenant-rw
+server.auth_log.sql_sessions.enabled	boolean	false	if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)	tenant-rw
+server.authentication_cache.enabled	boolean	true	enables a cache used during authentication to avoid lookups to system tables when retrieving per-user authentication-related information	tenant-rw
+server.child_metrics.enabled	boolean	false	enables the exporting of child metrics, additional prometheus time series with extra labels	tenant-rw
+server.client_cert_expiration_cache.capacity	integer	1000	the maximum number of client cert expirations stored	tenant-rw
+server.clock.forward_jump_check_enabled	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic	tenant-rw
+server.clock.persist_upper_bound_interval	duration	0s	the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.	tenant-rw
+server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog	tenant-rw
+server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are periodically purged	tenant-rw
+server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication	tenant-rw
+server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with all HTTP requests. The headers will contain a max-age setting of one year. Browsers honoring the header will always use HTTPS to access the DB Console. Ensure that TLS is correctly configured prior to enabling.	tenant-rw
+server.identity_map.configuration	string		system-identity to database-username mappings	tenant-rw
+server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries to delete on each purge of log-like system tables	tenant-rw
+server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries	tenant-rw
+server.max_connections_per_gateway	integer	-1	the maximum number of SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.	tenant-rw
+server.oidc_authentication.autologin	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	tenant-rw
+server.oidc_authentication.button_text	string	Login with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)	tenant-rw
+server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)	tenant-rw
+server.oidc_authentication.client_id	string		sets OIDC client id	tenant-rw
+server.oidc_authentication.client_secret	string		sets OIDC client secret	tenant-rw
+server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console	tenant-rw
+server.oidc_authentication.principal_regex	string	(.+)	regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract)	tenant-rw
+server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)	tenant-rw
+server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback) 	tenant-rw
+server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)	tenant-rw
+server.rangelog.ttl	duration	720h0m0s	if nonzero, entries in system.rangelog older than this duration are periodically purged	tenant-rw
+server.shutdown.connection_wait	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	tenant-rw
+server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.drain_wait is to set the wait time for health probes to notice that the node is not ready.)	tenant-rw
+server.shutdown.jobs_wait	duration	10s	the maximum amount of time a server waits for all currently executing jobs to notice drain request and to perform orderly shutdown	tenant-rw
+server.shutdown.query_wait	duration	10s	the timeout for waiting for active queries to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	tenant-rw
+server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead	tenant-rw
+server.user_login.cert_password_method.auto_scram_promotion.enabled	boolean	true	whether to automatically promote cert-password authentication to use SCRAM	tenant-rw
+server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled	boolean	true	if server.user_login.password_encryption=crdb-bcrypt, this controls whether to automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt	tenant-rw
+server.user_login.min_password_length	integer	1	the minimum length accepted for passwords set in cleartext via SQL. Note that a value lower than 1 is ignored: passwords cannot be empty in any case.	tenant-rw
+server.user_login.password_encryption	enumeration	scram-sha-256	which hash method to use to encode cleartext passwords passed via ALTER/CREATE USER/ROLE WITH PASSWORD [crdb-bcrypt = 2, scram-sha-256 = 3]	tenant-rw
+server.user_login.password_hashes.default_cost.crdb_bcrypt	integer	10	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method crdb-bcrypt (allowed range: 4-31)	tenant-rw
+server.user_login.password_hashes.default_cost.scram_sha_256	integer	10610	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method scram-sha-256 (allowed range: 4096-240000000000)	tenant-rw
+server.user_login.rehash_scram_stored_passwords_on_cost_change.enabled	boolean	true	if server.user_login.password_hashes.default_cost.scram_sha_256 differs from, the cost in a stored hash, this controls whether to automatically re-encode stored passwords using scram-sha-256 with the new default cost	tenant-rw
+server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)	tenant-rw
+server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	if server.user_login.password_encryption=scram-sha-256, this controls whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256	tenant-rw
+server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged	tenant-rw
+server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid	tenant-rw
+sql.auth.change_own_password.enabled	boolean	false	controls whether a user is allowed to change their own password, even if they have no other privileges	tenant-rw
+sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	tenant-rw
+sql.auth.resolve_membership_single_scan.enabled	boolean	true	determines whether to populate the role membership cache with a single scan	tenant-rw
+sql.closed_session_cache.capacity	integer	1000	the maximum number of sessions in the cache	tenant-rw
+sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in seconds	tenant-rw
+sql.contention.event_store.capacity	byte size	64 MiB	the in-memory storage capacity per-node of contention event store	tenant-rw
+sql.contention.event_store.duration_threshold	duration	0s	minimum contention duration to cause the contention events to be collected into crdb_internal.transaction_contention_events	tenant-rw
+sql.contention.txn_id_cache.max_size	byte size	64 MiB	the maximum byte size TxnID cache will use (set to 0 to disable)	tenant-rw
+sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references across databases is allowed	tenant-rw
+sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed	tenant-rw
+sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed	tenant-rw
+sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed	tenant-rw
 sql.defaults.cost_scans_with_default_col_size.enabled	boolean	false	"setting to true uses the same size for all columns to compute scan cost
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
