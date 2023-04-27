@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -835,7 +836,11 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 	// Immediately record summaries once on server startup. The update loop below
 	// will only update the key if it exists, to avoid race conditions during
 	// node decommissioning, so we have to error out if we can't create it.
-	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */, false /* mustExist */); err != nil {
+	if err := startup.RunIdempotentWithRetry(ctx,
+		n.stopper.ShouldQuiesce(),
+		"kv write node status", func(ctx context.Context) error {
+			return n.writeNodeStatus(ctx, 0 /* alertTTL */, false /* mustExist */)
+		}); err != nil {
 		return errors.Wrap(err, "error recording initial status summaries")
 	}
 	return n.stopper.RunAsyncTask(ctx, "write-node-status", func(ctx context.Context) {

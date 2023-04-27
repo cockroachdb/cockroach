@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -967,6 +968,8 @@ func (s *Server) Start(ctx context.Context) error {
 // should represent the general startup operation.
 func (s *Server) PreStart(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
+	done := startup.Begin(ctx)
+	defer done()
 
 	// Start the time sanity checker.
 	s.startTime = timeutil.Now()
