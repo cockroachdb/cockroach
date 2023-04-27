@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -109,6 +108,7 @@ type txnSpanRefresher struct {
 	knobs   *ClientTestingKnobs
 	riGen   rangeIteratorFactory
 	wrapped lockedSender
+	metrics *TxnMetrics
 
 	// refreshFootprint contains key spans which were read during the
 	// transaction. In case the transaction's timestamp needs to be pushed, we can
@@ -129,13 +129,6 @@ type txnSpanRefresher struct {
 
 	// canAutoRetry is set if the txnSpanRefresher is allowed to auto-retry.
 	canAutoRetry bool
-
-	clientRefreshSuccess                *metric.Counter
-	clientRefreshFail                   *metric.Counter
-	clientRefreshFailWithCondensedSpans *metric.Counter
-	clientRefreshMemoryLimitExceeded    *metric.Counter
-	clientRefreshAutoRetries            *metric.Counter
-	serverRefreshSuccess                *metric.Counter
 }
 
 // SendLocked implements the lockedSender interface.
@@ -207,7 +200,7 @@ func (sr *txnSpanRefresher) maybeCondenseRefreshSpans(
 			sr.refreshFootprint.clear()
 		}
 		if sr.refreshFootprint.condensed && !condensedBefore {
-			sr.clientRefreshMemoryLimitExceeded.Inc(1)
+			sr.metrics.ClientRefreshMemoryLimitExceeded.Inc(1)
 		}
 	}
 }
@@ -314,7 +307,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	log.Eventf(ctx, "refresh succeeded; retrying original request")
 	ba = ba.ShallowCopy()
 	ba.UpdateTxn(refreshToTxn)
-	sr.clientRefreshAutoRetries.Inc(1)
+	sr.metrics.ClientRefreshAutoRetries.Inc(1)
 
 	// To prevent starvation of batches that are trying to commit, split off the
 	// EndTxn request into its own batch on auto-retries. This avoids starvation
@@ -511,11 +504,11 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 	// Track the result of the refresh in metrics.
 	defer func() {
 		if err == nil {
-			sr.clientRefreshSuccess.Inc(1)
+			sr.metrics.ClientRefreshSuccess.Inc(1)
 		} else {
-			sr.clientRefreshFail.Inc(1)
+			sr.metrics.ClientRefreshFail.Inc(1)
 			if sr.refreshFootprint.condensed {
-				sr.clientRefreshFailWithCondensedSpans.Inc(1)
+				sr.metrics.ClientRefreshFailWithCondensedSpans.Inc(1)
 			}
 		}
 	}()
@@ -645,7 +638,7 @@ func (sr *txnSpanRefresher) forwardRefreshTimestampOnResponse(
 				"CanForwardReadTimestamp set. ba: %s, ba.Txn: %s, br.Txn: %s", ba.Summary(), baTxn, brTxn)
 		}
 		sr.refreshedTimestamp.Forward(brTxn.ReadTimestamp)
-		sr.serverRefreshSuccess.Inc(1)
+		sr.metrics.ServerRefreshSuccess.Inc(1)
 	} else if brTxn.ReadTimestamp.Less(baTxn.ReadTimestamp) {
 		return errors.AssertionFailedf("received transaction in response with "+
 			"earlier read timestamp than in the request. ba.Txn: %s, br.Txn: %s", baTxn, brTxn)

@@ -312,20 +312,15 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		condensedIntentsEveryN: &tc.TxnCoordSenderFactory.condensedIntentsEveryN,
 	}
 	tc.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
-		st:    tcf.st,
-		knobs: &tcf.testingKnobs,
-		riGen: riGen,
+		st:      tcf.st,
+		knobs:   &tcf.testingKnobs,
+		riGen:   riGen,
+		metrics: &tc.metrics,
 		// We can only allow refresh span retries on root transactions
 		// because those are the only places where we have all of the
 		// refresh spans. If this is a leaf, as in a distributed sql flow,
 		// we need to propagate the error to the root for an epoch restart.
-		canAutoRetry:                        typ == kv.RootTxn,
-		clientRefreshSuccess:                tc.metrics.ClientRefreshSuccess,
-		clientRefreshFail:                   tc.metrics.ClientRefreshFail,
-		clientRefreshFailWithCondensedSpans: tc.metrics.ClientRefreshFailWithCondensedSpans,
-		clientRefreshMemoryLimitExceeded:    tc.metrics.ClientRefreshMemoryLimitExceeded,
-		clientRefreshAutoRetries:            tc.metrics.ClientRefreshAutoRetries,
-		serverRefreshSuccess:                tc.metrics.ServerRefreshSuccess,
+		canAutoRetry: typ == kv.RootTxn,
 	}
 	tc.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
 		wrapped:                 tc.wrapped,
