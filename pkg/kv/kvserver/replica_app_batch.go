@@ -250,7 +250,12 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// We don't track these stats in standalone log application since they depend
 	// on whether the proposer is still waiting locally, and this concept does not
 	// apply in a standalone context.
-	if !cmd.IsLocal() {
+	//
+	// TODO(irfansharif): This code block can be removed once below-raft
+	// admission control is the only form of IO admission control. It pre-dates
+	// it -- these stats were previously used to deduct IO tokens for follower
+	// writes/ingests without waiting.
+	if !cmd.IsLocal() && !cmd.ApplyAdmissionControl() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
 		b.followerStoreWriteBytes.NumEntries++
 		b.followerStoreWriteBytes.WriteBytes += writeBytes

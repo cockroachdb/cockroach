@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -104,14 +105,22 @@ func (sh *storeForFlowControl) Lookup(
 	if repl == nil {
 		return nil, false
 	}
-	return nil, false // TODO(irfansharif): Fill this in.
+
+	repl.mu.Lock()
+	defer repl.mu.Unlock()
+	return repl.mu.replicaFlowControlIntegration.handle()
 }
 
 // ResetStreams is part of the StoresForFlowControl interface.
 func (sh *storeForFlowControl) ResetStreams(ctx context.Context) {
 	s := (*Store)(sh)
 	s.VisitReplicas(func(r *Replica) (wantMore bool) {
-		// TODO(irfansharif): Fill this in.
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		handle, found := r.mu.replicaFlowControlIntegration.handle()
+		if found {
+			handle.ResetStreams(ctx)
+		}
 		return true
 	})
 }
@@ -123,8 +132,36 @@ func (sh *storeForFlowControl) OnRaftTransportDisconnected(
 ) {
 	s := (*Store)(sh)
 	s.mu.replicasByRangeID.Range(func(replica *Replica) {
-		// TODO(irfansharif): Fill this in.
+		replica.mu.Lock()
+		defer replica.mu.Unlock()
+		replica.mu.replicaFlowControlIntegration.onRaftTransportDisconnected(ctx, storeIDs...)
 	})
+}
+
+// storeFlowControlHandleFactory is a concrete implementation of
+// kvflowcontrol.HandleFactory.
+type storeFlowControlHandleFactory Store
+
+var _ kvflowcontrol.HandleFactory = &storeFlowControlHandleFactory{}
+
+// makeStoreFlowControlHandleFactory returns a new storeFlowControlHandleFactory
+// instance.
+func makeStoreFlowControlHandleFactory(store *Store) *storeFlowControlHandleFactory {
+	return (*storeFlowControlHandleFactory)(store)
+}
+
+// NewHandle is part of the kvflowcontrol.HandleFactory interface.
+func (shf *storeFlowControlHandleFactory) NewHandle(
+	rangeID roachpb.RangeID, tenantID roachpb.TenantID,
+) kvflowcontrol.Handle {
+	s := (*Store)(shf)
+	return kvflowhandle.New(
+		s.cfg.KVFlowController,
+		s.cfg.KVFlowHandleMetrics,
+		s.cfg.Clock,
+		rangeID,
+		tenantID,
+	)
 }
 
 // NoopStoresFlowControlIntegration is a no-op implementation of the
