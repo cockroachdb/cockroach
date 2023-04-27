@@ -15,13 +15,19 @@ func _() {
 	_ = x[name-4]
 }
 
-const _testAttr_name = "ss1s2cname"
-
-var _testAttr_index = [...]uint8{0, 1, 3, 5, 6, 10}
-
 func (i testAttr) String() string {
-	if i < 0 || i >= testAttr(len(_testAttr_index)-1) {
+	switch i {
+	case s:
+		return "s"
+	case s1:
+		return "s1"
+	case s2:
+		return "s2"
+	case c:
+		return "c"
+	case name:
+		return "name"
+	default:
 		return "testAttr(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _testAttr_name[_testAttr_index[i]:_testAttr_index[i+1]]
 }

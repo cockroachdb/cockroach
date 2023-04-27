@@ -15,13 +15,19 @@ func _() {
 	_ = x[clusterScope-4]
 }
 
-const _targetScope_name = "unknowntableschemadatabasecluster"
-
-var _targetScope_index = [...]uint8{0, 7, 12, 18, 26, 33}
-
 func (i targetScope) String() string {
-	if i < 0 || i >= targetScope(len(_targetScope_index)-1) {
+	switch i {
+	case unknownScope:
+		return "unknown"
+	case tableScope:
+		return "table"
+	case schemaScope:
+		return "schema"
+	case databaseScope:
+		return "database"
+	case clusterScope:
+		return "cluster"
+	default:
 		return "targetScope(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _targetScope_name[_targetScope_index[i]:_targetScope_index[i+1]]
 }
