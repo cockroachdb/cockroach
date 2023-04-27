@@ -25,16 +25,46 @@ func _() {
 	_ = x[ReferencedTypeIDs-15]
 	_ = x[ReferencedSequenceIDs-16]
 	_ = x[ReferencedFunctionIDs-17]
+	_ = x[AttrMax-17]
 }
 
-const _Attr_name = "DescIDIndexIDColumnFamilyIDColumnIDConstraintIDNameReferencedDescIDCommentTemporaryIndexIDSourceIndexIDTargetStatusCurrentStatusElementTargetReferencedTypeIDsReferencedSequenceIDsReferencedFunctionIDs"
-
-var _Attr_index = [...]uint8{0, 6, 13, 27, 35, 47, 51, 67, 74, 90, 103, 115, 128, 135, 141, 158, 179, 200}
-
 func (i Attr) String() string {
-	i -= 1
-	if i < 0 || i >= Attr(len(_Attr_index)-1) {
-		return "Attr(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	switch i {
+	case DescID:
+		return "DescID"
+	case IndexID:
+		return "IndexID"
+	case ColumnFamilyID:
+		return "ColumnFamilyID"
+	case ColumnID:
+		return "ColumnID"
+	case ConstraintID:
+		return "ConstraintID"
+	case Name:
+		return "Name"
+	case ReferencedDescID:
+		return "ReferencedDescID"
+	case Comment:
+		return "Comment"
+	case TemporaryIndexID:
+		return "TemporaryIndexID"
+	case SourceIndexID:
+		return "SourceIndexID"
+	case TargetStatus:
+		return "TargetStatus"
+	case CurrentStatus:
+		return "CurrentStatus"
+	case Element:
+		return "Element"
+	case Target:
+		return "Target"
+	case ReferencedTypeIDs:
+		return "ReferencedTypeIDs"
+	case ReferencedSequenceIDs:
+		return "ReferencedSequenceIDs"
+	case ReferencedFunctionIDs:
+		return "ReferencedFunctionIDs"
+	default:
+		return "Attr(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _Attr_name[_Attr_index[i]:_Attr_index[i+1]]
 }

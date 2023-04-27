@@ -14,14 +14,17 @@ func _() {
 	_ = x[sliceIndex-4]
 }
 
-const _systemAttribute_name = "TypeSelfsliceSourcesliceIndex"
-
-var _systemAttribute_index = [...]uint8{0, 4, 8, 19, 29}
-
 func (i systemAttribute) String() string {
-	i -= 1
-	if i < 0 || i >= systemAttribute(len(_systemAttribute_index)-1) {
-		return "systemAttribute(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	switch i {
+	case Type:
+		return "Type"
+	case Self:
+		return "Self"
+	case sliceSource:
+		return "sliceSource"
+	case sliceIndex:
+		return "sliceIndex"
+	default:
+		return "systemAttribute(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _systemAttribute_name[_systemAttribute_index[i]:_systemAttribute_index[i+1]]
 }

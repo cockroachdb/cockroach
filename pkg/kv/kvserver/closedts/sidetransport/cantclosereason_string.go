@@ -18,13 +18,25 @@ func _() {
 	_ = x[MaxReason-7]
 }
 
-const _CantCloseReason_name = "ReasonUnknownReplicaDestroyedInvalidLeaseTargetOverLeaseExpirationMergeInProgressProposalsInFlightRequestsEvaluatingBelowTargetMaxReason"
-
-var _CantCloseReason_index = [...]uint8{0, 13, 29, 41, 66, 81, 98, 127, 136}
-
 func (i CantCloseReason) String() string {
-	if i < 0 || i >= CantCloseReason(len(_CantCloseReason_index)-1) {
+	switch i {
+	case ReasonUnknown:
+		return "ReasonUnknown"
+	case ReplicaDestroyed:
+		return "ReplicaDestroyed"
+	case InvalidLease:
+		return "InvalidLease"
+	case TargetOverLeaseExpiration:
+		return "TargetOverLeaseExpiration"
+	case MergeInProgress:
+		return "MergeInProgress"
+	case ProposalsInFlight:
+		return "ProposalsInFlight"
+	case RequestsEvaluatingBelowTarget:
+		return "RequestsEvaluatingBelowTarget"
+	case MaxReason:
+		return "MaxReason"
+	default:
 		return "CantCloseReason(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _CantCloseReason_name[_CantCloseReason_index[i]:_CantCloseReason_index[i+1]]
 }

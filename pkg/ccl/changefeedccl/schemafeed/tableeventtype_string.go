@@ -18,13 +18,25 @@ func _() {
 	_ = x[tableEventAddHiddenColumn-7]
 }
 
-const _tableEventType_name = "UnknownAddColumnNoBackfillAddColumnWithBackfillDropColumnTruncatePrimaryKeyChangeLocalityRegionalByRowChangeAddHiddenColumn"
-
-var _tableEventType_index = [...]uint8{0, 7, 26, 47, 57, 65, 81, 108, 123}
-
 func (i tableEventType) String() string {
-	if i >= tableEventType(len(_tableEventType_index)-1) {
+	switch i {
+	case tableEventUnknown:
+		return "Unknown"
+	case tableEventAddColumnNoBackfill:
+		return "AddColumnNoBackfill"
+	case tableEventAddColumnWithBackfill:
+		return "AddColumnWithBackfill"
+	case tableEventDropColumn:
+		return "DropColumn"
+	case tableEventTruncate:
+		return "Truncate"
+	case tableEventPrimaryKeyChange:
+		return "PrimaryKeyChange"
+	case tableEventLocalityRegionalByRowChange:
+		return "LocalityRegionalByRowChange"
+	case tableEventAddHiddenColumn:
+		return "AddHiddenColumn"
+	default:
 		return "tableEventType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _tableEventType_name[_tableEventType_index[i]:_tableEventType_index[i+1]]
 }

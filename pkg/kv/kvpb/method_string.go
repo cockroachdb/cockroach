@@ -61,13 +61,163 @@ func _() {
 	_ = x[NumMethods-49]
 }
 
-const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeRevertRangeScanReverseScanEndTxnAdminSplitAdminUnsplitAdminMergeAdminTransferLeaseAdminChangeReplicasAdminRelocateRangeHeartbeatTxnGCPushTxnRecoverTxnQueryLocksQueryTxnQueryIntentResolveIntentResolveIntentRangeMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumCheckConsistencyInitPutWriteBatchExportAdminScatterAddSSTableMigrateRecomputeStatsRefreshRefreshRangeSubsumeRangeStatsAdminVerifyProtectedTimestampQueryResolvedTimestampBarrierProbeIsSpanEmptyNumMethods"
-
-var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 67, 71, 82, 88, 98, 110, 120, 138, 157, 175, 187, 189, 196, 206, 216, 224, 235, 248, 266, 271, 282, 294, 307, 316, 331, 347, 354, 364, 370, 382, 392, 399, 413, 420, 432, 439, 449, 478, 500, 507, 512, 523, 533}
-
 func (i Method) String() string {
-	if i < 0 || i >= Method(len(_Method_index)-1) {
+	switch i {
+	case Get:
+		return "Get"
+	case Put:
+		return "Put"
+	case ConditionalPut:
+		return "ConditionalPut"
+	case Increment:
+		return "Increment"
+	case Delete:
+		return "Delete"
+	case DeleteRange:
+		return "DeleteRange"
+	case ClearRange:
+		return "ClearRange"
+	case RevertRange:
+		return "RevertRange"
+	case Scan:
+		return "Scan"
+	case ReverseScan:
+		return "ReverseScan"
+	case EndTxn:
+		return "EndTxn"
+	case AdminSplit:
+		return "AdminSplit"
+	case AdminUnsplit:
+		return "AdminUnsplit"
+	case AdminMerge:
+		return "AdminMerge"
+	case AdminTransferLease:
+		return "AdminTransferLease"
+	case AdminChangeReplicas:
+		return "AdminChangeReplicas"
+	case AdminRelocateRange:
+		return "AdminRelocateRange"
+	case HeartbeatTxn:
+		return "HeartbeatTxn"
+	case GC:
+		return "GC"
+	case PushTxn:
+		return "PushTxn"
+	case RecoverTxn:
+		return "RecoverTxn"
+	case QueryLocks:
+		return "QueryLocks"
+	case QueryTxn:
+		return "QueryTxn"
+	case QueryIntent:
+		return "QueryIntent"
+	case ResolveIntent:
+		return "ResolveIntent"
+	case ResolveIntentRange:
+		return "ResolveIntentRange"
+	case Merge:
+		return "Merge"
+	case TruncateLog:
+		return "TruncateLog"
+	case RequestLease:
+		return "RequestLease"
+	case TransferLease:
+		return "TransferLease"
+	case LeaseInfo:
+		return "LeaseInfo"
+	case ComputeChecksum:
+		return "ComputeChecksum"
+	case CheckConsistency:
+		return "CheckConsistency"
+	case InitPut:
+		return "InitPut"
+	case WriteBatch:
+		return "WriteBatch"
+	case Export:
+		return "Export"
+	case AdminScatter:
+		return "AdminScatter"
+	case AddSSTable:
+		return "AddSSTable"
+	case Migrate:
+		return "Migrate"
+	case RecomputeStats:
+		return "RecomputeStats"
+	case Refresh:
+		return "Refresh"
+	case RefreshRange:
+		return "RefreshRange"
+	case Subsume:
+		return "Subsume"
+	case RangeStats:
+		return "RangeStats"
+	case AdminVerifyProtectedTimestamp:
+		return "AdminVerifyProtectedTimestamp"
+	case QueryResolvedTimestamp:
+		return "QueryResolvedTimestamp"
+	case Barrier:
+		return "Barrier"
+	case Probe:
+		return "Probe"
+	case IsSpanEmpty:
+		return "IsSpanEmpty"
+	case NumMethods:
+		return "NumMethods"
+	default:
 		return "Method(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _Method_name[_Method_index[i]:_Method_index[i+1]]
+}
+
+var StringToMethodMap = map[string]Method{
+	"Get":                           0,
+	"Put":                           1,
+	"ConditionalPut":                2,
+	"Increment":                     3,
+	"Delete":                        4,
+	"DeleteRange":                   5,
+	"ClearRange":                    6,
+	"RevertRange":                   7,
+	"Scan":                          8,
+	"ReverseScan":                   9,
+	"EndTxn":                        10,
+	"AdminSplit":                    11,
+	"AdminUnsplit":                  12,
+	"AdminMerge":                    13,
+	"AdminTransferLease":            14,
+	"AdminChangeReplicas":           15,
+	"AdminRelocateRange":            16,
+	"HeartbeatTxn":                  17,
+	"GC":                            18,
+	"PushTxn":                       19,
+	"RecoverTxn":                    20,
+	"QueryLocks":                    21,
+	"QueryTxn":                      22,
+	"QueryIntent":                   23,
+	"ResolveIntent":                 24,
+	"ResolveIntentRange":            25,
+	"Merge":                         26,
+	"TruncateLog":                   27,
+	"RequestLease":                  28,
+	"TransferLease":                 29,
+	"LeaseInfo":                     30,
+	"ComputeChecksum":               31,
+	"CheckConsistency":              32,
+	"InitPut":                       33,
+	"WriteBatch":                    34,
+	"Export":                        35,
+	"AdminScatter":                  36,
+	"AddSSTable":                    37,
+	"Migrate":                       38,
+	"RecomputeStats":                39,
+	"Refresh":                       40,
+	"RefreshRange":                  41,
+	"Subsume":                       42,
+	"RangeStats":                    43,
+	"AdminVerifyProtectedTimestamp": 44,
+	"QueryResolvedTimestamp":        45,
+	"Barrier":                       46,
+	"Probe":                         47,
+	"IsSpanEmpty":                   48,
+	"MaxMethod":                     48,
+	"NumMethods":                    49,
 }

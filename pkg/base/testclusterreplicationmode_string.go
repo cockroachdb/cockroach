@@ -12,13 +12,13 @@ func _() {
 	_ = x[ReplicationManual-1]
 }
 
-const _TestClusterReplicationMode_name = "ReplicationAutoReplicationManual"
-
-var _TestClusterReplicationMode_index = [...]uint8{0, 15, 32}
-
 func (i TestClusterReplicationMode) String() string {
-	if i < 0 || i >= TestClusterReplicationMode(len(_TestClusterReplicationMode_index)-1) {
+	switch i {
+	case ReplicationAuto:
+		return "ReplicationAuto"
+	case ReplicationManual:
+		return "ReplicationManual"
+	default:
 		return "TestClusterReplicationMode(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _TestClusterReplicationMode_name[_TestClusterReplicationMode_index[i]:_TestClusterReplicationMode_index[i+1]]
 }

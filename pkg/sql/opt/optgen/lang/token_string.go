@@ -35,13 +35,59 @@ func _() {
 	_ = x[PIPE-24]
 }
 
-const _Token_name = "ILLEGALERROREOFIDENTSTRINGNUMBERWHITESPACECOMMENTLPARENRPARENLBRACKETRBRACKETLBRACERBRACEDOLLARCOLONASTERISKEQUALSARROWAMPERSANDCOMMACARETDOTELLIPSESPIPE"
-
-var _Token_index = [...]uint8{0, 7, 12, 15, 20, 26, 32, 42, 49, 55, 61, 69, 77, 83, 89, 95, 100, 108, 114, 119, 128, 133, 138, 141, 149, 153}
-
 func (i Token) String() string {
-	if i < 0 || i >= Token(len(_Token_index)-1) {
+	switch i {
+	case ILLEGAL:
+		return "ILLEGAL"
+	case ERROR:
+		return "ERROR"
+	case EOF:
+		return "EOF"
+	case IDENT:
+		return "IDENT"
+	case STRING:
+		return "STRING"
+	case NUMBER:
+		return "NUMBER"
+	case WHITESPACE:
+		return "WHITESPACE"
+	case COMMENT:
+		return "COMMENT"
+	case LPAREN:
+		return "LPAREN"
+	case RPAREN:
+		return "RPAREN"
+	case LBRACKET:
+		return "LBRACKET"
+	case RBRACKET:
+		return "RBRACKET"
+	case LBRACE:
+		return "LBRACE"
+	case RBRACE:
+		return "RBRACE"
+	case DOLLAR:
+		return "DOLLAR"
+	case COLON:
+		return "COLON"
+	case ASTERISK:
+		return "ASTERISK"
+	case EQUALS:
+		return "EQUALS"
+	case ARROW:
+		return "ARROW"
+	case AMPERSAND:
+		return "AMPERSAND"
+	case COMMA:
+		return "COMMA"
+	case CARET:
+		return "CARET"
+	case DOT:
+		return "DOT"
+	case ELLIPSES:
+		return "ELLIPSES"
+	case PIPE:
+		return "PIPE"
+	default:
 		return "Token(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _Token_name[_Token_index[i]:_Token_index[i+1]]
 }
