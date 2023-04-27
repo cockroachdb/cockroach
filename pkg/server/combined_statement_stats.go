@@ -983,7 +983,7 @@ func getStatementDetails(
 	if settings.Version.IsActive(ctx, clusterversion.V23_1AddSystemActivityTables) {
 		activityHasData, err = activityTablesHaveFullData(ctx, ie, testingKnobs, reqStartTime)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			log.Errorf(ctx, "Error on getStatementDetails: %s", err)
 		}
 	}
 
