@@ -15,14 +15,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/lexbase"
 )
 
-// PLPGSQLScanner is a scanner with a PLPGSQL specific scan function
-type PLPGSQLScanner struct {
+// PLpgSQLScanner is a scanner with a PLPGSQL specific scan function
+type PLpgSQLScanner struct {
 	Scanner
 }
 
 // Scan scans the next token and populates its information into lval.
 // This scan function contains rules for plpgsql.
-func (s *PLPGSQLScanner) Scan(lval ScanSymType) {
+func (s *PLpgSQLScanner) Scan(lval ScanSymType) {
 	ch, skipWhiteSpace := s.scanSetup(lval)
 
 	if skipWhiteSpace {
@@ -138,7 +138,7 @@ func (s *PLPGSQLScanner) Scan(lval ScanSymType) {
 	// lval for above.
 }
 
-func (s *PLPGSQLScanner) scanIdent(lval ScanSymType) {
+func (s *PLpgSQLScanner) scanIdent(lval ScanSymType) {
 	s.lowerCaseAndNormalizeIdent(lval)
 	lval.SetID(lexbase.GetKeywordID(lval.Str()))
 }

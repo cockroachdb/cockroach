@@ -1,0 +1,35 @@
+feature-allowlist
+unimplemented.*
+sql.plpgsql.*
+----
+
+feature-counters
+CREATE FUNCTION myfunc() RETURNS INT LANGUAGE plpgsql AS $$
+DECLARE
+BEGIN
+a := NULL;
+b = 7 + 7;
+END
+$$
+----
+error: pq: unimplemented: plpgsql not supported in user-defined functions
+sql.plpgsql.stmt_assign  2
+sql.plpgsql.stmt_block   1
+unimplemented.plpgsql    1
+
+
+feature-counters
+CREATE FUNCTION myf() RETURNS INT STABLE LANGUAGE plpgsql AS $$
+DECLARE
+BEGIN
+johnny := NULL;
+gyro = 7 + 7;
+OPEN curs1 NO SCROLL FOR SELECT * FROM foo WHERE key = mykey;
+END
+$$
+----
+error: pq: unimplemented: plpgsql not supported in user-defined functions
+sql.plpgsql.stmt_assign  2
+sql.plpgsql.stmt_block   1
+sql.plpgsql.stmt_open    1
+unimplemented.plpgsql    1

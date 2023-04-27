@@ -1,0 +1,13 @@
+parse
+DECLARE
+  s int8 := 0;
+  x int;
+BEGIN
+  FOREACH x IN ARRAY $1
+  LOOP
+    s := s + x;
+  END LOOP;
+  RETURN s;
+END
+----
+expected parse error: at or near "x": syntax error: unimplemented: this syntax
