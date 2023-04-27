@@ -33,10 +33,7 @@ import (
 )
 
 func startDistIngestion(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	ingestionJob *jobs.Job,
-	client streamclient.Client,
+	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
 ) error {
 
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
@@ -58,6 +55,16 @@ func startDistIngestion(
 	streamID := streampb.StreamID(details.StreamID)
 	updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.InitializingReplication,
 		fmt.Sprintf("connecting to the producer job %d and resuming a stream replication plan", streamID))
+
+	client, err := connectToActiveClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := client.Close(ctx); err != nil {
+			log.Warningf(ctx, "stream ingestion client did not shut down properly: %s", err.Error())
+		}
+	}()
 	if err := waitUntilProducerActive(ctx, client, streamID, heartbeatTimestamp, ingestionJob.ID()); err != nil {
 		return err
 	}

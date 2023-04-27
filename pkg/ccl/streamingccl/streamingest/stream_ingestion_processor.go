@@ -641,6 +641,7 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 			// cutover ts in the future, this will need to change.
 			//
 			// On receiving a cutover signal, the processor must shutdown gracefully.
+			log.Infof(sip.Ctx(), "received cutover signal")
 			sip.internalDrained = true
 			return nil, nil
 

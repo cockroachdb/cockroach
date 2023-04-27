@@ -340,13 +340,14 @@ SELECT
     f_random_zip_code();
 
 # A local lookup join with a CTE as input should succeed.
-query IT
+query IT retry
 WITH vtab AS (SELECT * FROM messages_rbt)
 SELECT vtab.account_id, vtab.message FROM vtab
   INNER LOOKUP JOIN messages_rbr rbr on vtab.account_id = rbr.account_id and rbr.crdb_region = 'ap-southeast-2'
 ----
 
 # A CTE built from an INSERT which must access remote rows should fail.
+retry
 statement error pq: Query has no home region\. Try adding a filter on parent\.crdb_region and/or on key column \(parent\.p_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 WITH vtab AS (INSERT INTO parent VALUES (6) RETURNING p_id)
 SELECT * FROM vtab

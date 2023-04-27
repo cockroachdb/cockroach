@@ -170,7 +170,7 @@ func (c *TenantStreamingClusters) WaitUntilHighWatermark(
 // Cutover sets the cutover timestamp on the replication job causing the job to
 // stop eventually.
 func (c *TenantStreamingClusters) Cutover(
-	producerJobID, ingestionJobID int, cutoverTime time.Time,
+	producerJobID, ingestionJobID int, cutoverTime time.Time, async bool,
 ) {
 	// Cut over the ingestion job and the job will stop eventually.
 	var cutoverStr string
@@ -178,8 +178,10 @@ func (c *TenantStreamingClusters) Cutover(
 		c.Args.DestTenantName, cutoverTime).Scan(&cutoverStr)
 	cutoverOutput := DecimalTimeToHLC(c.T, cutoverStr)
 	require.Equal(c.T, cutoverTime, cutoverOutput.GoTime())
-	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	jobutils.WaitForJobToSucceed(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	if !async {
+		jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+		jobutils.WaitForJobToSucceed(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	}
 }
 
 // StartStreamReplication producer job ID and ingestion job ID.
