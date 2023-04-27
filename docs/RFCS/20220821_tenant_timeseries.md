@@ -226,8 +226,7 @@ We are going to extend the data model as follows:
 - for SQL and other tenant-scoped metric, we are going
   to:
 
-  1) **extend the encoding of the metric name to be prefixed by the tenant ID.**
-  2) **change the source field to become SQL instance ID instead of node ID.**
+  1) **extend the encoding of the metric source to be suffixed by the tenant ID.**
 
 As a result, we will see:
 
@@ -238,19 +237,9 @@ As a result, we will see:
 - for metrics like `cr.node.sql.copy.count`, `cr.node.sql.distsql.exec.latency-count`, etc,
   the encoding of the name will be prefixed by the tenant ID; for example:
 
-  - `/System/tsd/<1>cr.node.sql.copy.count/...` for the tenant with ID 1;
-  - `/System/tsd/<2>cr.node.sql.copy.count/...` for the tenant with ID 2,
+  - `/System/tsd/cr.node.sql.copy.count/.../1-1` for the tenant with ID 1 on node with ID 1;
+  - `/System/tsd/cr.node.sql.copy.count/.../1-2` for the tenant with ID 2 on node with ID 1;
   - etc.
-
-  They will also be suffixed with the SQL instance ID, for example:
-
-  - `/System/tsd/<1>cr.node.sql.copy.count/.../1` for the tenant with ID 1, instance ID 1
-  - `/System/tsd/<1>cr.node.sql.copy.count/.../2` for the tenant with ID 1, instance ID 2
-  - `/System/tsd/<1>cr.node.sql.copy.count/.../3` for the tenant with ID 1, instance ID 3
-  - etc.
-
-In the case of Dedicated/SH deployments where there's just 1 SQL instance per KV instance,
-the SQL instance ID and node ID will match exactly and there will be no change in cardinality.
 
 ## Automatic classification of metrics
 
