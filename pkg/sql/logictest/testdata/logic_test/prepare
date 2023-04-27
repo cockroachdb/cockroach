@@ -1669,3 +1669,16 @@ DEALLOCATE ALL
 
 statement ok
 RESET prepared_statements_cache_size
+
+subtest execute_udf
+
+statement ok
+CREATE FUNCTION f(i int) RETURNS INT LANGUAGE SQL AS $$ SELECT i $$
+
+statement ok
+PREPARE q99008 AS select $1::int
+
+query I
+EXECUTE q99008 (f(10))
+----
+10
