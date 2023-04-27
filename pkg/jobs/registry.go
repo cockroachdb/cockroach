@@ -164,7 +164,8 @@ type Registry struct {
 	// is not too loud.
 	withSessionEvery log.EveryN
 
-	TestingResumerCreationKnobs map[jobspb.Type]func(Resumer) Resumer
+	// test only overrides for resumer creation.
+	creationKnobs sync.Map
 }
 
 func (r *Registry) UpdateJobWithTxn(
@@ -1562,7 +1563,8 @@ func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer,
 	if fn == nil {
 		return nil, errors.Errorf("no resumer is available for %s", payload.Type())
 	}
-	if wrapper := r.TestingResumerCreationKnobs[payload.Type()]; wrapper != nil {
+	if v, ok := r.creationKnobs.Load(payload.Type()); ok {
+		wrapper := v.(func(Resumer) Resumer)
 		return wrapper(fn(job, settings)), nil
 	}
 	return fn(job, settings), nil
