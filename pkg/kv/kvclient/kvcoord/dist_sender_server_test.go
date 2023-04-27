@@ -2467,6 +2467,36 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			expClientRestart: true,
 		},
 		{
+			name: "write too old with get conflict after forwarded timestamp",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				otherTxn := db.NewTxn(ctx, "afterTxnStart")
+				b := otherTxn.NewBatch()
+				// Set ts cache on "a".
+				b.Get("a")
+				// Create write-write conflict on "b".
+				b.Put("b", "put")
+				return otherTxn.CommitInBatch(ctx, b)
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				// Put to "a" to advance the txn timestamp.
+				if err := txn.Put(ctx, "a", "put"); err != nil {
+					return err
+				}
+				// Get from "b" to establish a read span. It is important that we
+				// perform a preemptive refresh before this read, otherwise the refresh
+				// would fail.
+				if _, err := txn.Get(ctx, "b"); err != nil {
+					return err
+				}
+				// Now, Put to "b", which would have thrown a write-too-old error had
+				// the transaction not preemptively refreshed before the Get.
+				return txn.Put(ctx, "b", "put")
+			},
+			// No retry, preemptive refresh before Get.
+			expClientRefresh:               true,
+			expClientAutoRetryAfterRefresh: false,
+		},
+		{
 			name: "write too old with multiple puts to same key",
 			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "value1")
