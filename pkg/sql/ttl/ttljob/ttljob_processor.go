@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -90,13 +91,9 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			pkColNames = append(pkColNames, buf.String())
 			buf.Reset()
 		}
-		pkColTypes = make([]*types.T, 0, len(primaryIndexDesc.KeyColumnIDs))
-		for _, id := range primaryIndexDesc.KeyColumnIDs {
-			col, err := catalog.MustFindColumnByID(desc, id)
-			if err != nil {
-				return err
-			}
-			pkColTypes = append(pkColTypes, col.GetType())
+		pkColTypes, err = GetPKColumnTypes(desc, primaryIndexDesc)
+		if err != nil {
+			return err
 		}
 		pkColDirs = primaryIndexDesc.KeyColumnDirections
 
@@ -384,6 +381,21 @@ func newTTLProcessor(
 		return nil, err
 	}
 	return ttlProcessor, nil
+}
+
+// GetPKColumnTypes returns tableDesc's primary key column types.
+func GetPKColumnTypes(
+	tableDesc catalog.TableDescriptor, indexDesc *descpb.IndexDescriptor,
+) ([]*types.T, error) {
+	pkColTypes := make([]*types.T, 0, len(indexDesc.KeyColumnIDs))
+	for i, id := range indexDesc.KeyColumnIDs {
+		col, err := catalog.MustFindColumnByID(tableDesc, id)
+		if err != nil {
+			return nil, errors.Wrapf(err, "column index=%d", i)
+		}
+		pkColTypes = append(pkColTypes, col.GetType())
+	}
+	return pkColTypes, nil
 }
 
 func init() {
