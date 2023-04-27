@@ -303,8 +303,8 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	waitBeforeCh := make(chan struct{})
 	waitAfterCh := make(chan struct{})
 	registry := c.DestSysServer.JobRegistry().(*jobs.Registry)
-	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-		jobspb.TypeStreamIngestion: func(raw jobs.Resumer) jobs.Resumer {
+	registry.TestingWrapResumerConstructor(jobspb.TypeStreamIngestion,
+		func(raw jobs.Resumer) jobs.Resumer {
 			r := blockingResumer{
 				orig:       raw,
 				waitBefore: waitBeforeCh,
@@ -312,8 +312,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 				ctx:        ctx,
 			}
 			return &r
-		},
-	}
+		})
 	defer ctxCancel()
 	unblockResumerStart := func() {
 		waitBeforeCh <- struct{}{}
@@ -391,8 +390,8 @@ func TestTenantStatusWithLatestCutoverTime(t *testing.T) {
 	waitBeforeCh := make(chan struct{})
 	waitAfterCh := make(chan struct{})
 	registry := c.DestSysServer.JobRegistry().(*jobs.Registry)
-	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-		jobspb.TypeStreamIngestion: func(raw jobs.Resumer) jobs.Resumer {
+	registry.TestingWrapResumerConstructor(jobspb.TypeStreamIngestion,
+		func(raw jobs.Resumer) jobs.Resumer {
 			r := blockingResumer{
 				orig:       raw,
 				waitBefore: waitBeforeCh,
@@ -400,8 +399,7 @@ func TestTenantStatusWithLatestCutoverTime(t *testing.T) {
 				ctx:        ctx,
 			}
 			return &r
-		},
-	}
+		})
 	defer ctxCancel()
 	unblockResumerStart := func() {
 		waitBeforeCh <- struct{}{}
