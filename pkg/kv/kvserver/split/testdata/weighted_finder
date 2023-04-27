@@ -1,0 +1,49 @@
+# Test the weighted finder with a set of known request configurations.
+finder weighted=true
+----
+
+requests key_dist=zipfian key_max=10000000000 span_dist=uniform span_max=1000 weight_dist=uniform weight_max=10 range_request_percent=95 request_count=10000
+----
+
+requests key_dist=zipfian key_max=100000 span_dist=uniform span_max=1000 weight_dist=uniform weight_max=10 range_request_percent=95 request_count=10000
+----
+
+requests key_dist=zipfian key_max=1000 span_dist=uniform span_max=100 weight_dist=uniform weight_max=10 range_request_percent=95 request_count=10000
+----
+
+requests key_dist=zipfian key_max=1000 span_dist=uniform span_max=1000 weight_dist=uniform weight_max=10 range_request_percent=0 request_count=10000
+----
+
+requests key_dist=zipfian key_max=10000000000 span_dist=uniform span_max=1000 weight_dist=zipfian weight_max=1000 range_request_percent=50 request_count=10000
+----
+
+eval seed=2022 iterations=100 all=true mix=sequential mix_count=5
+----
+description                                               no_key(%)  avg_diff(%)  max_diff(%)  avg_optimal_diff(%)  max_optimal_diff(%)
+mixed_requests(5)                                         3.00       10.87        29.92        0.01                 0.05
+w=uni(10)/k=zip(1000)/s=uni(100)/s(%)=95/10000                                                                      
+w=uni(10)/k=zip(1000)/s=uni(1000)/s(%)=0/10000                                                                      
+w=uni(10)/k=zip(10000000000)/s=uni(1000)/s(%)=95/10000                                                              
+w=uni(10)/k=zip(100000)/s=uni(1000)/s(%)=95/10000                                                                   
+w=zip(1000)/k=zip(10000000000)/s=uni(1000)/s(%)=50/10000                                                            
+
+eval seed=42 iterations=100 all=true mix=sequential mix_count=2
+----
+description                                               no_key(%)  avg_diff(%)  max_diff(%)  avg_optimal_diff(%)  max_optimal_diff(%)
+mixed_requests(2)                                         3.00       36.26        62.78        0.00                 0.01
+w=uni(10)/k=zip(1000)/s=uni(100)/s(%)=95/10000                                                                      
+w=uni(10)/k=zip(10000000000)/s=uni(1000)/s(%)=95/10000                                                              
+mixed_requests(2)                                         0.00       6.22         26.87        0.01                 0.05
+w=uni(10)/k=zip(100000)/s=uni(1000)/s(%)=95/10000                                                                   
+w=zip(1000)/k=zip(10000000000)/s=uni(1000)/s(%)=50/10000                                                            
+w=uni(10)/k=zip(1000)/s=uni(1000)/s(%)=0/10000            2.00       4.90         23.89        0.01                 0.02
+
+# Next test out a config with only one key. There shouldn't be any splits
+# possible.
+requests key_dist=zipfian key_max=1 span_dist=uniform span_max=1 weight_dist=uniform weight_max=10 range_request_percent=0 request_count=10000
+----
+
+eval seed=42 iterations=100
+----
+description                               no_key(%)  avg_diff(%)  max_diff(%)  avg_optimal_diff(%)  max_optimal_diff(%)
+w=uni(10)/k=zip(1)/s=uni(1)/s(%)=0/10000  100.00     NaN          0.00         NaN                  0.00
