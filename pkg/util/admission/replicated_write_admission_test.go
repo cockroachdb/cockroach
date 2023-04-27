@@ -121,7 +121,7 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 						tg[admissionpb.RegularWorkClass],
 						tg[admissionpb.ElasticWorkClass],
 					},
-					st, metrics, opts, knobs, &NoopOnLogEntryAdmitted{}, &mockCoordMu,
+					st, metrics, opts, knobs, &noopOnLogEntryAdmitted{}, &mockCoordMu,
 				).(*StoreWorkQueue)
 				tg[admissionpb.RegularWorkClass].r = storeWorkQueue.getRequesters()[admissionpb.RegularWorkClass]
 				tg[admissionpb.ElasticWorkClass].r = storeWorkQueue.getRequesters()[admissionpb.ElasticWorkClass]

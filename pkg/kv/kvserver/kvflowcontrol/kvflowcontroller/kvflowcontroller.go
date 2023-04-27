@@ -65,8 +65,9 @@ type Controller struct {
 		// minutes), clear these out.
 		buckets map[kvflowcontrol.Stream]bucket
 	}
-	metrics *metrics
-	clock   *hlc.Clock
+	metrics  *metrics
+	clock    *hlc.Clock
+	settings *cluster.Settings
 }
 
 var _ kvflowcontrol.Controller = &Controller{}
@@ -74,7 +75,8 @@ var _ kvflowcontrol.Controller = &Controller{}
 // New constructs a new Controller.
 func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock) *Controller {
 	c := &Controller{
-		clock: clock,
+		clock:    clock,
+		settings: settings,
 	}
 
 	regularTokens := kvflowcontrol.Tokens(regularTokensPerStream.Get(&settings.SV))
@@ -115,6 +117,10 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 	return c
 }
 
+func (c *Controller) mode() kvflowcontrol.ModeT {
+	return kvflowcontrol.ModeT(kvflowcontrol.Mode.Get(&c.settings.SV))
+}
+
 // Admit is part of the kvflowcontrol.Controller interface. It blocks until
 // there are flow tokens available for replication over the given stream for
 // work of the given priority.
@@ -135,10 +141,15 @@ func (c *Controller) Admit(
 		tokens := b.tokens[class]
 		c.mu.Unlock()
 
-		if tokens > 0 {
+		if tokens > 0 ||
+			// In addition to letting requests through when there are tokens
+			// being available, we'll also let them through if we're not
+			// applying flow control to their specific work class.
+			c.mode() == kvflowcontrol.ApplyToElastic && class == admissionpb.RegularWorkClass {
+
 			if log.ExpensiveLogEnabled(ctx, 2) {
-				log.Infof(ctx, "flow tokens available (pri=%s stream=%s tokens=%s wait-duration=%s)",
-					pri, connection.Stream(), tokens, c.clock.PhysicalTime().Sub(tstart))
+				log.Infof(ctx, "admitted request (pri=%s stream=%s tokens=%s wait-duration=%s mode=%s)",
+					pri, connection.Stream(), tokens, c.clock.PhysicalTime().Sub(tstart), c.mode())
 			}
 
 			// TODO(irfansharif): Right now we continue forwarding admission

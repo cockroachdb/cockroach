@@ -39,7 +39,7 @@ func TestTracker(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				tracker = New(kvflowcontrolpb.RaftLogPosition{Term: 1, Index: 0}, knobs)
+				tracker = New(kvflowcontrolpb.RaftLogPosition{Term: 1, Index: 0}, kvflowcontrol.Stream{}, knobs)
 				return ""
 
 			case "track":
@@ -81,7 +81,7 @@ func TestTracker(t *testing.T) {
 							t.Fatalf("unrecognized prefix: %s", parts[i])
 						}
 					}
-					tracker.Track(ctx, pri, tokens, logPosition)
+					require.True(t, tracker.Track(ctx, pri, tokens, logPosition))
 				}
 				return ""
 

@@ -162,7 +162,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 
 // disconnectReplicationRaftMuLocked is called when a Replica is being removed.
 // It cancels all outstanding proposals, closes the proposalQuota if there
-// is one, and removes the in-memory raft state.
+// is one, releases all held flow tokens, and removes the in-memory raft state.
 func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	r.raftMu.AssertHeld()
 	r.mu.Lock()
@@ -174,6 +174,7 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	if pq := r.mu.proposalQuota; pq != nil {
 		pq.Close("destroyed")
 	}
+	r.mu.replicaFlowControlIntegration.onReplicaDestroyed(ctx)
 	r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
 	for _, p := range r.mu.proposals {
 		r.cleanupFailedProposalLocked(p)

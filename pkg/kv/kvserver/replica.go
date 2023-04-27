@@ -801,6 +801,16 @@ type Replica struct {
 		pausedFollowers map[roachpb.ReplicaID]struct{}
 
 		slowProposalCount int64 // updated in refreshProposalsLocked
+
+		// replicaFlowControlIntegration is used to interface with replication flow
+		// control. It's backed by the node-level kvflowcontrol.Controller that
+		// manages flow tokens for on a per <tenant,work class> basis, which it
+		// interfaces through a replica-level kvflowcontrol.Handle. It's
+		// actively used on replicas initiating replication traffic, i.e. are
+		// both the leaseholder and raft leader.
+		//
+		// Accessing it requires Replica.mu to be held, exclusively.
+		replicaFlowControlIntegration replicaFlowControlIntegration
 	}
 
 	// The raft log truncations that are pending. Access is protected by its own
