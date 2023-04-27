@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 export const MULTITENANT_SESSION_COOKIE_NAME = "session";
+export const SYSTEM_TENANT_NAME = "system";
 
 export const getAllCookies = (): Map<string, string> => {
   const cookieMap: Map<string, string> = new Map();

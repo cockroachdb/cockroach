@@ -17,12 +17,13 @@ import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import { GraphDashboardProps } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { storeSources } = props;
+  const { storeSources, tenantSource } = props;
 
   return [
     <LineGraph
       title="Replication Lag"
       sources={storeSources}
+      tenantSource={tenantSource}
       tooltip={`The time between the wall clock and replicated time of the replication stream.
           This metric tracks how far behind the replication stream is relative to now. This metric is set to 0 during the initial scan.`}
     >
@@ -36,6 +37,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Logical Bytes"
       sources={storeSources}
+      tenantSource={tenantSource}
       tooltip={`Rate at which the logical bytes (sum of keys + values) are ingested by all replication jobs`}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
@@ -49,6 +51,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="SST Bytes"
       sources={storeSources}
+      tenantSource={tenantSource}
       tooltip={`Rate at which the SST bytes (compressed) are sent to KV by all replication jobs`}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
