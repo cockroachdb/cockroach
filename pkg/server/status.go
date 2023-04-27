@@ -32,6 +32,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -3470,13 +3471,11 @@ func (s *systemStatusServer) SpanStats(
 		return nil, err
 	}
 
-	// Get the cluster's active version
-	cv := s.sqlServer.settingsWatcher.GetTenantClusterVersion().ActiveVersion(ctx)
 	// If the cluster's active version is less than 23.1 return a mixed version error.
-	if cv.Less(roachpb.Version{Major: 23, Minor: 1, Internal: 0}) {
+	if !s.st.Version.IsActive(ctx, clusterversion.V23_1) {
 		return nil, errors.New(MixedVersionErr)
 	}
-	
+
 	// If we receive a request using the old format.
 	if isLegacyRequest(req) {
 		// We want to force 23.1 callers to use the new format (e.g. Spans field).
