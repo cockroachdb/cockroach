@@ -14,13 +14,17 @@ func _() {
 	_ = x[StateExhausted-3]
 }
 
-const _procState_name = "StateRunningStateDrainingStateTrailingMetaStateExhausted"
-
-var _procState_index = [...]uint8{0, 12, 25, 42, 56}
-
 func (i procState) String() string {
-	if i < 0 || i >= procState(len(_procState_index)-1) {
+	switch i {
+	case StateRunning:
+		return "StateRunning"
+	case StateDraining:
+		return "StateDraining"
+	case StateTrailingMeta:
+		return "StateTrailingMeta"
+	case StateExhausted:
+		return "StateExhausted"
+	default:
 		return "procState(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _procState_name[_procState_index[i]:_procState_index[i+1]]
 }

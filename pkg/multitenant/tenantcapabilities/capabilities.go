@@ -10,10 +10,7 @@
 
 package tenantcapabilities
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util/stringerutil"
-	"github.com/cockroachdb/redact"
-)
+import "github.com/cockroachdb/redact"
 
 // ID represents a handle to a tenant capability.
 type ID uint8
@@ -83,19 +80,6 @@ const (
 	TenantSpanConfigBounds // span_config_bounds
 
 	MaxCapabilityID ID = iota - 1
-)
-
-// IDs is a slice of all tenant capabilities.
-var IDs = stringerutil.EnumValues(
-	1,
-	MaxCapabilityID,
-)
-
-var stringToCapabilityIDMap = stringerutil.StringToEnumValueMap(
-	_ID_index[:],
-	_ID_name,
-	1,
-	MaxCapabilityID,
 )
 
 // FromName looks up a capability by name.

@@ -12,16 +12,21 @@ func _() {
 	_ = x[PreCommitPhase-2]
 	_ = x[PostCommitPhase-3]
 	_ = x[PostCommitNonRevertiblePhase-4]
+	_ = x[EarliestPhase-1]
+	_ = x[LatestPhase-4]
 }
 
-const _Phase_name = "StatementPhasePreCommitPhasePostCommitPhasePostCommitNonRevertiblePhase"
-
-var _Phase_index = [...]uint8{0, 14, 28, 43, 71}
-
 func (i Phase) String() string {
-	i -= 1
-	if i < 0 || i >= Phase(len(_Phase_index)-1) {
-		return "Phase(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	switch i {
+	case StatementPhase:
+		return "StatementPhase"
+	case PreCommitPhase:
+		return "PreCommitPhase"
+	case PostCommitPhase:
+		return "PostCommitPhase"
+	case PostCommitNonRevertiblePhase:
+		return "PostCommitNonRevertiblePhase"
+	default:
+		return "Phase(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _Phase_name[_Phase_index[i]:_Phase_index[i+1]]
 }
