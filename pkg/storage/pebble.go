@@ -36,12 +36,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -89,7 +89,7 @@ var ValueBlocksEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.value_blocks.enabled",
 	"set to true to enable writing of value blocks in sstables",
-	util.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithMetamorphicTestBool(
 		"storage.value_blocks.enabled", true)).WithPublic()
 
 // IngestAsFlushable controls whether ingested sstables that overlap the
@@ -108,7 +108,7 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.ingest_as_flushable.enabled",
 	"set to true to enable lazy ingestion of sstables",
-	util.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithMetamorphicTestBool(
 		"storage.ingest_as_flushable.enabled", true))
 
 // EngineKeyCompare compares cockroach keys, including the version (which

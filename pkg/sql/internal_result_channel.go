@@ -14,8 +14,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -50,7 +50,7 @@ type ieResultWriter interface {
 	finish()
 }
 
-var asyncIEResultChannelBufferSize = util.ConstantWithMetamorphicTestRange(
+var asyncIEResultChannelBufferSize = metamorphic.ConstantWithMetamorphicTestRange(
 	"async-IE-result-channel-buffer-size",
 	32, /* defaultValue */
 	1,  /* min */

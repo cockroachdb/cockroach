@@ -49,11 +49,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -72,7 +72,7 @@ var BackupCheckpointInterval = settings.RegisterDurationSetting(
 	"the minimum time between writing progress checkpoints during a backup",
 	time.Minute)
 
-var forceReadBackupManifest = util.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
+var forceReadBackupManifest = metamorphic.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
 
 func countRows(raw kvpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
 	res := roachpb.RowCount{DataSize: raw.DataSize}

@@ -11,7 +11,7 @@
 //go:build metamorphic_disable
 // +build metamorphic_disable
 
-package util
+package metamorphic
 
 // DisableMetamorphicTesting can be used to disable metamorphic tests. If it
 // is set to true then metamorphic testing will not be enabled.

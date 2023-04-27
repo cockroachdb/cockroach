@@ -10,11 +10,11 @@ package backupbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 )
 
 var (
-	defaultSmallFileBuffer = util.ConstantWithMetamorphicTestRange(
+	defaultSmallFileBuffer = metamorphic.ConstantWithMetamorphicTestRange(
 		"backup-merge-file-buffer-size",
 		128<<20, /* defaultValue */
 		1<<20,   /* metamorphic min */

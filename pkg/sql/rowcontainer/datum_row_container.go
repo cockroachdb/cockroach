@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -101,7 +102,7 @@ func NewRowContainerWithCapacity(
 	return c
 }
 
-var rowsPerChunkShift = uint(util.ConstantWithMetamorphicTestValue(
+var rowsPerChunkShift = uint(metamorphic.ConstantWithMetamorphicTestValue(
 	"row-container-rows-per-chunk-shift",
 	6, /* defaultValue */
 	1, /* metamorphicValue */

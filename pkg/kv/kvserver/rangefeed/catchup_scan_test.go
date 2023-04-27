@@ -21,17 +21,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 // smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
 // bugs in time-bound iterators.
-var smallEngineBlocks = util.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
+var smallEngineBlocks = metamorphic.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
 
 // TODO(erikgrinaker): This should be migrated to a data-driven test harness for
 // end-to-end rangefeed testing, with more exhaustive test cases. See:

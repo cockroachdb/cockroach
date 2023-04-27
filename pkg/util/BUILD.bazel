@@ -6,9 +6,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "util",
     srcs = [
-        "constants.go",
-        "constants_metamorphic_disable.go",  # keep
-        "constants_metamorphic_enable.go",
         "every_n.go",
         "fast_int_map.go",
         "hash.go",
@@ -29,11 +26,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/buildutil",
-        "//pkg/util/envutil",
         "//pkg/util/intsets",
         "//pkg/util/netutil/addr",
-        "//pkg/util/randutil",
+        "//pkg/util/randutil",  # keep
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",

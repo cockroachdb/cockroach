@@ -31,11 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -90,7 +90,7 @@ func min(a, b int) int {
 	return b
 }
 
-var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
+var defaultNumWorkers = metamorphic.ConstantWithMetamorphicTestRange(
 	"restore-worker-concurrency",
 	func() int {
 		// On low-CPU instances, a default value may still allow concurrent restore

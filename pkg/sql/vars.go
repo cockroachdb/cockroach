@@ -43,10 +43,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
@@ -2670,7 +2670,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().MultipleActivePortalsEnabled), nil
 		},
-		GlobalDefault: displayPgBool(util.ConstantWithMetamorphicTestBool("multiple_active_portals_enabled", false)),
+		GlobalDefault: displayPgBool(metamorphic.ConstantWithMetamorphicTestBool("multiple_active_portals_enabled", false)),
 	},
 
 	// CockroachDB extension.
@@ -2692,7 +2692,7 @@ var varGen = map[string]sessionVar{
 }
 
 // We want test coverage for this on and off so make it metamorphic.
-var copyFastPathDefault bool = util.ConstantWithMetamorphicTestBool("copy-fast-path-enabled-default", true)
+var copyFastPathDefault bool = metamorphic.ConstantWithMetamorphicTestBool("copy-fast-path-enabled-default", true)
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
 

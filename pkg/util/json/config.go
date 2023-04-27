@@ -11,7 +11,7 @@
 package json
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,7 +67,7 @@ const (
 
 // default configuration for parsing JSON.
 var parseJSONDefaultConfig = func() (cfg parseConfig) {
-	cfg.impl = util.ConstantWithMetamorphicTestChoice(
+	cfg.impl = metamorphic.ConstantWithMetamorphicTestChoice(
 		"parse-json-impl", useFastJSONParser, useStdGoJSON,
 	).(parseJSONImplType)
 	return cfg

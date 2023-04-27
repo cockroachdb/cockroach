@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -224,7 +224,7 @@ var UseMuxRangeFeed = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"changefeed.mux_rangefeed.enabled",
 	"if true, changefeed uses multiplexing rangefeed RPC",
-	util.ConstantWithMetamorphicTestBool("changefeed.mux_rangefeed.enabled", false),
+	metamorphic.ConstantWithMetamorphicTestBool("changefeed.mux_rangefeed.enabled", false),
 )
 
 // EventConsumerWorkers specifies the maximum number of workers to use when
@@ -244,7 +244,7 @@ var EventConsumerWorkerQueueSize = settings.RegisterIntSetting(
 	"changefeed.event_consumer_worker_queue_size",
 	"if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events "+
 		"which a worker can buffer",
-	int64(util.ConstantWithMetamorphicTestRange("changefeed.event_consumer_worker_queue_size", 16, 0, 16)),
+	int64(metamorphic.ConstantWithMetamorphicTestRange("changefeed.event_consumer_worker_queue_size", 16, 0, 16)),
 	settings.NonNegativeInt,
 ).WithPublic()
 
