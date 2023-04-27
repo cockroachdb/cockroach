@@ -170,7 +170,6 @@ func (s *PreServeConnHandler) AnnotateCtxForIncomingConn(
 	if s.trustClientProvidedRemoteAddr.Get() {
 		tag = "peer"
 	}
-	logtags.AddTag(ctx, "server", conn.LocalAddr().String())
 	return logtags.AddTag(ctx, tag, conn.RemoteAddr().String())
 }
 
