@@ -321,7 +321,13 @@ func TestAuthenticationHook(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hook, err := security.UserAuthCertHook(tc.insecure, makeFakeTLSState(t, tc.tlsSpec), tc.tenantID)
+			hook, err := security.UserAuthCertHook(
+				tc.insecure,
+				makeFakeTLSState(t, tc.tlsSpec),
+				tc.tenantID,
+				nil, /* certManager */
+				nil, /* cache */
+			)
 			if (err == nil) != tc.buildHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.buildHookSuccess, err)
 			}
