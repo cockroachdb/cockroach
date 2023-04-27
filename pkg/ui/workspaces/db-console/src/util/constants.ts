@@ -11,6 +11,7 @@
 import { util } from "@cockroachlabs/cluster-ui";
 
 export const indexNameAttr = "index_name";
+export const tenantNameAttr = "tenant";
 
 export const {
   aggregatedTsAttr,

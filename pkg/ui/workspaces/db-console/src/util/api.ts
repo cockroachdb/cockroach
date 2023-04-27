@@ -203,6 +203,11 @@ export type ListTracingSnapshotsRequestMessage =
 export type ListTracingSnapshotsResponseMessage =
   protos.cockroach.server.serverpb.ListTracingSnapshotsResponse;
 
+export type ListTenantsRequestMessage =
+  protos.cockroach.server.serverpb.ListTenantsRequest;
+export type ListTenantsResponseMessage =
+  protos.cockroach.server.serverpb.ListTenantsResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -829,6 +834,18 @@ export function getKeyVisualizerSamples(
   return timeoutFetch(
     serverpb.KeyVisSamplesResponse,
     `${STATUS_PREFIX}/keyvissamples`,
+    req as any,
+    timeout,
+  );
+}
+
+export function getTenants(
+  req: ListTenantsRequestMessage,
+  timeout?: moment.Duration,
+): Promise<ListTenantsResponseMessage> {
+  return timeoutFetch(
+    serverpb.ListTenantsResponse,
+    `${API_PREFIX}/tenants`,
     req as any,
     timeout,
   );

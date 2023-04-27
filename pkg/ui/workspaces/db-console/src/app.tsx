@@ -34,6 +34,7 @@ import {
   statementAttr,
   tabAttr,
   tableNameAttr,
+  tenantNameAttr,
   txnFingerprintIdAttr,
   viewAttr,
   idAttr,
@@ -144,7 +145,18 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                       to={`/metrics/:${dashboardNameAttr}/cluster`}
                     />
                     <Route
+                      exact
                       path={`/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}`}
+                      component={NodeGraphs}
+                    />
+                    <Route
+                      exact
+                      path={`/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}/tenant/:${tenantNameAttr}`}
+                      component={NodeGraphs}
+                    />
+                    <Route
+                      exact
+                      path={`/metrics/:${dashboardNameAttr}/cluster/tenant/:${tenantNameAttr}`}
                       component={NodeGraphs}
                     />
 
