@@ -104,6 +104,9 @@ func jobDescriptionFromMutationID(
 					}
 				}
 				jobDescBuilder.WriteString(")")
+			case *descpb.DescriptorMutation_MaterializedViewRefresh:
+				jobDescBuilder.WriteString("refreshing materialized view with primary key ")
+				jobDescBuilder.WriteString(t.MaterializedViewRefresh.NewPrimaryIndex.Name)
 			default:
 				return "", 0, errors.Newf("unsupported mutation %+v, while restoring table %+v", m, tableDesc)
 			}
