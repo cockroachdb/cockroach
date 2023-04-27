@@ -483,6 +483,25 @@ func (d ReplicaSet) ReplicationTargets() (out []ReplicationTarget) {
 	return out
 }
 
+// Difference compares two sets of replicas, returning the replica descriptors
+// that were added and removed when going from one to the other. 'd' is the before
+// state, 'o' is the one after.
+func (d ReplicaSet) Difference(o ReplicaSet) (added, removed []ReplicaDescriptor) {
+	for _, repl := range o.Descriptors() {
+		if _, found := d.GetReplicaDescriptorByID(repl.ReplicaID); found {
+			continue // still in raft group, nothing to do
+		}
+		added = append(added, repl)
+	}
+	for _, repl := range d.Descriptors() {
+		if _, found := o.GetReplicaDescriptorByID(repl.ReplicaID); found {
+			continue // still in raft group, nothing to do
+		}
+		removed = append(removed, repl)
+	}
+	return added, removed
+}
+
 // IsAddition returns true if `c` refers to a replica addition operation.
 func (c ReplicaChangeType) IsAddition() bool {
 	switch c {

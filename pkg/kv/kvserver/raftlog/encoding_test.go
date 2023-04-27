@@ -93,7 +93,7 @@ func BenchmarkRaftAdmissionMetaOverhead(b *testing.B) {
 						// 4. If using below-raft admission, decode the raft
 						// metadata.
 						if withRaftAdmissionMeta {
-							_, err = DecodeRaftAdmissionMeta(encodingBuf)
+							_, err := DecodeRaftAdmissionMeta(encodingBuf)
 							require.NoError(b, err)
 						}
 
