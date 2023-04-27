@@ -2149,7 +2149,7 @@ func (ds *DistSender) sendToReplicas(
 		ba.Replica = curReplica
 		ba.RangeID = desc.RangeID
 		// Communicate to the server the information our cache has about the
-		// range. If it's stale, the serve will return an update.
+		// range. If it's stale, the server will return an update.
 		ba.ClientRangeInfo = roachpb.ClientRangeInfo{
 			// Note that DescriptorGeneration will be 0 if the cached descriptor
 			// is "speculative" (see DescSpeculative()). Even if the speculation
@@ -2167,7 +2167,11 @@ func (ds *DistSender) sendToReplicas(
 				defaultSendClosedTimestampPolicy,
 			),
 
-			ExplicitlyRequested: ba.ClientRangeInfo.ExplicitlyRequested,
+			// Range info is only returned when ClientRangeInfo is non-empty.
+			// Explicitly request an update for speculative leases and descriptors, or
+			// when the client has requested it.
+			ExplicitlyRequested: ba.ClientRangeInfo.ExplicitlyRequested ||
+				(routing.DescSpeculative() && routing.LeaseSpeculative()),
 		}
 		br, err = transport.SendNext(ctx, ba)
 		ds.maybeIncrementErrCounters(br, err)

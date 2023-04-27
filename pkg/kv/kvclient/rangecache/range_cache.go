@@ -353,6 +353,13 @@ func (et EvictionToken) Desc() *roachpb.RangeDescriptor {
 	return et.desc
 }
 
+// DescSpeculative returns true if there is a cached descriptor and it's
+// speculative.
+func (et EvictionToken) DescSpeculative() bool {
+	d := et.Desc()
+	return d != nil && d.Generation == 0
+}
+
 // Leaseholder returns the cached leaseholder. If the cache didn't have any
 // lease information, returns nil. The result is to be considered immutable.
 //
@@ -372,6 +379,13 @@ func (et EvictionToken) Lease() *roachpb.Lease {
 		return nil
 	}
 	return et.lease
+}
+
+// LeaseSpeculative returns true if there is a cached lease and it's
+// speculative.
+func (et EvictionToken) LeaseSpeculative() bool {
+	l := et.Lease()
+	return l != nil && l.Speculative()
 }
 
 // LeaseSeq returns the sequence of the cached lease. If no lease is cached, or
