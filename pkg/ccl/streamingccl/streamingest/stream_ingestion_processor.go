@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -281,8 +282,8 @@ func newStreamIngestionDataProcessor(
 		frontier:          frontier,
 		maxFlushRateTimer: timeutil.NewTimer(),
 		cutoverProvider: &cutoverFromJobProgress{
-			jobID:    jobspb.JobID(spec.JobID),
-			registry: flowCtx.Cfg.JobRegistry,
+			jobID: jobspb.JobID(spec.JobID),
+			db:    flowCtx.Cfg.DB,
 		},
 		cutoverCh:        make(chan struct{}),
 		closePoller:      make(chan struct{}),
@@ -1155,22 +1156,39 @@ type cutoverProvider interface {
 // custoverFromJobProgress is a cutoverProvider that decides whether the cutover
 // time has been reached based on the progress stored on the job record.
 type cutoverFromJobProgress struct {
-	registry *jobs.Registry
-	jobID    jobspb.JobID
+	db    isql.DB
+	jobID jobspb.JobID
 }
 
 func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, error) {
-	j, err := c.registry.LoadJob(ctx, c.jobID)
-	if err != nil {
+	var (
+		progressBytes []byte
+		exists        bool
+	)
+	if err := c.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := jobs.InfoStorageForJob(txn, c.jobID)
+		var err error
+		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx)
+		return err
+	}); err != nil {
 		return false, err
 	}
-	progress := j.Progress()
+	if !exists {
+		log.Warningf(ctx, "no legacy job progress recorded yet")
+		return false, nil
+	}
+	progress := &jobspb.Progress{}
+	if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
+		return false, err
+	}
+
 	var sp *jobspb.Progress_StreamIngest
 	var ok bool
 	if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
-		return false, errors.Newf("unknown progress type %T in stream ingestion job %d",
-			j.Progress().Progress, c.jobID)
+		return false, errors.Newf("unknown progress details type %T in stream ingestion job %d",
+			progress.GetDetails(), c.jobID)
 	}
+
 	// Job has been signaled to complete.
 	if resolvedTimestamp := progress.GetHighWater(); !sp.StreamIngest.CutoverTime.IsEmpty() &&
 		resolvedTimestamp != nil && sp.StreamIngest.CutoverTime.Less(*resolvedTimestamp) {
