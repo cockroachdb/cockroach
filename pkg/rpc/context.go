@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -469,10 +468,6 @@ type ContextOptions struct {
 	// utility, not a server, and thus misses server configuration, a
 	// cluster version, a node ID, etc.
 	ClientOnly bool
-
-	// PreferSRVLookup indicates whether SRV records are preferred over A/AAAA
-	// records when dialing network targets.
-	PreferSRVLookup bool
 }
 
 func (c ContextOptions) validate() error {
@@ -1597,25 +1592,6 @@ func (ald *artificialLatencyDialer) dial(ctx context.Context, addr string) (net.
 	}, nil
 }
 
-// srvResolvingDialer first queries SRV records for addr, and dials
-// a random member of the result.
-// If the result is empty, it dials the addr directly.
-type srvResolvingDialer struct {
-	dialerFunc dialerFunc
-}
-
-func (srd *srvResolvingDialer) dial(ctx context.Context, addr string) (net.Conn, error) {
-	addrs, err := netutil.SRV(ctx, addr)
-	if err != nil {
-		return nil, err
-	}
-	if len(addrs) == 0 {
-		// If SRV lookup returns empty, we fallback to addr.
-		addrs = []string{addr}
-	}
-	return srd.dialerFunc(ctx, addrs[int(randutil.FastUint32())%len(addrs)])
-}
-
 type delayingListener struct {
 	net.Listener
 }
@@ -1778,14 +1754,6 @@ func (rpcCtx *Context) grpcDialRaw(
 		redialChan: make(chan struct{}),
 	}
 	dialerFunc := dialer.dial
-
-	if rpcCtx.ContextOptions.PreferSRVLookup {
-		dialer := &srvResolvingDialer{
-			dialerFunc: dialerFunc,
-		}
-		dialerFunc = dialer.dial
-	}
-
 	if rpcCtx.Knobs.ArtificialLatencyMap != nil {
 		latency := rpcCtx.Knobs.ArtificialLatencyMap[target]
 		log.VEventf(ctx, 1, "connecting with simulated latency %dms",
