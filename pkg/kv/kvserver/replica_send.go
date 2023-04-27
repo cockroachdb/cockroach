@@ -306,6 +306,12 @@ func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
 func (r *Replica) maybeAddRangeInfoToResponse(
 	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
 ) {
+	// Ignore lease requests. These are submitted directly to the replica,
+	// bypassing the DistSender. They don't need range info returned, but their
+	// ClientRangeInfo is always empty, so they'll otherwise always get it.
+	if ba.IsSingleRequestLeaseRequest() {
+		return
+	}
 	// Compare the client's info with the replica's info to detect if the client
 	// has stale knowledge. Note that the client can have more recent knowledge
 	// than the replica in case this is a follower.
