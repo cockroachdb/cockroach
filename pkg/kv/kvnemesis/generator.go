@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -63,17 +64,25 @@ type OperationConfig struct {
 // composition of the operations in the txn is controlled by TxnClientOps and
 // TxnBatchOps
 type ClosureTxnConfig struct {
+	// CommitSerializable is a serializable transaction that commits normally.
+	CommitSerializable int
+	// CommitSnapshot is a snapshot transaction that commits normally.
+	CommitSnapshot int
+	// RollbackSerializable is a serializable transaction that encounters an error
+	// at the end and has to roll back.
+	RollbackSerializable int
+	// RollbackSnapshot is a snapshot transaction that encounters an error at the
+	// end and has to roll back.
+	RollbackSnapshot int
+	// CommitSerializableInBatch is a serializable transaction that commits via
+	// the CommitInBatchMethod. This is an important part of the 1pc txn fastpath.
+	CommitSerializableInBatch int
+	// CommitSnapshotInBatch is a snapshot transaction that commits via the
+	// CommitInBatchMethod. This is an important part of the 1pc txn fastpath.
+	CommitSnapshotInBatch int
+
 	TxnClientOps ClientOperationConfig
 	TxnBatchOps  BatchOperationConfig
-
-	// Commit is a transaction that commits normally.
-	Commit int
-	// Rollback is a transaction that encounters an error at the end and has to
-	// roll back.
-	Rollback int
-	// CommitInBatch is a transaction that commits via the CommitInBatchMethod.
-	// This is an important part of the 1pc txn fastpath.
-	CommitInBatch int
 	// When CommitInBatch is selected, CommitBatchOps controls the composition of
 	// the kv.Batch used.
 	CommitBatchOps ClientOperationConfig
@@ -208,12 +217,15 @@ func newAllOperationsConfig() GeneratorConfig {
 		DB:    clientOpConfig,
 		Batch: batchOpConfig,
 		ClosureTxn: ClosureTxnConfig{
-			Commit:         5,
-			Rollback:       5,
-			CommitInBatch:  5,
-			TxnClientOps:   clientOpConfig,
-			TxnBatchOps:    batchOpConfig,
-			CommitBatchOps: clientOpConfig,
+			CommitSerializable:        3,
+			CommitSnapshot:            3,
+			RollbackSerializable:      3,
+			RollbackSnapshot:          3,
+			CommitSerializableInBatch: 3,
+			CommitSnapshotInBatch:     3,
+			TxnClientOps:              clientOpConfig,
+			TxnBatchOps:               batchOpConfig,
+			CommitBatchOps:            clientOpConfig,
 		},
 		Split: SplitConfig{
 			SplitNew:   1,
@@ -849,16 +861,25 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 }
 
 func (g *generator) registerClosureTxnOps(allowed *[]opGen, c *ClosureTxnConfig) {
+	const Commit, Rollback = ClosureTxnType_Commit, ClosureTxnType_Rollback
+	const SSI, SI = isolation.Serializable, isolation.Snapshot
 	addOpGen(allowed,
-		makeClosureTxn(ClosureTxnType_Commit, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.Commit)
+		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.CommitSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(ClosureTxnType_Rollback, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.Rollback)
+		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.CommitSnapshotInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(ClosureTxnType_Commit, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps), c.CommitInBatch)
+		makeClosureTxn(Rollback, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.RollbackSerializable)
+	addOpGen(allowed,
+		makeClosureTxn(Rollback, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.RollbackSnapshot)
+	addOpGen(allowed,
+		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps), c.CommitSerializableInBatch)
+	addOpGen(allowed,
+		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps), c.CommitSnapshotInBatch)
 }
 
 func makeClosureTxn(
 	txnType ClosureTxnType,
+	iso isolation.Level,
 	txnClientOps *ClientOperationConfig,
 	txnBatchOps *BatchOperationConfig,
 	commitInBatch *ClientOperationConfig,
@@ -872,7 +893,7 @@ func makeClosureTxn(
 		for i := range ops {
 			ops[i] = g.selectOp(rng, allowed)
 		}
-		op := closureTxn(txnType, ops...)
+		op := closureTxn(txnType, iso, ops...)
 		if commitInBatch != nil {
 			if txnType != ClosureTxnType_Commit {
 				panic(errors.AssertionFailedf(`CommitInBatch must commit got: %s`, txnType))
@@ -1012,12 +1033,18 @@ func opSlice(ops ...Operation) []Operation {
 	return ops
 }
 
-func closureTxn(typ ClosureTxnType, ops ...Operation) Operation {
-	return Operation{ClosureTxn: &ClosureTxnOperation{Ops: ops, Type: typ}}
+func closureTxn(typ ClosureTxnType, iso isolation.Level, ops ...Operation) Operation {
+	return Operation{ClosureTxn: &ClosureTxnOperation{Ops: ops, Type: typ, IsoLevel: iso}}
 }
 
-func closureTxnCommitInBatch(commitInBatch []Operation, ops ...Operation) Operation {
-	o := closureTxn(ClosureTxnType_Commit, ops...)
+func closureTxnSSI(typ ClosureTxnType, ops ...Operation) Operation {
+	return closureTxn(typ, isolation.Serializable, ops...)
+}
+
+func closureTxnCommitInBatch(
+	iso isolation.Level, commitInBatch []Operation, ops ...Operation,
+) Operation {
+	o := closureTxn(ClosureTxnType_Commit, iso, ops...)
 	if len(commitInBatch) > 0 {
 		o.ClosureTxn.CommitInBatch = &BatchOperation{Ops: commitInBatch}
 	}

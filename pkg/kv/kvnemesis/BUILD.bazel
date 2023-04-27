@@ -28,6 +28,7 @@ go_library(
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
@@ -77,6 +78,7 @@ go_test(
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -111,6 +113,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb:kvpb_proto",
+        "//pkg/kv/kvserver/concurrency/isolation:isolation_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
@@ -126,6 +129,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//errorspb",
