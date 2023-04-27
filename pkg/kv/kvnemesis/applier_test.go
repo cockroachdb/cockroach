@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -104,7 +105,10 @@ func TestApplier(t *testing.T) {
 			"delrange", step(delRange(k1, k3, 6)),
 		},
 		{
-			"txn-delrange", step(closureTxn(ClosureTxnType_Commit, delRange(k2, k4, 1))),
+			"txn-ssi-delrange", step(closureTxn(ClosureTxnType_Commit, isolation.Serializable, delRange(k2, k4, 1))),
+		},
+		{
+			"txn-si-delrange", step(closureTxn(ClosureTxnType_Commit, isolation.Snapshot, delRange(k2, k4, 1))),
 		},
 		{
 			"get-err", step(get(k1)),
@@ -128,7 +132,10 @@ func TestApplier(t *testing.T) {
 			"delrange-err", step(delRange(k2, k3, 12)),
 		},
 		{
-			"txn-err", step(closureTxn(ClosureTxnType_Commit, delRange(k2, k4, 1))),
+			"txn-ssi-err", step(closureTxn(ClosureTxnType_Commit, isolation.Serializable, delRange(k2, k4, 1))),
+		},
+		{
+			"txn-si-err", step(closureTxn(ClosureTxnType_Commit, isolation.Snapshot, delRange(k2, k4, 1))),
 		},
 		{
 			"batch-mixed", step(batch(put(k2, 2), get(k1), del(k2, 1), del(k3, 1), scan(k1, k3), reverseScanForUpdate(k1, k5))),
@@ -137,16 +144,22 @@ func TestApplier(t *testing.T) {
 			"batch-mixed-err", step(batch(put(k2, 2), getForUpdate(k1), scanForUpdate(k1, k3), reverseScan(k1, k3))),
 		},
 		{
-			"txn-commit-mixed", step(closureTxn(ClosureTxnType_Commit, put(k5, 5), batch(put(k6, 6), delRange(k3, k5, 1)))),
+			"txn-ssi-commit-mixed", step(closureTxn(ClosureTxnType_Commit, isolation.Serializable, put(k5, 5), batch(put(k6, 6), delRange(k3, k5, 1)))),
 		},
 		{
-			"txn-commit-batch", step(closureTxnCommitInBatch(opSlice(get(k1), put(k6, 6)), put(k5, 5))),
+			"txn-si-commit-mixed", step(closureTxn(ClosureTxnType_Commit, isolation.Snapshot, put(k5, 5), batch(put(k6, 6), delRange(k3, k5, 1)))),
 		},
 		{
-			"txn-rollback", step(closureTxn(ClosureTxnType_Rollback, put(k5, 5))),
+			"txn-ssi-commit-batch", step(closureTxnCommitInBatch(isolation.Serializable, opSlice(get(k1), put(k6, 6)), put(k5, 5))),
 		},
 		{
-			"txn-error", step(closureTxn(ClosureTxnType_Rollback, put(k5, 5))),
+			"txn-si-commit-batch", step(closureTxnCommitInBatch(isolation.Snapshot, opSlice(get(k1), put(k6, 6)), put(k5, 5))),
+		},
+		{
+			"txn-ssi-rollback", step(closureTxn(ClosureTxnType_Rollback, isolation.Serializable, put(k5, 5))),
+		},
+		{
+			"txn-si-rollback", step(closureTxn(ClosureTxnType_Rollback, isolation.Snapshot, put(k5, 5))),
 		},
 		{
 			"split", step(split(k2)),

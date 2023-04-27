@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -172,12 +173,33 @@ func TestRandStep(t *testing.T) {
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)
 			if o.CommitInBatch != nil {
-				counts.ClosureTxn.CommitInBatch++
+				switch o.IsoLevel {
+				case isolation.Serializable:
+					counts.ClosureTxn.CommitSerializableInBatch++
+				case isolation.Snapshot:
+					counts.ClosureTxn.CommitSnapshotInBatch++
+				default:
+					t.Fatalf("unexpected isolation level %s", o.IsoLevel)
+				}
 				countClientOps(&counts.ClosureTxn.CommitBatchOps, nil, o.CommitInBatch.Ops...)
 			} else if o.Type == ClosureTxnType_Commit {
-				counts.ClosureTxn.Commit++
+				switch o.IsoLevel {
+				case isolation.Serializable:
+					counts.ClosureTxn.CommitSerializable++
+				case isolation.Snapshot:
+					counts.ClosureTxn.CommitSnapshot++
+				default:
+					t.Fatalf("unexpected isolation level %s", o.IsoLevel)
+				}
 			} else if o.Type == ClosureTxnType_Rollback {
-				counts.ClosureTxn.Rollback++
+				switch o.IsoLevel {
+				case isolation.Serializable:
+					counts.ClosureTxn.RollbackSerializable++
+				case isolation.Snapshot:
+					counts.ClosureTxn.RollbackSnapshot++
+				default:
+					t.Fatalf("unexpected isolation level %s", o.IsoLevel)
+				}
 			}
 		case *SplitOperation:
 			if _, ok := splits[string(o.Key)]; ok {

@@ -1,6 +1,7 @@
 echo
 ----
 ···db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+···  txn.SetIsoLevel(isolation.Serializable)
 ···  {
 ···    b := &kv.Batch{}
 ···    b.Get(tk(7))

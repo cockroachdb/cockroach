@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -77,6 +78,7 @@ func TestOperationsFormat(t *testing.T) {
 		{
 			step: step(
 				closureTxn(ClosureTxnType_Commit,
+					isolation.Serializable,
 					batch(get(k7), get(k8), del(k9, 1)),
 					delRange(k10, k11, 2),
 					put(k11, 3),
