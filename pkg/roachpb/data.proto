@@ -772,7 +772,7 @@ message ClientRangeInfo {
   int64 lease_sequence = 2 [(gogoproto.casttype) = "LeaseSequence"];
   RangeClosedTimestampPolicy closed_timestamp_policy = 3;
   // ExplicitlyRequested causes range info to be returned even if other fields
-  // are up-to-date.
+  // are up-to-date or empty.
   bool explicitly_requested = 4;
 }
 
