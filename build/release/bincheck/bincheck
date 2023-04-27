@@ -35,7 +35,7 @@ echo ""
 "$cockroach" start-single-node --insecure --listening-url-file="$urlfile" --enterprise-encryption=path=cockroach-data,key=aes-128.key,old-key=plain --pid-file="$pidfile" &
 
 trap "kill -9 $! || true" EXIT
-for i in {0..3}
+for i in {0..8}
 do
   [[ -f "$urlfile" ]] && break
   backoff=$((2 ** i))
