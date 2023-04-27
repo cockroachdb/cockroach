@@ -57,10 +57,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -81,7 +81,7 @@ var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.expiration_leases_only.enabled",
 	"only use expiration-based leases, never epoch-based ones (experimental, affects performance)",
-	util.ConstantWithMetamorphicTestBool("kv.expiration_leases_only.enabled", false),
+	metamorphic.ConstantWithMetamorphicTestBool("kv.expiration_leases_only.enabled", false),
 )
 
 var leaseStatusLogLimiter = func() *log.EveryN {

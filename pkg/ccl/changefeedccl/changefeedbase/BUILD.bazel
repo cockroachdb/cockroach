@@ -21,7 +21,7 @@ go_library(
         "//pkg/sql/catalog/lease",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
-        "//pkg/util",
+        "//pkg/util/metamorphic",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -857,7 +857,7 @@ func (l *internalLookupCtx) GetSchemaName(
 	return schemaName, found, nil
 }
 
-var metamorphicDefaultUseIndexLookupForDescriptorsInDatabase = util.ConstantWithMetamorphicTestBool(
+var metamorphicDefaultUseIndexLookupForDescriptorsInDatabase = metamorphic.ConstantWithMetamorphicTestBool(
 	`use-index-lookup-for-descriptors-in-database`, true,
 )
 

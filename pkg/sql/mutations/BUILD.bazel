@@ -6,7 +6,7 @@ go_library(
     srcs = ["mutations_util.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/mutations",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util"],
+    deps = ["//pkg/util/metamorphic"],
 )
 
 get_x_data(name = "get_x_data")

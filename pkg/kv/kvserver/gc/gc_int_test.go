@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ import (
 // smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
 // bugs in time-bound iterators. We disable this under race, due to the slowdown.
 var smallEngineBlocks = !util.RaceEnabled &&
-	util.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
+	metamorphic.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
 
 func init() {
 	randutil.SeedForTests()

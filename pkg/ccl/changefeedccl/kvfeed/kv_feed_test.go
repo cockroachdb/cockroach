@@ -28,11 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -131,7 +131,7 @@ func TestKVFeed(t *testing.T) {
 			tc.initialHighWater, tc.endTime,
 			codec,
 			tf, sf, rangefeedFactory(ref.run), bufferFactory,
-			util.ConstantWithMetamorphicTestBool("use_mux", true),
+			metamorphic.ConstantWithMetamorphicTestBool("use_mux", true),
 			changefeedbase.Targets{},
 			TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())

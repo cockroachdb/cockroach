@@ -31,10 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -1028,7 +1028,7 @@ func splitTrigger(
 // the split trigger. In practice, the splitQueue wants to scan the left hand
 // side because the split key computation ensures that we do not create large
 // LHS ranges. However, to improve test coverage, we use a metamorphic value.
-var splitScansRightForStatsFirst = util.ConstantWithMetamorphicTestBool(
+var splitScansRightForStatsFirst = metamorphic.ConstantWithMetamorphicTestBool(
 	"split-scans-right-for-stats-first", false)
 
 // makeScanStatsFn constructs a splitStatsScanFn for the provided post-split

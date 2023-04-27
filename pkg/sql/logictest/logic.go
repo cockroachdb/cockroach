@@ -74,10 +74,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -573,7 +573,7 @@ var (
 	// the entire user keyspace during cluster bootstrapping. This should not
 	// semantically affect the test data written above it, but will activate MVCC
 	// range tombstone code paths in the storage layer for testing.
-	globalMVCCRangeTombstone = util.ConstantWithMetamorphicTestBool(
+	globalMVCCRangeTombstone = metamorphic.ConstantWithMetamorphicTestBool(
 		"logictest-global-mvcc-range-tombstone", false)
 
 	// useMVCCRangeTombstonesForPointDeletes will use point-sized MVCC range
@@ -582,7 +582,7 @@ var (
 	// code paths in the storage/KV layer, for testing. This may result in
 	// incorrect MVCC stats for RangeKey* fields in rare cases, due to point
 	// writes not holding appropriate latches for range key stats update.
-	useMVCCRangeTombstonesForPointDeletes = util.ConstantWithMetamorphicTestBool(
+	useMVCCRangeTombstonesForPointDeletes = metamorphic.ConstantWithMetamorphicTestBool(
 		"logictest-use-mvcc-range-tombstones-for-point-deletes", false)
 
 	// BackupRestoreProbability is the environment variable for `3node-backup` config.

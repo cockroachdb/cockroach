@@ -539,6 +539,7 @@ go_library(
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
         "//pkg/util/memzipper",
+        "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/optional",

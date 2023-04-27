@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -66,7 +67,7 @@ var (
 	// have grown abnormally large. RaftLogTruncationThreshold will typically not
 	// trigger it, unless the average log entry is <= 160 bytes. The key size is
 	// ~16 bytes, so Pebble point deletion batches will be bounded at ~1.6MB.
-	raftLogTruncationClearRangeThreshold = uint64(util.ConstantWithMetamorphicTestRange(
+	raftLogTruncationClearRangeThreshold = uint64(metamorphic.ConstantWithMetamorphicTestRange(
 		"raft-log-truncation-clearrange-threshold", 100000 /* default */, 1 /* min */, 1e6 /* max */))
 )
 

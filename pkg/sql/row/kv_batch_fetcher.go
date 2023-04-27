@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -51,7 +52,7 @@ func getKVBatchSize(forceProductionKVBatchSize bool) rowinfra.KeyLimit {
 	return defaultKVBatchSize
 }
 
-var defaultKVBatchSize = rowinfra.KeyLimit(util.ConstantWithMetamorphicTestValue(
+var defaultKVBatchSize = rowinfra.KeyLimit(metamorphic.ConstantWithMetamorphicTestValue(
 	"kv-batch-size",
 	int(rowinfra.ProductionKVBatchSize), /* defaultValue */
 	1,                                   /* metamorphicValue */

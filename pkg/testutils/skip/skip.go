@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -143,7 +144,7 @@ func UnderStressRace(t SkippableTest, args ...interface{}) {
 // run with the metamorphic build tag.
 func UnderMetamorphic(t SkippableTest, args ...interface{}) {
 	t.Helper()
-	if util.IsMetamorphicBuild() {
+	if metamorphic.IsMetamorphicBuild() {
 		t.Skip(append([]interface{}{"disabled under metamorphic"}, args...))
 	}
 }
@@ -153,7 +154,7 @@ func UnderMetamorphic(t SkippableTest, args ...interface{}) {
 // reason.
 func UnderMetamorphicWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
 	t.Helper()
-	if util.IsMetamorphicBuild() {
+	if metamorphic.IsMetamorphicBuild() {
 		t.Skip(append([]interface{}{fmt.Sprintf(
 			"disabled under metamorphic. issue: https://github.com/cockroachdb/cockroach/issues/%d", githubIssueID,
 		)}, args...))

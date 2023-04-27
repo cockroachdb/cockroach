@@ -29,12 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -163,7 +163,7 @@ var WebhookV2Enabled = settings.RegisterBoolSetting(
 	"changefeed.new_webhook_sink_enabled",
 	"if enabled, this setting enables a new implementation of the webhook sink"+
 		" that allows for a much higher throughput",
-	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
+	metamorphic.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
 )
 
 // PubsubV2Enabled determines whether or not the refactored Webhook sink
@@ -173,7 +173,7 @@ var PubsubV2Enabled = settings.RegisterBoolSetting(
 	"changefeed.new_pubsub_sink_enabled",
 	"if enabled, this setting enables a new implementation of the pubsub sink"+
 		" that allows for a higher throughput",
-	util.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink_enabled", false),
+	metamorphic.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink_enabled", false),
 )
 
 func getSink(

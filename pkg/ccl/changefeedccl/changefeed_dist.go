@@ -36,9 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -335,7 +335,7 @@ var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"changefeed.balance_range_distribution.enable",
 	"if enabled, the ranges are balanced equally among all nodes",
-	util.ConstantWithMetamorphicTestBool(
+	metamorphic.ConstantWithMetamorphicTestBool(
 		"changefeed.balance_range_distribution.enable", false),
 ).WithPublic()
 
