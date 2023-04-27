@@ -86,8 +86,8 @@ func TestFullClusterBackup(t *testing.T) {
 	restoredZones := make(chan struct{})
 	for _, server := range tcRestore.Servers {
 		registry := server.JobRegistry().(*jobs.Registry)
-		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+		registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.afterPreRestore = func() error {
 					close(restoredZones)
@@ -95,8 +95,7 @@ func TestFullClusterBackup(t *testing.T) {
 					return nil
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	// Pause SQL Stats compaction job to ensure the test is deterministic.
@@ -487,16 +486,15 @@ func TestClusterRestoreSystemTableOrdering(t *testing.T) {
 	restoredSystemTables := make([]string, 0)
 	for _, server := range tcRestore.Servers {
 		registry := server.JobRegistry().(*jobs.Registry)
-		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+		registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.duringSystemTableRestoration = func(systemTableName string) error {
 					restoredSystemTables = append(restoredSystemTables, systemTableName)
 					return nil
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
@@ -701,8 +699,8 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				alreadyErrored := false
 				for _, server := range tcRestore.Servers {
 					registry := server.JobRegistry().(*jobs.Registry)
-					registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-						jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+					registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+						func(raw jobs.Resumer) jobs.Resumer {
 							r := raw.(*restoreResumer)
 							r.testingKnobs.duringSystemTableRestoration = func(systemTableName string) error {
 								if !alreadyErrored && systemTableName == customRestoreSystemTable {
@@ -712,8 +710,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 								return nil
 							}
 							return r
-						},
-					}
+						})
 				}
 				// The initial restore will return an error, and restart.
 				sqlDBRestore.ExpectErr(t, `running execution from '.*' to '.*' on \d+ failed: injected error`, `RESTORE FROM $1`, localFoo)
@@ -734,15 +731,14 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		// Bugger the backup by injecting a failure while restoring the system data.
 		for _, server := range tcRestore.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+				func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
 					r.testingKnobs.duringSystemTableRestoration = func(_ string) error {
 						return errors.New("injected error")
 					}
 					return r
-				},
-			}
+				})
 		}
 
 		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, localFoo)
@@ -778,15 +774,14 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		// Bugger the backup by injecting a failure while restoring the system data.
 		for _, server := range tcRestore.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+				func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
 					r.testingKnobs.afterOfflineTableCreation = func() error {
 						return errors.New("injected error")
 					}
 					return r
-				},
-			}
+				})
 		}
 
 		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, localFoo)

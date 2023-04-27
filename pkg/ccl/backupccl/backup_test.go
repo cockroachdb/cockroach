@@ -7545,15 +7545,14 @@ func TestRestoreTypeDescriptorsRollBack(t *testing.T) {
 
 	for _, server := range tc.Servers {
 		registry := server.JobRegistry().(*jobs.Registry)
-		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+		registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.beforePublishingDescriptors = func() error {
 					return errors.New("boom")
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	sqlDB.Exec(t, `
@@ -7676,16 +7675,15 @@ func TestOfflineDescriptorsDuringRestore(t *testing.T) {
 
 		for _, server := range tc.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+			registry.TestingWrapResumerConstructor(
+				jobspb.TypeRestore, func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
 					r.testingKnobs.beforePublishingDescriptors = func() error {
 						notifyBackfill(ctx)
 						return nil
 					}
 					return r
-				},
-			}
+				})
 		}
 
 		sqlDB.Exec(t, `
@@ -7772,16 +7770,15 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		for _, server := range tc.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+				func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
 					r.testingKnobs.beforePublishingDescriptors = func() error {
 						notifyBackfill(ctx)
 						return nil
 					}
 					return r
-				},
-			}
+				})
 		}
 
 		sqlDB.Exec(t, `
@@ -7881,16 +7878,15 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		for _, server := range tc.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+				func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
 					r.testingKnobs.beforePublishingDescriptors = func() error {
 						notifyBackfill(ctx)
 						return nil
 					}
 					return r
-				},
-			}
+				})
 		}
 
 		sqlDB.Exec(t, `
@@ -8015,16 +8011,15 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 
 		for _, server := range tc.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+				func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
 					r.testingKnobs.afterPublishingDescriptors = func() error {
 						notifyContinue(ctx)
 						return errors.New("injected error")
 					}
 					return r
-				},
-			}
+				})
 		}
 
 		sqlDB.Exec(t, `
@@ -8077,16 +8072,15 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 
 		for _, server := range tc.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+				func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
 					r.testingKnobs.afterPublishingDescriptors = func() error {
 						notifyContinue(ctx)
 						return errors.New("injected error")
 					}
 					return r
-				},
-			}
+				})
 		}
 
 		sqlDB.Exec(t, `
@@ -8141,16 +8135,15 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 
 		for _, server := range tc.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+				func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
 					r.testingKnobs.afterPublishingDescriptors = func() error {
 						notifyContinue(ctx)
 						return errors.New("injected error")
 					}
 					return r
-				},
-			}
+				})
 		}
 
 		// Use the same connection throughout (except for the concurrent RESTORE) to
@@ -8210,16 +8203,15 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 
 		for _, server := range tc.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
-			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+			registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+				func(raw jobs.Resumer) jobs.Resumer {
 					r := raw.(*restoreResumer)
 					r.testingKnobs.afterPublishingDescriptors = func() error {
 						notifyContinue(ctx)
 						return errors.New("injected error")
 					}
 					return r
-				},
-			}
+				})
 		}
 
 		sqlDB.Exec(t, `
@@ -8517,9 +8509,9 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 	var forceFailure bool
 	for i := range tc.Servers {
-		tc.TenantOrServer(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(
-			raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+		tc.TenantOrServer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeRestore,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.beforePublishingDescriptors = func() error {
 					if forceFailure {
@@ -8528,8 +8520,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 					return nil
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	sqlDB.Exec(t, `CREATE DATABASE r1`)
@@ -8974,9 +8965,9 @@ func TestRestorePauseOnError(t *testing.T) {
 			jobRegistry = tc.Servers[i].TestTenants()[0].JobRegistry()
 		}
 
-		jobRegistry.(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.
-			Resumer{
-			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+		jobRegistry.(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeRestore,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.beforePublishingDescriptors = func() error {
 					if forceFailure {
@@ -8985,8 +8976,7 @@ func TestRestorePauseOnError(t *testing.T) {
 					return nil
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	sqlDB.Exec(t, `CREATE DATABASE r1`)
@@ -9230,15 +9220,14 @@ func TestRestoreSchemaDescriptorsRollBack(t *testing.T) {
 
 	for _, server := range tc.Servers {
 		registry := server.JobRegistry().(*jobs.Registry)
-		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+		registry.TestingWrapResumerConstructor(jobspb.TypeRestore,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.beforePublishingDescriptors = func() error {
 					return errors.New("boom")
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	sqlDB.Exec(t, `
@@ -9426,13 +9415,12 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 
 	for _, server := range tc.Servers {
 		registry := server.JobRegistry().(*jobs.Registry)
-		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeBackup: func(raw jobs.Resumer) jobs.Resumer {
+		registry.TestingWrapResumerConstructor(jobspb.TypeBackup,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*backupResumer)
 				r.testingKnobs.ignoreProtectedTimestamps = true
 				return r
-			},
-		}
+			})
 	}
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -10349,8 +10337,9 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 
 	var forceFailure bool
 	for i := range tc.Servers {
-		tc.TenantOrServer(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+		tc.TenantOrServer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeRestore,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.beforePublishingDescriptors = func() error {
 					if forceFailure {
@@ -10359,8 +10348,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 					return nil
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	sqlDB.Exec(t, `SET application_name = 'backup_test'`)
