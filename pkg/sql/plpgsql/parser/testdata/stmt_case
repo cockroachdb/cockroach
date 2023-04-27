@@ -11,7 +11,8 @@ BEGIN
 CASE hello
 WHEN world THEN
 END CASE
-<NOT DONE YET>END
+<NOT DONE YET>
+END
 <NOT DONE YET>
 
 parse
@@ -27,7 +28,8 @@ BEGIN
 CASE order_cnt
 WHEN 1 , 2 , 3 THEN
 END CASE
-<NOT DONE YET>END
+<NOT DONE YET>
+END
 <NOT DONE YET>
 
 parse
@@ -45,7 +47,8 @@ CASE order_cnt
 WHEN 1 , 2 , 3 THEN
 WHEN 5 THEN
 END CASE
-<NOT DONE YET>END
+<NOT DONE YET>
+END
 <NOT DONE YET>
 
 parse
@@ -61,7 +64,8 @@ BEGIN
 CASE
 WHEN true THEN
 END CASE
-<NOT DONE YET>END
+<NOT DONE YET>
+END
 <NOT DONE YET>
 
 parse
@@ -80,7 +84,8 @@ CASE
 WHEN order_cnt between 0 and 100 THEN
 WHEN order_cnt > 100 THEN
 END CASE
-<NOT DONE YET>END
+<NOT DONE YET>
+END
 <NOT DONE YET>
 
 parse
@@ -101,14 +106,15 @@ DECLARE
 BEGIN
 CASE
 WHEN order_cnt between 0 and 100 THEN
-  CALL a function/procedure
+CALL a function/procedure
 <NOT DONE YET>
 WHEN order_cnt > 100 THEN
-  CALL a function/procedure
+CALL a function/procedure
 <NOT DONE YET>
 ELSE
-  CALL a function/procedure
+CALL a function/procedure
 <NOT DONE YET>
 END CASE
-<NOT DONE YET>END
+<NOT DONE YET>
+END
 <NOT DONE YET>

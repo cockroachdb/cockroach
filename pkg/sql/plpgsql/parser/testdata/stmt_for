@@ -1,0 +1,118 @@
+parse
+DECLARE
+BEGIN
+FOR i IN EXECUTE some_happy_query LOOP
+  CALL fn(i);
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+FOR i IN EXECUTE some_happy_query LOOP
+CALL a function/procedure
+<NOT DONE YET>
+END LOOP
+END
+<NOT DONE YET>
+
+parse
+DECLARE
+BEGIN
+FOR i IN EXECUTE some_happy_query USING a=1, b=2 LOOP
+  CALL fn(i);
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+FOR i IN EXECUTE some_happy_query USING a = 1, b = 2 LOOP
+CALL a function/procedure
+<NOT DONE YET>
+END LOOP
+END
+<NOT DONE YET>
+
+parse
+DECLARE
+BEGIN
+FOR i IN some_cursor LOOP
+  CALL fn(i);
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+FOR i IN some_cursor LOOP
+CALL a function/procedure
+<NOT DONE YET>
+END LOOP
+END
+<NOT DONE YET>
+
+parse
+DECLARE
+BEGIN
+FOR i IN 1 .. 10 LOOP
+  CALL fn(i);
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+FOR i IN 1 .. 10 LOOP
+CALL a function/procedure
+<NOT DONE YET>
+END LOOP
+END
+<NOT DONE YET>
+
+parse
+DECLARE
+BEGIN
+FOR i IN 1 .. 10 BY 2 LOOP
+  CALL fn(i);
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+FOR i IN 1 .. 10 BY 2 LOOP
+CALL a function/procedure
+<NOT DONE YET>
+END LOOP
+END
+<NOT DONE YET>
+
+parse
+DECLARE
+BEGIN
+FOR i IN REVERSE 1 .. 10 BY 2 LOOP
+  CALL fn(i);
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+FOR i IN REVERSE 1 .. 10 BY 2 LOOP
+CALL a function/procedure
+<NOT DONE YET>
+END LOOP
+END
+<NOT DONE YET>
+
+parse
+DECLARE
+BEGIN
+FOR i IN SELECT a, b, c FROM t LOOP
+  CALL fn(i);
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+FOR i IN select a , b , c from t LOOP
+CALL a function/procedure
+<NOT DONE YET>
+END LOOP
+END
+<NOT DONE YET>
