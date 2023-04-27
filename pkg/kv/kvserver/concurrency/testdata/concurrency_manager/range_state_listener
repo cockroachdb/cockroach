@@ -77,12 +77,11 @@ finish req=req1
 
 debug-lock-table
 ----
-global: num=2
+num=2
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "k2"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # --------------------------------
 # Setup complete, test starts here
@@ -100,7 +99,7 @@ sequence req=req2
 
 debug-lock-table
 ----
-global: num=2
+num=2
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
@@ -108,7 +107,6 @@ global: num=2
    distinguished req: 2
  lock: "k2"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # Replica loses lease.
 on-lease-updated leaseholder=false lease-seq=2
@@ -122,8 +120,7 @@ on-lease-updated leaseholder=false lease-seq=2
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 handle-write-intent-error req=req2 lease-seq=1
   intent txn=txn1 key=k
@@ -133,8 +130,7 @@ handle-write-intent-error req=req2 lease-seq=1
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 sequence req=req2
 ----
@@ -166,12 +162,11 @@ handle-write-intent-error req=req2 lease-seq=2
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: false req: 3, txn: 00000002-0000-0000-0000-000000000000
-local: num=0
 
 sequence req=req2
 ----
@@ -215,10 +210,9 @@ finish req=reqRes1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   res: req: 3, txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
-local: num=0
 
 on-lock-acquired req=req2 key=k
 ----
@@ -226,10 +220,9 @@ on-lock-acquired req=req2 key=k
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 finish req=req2
 ----
@@ -246,8 +239,7 @@ on-lease-updated leaseholder=true lease-seq=4
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 sequence req=req3
 ----
@@ -268,8 +260,7 @@ handle-write-intent-error req=req3 lease-seq=2
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 sequence req=req3
 ----
@@ -285,12 +276,11 @@ handle-write-intent-error req=req3 lease-seq=4
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: false req: 4, txn: 00000003-0000-0000-0000-000000000000
-local: num=0
 
 sequence req=req3
 ----
@@ -329,10 +319,9 @@ finish req=reqRes2
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   res: req: 4, txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
-local: num=0
 
 on-lock-acquired req=req3 key=k
 ----
@@ -340,10 +329,9 @@ on-lock-acquired req=req3 key=k
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 finish req=req3
 ----
@@ -398,10 +386,9 @@ finish req=req1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # --------------------------------
 # Setup complete, test starts here
@@ -419,13 +406,12 @@ sequence req=req2
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 6, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 6
-local: num=0
 
 on-split
 ----
@@ -438,8 +424,7 @@ on-split
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 handle-write-intent-error req=req2 lease-seq=1
   intent txn=txn1 key=k
@@ -448,12 +433,11 @@ handle-write-intent-error req=req2 lease-seq=1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: false req: 6, txn: 00000002-0000-0000-0000-000000000000
-local: num=0
 
 sequence req=req2
 ----
@@ -492,10 +476,9 @@ finish req=reqRes1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   res: req: 6, txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
-local: num=0
 
 on-lock-acquired req=req2 key=k
 ----
@@ -503,10 +486,9 @@ on-lock-acquired req=req2 key=k
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 finish req=req2
 ----
@@ -575,10 +557,9 @@ finish req=req1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # --------------------------------
 # Setup complete, test starts here
@@ -603,13 +584,12 @@ sequence req=req3
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 8, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 8
-local: num=0
 
 on-merge
 ----
@@ -622,8 +602,7 @@ on-merge
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 on-lock-acquired req=req3 key=k2
 ----
@@ -631,8 +610,7 @@ on-lock-acquired req=req3 key=k2
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 finish req=req3
 ----
@@ -674,12 +652,11 @@ handle-write-intent-error req=req2 lease-seq=2
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: false req: 10, txn: 00000002-0000-0000-0000-000000000000
-local: num=0
 
 sequence req=req2
 ----
@@ -718,10 +695,9 @@ finish req=reqRes1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   res: req: 10, txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
-local: num=0
 
 on-lock-acquired req=req2 key=k
 ----
@@ -729,10 +705,9 @@ on-lock-acquired req=req2 key=k
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 finish req=req2
 ----
@@ -787,10 +762,9 @@ finish req=req1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # --------------------------------
 # Setup complete, test starts here
@@ -808,13 +782,12 @@ sequence req=req2
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 12, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 12
-local: num=0
 
 on-snapshot-applied
 ----
@@ -827,8 +800,7 @@ on-snapshot-applied
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 handle-write-intent-error req=req2 lease-seq=1
   intent txn=txn1 key=k
@@ -837,12 +809,11 @@ handle-write-intent-error req=req2 lease-seq=1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: false req: 12, txn: 00000002-0000-0000-0000-000000000000
-local: num=0
 
 sequence req=req2
 ----
@@ -881,10 +852,9 @@ finish req=reqRes1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   res: req: 12, txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
-local: num=0
 
 on-lock-acquired req=req2 key=k
 ----
@@ -892,10 +862,9 @@ on-lock-acquired req=req2 key=k
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 finish req=req2
 ----

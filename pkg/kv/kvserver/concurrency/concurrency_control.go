@@ -457,7 +457,6 @@ type Error = kvpb.Error
 
 // QueryLockTableOptions bundles the options for the QueryLockTableState function.
 type QueryLockTableOptions struct {
-	KeyScope           spanset.SpanScope
 	MaxLocks           int64
 	TargetBytes        int64
 	IncludeUncontended bool

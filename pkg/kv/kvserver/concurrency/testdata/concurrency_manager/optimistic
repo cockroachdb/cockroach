@@ -21,10 +21,9 @@ on-lock-acquired req=req1 key=d
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "d"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 finish req=req1
 ----
@@ -44,10 +43,9 @@ sequence req=req2 eval-kind=opt
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "d"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # When checking with a span that does not include the existing lock, there is
 # no conflict.
@@ -74,10 +72,9 @@ sequence req=req3 eval-kind=opt
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "d"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # Wider span for req3 has a conflict.
 check-opt-no-conflicts req=req3
@@ -130,8 +127,7 @@ sequence req=req4
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 new-request name=req5 txn=txn2 ts=12,1
   scan key=a endkey=e
