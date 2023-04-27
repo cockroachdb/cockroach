@@ -426,6 +426,21 @@ package kvflowcontrol
 //   - Because the fan-in effects of epoch-LIFO are not well understood (by this
 //     author at least), we just disable it below-raft.
 //
+// I13. What happens when a range {un,}quiesces?
+// - Quiescing a range only prevents its internal raft group from being ticked,
+//   which stops it from issuing MsgHeartbeats or calling elections. Quiesced
+//   ranges still have a raft leader and/or a leaseholder. Any raft operation
+//   (for example, proposals) on any replica ends up unquiescing the range,
+//   typically under stable raft leadership. As far as flow tokens are
+//   concerned:
+//   - Quiesced ranges have no steady stream of RaftTransport messages, which we
+//     use to piggyback flow token returns. But we guarantee timely delivery
+//     even without messages to piggyback on top of. See I8 above.
+//   - When returning flow tokens to a quiesced range's leaseholder, that's ok,
+//     we're able to look up the right kvflowcontrol.Handle since the replica is
+//     still around. When quiescing a range, we don't need to release all-held
+//     tokens, or wait until there are no held flow tokens.
+//
 // ---
 //
 // [^1]: kvserverpb.RaftMessageRequest is the unit of what's sent
