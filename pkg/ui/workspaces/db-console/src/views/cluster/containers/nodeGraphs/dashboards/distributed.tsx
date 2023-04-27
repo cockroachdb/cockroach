@@ -18,10 +18,14 @@ import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodeSources, nodeDisplayNameByID } = props;
+  const { nodeIDs, nodeSources, nodeDisplayNameByID, tenantSource } = props;
 
   return [
-    <LineGraph title="Batches" sources={nodeSources}>
+    <LineGraph
+      title="Batches"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+    >
       <Axis label="batches">
         <Metric
           name="cr.node.distsender.batches"
@@ -36,7 +40,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="RPCs" sources={nodeSources}>
+    <LineGraph title="RPCs" sources={nodeSources} tenantSource={tenantSource}>
       <Axis label="rpcs">
         <Metric
           name="cr.node.distsender.rpc.sent"
@@ -51,7 +55,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="RPC Errors" sources={nodeSources}>
+    <LineGraph
+      title="RPC Errors"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+    >
       <Axis label="errors">
         <Metric
           name="cr.node.distsender.rpc.sent.sendnexttimeout"
@@ -71,7 +79,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="KV Transactions" sources={nodeSources}>
+    <LineGraph
+      title="KV Transactions"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+    >
       <Axis label="transactions">
         <Metric name="cr.node.txn.commits" title="Committed" nonNegativeRate />
         <Metric
@@ -85,6 +97,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="KV Transaction Durations: 99th percentile"
+      tenantSource={tenantSource}
       tooltip={`The 99th percentile of transaction durations over a 1 minute period.
                               Values are displayed individually for each node.`}
     >
@@ -103,6 +116,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="KV Transaction Durations: 90th percentile"
+      tenantSource={tenantSource}
       tooltip={`The 90th percentile of transaction durations over a 1 minute period.
                               Values are displayed individually for each node.`}
     >
@@ -121,6 +135,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Node Heartbeat Latency: 99th percentile"
+      tenantSource={tenantSource}
       tooltip={`The 99th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period.
                               Values are displayed individually for each node.`}
     >
@@ -139,6 +154,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Node Heartbeat Latency: 90th percentile"
+      tenantSource={tenantSource}
       tooltip={`The 90th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period.
                               Values are displayed individually for each node.`}
     >

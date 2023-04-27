@@ -18,11 +18,18 @@ import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodeSources, tooltipSelection, nodeDisplayNameByID } = props;
+  const {
+    nodeIDs,
+    nodeSources,
+    tooltipSelection,
+    nodeDisplayNameByID,
+    tenantSource,
+  } = props;
 
   return [
     <LineGraph
       title="Live Node Count"
+      tenantSource={tenantSource}
       tooltip="The number of live nodes in the cluster."
     >
       <Axis label="nodes">
@@ -37,6 +44,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Memory Usage"
       sources={nodeSources}
+      tenantSource={tenantSource}
       tooltip={
         <div>
           {`Memory in use ${tooltipSelection}:`}
@@ -67,6 +75,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Goroutine Count"
       sources={nodeSources}
+      tenantSource={tenantSource}
       tooltip={`The number of Goroutines ${tooltipSelection}.
            This count should rise and fall based on load.`}
     >
@@ -78,6 +87,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Runnable Goroutines per CPU"
       sources={nodeSources}
+      tenantSource={tenantSource}
       tooltip={`The number of Goroutines waiting for CPU ${tooltipSelection}.
            This count should rise and fall based on load.`}
     >
@@ -97,6 +107,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="GC Runs"
       sources={nodeSources}
+      tenantSource={tenantSource}
       tooltip={`The number of times that Go’s garbage collector was invoked per second ${tooltipSelection}.`}
     >
       <Axis label="runs">
@@ -107,6 +118,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="GC Pause Time"
       sources={nodeSources}
+      tenantSource={tenantSource}
       tooltip={`The amount of processor time used by Go’s garbage collector
            per second ${tooltipSelection}.
            During garbage collection, application code execution is paused.`}
@@ -123,6 +135,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="CPU Time"
       sources={nodeSources}
+      tenantSource={tenantSource}
       tooltip={`The amount of CPU time used by CockroachDB (User)
            and system-level operations (Sys) ${tooltipSelection}.`}
     >
@@ -143,6 +156,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Clock Offset"
       sources={nodeSources}
+      tenantSource={tenantSource}
       tooltip={`Mean clock offset of each node against the rest of the cluster.`}
     >
       <Axis label="offset" units={AxisUnits.Duration}>
