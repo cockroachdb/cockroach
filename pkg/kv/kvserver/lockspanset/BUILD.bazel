@@ -1,0 +1,29 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "lockspanset",
+    srcs = ["lockspanset.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/roachpb",
+    ],
+)
+
+go_test(
+    name = "lockspanset_test",
+    srcs = ["lockspanset_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":lockspanset"],
+    deps = [
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/roachpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
