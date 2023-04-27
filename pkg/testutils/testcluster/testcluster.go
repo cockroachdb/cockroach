@@ -1436,19 +1436,30 @@ func (tc *TestCluster) WaitFor5NodeReplication() error {
 		// conformance since zone configs are propagated synchronously.
 		// Generous timeout is added to allow rangefeeds to catch up. On startup
 		// they could get delayed making test to fail.
-		now := tc.Server(0).Clock().Now()
-		for _, s := range tc.Servers {
-			scs := s.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
-			if err := testutils.SucceedsSoonError(func() error {
-				if scs.LastUpdated().Less(now) {
-					return errors.New("zone configs not propagated")
-				}
-				return nil
-			}); err != nil {
-				return err
-			}
+		err := tc.WaitForZoneConfigPropagation()
+		if err != nil {
+			return err
 		}
 		return tc.WaitForFullReplication()
+	}
+	return nil
+}
+
+// WaitForZoneConfigPropagation ensures that all span config subscribers caught
+// up till now. That would guarantee that zone configs set prior to this call
+// are applied.
+func (tc *TestCluster) WaitForZoneConfigPropagation() error {
+	now := tc.Server(0).Clock().Now()
+	for _, s := range tc.Servers {
+		scs := s.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
+		if err := testutils.SucceedsSoonError(func() error {
+			if scs.LastUpdated().Less(now) {
+				return errors.New("zone configs not propagated")
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
