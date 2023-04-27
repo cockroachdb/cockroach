@@ -1590,6 +1590,16 @@ func (stmt *Select) copyNode() *Select {
 	return &stmtCopy
 }
 
+func (n *CopyTo) walkStmt(v Visitor) Statement {
+	if newStmt, changed := walkStmt(v, n.Statement); changed {
+		// Make a copy of the CopyTo statement.
+		stmtCopy := *n
+		ret := &(stmtCopy)
+		ret.Statement = newStmt
+	}
+	return n
+}
+
 // walkStmt is part of the walkableStmt interface.
 func (stmt *Select) walkStmt(v Visitor) Statement {
 	ret := stmt

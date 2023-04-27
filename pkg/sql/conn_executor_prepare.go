@@ -197,12 +197,15 @@ func (ex *connExecutor) prepare(
 
 	origNumPlaceholders := stmt.NumPlaceholders
 	switch stmt.AST.(type) {
-	case *tree.Prepare:
-		// Special case: we're preparing a SQL-level PREPARE using the
+	case *tree.Prepare, *tree.CopyTo:
+		// Special cases:
+		// - We're preparing a SQL-level PREPARE using the
 		// wire protocol. There's an ambiguity from the perspective of this code:
 		// any placeholders that are inside of the statement that we're preparing
 		// shouldn't be treated as placeholders to the PREPARE statement. So, we
 		// edit the NumPlaceholders field to be 0 here.
+		// - We're preparing a COPY ... TO statement. We match the Postgres
+		// behavior, which is to treat the statement as if it had no placeholders.
 		stmt.NumPlaceholders = 0
 	}
 
@@ -257,8 +260,10 @@ func (ex *connExecutor) prepare(
 		// preparation.
 		stmt.Prepared = prepared
 
-		if err := tree.ProcessPlaceholderAnnotations(&ex.planner.semaCtx, stmt.AST, placeholderHints); err != nil {
-			return err
+		if stmt.NumPlaceholders > 0 {
+			if err := tree.ProcessPlaceholderAnnotations(&ex.planner.semaCtx, stmt.AST, placeholderHints); err != nil {
+				return err
+			}
 		}
 
 		p.stmt = stmt
@@ -417,7 +422,7 @@ func (ex *connExecutor) execBind(
 		if len(bindCmd.Args) != int(numQArgs) {
 			return retErr(
 				pgwirebase.NewProtocolViolationErrorf(
-					"expected %d arguments, got %d", numQArgs, len(bindCmd.Args)))
+					"bind message supplies %d parameters, but prepared statement \"%s\" requires %d", len(bindCmd.Args), bindCmd.PreparedStatementName, numQArgs))
 		}
 
 		resolve := func(ctx context.Context, txn *kv.Txn) (err error) {

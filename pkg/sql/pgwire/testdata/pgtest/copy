@@ -1040,3 +1040,71 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"0"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+### Tests for COPY ... TO with prepared statements.
+
+send
+Parse {"Query": "COPY (select 1) TO STDOUT"}
+Bind
+Describe {"ObjectType": "P"}
+Execute
+Sync
+----
+
+# Everything works fine with no placeholders.
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CopyOutResponse","ColumnFormatCodes":[0]}
+{"Type":"CopyData","Data":"310a"}
+{"Type":"CopyDone"}
+{"Type":"CommandComplete","CommandTag":"COPY 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# We match the PostgreSQL behavior when trying to bind a placeholder in COPY TO.
+send
+Parse {"Query": "COPY (select $1::int) TO STDOUT"}
+Bind {"Parameters": [{"text":"1"}]}
+Execute
+Sync
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01","Message":"bind message supplies 1 parameters, but prepared statement \"\" requires 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# And it's also an error to _not_ bind a placeholder.
+send
+Parse {"Query": "COPY (select $1::int) TO STDOUT"}
+Bind
+Execute
+Sync
+----
+
+until keepErrMessage noncrdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"42P02","Message":"there is no parameter $1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# CockroachDB has the same error as PostgreSQL, with a slightly different message.
+until keepErrMessage crdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CopyOutResponse","ColumnFormatCodes":null}
+{"Type":"ErrorResponse","Code":"42P02","Message":"COPY (SELECT $1::INT8) TO STDOUT: no value provided for placeholder: $1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
