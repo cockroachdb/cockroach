@@ -32,7 +32,8 @@ import (
 // TestHandleAdmit tests the blocking behavior of Handle.Admit():
 // - we block until there are flow tokens available;
 // - we unblock when streams without flow tokens are disconnected;
-// - we unblock when the handle is closed.
+// - we unblock when the handle is closed;
+// - we unblock when the handle is reset.
 func TestHandleAdmit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -69,12 +70,30 @@ func TestHandleAdmit(t *testing.T) {
 				handle.Close(ctx)
 			},
 		},
+		{
+			name: "unblocked-when-reset",
+			unblockFn: func(ctx context.Context, handle kvflowcontrol.Handle) {
+				// Reset all streams on the handle; the call to .Admit() should
+				// unblock.
+				handle.ResetStreams(ctx)
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			registry := metric.NewRegistry()
 			clock := hlc.NewClockForTesting(nil)
-			controller := kvflowcontroller.New(registry, cluster.MakeTestingClusterSettings(), clock)
-			handle := kvflowhandle.New(controller, kvflowhandle.NewMetrics(registry), clock)
+			st := cluster.MakeTestingClusterSettings()
+			kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+			kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
+
+			controller := kvflowcontroller.New(registry, st, clock)
+			handle := kvflowhandle.New(
+				controller,
+				kvflowhandle.NewMetrics(registry),
+				clock,
+				roachpb.RangeID(1),
+				roachpb.SystemTenantID,
+			)
 
 			// Connect a single stream at pos=0 and deplete all 16MiB of regular
 			// tokens at pos=1.
@@ -104,4 +123,103 @@ func TestHandleAdmit(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFlowControlMode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stream := kvflowcontrol.Stream{
+		TenantID: roachpb.MustMakeTenantID(42),
+		StoreID:  roachpb.StoreID(42),
+	}
+	pos := func(d uint64) kvflowcontrolpb.RaftLogPosition {
+		return kvflowcontrolpb.RaftLogPosition{Term: 1, Index: d}
+	}
+
+	for _, tc := range []struct {
+		mode            kvflowcontrol.ModeT
+		blocks, ignores []admissionpb.WorkClass
+	}{
+		{
+			mode: kvflowcontrol.ApplyToElastic,
+			blocks: []admissionpb.WorkClass{
+				admissionpb.ElasticWorkClass,
+			},
+			ignores: []admissionpb.WorkClass{
+				admissionpb.RegularWorkClass,
+			},
+		},
+		{
+			mode: kvflowcontrol.ApplyToAll,
+			blocks: []admissionpb.WorkClass{
+				admissionpb.ElasticWorkClass, admissionpb.RegularWorkClass,
+			},
+			ignores: []admissionpb.WorkClass{},
+		},
+	} {
+		t.Run(tc.mode.String(), func(t *testing.T) {
+			registry := metric.NewRegistry()
+			clock := hlc.NewClockForTesting(nil)
+			st := cluster.MakeTestingClusterSettings()
+			kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+			kvflowcontrol.Mode.Override(ctx, &st.SV, int64(tc.mode))
+
+			controller := kvflowcontroller.New(registry, st, clock)
+			handle := kvflowhandle.New(
+				controller,
+				kvflowhandle.NewMetrics(registry),
+				clock,
+				roachpb.RangeID(1),
+				roachpb.SystemTenantID,
+			)
+			defer handle.Close(ctx)
+
+			// Connect a single stream at pos=0 and deplete all 16MiB of regular
+			// tokens at pos=1. It also puts elastic tokens in the -ve.
+			handle.ConnectStream(ctx, pos(0), stream)
+			handle.DeductTokensFor(ctx, admissionpb.NormalPri, pos(1), kvflowcontrol.Tokens(16<<20 /* 16MiB */))
+
+			// Invoke .Admit() for {regular,elastic} work in a separate
+			// goroutines, and test below whether the goroutines are blocked.
+			regularAdmitCh := make(chan struct{})
+			elasticAdmitCh := make(chan struct{})
+			go func() {
+				require.NoError(t, handle.Admit(ctx, admissionpb.NormalPri, time.Time{}))
+				close(regularAdmitCh)
+			}()
+			go func() {
+				require.NoError(t, handle.Admit(ctx, admissionpb.BulkNormalPri, time.Time{}))
+				close(elasticAdmitCh)
+			}()
+
+			for _, ignoredClass := range tc.ignores { // work should not block
+				classAdmitCh := regularAdmitCh
+				if ignoredClass == admissionpb.ElasticWorkClass {
+					classAdmitCh = elasticAdmitCh
+				}
+
+				select {
+				case <-classAdmitCh:
+				case <-time.After(5 * time.Second):
+					t.Fatalf("%s work didn't get admitted", ignoredClass)
+				}
+			}
+
+			for _, blockedClass := range tc.blocks { // work should get blocked
+				classAdmitCh := regularAdmitCh
+				if blockedClass == admissionpb.ElasticWorkClass {
+					classAdmitCh = elasticAdmitCh
+				}
+
+				select {
+				case <-classAdmitCh:
+					t.Fatalf("unexpectedly admitted %s work", blockedClass)
+				case <-time.After(10 * time.Millisecond):
+				}
+			}
+		})
+	}
+
 }
