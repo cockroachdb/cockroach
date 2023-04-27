@@ -232,6 +232,11 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		pErr.GetTxn().WriteTooOld = false
 	}
 
+	// Check for server-side refresh.
+	if err := sr.forwardRefreshTimestampOnResponse(ba, br, pErr); err != nil {
+		return nil, kvpb.NewError(err)
+	}
+
 	if pErr == nil && br.Txn.WriteTooOld {
 		// If we got a response with the WriteTooOld flag set, then we pretend that
 		// we got a WriteTooOldError, which will cause us to attempt to refresh and
@@ -269,9 +274,6 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		} else {
 			log.VEventf(ctx, 2, "not checking error for refresh; refresh attempts exhausted")
 		}
-	}
-	if err := sr.forwardRefreshTimestampOnResponse(ba, br, pErr); err != nil {
-		return nil, kvpb.NewError(err)
 	}
 	return br, pErr
 }
