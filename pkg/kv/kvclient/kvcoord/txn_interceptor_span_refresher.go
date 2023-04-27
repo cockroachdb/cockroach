@@ -130,11 +130,12 @@ type txnSpanRefresher struct {
 	// canAutoRetry is set if the txnSpanRefresher is allowed to auto-retry.
 	canAutoRetry bool
 
-	refreshSuccess                *metric.Counter
-	refreshFail                   *metric.Counter
-	refreshFailWithCondensedSpans *metric.Counter
-	refreshMemoryLimitExceeded    *metric.Counter
-	refreshAutoRetries            *metric.Counter
+	clientRefreshSuccess                *metric.Counter
+	clientRefreshFail                   *metric.Counter
+	clientRefreshFailWithCondensedSpans *metric.Counter
+	clientRefreshMemoryLimitExceeded    *metric.Counter
+	clientRefreshAutoRetries            *metric.Counter
+	serverRefreshSuccess                *metric.Counter
 }
 
 // SendLocked implements the lockedSender interface.
@@ -206,7 +207,7 @@ func (sr *txnSpanRefresher) maybeCondenseRefreshSpans(
 			sr.refreshFootprint.clear()
 		}
 		if sr.refreshFootprint.condensed && !condensedBefore {
-			sr.refreshMemoryLimitExceeded.Inc(1)
+			sr.clientRefreshMemoryLimitExceeded.Inc(1)
 		}
 	}
 }
@@ -313,7 +314,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	log.Eventf(ctx, "refresh succeeded; retrying original request")
 	ba = ba.ShallowCopy()
 	ba.UpdateTxn(refreshToTxn)
-	sr.refreshAutoRetries.Inc(1)
+	sr.clientRefreshAutoRetries.Inc(1)
 
 	// To prevent starvation of batches that are trying to commit, split off the
 	// EndTxn request into its own batch on auto-retries. This avoids starvation
@@ -510,11 +511,11 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 	// Track the result of the refresh in metrics.
 	defer func() {
 		if err == nil {
-			sr.refreshSuccess.Inc(1)
+			sr.clientRefreshSuccess.Inc(1)
 		} else {
-			sr.refreshFail.Inc(1)
+			sr.clientRefreshFail.Inc(1)
 			if sr.refreshFootprint.condensed {
-				sr.refreshFailWithCondensedSpans.Inc(1)
+				sr.clientRefreshFailWithCondensedSpans.Inc(1)
 			}
 		}
 	}()
@@ -639,7 +640,12 @@ func (sr *txnSpanRefresher) forwardRefreshTimestampOnResponse(
 		return nil
 	}
 	if baTxn.ReadTimestamp.Less(brTxn.ReadTimestamp) {
+		if !ba.CanForwardReadTimestamp {
+			return errors.AssertionFailedf("unexpected server-side refresh without "+
+				"CanForwardReadTimestamp set. ba: %s, ba.Txn: %s, br.Txn: %s", ba.Summary(), baTxn, brTxn)
+		}
 		sr.refreshedTimestamp.Forward(brTxn.ReadTimestamp)
+		sr.serverRefreshSuccess.Inc(1)
 	} else if brTxn.ReadTimestamp.Less(baTxn.ReadTimestamp) {
 		return errors.AssertionFailedf("received transaction in response with "+
 			"earlier read timestamp than in the request. ba.Txn: %s, br.Txn: %s", baTxn, brTxn)
