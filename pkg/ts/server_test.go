@@ -377,6 +377,36 @@ func TestServerQueryTenant(t *testing.T) {
 				},
 			},
 		},
+		// Introduce an extra tenant's metrics, to ensure they're not
+		// included when queryin tenant 2.
+		{
+			Name:   "test.metric",
+			Source: "1-3",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          13.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          17.0,
+				},
+			},
+		},
+		{
+			Name:   "test.metric",
+			Source: "10-3",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          39.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          47.0,
+				},
+			},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -392,11 +422,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          101.0,
+						Value:          114.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          202.0,
+						Value:          219.0,
 					},
 				},
 			},
@@ -408,11 +438,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          305.0,
+						Value:          357.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          607.0,
+						Value:          671.0,
 					},
 				},
 			},
@@ -446,7 +476,8 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 	require.Equal(t, expectedSystemResult, systemResponse)
 
-	// App tenant should only report metrics with its tenant ID in the secondary source field
+	// App tenant without the necessary tenant capability should only
+	// report metrics with its tenant ID in the secondary source field.
 	tenantID := roachpb.MustMakeTenantID(2)
 	expectedTenantResponse := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
@@ -488,12 +519,6 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 
 	tenant, _ := serverutils.StartTenant(t, testCluster.Server(0), base.TestTenantArgs{TenantID: tenantID})
-	_, err = systemDB.Exec("ALTER TENANT [2] GRANT CAPABILITY can_view_tsdb_metrics=true;\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	capability := map[tenantcapabilities.ID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
-	testCluster.WaitForTenantCapabilities(t, tenantID, capability)
 	tenantConn, err := tenant.(*server.TestTenant).RPCContext().GRPCDialNode(tenant.(*server.TestTenant).Cfg.AdvertiseAddr, tsrv.NodeID(), rpc.DefaultClass).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -520,6 +545,75 @@ func TestServerQueryTenant(t *testing.T) {
 		sort.Strings(r.Sources)
 	}
 	require.Equal(t, expectedTenantResponse, tenantResponse)
+
+	// Tenants with the right capability aggregate their own metrics
+	// with the system tenant.
+	expectedTenantWithCapabilityResponse := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:     "test.metric",
+					Sources:  []string{"1"},
+					TenantID: tenantID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          101.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          202.0,
+					},
+				},
+			},
+			{
+				Query: tspb.Query{
+					Name:     "test.metric",
+					Sources:  []string{"1", "10"},
+					TenantID: tenantID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          305.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          607.0,
+					},
+				},
+			},
+		},
+	}
+
+	_, err = systemDB.Exec("ALTER TENANT [2] GRANT CAPABILITY can_view_tsdb_metrics=true;\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := map[tenantcapabilities.ID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
+	testCluster.WaitForTenantCapabilities(t, tenantID, capability)
+
+	tenantWithCapabilityResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    "test.metric",
+				Sources: []string{"1"},
+			},
+			{
+				Name: "test.metric",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range tenantWithCapabilityResponse.Results {
+		sort.Strings(r.Sources)
+	}
+	require.Equal(t, expectedTenantWithCapabilityResponse, tenantWithCapabilityResponse)
 }
 
 // TestServerQueryMemoryManagement verifies that queries succeed under

@@ -125,6 +125,11 @@ message TimeSeriesQueryRequest {
   // query will be downsampled into periods of the supplied length. The
   // supplied duration must be a multiple of ten seconds.
   optional int64 sample_nanos = 4 [(gogoproto.nullable) = false];
+  // TenantCanViewSystem, if the caller is a secondary tenant, indicates whether
+  // the tenant has the appropriate capability necessary to view and aggregate
+  // their metrics with those of the system tenant. Not relevant for system tenant
+  // callers.
+  optional bool tenant_can_view_system = 5 [(gogoproto.nullable) = false];
 }
 
 // TimeSeriesQueryResponse is the standard response for time series queries

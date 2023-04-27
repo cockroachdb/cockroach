@@ -324,6 +324,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 				NowNanos:            now + (10 * time.Hour).Nanoseconds(),
 			},
 			memContext,
+			ts.QueryOpts{},
 		)
 		return dps, err
 	}

@@ -436,6 +436,20 @@ func (tsi *timeSeriesSpanIterator) isValid() bool {
 	return tsi.total < tsi.length
 }
 
+// QueryOpts represents options to be provided to db.Query.
+type QueryOpts struct {
+	// tenantCanViewSystem indicates that a secondary tenant has
+	// the appropriate capability to view and aggregate system
+	// tenant metrics with their own.
+	tenantCanViewSystem bool
+}
+
+func queryOptsFromRequest(req *tspb.TimeSeriesQueryRequest) QueryOpts {
+	return QueryOpts{
+		tenantCanViewSystem: req.TenantCanViewSystem,
+	}
+}
+
 // Query processes the supplied query over the supplied timespan and on-disk
 // resolution, while respecting the provided limitations on memory usage.
 func (db *DB) Query(
@@ -444,6 +458,7 @@ func (db *DB) Query(
 	diskResolution Resolution,
 	timespan QueryTimespan,
 	mem QueryMemoryContext,
+	opts QueryOpts,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	timespan.normalize()
 
@@ -488,7 +503,7 @@ func (db *DB) Query(
 
 		if maxTimespanWidth > timespan.width() {
 			if err := db.queryChunk(
-				ctx, query, resolution, timespan, mem, &result, sourceSet,
+				ctx, query, resolution, timespan, mem, &result, sourceSet, opts,
 			); err != nil {
 				return nil, nil, err
 			}
@@ -504,7 +519,7 @@ func (db *DB) Query(
 					chunkTime.EndNanos = timespan.EndNanos
 				}
 				if err := db.queryChunk(
-					ctx, query, resolution, chunkTime, mem, &result, sourceSet,
+					ctx, query, resolution, chunkTime, mem, &result, sourceSet, opts,
 				); err != nil {
 					return nil, nil, err
 				}
@@ -545,6 +560,7 @@ func (db *DB) queryChunk(
 	mem QueryMemoryContext,
 	dest *[]tspb.TimeSeriesDatapoint,
 	sourceSet map[string]struct{},
+	opts QueryOpts,
 ) error {
 	acc := mem.workerMonitor.MakeBoundAccount()
 	defer acc.Close(ctx)
@@ -556,9 +572,9 @@ func (db *DB) queryChunk(
 	var data []kv.KeyValue
 	var err error
 	if len(query.Sources) == 0 {
-		data, err = db.readAllSourcesFromDatabase(ctx, query.Name, diskResolution, diskTimespan, query.TenantID)
+		data, err = db.readAllSourcesFromDatabase(ctx, query, diskResolution, diskTimespan, opts)
 	} else {
-		data, err = db.readFromDatabase(ctx, query.Name, diskResolution, diskTimespan, query.Sources, query.TenantID)
+		data, err = db.readFromDatabase(ctx, query, diskResolution, diskTimespan, opts)
 	}
 
 	if err != nil {
@@ -832,11 +848,10 @@ func aggregate(agg tspb.TimeSeriesQueryAggregator, values []float64) float64 {
 // sources.
 func (db *DB) readFromDatabase(
 	ctx context.Context,
-	seriesName string,
+	query tspb.Query,
 	diskResolution Resolution,
 	timespan QueryTimespan,
-	sources []string,
-	tenantID roachpb.TenantID,
+	opts QueryOpts,
 ) ([]kv.KeyValue, error) {
 	// Iterate over all key timestamps which may contain data for the given
 	// sources, based on the given start/end time and the resolution.
@@ -844,21 +859,27 @@ func (db *DB) readFromDatabase(
 	startTimestamp := diskResolution.normalizeToSlab(timespan.StartNanos)
 	kd := diskResolution.SlabDuration()
 	for currentTimestamp := startTimestamp; currentTimestamp <= timespan.EndNanos; currentTimestamp += kd {
-		for _, source := range sources {
+		for _, source := range query.Sources {
 			// If a TenantID is specified and is not the system tenant, only query
 			// data for that tenant source.
-			if tenantID.IsSet() && !tenantID.IsSystem() {
-				source = tsutil.MakeTenantSource(source, tenantID.String())
-				key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
+			if query.TenantID.IsSet() && !query.TenantID.IsSystem() {
+				tenantSource := tsutil.MakeTenantSource(source, query.TenantID.String())
+				key := MakeDataKey(query.Name, tenantSource, diskResolution, currentTimestamp)
 				b.Get(key)
+				// If the tenant also has the capability to view system level metrics, fetch
+				// the system tenant data as well.
+				if opts.tenantCanViewSystem {
+					key := MakeDataKey(query.Name, source, diskResolution, currentTimestamp)
+					b.Get(key)
+				}
 			} else {
 				// Otherwise, we get the source associated with the system tenant.
-				key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
+				key := MakeDataKey(query.Name, source, diskResolution, currentTimestamp)
 				b.Get(key)
 				// Then we scan all keys that match the tenant source prefix since the system tenant
 				// aggregates sources across all tenants.
-				startKey := MakeDataKey(seriesName, tsutil.MakeTenantSourcePrefix(source), diskResolution, currentTimestamp)
-				endKey := MakeDataKey(seriesName, tsutil.MakeTenantSourcePrefix(source), diskResolution, currentTimestamp).PrefixEnd()
+				startKey := MakeDataKey(query.Name, tsutil.MakeTenantSourcePrefix(source), diskResolution, currentTimestamp)
+				endKey := MakeDataKey(query.Name, tsutil.MakeTenantSourcePrefix(source), diskResolution, currentTimestamp).PrefixEnd()
 				b.Scan(startKey, endKey)
 			}
 		}
@@ -883,20 +904,20 @@ func (db *DB) readFromDatabase(
 // keys, rather than by timespan.
 func (db *DB) readAllSourcesFromDatabase(
 	ctx context.Context,
-	seriesName string,
+	query tspb.Query,
 	diskResolution Resolution,
 	timespan QueryTimespan,
-	tenantID roachpb.TenantID,
+	opts QueryOpts,
 ) ([]kv.KeyValue, error) {
 	// Based on the supplied timestamps and resolution, construct start and
 	// end keys for a scan that will return every key with data relevant to
 	// the query. Query slightly before and after the actual queried range
 	// to allow interpolation of points at the start and end of the range.
 	startKey := MakeDataKey(
-		seriesName, "" /* source */, diskResolution, timespan.StartNanos,
+		query.Name, "" /* source */, diskResolution, timespan.StartNanos,
 	)
 	endKey := MakeDataKey(
-		seriesName, "" /* source */, diskResolution, timespan.EndNanos,
+		query.Name, "" /* source */, diskResolution, timespan.EndNanos,
 	).PrefixEnd()
 	b := &kv.Batch{}
 	b.Scan(startKey, endKey)
@@ -905,7 +926,7 @@ func (db *DB) readAllSourcesFromDatabase(
 		return nil, err
 	}
 
-	if !tenantID.IsSet() || tenantID.IsSystem() {
+	if !query.TenantID.IsSet() || query.TenantID.IsSystem() {
 		return b.Results[0].Rows, nil
 	}
 
@@ -917,7 +938,12 @@ func (db *DB) readAllSourcesFromDatabase(
 			return nil, err
 		}
 		_, tenantSource := tsutil.DecodeSource(source)
-		if tenantSource == tenantID.String() {
+		if tenantSource == query.TenantID.String() {
+			rows = append(rows, row)
+		} else if opts.tenantCanViewSystem && tenantSource == tsutil.SystemTenantIDSource {
+			// If the tenant has the capability to view system tenant
+			// metrics alongside their own, and the row belongs to the
+			// system tenant, collect the system tenant row as well.
 			rows = append(rows, row)
 		}
 	}

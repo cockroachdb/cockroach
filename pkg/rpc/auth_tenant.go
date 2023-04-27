@@ -396,6 +396,12 @@ func (a tenantAuthorizer) authSpanConfigConformance(
 func (a tenantAuthorizer) authTSDBQuery(
 	ctx context.Context, id roachpb.TenantID, request *tspb.TimeSeriesQueryRequest,
 ) error {
+	// The capability indicates that the tenant has the ability to view & aggregate
+	// system tenant level metrics in addition to their own.
+	hasTSDBCapability := false
+	if err := a.capabilitiesAuthorizer.HasTSDBQueryCapability(ctx, id); err == nil {
+		hasTSDBCapability = true
+	}
 	for _, query := range request.Queries {
 		if !query.TenantID.IsSet() {
 			return authError("tsdb query with unspecified tenant not permitted")
@@ -404,9 +410,7 @@ func (a tenantAuthorizer) authTSDBQuery(
 			return authErrorf("tsdb query with invalid tenant not permitted")
 		}
 	}
-	if err := a.capabilitiesAuthorizer.HasTSDBQueryCapability(ctx, id); err != nil {
-		return authError(err.Error())
-	}
+	request.TenantCanViewSystem = hasTSDBCapability
 	return nil
 }
 

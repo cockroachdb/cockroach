@@ -875,16 +875,6 @@ func TestTenantAuthRequest(t *testing.T) {
 func TestTenantAuthCapabilityChecks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	makeTimeseriesQueryReq := func(tenantID roachpb.TenantID) *tspb.TimeSeriesQueryRequest {
-		return &tspb.TimeSeriesQueryRequest{
-			Queries: []tspb.Query{
-				{
-					TenantID: tenantID,
-				},
-			},
-		}
-	}
-
 	tenID := roachpb.MustMakeTenantID(10)
 	for method, tests := range map[string][]struct {
 		req                 interface{}
@@ -911,22 +901,6 @@ func TestTenantAuthCapabilityChecks(t *testing.T) {
 				expErr: "tenant does not have capability",
 			},
 		},
-		"/cockroach.ts.tspb.TimeSeries/Query": {
-			{
-				req: makeTimeseriesQueryReq(tenID),
-				configureAuthorizer: func(authorizer *mockAuthorizer) {
-					authorizer.hasTSDBQueryCapability = true
-				},
-				expErr: "",
-			},
-			{
-				req: makeTimeseriesQueryReq(tenID),
-				configureAuthorizer: func(authorizer *mockAuthorizer) {
-					authorizer.hasTSDBQueryCapability = false
-				},
-				expErr: "tenant does not have capability",
-			},
-		},
 	} {
 		ctx := context.Background()
 		for _, tc := range tests {
@@ -943,6 +917,102 @@ func TestTenantAuthCapabilityChecks(t *testing.T) {
 				require.Regexp(t, tc.expErr, err)
 			}
 		}
+	}
+}
+
+func TestTenantAuthTSDBQueryCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	makeTimeseriesQueryReq := func(tenantID roachpb.TenantID) *tspb.TimeSeriesQueryRequest {
+		return &tspb.TimeSeriesQueryRequest{
+			Queries: []tspb.Query{
+				{
+					TenantID: tenantID,
+				},
+			},
+		}
+	}
+	tenID := roachpb.MustMakeTenantID(10)
+	for _, tc := range []struct {
+		name                string
+		req                 *tspb.TimeSeriesQueryRequest
+		configureAuthorizer func(authorizer *mockAuthorizer)
+		expErr              string
+		expReq              *tspb.TimeSeriesQueryRequest
+	}{
+		{
+			name: "tenant has capability, sets TenantCanViewSystem on request",
+			req:  makeTimeseriesQueryReq(tenID),
+			configureAuthorizer: func(authorizer *mockAuthorizer) {
+				authorizer.hasTSDBQueryCapability = true
+			},
+			expReq: func() *tspb.TimeSeriesQueryRequest {
+				baseReq := makeTimeseriesQueryReq(tenID)
+				baseReq.TenantCanViewSystem = true
+				return baseReq
+			}(),
+		},
+		{
+			name: "tenant has capability, does not set TenantCanViewSystem on request",
+			req:  makeTimeseriesQueryReq(tenID),
+			configureAuthorizer: func(authorizer *mockAuthorizer) {
+				authorizer.hasTSDBQueryCapability = false
+			},
+			expReq: makeTimeseriesQueryReq(tenID),
+		},
+		{
+			name: "tenant ID on query doesn't match authorizer",
+			req: &tspb.TimeSeriesQueryRequest{
+				Queries: []tspb.Query{
+					{
+						TenantID: tenID,
+					},
+					{
+						TenantID: roachpb.MustMakeTenantID(20),
+					},
+				},
+			},
+			configureAuthorizer: func(authorizer *mockAuthorizer) {
+				authorizer.hasTSDBQueryCapability = false
+			},
+			expErr: "tsdb query with invalid tenant not permitted",
+		},
+		{
+			name: "query has unset tenant ID",
+			req: &tspb.TimeSeriesQueryRequest{
+				Queries: []tspb.Query{
+					{
+						TenantID: tenID,
+					},
+					{
+						TenantID: roachpb.TenantID{},
+					},
+				},
+			},
+			configureAuthorizer: func(authorizer *mockAuthorizer) {
+				authorizer.hasTSDBQueryCapability = false
+			},
+			expErr: "tsdb query with unspecified tenant not permitted",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			authorizer := mockAuthorizer{}
+			tc.configureAuthorizer(&authorizer)
+			err := rpc.TestingAuthorizeTenantRequest(
+				ctx, &settings.Values{}, tenID, "/cockroach.ts.tspb.TimeSeries/Query", tc.req, authorizer,
+			)
+			if tc.expErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Equal(t, codes.Unauthenticated, status.Code(err))
+				require.Regexp(t, tc.expErr, err)
+			}
+			if tc.expReq != nil {
+				require.Equal(t, tc.expReq, tc.req)
+			}
+		})
 	}
 }
 

@@ -19,6 +19,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 )
 
+// The SystemTenantIDSource represents the tenantID component of the
+// ts key source for the system tenant, which is in fact empty.
+//
+// Currently, the source field for secondary tenants has the structure
+// of `{nodeID|storeID}-{tenantID}`. For the system tenant, this `tenantID`
+// component of the source field is left blank, leaving only `{nodeID|storeID}`.
+// Functions like DecodeSource will therefore return an empty string for th
+// tenant source to represent the system tenant. To make that behavior clear
+// for readers, we define a constant.
+const SystemTenantIDSource = ""
+
 // DumpRawTo is a helper that gob-encodes all messages received from the
 // source stream to the given WriteCloser.
 func DumpRawTo(src tspb.TimeSeries_DumpRawClient, out io.Writer) error {

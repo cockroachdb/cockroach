@@ -324,6 +324,7 @@ func (s *Server) Query(
 						Resolution10s,
 						timespan,
 						memContexts[queryIdx],
+						queryOptsFromRequest(request),
 					)
 					if err == nil {
 						response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{
