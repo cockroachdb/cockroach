@@ -10,20 +10,11 @@
 
 package kvpb
 
-import "github.com/cockroachdb/cockroach/pkg/util/stringerutil"
-
 // Method is the enumerated type for methods.
 type Method int
 
 // SafeValue implements redact.SafeValue.
 func (Method) SafeValue() {}
-
-var StringToMethodMap = stringerutil.StringToEnumValueMap(
-	_Method_index[:],
-	_Method_name,
-	0,
-	MaxMethod,
-)
 
 //go:generate stringer -type=Method
 const (
