@@ -101,7 +101,7 @@ func RandCreateTable(
 	rng *rand.Rand, prefix string, tableIdx int, isMultiRegion bool,
 ) *tree.CreateTable {
 	return RandCreateTableWithColumnIndexNumberGenerator(rng, prefix, tableIdx,
-		isMultiRegion, nil /* generateColumnIndexNumber */)
+		isMultiRegion, true /* allowPartiallyVisibleIndex */, nil /* generateColumnIndexNumber */)
 }
 
 var nameGenCfg = func() randidentcfg.Config {
@@ -117,17 +117,22 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	prefix string,
 	tableIdx int,
 	isMultiRegion bool,
+	allowPartiallyVisibleIndex bool,
 	generateColumnIndexNumber func() int64,
 ) *tree.CreateTable {
 	g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
 	name := g.GenerateOne(tableIdx)
-	return RandCreateTableWithColumnIndexNumberGeneratorAndName(rng, name, tableIdx, isMultiRegion, generateColumnIndexNumber)
+	return RandCreateTableWithColumnIndexNumberGeneratorAndName(
+		rng, name, tableIdx, isMultiRegion, allowPartiallyVisibleIndex, generateColumnIndexNumber,
+	)
 }
 
 func RandCreateTableWithName(
 	rng *rand.Rand, tableName string, tableIdx int, isMultiRegion bool,
 ) *tree.CreateTable {
-	return RandCreateTableWithColumnIndexNumberGeneratorAndName(rng, tableName, tableIdx, isMultiRegion, nil)
+	return RandCreateTableWithColumnIndexNumberGeneratorAndName(
+		rng, tableName, tableIdx, isMultiRegion, true /* allowPartiallyVisibleIndex */, nil,
+	)
 }
 
 func RandCreateTableWithColumnIndexNumberGeneratorAndName(
@@ -135,6 +140,7 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 	tableName string,
 	tableIdx int,
 	isMultiRegion bool,
+	allowPartiallyVisibleIndex bool,
 	generateColumnIndexNumber func() int64,
 ) *tree.CreateTable {
 	// columnDefs contains the list of Columns we'll add to our table.
@@ -231,8 +237,10 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 			indexDef.Invisibility = 0.0
 			if notvisible := rng.Intn(6) == 0; notvisible {
 				indexDef.Invisibility = 1.0
-				if rng.Intn(2) == 0 {
-					indexDef.Invisibility = 1 - rng.Float64()
+				if allowPartiallyVisibleIndex {
+					if rng.Intn(2) == 0 {
+						indexDef.Invisibility = 1 - rng.Float64()
+					}
 				}
 			}
 

@@ -1319,7 +1319,16 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(og.params.rng, "table", tableIdx, databaseHasMultiRegion, og.newUniqueSeqNum)
+	partiallyVisibleIndexNotSupported, err := isClusterVersionLessThan(
+		ctx, tx, clusterversion.ByKey(clusterversion.V23_2_PartiallyVisibleIndexes),
+	)
+	if err != nil {
+		return nil, err
+	}
+	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(
+		og.params.rng, "table", tableIdx, databaseHasMultiRegion,
+		!partiallyVisibleIndexNotSupported, og.newUniqueSeqNum,
+	)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
 	tsQueryNotSupported, err := isClusterVersionLessThan(
