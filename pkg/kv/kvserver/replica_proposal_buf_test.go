@@ -21,12 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -138,6 +141,9 @@ func (t *testProposer) locker() sync.Locker {
 
 func (t *testProposer) rlocker() sync.Locker {
 	return t.RWMutex.RLocker()
+}
+func (t *testProposer) flowControlHandle(ctx context.Context) kvflowcontrol.Handle {
+	return &testFlowTokenHandle{}
 }
 
 func (t *testProposer) getReplicaID() roachpb.ReplicaID {
@@ -1047,3 +1053,43 @@ func (t mockTracker) Count() int {
 }
 
 var _ tracker.Tracker = mockTracker{}
+
+type testFlowTokenHandle struct{}
+
+var _ kvflowcontrol.Handle = &testFlowTokenHandle{}
+
+func (t *testFlowTokenHandle) Admit(
+	ctx context.Context, priority admissionpb.WorkPriority, t2 time.Time,
+) error {
+	return nil
+}
+
+func (t *testFlowTokenHandle) DeductTokensFor(
+	ctx context.Context,
+	priority admissionpb.WorkPriority,
+	position kvflowcontrolpb.RaftLogPosition,
+	tokens kvflowcontrol.Tokens,
+) {
+}
+
+func (t *testFlowTokenHandle) ReturnTokensUpto(
+	ctx context.Context,
+	priority admissionpb.WorkPriority,
+	position kvflowcontrolpb.RaftLogPosition,
+	stream kvflowcontrol.Stream,
+) {
+}
+
+func (t *testFlowTokenHandle) ConnectStream(
+	ctx context.Context, position kvflowcontrolpb.RaftLogPosition, stream kvflowcontrol.Stream,
+) {
+}
+
+func (t *testFlowTokenHandle) DisconnectStream(ctx context.Context, stream kvflowcontrol.Stream) {
+}
+
+func (t *testFlowTokenHandle) ResetStreams(ctx context.Context) {
+}
+
+func (t *testFlowTokenHandle) Close(ctx context.Context) {
+}

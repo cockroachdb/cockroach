@@ -250,7 +250,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// We don't track these stats in standalone log application since they depend
 	// on whether the proposer is still waiting locally, and this concept does not
 	// apply in a standalone context.
-	if !cmd.IsLocal() {
+	if !cmd.IsLocal() && !cmd.ApplyAdmissionControl() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
 		b.followerStoreWriteBytes.NumEntries++
 		b.followerStoreWriteBytes.WriteBytes += writeBytes
