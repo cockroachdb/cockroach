@@ -1,0 +1,42 @@
+# We allow implicit access to non-admin users so that we can test
+# with nodelocal.
+new-cluster name=s1 allow-implicit-access
+----
+
+exec-sql
+CREATE DATABASE testdb;
+USE testdb;
+CREATE TABLE testdb.t (a int primary key, b int);
+CREATE MATERIALIZED VIEW testdb.mv AS SELECT a, b FROM testdb.t;
+INSERT INTO testdb.t (a, b) VALUES (1, 2);
+----
+
+exec-sql
+REFRESH MATERIALIZED VIEW mv;
+----
+
+exec-sql
+INSERT INTO testdb.t (a, b) VALUES (2, 3);
+----
+
+exec-sql
+REFRESH MATERIALIZED VIEW mv;
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/test/'
+----
+
+
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access
+----
+
+exec-sql
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = 'newdb';
+----
+
+query-sql
+SELECT * FROM newdb.mv;
+----
+1 2
+2 3
