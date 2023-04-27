@@ -19,6 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -160,21 +162,18 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 
 		// Iterate over every span to feed work for the goroutine processors.
 		var alloc tree.DatumAlloc
-		for _, span := range ttlSpec.Spans {
-			startKey := span.Key
-			startPK, err := rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, startKey, &alloc)
+		for i, span := range ttlSpec.Spans {
+			bounds, err := SpanToQueryBounds(
+				codec,
+				pkColTypes,
+				pkColDirs,
+				span,
+				&alloc,
+			)
 			if err != nil {
-				return errors.Wrapf(err, "decode startKey error key=%x", []byte(startKey))
+				return errors.Wrapf(err, "SpanToQueryBounds error index=%d span=%s", i, span)
 			}
-			endKey := span.EndKey
-			endPK, err := rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, endKey, &alloc)
-			if err != nil {
-				return errors.Wrapf(err, "decode endKey error key=%x", []byte(endKey))
-			}
-			boundsChan <- QueryBounds{
-				Start: startPK,
-				End:   endPK,
-			}
+			boundsChan <- bounds
 		}
 		return nil
 	}()
@@ -381,6 +380,28 @@ func newTTLProcessor(
 		return nil, err
 	}
 	return ttlProcessor, nil
+}
+
+// SpanToQueryBounds converts the span output of the DistSQL planner to
+// QueryBounds to generate SELECT statements.
+func SpanToQueryBounds(
+	codec keys.SQLCodec,
+	pkColTypes []*types.T,
+	pkColDirs []catenumpb.IndexColumn_Direction,
+	span roachpb.Span,
+	alloc *tree.DatumAlloc,
+) (bounds QueryBounds, err error) {
+	startKey := span.Key
+	bounds.Start, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, startKey, alloc)
+	if err != nil {
+		return bounds, errors.Wrapf(err, "decode startKey error key=%x", []byte(startKey))
+	}
+	endKey := span.EndKey
+	bounds.End, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, endKey, alloc)
+	if err != nil {
+		return bounds, errors.Wrapf(err, "decode endKey error key=%x", []byte(endKey))
+	}
+	return bounds, nil
 }
 
 // GetPKColumnTypes returns tableDesc's primary key column types.
