@@ -15,8 +15,7 @@ new-request r=req1 txn=txn1 ts=10 spans=w@a
 
 acquire r=req1 k=a durability=r
 ----
-global: num=0
-local: num=0
+num=0
 
 # ---------------------------------------------------------------------------------
 # Upgrading from unreplicated to replicated for an uncontended lock causes that
@@ -25,15 +24,13 @@ local: num=0
 
 acquire r=req1 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
-local: num=0
 
 acquire r=req1 k=a durability=r
 ----
-global: num=0
-local: num=0
+num=0
 
 # ---------------------------------------------------------------------------------
 # Upgrading from unreplicated to replicated for a lock with only waiting readers
@@ -45,10 +42,9 @@ new-request r=reqContendReader txn=none ts=10 spans=r@a
 
 acquire r=req1 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
-local: num=0
 
 scan r=reqContendReader
 ----
@@ -56,18 +52,16 @@ start-waiting: true
 
 print
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
    waiting readers:
     req: 1, txn: none
    distinguished req: 1
-local: num=0
 
 acquire r=req1 k=a durability=r
 ----
-global: num=0
-local: num=0
+num=0
 
 guard-state r=reqContendReader
 ----
@@ -83,10 +77,9 @@ new-request r=reqContendWriter txn=none ts=10 spans=w@a
 
 acquire r=req1 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
-local: num=0
 
 scan r=reqContendReader
 ----
@@ -98,7 +91,7 @@ start-waiting: true
 
 print
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
    waiting readers:
@@ -106,11 +99,10 @@ global: num=1
    queued writers:
     active: true req: 2, txn: none
    distinguished req: 1
-local: num=0
 
 acquire r=req1 k=a durability=r
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 0, seqs: [2], unrepl epoch: 0, seqs: [2]
    waiting readers:
@@ -118,7 +110,6 @@ global: num=1
    queued writers:
     active: true req: 2, txn: none
    distinguished req: 1
-local: num=0
 
 guard-state r=reqContendReader
 ----
@@ -130,8 +121,7 @@ new: state=waitFor txn=txn1 key="a" held=true guard-access=write
 
 clear
 ----
-global: num=0
-local: num=0
+num=0
 
 # ---------------------------------------------------------------------------------
 # Upgrading from unreplicated to replicated for an uncontended lock. The lockState
@@ -147,10 +137,9 @@ local: num=0
 
 acquire r=req1 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
-local: num=0
 
 new-txn txn=txn2 ts=10 epoch=0 seq=0
 ----
@@ -160,12 +149,11 @@ new-request r=req2 txn=txn2 ts=10 spans=w@b
 
 acquire r=req2 k=b durability=u
 ----
-global: num=2
+num=2
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 new-request r=req3 txn=none ts=10 spans=r@a,c
 ----
@@ -180,18 +168,16 @@ new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
 acquire r=req2 k=b durability=r
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
    waiting readers:
     req: 3, txn: none
    distinguished req: 3
-local: num=0
 
 release txn=txn1 span=a
 ----
-global: num=0
-local: num=0
+num=0
 
 # Before the fix in #50173, this used to enter the following state:
 #  new: state=waitForDistinguished txn=txn2 key="b" held=true guard-access=read

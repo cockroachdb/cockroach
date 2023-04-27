@@ -67,13 +67,12 @@ sequence req=reqWaiter
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 2
-local: num=0
 
 sequence req=reqSecondLock
 ----
@@ -173,8 +172,7 @@ finish req=reqThreeKeyWriter
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 sequence req=reqTwoKeyWaiter
 ----
@@ -211,7 +209,7 @@ sequence req=reqTwoKeyWaiter
 
 debug-lock-table
 ----
-global: num=2
+num=2
  lock: "k1"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    waiting readers:
@@ -219,7 +217,6 @@ global: num=2
    distinguished req: 5
  lock: "k2"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
-local: num=0
 
 # Simulate that the replicated locks were discovered, so they are added to the
 # lock table. Keys "k1" and "k2" were previously discovered, but "k3" is new.
@@ -243,14 +240,13 @@ sequence req=reqThreeKeyWaiter
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k1"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    waiting readers:
     req: 6, txn: 00000002-0000-0000-0000-000000000000
     req: 5, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 5
-local: num=0
 
 # Before #99635 was fixed, reqTwoKeyWaiter would move on to waiting on key k2
 # and get stuck in lockTableWaiterImpl.WaitOn. Even after it resolved the intent

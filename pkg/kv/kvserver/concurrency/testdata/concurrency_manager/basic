@@ -56,10 +56,9 @@ on-lock-acquired req=req2 key=k
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 12.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 finish req=req2
 ----
@@ -67,10 +66,9 @@ finish req=req2
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 12.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 reset
 ----
@@ -78,8 +76,7 @@ reset
 # Demonstrate that 'reset' clears the lock table.
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 # -------------------------------------------------------------
 # 1. Acquire a lock
@@ -136,8 +133,7 @@ on-txn-updated txn=txn2 status=committed
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 new-request name=req4 txn=txn1 ts=10,1
   put key=k value=v

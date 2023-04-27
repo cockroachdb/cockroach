@@ -18,17 +18,15 @@ new-request r=req1 txn=txn1 ts=10 spans=w@a
 
 acquire r=req1 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
-local: num=0
 
 release txn=txn2 span=a,c
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
-local: num=0
 
 # ---------------------------------------------------------------------------------
 # Lock is reacquired at same epoch with lower timestamp. This is allowed,
@@ -44,10 +42,9 @@ new-request r=req2 txn=txn1 ts=8 spans=w@a
 
 acquire r=req2 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2, 3]
-local: num=0
 
 # ---------------------------------------------------------------------------------
 # Lock is reacquired at same epoch with lower timestamp and different durability.
@@ -67,20 +64,18 @@ start-waiting: true
 
 acquire r=req2 k=a durability=r
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 0, seqs: [2, 3]
    queued writers:
     active: true req: 1, txn: none
    distinguished req: 1
-local: num=0
 
 dequeue r=reqContend
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 0, seqs: [2, 3]
-local: num=0
 
 # ---------------------------------------------------------------------------------
 # Lock is reacquired at a different epoch. The old sequence numbers are discarded.
@@ -94,10 +89,9 @@ new-request r=req3 txn=txn1 ts=10 spans=w@a
 
 acquire r=req3 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 1, seqs: [0]
-local: num=0
 
 # ---------------------------------------------------------------------------------
 # Lock is reacquired at a different epoch with lower timestamp. This is allowed,
@@ -113,10 +107,9 @@ new-request r=req4 txn=txn1 ts=6 spans=w@a
 
 acquire r=req4 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 2, seqs: [0]
-local: num=0
 
 # ---------------------------------------------------------------------------------
 # Reader waits until the timestamp of the lock is updated.
@@ -135,13 +128,12 @@ new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
 print
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 2, seqs: [0]
    waiting readers:
     req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
-local: num=0
 
 new-txn txn=txn1 ts=14 epoch=1 seq=1
 ----
@@ -151,13 +143,12 @@ new-request r=req6 txn=txn1 ts=14 spans=w@a
 
 acquire r=req6 k=a durability=r
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 2, seqs: [0]
    waiting readers:
     req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
-local: num=0
 
 guard-state r=req5
 ----
@@ -165,10 +156,9 @@ old: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
 acquire r=req6 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
-local: num=0
 
 guard-state r=req5
 ----
@@ -194,13 +184,12 @@ new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
 add-discovered r=req7 k=a txn=txn1
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
    waiting readers:
     req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
-local: num=0
 
 guard-state r=req7
 ----

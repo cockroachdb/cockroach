@@ -23,17 +23,15 @@ start-waiting: false
 
 acquire r=req1 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1]
-local: num=0
 
 dequeue r=req1
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1]
-local: num=0
 
 new-txn txn=txn1 ts=10,1 epoch=0 seq=2
 ----
@@ -47,17 +45,15 @@ start-waiting: false
 
 acquire r=req2 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2]
-local: num=0
 
 dequeue r=req2
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2]
-local: num=0
 
 new-txn txn=txn1 ts=10,1 epoch=0 seq=4
 ----
@@ -71,17 +67,15 @@ start-waiting: false
 
 acquire r=req3 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
-local: num=0
 
 dequeue r=req3
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
-local: num=0
 
 # -------------------------------------------------------------
 # Re-Acquire lock with sequence number 4
@@ -99,17 +93,15 @@ start-waiting: false
 
 acquire r=req3 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
-local: num=0
 
 dequeue r=req3
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
-local: num=0
 
 # -------------------------------------------------------------
 # Re-Acquire lock with sequence number 2
@@ -127,17 +119,15 @@ start-waiting: false
 
 acquire r=req4 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
-local: num=0
 
 dequeue r=req4
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 4]
-local: num=0
 
 # -------------------------------------------------------------
 # Try to acquire lock with sequence number 3. Should update the
@@ -157,17 +147,15 @@ start-waiting: false
 
 acquire r=req5 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 3, 4]
-local: num=0
 
 dequeue r=req5
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 3, 4]
-local: num=0
 
 # -------------------------------------------------------------
 # Acquire lock with sequence numbers 5
@@ -185,14 +173,12 @@ start-waiting: false
 
 acquire r=req6 k=a durability=u
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 3, 4, 5]
-local: num=0
 
 dequeue r=req6
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [1, 2, 3, 4, 5]
-local: num=0

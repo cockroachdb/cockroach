@@ -103,7 +103,7 @@ finish req=req3
 
 debug-lock-table
 ----
-global: num=6
+num=6
  lock: "kHigh1"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "kHigh2"
@@ -116,7 +116,6 @@ global: num=6
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "kNormal2"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # -------------------------------------------------------------
 # Push (timestamp) the low priority txn using:
@@ -176,7 +175,7 @@ finish req=req5
 
 debug-lock-table
 ----
-global: num=6
+num=6
  lock: "kHigh1"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "kHigh2"
@@ -189,7 +188,6 @@ global: num=6
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "kNormal2"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # -------------------------------------------------------------
 # Push (abort) the low priority txn using:
@@ -255,7 +253,7 @@ finish req=req7
 
 debug-lock-table
 ----
-global: num=5
+num=5
  lock: "kHigh1"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "kHigh2"
@@ -266,7 +264,6 @@ global: num=5
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "kNormal2"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # -------------------------------------------------------------
 # Push (timestamp) the normal priority txn using:
@@ -326,7 +323,7 @@ finish req=req9
 
 debug-lock-table
 ----
-global: num=5
+num=5
  lock: "kHigh1"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "kHigh2"
@@ -337,7 +334,6 @@ global: num=5
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
  lock: "kNormal2"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # -------------------------------------------------------------
 # Push (abort) the normal priority txn using:
@@ -403,7 +399,7 @@ finish req=req11
 
 debug-lock-table
 ----
-global: num=4
+num=4
  lock: "kHigh1"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "kHigh2"
@@ -412,7 +408,6 @@ global: num=4
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
  lock: "kNormal1"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
-local: num=0
 
 # -------------------------------------------------------------
 # Push (timestamp) the high priority txn using:
@@ -476,7 +471,7 @@ finish req=req13
 
 debug-lock-table
 ----
-global: num=4
+num=4
  lock: "kHigh1"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
  lock: "kHigh2"
@@ -485,7 +480,6 @@ global: num=4
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
  lock: "kNormal1"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
-local: num=0
 
 # -------------------------------------------------------------
 # Push (abort) the high priority txn using:
@@ -553,14 +547,13 @@ finish req=req15
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "kHigh1"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: committed] epoch: 0, seqs: [0]
  lock: "kLow1"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
  lock: "kNormal1"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
-local: num=0
 
 # -------------------------------------------------------------
 # Scan across keyspace to clear out all aborted locks.
@@ -583,8 +576,7 @@ finish req=req16
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 reset
 ----
