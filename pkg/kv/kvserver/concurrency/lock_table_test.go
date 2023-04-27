@@ -805,7 +805,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.NoError(t, err)
 	// The 6 notRemovable locks remain.
 	require.Equal(t, int64(6), lt.lockCountForTesting())
-	require.Equal(t, int64(101), int64(lt.locks[spanset.SpanGlobal].lockIDSeqNum))
+	require.Equal(t, int64(101), int64(lt.locks.lockIDSeqNum))
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err = lt.AddDiscoveredLock(
 		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+11]}},
@@ -814,12 +814,12 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.NoError(t, err)
 	// Still the 6 notRemovable locks remain.
 	require.Equal(t, int64(6), lt.lockCountForTesting())
-	require.Equal(t, int64(102), int64(lt.locks[spanset.SpanGlobal].lockIDSeqNum))
+	require.Equal(t, int64(102), int64(lt.locks.lockIDSeqNum))
 	// Two more guards are dequeued, so we are down to 4 notRemovable locks.
 	lt.Dequeue(guards[4])
 	lt.Dequeue(guards[5])
 	// Bump up the enforcement interval manually.
-	lt.locks[spanset.SpanGlobal].lockAddMaxLocksCheckInterval = 2
+	lt.locks.lockAddMaxLocksCheckInterval = 2
 	// Add another discovered lock.
 	added, err = lt.AddDiscoveredLock(
 		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+12]}},
@@ -837,7 +837,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 	// Now enforcement is done, so only 4 remain.
 	require.Equal(t, int64(4), lt.lockCountForTesting())
 	// Bump down the enforcement interval manually, and bump up minLocks
-	lt.locks[spanset.SpanGlobal].lockAddMaxLocksCheckInterval = 1
+	lt.locks.lockAddMaxLocksCheckInterval = 1
 	lt.minLocks = 2
 	// Three more guards dequeued.
 	lt.Dequeue(guards[6])

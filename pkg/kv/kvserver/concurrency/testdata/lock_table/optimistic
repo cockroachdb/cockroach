@@ -22,28 +22,25 @@ false
 
 acquire r=req1 k=c durability=u
 ----
-global: num=1
+num=1
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 acquire r=req1 k=g durability=u
 ----
-global: num=2
+num=2
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 dequeue r=req1
 ----
-global: num=2
+num=2
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 new-request r=req2 txn=txn2 ts=11,1 spans=r@a,d
 ----
@@ -58,12 +55,11 @@ true
 
 dequeue r=req2
 ----
-global: num=2
+num=2
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 new-request r=req3 txn=txn2 ts=11,1 spans=r@a,d+r@f,i
 ----
@@ -78,12 +74,11 @@ false
 
 print
 ----
-global: num=2
+num=2
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 check-opt-no-conflicts r=req3 spans=r@a,c
 ----
@@ -103,12 +98,11 @@ no-conflicts: false
 
 dequeue r=req3
 ----
-global: num=2
+num=2
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # ---------------------------------------------------------------------------------
 # Test with a Skip wait policy. Even though the lock table has a conflicting lock,
@@ -133,9 +127,8 @@ no-conflicts: true
 
 dequeue r=req4
 ----
-global: num=2
+num=2
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
