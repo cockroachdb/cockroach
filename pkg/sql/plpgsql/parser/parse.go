@@ -28,7 +28,7 @@ func init() {
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner    scanner.PLPGSQLScanner
+	scanner    scanner.PLpgSQLScanner
 	lexer      lexer
 	parserImpl plpgsqlParserImpl
 	tokBuf     [8]plpgsqlSymType
@@ -41,7 +41,7 @@ type Parser struct {
 var defaultNakedIntType = types.Int
 
 // Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string) (statements.PLPGStatement, error) {
+func (p *Parser) Parse(sql string) (statements.PLpgStatement, error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
@@ -75,16 +75,16 @@ func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool) 
 
 func (p *Parser) parseWithDepth(
 	depth int, plpgsql string, nakedIntType *types.T,
-) (statements.PLPGStatement, error) {
+) (statements.PLpgStatement, error) {
 	p.scanner.Init(plpgsql)
 	defer p.scanner.Cleanup()
 	sql, tokens, done := p.scanFnBlock()
 	stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
 	if err != nil {
-		return statements.PLPGStatement{}, err
+		return statements.PLpgStatement{}, err
 	}
 	if !done {
-		return statements.PLPGStatement{}, errors.AssertionFailedf("invalid plpgsql function: %s", plpgsql)
+		return statements.PLpgStatement{}, errors.AssertionFailedf("invalid plpgsql function: %s", plpgsql)
 	}
 	return stmt, nil
 }
@@ -92,7 +92,7 @@ func (p *Parser) parseWithDepth(
 // parse parses a statement from the given scanned tokens.
 func (p *Parser) parse(
 	depth int, sql string, tokens []plpgsqlSymType, nakedIntType *types.T,
-) (statements.PLPGStatement, error) {
+) (statements.PLpgStatement, error) {
 	p.lexer.init(sql, tokens, nakedIntType)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
@@ -116,9 +116,9 @@ func (p *Parser) parse(
 			err = errors.WithTelemetry(err, tkeys...)
 		}
 
-		return statements.PLPGStatement{}, err
+		return statements.PLpgStatement{}, err
 	}
-	return statements.PLPGStatement{
+	return statements.PLpgStatement{
 		AST:             p.lexer.stmt,
 		SQL:             sql,
 		NumPlaceholders: p.lexer.numPlaceholders,
@@ -127,7 +127,7 @@ func (p *Parser) parse(
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
-func Parse(sql string) (statements.PLPGStatement, error) {
+func Parse(sql string) (statements.PLpgStatement, error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
