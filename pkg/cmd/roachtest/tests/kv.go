@@ -141,9 +141,7 @@ func registerKV(r registry.Registry) {
 				opts.duration = 30 * time.Minute
 			}
 
-			opts.duration = t.CLIOverrides().AsDuration("test.duration", opts.duration)
-
-			duration := " --duration=" + ifLocal(c, "10s", opts.duration.String())
+			duration := " --duration=" + t.CLIOverrides().String("kv.duration", ifLocal(c, "10s", opts.duration.String()))
 			var readPercent string
 			if opts.spanReads {
 				// SFU makes sense only if we repeat writes to the same key. Here

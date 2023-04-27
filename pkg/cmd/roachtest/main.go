@@ -504,7 +504,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		ctx, tests, cfg.count, cfg.parallelism, clusterOpt,
 		testOpts{
 			versionsBinaryOverride: cfg.versionsBinaryOverride,
-			testOverrides:          stringmap.StringMap{StringMap: cfg.testOverrides},
+			testOverrides:          stringmap.StringMap{M: cfg.testOverrides},
 			skipInit:               cfg.skipInit,
 		},
 		lopt, nil /* clusterAllocator */)
