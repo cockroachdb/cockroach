@@ -15,13 +15,19 @@ func _() {
 	_ = x[reasonTicks-4]
 }
 
-const _refreshRaftReason_name = "noReasonreasonNewLeaderreasonNewLeaderOrConfigChangereasonSnapshotAppliedreasonTicks"
-
-var _refreshRaftReason_index = [...]uint8{0, 8, 23, 52, 73, 84}
-
 func (i refreshRaftReason) String() string {
-	if i < 0 || i >= refreshRaftReason(len(_refreshRaftReason_index)-1) {
+	switch i {
+	case noReason:
+		return "noReason"
+	case reasonNewLeader:
+		return "reasonNewLeader"
+	case reasonNewLeaderOrConfigChange:
+		return "reasonNewLeaderOrConfigChange"
+	case reasonSnapshotApplied:
+		return "reasonSnapshotApplied"
+	case reasonTicks:
+		return "reasonTicks"
+	default:
 		return "refreshRaftReason(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _refreshRaftReason_name[_refreshRaftReason_index[i]:_refreshRaftReason_index[i+1]]
 }

@@ -16,14 +16,21 @@ func _() {
 	_ = x[Domain-6]
 }
 
-const _CreateTypeVariety_name = "EnumCompositeRangeBaseShellDomain"
-
-var _CreateTypeVariety_index = [...]uint8{0, 4, 13, 18, 22, 27, 33}
-
 func (i CreateTypeVariety) String() string {
-	i -= 1
-	if i < 0 || i >= CreateTypeVariety(len(_CreateTypeVariety_index)-1) {
-		return "CreateTypeVariety(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	switch i {
+	case Enum:
+		return "Enum"
+	case Composite:
+		return "Composite"
+	case Range:
+		return "Range"
+	case Base:
+		return "Base"
+	case Shell:
+		return "Shell"
+	case Domain:
+		return "Domain"
+	default:
+		return "CreateTypeVariety(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _CreateTypeVariety_name[_CreateTypeVariety_index[i]:_CreateTypeVariety_index[i+1]]
 }

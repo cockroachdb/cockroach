@@ -16,13 +16,21 @@ func _() {
 	_ = x[txnUpgradeToExplicit-5]
 }
 
-const _txnEventType_name = "noEventtxnStarttxnCommittxnRollbacktxnRestarttxnUpgradeToExplicit"
-
-var _txnEventType_index = [...]uint8{0, 7, 15, 24, 35, 45, 65}
-
 func (i txnEventType) String() string {
-	if i < 0 || i >= txnEventType(len(_txnEventType_index)-1) {
+	switch i {
+	case noEvent:
+		return "noEvent"
+	case txnStart:
+		return "txnStart"
+	case txnCommit:
+		return "txnCommit"
+	case txnRollback:
+		return "txnRollback"
+	case txnRestart:
+		return "txnRestart"
+	case txnUpgradeToExplicit:
+		return "txnUpgradeToExplicit"
+	default:
 		return "txnEventType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _txnEventType_name[_txnEventType_index[i]:_txnEventType_index[i+1]]
 }

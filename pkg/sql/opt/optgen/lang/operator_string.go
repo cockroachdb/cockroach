@@ -38,13 +38,65 @@ func _() {
 	_ = x[CustomFuncOp-27]
 }
 
-const _Operator_name = "UnknownOpRootOpDefineSetOpRuleSetOpDefineOpCommentsOpCommentOpTagsOpTagOpDefineFieldsOpDefineFieldOpRuleOpFuncOpNamesOpNameOpAndOpNotOpListOpListAnyOpBindOpLetOpRefOpAnyOpSliceOpStringOpStringsOpNumberOpCustomFuncOp"
-
-var _Operator_index = [...]uint8{0, 9, 15, 26, 35, 43, 53, 62, 68, 73, 87, 100, 106, 112, 119, 125, 130, 135, 141, 150, 156, 161, 166, 171, 178, 186, 195, 203, 215}
-
 func (i Operator) String() string {
-	if i < 0 || i >= Operator(len(_Operator_index)-1) {
+	switch i {
+	case UnknownOp:
+		return "UnknownOp"
+	case RootOp:
+		return "RootOp"
+	case DefineSetOp:
+		return "DefineSetOp"
+	case RuleSetOp:
+		return "RuleSetOp"
+	case DefineOp:
+		return "DefineOp"
+	case CommentsOp:
+		return "CommentsOp"
+	case CommentOp:
+		return "CommentOp"
+	case TagsOp:
+		return "TagsOp"
+	case TagOp:
+		return "TagOp"
+	case DefineFieldsOp:
+		return "DefineFieldsOp"
+	case DefineFieldOp:
+		return "DefineFieldOp"
+	case RuleOp:
+		return "RuleOp"
+	case FuncOp:
+		return "FuncOp"
+	case NamesOp:
+		return "NamesOp"
+	case NameOp:
+		return "NameOp"
+	case AndOp:
+		return "AndOp"
+	case NotOp:
+		return "NotOp"
+	case ListOp:
+		return "ListOp"
+	case ListAnyOp:
+		return "ListAnyOp"
+	case BindOp:
+		return "BindOp"
+	case LetOp:
+		return "LetOp"
+	case RefOp:
+		return "RefOp"
+	case AnyOp:
+		return "AnyOp"
+	case SliceOp:
+		return "SliceOp"
+	case StringOp:
+		return "StringOp"
+	case StringsOp:
+		return "StringsOp"
+	case NumberOp:
+		return "NumberOp"
+	case CustomFuncOp:
+		return "CustomFuncOp"
+	default:
 		return "Operator(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _Operator_name[_Operator_index[i]:_Operator_index[i+1]]
 }

@@ -13,14 +13,15 @@ func _() {
 	_ = x[InterleavedFormatVersion-3]
 }
 
-const _FormatVersion_name = "BaseFormatVersionFamilyFormatVersionInterleavedFormatVersion"
-
-var _FormatVersion_index = [...]uint8{0, 17, 36, 60}
-
 func (i FormatVersion) String() string {
-	i -= 1
-	if i >= FormatVersion(len(_FormatVersion_index)-1) {
-		return "FormatVersion(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	switch i {
+	case BaseFormatVersion:
+		return "BaseFormatVersion"
+	case FamilyFormatVersion:
+		return "FamilyFormatVersion"
+	case InterleavedFormatVersion:
+		return "InterleavedFormatVersion"
+	default:
+		return "FormatVersion(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _FormatVersion_name[_FormatVersion_index[i]:_FormatVersion_index[i+1]]
 }

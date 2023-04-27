@@ -13,14 +13,15 @@ func _() {
 	_ = x[ValidationType-3]
 }
 
-const _Type_name = "MutationTypeBackfillTypeValidationType"
-
-var _Type_index = [...]uint8{0, 12, 24, 38}
-
 func (i Type) String() string {
-	i -= 1
-	if i < 0 || i >= Type(len(_Type_index)-1) {
-		return "Type(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	switch i {
+	case MutationType:
+		return "MutationType"
+	case BackfillType:
+		return "BackfillType"
+	case ValidationType:
+		return "ValidationType"
+	default:
+		return "Type(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _Type_name[_Type_index[i]:_Type_index[i+1]]
 }

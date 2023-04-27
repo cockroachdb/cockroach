@@ -14,13 +14,17 @@ func _() {
 	_ = x[txnFinalized-3]
 }
 
-const _txnState_name = "txnPendingtxnRetryableErrortxnErrortxnFinalized"
-
-var _txnState_index = [...]uint8{0, 10, 27, 35, 47}
-
 func (i txnState) String() string {
-	if i < 0 || i >= txnState(len(_txnState_index)-1) {
+	switch i {
+	case txnPending:
+		return "txnPending"
+	case txnRetryableError:
+		return "txnRetryableError"
+	case txnError:
+		return "txnError"
+	case txnFinalized:
+		return "txnFinalized"
+	default:
 		return "txnState(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _txnState_name[_txnState_index[i]:_txnState_index[i+1]]
 }

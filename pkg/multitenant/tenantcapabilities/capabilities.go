@@ -13,7 +13,6 @@ package tenantcapabilities
 import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
-	"github.com/cockroachdb/cockroach/pkg/util/stringerutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -86,19 +85,6 @@ const (
 	TenantSpanConfigBounds // span_config_bounds
 
 	MaxCapabilityID ID = iota - 1
-)
-
-// IDs is a slice of all tenant capabilities.
-var IDs = stringerutil.EnumValues(
-	1,
-	MaxCapabilityID,
-)
-
-var stringToCapabilityIDMap = stringerutil.StringToEnumValueMap(
-	_ID_index[:],
-	_ID_name,
-	1,
-	MaxCapabilityID,
 )
 
 // FromName looks up a capability by name.
