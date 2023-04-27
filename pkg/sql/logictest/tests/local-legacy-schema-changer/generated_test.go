@@ -1983,6 +1983,13 @@ func TestLogic_upsert(
 	runLogicTest(t, "upsert")
 }
 
+func TestLogic_upsert_non_metamorphic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "upsert_non_metamorphic")
+}
+
 func TestLogic_uuid(
 	t *testing.T,
 ) {
