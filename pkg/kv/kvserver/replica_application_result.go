@@ -281,6 +281,10 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	// Some tests check for this log message in the trace.
 	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
 
+	// See I7 from kvflowcontrol/doc.go: we don't re-deduct flow tokens on
+	// reproposals.
+	p.raftAdmissionMeta = nil
+
 	pErr := r.propose(ctx, p, tok.Move(ctx))
 	if pErr != nil {
 		return pErr
