@@ -131,16 +131,16 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		processorConcurrency = processorSpanCount
 	}
 	err := func() error {
-		spanChan := make(chan QueryBounds, processorConcurrency)
-		defer close(spanChan)
+		boundsChan := make(chan QueryBounds, processorConcurrency)
+		defer close(boundsChan)
 		for i := int64(0); i < processorConcurrency; i++ {
 			group.GoCtx(func(ctx context.Context) error {
-				for spanToProcess := range spanChan {
+				for bounds := range boundsChan {
 					start := timeutil.Now()
-					spanRowCount, err := t.runTTLOnSpan(
+					spanRowCount, err := t.runTTLOnQueryBounds(
 						ctx,
 						metrics,
-						spanToProcess,
+						bounds,
 						pkColNames,
 						pkColDirs,
 						relationName,
@@ -152,7 +152,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 					if err != nil {
 						// Continue until channel is fully read.
 						// Otherwise, the keys input will be blocked.
-						for spanToProcess = range spanChan {
+						for bounds = range boundsChan {
 						}
 						return err
 					}
@@ -174,7 +174,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			if err != nil {
 				return errors.Wrapf(err, "decode endKey error key=%x", []byte(endKey))
 			}
-			spanChan <- QueryBounds{
+			boundsChan <- QueryBounds{
 				Start: startPK,
 				End:   endPK,
 			}
@@ -221,7 +221,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 }
 
 // spanRowCount should be checked even if the function returns an error because it may have partially succeeded
-func (t *ttlProcessor) runTTLOnSpan(
+func (t *ttlProcessor) runTTLOnQueryBounds(
 	ctx context.Context,
 	metrics rowLevelTTLMetrics,
 	bounds QueryBounds,
