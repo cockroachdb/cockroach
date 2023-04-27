@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig"
@@ -974,6 +975,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeDescriptorCache:      cfg.distSender.RangeDescriptorCache(),
 		RoleMemberCache:           sql.NewMembershipCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
 		SessionInitCache:          sessioninit.NewCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
+		ClientCertExpirationCache: security.NewClientCertExpirationCache(cfg.Settings, rootSQLMemoryMonitor),
 		RootMemoryMonitor:         rootSQLMemoryMonitor,
 		TestingKnobs:              sqlExecutorTestingKnobs,
 		CompactEngineSpanFunc:     storageEngineClient.CompactEngineSpan,
