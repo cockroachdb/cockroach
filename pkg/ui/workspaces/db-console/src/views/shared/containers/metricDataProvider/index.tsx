@@ -105,6 +105,8 @@ interface MetricsDataProviderConnectProps {
   setMetricsFixedWindow?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale?: (ts: TimeScale) => PayloadAction<TimeScale>;
   history?: History;
+  triggerManualQuery?: boolean;
+  stopManualQuery?: () => void;
 }
 
 /**
@@ -197,10 +199,18 @@ class MetricsDataProvider extends React.Component<
     if (!request) {
       return;
     }
-    const { metrics, requestMetrics, id } = props;
+    const { metrics, requestMetrics, id, triggerManualQuery, stopManualQuery } =
+      props;
     const nextRequest = metrics && metrics.nextRequest;
-    if (!nextRequest || !_.isEqual(nextRequest, request)) {
+    if (
+      !nextRequest ||
+      !_.isEqual(nextRequest, request) ||
+      triggerManualQuery === true
+    ) {
       requestMetrics(id, request);
+      if (stopManualQuery) {
+        stopManualQuery();
+      }
     }
   }
 

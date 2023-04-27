@@ -17,12 +17,20 @@
 
 import _ from "lodash";
 import { Action } from "redux";
+import { matchPath } from "react-router";
 import { delay } from "redux-saga/effects";
 import { take, fork, call, all, put } from "redux-saga/effects";
 
 import * as protos from "src/js/protos";
 import { PayloadAction } from "src/interfaces/action";
 import { queryTimeSeries } from "src/util/api";
+import { getCookieValue, PRIMARY_TENANT_NAME } from "./cookies";
+import { getMatchParamByName } from "../util/query";
+import {
+  dashboardNameAttr,
+  nodeIDAttr,
+  tenantNameAttr,
+} from "../util/constants";
 
 type TSRequest = protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
@@ -344,6 +352,14 @@ export function* sendRequestBatch(requests: WithID<TSRequest>[]) {
   // Flatten the queries from the batch into a single request.
   const unifiedRequest = _.clone(requests[0].data);
   unifiedRequest.queries = _.flatMap(requests, req => req.data.queries);
+  const selectedTenant = getSelectedTenantName();
+  if (selectedTenant !== "") {
+    const queries: protos.cockroach.ts.tspb.IQuery[] = [];
+    unifiedRequest.queries.forEach(query =>
+      queries.push({ ...query, tenant_name: selectedTenant }),
+    );
+    unifiedRequest.queries = queries;
+  }
 
   let response: protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
   try {
@@ -390,3 +406,27 @@ function timespanKey(timewindow: SimpleTimespan): string {
     (timewindow.end_nanos && timewindow.end_nanos.toString())
   );
 }
+
+export const getSelectedTenantName = (): string => {
+  const currentTenant = getCookieValue("tenant");
+  if (currentTenant !== PRIMARY_TENANT_NAME) {
+    return "";
+  }
+  const url = getMatchURL();
+  const path = [
+    `/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}/tenant/:${tenantNameAttr}`,
+    `/metrics/:${dashboardNameAttr}/cluster/tenant/:${tenantNameAttr}`,
+  ];
+  const match = matchPath(url, { path });
+  const selectedTenant = getMatchParamByName(match, tenantNameAttr) || "";
+  return selectedTenant;
+};
+
+export const getMatchURL = (): string => {
+  const pathnameArr = window.location.href.split("#");
+  if (pathnameArr.length > 1) {
+    const pathame = pathnameArr[1];
+    return pathame.split("?")[0] || "";
+  }
+  return "";
+};

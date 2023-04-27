@@ -106,6 +106,10 @@ message Query {
   // An optional tenant ID to restrict the time series query. If no tenant ID 
   // is provided, time series will be aggregated across all available tenants.
   optional roachpb.TenantID tenant_id = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+  // An optional tenant name to restrict the time series query. Currently only
+  // used by the frontend to communicate the system tenant wants to view time series
+  // of a specific tenant (since the frontend only has tenant name).
+  optional string tenant_name = 7 [(gogoproto.nullable) = false];
 }
 
 // TimeSeriesQueryRequest is the standard incoming time series query request

@@ -19,11 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -97,6 +100,12 @@ type Server struct {
 	workerMemMonitor *mon.BytesMonitor
 	resultMemMonitor *mon.BytesMonitor
 	workerSem        *quotapool.IntPool
+	ie               *sql.InternalExecutor
+	mu               struct {
+		syncutil.Mutex
+		// Map of the tenantName to TenantID.
+		tenants map[string]*roachpb.TenantID
+	}
 }
 
 var _ tspb.TimeSeriesServer = &Server{}
@@ -159,7 +168,8 @@ func MakeServer(
 	cfg ServerConfig,
 	memoryMonitor *mon.BytesMonitor,
 	stopper *stop.Stopper,
-) Server {
+	ie *sql.InternalExecutor,
+) *Server {
 	ambient.AddLogTag("ts-srv", nil)
 	ctx := ambient.AnnotateCtx(context.Background())
 
@@ -174,7 +184,7 @@ func MakeServer(
 	}
 	workerSem := quotapool.NewIntPool("ts.Server worker", uint64(queryWorkerMax))
 	stopper.AddCloser(workerSem.Closer("stopper"))
-	s := Server{
+	s := &Server{
 		AmbientContext: ambient,
 		db:             db,
 		stopper:        stopper,
@@ -192,7 +202,9 @@ func MakeServer(
 		queryMemoryMax: queryMemoryMax,
 		queryWorkerMax: queryWorkerMax,
 		workerSem:      workerSem,
+		ie:             ie,
 	}
+	s.mu.tenants = make(map[string]*roachpb.TenantID)
 
 	s.workerMemMonitor.StartNoReserved(ctx, memoryMonitor)
 	stopper.AddCloser(stop.CloserFn(func() {
@@ -279,6 +291,14 @@ func (s *Server) Query(
 		NowNanos:            timeutil.Now().UnixNano(),
 	}
 
+	// In the case where the user has provided a tenant name, we should determine
+	// what the tenant id is by either finding it in the tenant map or executing a
+	// sql query.
+	tenantIDFromName, err := s.getTenantIDFromName(ctx, request.Queries[0].TenantName)
+	if err != nil {
+		return &response, err
+	}
+
 	// Start a task which is itself responsible for starting per-query worker
 	// tasks. This is needed because RunAsyncTaskEx can block; in the
 	// case where a single request has more queries than the semaphore limit,
@@ -317,6 +337,11 @@ func (s *Server) Query(
 							InterpolationLimitNanos: interpolationLimit,
 						},
 					)
+
+					// If tenantIdFromName was set, we apply it here.
+					if tenantIDFromName != nil {
+						query.TenantID = *tenantIDFromName
+					}
 
 					datapoints, sources, err := s.db.Query(
 						ctx,
@@ -366,6 +391,44 @@ func (s *Server) Query(
 	}
 
 	return &response, nil
+}
+
+// getTenantIDFromName returns a tenant ID when given a tenant name. This is done by
+// checking if the name-ID pair exists in the tenant map and if it doesn't, makes
+// a sql query to retrieve the ID.
+func (s *Server) getTenantIDFromName(
+	ctx context.Context, tenantName string,
+) (*roachpb.TenantID, error) {
+	var tenantIDFromName *roachpb.TenantID
+	if tenantName != "" {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		opName := "query-tenant-id"
+		if val, ok := s.mu.tenants[tenantName]; !ok {
+			row, err := s.ie.QueryRow(
+				ctx, opName,
+				s.db.db.NewTxn(ctx, opName),
+				"SELECT id FROM system.tenants WHERE name = $1",
+				tenantName,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if row == nil {
+				return nil, errors.AssertionFailedf("system.tenants: expected 1 row, got 0")
+			}
+			id, ok := tree.AsDInt(row[0])
+			if !ok {
+				return nil, errors.AssertionFailedf("system.tenants: expected int, got %T", row[0])
+			}
+			tenantId := roachpb.MustMakeTenantID(uint64(id))
+			tenantIDFromName = &tenantId
+			s.mu.tenants[tenantName] = &tenantId
+		} else {
+			tenantIDFromName = val
+		}
+	}
+	return tenantIDFromName, nil
 }
 
 // Dump returns a stream of raw timeseries data that has been stored on the

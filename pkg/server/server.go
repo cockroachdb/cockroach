@@ -623,7 +623,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	sTS := ts.MakeServer(
 		cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig,
-		sqlMonitorAndMetrics.rootSQLMemoryMonitor, stopper,
+		sqlMonitorAndMetrics.rootSQLMemoryMonitor, stopper, internalExecutor,
 	)
 
 	systemConfigWatcher := systemconfigwatcher.New(
@@ -1100,7 +1100,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	// Connect the various servers to RPC.
-	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
+	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, sTS} {
 		if reflect.ValueOf(gw).IsNil() {
 			return nil, errors.Errorf("%d: nil", i)
 		}
@@ -1190,7 +1190,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		decomNodeMap:              decomNodeMap,
 		authentication:            sAuth,
 		tsDB:                      tsDB,
-		tsServer:                  &sTS,
+		tsServer:                  sTS,
 		eventsExporter:            eventsExporter,
 		recoveryServer:            recoveryServer,
 		raftTransport:             raftTransport,

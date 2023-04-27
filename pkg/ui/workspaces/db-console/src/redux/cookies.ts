@@ -8,7 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { DropdownOption } from "../views/shared/components/dropdown";
+
 export const MULTITENANT_SESSION_COOKIE_NAME = "session";
+export const PRIMARY_TENANT_NAME = "system";
 
 export const getAllCookies = (): Map<string, string> => {
   const cookieMap: Map<string, string> = new Map();
@@ -66,4 +69,14 @@ export const setCookie = (
     cookieStr += document.location.pathname;
   }
   document.cookie = cookieStr;
+};
+
+// tenantDropdownOptions makes an array of dropdown options from
+// the tenants found in the session cookie. It also adds a synthetic
+// all option which aggregates all metrics.
+export const tenantDropdownOptions = (): DropdownOption[] => {
+  const tenants = selectTenantsFromMultitenantSessionCookie();
+  const tenantOptions: DropdownOption[] = [{ label: "All", value: "" }];
+  tenants.map(val => tenantOptions.push({ label: val, value: val }));
+  return tenantOptions;
 };

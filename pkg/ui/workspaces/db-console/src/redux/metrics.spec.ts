@@ -655,5 +655,45 @@ describe("metrics reducer", function () {
           .run();
       });
     });
+    describe("helper functions", () => {
+      beforeEach(() => {
+        window.location.href =
+          "/#/metrics/overview/cluster/tenant/system?start=1&end=2";
+        Object.defineProperty(window.document, "cookie", {
+          writable: true,
+          value: "tenant=system;session=abc123,system,def456,demoapp",
+        });
+      });
+      afterEach(() => {
+        window.location.href = "";
+        Object.defineProperty(window.document, "cookie", {
+          writable: true,
+          value: "",
+        });
+      });
+      it("should get the formatted URL path for a match object", () => {
+        const result = metrics.getMatchURL();
+        expect(result).toEqual("/metrics/overview/cluster/tenant/system");
+      });
+      it("should get the selected tenant name in the URL or return an empty string", () => {
+        const result = metrics.getSelectedTenantName();
+        expect(result).toEqual("system");
+        // If we aren't viewing the system tenant, this will return an empty string.
+        Object.defineProperty(window.document, "cookie", {
+          writable: true,
+          value: "tenant=demoapp;session=abc123,system,def456,demoapp",
+        });
+        const result2 = metrics.getSelectedTenantName();
+        expect(result2).toEqual("");
+        // Likewise if we don't have the match param in the URL.
+        Object.defineProperty(window.document, "cookie", {
+          writable: true,
+          value: "tenant=system;session=abc123,system,def456,demoapp",
+        });
+        window.location.href = "/#/metrics/overview/cluster?start=1&end=2";
+        const result3 = metrics.getSelectedTenantName();
+        expect(result3).toEqual("");
+      });
+    });
   });
 });

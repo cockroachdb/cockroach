@@ -520,6 +520,43 @@ func TestServerQueryTenant(t *testing.T) {
 		sort.Strings(r.Sources)
 	}
 	require.Equal(t, expectedTenantResponse, tenantResponse)
+
+	// Test if query returns correct data when the system tenant requests
+	// secondary tenant data.
+	row := systemDB.QueryRow("SELECT name FROM system.tenants WHERE id = 2")
+	if row.Err() != nil {
+		t.Fatal(row.Err())
+	}
+	var tenantName string
+	err = row.Scan(&tenantName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	systemRequestingTenantResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:       "test.metric",
+				Sources:    []string{"1"},
+				TenantName: tenantName,
+			},
+			{
+				Name:       "test.metric",
+				TenantName: tenantName,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range systemRequestingTenantResponse.Results {
+		sort.Strings(r.Sources)
+	}
+	// Update tenant name field since we query with it.
+	expectedTenantResponse.Results[0].Query.TenantName = tenantName
+	expectedTenantResponse.Results[1].Query.TenantName = tenantName
+	require.Equal(t, expectedTenantResponse, systemRequestingTenantResponse)
 }
 
 // TestServerQueryMemoryManagement verifies that queries succeed under
