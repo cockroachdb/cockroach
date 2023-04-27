@@ -69,17 +69,16 @@ func TestImportMultiRegion(t *testing.T) {
 	noopDuringImportFunc := func() error { return nil }
 	duringImportFunc.Store(noopDuringImportFunc)
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).
-			TestingResumerCreationKnobs = map[jobspb.Type]func(jobs.Resumer) jobs.Resumer{
-			jobspb.TypeImport: func(resumer jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeImport,
+			func(resumer jobs.Resumer) jobs.Resumer {
 				resumer.(interface {
 					TestingSetAfterImportKnob(fn func(summary roachpb.RowCount) error)
 				}).TestingSetAfterImportKnob(func(summary roachpb.RowCount) error {
 					return duringImportFunc.Load().(func() error)()
 				})
 				return resumer
-			},
-		}
+			})
 	}
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)

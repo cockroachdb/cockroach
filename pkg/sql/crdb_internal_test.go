@@ -1527,10 +1527,9 @@ func TestInternalSystemJobsAccess(t *testing.T) {
 	// users requires jobs to be created and run. Thus, this test only creates jobs of type
 	// jobspb.TypeImport and overrides the import resumer.
 	registry := s.JobRegistry().(*jobs.Registry)
-	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{}
-	registry.TestingResumerCreationKnobs[jobspb.TypeImport] = func(r jobs.Resumer) jobs.Resumer {
+	registry.TestingWrapResumerConstructor(jobspb.TypeImport, func(r jobs.Resumer) jobs.Resumer {
 		return &fakeResumer{}
-	}
+	})
 
 	asUser := func(user string, f func(userDB *sqlutils.SQLRunner)) {
 		pgURL := url.URL{

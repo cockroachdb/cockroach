@@ -2051,8 +2051,9 @@ func TestFailedImportGC(t *testing.T) {
 	conn := tc.ServerConn(0)
 
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeImport,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if forceFailure {
@@ -2061,8 +2062,7 @@ func TestFailedImportGC(t *testing.T) {
 					return nil
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -2155,15 +2155,15 @@ func TestImportIntoCSVCancel(t *testing.T) {
 
 	setupDoneCh := make(chan struct{})
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeImport,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.onSetupFinish = func(flowinfra.Flow) {
 					close(setupDoneCh)
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -2212,8 +2212,9 @@ func TestImportCSVStmt(t *testing.T) {
 	conn := tc.ServerConn(0)
 
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeImport,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if forceFailure {
@@ -2222,8 +2223,7 @@ func TestImportCSVStmt(t *testing.T) {
 					return nil
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -2963,8 +2963,9 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 	aboutToRunDSP := make(chan struct{})
 	allowRunDSP := make(chan struct{})
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeImport,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.beforeRunDSP = func() error {
 					aboutToRunDSP <- struct{}{}
@@ -2972,8 +2973,7 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 					return nil
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
@@ -3050,8 +3050,9 @@ func TestImportIntoCSV(t *testing.T) {
 	var delayImportFinish chan struct{}
 
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeImport,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if importBodyFinished != nil {
@@ -3075,8 +3076,7 @@ func TestImportIntoCSV(t *testing.T) {
 					return nil
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -4782,10 +4782,10 @@ func TestImportDefaultWithResume(t *testing.T) {
 			jobIDCh := make(chan jobspb.JobID)
 			var jobID jobspb.JobID = -1
 
-			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			registry.TestingWrapResumerConstructor(jobspb.TypeImport,
 				// Arrange for our special job resumer to be
 				// returned the very first time we start the import.
-				jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+				func(raw jobs.Resumer) jobs.Resumer {
 					resumer := raw.(*importResumer)
 					resumer.testingKnobs.alwaysFlushJobProgress = true
 					resumer.testingKnobs.afterImport = func(summary roachpb.RowCount) error {
@@ -4799,8 +4799,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 						}
 					}
 					return resumer
-				},
-			}
+				})
 
 			expectedNumRows := 10*batchSize + 1
 			testBarrier, csvBarrier := newSyncBarrier()
@@ -6479,16 +6478,15 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		}
 
 		for i := 0; i < tc.NumServers(); i++ {
-			tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs =
-				map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-					jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
-						r := raw.(*importResumer)
-						r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
-							return errors.New("testing injected failure")
-						}
-						return r
-					},
-				}
+			tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+				jobspb.TypeImport,
+				func(raw jobs.Resumer) jobs.Resumer {
+					r := raw.(*importResumer)
+					r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
+						return errors.New("testing injected failure")
+					}
+					return r
+				})
 		}
 
 		sqlDB.Exec(t, `CREATE DATABASE failedimportpgdump; SET DATABASE = failedimportpgdump`)
@@ -7121,8 +7119,9 @@ func TestImportJobEventLogging(t *testing.T) {
 
 	var forceFailure bool
 	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeImport,
+			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if forceFailure {
@@ -7131,8 +7130,7 @@ func TestImportJobEventLogging(t *testing.T) {
 					return nil
 				}
 				return r
-			},
-		}
+			})
 	}
 
 	connDB := tc.ServerConn(0)
