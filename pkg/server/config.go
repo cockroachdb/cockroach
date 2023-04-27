@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -955,27 +954,9 @@ func (cfg *Config) parseGossipBootstrapAddresses(
 		}
 
 		if cfg.JoinPreferSRVRecords {
-			// The following code substitutes the entry in --join by the
-			// result of SRV resolution, if suitable SRV records are found
-			// for that name.
-			//
-			// TODO(knz): Delay this lookup. The logic for "regular" addresses
-			// is delayed until the point the connection is attempted, so that
-			// fresh DNS records are used for a new connection. This makes
-			// it possible to update DNS records without restarting the node.
-			// The SRV logic here does not have this property (yet).
-			srvAddrs, err := netutil.SRV(ctx, address)
-			if err != nil {
-				return nil, err
-			}
-
-			if len(srvAddrs) > 0 {
-				for _, sa := range srvAddrs {
-					bootstrapAddresses = append(bootstrapAddresses,
-						util.MakeUnresolvedAddrWithDefaults("tcp", sa, base.DefaultPort))
-				}
-				continue
-			}
+			// We will use the port in the SRV records.
+			bootstrapAddresses = append(bootstrapAddresses, util.MakeUnresolvedAddr("tcp", address))
+			continue
 		}
 
 		// Otherwise, use the address.

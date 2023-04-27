@@ -100,45 +100,17 @@ func (p *Provider) GetRegions(ctx context.Context) (*serverpb.RegionsResponse, e
 	return regions, nil
 }
 
-type regionSet = map[string]struct{}
-
 // getTenantRegions fetches the multi-region enum corresponding to the system
 // database of the current tenant, if that tenant is a multi-region tenant.
 // It returns nil, nil if the tenant is not a multi-region tenant.
 func getTenantRegions(
 	ctx context.Context, txn *kv.Txn, descs *descs.Collection,
-) (regionSet, error) {
+) (RegionSet, error) {
 	systemDatabase, err := descs.ByIDWithLeased(txn).Get().Database(ctx, keys.SystemDatabaseID)
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(
 			err, "failed to resolve system database for regions",
 		)
 	}
-	if !systemDatabase.IsMultiRegion() {
-		return nil, nil
-	}
-	enumID, _ := systemDatabase.MultiRegionEnumID()
-	typ, err := descs.ByIDWithLeased(txn).Get().Type(ctx, enumID)
-	if err != nil {
-		return nil, errors.NewAssertionErrorWithWrappedErrf(
-			err, "failed to resolve multi-region enum for the system database (%d)", enumID,
-		)
-	}
-	t := typ.AsEnumTypeDescriptor()
-	if t == nil {
-		return nil, errors.WithDetailf(
-			errors.AssertionFailedf(
-				"multi-region type %s (%d) for the system database is not an enum",
-				typ.GetName(), typ.GetID(),
-			), "descriptor: %v", typ)
-	}
-	set := make(map[string]struct{}, t.NumEnumMembers())
-	for i, n := 0, t.NumEnumMembers(); i < n; i++ {
-		// Skip regions which don't fully exist. This could mean that they
-		// are being dropped, or they are being added.
-		if !t.IsMemberReadOnly(i) {
-			set[t.GetMemberLogicalRepresentation(i)] = struct{}{}
-		}
-	}
-	return set, nil
+	return GetDatabaseRegions(ctx, txn, systemDatabase, descs)
 }

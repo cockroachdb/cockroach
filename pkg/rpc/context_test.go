@@ -2746,5 +2746,50 @@ func TestHeartbeatDialback(t *testing.T) {
 	}
 }
 
+// TestSRVResolvingDialer tests srvResolvingDialer dials the correct target if SRV query
+// is successful, and dials the input target directly if SRV query returns empty records.
+func TestSRVResolvingDialer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	t.Run("success SRV lookup", func(t *testing.T) {
+		expected := &net.SRV{
+			Target: "test",
+			Port:   123,
+		}
+		defer netutil.TestingOverrideSRVLookupFn(func(service, proto, name string) (string, []*net.SRV, error) {
+			return "", []*net.SRV{expected}, nil
+		})()
+
+		dialed := false
+		dial := func(ctx context.Context, addr string) (net.Conn, error) {
+			dialed = true
+			require.Equal(t, fmt.Sprintf("%s:%d", expected.Target, expected.Port), addr)
+			return nil, nil
+		}
+		dialer := &srvResolvingDialer{dialerFunc: dial}
+		_, err := dialer.dial(ctx, "srvquery")
+		require.NoError(t, err)
+		require.True(t, dialed)
+	})
+
+	t.Run("empty SRV lookup", func(t *testing.T) {
+		defer netutil.TestingOverrideSRVLookupFn(func(service, proto, name string) (string, []*net.SRV, error) {
+			return "", []*net.SRV{}, nil
+		})()
+		expected := "test-expected"
+		dialed := false
+		dial := func(ctx context.Context, addr string) (net.Conn, error) {
+			dialed = true
+			require.Equal(t, expected, addr)
+			return nil, nil
+		}
+		dialer := &srvResolvingDialer{dialerFunc: dial}
+		_, err := dialer.dial(ctx, expected)
+		require.NoError(t, err)
+		require.True(t, dialed)
+	})
+}
+
 // TODO(baptist): Add a test using TestCluster to verify this works in a full
 // integration test.

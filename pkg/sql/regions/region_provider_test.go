@@ -133,7 +133,7 @@ func TestGetRegions(t *testing.T) {
 				lm.errs = map[descpb.ID]error{systemRegionsEnumID: errors.New("boom")}
 				return newTestCollection(lm)
 			}(),
-			expErrRE: `failed to resolve multi-region enum for the system database \(10\): boom`,
+			expErrRE: `failed to resolve multi-region enum for the database \(10\): boom`,
 		},
 		{
 			name:          "region enum type not an enum",
@@ -145,7 +145,7 @@ func TestGetRegions(t *testing.T) {
 				}
 				return newTestCollection(lm)
 			}(),
-			expErrRE: `multi-region type fake_crdb_region \(10\) for the system database is not an enum`,
+			expErrRE: `multi-region type fake_crdb_region \(10\) for the database is not an enum`,
 		},
 		{
 			name:          "read-only members ignored",
