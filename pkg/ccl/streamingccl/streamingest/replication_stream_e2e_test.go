@@ -487,13 +487,12 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 94738, "flaky test")
 	skip.UnderRace(t, "takes too long with multiple nodes")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 
-	args.SrcNumNodes = 3
+	args.SrcNumNodes = 4
 	args.DestNumNodes = 3
 
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
@@ -675,13 +674,12 @@ func TestTenantStreamingDeleteRange(t *testing.T) {
 func TestTenantStreamingMultipleNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 86206)
 
 	skip.UnderRace(t, "takes too long with multiple nodes")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.SrcNumNodes = 3
+	args.SrcNumNodes = 4
 	args.DestNumNodes = 3
 
 	// Track the number of unique addresses that were connected to
@@ -698,6 +696,8 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
+	// Make sure we have data on all nodes, so that we will have multiple
+	// connections and client addresses (and actually test multi-node).
 	replicationtestutils.CreateScatteredTable(t, c, 3)
 
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
