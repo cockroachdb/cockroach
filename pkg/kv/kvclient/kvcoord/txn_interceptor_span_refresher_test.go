@@ -30,17 +30,13 @@ import (
 
 func makeMockTxnSpanRefresher() (txnSpanRefresher, *mockLockedSender) {
 	mockSender := &mockLockedSender{}
+	metrics := MakeTxnMetrics(metric.TestSampleInterval)
 	return txnSpanRefresher{
-		st:                                  cluster.MakeTestingClusterSettings(),
-		knobs:                               new(ClientTestingKnobs),
-		wrapped:                             mockSender,
-		canAutoRetry:                        true,
-		clientRefreshSuccess:                metric.NewCounter(metaClientRefreshSuccess),
-		clientRefreshFail:                   metric.NewCounter(metaClientRefreshFail),
-		clientRefreshFailWithCondensedSpans: metric.NewCounter(metaClientRefreshFailWithCondensedSpans),
-		clientRefreshMemoryLimitExceeded:    metric.NewCounter(metaClientRefreshMemoryLimitExceeded),
-		clientRefreshAutoRetries:            metric.NewCounter(metaClientRefreshAutoRetries),
-		serverRefreshSuccess:                metric.NewCounter(metaServerRefreshSuccess),
+		st:           cluster.MakeTestingClusterSettings(),
+		knobs:        new(ClientTestingKnobs),
+		wrapped:      mockSender,
+		metrics:      &metrics,
+		canAutoRetry: true,
 	}, mockSender
 }
 
@@ -286,18 +282,18 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				require.Equal(t, tc.expRefreshTS, br.Txn.WriteTimestamp)
 				require.Equal(t, tc.expRefreshTS, br.Txn.ReadTimestamp)
 				require.Equal(t, tc.expRefreshTS, tsr.refreshedTimestamp)
-				require.Equal(t, int64(1), tsr.clientRefreshSuccess.Count())
-				require.Equal(t, int64(0), tsr.clientRefreshFail.Count())
-				require.Equal(t, int64(1), tsr.clientRefreshAutoRetries.Count())
-				require.Equal(t, int64(0), tsr.serverRefreshSuccess.Count())
+				require.Equal(t, int64(1), tsr.metrics.ClientRefreshSuccess.Count())
+				require.Equal(t, int64(0), tsr.metrics.ClientRefreshFail.Count())
+				require.Equal(t, int64(1), tsr.metrics.ClientRefreshAutoRetries.Count())
+				require.Equal(t, int64(0), tsr.metrics.ServerRefreshSuccess.Count())
 			} else {
 				require.Nil(t, br)
 				require.NotNil(t, pErr)
 				require.Zero(t, tsr.refreshedTimestamp)
-				require.Equal(t, int64(0), tsr.clientRefreshSuccess.Count())
-				require.Equal(t, int64(0), tsr.clientRefreshFail.Count())
-				require.Equal(t, int64(0), tsr.clientRefreshAutoRetries.Count())
-				require.Equal(t, int64(0), tsr.serverRefreshSuccess.Count())
+				require.Equal(t, int64(0), tsr.metrics.ClientRefreshSuccess.Count())
+				require.Equal(t, int64(0), tsr.metrics.ClientRefreshFail.Count())
+				require.Equal(t, int64(0), tsr.metrics.ClientRefreshAutoRetries.Count())
+				require.Equal(t, int64(0), tsr.metrics.ServerRefreshSuccess.Count())
 			}
 		})
 	}
@@ -420,10 +416,10 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	br, pErr := tsr.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
-	require.Equal(t, int64(1), tsr.clientRefreshSuccess.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshFail.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshAutoRetries.Count())
-	require.Equal(t, int64(0), tsr.serverRefreshSuccess.Count())
+	require.Equal(t, int64(1), tsr.metrics.ClientRefreshSuccess.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshFail.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshAutoRetries.Count())
+	require.Equal(t, int64(0), tsr.metrics.ServerRefreshSuccess.Count())
 	require.True(t, tsr.refreshFootprint.empty())
 	require.False(t, tsr.refreshInvalid)
 
@@ -455,9 +451,9 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	br, pErr = tsr.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
-	require.Equal(t, int64(2), tsr.clientRefreshSuccess.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshFail.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshAutoRetries.Count())
+	require.Equal(t, int64(2), tsr.metrics.ClientRefreshSuccess.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshFail.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshAutoRetries.Count())
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
 
@@ -497,10 +493,10 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	require.Regexp(t,
 		"TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive refresh "+
 			"due to a conflict: committed value on key \"a\"\\)", pErr)
-	require.Equal(t, int64(2), tsr.clientRefreshSuccess.Count())
-	require.Equal(t, int64(1), tsr.clientRefreshFail.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshAutoRetries.Count())
-	require.Equal(t, int64(0), tsr.serverRefreshSuccess.Count())
+	require.Equal(t, int64(2), tsr.metrics.ClientRefreshSuccess.Count())
+	require.Equal(t, int64(1), tsr.metrics.ClientRefreshFail.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshAutoRetries.Count())
+	require.Equal(t, int64(0), tsr.metrics.ServerRefreshSuccess.Count())
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
 
@@ -537,10 +533,10 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	br, pErr = tsr.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
-	require.Equal(t, int64(3), tsr.clientRefreshSuccess.Count())
-	require.Equal(t, int64(1), tsr.clientRefreshFail.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshAutoRetries.Count())
-	require.Equal(t, int64(0), tsr.serverRefreshSuccess.Count())
+	require.Equal(t, int64(3), tsr.metrics.ClientRefreshSuccess.Count())
+	require.Equal(t, int64(1), tsr.metrics.ClientRefreshFail.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshAutoRetries.Count())
+	require.Equal(t, int64(0), tsr.metrics.ServerRefreshSuccess.Count())
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
 }
@@ -608,10 +604,10 @@ func TestTxnSpanRefresherPreemptiveRefreshIsoLevel(t *testing.T) {
 			if tt.expRefresh {
 				expRefreshSuccess = 1
 			}
-			require.Equal(t, expRefreshSuccess, tsr.clientRefreshSuccess.Count())
-			require.Equal(t, int64(0), tsr.clientRefreshFail.Count())
-			require.Equal(t, int64(0), tsr.clientRefreshAutoRetries.Count())
-			require.Equal(t, int64(0), tsr.serverRefreshSuccess.Count())
+			require.Equal(t, expRefreshSuccess, tsr.metrics.ClientRefreshSuccess.Count())
+			require.Equal(t, int64(0), tsr.metrics.ClientRefreshFail.Count())
+			require.Equal(t, int64(0), tsr.metrics.ClientRefreshAutoRetries.Count())
+			require.Equal(t, int64(0), tsr.metrics.ServerRefreshSuccess.Count())
 			require.True(t, tsr.refreshFootprint.empty())
 			require.False(t, tsr.refreshInvalid)
 		})
@@ -852,9 +848,9 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 					default:
 						require.Fail(t, "unexpected")
 					}
-					require.Equal(t, expSuccess, tsr.clientRefreshSuccess.Count())
-					require.Equal(t, expFail, tsr.clientRefreshFail.Count())
-					require.Equal(t, expAutoRetries, tsr.clientRefreshAutoRetries.Count())
+					require.Equal(t, expSuccess, tsr.metrics.ClientRefreshSuccess.Count())
+					require.Equal(t, expFail, tsr.metrics.ClientRefreshFail.Count())
+					require.Equal(t, expAutoRetries, tsr.metrics.ClientRefreshAutoRetries.Count())
 
 					require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 					require.False(t, tsr.refreshInvalid)
@@ -887,9 +883,9 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 					default:
 						require.Fail(t, "unexpected")
 					}
-					require.Equal(t, expSuccess, tsr.clientRefreshSuccess.Count())
-					require.Equal(t, expFail, tsr.clientRefreshFail.Count())
-					require.Equal(t, expAutoRetries, tsr.clientRefreshAutoRetries.Count())
+					require.Equal(t, expSuccess, tsr.metrics.ClientRefreshSuccess.Count())
+					require.Equal(t, expFail, tsr.metrics.ClientRefreshFail.Count())
+					require.Equal(t, expAutoRetries, tsr.metrics.ClientRefreshAutoRetries.Count())
 
 					if errIdx < 2 {
 						require.Equal(t, []roachpb.Span(nil), tsr.refreshFootprint.asSlice())
@@ -974,7 +970,7 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	require.False(t, tsr.refreshInvalid)
 	require.Equal(t, 2+roachpb.SpanOverhead, tsr.refreshFootprint.bytes)
 	require.False(t, tsr.refreshFootprint.condensed)
-	require.Equal(t, int64(0), tsr.clientRefreshMemoryLimitExceeded.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshMemoryLimitExceeded.Count())
 	require.Zero(t, tsr.refreshedTimestamp)
 
 	// Exceed the limit again, this time with a non-adjacent span such that
@@ -991,8 +987,8 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	require.True(t, tsr.refreshFootprint.condensed)
 	require.False(t, tsr.refreshInvalid)
 	require.Zero(t, tsr.refreshedTimestamp)
-	require.Equal(t, int64(1), tsr.clientRefreshMemoryLimitExceeded.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshFailWithCondensedSpans.Count())
+	require.Equal(t, int64(1), tsr.metrics.ClientRefreshMemoryLimitExceeded.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshFailWithCondensedSpans.Count())
 
 	// Return a transaction retry error and make sure the metric indicating that
 	// we did not retry due to the refresh span bytes is incremented.
@@ -1005,7 +1001,7 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	exp := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "")
 	require.Equal(t, exp, pErr.GetDetail())
 	require.Nil(t, br)
-	require.Equal(t, int64(1), tsr.clientRefreshFailWithCondensedSpans.Count())
+	require.Equal(t, int64(1), tsr.metrics.ClientRefreshFailWithCondensedSpans.Count())
 }
 
 // TestTxnSpanRefresherAssignsCanForwardReadTimestamp tests that the
@@ -1052,10 +1048,10 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 	require.Equal(t, refreshTS1, tsr.refreshedTimestamp)
 	require.Nil(t, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, int64(0), tsr.clientRefreshSuccess.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshFail.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshAutoRetries.Count())
-	require.Equal(t, int64(1), tsr.serverRefreshSuccess.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshSuccess.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshFail.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshAutoRetries.Count())
+	require.Equal(t, int64(1), tsr.metrics.ServerRefreshSuccess.Count())
 
 	// Send a Put request for a transaction with a fixed commit timestamp.
 	// Should NOT set CanForwardReadTimestamp flag.
@@ -1110,10 +1106,10 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 	require.Equal(t, refreshTS2, tsr.refreshedTimestamp)
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, int64(0), tsr.clientRefreshSuccess.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshFail.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshAutoRetries.Count())
-	require.Equal(t, int64(2), tsr.serverRefreshSuccess.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshSuccess.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshFail.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshAutoRetries.Count())
+	require.Equal(t, int64(2), tsr.metrics.ServerRefreshSuccess.Count())
 
 	// Send another Scan request. Should NOT set CanForwardReadTimestamp flag.
 	ba.Requests = nil
@@ -1187,10 +1183,10 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 	require.Equal(t, refreshTS3, tsr.refreshedTimestamp)
 	require.Equal(t, []roachpb.Span(nil), tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, int64(0), tsr.clientRefreshSuccess.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshFail.Count())
-	require.Equal(t, int64(0), tsr.clientRefreshAutoRetries.Count())
-	require.Equal(t, int64(3), tsr.serverRefreshSuccess.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshSuccess.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshFail.Count())
+	require.Equal(t, int64(0), tsr.metrics.ClientRefreshAutoRetries.Count())
+	require.Equal(t, int64(3), tsr.metrics.ServerRefreshSuccess.Count())
 }
 
 // TestTxnSpanRefresherEpochIncrement tests that a txnSpanRefresher's refresh
