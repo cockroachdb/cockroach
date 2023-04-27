@@ -214,7 +214,9 @@ func csvForEach(t *testing.T, csvFile string, each func(lineno int, line []strin
 		t.Fatal(err)
 	}
 
-	for lineno := 2; ; lineno++ {
+	// Start lineno at 9 to account for the comment lines at the beginning of
+	// the CSV files.
+	for lineno := 9; ; lineno++ {
 		line, err := reader.Read()
 		if err == io.EOF {
 			break
