@@ -65,11 +65,7 @@ func ReType(expr tree.TypedExpr, wantedType *types.T) (_ tree.TypedExpr, ok bool
 func PerformCast(
 	ctx context.Context, evalCtx *Context, d tree.Datum, t *types.T,
 ) (tree.Datum, error) {
-	ret, err := performCastWithoutPrecisionTruncation(ctx, evalCtx, d, t, true /* truncateWidth */)
-	if err != nil {
-		return nil, err
-	}
-	return tree.AdjustValueToType(t, ret)
+	return performCast(ctx, evalCtx, d, t, true /* truncateWidth */)
 }
 
 // PerformAssignmentCast performs an assignment cast from the provided Datum to
@@ -89,7 +85,13 @@ func PerformAssignmentCast(
 			"invalid assignment cast: %s -> %s", d.ResolvedType(), t,
 		)
 	}
-	d, err := performCastWithoutPrecisionTruncation(ctx, evalCtx, d, t, false /* truncateWidth */)
+	return performCast(ctx, evalCtx, d, t, false /* truncateWidth */)
+}
+
+func performCast(
+	ctx context.Context, evalCtx *Context, d tree.Datum, t *types.T, truncateWidth bool,
+) (tree.Datum, error) {
+	d, err := performCastWithoutPrecisionTruncation(ctx, evalCtx, d, t, truncateWidth)
 	if err != nil {
 		return nil, err
 	}
@@ -900,7 +902,7 @@ func performCastWithoutPrecisionTruncation(
 				ecast := tree.DNull
 				if e != tree.DNull {
 					var err error
-					ecast, err = PerformCast(ctx, evalCtx, e, t.ArrayContents())
+					ecast, err = performCast(ctx, evalCtx, e, t.ArrayContents(), truncateWidth)
 					if err != nil {
 						return nil, err
 					}
