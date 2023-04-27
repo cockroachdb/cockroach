@@ -23,7 +23,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -808,12 +807,6 @@ type Store struct {
 	// Queue to limit concurrent non-empty snapshot sending.
 	snapshotSendQueue *multiqueue.MultiQueue
 
-	// Track newly-acquired expiration-based leases that we want to proactively
-	// renew. An object is sent on the signal whenever a new entry is added to
-	// the map.
-	renewableLeases       syncutil.IntMap // map[roachpb.RangeID]*Replica
-	renewableLeasesSignal chan struct{}   // 1-buffered
-
 	// draining holds a bool which indicates whether this store is draining. See
 	// SetDraining() for a more detailed explanation of behavior changes.
 	//
@@ -1337,11 +1330,6 @@ func NewStore(
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 	s.snapshotApplyQueue = multiqueue.NewMultiQueue(int(cfg.SnapshotApplyLimit))
 	s.snapshotSendQueue = multiqueue.NewMultiQueue(int(cfg.SnapshotSendLimit))
-	if ch := s.cfg.TestingKnobs.LeaseRenewalSignalChan; ch != nil {
-		s.renewableLeasesSignal = ch
-	} else {
-		s.renewableLeasesSignal = make(chan struct{}, 1)
-	}
 
 	s.consistencyLimiter = quotapool.NewRateLimiter(
 		"ConsistencyQueue",
@@ -2056,10 +2044,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 	}
 
-	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
-		s.startLeaseRenewer(ctx)
-	}
-
 	// Connect rangefeeds to closed timestamp updates.
 	s.startRangefeedUpdater(ctx)
 
@@ -2124,85 +2108,6 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return nil, errSpanConfigsUnavailable
 	}
 	return s.cfg.SpanConfigSubscriber, nil
-}
-
-// startLeaseRenewer runs an infinite loop in a goroutine which regularly
-// checks whether the store has any expiration-based leases that should be
-// proactively renewed and attempts to continue renewing them.
-//
-// This reduces user-visible latency when range lookups are needed to serve a
-// request and reduces ping-ponging of r1's lease to different replicas as
-// maybeGossipFirstRange is called on each (e.g.  #24753).
-//
-// Currently, this is only used for ranges that _require_ expiration-based
-// leases, as determined by Replica.requiresExpirationLeaseRLocked(), i.e. the
-// meta and liveness ranges.
-//
-// If kv.expiration_leases_only.enabled is true, then this lease renewer is
-// disabled, and lease extensions are instead done by the Raft scheduler during
-// Raft ticks.
-//
-// TODO(erikgrinaker): Remove this and only use the Raft scheduler.
-func (s *Store) startLeaseRenewer(ctx context.Context) {
-	// Start a goroutine that watches and proactively renews certain
-	// expiration-based leases.
-	_ = s.stopper.RunAsyncTask(ctx, "lease-renewer", func(ctx context.Context) {
-		timer := timeutil.NewTimer()
-		defer timer.Stop()
-
-		// Wake up the lease renewer when kv.expiration_leases_only.enabled changes.
-		ExpirationLeasesOnly.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
-			select {
-			case s.renewableLeasesSignal <- struct{}{}:
-			default:
-			}
-		})
-
-		// Determine how frequently to attempt to ensure that we have each lease.
-		// The divisor used here is somewhat arbitrary, but needs to be large
-		// enough to ensure we'll attempt to renew the lease reasonably early
-		// within the RangeLeaseRenewalDuration time window. This means we'll wake
-		// up more often that strictly necessary, but it's more maintainable than
-		// attempting to accurately determine exactly when each iteration of a
-		// lease expires and when we should attempt to renew it as a result.
-		renewalDuration := s.cfg.RangeLeaseDuration / 5
-		if d := s.cfg.TestingKnobs.LeaseRenewalDurationOverride; d > 0 {
-			renewalDuration = d
-		}
-		for {
-			var numRenewableLeases int
-			// If kv.expiration_leases_only.enabled is true then the Raft scheduler
-			// will handle this, so don't attempt to renew them and just go to sleep.
-			if !ExpirationLeasesOnly.Get(&s.ClusterSettings().SV) {
-				s.renewableLeases.Range(func(k int64, v unsafe.Pointer) bool {
-					numRenewableLeases++
-					repl := (*Replica)(v)
-					annotatedCtx := repl.AnnotateCtx(ctx)
-					if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
-						if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); !ok {
-							log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
-						}
-						s.renewableLeases.Delete(k)
-					}
-					return true
-				})
-			}
-
-			if numRenewableLeases > 0 {
-				timer.Reset(renewalDuration)
-			}
-			if fn := s.cfg.TestingKnobs.LeaseRenewalOnPostCycle; fn != nil {
-				fn()
-			}
-			select {
-			case <-s.renewableLeasesSignal:
-			case <-timer.C:
-				timer.Read = true
-			case <-s.stopper.ShouldQuiesce():
-				return
-			}
-		}
-	})
 }
 
 // startRangefeedUpdater periodically informs all the replicas with rangefeeds

@@ -10160,8 +10160,8 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		}
 		return q
 	})
-	// Verify no quiescence with expiration-based leases, but only if
-	// kv.expiration_leases_only.enabled is true.
+	// Verify no quiescence with expiration-based leases, regardless
+	// of kv.expiration_leases_only.enabled.
 	test(false, func(q *testQuiescer) *testQuiescer {
 		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, true)
 		q.lease.Epoch = 0
@@ -10170,7 +10170,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		}
 		return q
 	})
-	test(true, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) *testQuiescer {
 		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, false)
 		q.lease.Epoch = 0
 		q.lease.Expiration = &hlc.Timestamp{
