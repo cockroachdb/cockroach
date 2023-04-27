@@ -446,6 +446,28 @@ func (t testTrace) equalToTrace(tr Trace) bool {
 		return false
 	}
 
+	// _dropped_indirect_children tag should only be added to the true root span
+	if tr.DroppedIndirectChildren {
+		tg := tr.Root.FindTagGroup(tracingpb.AnonymousTagGroupName)
+		if tg == nil {
+			return false
+		}
+		if _, foundTag := tg.FindTag("_dropped_indirect_children"); !foundTag {
+			return false
+		}
+	}
+
+	// _dropped_children tag should only be added to the true root span
+	if tr.DroppedDirectChildren {
+		tg := tr.Root.FindTagGroup(tracingpb.AnonymousTagGroupName)
+		if tg == nil {
+			return false
+		}
+		if _, foundTag := tg.FindTag("_dropped_children"); !foundTag {
+			return false
+		}
+	}
+
 	sort.Slice(tr.Children, func(i, j int) bool {
 		return strings.Compare(tr.Children[i].Root.Operation, tr.Children[j].Root.Operation) == -1
 	})
@@ -453,7 +475,48 @@ func (t testTrace) equalToTrace(tr Trace) bool {
 		return strings.Compare(t.children[i].op, t.children[j].op) == -1
 	})
 	for i, c := range t.children {
-		if !c.equalToTrace(tr.Children[i]) {
+		if !c.equalToTraceRecursive(tr.Children[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (t testTrace) equalToTraceRecursive(tr Trace) bool {
+	if t.op != "" && t.op != tr.Root.Operation {
+		return false
+	}
+	if len(t.children) != len(tr.Children) {
+		return false
+	}
+	// _dropped_indirect_children tag should not be added to child spans
+	if tr.DroppedIndirectChildren {
+		tg := tr.Root.FindTagGroup(tracingpb.AnonymousTagGroupName)
+		if tg != nil {
+			if _, foundTag := tg.FindTag("_dropped_indirect_children"); foundTag {
+				return false
+			}
+		}
+	}
+
+	// _dropped_children tag should not be added to child spans
+	if tr.DroppedDirectChildren {
+		tg := tr.Root.FindTagGroup(tracingpb.AnonymousTagGroupName)
+		if tg != nil {
+			if _, foundTag := tg.FindTag("_dropped_children"); foundTag {
+				return false
+			}
+		}
+	}
+
+	sort.Slice(tr.Children, func(i, j int) bool {
+		return strings.Compare(tr.Children[i].Root.Operation, tr.Children[j].Root.Operation) == -1
+	})
+	sort.Slice(t.children, func(i, j int) bool {
+		return strings.Compare(t.children[i].op, t.children[j].op) == -1
+	})
+	for i, c := range t.children {
+		if !c.equalToTraceRecursive(tr.Children[i]) {
 			return false
 		}
 	}
