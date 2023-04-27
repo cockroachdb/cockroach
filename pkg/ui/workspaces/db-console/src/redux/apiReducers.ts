@@ -525,6 +525,10 @@ const rawTraceReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshRawTrace = rawTraceReducerObj.refresh;
 
+const tenantsListObj = new CachedDataReducer(api.getTenants, "tenants");
+
+export const refreshTenantsList = tenantsListObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<
@@ -588,6 +592,7 @@ export interface APIReducersState {
   snapshots: KeyedCachedDataReducerState<clusterUiApi.ListTracingSnapshotsResponse>;
   snapshot: KeyedCachedDataReducerState<clusterUiApi.GetTracingSnapshotResponse>;
   rawTrace: KeyedCachedDataReducerState<clusterUiApi.GetTraceResponse>;
+  tenants: CachedDataReducerState<api.ListTenantsResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -642,6 +647,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [rawTraceReducerObj.actionNamespace]: rawTraceReducerObj.reducer,
   [statementFingerprintInsightsReducerObj.actionNamespace]:
     statementFingerprintInsightsReducerObj.reducer,
+  [tenantsListObj.actionNamespace]: tenantsListObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

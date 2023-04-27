@@ -17,10 +17,20 @@ import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodeSources, storeSources, nodeDisplayNameByID } = props;
+  const {
+    nodeIDs,
+    nodeSources,
+    storeSources,
+    nodeDisplayNameByID,
+    tenantSource,
+  } = props;
 
   return [
-    <LineGraph title="Queue Processing Failures" sources={storeSources}>
+    <LineGraph
+      title="Queue Processing Failures"
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Count} label="failures">
         <Metric
           name="cr.store.queue.gc.process.failure"
@@ -65,7 +75,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Queue Processing Times" sources={storeSources}>
+    <LineGraph
+      title="Queue Processing Times"
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Duration} label="processing time">
         <Metric
           name="cr.store.queue.gc.processingnanos"
@@ -113,7 +127,11 @@ export default function (props: GraphDashboardProps) {
     // TODO(mrtracy): The queues below should also have "processing
     // nanos" on the graph, but that has a time unit instead of a count
     // unit, and thus we need support for multi-axis graphs.
-    <LineGraph title="Replica GC Queue" sources={storeSources}>
+    <LineGraph
+      title="Replica GC Queue"
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.store.queue.replicagc.process.success"
@@ -133,7 +151,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Replication Queue" sources={storeSources}>
+    <LineGraph
+      title="Replication Queue"
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.store.queue.replicate.process.success"
@@ -182,7 +204,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Split Queue" sources={storeSources}>
+    <LineGraph
+      title="Split Queue"
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.store.queue.split.process.success"
@@ -197,7 +223,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Merge Queue" sources={storeSources}>
+    <LineGraph
+      title="Merge Queue"
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.store.queue.merge.process.success"
@@ -212,7 +242,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Raft Log Queue" sources={storeSources}>
+    <LineGraph
+      title="Raft Log Queue"
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.store.queue.raftlog.process.success"
@@ -227,7 +261,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Raft Snapshot Queue" sources={storeSources}>
+    <LineGraph
+      title="Raft Snapshot Queue"
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.store.queue.raftsnapshot.process.success"
@@ -242,7 +280,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Consistency Checker Queue" sources={storeSources}>
+    <LineGraph
+      title="Consistency Checker Queue"
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.store.queue.consistency.process.success"
@@ -257,7 +299,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Time Series Maintenance Queue" sources={storeSources}>
+    <LineGraph
+      title="Time Series Maintenance Queue"
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.store.queue.tsmaintenance.process.success"
@@ -272,7 +318,11 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="MVCC GC Queue" sources={storeSources}>
+    <LineGraph
+      title="MVCC GC Queue"
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.store.queue.gc.process.success"
@@ -290,6 +340,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Protected Timestamp Records"
       sources={nodeSources}
+      tenantSource={tenantSource}
       tooltip={`Number of protected timestamp records (used by backups, changefeeds, etc. to prevent MVCC GC)`}
     >
       <Axis units={AxisUnits.Count} label="Records">
