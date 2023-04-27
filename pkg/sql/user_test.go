@@ -31,6 +31,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestUserLoginAfterGC sets an artificially low gc.ttl on system.role_members,
+// then verifies that the role membership cache still works. This is valuable to
+// test since we change the read timestamp of the transaction that populates the
+// role membership cache.
+func TestUserLoginAfterGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Create a user.
+	_, err := db.Exec(`CREATE USER newuser WITH password '123'`)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`GRANT admin TO newuser`)
+	require.NoError(t, err)
+
+	// Sleep so that the system.role_members modification time is 2s in the past.
+	time.Sleep(2 * time.Second)
+
+	// Force a table GC with a threshold of 500ms in the past.
+	err = s.ForceTableGC(ctx, "system", "role_members", s.Clock().Now().Add(-int64(500*time.Millisecond), 0))
+	require.NoError(t, err)
+
+	// Verify that newuser can still log in.
+	newUserURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
+		t, s.ServingSQLAddr(), t.Name(), url.UserPassword("newuser", "123"), false, /* withClientCerts */
+	)
+	defer cleanup()
+
+	newUserConn, err := sqltestutils.PGXConn(t, newUserURL)
+	require.NoError(t, err)
+	defer func() { _ = newUserConn.Close(ctx) }()
+
+	_, err = newUserConn.Exec(ctx, `SHOW GRANTS FOR newuser`)
+	require.NoError(t, err)
+}
+
 // TestGetUserTimeout verifies that user login attempts
 // fail with a suitable timeout when some system range(s) are
 // unavailable.

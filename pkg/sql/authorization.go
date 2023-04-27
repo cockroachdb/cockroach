@@ -563,17 +563,9 @@ func MemberOfWithAdminOption(
 	// The singleflight closure uses a fresh transaction to prevent a data race
 	// that may occur if the context is cancelled, leading to the outer txn
 	// being cleaned up. We set the timestamp of this new transaction to be
-	// the modification time of system.role_members' table descriptor to
+	// the same as the outer transaction that already read the descriptor, to
 	// ensure that we are reading from the right version of the table.
-	// Unfortunately, we cannot use the modification time of the descriptor
-	// if it's at version 1 since the permanent upgrade that adds the initial
-	// row for the system.role_members did not bump the version. However,
-	// this implies that the table is at its initial state, so it is safe
-	// to use the current transaction's read timestamp.
-	newTxnTimestamp := tableDesc.GetModificationTime()
-	if tableDesc.GetVersion() == 1 {
-		newTxnTimestamp = txn.KV().ReadTimestamp()
-	}
+	newTxnTimestamp := txn.KV().ReadTimestamp()
 	future, _ := roleMembersCache.populateCacheGroup.DoChan(ctx,
 		fmt.Sprintf("%s-%d", member.Normalized(), tableVersion),
 		singleflight.DoOpts{
