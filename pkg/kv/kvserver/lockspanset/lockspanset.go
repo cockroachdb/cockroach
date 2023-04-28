@@ -19,10 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-const NumLockStrength = lock.MaxStrength + 1
-
 type LockSpanSet struct {
-	spans [NumLockStrength][]roachpb.Span
+	spans [lock.NumLockStrength][]roachpb.Span
 }
 
 var lockSpanSetPool = sync.Pool{
@@ -78,10 +76,10 @@ func (l *LockSpanSet) Empty() bool {
 // String prints a string representation of the LockSpanSet.
 func (l *LockSpanSet) String() string {
 	var buf strings.Builder
-	for st := lock.Strength(0); st < NumLockStrength; st++ {
-		for _, span := range l.GetSpans(st) {
+	for st, spans := range l.spans {
+		for _, span := range spans {
 			fmt.Fprintf(&buf, "%s: %s\n",
-				st, span)
+				lock.Strength(st), span)
 		}
 	}
 	return buf.String()
@@ -90,8 +88,8 @@ func (l *LockSpanSet) String() string {
 // Len returns the total number of spans tracked across all strengths.
 func (l *LockSpanSet) Len() int {
 	var count int
-	for st := lock.Strength(0); st < NumLockStrength; st++ {
-		count += len(l.GetSpans(st))
+	for _, spans := range l.spans {
+		count += len(spans)
 	}
 	return count
 }
