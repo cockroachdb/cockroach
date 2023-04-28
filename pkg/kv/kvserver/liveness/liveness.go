@@ -1556,3 +1556,9 @@ func (nl *NodeLiveness) TestingSetDecommissioningInternal(
 ) (changeCommitted bool, err error) {
 	return nl.setMembershipStatusInternal(ctx, oldLivenessRec, targetStatus)
 }
+
+// TestingMaybeUpdate replaces the liveness (if it appears newer) and invokes
+// the registered callbacks if the node became live in the process. For testing.
+func (nl *NodeLiveness) TestingMaybeUpdate(ctx context.Context, newRec Record) {
+	nl.maybeUpdate(ctx, newRec)
+}
