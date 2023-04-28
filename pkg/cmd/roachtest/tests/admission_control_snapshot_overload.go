@@ -80,10 +80,6 @@ func registerSnapshotOverload(r registry.Registry) {
 					ctx, "SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '256MiB'"); err != nil {
 					t.Fatalf("failed to set kv.snapshot_rebalance.max_rate: %v", err)
 				}
-				if _, err := db.ExecContext(
-					ctx, "SET CLUSTER SETTING kv.snapshot_recovery.max_rate = '256MiB'"); err != nil {
-					t.Fatalf("failed to set kv.snapshot_recovery.max_rate: %v", err)
-				}
 			}
 
 			t.Status(fmt.Sprintf("setting up prometheus/grafana (<%s)", 2*time.Minute))

@@ -78,8 +78,8 @@ func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Dura
 // after them in the queue to time-out.
 //
 // The parameter controls which rate(s) to use.
-func makeRateLimitedTimeoutFunc(rateSettings ...*settings.ByteSizeSetting) queueProcessTimeoutFunc {
-	return makeRateLimitedTimeoutFuncByPermittedSlowdown(permittedRangeScanSlowdown, rateSettings...)
+func makeRateLimitedTimeoutFunc(rateSettings *settings.ByteSizeSetting) queueProcessTimeoutFunc {
+	return makeRateLimitedTimeoutFuncByPermittedSlowdown(permittedRangeScanSlowdown, rateSettings)
 }
 
 // permittedRangeScanSlowdown is the factor of the above the estimated duration
@@ -91,7 +91,7 @@ const permittedRangeScanSlowdown = 10
 // slowdown factor on the estimated queue processing duration based on the given rate settings.
 // See makeRateLimitedTimeoutFunc for more information.
 func makeRateLimitedTimeoutFuncByPermittedSlowdown(
-	permittedSlowdown int, rateSettings ...*settings.ByteSizeSetting,
+	permittedSlowdown int, rateSettings *settings.ByteSizeSetting,
 ) queueProcessTimeoutFunc {
 	return func(cs *cluster.Settings, r replicaInQueue) time.Duration {
 		minimumTimeout := queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
@@ -99,16 +99,10 @@ func makeRateLimitedTimeoutFuncByPermittedSlowdown(
 		// Some tests set up a fake implementation of replicaInQueue in which
 		// case we fall back to the configured minimum timeout.
 		repl, ok := r.(interface{ GetMVCCStats() enginepb.MVCCStats })
-		if !ok || len(rateSettings) == 0 {
+		if !ok {
 			return minimumTimeout
 		}
-		minSnapshotRate := rateSettings[0].Get(&cs.SV)
-		for i := 1; i < len(rateSettings); i++ {
-			snapshotRate := rateSettings[i].Get(&cs.SV)
-			if snapshotRate < minSnapshotRate {
-				minSnapshotRate = snapshotRate
-			}
-		}
+		minSnapshotRate := rateSettings.Get(&cs.SV)
 		estimatedDuration := time.Duration(repl.GetMVCCStats().Total()/minSnapshotRate) * time.Second
 		timeout := estimatedDuration * time.Duration(permittedSlowdown)
 		if timeout < minimumTimeout {
