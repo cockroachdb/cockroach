@@ -53,6 +53,9 @@ var ExclusiveLocksBlockNonLockingReads = settings.RegisterBoolSetting(
 // MaxStrength is the maximum value in the Strength enum.
 const MaxStrength = Intent
 
+// NumLockStrength is the total number of lock strengths in the Strength enum.
+const NumLockStrength = MaxStrength + 1
+
 // MaxDurability is the maximum value in the Durability enum.
 const MaxDurability = Unreplicated
 
