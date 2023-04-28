@@ -3993,42 +3993,6 @@ func (m *RoleBasedAuditEvent) AppendJSONFields(printComma bool, b redact.Redacta
 		b = append(b, '"')
 	}
 
-	if m.ServerAddress != "" {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"ServerAddress\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.ServerAddress)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
-	}
-
-	if m.RemoteAddress != "" {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"RemoteAddress\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.RemoteAddress)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
-	}
-
-	if m.ConnectionType != "" {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"ConnectionType\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.ConnectionType)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
-	}
-
 	return printComma, b
 }
 
