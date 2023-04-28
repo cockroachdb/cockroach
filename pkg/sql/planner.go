@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
