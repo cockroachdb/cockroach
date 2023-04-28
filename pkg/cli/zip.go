@@ -242,7 +242,7 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 			sqlExecCtx.TerminalOutput = false
 			sqlExecCtx.ShowTimes = false
 			// Use a streaming format to avoid accumulating all rows in RAM.
-			sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
+			sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayHTML
 
 			sqlConn, err := makeTenantSQLClient("cockroach zip", useSystemDb, tenant.TenantName)
 			// The zip output is sent directly into a text file, so the results should
@@ -382,7 +382,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	const maxRetries = 5
 	suffix := ""
 	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
-		name := baseName + suffix + ".txt"
+		name := baseName + suffix + ".html"
 		s.progress("writing output: %s", name)
 		sqlErr := func() error {
 			zc.z.Lock()
@@ -403,7 +403,17 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			}
 			// Pump the SQL rows directly into the zip writer, to avoid
 			// in-RAM buffering.
-			return sqlExecCtx.RunQueryAndFormatResults(ctx, conn, w, io.Discard, stderr, clisqlclient.MakeQuery(query))
+			if err := sqlExecCtx.RunQueryAndFormatResults(ctx, conn, w, io.Discard, stderr, clisqlclient.MakeQuery(query)); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintln(w, `
+<link href="https://cdn.jsdelivr.net/gh/tofsjonas/sortable@2.1.3/sortable.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/gh/tofsjonas/sortable@2.1.3/sortable.min.js"></script>
+<script>
+  document.getElementsByTagName("table")[0].classList.add('sortable');
+</script>`)
+			return err
+
 		}()
 		if sqlErr != nil {
 			if cErr := zc.z.createError(s, name, errors.CombineErrors(sqlErr, errors.Newf("query: %s", query))); cErr != nil {
