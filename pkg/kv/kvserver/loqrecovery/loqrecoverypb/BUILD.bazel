@@ -39,6 +39,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/util/keysutil",
         "//pkg/util/log/eventpb",

@@ -87,7 +87,7 @@ sequence req=req4
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
@@ -95,7 +95,6 @@ global: num=1
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
     active: true req: 4, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 2
-local: num=0
 
 # -------------------------------------------------------------
 # Read-only request runs into long lock wait-queue. Waits for
@@ -168,14 +167,13 @@ finish req=req2
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
     active: true req: 4, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 3
-local: num=0
 
 # -------------------------------------------------------------
 # Read-write request runs into long lock wait-queue. Instead of

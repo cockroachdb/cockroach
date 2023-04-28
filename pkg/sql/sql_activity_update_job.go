@@ -30,9 +30,9 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
-// enabled the stats activity flush job.
-var enabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+// sqlStatsActivityFlushEnabled the stats activity flush job.
+var sqlStatsActivityFlushEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.stats.activity.flush.enabled",
 	"enable the flush to the system statement and transaction activity tables",
 	true)
@@ -66,13 +66,16 @@ var sqlStatsActivityMaxPersistedRows = settings.RegisterIntSetting(
 
 const numberOfTopColumns = 6
 
+// sqlActivityUpdateJob is responsible for translating the data in the
+// statement/txn statistics tables into the statement/txn _activity_
+// tables.
 type sqlActivityUpdateJob struct {
 	job *jobs.Job
 }
 
 // Resume implements the jobs.sqlActivityUpdateJob interface.
 // The SQL activity job runs AS a forever-running background job
-// and runs the SqlActivityUpdater according to sql.stats.activity.flush.interval.
+// and runs the sqlActivityUpdater according to sql.stats.activity.flush.interval.
 func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{}) (jobErr error) {
 	log.Infof(ctx, "starting sql stats activity flush job")
 	// The sql activity update job is a forever running background job.
@@ -85,23 +88,21 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 	stopper := execCtx.ExecCfg().DistSQLSrv.Stopper
 	settings := execCtx.ExecCfg().Settings
 	statsFlush := execCtx.ExecCfg().InternalDB.server.sqlStats
-	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeAutoUpdateSQLActivity].(ActivityUpdaterMetrics)
+	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeAutoUpdateSQLActivity].(activityUpdaterMetrics)
 
 	flushDoneSignal := make(chan struct{})
 	defer func() {
-		statsFlush.SetFlushDoneCallback(nil)
+		statsFlush.SetFlushDoneSignalCh(nil)
 		close(flushDoneSignal)
 	}()
 
+	statsFlush.SetFlushDoneSignalCh(flushDoneSignal)
 	for {
-		statsFlush.SetFlushDoneCallback(func() {
-			flushDoneSignal <- struct{}{}
-		})
 		select {
 		case <-flushDoneSignal:
 			// A flush was done. Set the timer and wait for it to complete.
-			if enabled.Get(&settings.SV) {
-				updater := NewSqlActivityUpdater(settings, execCtx.ExecCfg().InternalDB)
+			if sqlStatsActivityFlushEnabled.Get(&settings.SV) {
+				updater := newSqlActivityUpdater(settings, execCtx.ExecCfg().InternalDB)
 				if err := updater.TransferStatsToActivity(ctx); err != nil {
 					log.Warningf(ctx, "error running sql activity updater job: %v", err)
 					metrics.numErrors.Inc(1)
@@ -115,14 +116,14 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 	}
 }
 
-type ActivityUpdaterMetrics struct {
+type activityUpdaterMetrics struct {
 	numErrors *metric.Counter
 }
 
-func (m ActivityUpdaterMetrics) MetricStruct() {}
+func (m activityUpdaterMetrics) MetricStruct() {}
 
 func newActivityUpdaterMetrics() metric.Struct {
-	return ActivityUpdaterMetrics{
+	return activityUpdaterMetrics{
 		numErrors: metric.NewCounter(metric.Metadata{
 			Name:        "jobs.metrics.task_failed",
 			Help:        "Number of metrics sql activity updater tasks that failed",
@@ -156,20 +157,20 @@ func init() {
 	)
 }
 
-// NewSqlActivityUpdater returns a new instance of SqlActivityUpdater.
-func NewSqlActivityUpdater(setting *cluster.Settings, db isql.DB) *SqlActivityUpdater {
-	return &SqlActivityUpdater{
+// newSqlActivityUpdater returns a new instance of sqlActivityUpdater.
+func newSqlActivityUpdater(setting *cluster.Settings, db isql.DB) *sqlActivityUpdater {
+	return &sqlActivityUpdater{
 		st: setting,
 		db: db,
 	}
 }
 
-type SqlActivityUpdater struct {
+type sqlActivityUpdater struct {
 	st *cluster.Settings
 	db isql.DB
 }
 
-func (u *SqlActivityUpdater) TransferStatsToActivity(ctx context.Context) error {
+func (u *sqlActivityUpdater) TransferStatsToActivity(ctx context.Context) error {
 	// Get the config and pass it around to avoid any issue of it changing
 	// in the middle of the execution.
 	maxRowPersistedRows := sqlStatsActivityMaxPersistedRows.Get(&u.st.SV)
@@ -213,7 +214,7 @@ func (u *SqlActivityUpdater) TransferStatsToActivity(ctx context.Context) error 
 // transferAllStats is used to transfer all the stats FROM
 // system.statement_statistics and system.transaction_statistics
 // to system.statement_activity and system.transaction_activity
-func (u *SqlActivityUpdater) transferAllStats(
+func (u *sqlActivityUpdater) transferAllStats(
 	ctx context.Context,
 	aggTs time.Time,
 	totalStmtClusterExecCount int64,
@@ -326,7 +327,7 @@ INTO system.public.statement_activity (aggregated_ts, fingerprint_id, transactio
 // transferTopStats is used to transfer top N stats FROM
 // system.statement_statistics and system.transaction_statistics
 // to system.statement_activity and system.transaction_activity
-func (u *SqlActivityUpdater) transferTopStats(
+func (u *sqlActivityUpdater) transferTopStats(
 	ctx context.Context,
 	aggTs time.Time,
 	topLimit int64,
@@ -518,7 +519,7 @@ INTO system.public.statement_activity
 // system.statement_statistics and system.transaction_statistics.
 // It also gets the total execution count for the specified aggregated
 // timestamp.
-func (u *SqlActivityUpdater) getAostExecutionCount(
+func (u *sqlActivityUpdater) getAostExecutionCount(
 	ctx context.Context, aggTs time.Time,
 ) (
 	stmtRowCount int64,
@@ -561,7 +562,7 @@ func (u *SqlActivityUpdater) getAostExecutionCount(
 	return stmtRowCount, txnRowCount, totalStmtClusterExecCount, totalTxnClusterExecCount, err
 }
 
-func (u *SqlActivityUpdater) getExecutionCountFromRow(
+func (u *sqlActivityUpdater) getExecutionCountFromRow(
 	ctx context.Context, iter isql.Rows,
 ) (rowCount int64, totalExecutionCount int64, err error) {
 	ok, err := iter.Next(ctx)
@@ -583,7 +584,7 @@ func (u *SqlActivityUpdater) getExecutionCountFromRow(
 
 // ComputeAggregatedTs returns the aggregation timestamp to assign
 // in-memory SQL stats during storage or aggregation.
-func (u *SqlActivityUpdater) computeAggregatedTs(sv *settings.Values) time.Time {
+func (u *sqlActivityUpdater) computeAggregatedTs(sv *settings.Values) time.Time {
 	interval := persistedsqlstats.SQLStatsAggregationInterval.Get(sv)
 
 	now := timeutil.Now()
@@ -593,7 +594,7 @@ func (u *SqlActivityUpdater) computeAggregatedTs(sv *settings.Values) time.Time 
 
 // compactActivityTables is used delete rows FROM the activity tables
 // to keep the tables under the specified config limit.
-func (u *SqlActivityUpdater) compactActivityTables(ctx context.Context, maxRowCount int64) error {
+func (u *sqlActivityUpdater) compactActivityTables(ctx context.Context, maxRowCount int64) error {
 	rowCount, err := u.getTableRowCount(ctx, "system.statement_activity")
 	if err != nil {
 		return err
@@ -639,7 +640,7 @@ WHERE aggregated_ts not in (SELECT distinct aggregated_ts FROM system.statement_
 // system.statement_statistics and system.transaction_statistics.
 // It also gets the total execution count for the specified aggregated
 // timestamp.
-func (u *SqlActivityUpdater) getTableRowCount(
+func (u *sqlActivityUpdater) getTableRowCount(
 	ctx context.Context, tableName string,
 ) (rowCount int64, retErr error) {
 	query := fmt.Sprintf(`

@@ -77,10 +77,12 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"timing": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvpb": {
-						"Method": {},
+						"Method":            {},
+						"LeaseAppliedIndex": {},
+						"RaftIndex":         {},
+						"RaftTerm":          {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb": {
-						"LAI":    {},
 						"SeqNum": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation": {

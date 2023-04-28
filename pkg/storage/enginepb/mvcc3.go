@@ -28,23 +28,8 @@ func (ms *MVCCStats) ToStatsDelta() MVCCStatsDelta {
 	return MVCCStatsDelta(*ms)
 }
 
-// ToStats converts the receiver to an MVCCStats.
-func (ms *MVCCPersistentStats) ToStats() MVCCStats {
-	return MVCCStats(*ms)
-}
-
-// ToStatsPtr converts the receiver to a *MVCCStats.
-func (ms *MVCCPersistentStats) ToStatsPtr() *MVCCStats {
-	return (*MVCCStats)(ms)
-}
-
 // SafeValue implements the redact.SafeValue interface.
 func (ms *MVCCStats) SafeValue() {}
-
-// ToPersistentStats converts the receiver to an MVCCPersistentStats.
-func (ms *MVCCStats) ToPersistentStats() MVCCPersistentStats {
-	return MVCCPersistentStats(*ms)
-}
 
 // MustSetValue is like SetValue, except it resets the enum and panics if the
 // provided value is not a valid variant type.

@@ -279,11 +279,15 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 }
 
 func newRaftConfig(
-	strg raft.Storage, id uint64, appliedIndex uint64, storeCfg StoreConfig, logger raft.Logger,
+	strg raft.Storage,
+	id uint64,
+	appliedIndex kvpb.RaftIndex,
+	storeCfg StoreConfig,
+	logger raft.Logger,
 ) *raft.Config {
 	return &raft.Config{
 		ID:                        id,
-		Applied:                   appliedIndex,
+		Applied:                   uint64(appliedIndex),
 		AsyncStorageWrites:        true,
 		ElectionTick:              storeCfg.RaftElectionTimeoutTicks,
 		HeartbeatTick:             storeCfg.RaftHeartbeatIntervalTicks,

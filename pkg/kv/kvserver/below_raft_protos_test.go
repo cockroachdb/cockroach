@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -50,7 +51,7 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 			return m
 		},
 		func(r *rand.Rand) protoutil.Message {
-			return enginepb.NewPopulatedRangeAppliedState(r, false)
+			return kvserverpb.NewPopulatedRangeAppliedState(r, false)
 		},
 		func(r *rand.Rand) protoutil.Message {
 			type expectedHardState struct {
@@ -74,7 +75,7 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 			// as part of VersionUnreplicatedRaftTruncatedState.
 			// However, it has been sent through Raft for a long time, as part of
 			// ReplicatedEvalResult.
-			return roachpb.NewPopulatedRaftTruncatedState(r, false)
+			return kvserverpb.NewPopulatedRaftTruncatedState(r, false)
 		},
 		func(r *rand.Rand) protoutil.Message {
 
@@ -91,7 +92,7 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 			return m
 		},
 		func(r *rand.Rand) protoutil.Message {
-			return roachpb.NewPopulatedRaftReplicaID(r, false)
+			return kvserverpb.NewPopulatedRaftReplicaID(r, false)
 		},
 	}
 
