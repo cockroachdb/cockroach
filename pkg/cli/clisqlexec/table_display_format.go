@@ -11,6 +11,8 @@
 package clisqlexec
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
@@ -55,6 +57,23 @@ const (
 	// formats, for use in tests.
 	TableDisplayLastFormat // this must remain at the end of the list.
 )
+
+// TableFormatHelp lists the possible values for the display format.
+var TableFormatHelp = func() string {
+	var buf strings.Builder
+	comma := ""
+	for tfmt := TableDisplayFormat(0); tfmt < TableDisplayLastFormat; tfmt++ {
+		if tfmt == TableDisplayRawHTML {
+			// Note: rawhtml is omitted intentionally from the user doc. It
+			// is only supported for the 'gen settings-table' command.
+			continue
+		}
+		buf.WriteString(comma)
+		buf.WriteString(tfmt.String())
+		comma = ", "
+	}
+	return buf.String()
+}()
 
 var _ pflag.Value = (*TableDisplayFormat)(nil)
 
@@ -108,10 +127,9 @@ func (f *TableDisplayFormat) Set(s string) error {
 	case "raw":
 		*f = TableDisplayRaw
 	default:
-		return errors.Newf("invalid table display format: %s "+
-			// Note: rawhtml is omitted intentionally. It is
-			// only supported for the 'gen settings-table' command.
-			"(possible values: tsv, csv, table, records, sql, html, raw)", s)
+		return errors.WithHintf(
+			errors.Newf("invalid table display format: %s", s),
+			"Possible values: %s.", TableFormatHelp)
 	}
 	return nil
 }
