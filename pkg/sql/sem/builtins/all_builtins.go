@@ -52,11 +52,13 @@ func init() {
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
 	tree.ResolvedBuiltinFuncDefs = make(map[string]*tree.ResolvedFunctionDefinition)
 	tree.OidToQualifiedBuiltinOverload = make(map[oid.Oid]tree.QualifiedOverload)
+	tree.OidToBuiltinName = make(map[oid.Oid]string)
 
 	builtinsregistry.AddSubscription(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
 		for i, fn := range overloads {
 			signature := name + fn.Signature(true)
 			overloads[i].Oid = signatureMustHaveHardcodedOID(signature)
+			tree.OidToBuiltinName[overloads[i].Oid] = name
 			if _, ok := CastBuiltinNames[name]; ok {
 				retOid := fn.ReturnType(nil).Oid()
 				if _, ok := CastBuiltinOIDs[retOid]; !ok {

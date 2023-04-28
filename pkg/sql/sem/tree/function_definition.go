@@ -195,8 +195,7 @@ var FunDefs map[string]*FunctionDefinition
 var ResolvedBuiltinFuncDefs map[string]*ResolvedFunctionDefinition
 
 // OidToBuiltinName contains a map from the hashed OID of all builtin functions
-// to their name. We populate this from the pg_catalog.go file in the sql
-// package because of dependency issues: we can't use oidHasher from this file.
+// to their name.
 var OidToBuiltinName map[oid.Oid]string
 
 // OidToQualifiedBuiltinOverload is a map from builtin function OID to an
