@@ -59,7 +59,7 @@ func RunningJobExists(
 SELECT
   id
 FROM
-  system.jobs@jobs_status_created_idx
+  system.jobs
 WHERE
 	job_type IN ` + typeStrs + ` AND
   status IN ` + NonTerminalStatusTupleString + `
