@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/errors"
 )
 
 type LockSpanSet struct {
@@ -101,4 +102,27 @@ func (l *LockSpanSet) Copy() *LockSpanSet {
 		n.spans[st] = append(n.spans[st], l.spans[st]...)
 	}
 	return n
+}
+
+// Reserve space for N additional spans.
+func (l *LockSpanSet) Reserve(str lock.Strength, n int) {
+	existing := l.spans[str]
+	if n <= cap(existing)-len(existing) {
+		return
+	}
+	l.spans[str] = make([]roachpb.Span, len(existing), n+len(existing))
+	copy(l.spans[str], existing)
+}
+
+// Validate returns an error if any spans that have been added to the set are
+// invalid.
+func (l *LockSpanSet) Validate() error {
+	for _, spans := range l.spans {
+		for _, span := range spans {
+			if !span.Valid() {
+				return errors.Errorf("invalid span %s %s", span.Key, span.EndKey)
+			}
+		}
+	}
+	return nil
 }

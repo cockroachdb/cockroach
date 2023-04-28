@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -186,7 +187,8 @@ func TestCmdClearRange(t *testing.T) {
 				// particular, to test the additional seeks necessary to peek for
 				// adjacent range keys that we may truncate (for stats purposes) which
 				// should not cross the range bounds.
-				var latchSpans, lockSpans spanset.SpanSet
+				var latchSpans spanset.SpanSet
+				var lockSpans lockspanset.LockSpanSet
 				declareKeysClearRange(&desc, &cArgs.Header, cArgs.Args, &latchSpans, &lockSpans, 0)
 				batch := &wrappedBatch{Batch: spanset.NewBatchAt(eng.NewBatch(), &latchSpans, cArgs.Header.Timestamp)}
 				defer batch.Close()

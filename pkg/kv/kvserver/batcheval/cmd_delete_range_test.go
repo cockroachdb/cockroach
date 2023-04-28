@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -252,7 +253,8 @@ func TestDeleteRangeTombstone(t *testing.T) {
 					// the additional seeks necessary to check for adjacent range keys that we
 					// may merge with (for stats purposes) which should not cross the range
 					// bounds.
-					var latchSpans, lockSpans spanset.SpanSet
+					var latchSpans spanset.SpanSet
+					var lockSpans lockspanset.LockSpanSet
 					declareKeysDeleteRange(evalCtx.Desc, &h, req, &latchSpans, &lockSpans, 0)
 					batch := spanset.NewBatchAt(engine.NewBatch(), &latchSpans, h.Timestamp)
 					defer batch.Close()
