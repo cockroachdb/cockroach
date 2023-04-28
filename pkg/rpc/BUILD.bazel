@@ -50,6 +50,7 @@ go_library(
         "//pkg/util/log/severity",
         "//pkg/util/metric",
         "//pkg/util/netutil",
+        "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
