@@ -11,11 +11,11 @@
 package logtestutils
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
 // InstallLogFileSink installs a file sink for telemetry logging tests.
