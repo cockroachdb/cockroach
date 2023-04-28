@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Flush flushes in-memory sql stats into system table. Any errors encountered
+// Flush flushes in-memory sql stats into a system table. Any errors encountered
 // during the flush will be logged as warning.
 func (s *PersistedSQLStats) Flush(ctx context.Context) {
 	now := s.getTimeNow()

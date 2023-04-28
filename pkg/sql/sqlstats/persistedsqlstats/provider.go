@@ -68,7 +68,7 @@ type PersistedSQLStats struct {
 	// exceeded.
 	memoryPressureSignal chan struct{}
 
-	// Use the signal the flush completed.
+	// Used to signal the flush completed.
 	flushDoneCallback func()
 	flushMutex        syncutil.Mutex
 
@@ -173,7 +173,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			case <-s.memoryPressureSignal:
 				// We are experiencing memory pressure, so we flush SQL stats to disk
 				// immediately, rather than waiting the full flush interval, in an
-				// attempt to relieve some of that pressure
+				// attempt to relieve some of that pressure.
 			case <-resetIntervalChanged:
 				// In this case, we would restart the loop without performing any flush
 				// and recalculate the flush interval in the for-loop's post statement.
