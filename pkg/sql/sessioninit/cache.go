@@ -59,7 +59,8 @@ type Cache struct {
 	// populateCacheGroup is used to ensure that there is at most one in-flight
 	// request for populating each cache entry.
 
-	// AuditConfig is the cluster's audit configuration.
+	// AuditConfig is the cluster's audit configuration. See the 'sql.log.user_audit'
+	// cluster setting to see how this is configured.
 	AuditConfig *auditlogging.AuditConfigLock
 
 	populateCacheGroup *singleflight.Group

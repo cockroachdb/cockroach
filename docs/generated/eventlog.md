@@ -449,11 +449,8 @@ cluster setting.
 | Field | Description | Sensitive |
 |--|--|--|
 | `Role` | The configured audit role that emitted this log. | yes |
-| `StatementType` |  | yes |
-| `DatabaseName` |  | yes |
-| `ServerAddress` |  | yes |
-| `RemoteAddress` |  | yes |
-| `ConnectionType` |  | yes |
+| `StatementType` | The statement type of the query. | yes |
+| `DatabaseName` | The active database at the time of this log. | yes |
 
 
 #### Common fields

@@ -28,7 +28,7 @@ func parse(input string) (*AuditConfig, error) {
 	}
 
 	config := EmptyAuditConfig()
-	config.Settings = make([]AuditSetting, len(tokens.Lines))
+	config.settings = make([]AuditSetting, len(tokens.Lines))
 	// settingsRoleMap keeps track of the roles we've already written in the config
 	settingsRoleMap := make(map[username.SQLUsername]interface{}, len(tokens.Lines))
 	for i, line := range tokens.Lines {
@@ -38,13 +38,13 @@ func parse(input string) (*AuditConfig, error) {
 				pgerror.WithCandidateCode(err, pgcode.ConfigFile),
 				"line %d", tokens.Linenos[i])
 		}
-		if _, exists := settingsRoleMap[setting.Role]; exists {
-			return nil, errors.Newf("duplicate role listed: %v", setting.Role)
+		if _, exists := settingsRoleMap[setting.role]; exists {
+			return nil, errors.Newf("duplicate role listed: %v", setting.role)
 		}
-		settingsRoleMap[setting.Role] = i
-		config.Settings[i] = setting
-		if setting.Role.Normalized() == allUserRole {
-			config.AllRoleAuditSettingIdx = i
+		settingsRoleMap[setting.role] = i
+		config.settings[i] = setting
+		if setting.role.Normalized() == allUserRole {
+			config.allRoleAuditSettingIdx = i
 		}
 	}
 	return config, nil
@@ -52,22 +52,22 @@ func parse(input string) (*AuditConfig, error) {
 
 func parseAuditSetting(inputLine rulebasedscanner.Line) (setting AuditSetting, err error) {
 	fieldIdx := 0
-	setting.Input = inputLine.Input
+	setting.input = inputLine.Input
 	line := inputLine.Tokens
 
 	// Read the user/Role type.
 	if len(line[fieldIdx]) > 1 {
 		return setting, errors.WithHint(
 			errors.New("multiple values specified for role"),
-			"Specify exactly one role type per line.")
+			"Specify exactly one Role type per line.")
 	}
 	// Note we do not do any validation to ensure the input Role exists as an actual Role. This allows for
 	// input roles to be arbitrary string values.
-	setting.Role, err = username.MakeSQLUsernameFromUserInput(line[fieldIdx][0].Value, username.PurposeValidation)
+	setting.role, err = username.MakeSQLUsernameFromUserInput(line[fieldIdx][0].Value, username.PurposeValidation)
 	if err != nil {
 		return setting, err
 	}
-	err = parseRole(setting.Role)
+	err = parseRole(setting.role)
 	if err != nil {
 		return setting, err
 	}
@@ -76,12 +76,12 @@ func parseAuditSetting(inputLine rulebasedscanner.Line) (setting AuditSetting, e
 	if fieldIdx >= len(line) {
 		return setting, errors.New("end-of-line before statement types specification")
 	}
-	setting.StatementTypes, err = parseStatementTypes(line[fieldIdx])
+	setting.statementTypes, err = parseStatementTypes(line[fieldIdx])
 	return setting, err
 }
 
 func parseRole(role username.SQLUsername) error {
-	// Cannot use reserved role names.
+	// Cannot use reserved Role names.
 	if role.IsPublicRole() || role.IsNoneRole() {
 		return errors.Newf("cannot use reserved role name: '%s'", role.Normalized())
 	}

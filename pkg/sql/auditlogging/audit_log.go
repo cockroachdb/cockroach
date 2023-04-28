@@ -43,7 +43,11 @@ type AuditEventBuilder interface {
 
 // Define special statement types "ALL" and "NONE"
 const (
+	// AuditAllStatementsConst is a special statement type representing
+	// all statement types allowed by the audit configuration (DDL,DCL,DML)
 	AuditAllStatementsConst tree.StatementType = -1
+	// AuditNoneStatementConst is a special statement type representing
+	// no statement types.
 	AuditNoneStatementConst tree.StatementType = -2
 )
 
@@ -51,6 +55,8 @@ const (
 // the audit setting applies to all users.
 const allUserRole = "all"
 
+// AuditConfigLock is a mutex wrapper around AuditConfig, to provide safety
+// with concurrent usage.
 type AuditConfigLock struct {
 	syncutil.RWMutex
 	Config *AuditConfig
@@ -58,18 +64,18 @@ type AuditConfigLock struct {
 
 // AuditConfig is a parsed configuration.
 type AuditConfig struct {
-	// Settings are the collection of AuditSettings that make up the AuditConfig.
-	Settings []AuditSetting
-	// AllRoleAuditSettingIdx is an index corresponding to an AuditSetting in Settings that applies to all
-	// users, if it exists. Default value -1 (DefaultAllAuditSettingIdx).
-	AllRoleAuditSettingIdx int
+	// settings are the collection of AuditSettings that make up the AuditConfig.
+	settings []AuditSetting
+	// allRoleAuditSettingIdx is an index corresponding to an AuditSetting in settings that applies to all
+	// users, if it exists. Default value -1 (defaultAllAuditSettingIdx).
+	allRoleAuditSettingIdx int
 }
 
-const DefaultAllAuditSettingIdx = -1
+const defaultAllAuditSettingIdx = -1
 
 func EmptyAuditConfig() *AuditConfig {
 	return &AuditConfig{
-		AllRoleAuditSettingIdx: DefaultAllAuditSettingIdx,
+		allRoleAuditSettingIdx: defaultAllAuditSettingIdx,
 	}
 }
 
@@ -79,14 +85,14 @@ func (c AuditConfig) GetMatchingAuditSetting(
 	userRoles map[username.SQLUsername]bool,
 ) *AuditSetting {
 	// If the user matches any Setting, return the corresponding filter.
-	for idx, filter := range c.Settings {
+	for idx, filter := range c.settings {
 		// If we have matched an audit setting by role, return the audit setting.
-		_, exists := userRoles[filter.Role]
+		_, exists := userRoles[filter.role]
 		if exists {
 			return &filter
 		}
 		// If we have reached an audit setting that applies to all roles, return the audit setting.
-		if idx == c.AllRoleAuditSettingIdx {
+		if idx == c.allRoleAuditSettingIdx {
 			return &filter
 		}
 	}
@@ -95,14 +101,14 @@ func (c AuditConfig) GetMatchingAuditSetting(
 }
 
 func (c AuditConfig) String() string {
-	if len(c.Settings) == 0 {
+	if len(c.settings) == 0 {
 		return "# (empty configuration)\n"
 	}
 
 	var sb strings.Builder
 	sb.WriteString("# Original configuration:\n")
-	for _, setting := range c.Settings {
-		fmt.Fprintf(&sb, "# %s\n", setting.Input)
+	for _, setting := range c.settings {
+		fmt.Fprintf(&sb, "# %s\n", setting.input)
 	}
 	sb.WriteString("#\n# Interpreted configuration:\n")
 
@@ -117,9 +123,9 @@ func (c AuditConfig) String() string {
 
 	row := []string{"# ROLE", "STATEMENT_TYPE"}
 	table.Append(row)
-	for _, setting := range c.Settings {
-		row[0] = setting.Role.Normalized()
-		row[1] = strings.Join(writeStatementTypes(setting.StatementTypes), ",")
+	for _, setting := range c.settings {
+		row[0] = setting.role.Normalized()
+		row[1] = strings.Join(writeStatementTypes(setting.statementTypes), ",")
 		table.Append(row)
 	}
 	table.Render()
@@ -147,28 +153,34 @@ func writeStatementTypes(vals []tree.StatementType) []string {
 
 // AuditSetting is a single rule in the audit logging configuration.
 type AuditSetting struct {
-	// Input is the original configuration line in the audit logging configuration string.
-	Input string
+	// input is the original configuration line in the audit logging configuration string.
+	input          string
+	role           username.SQLUsername
+	statementTypes []tree.StatementType
+}
 
-	Role           username.SQLUsername
-	StatementTypes []tree.StatementType
+// Role is a getter method for the AuditSetting role.
+func (s AuditSetting) Role() username.SQLUsername {
+	return s.role
 }
 
 func (s AuditSetting) String() string {
-	return AuditConfig{Settings: []AuditSetting{s}}.String()
+	return AuditConfig{settings: []AuditSetting{s}}.String()
 }
 
+// CheckMatchingStatementType determines if the given statement type corresponds to the
+// configured statement types of the audit setting.
 func (s AuditSetting) CheckMatchingStatementType(currStmtType tree.StatementType) bool {
 	// If we are auditing all statement types, return true.
-	if s.HasAllStatementType() {
+	if s.hasAllStatementType() {
 		return true
 	}
 	// If we are auditing no statement types, return false.
-	if s.HasNoneStatementType() {
+	if s.hasNoneStatementType() {
 		return false
 	}
 	// Check if the given statement matches the audit setting's statement type(s).
-	for _, stmtType := range s.StatementTypes {
+	for _, stmtType := range s.statementTypes {
 		if currStmtType == stmtType {
 			return true
 		}
@@ -176,17 +188,17 @@ func (s AuditSetting) CheckMatchingStatementType(currStmtType tree.StatementType
 	return false
 }
 
-func (s AuditSetting) HasAllStatementType() bool {
+func (s AuditSetting) hasAllStatementType() bool {
 	// If we are auditing all statement types, return true.
-	if len(s.StatementTypes) == 1 && s.StatementTypes[0] == AuditAllStatementsConst {
+	if len(s.statementTypes) == 1 && s.statementTypes[0] == AuditAllStatementsConst {
 		return true
 	}
 	return false
 }
 
-func (s AuditSetting) HasNoneStatementType() bool {
+func (s AuditSetting) hasNoneStatementType() bool {
 	// If we are auditing all statement types, return true.
-	if len(s.StatementTypes) == 1 && s.StatementTypes[0] == AuditNoneStatementConst {
+	if len(s.statementTypes) == 1 && s.statementTypes[0] == AuditNoneStatementConst {
 		return true
 	}
 	return false
