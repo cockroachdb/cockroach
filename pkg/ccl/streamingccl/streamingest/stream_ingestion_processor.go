@@ -655,15 +655,8 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 	return nil, nil
 }
 
-func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, error) {
-	rekey, ok, err := sip.rekeyer.RewriteKey(key, 0 /*wallTime*/)
-	if !ok {
-		return nil, errors.New("every key is expected to match tenant prefix")
-	}
-	if err != nil {
-		return nil, err
-	}
-	return rekey, nil
+func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, bool, error) {
+	return sip.rekeyer.RewriteKey(key, 0 /*wallTime*/)
 }
 
 func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error {
@@ -715,13 +708,20 @@ func (sip *streamIngestionProcessor) bufferRangeKeyVal(
 	defer sp.Finish()
 
 	var err error
-	rangeKeyVal.RangeKey.StartKey, err = sip.rekey(rangeKeyVal.RangeKey.StartKey)
+	var ok bool
+	rangeKeyVal.RangeKey.StartKey, ok, err = sip.rekey(rangeKeyVal.RangeKey.StartKey)
 	if err != nil {
 		return err
 	}
-	rangeKeyVal.RangeKey.EndKey, err = sip.rekey(rangeKeyVal.RangeKey.EndKey)
+	if !ok {
+		return nil
+	}
+	rangeKeyVal.RangeKey.EndKey, ok, err = sip.rekey(rangeKeyVal.RangeKey.EndKey)
 	if err != nil {
 		return err
+	}
+	if !ok {
+		return nil
 	}
 	sip.rangeBatcher.buffer(rangeKeyVal)
 	return nil
@@ -750,9 +750,13 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 	}
 
 	var err error
-	kv.Key, err = sip.rekey(kv.Key)
+	var ok bool
+	kv.Key, ok, err = sip.rekey(kv.Key)
 	if err != nil {
 		return err
+	}
+	if !ok {
+		return nil
 	}
 
 	if sip.rewriteToDiffKey {
