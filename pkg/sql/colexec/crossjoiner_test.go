@@ -439,7 +439,7 @@ func BenchmarkCrossJoiner(b *testing.B) {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, joinType := range []descpb.JoinType{descpb.InnerJoin, descpb.LeftSemiJoin} {
 			for _, nRows := range []int{1, 1 << 4, 1 << 8, 1 << 11, 1 << 13} {
-				cols := newIntColumns(nCols, nRows)
+				cols := newIntColumns(nCols, nRows, 1 /* dupCount */)
 				tc := &joinTestCase{
 					joinType:   joinType,
 					leftTypes:  sourceTypes,
