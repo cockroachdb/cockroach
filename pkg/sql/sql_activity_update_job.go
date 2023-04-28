@@ -30,9 +30,9 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
-// enabled the stats activity flush job.
-var enabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+// sqlStatsActivityFlushEnabled the stats activity flush job.
+var sqlStatsActivityFlushEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.stats.activity.flush.enabled",
 	"enable the flush to the system statement and transaction activity tables",
 	true)
@@ -103,7 +103,7 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 		select {
 		case <-flushDoneSignal:
 			// A flush was done. Set the timer and wait for it to complete.
-			if enabled.Get(&settings.SV) {
+			if sqlStatsActivityFlushEnabled.Get(&settings.SV) {
 				updater := newSqlActivityUpdater(settings, execCtx.ExecCfg().InternalDB)
 				if err := updater.TransferStatsToActivity(ctx); err != nil {
 					log.Warningf(ctx, "error running sql activity updater job: %v", err)
