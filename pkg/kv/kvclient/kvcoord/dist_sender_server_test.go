@@ -2108,6 +2108,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		},
 		{
 			name: "forwarded timestamp with get and cput",
+			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				_, err := db.Get(ctx, "a") // read key to set ts cache
 				return err
@@ -3325,10 +3328,13 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Clear keyspace before each subtest.
+			_, err := db.DelRange(ctx, "a", "z", false /* returnKeys */)
+			require.NoError(t, err)
+
 			if tc.beforeTxnStart != nil {
-				if err := tc.beforeTxnStart(ctx, db); err != nil {
-					t.Fatalf("failed beforeTxnStart: %s", err)
-				}
+				err := tc.beforeTxnStart(ctx, db)
+				require.NoError(t, err, "beforeTxnStart")
 			}
 
 			filterFn.Store((func(kvserverbase.FilterArgs) *kvpb.Error)(nil))
@@ -3356,7 +3362,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			tcsFactory := kvcoord.NewTxnCoordSenderFactory(tcsFactoryCfg, distSender)
 			testDB := kv.NewDBWithContext(s.AmbientCtx(), tcsFactory, s.Clock(), db.Context())
 
-			err := testDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			err = testDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				if txn.Epoch() > 0 {
 					// We expected a new epoch and got it; return success.
 					return nil
@@ -3370,15 +3376,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 
 				if tc.priorReads {
 					_, err := txn.Get(ctx, "prior read")
-					if err != nil {
-						t.Fatalf("unexpected error during prior read: %v", err)
-					}
+					require.NoError(t, err, "prior read")
 				}
 
 				if tc.afterTxnStart != nil {
-					if err := tc.afterTxnStart(ctx, db); err != nil {
-						t.Fatalf("failed afterTxnStart: %s", err)
-					}
+					err := tc.afterTxnStart(ctx, db)
+					require.NoError(t, err, "afterTxnStart")
 				}
 
 				return tc.retryable(ctx, txn)
