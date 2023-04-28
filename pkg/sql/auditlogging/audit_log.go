@@ -41,16 +41,6 @@ type AuditEventBuilder interface {
 	) logpb.EventPayload
 }
 
-// Define special statement types "ALL" and "NONE"
-const (
-	// AuditAllStatementsConst is a special statement type representing
-	// all statement types allowed by the audit configuration (DDL,DCL,DML)
-	AuditAllStatementsConst tree.StatementType = -1
-	// AuditNoneStatementConst is a special statement type representing
-	// no statement types.
-	AuditNoneStatementConst tree.StatementType = -2
-)
-
 // allUserRole is a special role value for an audit setting, it designates that
 // the audit setting applies to all users.
 const allUserRole = "all"
@@ -87,7 +77,7 @@ func (c AuditConfig) GetMatchingAuditSetting(
 	// If the user matches any Setting, return the corresponding filter.
 	for idx, filter := range c.settings {
 		// If we have matched an audit setting by role, return the audit setting.
-		_, exists := userRoles[filter.role]
+		_, exists := userRoles[filter.Role]
 		if exists {
 			return &filter
 		}
@@ -124,29 +114,22 @@ func (c AuditConfig) String() string {
 	row := []string{"# ROLE", "STATEMENT_TYPE"}
 	table.Append(row)
 	for _, setting := range c.settings {
-		row[0] = setting.role.Normalized()
-		row[1] = strings.Join(writeStatementTypes(setting.statementTypes), ",")
+		row[0] = setting.Role.Normalized()
+		row[1] = strings.Join(writeStatementTypes(setting.StatementTypes), ",")
 		table.Append(row)
 	}
 	table.Render()
 	return sb.String()
 }
 
-func writeStatementTypes(vals []tree.StatementType) []string {
-	var stmtTypes []string
-	for _, stmtType := range vals {
-		switch stmtType {
-		case AuditAllStatementsConst:
-			stmtTypes = append(stmtTypes,
-				tree.TypeDDL.String(),
-				tree.TypeDML.String(),
-				tree.TypeDCL.String(),
-			)
-		case AuditNoneStatementConst:
-			stmtTypes = append(stmtTypes, "NONE")
-		default:
-			stmtTypes = append(stmtTypes, stmtType.String())
-		}
+func writeStatementTypes(vals map[tree.StatementType]int) []string {
+	if len(vals) == 0 {
+		return []string{"NONE"}
+	}
+	stmtTypes := make([]string, len(vals))
+	// Assign statement types in the order they were input.
+	for stmtType := range vals {
+		stmtTypes[vals[stmtType]] = stmtType.String()
 	}
 	return stmtTypes
 }
@@ -154,52 +137,14 @@ func writeStatementTypes(vals []tree.StatementType) []string {
 // AuditSetting is a single rule in the audit logging configuration.
 type AuditSetting struct {
 	// input is the original configuration line in the audit logging configuration string.
-	input          string
-	role           username.SQLUsername
-	statementTypes []tree.StatementType
-}
-
-// Role is a getter method for the AuditSetting role.
-func (s AuditSetting) Role() username.SQLUsername {
-	return s.role
+	input string
+	// Role is user/role this audit setting applies for.
+	Role username.SQLUsername
+	// StatementTypes is a mapping of statement type to the index/order it was input in the config.
+	// The order is used so we can print the setting's statement types in the same order it was
+	StatementTypes map[tree.StatementType]int
 }
 
 func (s AuditSetting) String() string {
 	return AuditConfig{settings: []AuditSetting{s}}.String()
-}
-
-// CheckMatchingStatementType determines if the given statement type corresponds to the
-// configured statement types of the audit setting.
-func (s AuditSetting) CheckMatchingStatementType(currStmtType tree.StatementType) bool {
-	// If we are auditing all statement types, return true.
-	if s.hasAllStatementType() {
-		return true
-	}
-	// If we are auditing no statement types, return false.
-	if s.hasNoneStatementType() {
-		return false
-	}
-	// Check if the given statement matches the audit setting's statement type(s).
-	for _, stmtType := range s.statementTypes {
-		if currStmtType == stmtType {
-			return true
-		}
-	}
-	return false
-}
-
-func (s AuditSetting) hasAllStatementType() bool {
-	// If we are auditing all statement types, return true.
-	if len(s.statementTypes) == 1 && s.statementTypes[0] == AuditAllStatementsConst {
-		return true
-	}
-	return false
-}
-
-func (s AuditSetting) hasNoneStatementType() bool {
-	// If we are auditing all statement types, return true.
-	if len(s.statementTypes) == 1 && s.statementTypes[0] == AuditNoneStatementConst {
-		return true
-	}
-	return false
 }
