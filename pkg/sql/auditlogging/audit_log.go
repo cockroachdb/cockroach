@@ -52,6 +52,14 @@ type AuditConfigLock struct {
 	Config *AuditConfig
 }
 
+func (cl *AuditConfigLock) GetMatchingAuditSetting(userRoles map[username.SQLUsername]bool) *AuditSetting {
+	cl.RLock()
+	defer cl.RUnlock()
+
+	// Get matching audit setting.
+	return cl.Config.getMatchingAuditSetting(userRoles)
+}
+
 // AuditConfig is a parsed configuration.
 type AuditConfig struct {
 	// settings are the collection of AuditSettings that make up the AuditConfig.
@@ -69,9 +77,9 @@ func EmptyAuditConfig() *AuditConfig {
 	}
 }
 
-// GetMatchingAuditSetting checks if any user's roles match any roles configured in the audit config.
+// getMatchingAuditSetting checks if any user's roles match any roles configured in the audit config.
 // Returns the first matching AuditSetting.
-func (c AuditConfig) GetMatchingAuditSetting(
+func (c AuditConfig) getMatchingAuditSetting(
 	userRoles map[username.SQLUsername]bool,
 ) *AuditSetting {
 	// If the user matches any Setting, return the corresponding filter.

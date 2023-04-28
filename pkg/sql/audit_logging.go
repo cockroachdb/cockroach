@@ -55,11 +55,9 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(
 		log.Errorf(ctx, "RoleBasedAuditEvent: error getting user role memberships: %v", err)
 		return
 	}
-	p.AuditConfig().Lock()
-	defer p.AuditConfig().Unlock()
 
 	// Get matching audit setting.
-	auditSetting := p.AuditConfig().Config.GetMatchingAuditSetting(userRoles)
+	auditSetting := p.AuditConfig().GetMatchingAuditSetting(userRoles)
 	// No matching setting, return early.
 	if auditSetting == nil {
 		return
