@@ -625,6 +625,7 @@ func TestTenantStreamingDeleteRange(t *testing.T) {
 func TestTenantStreamingMultipleNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 86206)
 
 	skip.UnderRace(t, "takes too long with multiple nodes")
 
