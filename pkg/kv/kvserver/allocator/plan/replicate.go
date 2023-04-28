@@ -473,7 +473,6 @@ func (rp ReplicaPlanner) addOrReplaceVoters(
 		lhStore:           repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              ops,
-		Priority:          kvserverpb.SnapshotRequest_RECOVERY,
 		AllocatorPriority: allocatorPriority,
 		Reason:            kvserverpb.ReasonRangeUnderReplicated,
 		Details:           details,
@@ -525,7 +524,6 @@ func (rp ReplicaPlanner) addOrReplaceNonVoters(
 		lhStore:           repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              ops,
-		Priority:          kvserverpb.SnapshotRequest_RECOVERY,
 		AllocatorPriority: allocatorPrio,
 		Reason:            kvserverpb.ReasonRangeUnderReplicated,
 		Details:           details,
@@ -666,8 +664,7 @@ func (rp ReplicaPlanner) removeVoter(
 		lhStore:           repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              kvpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, removeVoter),
-		Priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
-		AllocatorPriority: 0.0,                                // unused
+		AllocatorPriority: 0.0, // unused
 		Reason:            kvserverpb.ReasonRangeOverReplicated,
 		Details:           details,
 	}
@@ -706,8 +703,7 @@ func (rp ReplicaPlanner) removeNonVoter(
 		lhStore:           repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              kvpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, target),
-		Priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
-		AllocatorPriority: 0.0,                                // unused
+		AllocatorPriority: 0.0, // unused
 		Reason:            kvserverpb.ReasonRangeOverReplicated,
 		Details:           details,
 	}
@@ -763,8 +759,7 @@ func (rp ReplicaPlanner) removeDecommissioning(
 		lhStore:           repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              kvpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
-		Priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
-		AllocatorPriority: 0.0,                                // unused
+		AllocatorPriority: 0.0, // unused
 		Reason:            kvserverpb.ReasonStoreDecommissioning,
 		Details:           "",
 	}
@@ -801,8 +796,7 @@ func (rp ReplicaPlanner) removeDead(
 		lhStore:           repl.StoreID(),
 		Usage:             repl.RangeUsageInfo(),
 		Chgs:              kvpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
-		Priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
-		AllocatorPriority: 0.0,                                // unused
+		AllocatorPriority: 0.0, // unused
 		Reason:            kvserverpb.ReasonStoreDead,
 		Details:           "",
 	}
@@ -938,7 +932,6 @@ func (rp ReplicaPlanner) considerRebalance(
 		lhStore:           repl.StoreID(),
 		Usage:             rangeUsageInfo,
 		Chgs:              chgs,
-		Priority:          kvserverpb.SnapshotRequest_REBALANCE,
 		AllocatorPriority: allocatorPrio,
 		Reason:            kvserverpb.ReasonRebalance,
 		Details:           details,

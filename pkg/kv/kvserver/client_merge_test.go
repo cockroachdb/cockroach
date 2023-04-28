@@ -3721,12 +3721,12 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		inSnap kvserver.IncomingSnapshot,
 		sstNames []string,
 	) error {
-		// Only verify snapshots of type VIA_SNAPSHOT_QUEUE and on the range under
-		// exercise (range 2). Note that the keys of range 2 aren't verified in this
-		// functions. Unreplicated range-id local keys are not verified because
-		// there are too many keys and the other replicated keys are verified later
-		// on in the test. This function verifies that the subsumed replicas have
-		// been handled properly.
+		// Only verify snapshots on the range under exercise (range 2). Note
+		// that the keys of range 2 aren't verified in this functions.
+		// Unreplicated range-id local keys are not verified because there are
+		// too many keys and the other replicated keys are verified later on in
+		// the test. This function verifies that the subsumed replicas have been
+		// handled properly.
 		if inSnap.Desc.RangeID != rangeIds[string(keyA)] {
 			return nil
 		}

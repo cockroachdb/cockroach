@@ -16,9 +16,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// SafeValue implements the redact.SafeValue interface.
-func (SnapshotRequest_Type) SafeValue() {}
-
 // Error returns the error contained in the snapshot response, if any.
 //
 // The bool indicates whether this message uses the deprecated behavior of
