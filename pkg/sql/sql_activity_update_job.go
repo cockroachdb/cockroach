@@ -92,14 +92,12 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 
 	flushDoneSignal := make(chan struct{})
 	defer func() {
-		statsFlush.SetFlushDoneCallback(nil)
+		statsFlush.SetFlushDoneSignalCh(nil)
 		close(flushDoneSignal)
 	}()
 
+	statsFlush.SetFlushDoneSignalCh(flushDoneSignal)
 	for {
-		statsFlush.SetFlushDoneCallback(func() {
-			flushDoneSignal <- struct{}{}
-		})
 		select {
 		case <-flushDoneSignal:
 			// A flush was done. Set the timer and wait for it to complete.
