@@ -520,7 +520,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 	}
 	var err error
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		lease, err = m.leaseManager.AcquireLease(ctx, m.codec.StartupMigrationLeaseKey())
+		lease, err = m.leaseManager.AcquireLease(startup.WithoutChecks(ctx), m.codec.StartupMigrationLeaseKey())
 		if err == nil {
 			break
 		}
@@ -538,7 +538,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		if log.V(1) {
 			log.Info(ctx, "trying to release the lease")
 		}
-		if err := m.leaseManager.ReleaseLease(ctx, lease); err != nil {
+		if err := m.leaseManager.ReleaseLease(startup.WithoutChecks(ctx), lease); err != nil {
 			log.Errorf(ctx, "failed to release migration lease: %s", err)
 		}
 	}()
@@ -605,12 +605,17 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		if log.V(1) {
 			log.Infof(ctx, "running migration %q", migration.name)
 		}
-		if err := migration.workFn(ctx, r); err != nil {
+		if err := startup.RunIdempotentWithRetry(ctx, m.stopper.ShouldQuiesce(), migration.name,
+			func(ctx context.Context) error {
+				return migration.workFn(ctx, r)
+			}); err != nil {
 			return errors.Wrapf(err, "failed to run migration %q", migration.name)
 		}
 
 		log.VEventf(ctx, 1, "persisting record of completing migration %s", migration.name)
-		if err := m.db.Put(ctx, key, startTime); err != nil {
+		if err := startup.RunIdempotentWithRetry(ctx, m.stopper.ShouldQuiesce(),
+			"persist completed migration record",
+			func(ctx context.Context) error { return m.db.Put(ctx, key, startTime) }); err != nil {
 			return errors.Wrapf(err, "failed to persist record of completing migration %q",
 				migration.name)
 		}
