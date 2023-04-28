@@ -137,7 +137,7 @@ test_role ALL
 #
 # Interpreted configuration:
 # ROLE    STATEMENT_TYPE
-test_role TypeDDL,TypeDML,TypeDCL
+test_role TypeDCL,TypeDDL,TypeDML
 
 line
 test_role NONE
@@ -187,29 +187,29 @@ thirddRole "DML"
 #
 # Interpreted configuration:
 # ROLE      STATEMENT_TYPE
-test_role   TypeDDL,TypeDML,TypeDCL
+test_role   TypeDCL,TypeDDL,TypeDML
 anotherrole TypeDML,TypeDCL,TypeDDL
 thirddrole  TypeDML
 # Detail:
 &auditlogging.AuditConfig{
-    Settings: {
+    settings: {
         {
-            Input:          "test_role ALL",
+            input:          "test_role ALL",
             Role:           username.SQLUsername{u:"test_role"},
-            StatementTypes: {-1},
+            StatementTypes: {0:1, 1:2, 2:0},
         },
         {
-            Input:          "anotherRole DML,DCL,DDL",
+            input:          "anotherRole DML,DCL,DDL",
             Role:           username.SQLUsername{u:"anotherrole"},
-            StatementTypes: {1, 2, 0},
+            StatementTypes: {0:2, 1:0, 2:1},
         },
         {
-            Input:          "thirddRole \"DML\"",
+            input:          "thirddRole \"DML\"",
             Role:           username.SQLUsername{u:"thirddrole"},
-            StatementTypes: {1},
+            StatementTypes: {1:0},
         },
     },
-    AllRoleAuditSettingIdx: -1,
+    allRoleAuditSettingIdx: -1,
 }
 
 # Test ALL role
@@ -228,35 +228,35 @@ thirddRole "DML"
 #
 # Interpreted configuration:
 # ROLE      STATEMENT_TYPE
-test_role   TypeDDL,TypeDML,TypeDCL
+test_role   TypeDCL,TypeDDL,TypeDML
 anotherrole TypeDML,TypeDCL,TypeDDL
-all         TypeDDL,TypeDML,TypeDCL
+all         TypeDCL,TypeDDL,TypeDML
 thirddrole  TypeDML
 # Detail:
 &auditlogging.AuditConfig{
-    Settings: {
+    settings: {
         {
-            Input:          "test_role ALL",
+            input:          "test_role ALL",
             Role:           username.SQLUsername{u:"test_role"},
-            StatementTypes: {-1},
+            StatementTypes: {0:1, 1:2, 2:0},
         },
         {
-            Input:          "anotherRole DML,DCL,DDL",
+            input:          "anotherRole DML,DCL,DDL",
             Role:           username.SQLUsername{u:"anotherrole"},
-            StatementTypes: {1, 2, 0},
+            StatementTypes: {0:2, 1:0, 2:1},
         },
         {
-            Input:          "all ALL",
+            input:          "all ALL",
             Role:           username.SQLUsername{u:"all"},
-            StatementTypes: {-1},
+            StatementTypes: {0:1, 1:2, 2:0},
         },
         {
-            Input:          "thirddRole \"DML\"",
+            input:          "thirddRole \"DML\"",
             Role:           username.SQLUsername{u:"thirddrole"},
-            StatementTypes: {1},
+            StatementTypes: {1:0},
         },
     },
-    AllRoleAuditSettingIdx: 2,
+    allRoleAuditSettingIdx: 2,
 }
 
 # Test NONE statement types
@@ -278,32 +278,32 @@ all ALL
 test_role   NONE
 anotherrole TypeDML,TypeDCL,TypeDDL
 thirddrole  TypeDML
-all         TypeDDL,TypeDML,TypeDCL
+all         TypeDCL,TypeDDL,TypeDML
 # Detail:
 &auditlogging.AuditConfig{
-    Settings: {
+    settings: {
         {
-            Input:          "test_role NONE",
+            input:          "test_role NONE",
             Role:           username.SQLUsername{u:"test_role"},
-            StatementTypes: {-2},
+            StatementTypes: {},
         },
         {
-            Input:          "anotherRole DML,DCL,DDL",
+            input:          "anotherRole DML,DCL,DDL",
             Role:           username.SQLUsername{u:"anotherrole"},
-            StatementTypes: {1, 2, 0},
+            StatementTypes: {0:2, 1:0, 2:1},
         },
         {
-            Input:          "thirddRole \"DML\"",
+            input:          "thirddRole \"DML\"",
             Role:           username.SQLUsername{u:"thirddrole"},
-            StatementTypes: {1},
+            StatementTypes: {1:0},
         },
         {
-            Input:          "all ALL",
+            input:          "all ALL",
             Role:           username.SQLUsername{u:"all"},
-            StatementTypes: {-1},
+            StatementTypes: {0:1, 1:2, 2:0},
         },
     },
-    AllRoleAuditSettingIdx: 3,
+    allRoleAuditSettingIdx: 3,
 }
 
 subtest end
