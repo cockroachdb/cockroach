@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -195,6 +196,10 @@ func TestMultiNodeExportStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Too slow, can't maintain leadership/leases/liveness.
+	skip.UnderDeadlock(t)
+	skip.UnderStressRace(t)
+
 	nodes := 5
 	exportRows := 100
 	db, _, cleanup := setupExportableBank(t, nodes, exportRows*2)
@@ -249,6 +254,10 @@ func TestExportJoin(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
+
+	// Too slow, can't maintain leadership/leases/liveness.
+	skip.UnderDeadlock(t)
+	skip.UnderStressRace(t)
 
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
 	defer srv.Stopper().Stop(context.Background())
