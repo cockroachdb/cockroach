@@ -690,7 +690,7 @@ func (q *rebalancerQueue) enqueue(req *rebalanceRequest) {
 
 	e = q.queue.PushBack(req)
 	q.elements[req.conn] = e
-	q.metrics.rebalanceReqQueued.Inc(1)
+	q.metrics.RebalanceReqQueued.Inc(1)
 	q.sem.Release(1)
 }
 
@@ -720,6 +720,6 @@ func (q *rebalancerQueue) dequeue(ctx context.Context) (*rebalanceRequest, error
 
 	req := q.queue.Remove(e).(*rebalanceRequest)
 	delete(q.elements, req.conn)
-	q.metrics.rebalanceReqQueued.Dec(1)
+	q.metrics.RebalanceReqQueued.Dec(1)
 	return req, nil
 }
