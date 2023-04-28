@@ -2784,15 +2784,6 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		return
 	}
 
-	//  Don't send a queue name or priority if the receiver may not understand
-	//  them or the setting is disabled. TODO(baptist): Remove the version flag in
-	//  v23.1. Consider removing the cluster setting once we have verified this
-	//  works as expected in all cases.
-	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2PrioritizeSnapshots) ||
-		!snapshotPrioritizationEnabled.Get(&r.store.ClusterSettings().SV) {
-		senderQueueName = 0
-		senderQueuePriority = 0
-	}
 	snapUUID := uuid.MakeV4()
 	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, snapType == kvserverpb.SnapshotRequest_INITIAL, recipient.StoreID)
 	// The cleanup function needs to be called regardless of success or failure of
