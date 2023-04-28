@@ -29,8 +29,6 @@ func Example_describe_unknown() {
 
 	// Output:
 	// sql -e \set echo -e \dz
-	// ERROR: unsupported command: \dz with 0 arguments
-	// HINT: Use the SQL SHOW statement to inspect your schema.
 	// ERROR: -e: unsupported command: \dz with 0 arguments
 	// HINT: Use the SQL SHOW statement to inspect your schema.
 }
