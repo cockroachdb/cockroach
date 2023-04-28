@@ -18,10 +18,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// UserAuditLogConfig is a cluster setting that takes a user/role-based audit configuration.
 var UserAuditLogConfig = settings.RegisterValidatedStringSetting(
 	settings.TenantWritable,
 	"sql.log.user_audit",
-	"user-based audit logging configuration",
+	"user/role-based audit logging configuration. ",
 	"",
 	validateAuditLogConfig,
 )
@@ -36,7 +37,7 @@ func validateAuditLogConfig(_ *settings.Values, input string) error {
 	if err != nil {
 		return err
 	}
-	if len(conf.Settings) == 0 {
+	if len(conf.settings) == 0 {
 		// The string was not empty, but we were unable to parse any settings.
 		return errors.WithHint(errors.New("no entries"),
 			"To use the default configuration, assign the empty string ('').")

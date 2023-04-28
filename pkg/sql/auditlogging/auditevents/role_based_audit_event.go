@@ -35,7 +35,7 @@ func (f *RoleBasedAuditEvent) BuildAuditEvent(
 	return &eventpb.RoleBasedAuditEvent{
 		CommonSQLEventDetails: details,
 		CommonSQLExecDetails:  exec,
-		Role:                  f.Setting.Role.Normalized(),
+		Role:                  f.Setting.Role().Normalized(),
 		StatementType:         f.StatementType,
 		DatabaseName:          f.DatabaseName,
 	}
