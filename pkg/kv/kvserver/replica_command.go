@@ -1009,7 +1009,6 @@ func (r *Replica) WaitForLeaseAppliedIndex(
 func (r *Replica) ChangeReplicas(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	priority kvserverpb.SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	chgs kvpb.ReplicationChanges,
@@ -1033,13 +1032,12 @@ func (r *Replica) ChangeReplicas(
 			return nil, errors.New("must disable replicate queue to use ChangeReplicas manually")
 		}
 	}
-	return r.changeReplicasImpl(ctx, desc, priority, kvserverpb.SnapshotRequest_OTHER, 0.0, reason, details, chgs)
+	return r.changeReplicasImpl(ctx, desc, kvserverpb.SnapshotRequest_OTHER, 0.0, reason, details, chgs)
 }
 
 func (r *Replica) changeReplicasImpl(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	priority kvserverpb.SnapshotRequest_Priority,
 	senderName kvserverpb.SnapshotRequest_QueueName,
 	senderQueuePriority float64,
 	reason kvserverpb.RangeLogEventReason,
@@ -1108,7 +1106,7 @@ func (r *Replica) changeReplicasImpl(
 		_ = roachpb.ReplicaSet.LearnerDescriptors
 		var err error
 		desc, err = r.initializeRaftLearners(
-			ctx, desc, priority, senderName, senderQueuePriority, reason, details, adds, roachpb.LEARNER,
+			ctx, desc, senderName, senderQueuePriority, reason, details, adds, roachpb.LEARNER,
 		)
 		if err != nil {
 			return nil, err
@@ -1154,7 +1152,7 @@ func (r *Replica) changeReplicasImpl(
 		// disruption to foreground traffic. See
 		// https://github.com/cockroachdb/cockroach/issues/63199 for an example.
 		desc, err = r.initializeRaftLearners(
-			ctx, desc, priority, senderName, senderQueuePriority, reason, details, adds, roachpb.NON_VOTER,
+			ctx, desc, senderName, senderQueuePriority, reason, details, adds, roachpb.NON_VOTER,
 		)
 		if err != nil {
 			return nil, err
@@ -1721,7 +1719,6 @@ func getChangesByNodeID(chgs kvpb.ReplicationChanges) changesByNodeID {
 func (r *Replica) initializeRaftLearners(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	priority kvserverpb.SnapshotRequest_Priority,
 	senderName kvserverpb.SnapshotRequest_QueueName,
 	senderQueuePriority float64,
 	reason kvserverpb.RangeLogEventReason,
@@ -1870,9 +1867,7 @@ func (r *Replica) initializeRaftLearners(
 		// orphaned learner. Second, this tickled some bugs in etcd/raft around
 		// switching between StateSnapshot and StateProbe. Even if we worked through
 		// these, it would be susceptible to future similar issues.
-		if err := r.sendSnapshotUsingDelegate(
-			ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL, priority, senderName, senderQueuePriority,
-		); err != nil {
+		if err := r.sendSnapshotUsingDelegate(ctx, rDesc, senderName, senderQueuePriority); err != nil {
 			return nil, err
 		}
 	}
@@ -2800,8 +2795,6 @@ func (r *Replica) getSenderReplicas(
 func (r *Replica) sendSnapshotUsingDelegate(
 	ctx context.Context,
 	recipient roachpb.ReplicaDescriptor,
-	snapType kvserverpb.SnapshotRequest_Type,
-	priority kvserverpb.SnapshotRequest_Priority,
 	senderQueueName kvserverpb.SnapshotRequest_QueueName,
 	senderQueuePriority float64,
 ) (retErr error) {
@@ -2858,10 +2851,8 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		RangeID:              r.RangeID,
 		CoordinatorReplica:   sender,
 		RecipientReplica:     recipient,
-		DeprecatedPriority:   priority,
 		SenderQueueName:      senderQueueName,
 		SenderQueuePriority:  senderQueuePriority,
-		DeprecatedType:       snapType,
 		Term:                 kvpb.RaftTerm(status.Term),
 		DelegatedSender:      sender,
 		FirstIndex:           appliedIndex,
@@ -3170,8 +3161,7 @@ func (r *Replica) followerSendSnapshot(
 
 	// Create new snapshot request header using the delegate snapshot request.
 	header := kvserverpb.SnapshotRequest_Header{
-		State:                                snap.State,
-		DeprecatedUnreplicatedTruncatedState: true,
+		State: snap.State,
 		RaftMessageRequest: kvserverpb.RaftMessageRequest{
 			RangeID:     req.RangeID,
 			FromReplica: req.CoordinatorReplica,
@@ -3185,11 +3175,8 @@ func (r *Replica) followerSendSnapshot(
 			},
 		},
 		RangeSize:           rangeSize,
-		DeprecatedPriority:  req.DeprecatedPriority,
 		SenderQueueName:     req.SenderQueueName,
 		SenderQueuePriority: req.SenderQueuePriority,
-		DeprecatedStrategy:  kvserverpb.SnapshotRequest_KV_BATCH,
-		DeprecatedType:      req.DeprecatedType,
 		SharedReplicate:     sharedReplicate,
 	}
 	newBatchFn := func() storage.WriteBatch {

@@ -113,7 +113,6 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	if !ok {
 		return false, errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
-	snapType := kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE
 
 	if typ := repDesc.Type; typ == roachpb.LEARNER || typ == roachpb.NON_VOTER {
 		if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
@@ -133,7 +132,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 		}
 	}
 
-	err := repl.sendSnapshotUsingDelegate(ctx, repDesc, snapType, kvserverpb.SnapshotRequest_RECOVERY, kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE, raftSnapshotPriority)
+	err := repl.sendSnapshotUsingDelegate(ctx, repDesc, kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE, raftSnapshotPriority)
 
 	// NB: if the snapshot fails because of an overlapping replica on the
 	// recipient which is also waiting for a snapshot, the "smart" thing is to
