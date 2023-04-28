@@ -121,7 +121,7 @@ func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 		db.Exec(t, fmt.Sprintf("REVOKE %s from root", td.role))
 	}
 
-	log.Flush()
+	log.FlushFileSinks()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -206,7 +206,7 @@ func testMultiRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 		db.Exec(t, query)
 	}
 
-	log.Flush()
+	log.FlushFileSinks()
 
 	entries, err := log.FetchEntriesFromFiles(
 		startTimestamp,
