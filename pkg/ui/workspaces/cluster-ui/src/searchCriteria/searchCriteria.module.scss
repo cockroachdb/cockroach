@@ -7,11 +7,25 @@
   margin-right: 10px;
   padding: 20px;
   background-color: white;
+  font-family: $font-family--lato-regular;
 }
 
 .top-area {
   z-index: 5;
   background-color: white;
+  font-family: $font-family--lato-regular;
+
+  label {
+    display: block;
+    margin-bottom: 0px;
+    font-family: $font-family--lato-regular;
+    font-size: $font-size--medium;
+    font-weight: $font-weight--light;
+  }
+
+  ul {
+    margin-bottom: 1em;
+  }
 }
 
 .timescale-small {
@@ -22,6 +36,7 @@
   color: $colors--neutral-6;
   font-family: $font-family--semi-bold;
   font-size: $font-size--medium;
+  line-height: $line-height--medium-small;
 }
 
 .margin-top-btn {
