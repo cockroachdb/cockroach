@@ -3166,6 +3166,46 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 		},
 		{
+			name: "multi-range batch commit with write too old after prior read (err on first range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.Put("a", "put")
+				b.Put("c", "put")
+				return txn.CommitInBatch(ctx, b)
+			},
+			priorReads: true,
+			// The Put to "a" will fail, failing the parallel commit and forcing a
+			// client-side refresh.
+			allIsoLevels: &expect{
+				expServerRefresh:               false,
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
+		},
+		{
+			name: "multi-range batch commit with write too old after prior read (err on second range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "c", "value")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.Put("a", "put")
+				b.Put("c", "put")
+				return txn.CommitInBatch(ctx, b)
+			},
+			priorReads: true,
+			// The Put to "c" will fail, failing the parallel commit and forcing a
+			// client-side refresh.
+			allIsoLevels: &expect{
+				expServerRefresh:               false,
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
+		},
+		{
 			name: "multi-range batch commit with write too old and failed cput",
 			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "orig")
