@@ -114,7 +114,7 @@ func TestHandleDemoNodeCommandsInvalidNodeName(t *testing.T) {
 
 	c := setupTestCliState()
 	c.handleDemoNodeCommands(demoNodeCommandTests, cliStateEnum(0), cliStateEnum(1))
-	assert.Equal(t, errInvalidSyntax, c.exitErr)
+	assert.ErrorContains(t, c.exitErr, "invalid syntax")
 }
 
 func setupTestCliState() *cliState {
