@@ -673,6 +673,7 @@ type Pebble struct {
 	// intents.
 	settings     *cluster.Settings
 	encryption   *EncryptionEnv
+	fileLock     *pebble.Lock
 	fileRegistry *PebbleFileRegistry
 
 	// Stats updated by pebble.EventListener invocations, and returned in
@@ -819,6 +820,27 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 			filesystemCloser.Close()
 		}
 	}()
+	if !cfg.Opts.ReadOnly {
+		if err := cfg.Opts.FS.MkdirAll(cfg.Dir, os.ModePerm); err != nil {
+			return nil, err
+		}
+	}
+
+	// Acquire the database lock in the store directory to ensure that no other
+	// process is simultaneously accessing the same store. We manually acquire
+	// the database lock here (rather than allowing Pebble to acquire the lock)
+	// so that we hold the lock when we initialize encryption-at-rest subsystem.
+	cfg.Opts.Lock, err = pebble.LockDirectory(cfg.Dir, cfg.Opts.FS)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		// If we fail to open the database, release the file lock before
+		// returning.
+		if err != nil {
+			err = errors.WithSecondaryError(err, cfg.Opts.Lock.Close())
+		}
+	}()
 
 	cfg.Opts.EnsureDefaults()
 	cfg.Opts.ErrorIfNotExists = cfg.MustExist
@@ -900,6 +922,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		properties:       storeProps,
 		settings:         cfg.Settings,
 		encryption:       env,
+		fileLock:         cfg.Opts.Lock,
 		fileRegistry:     fileRegistry,
 		fs:               cfg.Opts.FS,
 		unencryptedFS:    unencryptedFS,
@@ -1135,6 +1158,7 @@ func (p *Pebble) Close() {
 	if p.closer != nil {
 		handleErr(p.closer.Close())
 	}
+	handleErr(p.fileLock.Close())
 }
 
 // Closed implements the Engine interface.
