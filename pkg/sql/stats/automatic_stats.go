@@ -568,7 +568,7 @@ FROM
 		AS OF SYSTEM TIME '-%s'
 WHERE
 	tbl.database_name IS NOT NULL
-	AND tbl.table_id NOT IN (%d, %d, %d, %d)  -- excluded system tables
+	AND tbl.table_id NOT IN (%d, %d, %d)  -- excluded system tables
 	AND tbl.drop_time IS NULL
 	AND (
 			crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor, false)->'table'->>'viewQuery'
@@ -652,7 +652,7 @@ func (r *Refresher) ensureAllTables(
 	getAllTablesQuery := fmt.Sprintf(
 		getAllTablesTemplateSQL,
 		initialTableCollectionDelay,
-		keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
+		keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID,
 		autoStatsPredicate, systemTablesPredicate,
 	)
 	r.getApplicableTables(ctx, getAllTablesQuery,
