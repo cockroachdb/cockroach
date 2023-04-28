@@ -327,7 +327,7 @@ func ingestWithRetries(
 		if jobs.IsPermanentJobError(err) || errors.Is(err, context.Canceled) {
 			break
 		}
-		const msgFmt = "stream ingestion waits for retrying after error %s"
+		const msgFmt = "stream ingestion waits for retrying after error: %q"
 		log.Warningf(ctx, msgFmt, err)
 		updateRunningStatus(ctx, ingestionJob, fmt.Sprintf(msgFmt, err))
 		retryCount++
