@@ -937,7 +937,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	require.Equal(t, tableID, int(id))
 
 	makeTenantConn := func() *sqlutils.SQLRunner {
-		return sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, tenant.SQLAddr(), "" /* useDatabase */, false /* insecure */, kvserver.Stopper()))
+		return sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, tenant.SQLAddr(), "" /* useDatabase */, false /* insecure */, kvserver.Stopper(), false /*requiresRoot*/))
 	}
 
 	blockers := make([]*sqlutils.SQLRunner, numBlockers)

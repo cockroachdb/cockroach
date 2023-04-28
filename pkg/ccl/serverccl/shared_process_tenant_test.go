@@ -44,7 +44,7 @@ func TestSharedProcessTenantNoSpanLimit(t *testing.T) {
 	var tenantDB *gosql.DB
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		tenantDB, err = serverutils.OpenDBConnE(sqlAddr, "cluster:hello", false, tc.Stopper())
+		tenantDB, err = serverutils.OpenDBConnE(sqlAddr, "cluster:hello", false, tc.Stopper(), false /*requiresRoot*/)
 		if err != nil {
 			return err
 		}

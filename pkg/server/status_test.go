@@ -3559,7 +3559,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 	)
 
 	conn2 :=
-		serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper())
+		serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper(), false /*requiresRoot*/)
 	defer func() {
 		require.NoError(t, conn2.Close())
 	}()

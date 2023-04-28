@@ -131,6 +131,7 @@ func newRowLevelTTLTestJobTestHelper(
 			"",    /* useDatabase */
 			false, /* insecure */
 			ts.Stopper(),
+			false, /*requiresRoot*/
 		)
 		th.sqlDB = sqlutils.MakeSQLRunner(db)
 		th.server = ts

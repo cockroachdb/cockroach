@@ -74,7 +74,7 @@ func TestDataDriven(t *testing.T) {
 				// because at least one of the config profiles changes the
 				// default tenant.
 				sysTenantDB := serverutils.OpenDBConn(t, s.SQLAddr(), "cluster:system/defaultdb",
-					true /* insecure */, s.Stopper())
+					true /* insecure */, s.Stopper(), false /*requiresRoot*/)
 				db = sqlutils.MakeSQLRunner(sysTenantDB)
 				res.WriteString("server started\n")
 
@@ -116,7 +116,7 @@ AND   status = 'succeeded'`).Scan(&numTasksCompleted)
 				}
 				sqlAddr := s.(*server.TestServer).SQLAddr()
 				testutils.SucceedsSoon(t, func() error {
-					goDB := serverutils.OpenDBConn(t, sqlAddr, "cluster:"+d.Input+"/defaultdb", true /* insecure */, s.Stopper())
+					goDB := serverutils.OpenDBConn(t, sqlAddr, "cluster:"+d.Input+"/defaultdb", true /* insecure */, s.Stopper(), false /*requiresRoot*/)
 					return goDB.Ping()
 				})
 				return "ok"

@@ -316,6 +316,7 @@ func TestServerQueryTenant(t *testing.T) {
 		"",    /* useDatabase */
 		false, /* insecure */
 		tsrv.Stopper(),
+		false, /*requiresRoot*/
 	)
 
 	// Populate data directly.

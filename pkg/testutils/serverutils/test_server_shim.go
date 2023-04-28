@@ -21,6 +21,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"flag"
+	"fmt"
 	"math/rand"
 	"net/url"
 	"testing"
@@ -362,7 +363,7 @@ func StartServer(
 	}
 
 	goDB := OpenDBConn(
-		t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+		t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper(), params.RequiresRoot)
 
 	// Now that we have started the server on the bootstrap version, let us run
 	// the migrations up to the overridden BinaryVersion.
@@ -391,19 +392,56 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 
 // OpenDBConnE is like OpenDBConn, but returns an error.
 func OpenDBConnE(
-	sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
+	sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper, requireRoot bool,
 ) (*gosql.DB, error) {
-	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+	rootURL, cleanupRootDB, err := sqlutils.PGUrlE(
 		sqlAddr, "StartServer" /* prefix */, url.User(username.RootUser))
 	if err != nil {
 		return nil, err
 	}
 
-	pgURL.Path = useDatabase
+	rootURL.Path = useDatabase
 	if insecure {
-		pgURL.RawQuery = "sslmode=disable"
+		rootURL.RawQuery = "sslmode=disable"
 	}
-	goDB, err := gosql.Open("postgres", pgURL.String())
+	rootDB, err := gosql.Open("postgres", rootURL.String())
+	if err != nil {
+		return nil, err
+	}
+
+	stopper.AddCloser(
+		stop.CloserFn(func() {
+			_ = rootDB.Close()
+			cleanupRootDB()
+		}))
+
+	if requireRoot {
+		return rootDB, nil
+	}
+
+	privQuery := fmt.Sprintf(`
+CREATE ROLE IF NOT EXISTS %s WITH LOGIN CREATEDB CREATEROLE CREATELOGIN MODIFYCLUSTERSETTING VIEWACTIVITY;
+GRANT CREATE ON DATABASE defaultdb TO %s WITH GRANT OPTION;
+GRANT SYSTEM MANAGETENANT TO %s  WITH GRANT OPTION;
+`, username.TestUser, username.TestUser, username.TestUser)
+
+	// Create testuser and grant privileges
+	if _, err := rootDB.Exec(privQuery); err != nil {
+		return nil, err
+	}
+
+	testURL, cleanupGoDB, err := sqlutils.PGUrlE(
+		sqlAddr, "StartServer" /* prefix */, url.User(username.TestUser))
+	if err != nil {
+		return nil, err
+	}
+
+	testURL.Path = useDatabase
+	if insecure {
+		testURL.RawQuery = "sslmode=disable"
+	}
+
+	goDB, err := gosql.Open("postgres", testURL.String())
 	if err != nil {
 		return nil, err
 	}
@@ -418,9 +456,9 @@ func OpenDBConnE(
 
 // OpenDBConn sets up a gosql DB connection to the given server.
 func OpenDBConn(
-	t testing.TB, sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
+	t testing.TB, sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper, requireRoot bool,
 ) *gosql.DB {
-	conn, err := OpenDBConnE(sqlAddr, useDatabase, insecure, stopper)
+	conn, err := OpenDBConnE(sqlAddr, useDatabase, insecure, stopper, requireRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +504,7 @@ func StartTenant(
 	}
 
 	goDB := OpenDBConn(
-		t, tenant.SQLAddr(), params.UseDatabase, false /* insecure */, stopper)
+		t, tenant.SQLAddr(), params.UseDatabase, false /* insecure */, stopper, true)
 	return tenant, goDB
 }
 

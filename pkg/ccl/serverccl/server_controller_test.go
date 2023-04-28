@@ -102,7 +102,7 @@ ALTER TENANT application START SERVICE SHARED`)
 			}
 
 			sqlAddr := tc.Server(i).ServingSQLAddr()
-			db, err := serverutils.OpenDBConnE(sqlAddr, "cluster:application", false, tc.Stopper())
+			db, err := serverutils.OpenDBConnE(sqlAddr, "cluster:application", false, tc.Stopper(), false /*requiresRoot*/)
 			if err != nil {
 				return err
 			}
@@ -194,7 +194,7 @@ func TestServerControllerHTTP(t *testing.T) {
 
 	// Get a SQL connection to the test tenant.
 	sqlAddr := s.ServingSQLAddr()
-	db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+	db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper(), false /*requiresRoot*/)
 	// Expect no error yet: the connection is opened lazily; an
 	// error here means the parameters were incorrect.
 	require.NoError(t, err)
@@ -440,7 +440,7 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 	sqlAddr := tc.Server(serverIdx).ServingSQLAddr()
 	t.Logf("attempting to use tenant server on node %d (%s)", serverIdx, sqlAddr)
 	testutils.SucceedsSoon(t, func() error {
-		tenantDB, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello", false, tc.Stopper())
+		tenantDB, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello", false, tc.Stopper(), false /*requiresRoot*/)
 		if err != nil {
 			t.Logf("error connecting to tenant server (will retry): %v", err)
 			return err
@@ -490,7 +490,7 @@ func TestServerStartStop(t *testing.T) {
 
 	// Check the liveness.
 	testutils.SucceedsSoon(t, func() error {
-		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper(), false /*requiresRoot*/)
 		// Expect no error yet: the connection is opened lazily; an
 		// error here means the parameters were incorrect.
 		require.NoError(t, err)
@@ -508,7 +508,7 @@ func TestServerStartStop(t *testing.T) {
 
 	// Verify that the service is indeed stopped.
 	testutils.SucceedsSoon(t, func() error {
-		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper(), false /*requiresRoot*/)
 		// Expect no error yet: the connection is opened lazily; an
 		// error here means the parameters were incorrect.
 		require.NoError(t, err)

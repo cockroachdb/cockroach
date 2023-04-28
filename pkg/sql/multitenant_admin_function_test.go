@@ -257,6 +257,7 @@ func (tc testCase) runTest(
 		"",    /* useDatabase */
 		false, /* insecure */
 		testServer.Stopper(),
+		false, /*requiresRoot*/
 	)
 
 	createSecondaryDB := func(

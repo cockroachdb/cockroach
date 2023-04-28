@@ -42,7 +42,7 @@ func TestDescribe(t *testing.T) {
 	defer c.Cleanup()
 
 	db := serverutils.OpenDBConn(
-		t, c.TestServer.ServingSQLAddr(), "defaultdb", false /* insecure */, c.TestServer.Stopper())
+		t, c.TestServer.ServingSQLAddr(), "defaultdb", false /* insecure */, c.TestServer.Stopper(), true /*requiresRoot*/)
 
 	var commonArgs []string
 

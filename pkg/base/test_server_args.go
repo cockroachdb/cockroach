@@ -173,6 +173,10 @@ type TestServerArgs struct {
 	// AutoConfigProvider provides auto-configuration tasks to apply on
 	// the cluster during server initialization.
 	AutoConfigProvider acprovider.Provider
+
+	// RequiresRoot determines whether the cluster using testuser or root as the default
+	// user
+	RequiresRoot bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test

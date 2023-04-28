@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"go.etcd.io/etcd/raft/v3"
 	"net"
 	"reflect"
 	"runtime"
@@ -53,7 +54,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3"
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
@@ -596,7 +596,7 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 	}
 
 	dbConn, err := serverutils.OpenDBConnE(
-		server.ServingSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
+		server.ServingSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper(), serverArgs.RequiresRoot)
 	if err != nil {
 		return err
 	}
@@ -605,7 +605,7 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 	var hostDbConn *gosql.DB
 	if idx == 0 {
 		hostDbConn, err = serverutils.OpenDBConnE(
-			server.HostSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
+			server.HostSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper(), serverArgs.RequiresRoot)
 		if err != nil {
 			return err
 		}
@@ -1677,7 +1677,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 		}
 
 		dbConn, err := serverutils.OpenDBConnE(srv.ServingSQLAddr(),
-			serverArgs.UseDatabase, serverArgs.Insecure, srv.Stopper())
+			serverArgs.UseDatabase, serverArgs.Insecure, srv.Stopper(), serverArgs.RequiresRoot)
 		if err != nil {
 			return err
 		}

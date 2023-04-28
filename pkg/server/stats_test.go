@@ -316,7 +316,7 @@ func TestClusterResetSQLStats(t *testing.T) {
 
 			sqlDB := serverutils.OpenDBConn(
 				t, gatewayServer.ServingSQLAddr(), "" /* useDatabase */, true, /* insecure */
-				gatewayServer.Stopper())
+				gatewayServer.Stopper(), false /*requiresRoot*/)
 
 			populateStats(t, sqlDB)
 			if flushed {

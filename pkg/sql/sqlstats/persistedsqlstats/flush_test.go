@@ -324,7 +324,7 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	s, conn, _ := serverutils.StartServer(t, params)
 	observer :=
-		serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper())
+		serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper(), false /*requiresRoot*/)
 
 	defer s.Stopper().Stop(context.Background())
 
