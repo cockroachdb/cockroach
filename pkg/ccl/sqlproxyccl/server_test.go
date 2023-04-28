@@ -62,6 +62,8 @@ func TestHandleVars(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Contains(t, string(out), "# HELP proxy_sql_conns")
+	require.Contains(t, string(out), "# HELP proxy_balancer_rebalance_total")
+	require.Contains(t, string(out), "# HELP proxy_conn_migration_attempted")
 }
 
 func TestAwaitNoConnections(t *testing.T) {
