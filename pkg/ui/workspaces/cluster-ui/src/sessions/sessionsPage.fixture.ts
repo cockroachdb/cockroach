@@ -45,7 +45,6 @@ export const idleSession: SessionInfo = {
     alloc_bytes: Long.fromNumber(0),
     max_alloc_bytes: Long.fromNumber(10240),
     active_queries: [],
-    toJSON: () => ({}),
   },
 };
 
@@ -82,7 +81,6 @@ export const idleTransactionSession: SessionInfo = {
     },
     last_active_query_no_constants: "SHOW database",
     active_queries: [],
-    toJSON: () => ({}),
   },
 };
 
@@ -133,7 +131,6 @@ export const activeSession: SessionInfo = {
       num_auto_retries: 3,
     },
     last_active_query_no_constants: "SHOW database",
-    toJSON: () => ({}),
   },
 };
 

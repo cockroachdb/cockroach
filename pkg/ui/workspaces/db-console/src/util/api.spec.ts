@@ -15,11 +15,11 @@ import Long from "long";
 
 import fetchMock from "./fetch-mock";
 
-import * as protos from "src/js/protos";
-import { cockroach } from "src/js/protos";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
+const cockroach = protos.cockroach;
 import * as api from "./api";
 import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
-import Severity = cockroach.util.log.Severity;
+const Severity = cockroach.util.log.Severity;
 
 describe("rest api", function() {
   describe("databases request", function() {
@@ -484,8 +484,8 @@ describe("rest api", function() {
         .then(result => {
           assert.lengthOf(fetchMock.calls(healthUrl), 1);
           assert.deepEqual(
-            result.toJSON(),
-            new protos.cockroach.server.serverpb.HealthResponse().toJSON(),
+            result,
+            new protos.cockroach.server.serverpb.HealthResponse(),
           );
         });
     });

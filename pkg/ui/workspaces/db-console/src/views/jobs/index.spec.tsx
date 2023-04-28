@@ -42,7 +42,6 @@ const getMockJobsTableProps = (jobs: Array<Job>): JobsTableProps => {
     jobs: {
       data: {
         jobs: jobs,
-        toJSON: () => ({}),
       },
       inFlight: false,
       valid: true,
