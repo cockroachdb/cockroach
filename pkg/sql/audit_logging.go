@@ -60,11 +60,16 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(
 
 	// Get matching audit setting.
 	auditSetting := p.AuditConfig().Config.GetMatchingAuditSetting(userRoles)
+	// No matching setting, return early.
+	if auditSetting == nil {
+		return
+	}
+
 	stmtType := p.stmt.AST.StatementType()
-	if auditSetting != nil && auditSetting.CheckMatchingStatementType(stmtType) {
+	if _, exists := auditSetting.StatementTypes[stmtType]; exists {
 		p.curPlan.auditEventBuilders = append(p.curPlan.auditEventBuilders,
 			&auditevents.RoleBasedAuditEvent{
-				Setting:       auditSetting,
+				Role:          auditSetting.Role.Normalized(),
 				StatementType: stmtType.String(),
 				DatabaseName:  p.CurrentDatabase(),
 			},

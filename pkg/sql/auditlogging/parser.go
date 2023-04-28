@@ -38,12 +38,12 @@ func parse(input string) (*AuditConfig, error) {
 				pgerror.WithCandidateCode(err, pgcode.ConfigFile),
 				"line %d", tokens.Linenos[i])
 		}
-		if _, exists := settingsRoleMap[setting.role]; exists {
-			return nil, errors.Newf("duplicate role listed: %v", setting.role)
+		if _, exists := settingsRoleMap[setting.Role]; exists {
+			return nil, errors.Newf("duplicate role listed: %v", setting.Role)
 		}
-		settingsRoleMap[setting.role] = i
+		settingsRoleMap[setting.Role] = i
 		config.settings[i] = setting
-		if setting.role.Normalized() == allUserRole {
+		if setting.Role.Normalized() == allUserRole {
 			config.allRoleAuditSettingIdx = i
 		}
 	}
@@ -55,19 +55,19 @@ func parseAuditSetting(inputLine rulebasedscanner.Line) (setting AuditSetting, e
 	setting.input = inputLine.Input
 	line := inputLine.Tokens
 
-	// Read the user/Role type.
+	// Read the user/role type.
 	if len(line[fieldIdx]) > 1 {
 		return setting, errors.WithHint(
 			errors.New("multiple values specified for role"),
-			"Specify exactly one Role type per line.")
+			"Specify exactly one role type per line.")
 	}
-	// Note we do not do any validation to ensure the input Role exists as an actual Role. This allows for
+	// Note we do not do any validation to ensure the input role exists as an actual role. This allows for
 	// input roles to be arbitrary string values.
-	setting.role, err = username.MakeSQLUsernameFromUserInput(line[fieldIdx][0].Value, username.PurposeValidation)
+	setting.Role, err = username.MakeSQLUsernameFromUserInput(line[fieldIdx][0].Value, username.PurposeValidation)
 	if err != nil {
 		return setting, err
 	}
-	err = parseRole(setting.role)
+	err = parseRole(setting.Role)
 	if err != nil {
 		return setting, err
 	}
@@ -76,12 +76,12 @@ func parseAuditSetting(inputLine rulebasedscanner.Line) (setting AuditSetting, e
 	if fieldIdx >= len(line) {
 		return setting, errors.New("end-of-line before statement types specification")
 	}
-	setting.statementTypes, err = parseStatementTypes(line[fieldIdx])
+	setting.StatementTypes, err = parseStatementTypes(line[fieldIdx])
 	return setting, err
 }
 
 func parseRole(role username.SQLUsername) error {
-	// Cannot use reserved Role names.
+	// Cannot use reserved role names.
 	if role.IsPublicRole() || role.IsNoneRole() {
 		return errors.Newf("cannot use reserved role name: '%s'", role.Normalized())
 	}
@@ -101,26 +101,28 @@ func parseRole(role username.SQLUsername) error {
 }
 
 // parseStatementTypes parses the statement type field.
-func parseStatementTypes(stmtTypes []rulebasedscanner.String) (types []tree.StatementType, err error) {
-	for _, stmtType := range stmtTypes {
+func parseStatementTypes(stmtTypes []rulebasedscanner.String) (map[tree.StatementType]int, error) {
+	types := make(map[tree.StatementType]int)
+	for idx, stmtType := range stmtTypes {
 		val := strings.ToUpper(stmtType.Value)
 		switch val {
 		case "DDL":
-			types = append(types, tree.TypeDDL)
+			types[tree.TypeDDL] = idx
 		case "DML":
-			types = append(types, tree.TypeDML)
+			types[tree.TypeDML] = idx
 		case "DCL":
-			types = append(types, tree.TypeDCL)
+			types[tree.TypeDCL] = idx
 		case "ALL":
 			if len(types) > 0 {
 				return types, errors.Newf(`redundant statement types with "ALL"`)
 			}
-			types = append(types, AuditAllStatementsConst)
+			types[tree.TypeDCL] = idx
+			types[tree.TypeDDL] = idx + 1
+			types[tree.TypeDML] = idx + 2
 		case "NONE":
 			if len(types) > 0 {
 				return types, errors.Newf(`redundant statement types with "NONE"`)
 			}
-			types = append(types, AuditNoneStatementConst)
 		default:
 			return types, errors.WithHint(errors.Newf(
 				`unknown statement type: %q (valid types include: "DDL", "DML", "DCL", "ALL", "NONE")`, stmtType.Value,
