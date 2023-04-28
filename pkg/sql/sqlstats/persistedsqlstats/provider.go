@@ -68,9 +68,11 @@ type PersistedSQLStats struct {
 	// exceeded.
 	memoryPressureSignal chan struct{}
 
-	// Use the signal the flush completed.
-	flushDoneCallback func()
-	flushMutex        syncutil.Mutex
+	// Used to signal the flush completed.
+	flushDoneMu struct {
+		syncutil.Mutex
+		signalCh chan<- struct{}
+	}
 
 	lastFlushStarted time.Time
 	jobMonitor       jobMonitor
@@ -94,7 +96,6 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 		cfg:                  cfg,
 		memoryPressureSignal: make(chan struct{}),
 		drain:                make(chan struct{}),
-		flushDoneCallback:    nil,
 	}
 
 	p.jobMonitor = jobMonitor{
@@ -134,10 +135,11 @@ func (s *PersistedSQLStats) Stop(ctx context.Context) {
 	s.tasksDoneWG.Wait()
 }
 
-func (s *PersistedSQLStats) SetFlushDoneCallback(callBackFunc func()) {
-	s.flushMutex.Lock()
-	defer s.flushMutex.Unlock()
-	s.flushDoneCallback = callBackFunc
+// SetFlushDoneSignalCh sets the channel to signal each time a flush has been completed.
+func (s *PersistedSQLStats) SetFlushDoneSignalCh(sigCh chan<- struct{}) {
+	s.flushDoneMu.Lock()
+	defer s.flushDoneMu.Unlock()
+	s.flushDoneMu.signalCh = sigCh
 }
 
 // GetController returns the controller of the PersistedSQLStats.
@@ -173,7 +175,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			case <-s.memoryPressureSignal:
 				// We are experiencing memory pressure, so we flush SQL stats to disk
 				// immediately, rather than waiting the full flush interval, in an
-				// attempt to relieve some of that pressure
+				// attempt to relieve some of that pressure.
 			case <-resetIntervalChanged:
 				// In this case, we would restart the loop without performing any flush
 				// and recalculate the flush interval in the for-loop's post statement.
@@ -186,13 +188,21 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 
 			s.Flush(ctx)
 
-			func() {
-				s.flushMutex.Lock()
-				defer s.flushMutex.Unlock()
-				if s.flushDoneCallback != nil {
-					s.flushDoneCallback()
+			// Tell the local activity translator job, if any, that we've
+			// performed a round of flush.
+			if sigCh := func() chan<- struct{} {
+				s.flushDoneMu.Lock()
+				defer s.flushDoneMu.Unlock()
+				return s.flushDoneMu.signalCh
+			}(); sigCh != nil {
+				select {
+				case sigCh <- struct{}{}:
+				case <-stopper.ShouldQuiesce():
+					return
+				case <-s.drain:
+					return
 				}
-			}()
+			}
 		}
 	})
 	if err != nil {
