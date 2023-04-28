@@ -9,7 +9,7 @@ set -euo pipefail
 # Usage:
 #   ./assignment_casts_gen.sh > assignment_casts.csv
 
-pgversion=$(psql -AXqtc 'SHOW server_version')
+pgversion=$(psql -AXqtc "SELECT substring(version(), 'PostgreSQL (\d+\.\d+)')")
 
 echo "# Testcases for TestAssignmentCastsMatchPostgres."
 echo "#"
