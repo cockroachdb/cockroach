@@ -11,7 +11,7 @@ eexpect ":/# "
 # Check table ASCII art with and without --format=table. (#7268)
 
 start_test "Check that tables are pretty-printed when output is not a terminal but --format=table is specified."
-send "echo 'select 1 as WOO;' | $argv sql --format=table | cat\r"
+send "echo 'select 1 as WOO;' | $argv sql --format=table 2>/dev/null | cat\r"
 eexpect "woo"
 eexpect "?-*-\r\n"
 eexpect "  1"
@@ -21,7 +21,7 @@ end_test
 
 
 start_test "Check that tables are pretty-printed when output is not a terminal but --format=ndjson is specified."
-send "echo 'select 1 as WOO;' | $argv sql --format=ndjson | cat\r"
+send "echo 'select 1 as WOO;' | $argv sql --format=ndjson 2>/dev/null | cat\r"
 eexpect "{\"woo\":\"1\"}"
 eexpect ":/# "
 end_test
@@ -36,7 +36,7 @@ eexpect ":/# "
 end_test
 
 start_test "Check that tables are not pretty-printed when output is not a terminal and --format=table is not specified"
-send "echo begin; echo 'select 1 as woo;' | $argv sql | cat\r"
+send "echo begin; echo 'select 1 as woo;' | $argv sql 2>/dev/null | cat\r"
 eexpect "begin\r\nwoo\r\n1\r\n"
 eexpect ":/# "
 end_test
