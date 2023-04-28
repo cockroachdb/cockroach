@@ -37,10 +37,10 @@ func (n *ndjsonReporter) iter(w, ew io.Writer, rowIdx int, row []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := ew.Write(out); err != nil {
+	if _, err := w.Write(out); err != nil {
 		return err
 	}
-	if _, err := ew.Write(newLineChar); err != nil {
+	if _, err := w.Write(newLineChar); err != nil {
 		return err
 	}
 	return nil
