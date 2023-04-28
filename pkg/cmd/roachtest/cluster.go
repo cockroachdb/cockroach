@@ -18,6 +18,7 @@ import (
 	"io"
 	"io/fs"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -45,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1542,7 +1544,7 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 			deadNodes++
 		}
 
-		t.L().Printf("node %d: err=%v,msg=%s", n.Node, n.Err, n.Msg)
+		t.L().Printf("n%d: err=%v,msg=%s", n.Node, n.Err, n.Msg)
 	}
 
 	if deadNodes > 0 {
@@ -1555,33 +1557,41 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 // live node is found, it returns nil and -1. If a live node is found it returns
 // a connection to it and the node's index.
 func (c *clusterImpl) ConnectToLiveNode(ctx context.Context, t *testImpl) (*gosql.DB, int) {
-	node := -1
 	if c.spec.NodeCount < 1 {
-		return nil, node // unit tests
+		return nil, -1 // unit tests
 	}
-	// Find a live node to run against, if one exists.
-	var db *gosql.DB
-	for i := 1; i <= c.spec.NodeCount; i++ {
-		// Don't hang forever.
-		if err := contextutil.RunWithTimeout(
-			ctx, "find live node", 5*time.Second,
-			func(ctx context.Context) error {
-				db = c.Conn(ctx, t.L(), i)
-				_, err := db.ExecContext(ctx, `;`)
-				return err
-			},
-		); err != nil {
-			_ = db.Close()
-			db = nil
-			continue
+
+	checkReady := func(ctx context.Context, node int) bool {
+		adminAddr, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(node))
+		if err != nil {
+			t.L().Printf("n%d not ready/live: %s", node, err)
+			return false
 		}
-		node = i
-		break
+
+		url := fmt.Sprintf(`http://%s/health?ready=1`, adminAddr[0])
+		resp, err := httputil.Get(ctx, url)
+		if err != nil {
+			t.L().Printf("n%d not ready/live: %s", node, err)
+			return false
+		}
+
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			t.L().Printf("n%d not ready/live: HTTP %d \n%s", node, resp.StatusCode, body)
+			return false
+		}
+
+		return true
 	}
-	if db == nil {
-		return nil, node
+
+	// Find a live node to run against, if one exists.
+	for i := 1; i <= c.spec.NodeCount; i++ {
+		if checkReady(ctx, i) {
+			return c.Conn(ctx, t.L(), i), i
+		}
 	}
-	return db, node
+	return nil, -1
 }
 
 // FailOnInvalidDescriptors fails the test if there exists any descriptors in
