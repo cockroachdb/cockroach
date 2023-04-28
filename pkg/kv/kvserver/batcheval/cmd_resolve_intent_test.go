@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -99,7 +100,8 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 
 				as := abortspan.New(desc.RangeID)
 
-				var latchSpans, lockSpans spanset.SpanSet
+				var latchSpans spanset.SpanSet
+				var lockSpans lockspanset.LockSpanSet
 
 				var h kvpb.Header
 				h.RangeID = desc.RangeID

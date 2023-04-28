@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -476,8 +475,8 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// under the lock. For write-write conflicts, try to abort the lock
 		// holder entirely so the write request can revoke and replace the lock
 		// with its own lock.
-		switch ws.guardAccess {
-		case spanset.SpanReadOnly:
+		switch ws.guardStrength {
+		case lock.None:
 			pushType = kvpb.PUSH_TIMESTAMP
 			beforePushObs = roachpb.ObservedTimestamp{
 				NodeID:    w.nodeDesc.NodeID,
@@ -499,9 +498,11 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 			// round-trip and would lose the local timestamp if rewritten later.
 			log.VEventf(ctx, 2, "pushing timestamp of txn %s above %s", ws.txn.ID.Short(), h.Timestamp)
 
-		case spanset.SpanReadWrite:
+		case lock.Intent:
 			pushType = kvpb.PUSH_ABORT
 			log.VEventf(ctx, 2, "pushing txn %s to abort", ws.txn.ID.Short())
+		default:
+			log.Fatalf(ctx, "unhandled lock strength %s", ws.guardStrength)
 		}
 
 	case lock.WaitPolicy_Error:

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -670,7 +671,7 @@ func (g *Guard) LatchSpans() *spanset.SpanSet {
 // SpanSets to the caller, ensuring that the SpanSets are not destroyed with the
 // Guard. The method is only safe if called immediately before passing the Guard
 // to FinishReq.
-func (g *Guard) TakeSpanSets() (*spanset.SpanSet, *spanset.SpanSet) {
+func (g *Guard) TakeSpanSets() (*spanset.SpanSet, *lockspanset.LockSpanSet) {
 	la, lo := g.Req.LatchSpans, g.Req.LockSpans
 	g.Req.LatchSpans, g.Req.LockSpans = nil, nil
 	return la, lo
@@ -708,18 +709,18 @@ func (g *Guard) IsolatedAtLaterTimestamps() bool {
 	// unprotected timestamp. We only look at global latch spans because local
 	// latch spans always use unbounded (NonMVCC) timestamps.
 	return len(g.Req.LatchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) == 0 &&
-		// Similarly, if the request declared any global or local read lock spans
-		// then it can not trivially bump its timestamp without dropping its
-		// lockTableGuard and re-scanning the lockTable. Doing so could allow the
-		// request to conflict with locks that it previously did not conflict with.
-		len(g.Req.LockSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) == 0 &&
-		len(g.Req.LockSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanLocal)) == 0
+		// Similarly, if the request intends to perform any non-locking reads, it
+		// cannot trivially bump its timestamp and expect to be isolated at the
+		// higher timestamp. Bumping its timestamp could cause the request to
+		// conflict with locks that it previously did not conflict with. It must
+		// drop its lockTableGuard and re-scan the lockTable.
+		len(g.Req.LockSpans.GetSpans(lock.None)) == 0
 }
 
 // CheckOptimisticNoConflicts checks that the {latch,lock}SpansRead do not
 // have a conflicting latch, lock.
 func (g *Guard) CheckOptimisticNoConflicts(
-	latchSpansRead *spanset.SpanSet, lockSpansRead *spanset.SpanSet,
+	latchSpansRead *spanset.SpanSet, lockSpansRead *lockspanset.LockSpanSet,
 ) (ok bool) {
 	if g.EvalKind != OptimisticEval {
 		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.EvalKind))

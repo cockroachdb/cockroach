@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -18,7 +19,6 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":lockspanset"],
     deps = [
-        "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
         "//pkg/util/leaktest",
