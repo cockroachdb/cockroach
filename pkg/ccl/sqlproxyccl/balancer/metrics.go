@@ -13,9 +13,9 @@ import "github.com/cockroachdb/cockroach/pkg/util/metric"
 // Metrics contains pointers to the metrics for monitoring balancer-related
 // operations.
 type Metrics struct {
-	rebalanceReqRunning *metric.Gauge
-	rebalanceReqQueued  *metric.Gauge
-	rebalanceReqTotal   *metric.Counter
+	RebalanceReqRunning *metric.Gauge
+	RebalanceReqQueued  *metric.Gauge
+	RebalanceReqTotal   *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -47,19 +47,19 @@ var (
 // NewMetrics instantiates the metrics holder for balancer monitoring.
 func NewMetrics() *Metrics {
 	return &Metrics{
-		rebalanceReqRunning: metric.NewGauge(metaRebalanceReqRunning),
-		rebalanceReqQueued:  metric.NewGauge(metaRebalanceReqQueued),
-		rebalanceReqTotal:   metric.NewCounter(metaRebalanceReqTotal),
+		RebalanceReqRunning: metric.NewGauge(metaRebalanceReqRunning),
+		RebalanceReqQueued:  metric.NewGauge(metaRebalanceReqQueued),
+		RebalanceReqTotal:   metric.NewCounter(metaRebalanceReqTotal),
 	}
 }
 
 // processRebalanceStart indicates the start of processing a rebalance request.
 func (m *Metrics) processRebalanceStart() {
-	m.rebalanceReqRunning.Inc(1)
-	m.rebalanceReqTotal.Inc(1)
+	m.RebalanceReqRunning.Inc(1)
+	m.RebalanceReqTotal.Inc(1)
 }
 
 // processRebalanceFinish indicates the end of processing a rebalance request.
 func (m *Metrics) processRebalanceFinish() {
-	m.rebalanceReqRunning.Dec(1)
+	m.RebalanceReqRunning.Dec(1)
 }
