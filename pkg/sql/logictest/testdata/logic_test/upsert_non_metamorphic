@@ -1,0 +1,29 @@
+# LogicTest: !metamorphic-batch-sizes
+
+# Regression test for UPSERT batching logic not respecting footprint-based
+# limiting (#102472).
+statement ok
+CREATE TABLE src (s STRING);
+CREATE TABLE dest (s STRING);
+INSERT INTO src SELECT repeat('a', 100000) FROM generate_series(1, 60)
+
+statement ok
+SET CLUSTER SETTING kv.raft.command.max_size='4MiB';
+
+statement ok
+SET CLUSTER SETTING sql.mutations.mutation_batch_byte_size='1MiB';
+
+# This statement produces a raft command of about 6 MB in size, so if the
+# batching logic is incorrect, we'll encounter "command is too large" error.
+statement ok
+UPSERT INTO dest (s) (SELECT s FROM src)
+
+statement ok
+RESET CLUSTER SETTING sql.mutations.mutation_batch_byte_size;
+
+statement ok
+RESET CLUSTER SETTING kv.raft.command.max_size;
+
+statement ok
+DROP TABLE src;
+DROP TABLE dest
