@@ -6772,7 +6772,6 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 			if _, err := tc.repl.ChangeReplicas(
 				context.Background(),
 				tc.repl.Desc(),
-				kvserverpb.SnapshotRequest_REBALANCE,
 				kvserverpb.ReasonRebalance,
 				"",
 				chgs,

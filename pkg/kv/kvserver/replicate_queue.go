@@ -817,7 +817,6 @@ func (rq *replicateQueue) applyChange(
 			replica,
 			op.Chgs,
 			replica.Desc(),
-			op.Priority,
 			op.AllocatorPriority,
 			op.Reason,
 			op.Details,
@@ -1104,7 +1103,6 @@ func (rq *replicateQueue) changeReplicas(
 	repl *Replica,
 	chgs kvpb.ReplicationChanges,
 	desc *roachpb.RangeDescriptor,
-	priority kvserverpb.SnapshotRequest_Priority,
 	allocatorPriority float64,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
@@ -1113,7 +1111,7 @@ func (rq *replicateQueue) changeReplicas(
 	// the latter traps tests that try to call it while the replication
 	// queue is active.
 	_, err := repl.changeReplicasImpl(
-		ctx, desc, priority, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, allocatorPriority, reason,
+		ctx, desc, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, allocatorPriority, reason,
 		details, chgs,
 	)
 	return err

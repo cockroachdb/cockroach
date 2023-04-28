@@ -70,17 +70,6 @@ const (
 	DefaultSnapshotApplyLimit = 1
 )
 
-// TODO(baptist): Remove in v24.1, no longer read in v23.2.
-func init() {
-	_ = settings.RegisterBoolSetting(
-		settings.SystemOnly,
-		"kv.snapshot_prioritization.enabled",
-		"deprecated no longer used",
-		true,
-		settings.Retired,
-	)
-}
-
 // snapshotMetrics contains metrics on the number and size of snapshots in
 // progress or in the snapshot queue.
 type snapshotMetrics struct {
@@ -1401,14 +1390,11 @@ func (s *Store) receiveSnapshot(
 		if header.SenderQueueName == kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE {
 			s.metrics.RangeSnapshotRecoveryRcvdBytes.Inc(inc)
 		} else if header.SenderQueueName == kvserverpb.SnapshotRequest_OTHER {
-			// OTHER snapshots are sent by Replica.ChangeReplicas but are not used for
-			// recovery, but do have various uses (user, pre-merge, store rebalancer).
-			// They are all bucketed under the Rebalance bucket.
 			s.metrics.RangeSnapshotRebalancingRcvdBytes.Inc(inc)
 		} else {
-			// SnapshotRequest_REPLICATE_QUEUE sends both recovery and rebalance
-			// snapshots. Split based on whether the priority is set. Priority 0 means
-			// it is used for rebalance.
+			// TODO(baptist): This logic is pretty messy. Consider refactoring all the
+			// snapshot related metrics.
+			// Replicate queue does both types, so split based on priority.
 			// See AllocatorAction.Priority
 			if header.SenderQueuePriority > 0 {
 				s.metrics.RangeSnapshotRecoveryRcvdBytes.Inc(inc)
@@ -1498,17 +1484,6 @@ var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	settings.ByteSizeWithMinimum(minSnapshotRate),
 	settings.WithPublic,
 )
-
-// TODO(baptist): Remove in v24.1, no longer read in v23.2.
-func init() {
-	_ = settings.RegisterByteSizeSetting(
-		settings.SystemOnly,
-		"kv.snapshot_recovery.max_rate",
-		"use kv.snapshot_rebalance.max_rate instead",
-		32<<20, // 32mb/s
-		settings.Retired,
-	)
-}
 
 // snapshotSenderBatchSize is the size that key-value batches are allowed to
 // grow to during Range snapshots before being sent to the receiver. This limit

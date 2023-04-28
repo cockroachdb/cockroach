@@ -967,7 +967,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *kvpb.AdminChangeReplicasRequest:
 		chgs := tArgs.Changes()
-		desc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonAdminRequest, "", chgs)
+		desc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, kvserverpb.ReasonAdminRequest, "", chgs)
 		pErr = kvpb.NewError(err)
 		if pErr != nil {
 			resp = &kvpb.AdminChangeReplicasResponse{}
