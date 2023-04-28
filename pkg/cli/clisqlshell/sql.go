@@ -409,7 +409,7 @@ var options = map[string]struct {
 		display: func(c *cliState) string { return strconv.Itoa(c.sqlExecCtx.TableBorderMode) },
 	},
 	`display_format`: {
-		description:               "the output format for tabular data (table, csv, tsv, html, ndjson, sql, records, raw)",
+		description:               fmt.Sprintf("the output format for tabular data (%s)", clisqlexec.TableFormatHelp),
 		isBoolean:                 false,
 		validDuringMultilineEntry: true,
 		set: func(c *cliState, val string) error {
