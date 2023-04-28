@@ -13,6 +13,7 @@ package main
 import (
 	"archive/zip"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"html"
 	"io"
@@ -1149,6 +1150,33 @@ func (r *testRunner) teardownTest(
 			t.Error(err)
 		}
 
+		// We collect all the admin health endpoints in parallel,
+		// and select the first one that succeeds to run the validation queries
+		statuses, err := c.HealthStatus(ctx, t.L(), c.All())
+		if err != nil {
+			t.Error(errors.WithDetail(err, "Unable to check health status"))
+		}
+
+		var db *gosql.DB
+		var validationNode int
+		for _, s := range statuses {
+			if s.Err != nil {
+				t.L().Printf("n%d:/health?ready=1 error=%s", s.Node, s.Err)
+				continue
+			}
+
+			if s.Status != http.StatusOK {
+				t.L().Printf("n%d:/health?ready=1 status=%d body=%s", s.Node, s.Status, s.Body)
+				continue
+			}
+
+			if db == nil {
+				db = c.Conn(ctx, t.L(), s.Node)
+				validationNode = s.Node
+			}
+			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
+		}
+
 		// We avoid trying to do this when t.Failed() (and in particular when there
 		// are dead nodes) because for reasons @tbg does not understand this gets
 		// stuck occasionally, which really ruins the roachtest run. The method
@@ -1157,10 +1185,9 @@ func (r *testRunner) teardownTest(
 		//
 		// TODO(testinfra): figure out why this can still get stuck despite the
 		// above.
-		db, node := c.ConnectToLiveNode(ctx, t)
 		if db != nil {
 			defer db.Close()
-			t.L().Printf("running validation checks on node %d (<10m)", node)
+			t.L().Printf("running validation checks on node %d (<10m)", validationNode)
 			// If this validation fails due to a timeout, it is very likely that
 			// the replica divergence check below will also fail.
 			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
