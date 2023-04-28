@@ -116,8 +116,12 @@ func (f *fingerprintWriter) PutRawMVCCRangeKey(key MVCCRangeKey, bytes []byte) e
 func (f *fingerprintWriter) PutRawMVCC(key MVCCKey, value []byte) error {
 	defer f.hasher.Reset()
 	// Hash the key/timestamp and value of the RawMVCC.
-	if err := f.hashKey(key.Key); err != nil {
+	err, skip := f.hashKey(key.Key)
+	if err != nil {
 		return err
+	}
+	if skip {
+		return nil
 	}
 	if err := f.hashTimestamp(key.Timestamp); err != nil {
 		return err
@@ -134,9 +138,14 @@ func (f *fingerprintWriter) PutUnversioned(key roachpb.Key, value []byte) error 
 	defer f.hasher.Reset()
 
 	// Hash the key and value in the absence of a timestamp.
-	if err := f.hashKey(key); err != nil {
+	err, skip := f.hashKey(key)
+	if err != nil {
 		return err
 	}
+	if skip {
+		return nil
+	}
+
 	if err := f.hashValue(value); err != nil {
 		return err
 	}
@@ -145,14 +154,27 @@ func (f *fingerprintWriter) PutUnversioned(key roachpb.Key, value []byte) error 
 	return nil
 }
 
-func (f *fingerprintWriter) hashKey(key []byte) error {
+func (f *fingerprintWriter) hashKey(key []byte) (error, bool) {
+	noTenantPrefix, err := keys.StripTenantPrefix(key)
+	if err != nil {
+		return err, false
+	}
+	// Fingerprinting ignores rows from a few special-cased key ranges, namely for
+	// the tables that contain ephemeral cluster-topology/state information, which
+	// if expected to differ between two clusters that otherwise contain the same
+	// data.
+	_, tID, _, _ := keys.DecodeTableIDIndexID(noTenantPrefix)
+	if tID == keys.SqllivenessID || tID == keys.LeaseTableID || tID == keys.SQLInstancesTableID {
+		return nil, true
+	}
+
 	if f.options.StripIndexPrefixAndTimestamp {
-		return f.hash(f.stripIndexPrefix(key))
+		return f.hash(f.stripIndexPrefix(key)), false
 	}
 	if f.options.StripTenantPrefix {
-		return f.hash(f.stripTenantPrefix(key))
+		return f.hash(noTenantPrefix), false
 	}
-	return f.hash(key)
+	return f.hash(key), false
 }
 
 func (f *fingerprintWriter) hashTimestamp(timestamp hlc.Timestamp) error {
@@ -187,14 +209,6 @@ func (f *fingerprintWriter) stripValueChecksum(value []byte) []byte {
 		return value
 	}
 	return value[mvccChecksumSize:]
-}
-
-func (f *fingerprintWriter) stripTenantPrefix(key []byte) []byte {
-	remainder, err := keys.StripTenantPrefix(key)
-	if err != nil {
-		return key
-	}
-	return remainder
 }
 
 func (f *fingerprintWriter) stripIndexPrefix(key []byte) []byte {
@@ -261,11 +275,19 @@ func FingerprintRangekeys(
 	defer fw.Close()
 	fingerprintRangeKey := func(stack MVCCRangeKeyStack) (uint64, error) {
 		defer fw.hasher.Reset()
-		if err := fw.hashKey(stack.Bounds.Key); err != nil {
+		err, skip := fw.hashKey(stack.Bounds.Key)
+		if err != nil {
 			return 0, err
 		}
-		if err := fw.hashKey(stack.Bounds.EndKey); err != nil {
+		if skip {
+			return 0, nil
+		}
+		err, skip = fw.hashKey(stack.Bounds.EndKey)
+		if err != nil {
 			return 0, err
+		}
+		if skip {
+			return 0, nil
 		}
 		for _, v := range stack.Versions {
 			if err := fw.hashTimestamp(v.Timestamp); err != nil {
