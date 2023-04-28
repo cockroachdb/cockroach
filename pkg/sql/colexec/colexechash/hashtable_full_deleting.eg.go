@@ -6183,11 +6183,160 @@ func (ht *HashTable) checkColDeleting(
 
 // Check performs an equality check between the current key in the ToCheckID
 // bucket and the probe key at that index. If there is a match, the HashTable's
-// same array is updated to lazily populate the linked list of identical build
-// table keys. The visited flag for corresponding build table key is also set. A
+// Same array is updated to lazily populate the linked list of identical build
+// table keys. The Visited flag for corresponding build table key is also set. A
 // key is removed from ToCheck if it has already been visited in a previous
 // probe, or the bucket has reached the end (key not found in build table). The
 // new length of ToCheck is returned by this function.
+//
+// Let's walk through an example of how this function works for the INNER join
+// when the right source is not distinct (i.e. with the
+// HashTableDefaultProbeMode probe mode and Same being non-nil).
+//
+// In this example the right source contains the following tuples:
+//
+//	[-1, -2, -4, -1, -3, -2, -1, -3]
+//
+// and for simplicity we will assume that our hash function is
+//
+//	h(i) = i % 2
+//
+// while the hash table only uses two buckets.
+//
+// During the build phase, before we get to Check function, the hash table is
+// constructed in the following manner:
+//
+//	ht.BuildScratch.First = [2, 1]
+//	ht.BuildScratch.Next  = [x, 4, 3, 6, 5, 7, 0, 8, 0]    ('x' means reserved)
+//
+// Describing in words what this tells us is: say, if we have a value i with
+// h(i) = 1, then in order to iterate over all possible matches we do the
+// following traversal:
+//   - start at keyID = First[h(i)] = First[1] = 1 (i.e. zeroth tuple is the
+//     first "candidate")
+//   - then for each "candidate" keyID, do nextKeyID = Next[keyID] until it
+//     becomes zero, so we will try keyIDs Next[1] = 4, Next[4] = 5,
+//     Next[5] = 7, Next[7] = 8, and then stop.
+//
+// With this background in mind, let's imagine that the first probing batch from
+// the left is [-3, -1, -5].
+//
+// On the first iteration of probing (i.e. the first Check call), we populate
+// the following:
+// -    ToCheck = [0, 1, 2]
+// -  ToCheckID = [1, 1, 1].
+// which means that for each probing tuple we have a hash match, and it's the
+// zeroth build tuple. Check function finds that only the first probing tuple -1
+// matches with the zeroth build tuple, so we end up with the following:
+// -    differs = [true, false, true]
+// -  HeadID[1] = 1.
+// However, since we're selecting the "same" tuples (i.e. populating the Same
+// slice), we actually want to continue probing the first tuple from the batch
+// for more matches, so we still include it into the ToCheck Slice and do:
+//
+//	Visited[1] = true.
+//
+// Then we proceed to the second iteration of probing with all tuples still
+// included:
+// -    ToCheck = [0, 1, 2]
+// -  ToCheckID = [4, 4, 4].
+// Check function again finds that only the first probing tuple matches with the
+// "candidate", so we end up with the following:
+// -    differs = [true, false, true].
+// Again, since we want to find all "same" tuples, we find that build tuples
+// with firstID=1 and keyID=4 are the same, so we do
+// -    Same[1] = 4
+// - Visited[4] = true.
+//
+// On the third iteration, we're still checking all the probing tuples:
+// -    ToCheck = [0, 1, 2]
+// -  ToCheckID = [5, 5, 5].
+// This time the Check function finds that the zeroth probing tuple has a match:
+// -    differs = [false, true, true]
+// -  HeadID[0] = 5
+// - Visited[5] = true.
+//
+// On the fourth iteration, we're still checking all the probing tuples:
+// -    ToCheck = [0, 1, 2]
+// -  ToCheckID = [7, 7, 7].
+// The Check function finds that the first probing tuple has a match:
+// -    differs = [true, false, true].
+// We have firstID = 1 and keyID = 7 and do:
+// -    Same[7] = Same[1] = 4
+// -    Same[1] = 7
+// - Visited[7] = true.
+//
+// On the fifth iteration, we're still checking all the probing tuples:
+// -    ToCheck = [0, 1, 2]
+// -  ToCheckID = [8, 8, 8].
+// The Check function finds that the zeroth probing tuple has a match:
+// -    differs = [false, true, true].
+// We have firstID = 5 and keyID = 8 and do:
+// -    Same[5] = 8
+// - Visited[8] = true.
+//
+// At this point, after five Check calls, there are no more "candidates" for any
+// probing tuples (since we reached the end of the hash chain for each probing
+// tuple), and the hash joiner will proceed to collecting the matches. Let's
+// summarize the current state of things:
+// - BuildScratch.First = [2, 1]
+// - BuildScratch.Next  = [x, 4, 3, 6, 5, 7, 0, 8, 0]    ('x' means reserved)
+// -              Same  = [x, 7, 0, 0, 0, 8, 0, 4, 0]
+// -            Visited = [t, t, f, f, t, t, f, t, t]    ('f' means false, 't' means true)
+// -             HeadID = [5, 1, 0].
+// What this means is that the zeroth probing tuple -3 has an equality match
+// with (HeadID[0] = 5) the fourth build tuple -3 as well as (Same[5] = 8) the
+// seventh build tuple -3; the first probing tuple -1 has an equality match with
+// build tuples with keyIDs HeadID[1] = 1, Same[1] = 7, Same[7] = 4 (i.e. the
+// zeroth, the sixth, and the third build tuples with value -1); and the second
+// probing tuple -5 doesn't have any matches.
+//
+// Now let's quickly go through the second probing batch from the left source
+// that has values [-1, -2, -3].
+//
+// On the first Check call we have:
+// -    ToCheck = [0, 1, 2]
+// -  ToCheckID = [1, 2, 1].
+// We find that zeroth and first probing tuple have matches, but since the build
+// tuple with keyID=1 has already been visited, we don't include it to be
+// checked again, yet keyID=2 hasn't been visited, so we still continue probing
+// the first tuple:
+// -     HeadID = [1, 2, 0]
+// -    ToCheck = [1, 2]
+// -  ToCheckID = [x, 3, 4]
+// - Visited[2] = true.
+//
+// On the second Check call we find that both probing tuples didn't get matches
+// with the candidates (i.e. they had hash collisions), so we continue probing
+// both of them:
+// -     HeadID = [1, 2, 0]
+// -    ToCheck = [1, 2]
+// -  ToCheckID = [x, 6, 5]
+// - Visited[3] = true.
+//
+// On the third Check call both tuples got matches.
+// -     HeadID = [1, 2, 5]
+// -    Same[2] = 6
+// - Visited[6] = true.
+// Both tuples are removed from the ToCheck slice because for the -2 probing
+// tuple we reached the end of the hash chain and for the -3 probing tuple we
+// found a match that has been previously visited.
+//
+// At this point, after three Check calls, there are no more "candidates" for
+// any probing tuples, and the hash joiner will proceed to collecting the
+// matches. The current state of things:
+// - BuildScratch.First = [2, 1]
+// - BuildScratch.Next  = [x, 4, 3, 6, 5, 7, 0, 8, 0]    ('x' means reserved)
+// -              Same  = [x, 7, 6, 0, 0, 8, 0, 4, 0]
+// -            Visited = [t, t, t, t, t, t, t, t, t]    ('t' means true)
+// -             HeadID = [1, 2, 5].
+// This means that the zeroth probing tuple -1 has equality matches with keyIDs
+// 1, 7, 4; the first probing tuple -2 with keyIDs 2, 6; the second probing
+// tuple -3 with keyIDs 5, 8.
+//
+// We also have fully visited all tuples in the hash table, so all future
+// probing batches will be handled more efficiently (namely, once we find a
+// match, we stop probing for the corresponding tuple).
 func (ht *HashTable) Check(nToCheck uint64, probeSel []int) uint64 {
 	ht.checkCols(ht.Keys, nToCheck, probeSel)
 	nDiffers := uint64(0)
