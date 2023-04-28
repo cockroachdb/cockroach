@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -79,19 +80,19 @@ func profileLocal(
 // stacksLocal retrieves goroutine stack files on the local node. This method
 // returns a gRPC error to the caller.
 func stacksLocal(req *serverpb.StacksRequest) (*serverpb.JSONResponse, error) {
-	var stackType int
+	var buf *bytes.Buffer
 	switch req.Type {
 	case serverpb.StacksType_GOROUTINE_STACKS:
-		stackType = 2
+		// Use allstacks.Get because it doesn't have an arbitrary 64MB limit (as
+		// opposed to the profile).
+		buf = bytes.NewBuffer(allstacks.Get())
 	case serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1:
-		stackType = 1
+		buf = bytes.NewBuffer(nil)
+		if err := pprof.Lookup("goroutine").WriteTo(buf, 1 /* debug */); err != nil {
+			return nil, status.Errorf(codes.Unknown, "failed to write goroutine stack: %s", err)
+		}
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
-	}
-
-	var buf bytes.Buffer
-	if err := pprof.Lookup("goroutine").WriteTo(&buf, stackType); err != nil {
-		return nil, status.Errorf(codes.Unknown, "failed to write goroutine stack: %s", err)
 	}
 	return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 }
