@@ -268,19 +268,18 @@ func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
+	t.Logf("starting test server")
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: params,
-	})
-	defer tc.Stopper().Stop(ctx)
+	server, conn, _ := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(ctx)
 
-	server := tc.Server(0 /* idx */)
-	conn := tc.ServerConn(0 /* idx */)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
+	t.Logf("launching the stats compaction job")
 	jobID, err := launchSQLStatsCompactionJob(server)
 	require.NoError(t, err)
 
+	t.Logf("checking the job status")
 	// Ensure the sqlstats job is hidden from the SHOW JOBS command.
 	sqlDB.CheckQueryResults(
 		t,
@@ -294,6 +293,8 @@ func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
 		fmt.Sprintf("SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_id = %d", jobID),
 		[][]string{{"1"}},
 	)
+
+	t.Logf("test complete")
 }
 
 func launchSQLStatsCompactionJob(server serverutils.TestServerInterface) (jobspb.JobID, error) {
