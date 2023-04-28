@@ -94,12 +94,6 @@ type SettingsCacheEntry struct {
 	Settings []string
 }
 
-type SessionConnDetails struct {
-	RemoteAddr string // terminal identity (hostname / IP address)
-	ServerAddr string // server identity (hostname / IP address)
-	ConnMethod string // connection method
-}
-
 // NewCache initializes a new sessioninit.Cache.
 func NewCache(account mon.BoundAccount, stopper *stop.Stopper) *Cache {
 	return &Cache{
