@@ -201,8 +201,8 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
 
-	// Exclude the 4 system tables which don't use autostats.
-	systemTablesWithStats := bootstrap.NumSystemTablesForSystemTenant - 4
+	// Exclude the 3 system tables which don't use autostats.
+	systemTablesWithStats := bootstrap.NumSystemTablesForSystemTenant - 3
 	numUserTablesWithStats := 2
 
 	// This now includes 36 system tables as well as the 2 created above.
@@ -280,7 +280,7 @@ func checkAllTablesCount(ctx context.Context, systemTables bool, expected int, r
 	getAllTablesQuery := fmt.Sprintf(
 		getAllTablesTemplateSQL,
 		collectionDelay,
-		keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
+		keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID,
 		autoStatsEnabledOrNotSpecifiedPredicate, systemTablesPredicate,
 	)
 	r.getApplicableTables(ctx, getAllTablesQuery,
@@ -297,7 +297,7 @@ func checkExplicitlyEnabledTablesCount(ctx context.Context, expected int, r *Ref
 	getTablesWithAutoStatsExplicitlyEnabledQuery := fmt.Sprintf(
 		getAllTablesTemplateSQL,
 		collectionDelay,
-		keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
+		keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID,
 		explicitlyEnabledTablesPredicate, autoStatsOnSystemTablesEnabledPredicate,
 	)
 	r.getApplicableTables(ctx, getTablesWithAutoStatsExplicitlyEnabledQuery,
