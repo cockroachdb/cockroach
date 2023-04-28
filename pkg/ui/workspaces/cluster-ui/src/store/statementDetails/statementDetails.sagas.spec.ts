@@ -47,7 +47,7 @@ describe("SQLDetailsStats sagas", () => {
   });
 
   const action: PayloadAction<StatementDetailsRequest> = {
-    payload: cockroach.server.serverpb.StatementDetailsRequest.create({
+    payload: new cockroach.server.serverpb.StatementDetailsRequest({
       fingerprint_id: "SELECT * FROM crdb_internal.node_build_info",
       app_names: ["$ cockroach sql", "newname"],
     }),

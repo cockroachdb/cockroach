@@ -211,7 +211,6 @@ describe("test activeStatementUtils", () => {
         ],
         errors: [],
         internal_app_name_prefix: INTERNAL_APP_NAME_PREFIX,
-        toJSON: () => ({}),
       };
 
       const statements =
@@ -288,7 +287,6 @@ describe("test activeStatementUtils", () => {
         ],
         errors: [],
         internal_app_name_prefix: INTERNAL_APP_NAME_PREFIX,
-        toJSON: () => ({}),
       };
 
       const activeTransactions =
@@ -342,7 +340,6 @@ describe("test activeStatementUtils", () => {
         ],
         errors: [],
         internal_app_name_prefix: INTERNAL_APP_NAME_PREFIX,
-        toJSON: () => ({}),
       };
 
       const activeExecs = getActiveExecutionsFromSessions(sessionsResponse);
