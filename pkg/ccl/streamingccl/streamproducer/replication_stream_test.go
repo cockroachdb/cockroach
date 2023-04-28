@@ -357,6 +357,7 @@ USE d;
 	t2Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t2")
 
 	t.Run("stream-table-cursor-error", func(t *testing.T) {
+		skip.WithIssue(t, 102286)
 		_, feed := startReplication(t, h, makePartitionStreamDecoder,
 			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp, hlc.Timestamp{}, "t2"))
 		defer feed.Close(ctx)
