@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/gossip",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/load",
         "//pkg/kv/kvserver/allocator/storepool",
@@ -46,6 +47,7 @@ go_test(
         "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/load",
         "//pkg/kv/kvserver/allocator/storepool",

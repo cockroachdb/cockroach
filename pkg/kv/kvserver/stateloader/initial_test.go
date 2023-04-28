@@ -15,6 +15,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -33,19 +35,20 @@ func TestSynthesizeHardState(t *testing.T) {
 	tHS := raftpb.HardState{Term: 2, Vote: 3, Commit: 4}
 
 	testCases := []struct {
-		TruncTerm, RaftAppliedIndex uint64
-		OldHS                       *raftpb.HardState
-		NewHS                       raftpb.HardState
-		Err                         string
+		TruncTerm        kvpb.RaftTerm
+		RaftAppliedIndex kvpb.RaftIndex
+		OldHS            *raftpb.HardState
+		NewHS            raftpb.HardState
+		Err              string
 	}{
 		{OldHS: nil, TruncTerm: 42, RaftAppliedIndex: 24, NewHS: raftpb.HardState{Term: 42, Vote: 0, Commit: 24}},
 		// Can't wind back the committed index of the new HardState.
-		{OldHS: &tHS, RaftAppliedIndex: tHS.Commit - 1, Err: "can't decrease HardState.Commit"},
-		{OldHS: &tHS, RaftAppliedIndex: tHS.Commit, NewHS: tHS},
-		{OldHS: &tHS, RaftAppliedIndex: tHS.Commit + 1, NewHS: raftpb.HardState{Term: tHS.Term, Vote: 3, Commit: tHS.Commit + 1}},
+		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit - 1), Err: "can't decrease HardState.Commit"},
+		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit), NewHS: tHS},
+		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit + 1), NewHS: raftpb.HardState{Term: tHS.Term, Vote: 3, Commit: tHS.Commit + 1}},
 		// Higher Term is picked up, but vote isn't carried over when the term
 		// changes.
-		{OldHS: &tHS, RaftAppliedIndex: tHS.Commit, TruncTerm: 11, NewHS: raftpb.HardState{Term: 11, Vote: 0, Commit: tHS.Commit}},
+		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit), TruncTerm: 11, NewHS: raftpb.HardState{Term: 11, Vote: 0, Commit: tHS.Commit}},
 	}
 
 	for i, test := range testCases {
@@ -66,7 +69,7 @@ func TestSynthesizeHardState(t *testing.T) {
 			}
 
 			err = rsl.SynthesizeHardState(
-				context.Background(), batch, oldHS, roachpb.RaftTruncatedState{Term: test.TruncTerm}, test.RaftAppliedIndex,
+				context.Background(), batch, oldHS, kvserverpb.RaftTruncatedState{Term: test.TruncTerm}, test.RaftAppliedIndex,
 			)
 			if !testutils.IsError(err, test.Err) {
 				t.Fatalf("%d: expected %q got %v", i, test.Err, err)

@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
@@ -115,8 +116,8 @@ type testReplicaInfo struct {
 	Generation roachpb.RangeGeneration `yaml:"Generation,omitempty"`
 
 	// Raft state.
-	RangeAppliedIndex  uint64                        `yaml:"RangeAppliedIndex"`
-	RaftCommittedIndex uint64                        `yaml:"RaftCommittedIndex"`
+	RangeAppliedIndex  kvpb.RaftIndex                `yaml:"RangeAppliedIndex"`
+	RaftCommittedIndex kvpb.RaftIndex                `yaml:"RaftCommittedIndex"`
 	DescriptorUpdates  []testReplicaDescriptorChange `yaml:"DescriptorUpdates,flow,omitempty"`
 
 	// TODO(oleg): Add ability to have descriptor intents in the store for testing purposes
@@ -345,7 +346,7 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 				t.Fatalf("failed to serialize metadata entry for raft log")
 			}
 			if err := eng.PutUnversioned(keys.RaftLogKey(replica.RangeID,
-				uint64(i)+hardState.Commit+1), value); err != nil {
+				kvpb.RaftIndex(uint64(i)+hardState.Commit+1)), value); err != nil {
 				t.Fatalf("failed to insert raft log entry into store: %s", err)
 			}
 		}
@@ -409,7 +410,7 @@ func buildReplicaDescriptorFromTestData(
 		LeaseAppliedIndex: 0,
 		Desc:              &desc,
 		Lease:             &lease,
-		TruncatedState: &roachpb.RaftTruncatedState{
+		TruncatedState: &kvserverpb.RaftTruncatedState{
 			Index: 1,
 			Term:  1,
 		},
@@ -422,11 +423,11 @@ func buildReplicaDescriptorFromTestData(
 	hardState := raftpb.HardState{
 		Term:   0,
 		Vote:   0,
-		Commit: replica.RaftCommittedIndex,
+		Commit: uint64(replica.RaftCommittedIndex),
 	}
 	var raftLog []enginepb.MVCCMetadata
 	for i, u := range replica.DescriptorUpdates {
-		entry := raftLogFromPendingDescriptorUpdate(t, replica, u, desc, uint64(i))
+		entry := raftLogFromPendingDescriptorUpdate(t, replica, u, desc, kvpb.RaftIndex(i))
 		raftLog = append(raftLog, enginepb.MVCCMetadata{RawBytes: entry.RawBytes})
 	}
 	return replicaID, key, desc, replicaState, hardState, raftLog
@@ -437,7 +438,7 @@ func raftLogFromPendingDescriptorUpdate(
 	replica testReplicaInfo,
 	update testReplicaDescriptorChange,
 	desc roachpb.RangeDescriptor,
-	entryIndex uint64,
+	entryIndex kvpb.RaftIndex,
 ) roachpb.Value {
 	// We mimic EndTxn messages with commit triggers here. We don't construct
 	// full batches with descriptor updates as we only need data that would be
@@ -488,7 +489,7 @@ func raftLogFromPendingDescriptorUpdate(
 		raftlog.EntryEncodingStandardWithoutAC, kvserverbase.CmdIDKey(fmt.Sprintf("%08d", entryIndex)), out)
 	ent := raftpb.Entry{
 		Term:  1,
-		Index: replica.RaftCommittedIndex + entryIndex,
+		Index: uint64(replica.RaftCommittedIndex + entryIndex),
 		Type:  raftpb.EntryNormal,
 		Data:  data,
 	}

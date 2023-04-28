@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -408,7 +409,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	// This leads to the general desire to validate the internal consistency of the
 	// entire raft state (i.e. HardState, TruncatedState, Log).
 	{
-		var msg roachpb.RaftReplicaID
+		var msg kvserverpb.RaftReplicaID
 		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
 			return keys.RaftReplicaIDKey(rangeID)
 		}, &msg, func(rangeID roachpb.RangeID) error {

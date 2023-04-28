@@ -77,7 +77,7 @@ sequence req=req3
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
  lock: "k2"
@@ -87,7 +87,6 @@ global: num=3
    distinguished req: 3
  lock: "k3"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # -------------------------------------------------------------
 # Read-only request with lock timeout hits lock. The request
@@ -139,7 +138,7 @@ finish req=reqTimeout1
 
 debug-lock-table
 ----
-global: num=2
+num=2
  lock: "k2"
   res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 11.000000000,0, seq: 0
  lock: "k3"
@@ -147,7 +146,6 @@ global: num=2
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
-local: num=0
 
 # -------------------------------------------------------------
 # Read-write request with lock timeout hits reservation
@@ -206,7 +204,7 @@ sequence req=reqTimeout3
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "k2"
   res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 11.000000000,0, seq: 0
  lock: "k3"
@@ -216,7 +214,6 @@ global: num=3
    distinguished req: 3
  lock: "k4"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
-local: num=0
 
 # -------------------------------------------------------------
 # Read-only request with lock timeout discovers abandoned
@@ -272,10 +269,9 @@ finish req=req3
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k4"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
-local: num=0
 
 reset
 ----

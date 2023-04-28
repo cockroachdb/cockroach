@@ -53,12 +53,7 @@ func QueryLocks(
 	reply := resp.(*kvpb.QueryLocksResponse)
 
 	concurrencyManager := cArgs.EvalCtx.GetConcurrencyManager()
-	keyScope := spanset.SpanGlobal
-	if keys.IsLocal(args.Key) {
-		keyScope = spanset.SpanLocal
-	}
 	opts := concurrency.QueryLockTableOptions{
-		KeyScope:           keyScope,
 		MaxLocks:           h.MaxSpanRequestKeys,
 		TargetBytes:        h.TargetBytes,
 		IncludeUncontended: args.IncludeUncontended,

@@ -495,7 +495,8 @@ func addSSTablePreApply(
 	st *cluster.Settings,
 	eng storage.Engine,
 	sideloaded logstore.SideloadStorage,
-	term, index uint64,
+	term kvpb.RaftTerm,
+	index kvpb.RaftIndex,
 	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
 	limiter *rate.Limiter,
 ) bool {
@@ -561,7 +562,8 @@ func ingestViaCopy(
 	st *cluster.Settings,
 	eng storage.Engine,
 	ingestPath string,
-	term, index uint64,
+	term kvpb.RaftTerm,
+	index kvpb.RaftIndex,
 	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
 	limiter *rate.Limiter,
 ) error {

@@ -99,14 +99,13 @@ on-txn-updated txn=txnOld status=committed
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   res: req: 2, txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
     active: true req: 4, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 3
-local: num=0
 
 
 # This is the interesting step - we see reqTxn2 announce that it conflicted with

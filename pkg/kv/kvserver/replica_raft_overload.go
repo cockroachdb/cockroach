@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -72,7 +73,7 @@ type computeExpendableOverloadedFollowersInput struct {
 	// that the original store can now contribute to quorum. However, that store
 	// is likely behind on the log, and we should consider it as non-live until
 	// it has caught up.
-	minLiveMatchIndex uint64
+	minLiveMatchIndex kvpb.RaftIndex
 }
 
 type nonLiveReason byte
@@ -129,7 +130,7 @@ func computeExpendableOverloadedFollowers(
 				if pr.IsPaused() {
 					nonLive[roachpb.ReplicaID(id)] = nonLiveReasonPaused
 				}
-				if pr.Match < d.minLiveMatchIndex {
+				if kvpb.RaftIndex(pr.Match) < d.minLiveMatchIndex {
 					nonLive[roachpb.ReplicaID(id)] = nonLiveReasonBehind
 				}
 			}

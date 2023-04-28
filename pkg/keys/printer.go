@@ -17,6 +17,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -305,7 +306,7 @@ func raftLogKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.Key
 	if err != nil {
 		panic(err)
 	}
-	return "", RaftLogKey(rangeID, index)
+	return "", RaftLogKey(rangeID, kvpb.RaftIndex(index))
 }
 
 func raftLogKeyPrint(buf *redact.StringBuilder, key roachpb.Key) {

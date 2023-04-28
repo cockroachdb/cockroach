@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -51,7 +50,7 @@ func TestSideTransportClosed(t *testing.T) {
 		curSet     bool
 		nextSet    bool
 		recSet     bool
-		applied    ctpb.LAI
+		applied    kvpb.LeaseAppliedIndex
 		sufficient hlc.Timestamp
 
 		expClosed          hlc.Timestamp
@@ -443,10 +442,10 @@ func TestSideTransportClosedMonotonic(t *testing.T) {
 	for i := 0; i < observers; i++ {
 		g.Go(func() error {
 			var lastTS hlc.Timestamp
-			var lastLAI ctpb.LAI
+			var lastLAI kvpb.LeaseAppliedIndex
 			for atomic.LoadInt32(&done) == 0 {
 				// Determine which lease applied index to use.
-				var lai ctpb.LAI
+				var lai kvpb.LeaseAppliedIndex
 				switch rand.Intn(3) {
 				case 0:
 					lai = lastLAI
@@ -500,7 +499,7 @@ var _ sidetransportReceiver = &mockReceiver{}
 // GetClosedTimestamp is part of the sidetransportReceiver interface.
 func (r *mockReceiver) GetClosedTimestamp(
 	ctx context.Context, rangeID roachpb.RangeID, leaseholderNode roachpb.NodeID,
-) (hlc.Timestamp, ctpb.LAI) {
+) (hlc.Timestamp, kvpb.LeaseAppliedIndex) {
 	r.Lock()
 	defer r.Unlock()
 	return r.ts, r.lai
@@ -522,10 +521,10 @@ func TestReplicaClosedTimestamp(t *testing.T) {
 
 	for _, test := range []struct {
 		name                string
-		applied             ctpb.LAI
+		applied             kvpb.LeaseAppliedIndex
 		raftClosed          hlc.Timestamp
 		sidetransportClosed hlc.Timestamp
-		sidetransportLAI    ctpb.LAI
+		sidetransportLAI    kvpb.LeaseAppliedIndex
 		expClosed           hlc.Timestamp
 	}{
 		{
@@ -569,7 +568,7 @@ func TestReplicaClosedTimestamp(t *testing.T) {
 			tc.repl.mu.Lock()
 			defer tc.repl.mu.Unlock()
 			tc.repl.mu.state.RaftClosedTimestamp = test.raftClosed
-			tc.repl.mu.state.LeaseAppliedIndex = uint64(test.applied)
+			tc.repl.mu.state.LeaseAppliedIndex = test.applied
 			// NB: don't release the mutex to make this test a bit more resilient to
 			// problems that could arise should something propose a command to this
 			// replica whose LeaseAppliedIndex we've mutated.

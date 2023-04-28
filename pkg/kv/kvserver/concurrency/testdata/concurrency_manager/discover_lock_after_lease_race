@@ -78,8 +78,7 @@ finish req=req1
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 # --------------------------------
 # Setup complete, test starts here
@@ -101,8 +100,7 @@ on-lease-updated leaseholder=false lease-seq=2
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 # The following series of events takes place on the new leaseholder.
 #
@@ -138,10 +136,9 @@ handle-write-intent-error req=req4 lease-seq=3
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
-local: num=0
 
 sequence req=req4
 ----
@@ -162,13 +159,12 @@ handle-write-intent-error req=req2 lease-seq=1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "k"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
    waiting readers:
     req: 3, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 3
-local: num=0
 
 sequence req=req2
 ----

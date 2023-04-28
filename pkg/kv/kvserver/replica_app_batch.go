@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -65,7 +64,7 @@ type replicaAppBatch struct {
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
 
 	// Reused by addAppliedStateKeyToBatch to avoid heap allocations.
-	asAlloc enginepb.RangeAppliedState
+	asAlloc kvserverpb.RangeAppliedState
 }
 
 // Stage implements the apply.Batch interface. The method handles the first
@@ -510,11 +509,11 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	ctx context.Context, cmd *replicatedCmd,
 ) {
 	b.state.RaftAppliedIndex = cmd.Index()
-	b.state.RaftAppliedIndexTerm = cmd.Term
+	b.state.RaftAppliedIndexTerm = kvpb.RaftTerm(cmd.Term)
 
-	// NB: since the command is "trivial" we know the LeaseIndex field is set to
+	// NB: since the command is "trivial" we know the LeaseSequence field is set to
 	// something meaningful if it's nonzero (e.g. cmd is not a lease request). For
-	// a rejected command, cmd.LeaseIndex was zeroed out earlier.
+	// a rejected command, cmd.LeaseSequence was zeroed out earlier.
 	if leaseAppliedIndex := cmd.LeaseIndex; leaseAppliedIndex != 0 {
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
 	}

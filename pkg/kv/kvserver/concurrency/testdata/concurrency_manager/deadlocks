@@ -81,14 +81,13 @@ finish req=req3w
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # --------------------------------
 # Setup complete, test starts here
@@ -144,7 +143,7 @@ sequence req=req3r
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    waiting readers:
@@ -160,7 +159,6 @@ global: num=3
    waiting readers:
     req: 5, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 5
-local: num=0
 
 # Break the deadlock by aborting txn1.
 on-txn-updated txn=txn1 status=aborted
@@ -293,14 +291,13 @@ finish req=req3w
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 # --------------------------------
 # Setup complete, test starts here
@@ -371,7 +368,7 @@ sequence req=req3w2
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
@@ -388,7 +385,6 @@ global: num=3
    queued writers:
     active: true req: 12, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 12
-local: num=0
 
 # Break the deadlock by aborting txn1.
 on-txn-updated txn=txn1 status=aborted
@@ -539,14 +535,13 @@ finish req=req3w
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 new-request name=req4w txn=txn4 ts=10,1
   put key=b value=v2
@@ -576,7 +571,7 @@ on-txn-updated txn=txn2 status=committed
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
@@ -586,7 +581,6 @@ global: num=3
    queued writers:
     active: true req: 17, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 17
-local: num=0
 
 # --------------------------------
 # Setup complete, test starts here
@@ -627,7 +621,7 @@ sequence req=req3w2
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
@@ -643,7 +637,6 @@ global: num=3
    queued writers:
     active: true req: 17, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 17
-local: num=0
 
 # Break the deadlock by aborting txn4.
 on-txn-updated txn=txn4 status=aborted
@@ -777,14 +770,13 @@ finish req=req3w
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 new-request name=req4w txn=txn4 ts=10,1
   put key=b value=v2
@@ -814,7 +806,7 @@ on-txn-updated txn=txn2 status=committed
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
@@ -824,7 +816,6 @@ global: num=3
    queued writers:
     active: true req: 23, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 23
-local: num=0
 
 # --------------------------------
 # Setup complete, test starts here
@@ -865,7 +856,7 @@ sequence req=req3w2
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
@@ -881,7 +872,6 @@ global: num=3
    queued writers:
     active: true req: 23, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 23
-local: num=0
 
 # Break the deadlock by aborting txn1.
 on-txn-updated txn=txn1 status=aborted
@@ -1022,14 +1012,13 @@ finish req=req3w
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
-local: num=0
 
 new-request name=req4w txn=txn4 ts=10,1
   put key=a value=v2
@@ -1091,7 +1080,7 @@ on-txn-updated txn=txn2 status=committed
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   res: req: 30, txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
  lock: "b"
@@ -1104,7 +1093,6 @@ global: num=3
    queued writers:
     active: true req: 29, txn: 00000005-0000-0000-0000-000000000000
    distinguished req: 29
-local: num=0
 
 # --------------------------------
 # Setup complete, test starts here
@@ -1130,7 +1118,7 @@ sequence req=req3w2
 
 debug-lock-table
 ----
-global: num=3
+num=3
  lock: "a"
   res: req: 30, txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
    queued writers:
@@ -1146,7 +1134,6 @@ global: num=3
    queued writers:
     active: true req: 29, txn: 00000005-0000-0000-0000-000000000000
    distinguished req: 29
-local: num=0
 
 # Break the deadlock by aborting txn4.
 on-txn-updated txn=txn4 status=aborted

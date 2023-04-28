@@ -13,8 +13,8 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -54,7 +54,7 @@ func (r *Replica) BumpSideTransportClosed(
 		return res
 	}
 
-	lai := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
+	lai := r.mu.state.LeaseAppliedIndex
 	policy := r.closedTimestampPolicyRLocked()
 	target := targetByPolicy[policy]
 	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
@@ -130,7 +130,7 @@ func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 // ForwardSideTransportClosedTimestamp forwards the side-transport closed
 // timestamp. It is called by the closed timestamp side-transport receiver.
 func (r *Replica) ForwardSideTransportClosedTimestamp(
-	ctx context.Context, closed hlc.Timestamp, lai ctpb.LAI,
+	ctx context.Context, closed hlc.Timestamp, lai kvpb.LeaseAppliedIndex,
 ) {
 	// We pass knownApplied = false because we don't know whether this lease
 	// applied index has been applied locally yet.
@@ -177,7 +177,7 @@ type sidetransportAccess struct {
 type sidetransportReceiver interface {
 	GetClosedTimestamp(
 		ctx context.Context, rangeID roachpb.RangeID, leaseholderNode roachpb.NodeID,
-	) (hlc.Timestamp, ctpb.LAI)
+	) (hlc.Timestamp, kvpb.LeaseAppliedIndex)
 	HTML() string
 }
 
@@ -186,7 +186,7 @@ type sidetransportReceiver interface {
 // lease applied index has been locally applied.
 type closedTimestamp struct {
 	ts  hlc.Timestamp
-	lai ctpb.LAI
+	lai kvpb.LeaseAppliedIndex
 }
 
 // regression returns whether the combination of the two closed timestamps
@@ -226,7 +226,7 @@ func (st *sidetransportAccess) init(receiver sidetransportReceiver, rangeID roac
 //
 // The method returns the current applied closed timestamp.
 func (st *sidetransportAccess) forward(
-	ctx context.Context, closed hlc.Timestamp, lai ctpb.LAI, knownApplied bool,
+	ctx context.Context, closed hlc.Timestamp, lai kvpb.LeaseAppliedIndex, knownApplied bool,
 ) closedTimestamp {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -280,7 +280,10 @@ func (st *sidetransportAccess) assertNoRegression(ctx context.Context, cur, up c
 // previous caller passed in. This means that get can be called without holding
 // the replica.mu.
 func (st *sidetransportAccess) get(
-	ctx context.Context, leaseholder roachpb.NodeID, appliedLAI ctpb.LAI, sufficient hlc.Timestamp,
+	ctx context.Context,
+	leaseholder roachpb.NodeID,
+	appliedLAI kvpb.LeaseAppliedIndex,
+	sufficient hlc.Timestamp,
 ) hlc.Timestamp {
 	st.mu.RLock()
 	cur, next := st.mu.cur, st.mu.next

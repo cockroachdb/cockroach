@@ -664,7 +664,7 @@ func mergeCheckingTimestampCaches(
 		}
 
 		// Applied to leaseholder after the partition heals.
-		var truncIndex uint64
+		var truncIndex kvpb.RaftIndex
 		restoredLeaseholderFuncs := noopRaftHandlerFuncs()
 		restoredLeaseholderFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			// Make sure that even going forward no MsgApp for what we just
@@ -675,7 +675,7 @@ func mergeCheckingTimestampCaches(
 			//
 			// NB: the Index on the message is the log index that _precedes_ any of the
 			// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-			return req.Message.Type == raftpb.MsgApp && req.Message.Index < truncIndex
+			return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < truncIndex
 		}
 
 		// Because we enter a split leader-leaseholder state, none of the
@@ -730,13 +730,13 @@ func mergeCheckingTimestampCaches(
 			// largest log index on the leader, or it will panic. So we choose
 			// the minimum of these two and just pick the smallest "last index"
 			// in the range, which does the trick.
-			min := func(a, b uint64) uint64 {
+			min := func(a, b kvpb.RaftIndex) kvpb.RaftIndex {
 				if a < b {
 					return a
 				}
 				return b
 			}
-			minLastIndex := uint64(math.MaxUint64)
+			minLastIndex := kvpb.RaftIndex(math.MaxUint64)
 			for _, r := range lhsRepls {
 				lastIndex := r.GetLastIndex()
 				minLastIndex = min(minLastIndex, lastIndex)
@@ -2538,7 +2538,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 
 	// Be extra paranoid and verify the exact value of the replica tombstone.
 	checkTombstone := func(eng storage.Engine) {
-		var rhsTombstone roachpb.RangeTombstone
+		var rhsTombstone kvserverpb.RangeTombstone
 		rhsTombstoneKey := keys.RangeTombstoneKey(rhsDesc.RangeID)
 		ok, err = storage.MVCCGetProto(ctx, eng, rhsTombstoneKey, hlc.Timestamp{},
 			&rhsTombstone, storage.MVCCGetOptions{})
@@ -3886,7 +3886,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			}
 
 			tombstoneKey := keys.RangeTombstoneKey(rangeID)
-			tombstoneValue := &roachpb.RangeTombstone{NextReplicaID: math.MaxInt32}
+			tombstoneValue := &kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32}
 			if err := storage.MVCCBlindPutProto(
 				context.Background(), &sst, nil, tombstoneKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, tombstoneValue, nil,
 			); err != nil {
@@ -4026,7 +4026,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	}
 
 	// Truncate the logs of the LHS.
-	index := func() uint64 {
+	index := func() kvpb.RaftIndex {
 		repl := store0.LookupReplica(roachpb.RKey(keyA))
 		index := repl.GetLastIndex()
 		truncArgs := &kvpb.TruncateLogRequest{
@@ -4058,7 +4058,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				//
 				// NB: the Index on the message is the log index that _precedes_ any of the
 				// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-				return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
+				return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
 			},
 			// Don't drop heartbeats or responses.
 			dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },

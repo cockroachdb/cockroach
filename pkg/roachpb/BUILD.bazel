@@ -109,7 +109,6 @@ proto_library(
         "data.proto",
         "index_usage_stats.proto",
         "internal.proto",
-        "internal_raft.proto",
         "io-formats.proto",
         "metadata.proto",
         "span_config.proto",

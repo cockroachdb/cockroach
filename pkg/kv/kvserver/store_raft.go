@@ -233,8 +233,8 @@ func (s *Store) uncoalesceBeats(
 			Type:   msgT,
 			From:   uint64(beat.FromReplicaID),
 			To:     uint64(beat.ToReplicaID),
-			Term:   beat.Term,
-			Commit: beat.Commit,
+			Term:   uint64(beat.Term),
+			Commit: uint64(beat.Commit),
 		}
 		beatReqs[i] = kvserverpb.RaftMessageRequest{
 			RangeID: beat.RangeID,

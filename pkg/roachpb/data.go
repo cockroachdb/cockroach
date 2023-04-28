@@ -1741,7 +1741,7 @@ func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
 }
 
 // LeaseSequence is a custom type for a lease sequence number.
-type LeaseSequence int64
+type LeaseSequence uint64
 
 // SafeValue implements the redact.SafeValue interface.
 func (s LeaseSequence) SafeValue() {}

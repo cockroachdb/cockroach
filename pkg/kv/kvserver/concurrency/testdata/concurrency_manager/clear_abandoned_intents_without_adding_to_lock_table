@@ -32,10 +32,9 @@ handle-write-intent-error req=req1 lease-seq=1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
-local: num=0
 
 sequence req=req1
 ----
@@ -50,13 +49,12 @@ sequence req=req1
 
 debug-lock-table
 ----
-global: num=1
+num=1
  lock: "a"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    waiting readers:
     req: 1, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 1
-local: num=0
 
 debug-advance-clock ts=123
 ----
@@ -75,8 +73,7 @@ on-txn-updated txn=txn2 status=aborted
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 finish req=req1
 ----
@@ -119,8 +116,7 @@ handle-write-intent-error req=req2 lease-seq=1
 
 debug-lock-table
 ----
-global: num=0
-local: num=0
+num=0
 
 sequence req=req2
 ----

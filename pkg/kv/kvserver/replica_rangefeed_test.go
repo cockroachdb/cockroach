@@ -859,7 +859,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 					// to make the test pass reliably.
 					// NB: the Index on the message is the log index that _precedes_ any of the
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-					return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
+					return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
 				},
 				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
 				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },

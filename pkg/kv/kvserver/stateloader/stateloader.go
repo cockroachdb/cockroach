@@ -13,6 +13,7 @@ package stateloader
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -172,8 +173,8 @@ func (rsl StateLoader) SetLease(
 // LoadRangeAppliedState loads the Range applied state.
 func (rsl StateLoader) LoadRangeAppliedState(
 	ctx context.Context, reader storage.Reader,
-) (*enginepb.RangeAppliedState, error) {
-	var as enginepb.RangeAppliedState
+) (*kvserverpb.RangeAppliedState, error) {
+	var as kvserverpb.RangeAppliedState
 	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, &as,
 		storage.MVCCGetOptions{})
 	return &as, err
@@ -200,19 +201,21 @@ func (rsl StateLoader) LoadMVCCStats(
 func (rsl StateLoader) SetRangeAppliedState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
-	appliedIndex, leaseAppliedIndex, appliedIndexTerm uint64,
+	appliedIndex kvpb.RaftIndex,
+	leaseAppliedIndex kvpb.LeaseAppliedIndex,
+	appliedIndexTerm kvpb.RaftTerm,
 	newMS *enginepb.MVCCStats,
 	raftClosedTimestamp hlc.Timestamp,
-	asAlloc *enginepb.RangeAppliedState, // optional
+	asAlloc *kvserverpb.RangeAppliedState, // optional
 ) error {
 	if asAlloc == nil {
-		asAlloc = new(enginepb.RangeAppliedState)
+		asAlloc = new(kvserverpb.RangeAppliedState)
 	}
 	as := asAlloc
-	*as = enginepb.RangeAppliedState{
+	*as = kvserverpb.RangeAppliedState{
 		RaftAppliedIndex:     appliedIndex,
 		LeaseAppliedIndex:    leaseAppliedIndex,
-		RangeStats:           newMS.ToPersistentStats(),
+		RangeStats:           kvserverpb.MVCCPersistentStats(*newMS),
 		RaftClosedTimestamp:  raftClosedTimestamp,
 		RaftAppliedIndexTerm: appliedIndexTerm,
 	}
@@ -332,7 +335,7 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 	return kvserverpb.ReplicaState{
 		Desc:           &roachpb.RangeDescriptor{RangeID: rangeID},
 		Lease:          &roachpb.Lease{},
-		TruncatedState: &roachpb.RaftTruncatedState{},
+		TruncatedState: &kvserverpb.RaftTruncatedState{},
 		GCThreshold:    &hlc.Timestamp{},
 		Stats:          &enginepb.MVCCStats{},
 		GCHint:         &roachpb.GCHint{},
