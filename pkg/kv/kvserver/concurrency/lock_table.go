@@ -18,9 +18,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -95,9 +95,10 @@ type waitingState struct {
 	queuedWriters int               // how many writers are waiting?
 	queuedReaders int               // how many readers are waiting?
 
-	// Represents the action that the request was trying to perform when
-	// it hit the conflict. E.g. was it trying to read or write?
-	guardAccess spanset.SpanAccess
+	// Represents the lock strength of the action that the request was trying to
+	// perform when it hit the conflict. E.g. was it trying to perform a (possibly
+	// locking) read or write an Intent?
+	guardStrength lock.Strength
 }
 
 // String implements the fmt.Stringer interface.
@@ -361,7 +362,7 @@ type lockTableGuardImpl struct {
 	// Information about this request.
 	txn                *enginepb.TxnMeta
 	ts                 hlc.Timestamp
-	spans              *spanset.SpanSet
+	spans              *lockspanset.LockSpanSet
 	waitPolicy         lock.WaitPolicy
 	maxWaitQueueLength int
 
@@ -412,9 +413,8 @@ type lockTableGuardImpl struct {
 	// The key for the lockState.
 	key roachpb.Key
 	// The key for the lockState is contained in the Span specified by
-	// spans[sa][ss][index].
-	ss    spanset.SpanScope
-	sa    spanset.SpanAccess // Iterates from stronger to weaker strength
+	// spans[str][index].
+	str   lock.Strength // Iterates from strongest to weakest lock strength
 	index int
 
 	mu struct {
@@ -534,17 +534,18 @@ func (g *lockTableGuardImpl) updateStateLocked(newState waitingState) {
 	g.mu.state = newState
 }
 
-func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(spanSet *spanset.SpanSet) (ok bool) {
+func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(
+	lockSpanSet *lockspanset.LockSpanSet,
+) (ok bool) {
 	if g.waitPolicy == lock.WaitPolicy_SkipLocked {
 		// If the request is using a SkipLocked wait policy, lock conflicts are
 		// handled during evaluation.
 		return true
 	}
-	// Temporarily replace the SpanSet in the guard.
+	// Temporarily replace the LockSpanSet in the guard.
 	originalSpanSet := g.spans
-	g.spans = spanSet
-	g.sa = spanset.NumSpanAccess - 1
-	g.ss = spanset.SpanScope(0)
+	g.spans = lockSpanSet
+	g.str = lock.MaxStrength
 	g.index = -1
 	defer func() {
 		g.spans = originalSpanSet
@@ -556,7 +557,7 @@ func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(spanSet *spanset.SpanSet
 		ltRange := &lockState{key: startKey, endKey: span.EndKey}
 		for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
 			l := iter.Cur()
-			if !l.isNonConflictingLock(g, g.sa) {
+			if !l.isNonConflictingLock(g, g.str) {
 				return false
 			}
 		}
@@ -646,8 +647,8 @@ func (g *lockTableGuardImpl) isSameTxnAsReservation(ws waitingState) bool {
 // accumulate intents to resolve.
 // Acquires g.mu.
 func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
-	spans := g.spans.GetSpans(g.sa, g.ss)
-	var span *spanset.Span
+	spans := g.spans.GetSpans(g.str)
+	var span *roachpb.Span
 	resumingInSameSpan := false
 	if g.index == -1 || len(spans[g.index].EndKey) == 0 {
 		span = stepToNextSpan(g)
@@ -687,7 +688,7 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 				// Else, past the lock where it stopped waiting. We may not
 				// encounter that lock since it may have been garbage collected.
 			}
-			wait, transitionedToFree := l.tryActiveWait(g, g.sa, notify, g.lt.clock)
+			wait, transitionedToFree := l.tryActiveWait(g, g.str, notify, g.lt.clock)
 			if transitionedToFree {
 				locksToGC = append(locksToGC, l)
 			}
@@ -1276,7 +1277,6 @@ func (l *lockState) informActiveWaiters() {
 
 	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
 		state := waitForState
-		state.guardAccess = spanset.SpanReadOnly
 		// Since there are waiting readers we could not have transitioned out of
 		// or into a state with a reservation, since readers do not wait for
 		// reservations.
@@ -1285,6 +1285,7 @@ func (l *lockState) informActiveWaiters() {
 			l.distinguishedWaiter = g
 			findDistinguished = false
 		}
+		state.guardStrength = g.str
 		g.mu.Lock()
 		g.updateStateLocked(state)
 		if l.distinguishedWaiter == g {
@@ -1303,7 +1304,7 @@ func (l *lockState) informActiveWaiters() {
 		if g.isSameTxnAsReservation(state) {
 			state.kind = waitSelf
 		} else {
-			state.guardAccess = spanset.SpanReadWrite
+			state.guardStrength = qg.guard.str
 			if findDistinguished {
 				l.distinguishedWaiter = g
 				findDistinguished = false
@@ -1499,13 +1500,14 @@ func (l *lockState) clearLockHolder() {
 	}
 }
 
-// Decides whether the request g with access sa should actively wait at this
-// lock and if yes, adjusts the data-structures appropriately. The notify
-// parameter is true iff the request's new state channel should be notified --
-// it is set to false when the call to tryActiveWait is happening due to an
-// event for a different request or transaction (like a lock release) since in
-// that case the channel is notified first and the call to tryActiveWait()
-// happens later in lockTableGuard.CurState().
+// tryActiveWait decides whether the request g, with locking strength str,
+// should actively wait at this lock or not. It adjusts the data-structures
+// appropriately if the request needs to wait. The notify parameter is true iff
+// the request's new state channel should be notified -- it is set to false when
+// the call to tryActiveWait is happening due to an event for a different
+// request or transaction (like a lock release) since in that case the channel
+// is notified first and the call to tryActiveWait() happens later in
+// lockTableGuard.CurState().
 //
 // It uses the finalizedTxnCache to decide that the caller does not need to
 // wait on a lock of a transaction that is already finalized.
@@ -1559,10 +1561,16 @@ func (l *lockState) clearLockHolder() {
 // The return value is true iff it is actively waiting.
 // Acquires l.mu, g.mu.
 func (l *lockState) tryActiveWait(
-	g *lockTableGuardImpl, sa spanset.SpanAccess, notify bool, clock *hlc.Clock,
+	g *lockTableGuardImpl, str lock.Strength, notify bool, clock *hlc.Clock,
 ) (wait bool, transitionedToFree bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	switch str {
+	case lock.None, lock.Intent:
+	default:
+		panic(errors.AssertionFailedf("unexpected lock strength %s", str))
+	}
 
 	// It is possible that this lock is empty and has not yet been deleted.
 	if l.isEmptyLock() {
@@ -1596,32 +1604,52 @@ func (l *lockState) tryActiveWait(
 		}
 	}
 
-	if sa == spanset.SpanReadOnly {
+	if str == lock.None {
 		if lockHolderTxn == nil {
-			// Reads only care about locker, not a reservation.
+			// Non locking reads only care about locks, not reservations.
 			return false, false
 		}
 		// Locked by some other txn.
+		// TODO(arul): this will need to change once we start supporting different
+		// lock strengths.
 		if g.ts.Less(lockHolderTS) {
 			return false, false
 		}
 		g.mu.Lock()
-		_, alsoHasStrongerAccess := g.mu.locks[l]
+		_, alsoLocksWithHigherStrength := g.mu.locks[l]
 		g.mu.Unlock()
 
 		// If the request already has this lock in its locks map, it must also be
-		// writing to this key and must be either a reservation holder or inactive
-		// waiter at this lock. The former has already been handled above. For the
-		// latter, it must have had its reservation broken. Since this is a weaker
-		// access we defer to the stronger access and don't wait here.
+		// acquiring this lock at a higher strength. It must either be a reservation
+		// holder or an inactive waiter at this lock. The former has already been
+		// handled above. For the latter to be possible, the request must have had
+		// its reservation broken. Since this is a weaker lock strength, we defer to
+		// the stronger lock strength and continuing with our scan.
 		//
-		// For non-transactional requests that have the key specified as both
-		// SpanReadOnly and SpanReadWrite, the request never acquires a
-		// reservation, so using the locks map to detect this duplication of the
-		// key is not possible. In the rare case, the lock is now held at a
-		// timestamp that is not compatible with this request and it will wait
-		// here -- there is no correctness issue with doing that.
-		if alsoHasStrongerAccess {
+		// NB: If we were not defer to the stronger lock strength and start waiting
+		// here, we would end up doing so in the wrong wait queue (queuedReaders vs.
+		// queuedWriters.
+		//
+		// TODO(arul): the queued{Readers,Writers} names are going to change, as
+		// described in the Shared locks RFC. Reword this comment when that happens.
+		//
+		// Non-transactional requests cannot make reservations or acquire locks.
+		// They can only perform reads or writes, which means they can only have
+		// lock spans with strength {None,Intent}. However, because they cannot make
+		// reservations, we can not detect a key is being accessed with both None
+		// and Intent locking strengths, like we can for transactional requests. In
+		// some rare cases, the is now held at a timestamp that is not compatible
+		// with this request and it will wait here -- there's no correctness issue
+		// in doing so.
+		//
+		// TODO(arul): It seems like the above paragraph is implying a writing
+		// non-transactional request will end up waiting in the same queue as
+		// non-locking readers, and that's fine. We should revisit if we want to
+		// store non-transactional writers with other locking requests, as described
+		// in the shared locks RFC -- non-transactional requests race with readers
+		// and reservation holders anyway, so I'm not entirely sure what we get by
+		// storing them in the same queue as locking requests.
+		if alsoLocksWithHigherStrength {
 			return false, false
 		}
 	}
@@ -1631,7 +1659,7 @@ func (l *lockState) tryActiveWait(
 		key:           l.key,
 		queuedWriters: l.queuedWriters.Len(),
 		queuedReaders: l.waitingReaders.Len(),
-		guardAccess:   sa,
+		guardStrength: str,
 	}
 	if lockHolderTxn != nil {
 		waitForState.txn = lockHolderTxn
@@ -1655,7 +1683,7 @@ func (l *lockState) tryActiveWait(
 
 	// Incompatible with whoever is holding lock or reservation.
 
-	if l.reservation != nil && sa == spanset.SpanReadWrite && l.tryBreakReservation(g.seqNum) {
+	if l.reservation != nil && str == lock.Intent && l.tryBreakReservation(g.seqNum) {
 		l.reservation = g
 		g.mu.Lock()
 		g.mu.locks[l] = struct{}{}
@@ -1671,7 +1699,7 @@ func (l *lockState) tryActiveWait(
 	wait = true
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if sa == spanset.SpanReadWrite {
+	if str == lock.Intent {
 		var qg *queuedGuard
 		if _, inQueue := g.mu.locks[l]; inQueue {
 			// Already in queue and must be in the right position, so mark as active
@@ -1775,7 +1803,7 @@ func (l *lockState) tryActiveWait(
 	return true, false
 }
 
-func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, sa spanset.SpanAccess) bool {
+func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, str lock.Strength) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -1807,7 +1835,7 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, sa spanset.SpanA
 	// path. A conflict with a finalized txn will be noticed when retrying
 	// pessimistically.
 
-	if sa == spanset.SpanReadOnly && g.ts.Less(lockHolderTS) {
+	if str == lock.None && g.ts.Less(lockHolderTS) {
 		return true
 	}
 	// Conflicts.
@@ -1951,13 +1979,13 @@ func (l *lockState) acquireLock(
 }
 
 // A replicated lock held by txn with timestamp ts was discovered by guard g
-// where g is trying to access this key with access sa.
+// where g is trying to access this key with strength accessStrength.
 // Acquires l.mu.
 func (l *lockState) discoveredLock(
 	txn *enginepb.TxnMeta,
 	ts hlc.Timestamp,
 	g *lockTableGuardImpl,
-	sa spanset.SpanAccess,
+	accessStrength lock.Strength,
 	notRemovable bool,
 	clock *hlc.Clock,
 ) error {
@@ -1998,8 +2026,8 @@ func (l *lockState) discoveredLock(
 		l.reservation = nil
 	}
 
-	switch sa {
-	case spanset.SpanReadOnly:
+	switch accessStrength {
+	case lock.None:
 		// Don't enter the lock's queuedReaders list, because all queued readers
 		// are expected to be active. Instead, wait until the next scan.
 
@@ -2011,7 +2039,7 @@ func (l *lockState) discoveredLock(
 			return errors.AssertionFailedf("discovered non-conflicting lock")
 		}
 
-	case spanset.SpanReadWrite:
+	case lock.Intent:
 		// Immediately enter the lock's queuedWriters list.
 		// NB: this inactive waiter can be non-transactional.
 		g.mu.Lock()
@@ -2042,6 +2070,8 @@ func (l *lockState) discoveredLock(
 				l.queuedWriters.InsertBefore(qg, e)
 			}
 		}
+	default:
+		panic(errors.AssertionFailedf("unhandled lock strength %s", accessStrength))
 	}
 
 	// If there are waiting requests from the same txn, they no longer need to wait.
@@ -2078,11 +2108,10 @@ func (l *lockState) tryClearLock(force bool) bool {
 		// Note that none of the current waiters can be requests from lockHolderTxn,
 		// so they will never be told to waitElsewhere on themselves.
 		waitState = waitingState{
-			kind:        waitElsewhere,
-			txn:         lockHolderTxn,
-			key:         l.key,
-			held:        true,
-			guardAccess: spanset.SpanReadOnly,
+			kind: waitElsewhere,
+			txn:  lockHolderTxn,
+			key:  l.key,
+			held: true,
 		}
 	} else {
 		// !replicatedHeld || force. Both are handled as doneWaiting since the
@@ -2103,6 +2132,8 @@ func (l *lockState) tryClearLock(force bool) bool {
 	// Clear waitingReaders.
 	for e := l.waitingReaders.Front(); e != nil; {
 		g := e.Value.(*lockTableGuardImpl)
+		waitState.guardStrength = g.str
+
 		curr := e
 		e = e.Next()
 		l.waitingReaders.Remove(curr)
@@ -2115,9 +2146,10 @@ func (l *lockState) tryClearLock(force bool) bool {
 	}
 
 	// Clear queuedWriters.
-	waitState.guardAccess = spanset.SpanReadWrite
 	for e := l.queuedWriters.Front(); e != nil; {
 		qg := e.Value.(*queuedGuard)
+		waitState.guardStrength = qg.guard.str
+
 		curr := e
 		e = e.Next()
 		l.queuedWriters.Remove(curr)
@@ -2492,8 +2524,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 	} else {
 		g = guard.(*lockTableGuardImpl)
 		g.key = nil
-		g.sa = spanset.NumSpanAccess - 1
-		g.ss = spanset.SpanScope(0)
+		g.str = lock.MaxStrength
 		g.index = -1
 		g.mu.Lock()
 		g.mu.startWait = false
@@ -2530,7 +2561,7 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g.spans = req.LockSpans
 	g.waitPolicy = req.WaitPolicy
 	g.maxWaitQueueLength = req.MaxLockWaitQueueLength
-	g.sa = spanset.NumSpanAccess - 1
+	g.str = lock.MaxStrength
 	g.index = -1
 	return g
 }
@@ -2622,7 +2653,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	}
 	g := guard.(*lockTableGuardImpl)
 	key := intent.Key
-	sa, _, err := findAccessInSpans(key, g.spans)
+	str, err := findHighestLockStrengthInSpans(key, g.spans)
 	if err != nil {
 		return false, err
 	}
@@ -2659,7 +2690,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		g.notRemovableLock = l
 		notRemovableLock = true
 	}
-	err = l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, sa, notRemovableLock, g.lt.clock)
+	err = l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, str, notRemovableLock, g.lt.clock)
 	// Can't release tree.mu until call l.discoveredLock() since someone may
 	// find an empty lock and remove it from the tree.
 	t.locks.mu.Unlock()
@@ -2784,27 +2815,24 @@ func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
 	}
 }
 
-// Given the key must be in spans, returns the strongest access
-// specified in the spans, along with the scope of the key.
-func findAccessInSpans(
-	key roachpb.Key, spans *spanset.SpanSet,
-) (spanset.SpanAccess, spanset.SpanScope, error) {
-	ss := spanset.SpanGlobal
-	if keys.IsLocal(key) {
-		ss = spanset.SpanLocal
-	}
-	for sa := spanset.NumSpanAccess - 1; sa >= 0; sa-- {
-		s := spans.GetSpans(sa, ss)
+// findHighestLockStrengthInSpans returns the highest lock strength specified
+// for the given key in the supplied spans. It is expected for the key to be
+// present in the spans; an assertion failed error is returned otherwise.
+func findHighestLockStrengthInSpans(
+	key roachpb.Key, spans *lockspanset.LockSpanSet,
+) (lock.Strength, error) {
+	for str := lock.MaxStrength; str >= 0; str-- {
+		s := spans.GetSpans(str)
 		// First span that starts after key
 		i := sort.Search(len(s), func(i int) bool {
 			return key.Compare(s[i].Key) < 0
 		})
 		if i > 0 &&
 			((len(s[i-1].EndKey) > 0 && key.Compare(s[i-1].EndKey) < 0) || key.Equal(s[i-1].Key)) {
-			return sa, ss, nil
+			return str, nil
 		}
 	}
-	return 0, 0, errors.AssertionFailedf("could not find access in spans")
+	return 0, errors.AssertionFailedf("could not find access in spans")
 }
 
 // Tries to GC locks that were previously known to have become empty.
@@ -2878,20 +2906,18 @@ func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bo
 // Iteration helper for findNextLockAfter. Returns the next span to search
 // over, or nil if the iteration is done.
 // REQUIRES: g.mu is locked.
-func stepToNextSpan(g *lockTableGuardImpl) *spanset.Span {
+func stepToNextSpan(g *lockTableGuardImpl) *roachpb.Span {
 	g.index++
-	for ; g.ss < spanset.NumSpanScope; g.ss++ {
-		for ; g.sa >= 0; g.sa-- {
-			spans := g.spans.GetSpans(g.sa, g.ss)
-			if g.index < len(spans) {
-				span := &spans[g.index]
-				g.key = span.Key
-				return span
-			}
-			g.index = 0
+	for ; g.str >= 0; g.str-- {
+		spans := g.spans.GetSpans(g.str)
+		if g.index < len(spans) {
+			span := &spans[g.index]
+			g.key = span.Key
+			return span
 		}
-		g.sa = spanset.NumSpanAccess - 1
+		g.index = 0
 	}
+	g.str = lock.MaxStrength
 	return nil
 }
 

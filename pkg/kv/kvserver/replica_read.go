@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -522,7 +523,7 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 // and uses that to compute the latch and lock spans.
 func (r *Replica) collectSpansRead(
 	ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
-) (latchSpans, lockSpans *spanset.SpanSet, _ error) {
+) (latchSpans *spanset.SpanSet, lockSpans *lockspanset.LockSpanSet, _ error) {
 	baCopy := *ba
 	baCopy.Requests = make([]kvpb.RequestUnion, 0, len(ba.Requests))
 	for i := 0; i < len(ba.Requests); i++ {

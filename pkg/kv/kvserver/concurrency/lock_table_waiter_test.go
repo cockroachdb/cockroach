@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -84,7 +84,7 @@ func (g *mockLockTableGuard) CurState() waitingState {
 func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 	return g.toResolve
 }
-func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool) {
+func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool) {
 	return true
 }
 func (g *mockLockTableGuard) IsKeyLockedByConflictingTxn(
@@ -318,14 +318,14 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 
 			req := makeReq()
 			g.state = waitingState{
-				kind:        k,
-				txn:         &pusheeTxn.TxnMeta,
-				key:         keyA,
-				held:        lockHeld,
-				guardAccess: spanset.SpanReadOnly,
+				kind:          k,
+				txn:           &pusheeTxn.TxnMeta,
+				key:           keyA,
+				held:          lockHeld,
+				guardStrength: lock.None,
 			}
 			if waitAsWrite {
-				g.state.guardAccess = spanset.SpanReadWrite
+				g.state.guardStrength = lock.Intent
 			}
 			g.notify()
 
@@ -507,11 +507,11 @@ func testErrorWaitPush(
 
 			req := makeReq()
 			g.state = waitingState{
-				kind:        k,
-				txn:         &pusheeTxn.TxnMeta,
-				key:         keyA,
-				held:        lockHeld,
-				guardAccess: spanset.SpanReadOnly,
+				kind:          k,
+				txn:           &pusheeTxn.TxnMeta,
+				key:           keyA,
+				held:          lockHeld,
+				guardStrength: lock.None,
 			}
 			g.notify()
 
@@ -665,11 +665,11 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 
 				req := makeReq()
 				g.state = waitingState{
-					kind:        k,
-					txn:         &pusheeTxn.TxnMeta,
-					key:         keyA,
-					held:        lockHeld,
-					guardAccess: spanset.SpanReadWrite,
+					kind:          k,
+					txn:           &pusheeTxn.TxnMeta,
+					key:           keyA,
+					held:          lockHeld,
+					guardStrength: lock.Intent,
 				}
 				g.notify()
 
@@ -797,11 +797,11 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 		pusheeTxn := makeTxnProto("pushee")
 		lockHeld := sync
 		g.state = waitingState{
-			kind:        waitForDistinguished,
-			txn:         &pusheeTxn.TxnMeta,
-			key:         keyA,
-			held:        lockHeld,
-			guardAccess: spanset.SpanReadWrite,
+			kind:          waitForDistinguished,
+			txn:           &pusheeTxn.TxnMeta,
+			key:           keyA,
+			held:          lockHeld,
+			guardStrength: lock.Intent,
 		}
 
 		// Errors are propagated when observed while pushing transactions.
@@ -852,8 +852,8 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 	pusheeTxn.Status = roachpb.ABORTED
 
 	g.state = waitingState{
-		kind:        doneWaiting,
-		guardAccess: spanset.SpanReadWrite,
+		kind:          doneWaiting,
+		guardStrength: lock.Intent,
 	}
 	g.toResolve = []roachpb.LockUpdate{
 		roachpb.MakeLockUpdate(&pusheeTxn, roachpb.Span{Key: keyA}),

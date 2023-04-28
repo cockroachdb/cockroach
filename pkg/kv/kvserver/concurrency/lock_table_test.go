@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -305,13 +306,13 @@ func TestLockTableBasic(t *testing.T) {
 				if d.HasArg("max-lock-wait-queue-length") {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
 				}
-				spans := scanSpans(t, d, ts)
+				latchSpans, lockSpans := scanSpans(t, d, ts)
 				req := Request{
 					Timestamp:              ts,
 					WaitPolicy:             waitPolicy,
 					MaxLockWaitQueueLength: maxLockWaitQueueLength,
-					LatchSpans:             spans,
-					LockSpans:              spans,
+					LatchSpans:             latchSpans,
+					LockSpans:              lockSpans,
 				}
 				if txnMeta != nil {
 					// Update the transaction's timestamp, if necessary. The transaction
@@ -485,8 +486,8 @@ func TestLockTableBasic(t *testing.T) {
 				if g == nil {
 					d.Fatalf(t, "unknown guard: %s", reqName)
 				}
-				spans := scanSpans(t, d, req.Timestamp)
-				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(spans))
+				_, lockSpans := scanSpans(t, d, req.Timestamp)
+				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(lockSpans))
 
 			case "is-key-locked-by-conflicting-txn":
 				var reqName string
@@ -577,8 +578,21 @@ func TestLockTableBasic(t *testing.T) {
 				if txnS == "" {
 					txnS = fmt.Sprintf("unknown txn with ID: %v", state.txn.ID)
 				}
+				// TODO(arul): We're translating the lock strength back to guardAccess
+				// for now to reduce test churn. A followup patch should teach these
+				// datadriven tests to use lock.Strength correctly -- both in its input
+				// and output.
+				var sa spanset.SpanAccess
+				switch state.guardStrength {
+				case lock.None:
+					sa = spanset.SpanReadOnly
+				case lock.Intent:
+					sa = spanset.SpanReadWrite
+				default:
+					t.Fatalf("unexpected guard strength %s", state.guardStrength)
+				}
 				return fmt.Sprintf("%sstate=%s txn=%s key=%s held=%t guard-access=%s",
-					str, typeStr, txnS, state.key, state.held, state.guardAccess)
+					str, typeStr, txnS, state.key, state.held, sa)
 
 			case "resolve-before-scanning":
 				var reqName string
@@ -689,8 +703,11 @@ func getSpan(t *testing.T, d *datadriven.TestData, str string) roachpb.Span {
 	return span
 }
 
-func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.SpanSet {
-	spans := &spanset.SpanSet{}
+func scanSpans(
+	t *testing.T, d *datadriven.TestData, ts hlc.Timestamp,
+) (*spanset.SpanSet, *lockspanset.LockSpanSet) {
+	latchSpans := &spanset.SpanSet{}
+	lockSpans := &lockspanset.LockSpanSet{}
 	var spansStr string
 	d.ScanArgs(t, "spans", &spansStr)
 	parts := strings.Split(spansStr, "+")
@@ -701,17 +718,22 @@ func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.
 		c := p[0]
 		p = p[2:]
 		var sa spanset.SpanAccess
+		var str lock.Strength
+		// TODO(arul): Switch the datadriven input to use lock strengths instead.
 		switch c {
 		case 'r':
 			sa = spanset.SpanReadOnly
+			str = lock.None
 		case 'w':
 			sa = spanset.SpanReadWrite
+			str = lock.Intent
 		default:
 			d.Fatalf(t, "incorrect span access: %c", c)
 		}
-		spans.AddMVCC(sa, getSpan(t, d, p), ts)
+		latchSpans.AddMVCC(sa, getSpan(t, d, p), ts)
+		lockSpans.Add(str, getSpan(t, d, p))
 	}
-	return spans
+	return latchSpans, lockSpans
 }
 
 func ScanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
@@ -758,16 +780,18 @@ func TestLockTableMaxLocks(t *testing.T) {
 	// 10 requests, each with 10 discovered locks. Only 1 will be considered
 	// notRemovable per request.
 	for i := 0; i < 10; i++ {
-		spans := &spanset.SpanSet{}
+		latchSpans := &spanset.SpanSet{}
+		lockSpans := &lockspanset.LockSpanSet{}
 		for j := 0; j < 20; j++ {
 			k := roachpb.Key(fmt.Sprintf("%08d", i*20+j))
 			keys = append(keys, k)
-			spans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: k}, hlc.Timestamp{WallTime: 1})
+			latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: k}, hlc.Timestamp{WallTime: 1})
+			lockSpans.Add(lock.Intent, roachpb.Span{Key: k})
 		}
 		req := Request{
 			Timestamp:  hlc.Timestamp{WallTime: 1},
-			LatchSpans: spans,
-			LockSpans:  spans,
+			LatchSpans: latchSpans,
+			LockSpans:  lockSpans,
 		}
 		reqs = append(reqs, req)
 		ltg := lt.ScanAndEnqueue(req, nil)
@@ -883,16 +907,18 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	var guards []lockTableGuard
 	// 10 requests. Every pair of requests have the same span.
 	for i := 0; i < 10; i++ {
-		spans := &spanset.SpanSet{}
+		latchSpans := &spanset.SpanSet{}
+		lockSpans := &lockspanset.LockSpanSet{}
 		key := roachpb.Key(fmt.Sprintf("%08d", i/2))
 		if i%2 == 0 {
 			keys = append(keys, key)
 		}
-		spans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key}, hlc.Timestamp{WallTime: 1})
+		latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key}, hlc.Timestamp{WallTime: 1})
+		lockSpans.Add(lock.Intent, roachpb.Span{Key: key})
 		req := Request{
 			Timestamp:  hlc.Timestamp{WallTime: 1},
-			LatchSpans: spans,
-			LockSpans:  spans,
+			LatchSpans: latchSpans,
+			LockSpans:  lockSpans,
 		}
 		ltg := lt.ScanAndEnqueue(req, nil)
 		require.Nil(t, ltg.ResolveBeforeScanning())
@@ -1346,11 +1372,17 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 	for i := 0; i < numRequests; i++ {
 		ts := timestamps[rng.Intn(len(timestamps))]
 		keysPerm := rng.Perm(len(keys))
-		spans := &spanset.SpanSet{}
+		latchSpans := &spanset.SpanSet{}
+		lockSpans := &lockspanset.LockSpanSet{}
 		for i := 0; i < numKeys; i++ {
 			span := roachpb.Span{Key: keys[keysPerm[i]]}
 			acc := spanset.SpanAccess(rng.Intn(int(spanset.NumSpanAccess)))
-			spans.AddMVCC(acc, span, ts)
+			str := lock.None
+			if acc == spanset.SpanReadWrite {
+				str = lock.Intent
+			}
+			latchSpans.AddMVCC(acc, span, ts)
+			lockSpans.Add(str, span)
 		}
 		var txn *roachpb.Transaction
 		if rng.Intn(2) == 0 {
@@ -1365,8 +1397,8 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 		request := &Request{
 			Txn:        txn,
 			Timestamp:  ts,
-			LatchSpans: spans,
-			LockSpans:  spans,
+			LatchSpans: latchSpans,
+			LockSpans:  lockSpans,
 		}
 		items = append(items, workloadItem{request: request})
 		if txn != nil {
@@ -1439,13 +1471,14 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 			ts = timestamps[rng.Intn(len(timestamps))]
 		}
 		keysPerm := rng.Perm(len(keys))
-		spans := &spanset.SpanSet{}
+		latchSpans := &spanset.SpanSet{}
+		lockSpans := &lockspanset.LockSpanSet{}
 		onlyReads := txnMeta == nil && rng.Intn(2) != 0
 		numKeys := rng.Intn(len(keys)-1) + 1
 		request := &Request{
 			Timestamp:  ts,
-			LatchSpans: spans,
-			LockSpans:  spans,
+			LatchSpans: latchSpans,
+			LockSpans:  lockSpans,
 		}
 		if txnMeta != nil {
 			request.Txn = &roachpb.Transaction{
@@ -1457,21 +1490,26 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 		for i := 0; i < numKeys; i++ {
 			span := roachpb.Span{Key: keys[keysPerm[i]]}
 			acc := spanset.SpanReadOnly
+			str := lock.None
 			dupRead := false
 			if !onlyReads {
 				acc = spanset.SpanAccess(rng.Intn(int(spanset.NumSpanAccess)))
 				if acc == spanset.SpanReadWrite && txnMeta != nil && rng.Intn(2) == 0 {
 					// Acquire lock.
 					wi.locksToAcquire = append(wi.locksToAcquire, span.Key)
+					str = lock.Intent
 				}
 				if acc == spanset.SpanReadWrite && rng.Intn(2) == 0 {
 					// Also include the key as read.
 					dupRead = true
+					str = lock.Intent
 				}
 			}
-			spans.AddMVCC(acc, span, ts)
+			latchSpans.AddMVCC(acc, span, ts)
+			lockSpans.Add(str, span)
 			if dupRead {
-				spans.AddMVCC(spanset.SpanReadOnly, span, ts)
+				latchSpans.AddMVCC(spanset.SpanReadOnly, span, ts)
+				lockSpans.Add(lock.None, span)
 			}
 		}
 		items = append(items, wi)
@@ -1579,20 +1617,24 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 // keys will be locked.
 func createRequests(index int, numOutstanding int, numKeys int, numReadKeys int) []benchWorkItem {
 	ts := hlc.Timestamp{WallTime: 10}
-	spans := &spanset.SpanSet{}
+	latchSpans := &spanset.SpanSet{}
+	lockSpans := &lockspanset.LockSpanSet{}
 	wi := benchWorkItem{
 		Request: Request{
 			Timestamp:  ts,
-			LatchSpans: spans,
-			LockSpans:  spans,
+			LatchSpans: latchSpans,
+			LockSpans:  lockSpans,
 		},
 	}
 	for i := 0; i < numKeys; i++ {
 		key := roachpb.Key(fmt.Sprintf("k%d.%d", index, i))
+		span := roachpb.Span{Key: key}
 		if i <= numReadKeys {
-			spans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: key}, ts)
+			latchSpans.AddMVCC(spanset.SpanReadOnly, span, ts)
+			lockSpans.Add(lock.None, span)
 		} else {
-			spans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key}, ts)
+			latchSpans.AddMVCC(spanset.SpanReadWrite, span, ts)
+			lockSpans.Add(lock.Intent, span)
 			wi.locksToAcquire = append(wi.locksToAcquire, key)
 		}
 	}
