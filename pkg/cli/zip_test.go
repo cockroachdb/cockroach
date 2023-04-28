@@ -566,9 +566,11 @@ func TestZipRetries(t *testing.T) {
 		}()
 
 		zr := zipCtx.newZipReporter("test")
+		zr.sqlOutputFilenameExtension = "json"
 		zc := debugZipContext{
-			z:       z,
-			timeout: 3 * time.Second,
+			z:              z,
+			clusterPrinter: zr,
+			timeout:        3 * time.Second,
 		}
 		if err := zc.dumpTableDataForZip(
 			zr,
@@ -590,16 +592,16 @@ func TestZipRetries(t *testing.T) {
 	for _, f := range r.File {
 		fmt.Fprintln(&fileList, f.Name)
 	}
-	const expected = `test/generate_series(1,15000) as t(x).txt
-test/generate_series(1,15000) as t(x).txt.err.txt
-test/generate_series(1,15000) as t(x).1.txt
-test/generate_series(1,15000) as t(x).1.txt.err.txt
-test/generate_series(1,15000) as t(x).2.txt
-test/generate_series(1,15000) as t(x).2.txt.err.txt
-test/generate_series(1,15000) as t(x).3.txt
-test/generate_series(1,15000) as t(x).3.txt.err.txt
-test/generate_series(1,15000) as t(x).4.txt
-test/generate_series(1,15000) as t(x).4.txt.err.txt
+	const expected = `test/generate_series(1,15000) as t(x).json
+test/generate_series(1,15000) as t(x).json.err.txt
+test/generate_series(1,15000) as t(x).1.json
+test/generate_series(1,15000) as t(x).1.json.err.txt
+test/generate_series(1,15000) as t(x).2.json
+test/generate_series(1,15000) as t(x).2.json.err.txt
+test/generate_series(1,15000) as t(x).3.json
+test/generate_series(1,15000) as t(x).3.json.err.txt
+test/generate_series(1,15000) as t(x).4.json
+test/generate_series(1,15000) as t(x).4.json.err.txt
 `
 	assert.Equal(t, expected, fileList.String())
 }
