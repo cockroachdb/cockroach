@@ -2783,20 +2783,20 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 				}
 
 				return addRow(
-					h.UserOid(userName),                  // oid
-					tree.NewDName(userName.Normalized()), // rolname
-					tree.MakeDBool(isRoot || isSuper),    // rolsuper
-					tree.MakeDBool(roleInherits),         // rolinherit
-					tree.MakeDBool(isRoot || createRole), // rolcreaterole
-					tree.MakeDBool(isRoot || createDB),   // rolcreatedb
-					tree.DBoolFalse,                      // rolcatupdate
-					tree.MakeDBool(roleCanLogin),         // rolcanlogin.
-					tree.DBoolFalse,                      // rolreplication
-					negOneVal,                            // rolconnlimit
-					passwdStarString,                     // rolpassword
-					rolValidUntil,                        // rolvaliduntil
-					tree.DBoolFalse,                      // rolbypassrls
-					settings,                             // rolconfig
+					h.UserOid(userName),                   // oid
+					tree.NewDName(userName.Normalized()),  // rolname
+					tree.MakeDBool(isRoot || isSuper),     // rolsuper
+					tree.MakeDBool(roleInherits),          // rolinherit
+					tree.MakeDBool(isSuper || createRole), // rolcreaterole
+					tree.MakeDBool(isSuper || createDB),   // rolcreatedb
+					tree.DBoolFalse,                       // rolcatupdate
+					tree.MakeDBool(roleCanLogin),          // rolcanlogin.
+					tree.DBoolFalse,                       // rolreplication
+					negOneVal,                             // rolconnlimit
+					passwdStarString,                      // rolpassword
+					rolValidUntil,                         // rolvaliduntil
+					tree.DBoolFalse,                       // rolbypassrls
+					settings,                              // rolconfig
 				)
 			})
 	},
@@ -3470,7 +3470,7 @@ https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 				return addRow(
 					tree.NewDName(userName.Normalized()), // usename
 					h.UserOid(userName),                  // usesysid
-					tree.MakeDBool(isRoot || createDB),   // usecreatedb
+					tree.MakeDBool(isSuper || createDB),  // usecreatedb
 					tree.MakeDBool(isRoot || isSuper),    // usesuper
 					tree.DBoolFalse,                      // userepl
 					tree.DBoolFalse,                      // usebypassrls
