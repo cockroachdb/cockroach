@@ -63,6 +63,7 @@ export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
     ...provided,
     width: "80px",
     border: "none",
+    lineHeight: "29px",
   });
 
   const customStylesBy = { ...customStyles };
@@ -70,6 +71,7 @@ export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
     ...provided,
     width: "170px",
     border: "none",
+    lineHeight: "29px",
   });
 
   return (
