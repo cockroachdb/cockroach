@@ -93,7 +93,7 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 
 	execCfg := srv.ExecutorConfig().(ExecutorConfig)
 	st := cluster.MakeTestingClusterSettings()
-	updater := NewSqlActivityUpdater(st, execCfg.InternalDB)
+	updater := newSqlActivityUpdater(st, execCfg.InternalDB)
 
 	// Transient failures from AOST queries: https://github.com/cockroachdb/cockroach/issues/97840
 	testutils.SucceedsWithin(t, func() error {
@@ -238,7 +238,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	updater := NewSqlActivityUpdater(st, execCfg.InternalDB)
+	updater := newSqlActivityUpdater(st, execCfg.InternalDB)
 
 	appNamePrefix := "TestSqlActivityUpdateJobLoop"
 	// Generate 100 unique rows for statistics tables
