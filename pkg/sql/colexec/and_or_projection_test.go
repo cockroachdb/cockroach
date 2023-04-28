@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
@@ -25,8 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/stretchr/testify/require"
 )
 
 type andOrTestCase struct {
@@ -217,74 +214,5 @@ func TestAndOrOps(t *testing.T) {
 					})
 			}
 		})
-	}
-}
-
-func benchmarkLogicalProjOp(
-	b *testing.B, operation string, useSelectionVector bool, hasNulls bool,
-) {
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
-	defer evalCtx.Stop(ctx)
-	flowCtx := &execinfra.FlowCtx{
-		EvalCtx: &evalCtx,
-		Mon:     evalCtx.TestingMon,
-		Cfg: &execinfra.ServerConfig{
-			Settings: st,
-		},
-	}
-	rng := randutil.NewTestRandWithSeed(91)
-
-	batch := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{types.Bool, types.Bool})
-	col1 := batch.ColVec(0).Bool()
-	col2 := batch.ColVec(0).Bool()
-	for i := 0; i < coldata.BatchSize(); i++ {
-		col1[i] = rng.Float64() < 0.5
-		col2[i] = rng.Float64() < 0.5
-	}
-	if hasNulls {
-		nulls1 := batch.ColVec(0).Nulls()
-		nulls2 := batch.ColVec(0).Nulls()
-		for i := 0; i < coldata.BatchSize(); i++ {
-			if rng.Float64() < 0.1 {
-				nulls1.SetNull(i)
-			}
-			if rng.Float64() < 0.1 {
-				nulls2.SetNull(i)
-			}
-		}
-	}
-	batch.SetLength(coldata.BatchSize())
-	if useSelectionVector {
-		batch.SetSelection(true)
-		sel := batch.Selection()
-		for i := 0; i < coldata.BatchSize(); i++ {
-			sel[i] = i
-		}
-	}
-	typs := []*types.T{types.Bool, types.Bool}
-	input := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-	logicalProjOp, err := colexectestutils.CreateTestProjectingOperator(
-		ctx, flowCtx, input, typs, fmt.Sprintf("@1 %s @2", operation), testMemAcc,
-	)
-	require.NoError(b, err)
-	logicalProjOp.Init(ctx)
-
-	b.SetBytes(int64(8 * coldata.BatchSize()))
-	for i := 0; i < b.N; i++ {
-		logicalProjOp.Next()
-	}
-}
-
-func BenchmarkLogicalProjOp(b *testing.B) {
-	for _, operation := range []string{"AND", "OR"} {
-		for _, useSel := range []bool{true, false} {
-			for _, hasNulls := range []bool{true, false} {
-				b.Run(fmt.Sprintf("%s,useSel=%t,hasNulls=%t", operation, useSel, hasNulls), func(b *testing.B) {
-					benchmarkLogicalProjOp(b, operation, useSel, hasNulls)
-				})
-			}
-		}
 	}
 }
