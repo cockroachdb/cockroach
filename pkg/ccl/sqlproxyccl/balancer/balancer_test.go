@@ -100,7 +100,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 	// any request.
 	assertNoRunningRequests := func(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
-			runningReq := b.metrics.rebalanceReqRunning.Value()
+			runningReq := b.metrics.RebalanceReqRunning.Value()
 			if runningReq != 0 {
 				return errors.Newf("expected no running requests, but got %d", runningReq)
 			}
@@ -115,7 +115,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 			conn: &testConnHandle{
 				onTransferConnection: func() error {
 					count++
-					require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
+					require.Equal(t, int64(1), b.metrics.RebalanceReqRunning.Value())
 					return errors.New("cannot transfer")
 				},
 			},
@@ -139,7 +139,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 			conn: &testConnHandle{
 				onTransferConnection: func() error {
 					count++
-					require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
+					require.Equal(t, int64(1), b.metrics.RebalanceReqRunning.Value())
 					return nil
 				},
 			},
@@ -163,7 +163,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 			conn: &testConnHandle{
 				onTransferConnection: func() error {
 					count++
-					require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
+					require.Equal(t, int64(1), b.metrics.RebalanceReqRunning.Value())
 					return context.Canceled
 				},
 			},
@@ -217,7 +217,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 						// concurrent rebalances defined.
 						newCount := atomic.AddInt32(&count, 1)
 						require.True(t, newCount <= 2)
-						require.True(t, b.metrics.rebalanceReqRunning.Value() <= 2)
+						require.True(t, b.metrics.RebalanceReqRunning.Value() <= 2)
 						return nil
 					},
 				},
@@ -233,7 +233,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 
 		// We should only transfer once for every connection.
 		require.Equal(t, int32(0), count)
-		require.Equal(t, int64(reqCount), b.metrics.rebalanceReqTotal.Count())
+		require.Equal(t, int64(reqCount), b.metrics.RebalanceReqTotal.Count())
 	})
 }
 
@@ -1257,13 +1257,13 @@ func TestRebalancerQueue(t *testing.T) {
 
 	// Enqueue in a specific order. req3 overrides req1; req2 is a no-op.
 	q.enqueue(req1)
-	require.Equal(t, int64(1), q.metrics.rebalanceReqQueued.Value())
+	require.Equal(t, int64(1), q.metrics.RebalanceReqQueued.Value())
 	q.enqueue(req3)
-	require.Equal(t, int64(1), q.metrics.rebalanceReqQueued.Value())
+	require.Equal(t, int64(1), q.metrics.RebalanceReqQueued.Value())
 	q.enqueue(req2)
 	require.Len(t, q.elements, 1)
 	require.Equal(t, 1, q.queue.Len())
-	require.Equal(t, int64(1), q.metrics.rebalanceReqQueued.Value())
+	require.Equal(t, int64(1), q.metrics.RebalanceReqQueued.Value())
 
 	// Create another request.
 	conn2 := &testConnHandle{}
@@ -1272,7 +1272,7 @@ func TestRebalancerQueue(t *testing.T) {
 		conn:      conn2,
 	}
 	q.enqueue(req4)
-	require.Equal(t, int64(2), q.metrics.rebalanceReqQueued.Value())
+	require.Equal(t, int64(2), q.metrics.RebalanceReqQueued.Value())
 	require.Len(t, q.elements, 2)
 	require.Equal(t, 2, q.queue.Len())
 
@@ -1280,11 +1280,11 @@ func TestRebalancerQueue(t *testing.T) {
 	item, err := q.dequeue(ctx)
 	require.NoError(t, err)
 	require.Equal(t, req3, item)
-	require.Equal(t, int64(1), q.metrics.rebalanceReqQueued.Value())
+	require.Equal(t, int64(1), q.metrics.RebalanceReqQueued.Value())
 	item, err = q.dequeue(ctx)
 	require.NoError(t, err)
 	require.Equal(t, req4, item)
-	require.Equal(t, int64(0), q.metrics.rebalanceReqQueued.Value())
+	require.Equal(t, int64(0), q.metrics.RebalanceReqQueued.Value())
 	require.Empty(t, q.elements)
 	require.Equal(t, 0, q.queue.Len())
 
@@ -1293,7 +1293,7 @@ func TestRebalancerQueue(t *testing.T) {
 	req4, err = q.dequeue(ctx)
 	require.EqualError(t, err, context.Canceled.Error())
 	require.Nil(t, req4)
-	require.Equal(t, int64(0), q.metrics.rebalanceReqQueued.Value())
+	require.Equal(t, int64(0), q.metrics.RebalanceReqQueued.Value())
 }
 
 // TestRebalancerQueueBlocking tests the blocking behavior when invoking
