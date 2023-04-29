@@ -430,8 +430,11 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 		IsInaccessible:                    col.IsInaccessible(),
 		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
 		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
-		PgAttributeNum:                    col.GetPGAttributeNum(),
 		IsSystemColumn:                    col.IsSystemColumn(),
+	}
+	// Only set PgAttributeNum if it differs from ColumnID.
+	if pgAttNum := col.GetPGAttributeNum(); pgAttNum != catid.PGAttributeNum(col.GetID()) {
+		column.PgAttributeNum = pgAttNum
 	}
 	w.ev(maybeMutationStatus(col), column)
 	w.ev(scpb.Status_PUBLIC, &scpb.ColumnName{

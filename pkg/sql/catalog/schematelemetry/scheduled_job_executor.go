@@ -71,7 +71,7 @@ func (s schemaTelemetryExecutor) ExecuteJob(
 			s.metrics.NumFailed.Inc(1)
 		}
 	}()
-	p, cleanup := cfg.PlanHookMaker("invoke-schema-telemetry", txn.KV(), username.NodeUserName())
+	p, cleanup := cfg.PlanHookMaker(ctx, "invoke-schema-telemetry", txn.KV(), username.NodeUserName())
 	defer cleanup()
 	jr := p.(sql.PlanHookState).ExecCfg().JobRegistry
 	r := schematelemetrycontroller.CreateSchemaTelemetryJobRecord(jobs.CreatedByScheduledJobs, sj.ScheduleID())

@@ -11,13 +11,14 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
@@ -31,7 +32,11 @@ type plannerJobExecContext struct {
 
 // MakeJobExecContext makes a JobExecContext.
 func MakeJobExecContext(
-	opName string, user username.SQLUsername, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
+	ctx context.Context,
+	opName string,
+	user username.SQLUsername,
+	memMetrics *MemoryMetrics,
+	execCfg *ExecutorConfig,
 ) (JobExecContext, func()) {
 	plannerInterface, close := NewInternalPlanner(
 		opName,
@@ -39,7 +44,7 @@ func MakeJobExecContext(
 		user,
 		memMetrics,
 		execCfg,
-		sessiondatapb.SessionData{},
+		NewInternalSessionData(ctx, execCfg.Settings, opName),
 	)
 	p := plannerInterface.(*planner)
 	return &plannerJobExecContext{p: p}, close

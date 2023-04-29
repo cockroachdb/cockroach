@@ -631,10 +631,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.sqlLivenessProvider,
 			cfg.Settings,
 			cfg.HistogramWindowInterval(),
-			func(opName string, user username.SQLUsername) (interface{}, func()) {
+			func(ctx context.Context, opName string, user username.SQLUsername) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment
 				// in sql/jobs/registry.go on planHookMaker.
-				return sql.MakeJobExecContext(opName, user, &sql.MemoryMetrics{}, execCfg)
+				return sql.MakeJobExecContext(ctx, opName, user, &sql.MemoryMetrics{}, execCfg)
 			},
 			jobAdoptionStopFile,
 			td,
@@ -1188,7 +1188,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
 		sql.ValidateConstraint,
-		sql.NewFakeSessionData,
+		sql.NewInternalSessionData,
 	)
 
 	jobsInternalDB := sql.NewInternalDBWithSessionDataOverrides(internalDB, func(sd *sessiondata.SessionData) {
@@ -1650,7 +1650,7 @@ func (s *SQLServer) preStart(
 			Settings:     s.execCfg.Settings,
 			DB:           s.execCfg.InternalDB,
 			TestingKnobs: knobs.JobsTestingKnobs,
-			PlanHookMaker: func(opName string, txn *kv.Txn, user username.SQLUsername) (interface{}, func()) {
+			PlanHookMaker: func(ctx context.Context, opName string, txn *kv.Txn, user username.SQLUsername) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment
 				// in sql/jobs/registry.go on planHookMaker.
 				return sql.NewInternalPlanner(
@@ -1659,7 +1659,7 @@ func (s *SQLServer) preStart(
 					user,
 					&sql.MemoryMetrics{},
 					s.execCfg,
-					sessiondatapb.SessionData{},
+					sql.NewInternalSessionData(ctx, s.execCfg.Settings, opName),
 				)
 			},
 		},

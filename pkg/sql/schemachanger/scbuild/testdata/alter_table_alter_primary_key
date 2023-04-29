@@ -67,7 +67,7 @@ build
 ALTER TABLE defaultdb.bar ALTER PRIMARY KEY USING COLUMNS (i)
 ----
 - [[Column:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC]
-  {columnId: 2, isHidden: true, pgAttributeNum: 2, tableId: 105}
+  {columnId: 2, isHidden: true, tableId: 105}
 - [[ColumnName:{DescID: 105, Name: rowid, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: rowid, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]

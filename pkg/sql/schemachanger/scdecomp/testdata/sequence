@@ -116,7 +116,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 1
+    pgAttributeNum: 0
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -126,7 +126,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 2
+    pgAttributeNum: 0
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -136,7 +136,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 4.294967294e+09
+    pgAttributeNum: 0
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -146,7 +146,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 4.294967295e+09
+    pgAttributeNum: 0
     tableId: 105
   Status: PUBLIC
 - PrimaryIndex:
@@ -423,7 +423,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 1
+    pgAttributeNum: 0
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -433,7 +433,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
-    pgAttributeNum: 2
+    pgAttributeNum: 0
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -443,7 +443,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 4.294967294e+09
+    pgAttributeNum: 0
     tableId: 105
   Status: PUBLIC
 - Column:
@@ -453,7 +453,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
-    pgAttributeNum: 4.294967295e+09
+    pgAttributeNum: 0
     tableId: 105
   Status: PUBLIC
 - PrimaryIndex:

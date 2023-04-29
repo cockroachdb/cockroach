@@ -75,7 +75,6 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
                 "id": 2,
                 "name": "b",
                 "nullable": true,
-                "pgAttributeNum": 2,
                 "type": {
                     "family": "StringFamily",
                     "oid": 25

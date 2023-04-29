@@ -83,7 +83,6 @@ upsert descriptor #106
   +      id: 2
   +      name: l
   +      nullable: true
-  +      pgAttributeNum: 2
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -219,7 +218,6 @@ upsert descriptor #106
   +      id: 2
   +      name: l
   +      nullable: true
-  +      pgAttributeNum: 2
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -489,7 +487,6 @@ upsert descriptor #106
   +  - defaultExpr: nextval(107:::REGCLASS)
   +    id: 2
   +    name: l
-  +    pgAttributeNum: 2
   +    type:
   +      family: IntFamily
   +      oid: 20
@@ -512,7 +509,6 @@ upsert descriptor #106
   -      id: 2
   -      name: l
   -      nullable: true
-  -      pgAttributeNum: 2
   -      type:
   -        family: IntFamily
   -        oid: 20

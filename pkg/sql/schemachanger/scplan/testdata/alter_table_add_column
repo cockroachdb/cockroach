@@ -16,7 +16,6 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2
@@ -67,7 +66,6 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2
@@ -110,6 +108,7 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -183,7 +182,6 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2
@@ -272,7 +270,6 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2
@@ -339,6 +336,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -557,7 +555,6 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2
@@ -584,7 +581,6 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 3
-        PgAttributeNum: 3
         TableID: 104
     *scop.SetColumnName
       ColumnID: 3
@@ -698,7 +694,6 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2
@@ -725,7 +720,6 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 3
-        PgAttributeNum: 3
         TableID: 104
     *scop.SetColumnName
       ColumnID: 3
@@ -805,6 +799,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -1016,7 +1011,6 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2
@@ -1102,7 +1096,6 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2
@@ -1168,6 +1161,7 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -1369,7 +1363,6 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2
@@ -1395,7 +1388,6 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 3
-        PgAttributeNum: 3
         TableID: 107
     *scop.SetColumnName
       ColumnID: 3
@@ -1446,7 +1438,6 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2
@@ -1472,7 +1463,6 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 3
-        PgAttributeNum: 3
         TableID: 107
     *scop.SetColumnName
       ColumnID: 3
@@ -1504,6 +1494,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 104
@@ -1787,6 +1778,7 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 108
@@ -2036,7 +2028,6 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 109
     *scop.SetColumnName
       ColumnID: 2
@@ -2126,7 +2117,6 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
-        PgAttributeNum: 2
         TableID: 109
     *scop.SetColumnName
       ColumnID: 2
@@ -2194,6 +2184,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
+        AppName: $ internal-test
         UserName: root
       DescriptorIDs:
       - 109

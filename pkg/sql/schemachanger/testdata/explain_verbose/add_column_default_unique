@@ -100,7 +100,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT
 │           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
 │           │       ColumnID: 2
-│           │       PgAttributeNum: 2
 │           │       TableID: 106
 │           │
 │           ├── • SetColumnName
@@ -304,7 +303,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT
 │           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
 │           │       ColumnID: 2
-│           │       PgAttributeNum: 2
 │           │       TableID: 106
 │           │
 │           ├── • SetColumnName
