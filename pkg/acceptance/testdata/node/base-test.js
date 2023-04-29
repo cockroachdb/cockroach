@@ -40,7 +40,7 @@ describe('error cases', () => {
   const cases = [{
     name: 'not enough params',
     query: { text: 'SELECT 3', values: ['foo'] },
-    msg: "expected 0 arguments, got 1",
+    msg: "bind message supplies 1 parameters, but prepared statement \"\" requires 0",
     code: '08P01',
   }, {
     name: 'invalid utf8',
