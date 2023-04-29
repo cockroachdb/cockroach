@@ -15,43 +15,67 @@ import (
 	"io"
 )
 
-type ndjsonReporter struct {
-	cols []string
+type jsonReporter struct {
+	start, end, middle []byte
+	currentPrefix      []byte
+	cols               []string
+	rowMap             map[string]string
 }
 
-func (n *ndjsonReporter) describe(w io.Writer, cols []string) error {
+func (n *jsonReporter) describe(w io.Writer, cols []string) error {
 	n.cols = cols
-	return nil
-}
-
-func (n *ndjsonReporter) beforeFirstRow(w io.Writer, allRows RowStrIter) error {
-	return nil
-}
-
-func (n *ndjsonReporter) iter(w, ew io.Writer, rowIdx int, row []string) error {
-	retMap := make(map[string]string, len(row))
-	for i := range row {
-		retMap[n.cols[i]] = row[i]
+	n.rowMap = make(map[string]string, len(cols))
+	for _, col := range cols {
+		n.rowMap[col] = ""
 	}
-	out, err := json.Marshal(retMap)
+	_, err := w.Write(n.start)
+	return err
+}
+
+func (n *jsonReporter) beforeFirstRow(w io.Writer, allRows RowStrIter) error {
+	return nil
+}
+
+func (n *jsonReporter) iter(w, ew io.Writer, rowIdx int, row []string) error {
+	for i := range row {
+		n.rowMap[n.cols[i]] = row[i]
+	}
+	out, err := json.Marshal(n.rowMap)
 	if err != nil {
 		return err
 	}
+	if _, err := w.Write(n.currentPrefix); err != nil {
+		return err
+	}
+	n.currentPrefix = n.middle
 	if _, err := w.Write(out); err != nil {
 		return err
 	}
-	if _, err := w.Write(newLineChar); err != nil {
-		return err
+	return nil
+}
+
+func (n *jsonReporter) doneRows(w io.Writer, seenRows int) error {
+	_, err := w.Write(n.end)
+	return err
+}
+
+func (n *jsonReporter) doneNoRows(w io.Writer) error {
+	_, err := w.Write(n.end)
+	return err
+}
+
+func makeJSONReporter(format TableDisplayFormat) *jsonReporter {
+	r := &jsonReporter{
+		start:         []byte("["),
+		end:           []byte("\n]\n"),
+		middle:        []byte(",\n  "),
+		currentPrefix: []byte("\n  "),
 	}
-	return nil
-}
-
-var newLineChar = []byte("\n")
-
-func (n *ndjsonReporter) doneRows(w io.Writer, seenRows int) error {
-	return nil
-}
-
-func (n *ndjsonReporter) doneNoRows(w io.Writer) error {
-	return nil
+	if format == TableDisplayNDJSON {
+		r.start = nil
+		r.currentPrefix = nil
+		r.end = []byte("\n")
+		r.middle = []byte("\n")
+	}
+	return r
 }
