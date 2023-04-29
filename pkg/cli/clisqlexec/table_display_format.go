@@ -37,9 +37,11 @@ const (
 	// TableDisplayRecords is a record-oriented format. It is somewhat
 	// compatible with 'psql' "expanded display" mode.
 	TableDisplayRecords
-	// TableDisplayNDJSON reports results in an nd-json format
-	// (https://github.com/ndjson/ndjson-spec).
+	// TableDisplayNDJSON reports results in an newlined-delimited JSON
+	// format (https://github.com/ndjson/ndjson-spec).
 	TableDisplayNDJSON
+	// TableDisplayJSON reports results using JSON.
+	TableDisplayJSON
 	// TableDisplaySQL reports results using SQL statements that mimic
 	// the creation of a SQL table containing the result values.
 	TableDisplaySQL
@@ -95,6 +97,8 @@ func (f *TableDisplayFormat) String() string {
 		return "sql"
 	case TableDisplayNDJSON:
 		return "ndjson"
+	case TableDisplayJSON:
+		return "json"
 	case TableDisplayHTML:
 		return "html"
 	case TableDisplayRawHTML:
@@ -120,6 +124,8 @@ func (f *TableDisplayFormat) Set(s string) error {
 		*f = TableDisplaySQL
 	case "ndjson":
 		*f = TableDisplayNDJSON
+	case "json":
+		*f = TableDisplayJSON
 	case "html":
 		*f = TableDisplayHTML
 	case "rawhtml":

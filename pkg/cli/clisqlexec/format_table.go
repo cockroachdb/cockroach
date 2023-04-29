@@ -254,7 +254,9 @@ func (sqlExecCtx *Context) makeReporter(w io.Writer) (rowReporter, func(), error
 		return reporter, cleanup, nil
 
 	case TableDisplayNDJSON:
-		return &ndjsonReporter{}, nil, nil
+		fallthrough
+	case TableDisplayJSON:
+		return makeJSONReporter(sqlExecCtx.TableDisplayFormat), nil, nil
 
 	case TableDisplayRaw:
 		return &rawReporter{}, nil, nil
