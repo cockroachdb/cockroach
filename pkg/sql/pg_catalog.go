@@ -2783,20 +2783,20 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 				}
 
 				return addRow(
-					h.UserOid(userName),                  // oid
-					tree.NewDName(userName.Normalized()), // rolname
-					tree.MakeDBool(isRoot || isSuper),    // rolsuper
-					tree.MakeDBool(roleInherits),         // rolinherit
-					tree.MakeDBool(isRoot || createRole), // rolcreaterole
-					tree.MakeDBool(isRoot || createDB),   // rolcreatedb
-					tree.DBoolFalse,                      // rolcatupdate
-					tree.MakeDBool(roleCanLogin),         // rolcanlogin.
-					tree.DBoolFalse,                      // rolreplication
-					negOneVal,                            // rolconnlimit
-					passwdStarString,                     // rolpassword
-					rolValidUntil,                        // rolvaliduntil
-					tree.DBoolFalse,                      // rolbypassrls
-					settings,                             // rolconfig
+					h.UserOid(userName),                   // oid
+					tree.NewDName(userName.Normalized()),  // rolname
+					tree.MakeDBool(isRoot || isSuper),     // rolsuper
+					tree.MakeDBool(roleInherits),          // rolinherit
+					tree.MakeDBool(isSuper || createRole), // rolcreaterole
+					tree.MakeDBool(isSuper || createDB),   // rolcreatedb
+					tree.DBoolFalse,                       // rolcatupdate
+					tree.MakeDBool(roleCanLogin),          // rolcanlogin.
+					tree.DBoolFalse,                       // rolreplication
+					negOneVal,                             // rolconnlimit
+					passwdStarString,                      // rolpassword
+					rolValidUntil,                         // rolvaliduntil
+					tree.DBoolFalse,                       // rolbypassrls
+					settings,                              // rolconfig
 				)
 			})
 	},
@@ -3470,7 +3470,7 @@ https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 				return addRow(
 					tree.NewDName(userName.Normalized()), // usename
 					h.UserOid(userName),                  // usesysid
-					tree.MakeDBool(isRoot || createDB),   // usecreatedb
+					tree.MakeDBool(isSuper || createDB),  // usecreatedb
 					tree.MakeDBool(isRoot || isSuper),    // usesuper
 					tree.DBoolFalse,                      // userepl
 					tree.DBoolFalse,                      // usebypassrls
@@ -4609,19 +4609,6 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 				return nil
 			})
 	},
-}
-
-// Populate the oid-to-builtin-function map. We have to do this operation here,
-// rather than in the SQL builtins package, because the oidHasher can't live
-// there.
-func init() {
-	tree.OidToBuiltinName = make(map[oid.Oid]string, len(tree.FunDefs))
-
-	for name, def := range tree.FunDefs {
-		for _, overload := range def.Definition {
-			tree.OidToBuiltinName[overload.Oid] = name
-		}
-	}
 }
 
 // oidHasher provides a consistent hashing mechanism for object identifiers in

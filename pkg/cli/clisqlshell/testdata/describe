@@ -47,7 +47,7 @@ Name,Owner,Encoding,Collate,Ctype,Access privileges
 defaultdb,root,UTF8,en_US.utf8,en_US.utf8,
 mydb,root,UTF8,en_US.utf8,en_US.utf8,
 postgres,root,UTF8,en_US.utf8,en_US.utf8,
-system,unknown (OID=3233629770),UTF8,en_US.utf8,en_US.utf8,
+system,node,UTF8,en_US.utf8,en_US.utf8,
 
 cli
 \l+
@@ -72,7 +72,7 @@ Name,Owner,Encoding,Collate,Ctype,Access privileges,Connections,Description
 defaultdb,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,
 mydb,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,my awesome db comment
 postgres,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,
-system,unknown (OID=3233629770),UTF8,en_US.utf8,en_US.utf8,,Unlimited,
+system,node,UTF8,en_US.utf8,en_US.utf8,,Unlimited,
 
 cli
 \l my%
@@ -1956,9 +1956,10 @@ SELECT rolname AS "Role name",
        memberof AS "Member of"
   FROM roles
 Role name,Attributes,Member of
-myuser,Superuser,{admin}
+myuser,"Superuser, Create role, Create DB",{admin}
 root,"Superuser, Create role, Create DB",{admin}
 admin,"Superuser, Create role, Create DB",{}
+node,"Superuser, Create role, Create DB, Cannot login",{}
 
 cli
 \du myuser
@@ -1997,7 +1998,7 @@ SELECT rolname AS "Role name",
        memberof AS "Member of"
   FROM roles
 Role name,Attributes,Member of
-myuser,Superuser,{admin}
+myuser,"Superuser, Create role, Create DB",{admin}
 
 subtest end
 
