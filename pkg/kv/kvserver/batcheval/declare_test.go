@@ -37,9 +37,14 @@ func TestRequestsSerializeWithAllKeys(t *testing.T) {
 			continue
 		}
 		method := kvpb.Method(i)
-		if method == kvpb.Probe {
+		switch method {
+		case kvpb.Probe:
 			// Probe is special since it's a no-op round-trip through the replication
 			// layer. It does not declare any keys.
+			continue
+		case kvpb.RequestLease:
+			// Lease requests ignore latches, since they can be evaluated on
+			// any replica.
 			continue
 		}
 		t.Run(method.String(), func(t *testing.T) {
