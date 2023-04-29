@@ -163,10 +163,10 @@ func Example_sql_config() {
 	// HINT: Try \? for help.
 	// sql --set display_format=invalidvalue -e select 123 as "123"
 	// ERROR: -e: \set display_format=invalidvalue: invalid table display format: invalidvalue
-	// HINT: Possible values: tsv, csv, table, records, ndjson, sql, html, raw.
+	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, raw.
 	// sql -e \set display_format=invalidvalue -e select 123 as "123"
 	// ERROR: -e: \set display_format=invalidvalue: invalid table display format: invalidvalue
-	// HINT: Possible values: tsv, csv, table, records, ndjson, sql, html, raw.
+	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, raw.
 }
 
 func Example_sql_watch() {
