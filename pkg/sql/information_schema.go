@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -2756,6 +2758,18 @@ func forEachRole(
 		if err := fn(userName, bool(*isRole), options, defaultSettings); err != nil {
 			return err
 		}
+	}
+
+	// Add a row for the internal `node` user. It does not exist in system.users
+	// since you can't log in as it, but it does own objects like the system
+	// database, so it should be viewable in introspection.
+	nodeOptionsJSON, err := json.MakeJSON(map[string]interface{}{roleoption.NOLOGIN.String(): true})
+	if err != nil {
+		return err
+	}
+	nodeOptions := roleOptions{tree.NewDJSON(nodeOptionsJSON)}
+	if err := fn(username.NodeUserName(), false /* isRole */, nodeOptions, tree.DNull /* settings */); err != nil {
+		return err
 	}
 
 	return nil

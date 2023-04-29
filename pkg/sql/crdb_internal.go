@@ -6072,6 +6072,10 @@ CREATE TABLE crdb_internal.default_privileges (
 		// Cache roles ahead of time to avoid role lookup inside loop.
 		var roles []catpb.DefaultPrivilegesRole
 		if err := forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+			// Skip the internal node user, since it can't be modified and just adds noise.
+			if userName.IsNodeUser() {
+				return nil
+			}
 			roles = append(roles, catpb.DefaultPrivilegesRole{
 				Role: userName,
 			})

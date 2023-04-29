@@ -2536,6 +2536,7 @@ ORDER BY rolname
 ----
 oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolreplication
 2310524507  admin     true      true        true           true         false         true         false
+3233629770  node      true      true        true           true         false         false        false
 1546506610  root      true      true        true           true         false         true         false
 2264919399  testuser  false     true        false          false        false         true         false
 
@@ -2546,6 +2547,7 @@ ORDER BY rolname
 ----
 oid         rolname   rolconnlimit  rolpassword  rolvaliduntil  rolbypassrls  rolconfig
 2310524507  admin     -1            ********     NULL           false         NULL
+3233629770  node      -1            ********     NULL           false         NULL
 1546506610  root      -1            ********     NULL           false         NULL
 2264919399  testuser  -1            ********     NULL           false         NULL
 
@@ -2560,12 +2562,13 @@ roleid      member      grantor  admin_option
 
 ## pg_catalog.pg_user
 
-query TOBBBBTTA colnames
+query TOBBBBTTT colnames
 SELECT usename, usesysid, usecreatedb, usesuper, userepl, usebypassrls, passwd, valuntil, useconfig
 FROM pg_catalog.pg_user
 ORDER BY usename
 ----
 usename   usesysid    usecreatedb  usesuper  userepl  usebypassrls  passwd    valuntil  useconfig
+node      3233629770  true         true      false    false         ********  NULL      NULL
 root      1546506610  true         true      false    false         ********  NULL      NULL
 testuser  2264919399  false        false     false    false         ********  NULL      NULL
 
