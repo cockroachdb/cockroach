@@ -136,6 +136,10 @@ thenshort`,
 	// ܈85            | 0
 	// sql --format=ndjson -e select * from t.u
 	// {"a|b":"0","f\"oo":"0","f'oo":"0","f\\oo":"0","short\nvery very long\nnot much":"0","very very long\nthenshort":"0","κόσμε":"0","܈85":"0"}
+	// sql --format=json -e select * from t.u
+	// [
+	// {"a|b":"0","f\"oo":"0","f'oo":"0","f\\oo":"0","short\nvery very long\nnot much":"0","very very long\nthenshort":"0","κόσμε":"0","܈85":"0"}
+	// ]
 	// sql --format=sql -e select * from t.u
 	// CREATE TABLE results (
 	//   "f""oo" STRING,
@@ -220,6 +224,10 @@ func Example_sql_empty_table() {
 	// (0 rows)
 	// sql --format=records -e select * from t.norows
 	// sql --format=ndjson -e select * from t.norows
+	//
+	// sql --format=json -e select * from t.norows
+	// [
+	// ]
 	// sql --format=sql -e select * from t.norows
 	// CREATE TABLE results (
 	//   x STRING
@@ -258,6 +266,12 @@ func Example_sql_empty_table() {
 	// {}
 	// {}
 	// {}
+	// sql --format=json -e select * from t.nocols
+	// [
+	// {},
+	// {},
+	// {}
+	// ]
 	// sql --format=sql -e select * from t.nocols
 	// CREATE TABLE results (
 	// );
@@ -300,6 +314,10 @@ func Example_sql_empty_table() {
 	// sql --format=records -e select * from t.nocolsnorows
 	// (0 rows)
 	// sql --format=ndjson -e select * from t.nocolsnorows
+	//
+	// sql --format=json -e select * from t.nocolsnorows
+	// [
+	// ]
 	// sql --format=sql -e select * from t.nocolsnorows
 	// CREATE TABLE results (
 	// );
@@ -626,6 +644,18 @@ func Example_sql_table() {
 	// {"d":"non-printable UTF8 string","s":"\\x01"}
 	// {"d":"UTF8 string with RTL char","s":"܈85"}
 	// {"d":"tabs","s":"a\tb\tc\n12\t123123213\t12313"}
+	// sql --format=json -e select * from t.t
+	// [
+	// {"d":"printable ASCII","s":"foo"},
+	// {"d":"printable ASCII with quotes","s":"\"foo"},
+	// {"d":"printable ASCII with backslash","s":"\\foo"},
+	// {"d":"non-printable ASCII","s":"foo\nbar"},
+	// {"d":"printable UTF8","s":"κόσμε"},
+	// {"d":"printable UTF8 using escapes","s":"ñ"},
+	// {"d":"non-printable UTF8 string","s":"\\x01"},
+	// {"d":"UTF8 string with RTL char","s":"܈85"},
+	// {"d":"tabs","s":"a\tb\tc\n12\t123123213\t12313"}
+	// ]
 	// sql --format=sql -e select * from t.t
 	// CREATE TABLE results (
 	//   s STRING,
