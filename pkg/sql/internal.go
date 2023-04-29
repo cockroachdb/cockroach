@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
@@ -49,6 +49,46 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
+
+// NewInternalSessionData returns a session data for use in internal queries
+// that are not run on behalf of a user session, such as those run during the
+// steps of background jobs and schema changes. Each session variable is
+// initialized using the correct default value.
+func NewInternalSessionData(
+	ctx context.Context, settings *cluster.Settings, opName string,
+) *sessiondata.SessionData {
+	appName := catconstants.InternalAppNamePrefix
+	if opName != "" {
+		appName = catconstants.InternalAppNamePrefix + "-" + opName
+	}
+
+	sd := &sessiondata.SessionData{}
+	sds := sessiondata.NewStack(sd)
+	defaults := SessionDefaults(map[string]string{
+		"application_name": appName,
+	})
+	sdMutIterator := makeSessionDataMutatorIterator(sds, defaults, settings)
+
+	sdMutIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		for varName, v := range varGen {
+			if v.Set != nil {
+				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
+				if hasDefault {
+					if err := v.Set(ctx, m, defVal); err != nil {
+						log.Warningf(ctx, "error setting default for %s: %v", varName, err)
+					}
+				}
+			}
+		}
+	})
+
+	sd.UserProto = username.NodeUserName().EncodeProto()
+	sd.Internal = true
+	sd.SearchPath = sessiondata.DefaultSearchPathForUser(username.NodeUserName())
+	sd.SequenceState = sessiondata.NewSequenceState()
+	sd.Location = time.UTC
+	return sd
+}
 
 var _ isql.Executor = &InternalExecutor{}
 
@@ -219,7 +259,10 @@ func (ie *InternalExecutor) initConnEx(
 
 	applicationStats := ie.s.sqlStats.GetApplicationStats(sd.ApplicationName, true /* internal */)
 	sds := sessiondata.NewStack(sd)
-	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
+	defaults := SessionDefaults(map[string]string{
+		"application_name": sd.ApplicationName,
+	})
+	sdMutIterator := makeSessionDataMutatorIterator(sds, defaults, ie.s.cfg.Settings)
 	var ex *connExecutor
 	var err error
 	if txn == nil {
@@ -912,7 +955,7 @@ func (ie *InternalExecutor) execInternal(
 		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
 		sd = ie.sessionDataStack.Top().Clone()
 	} else {
-		sd = newSessionData(SessionArgs{})
+		sd = NewInternalSessionData(context.Background(), ie.s.cfg.Settings, "" /* opName */)
 	}
 
 	applyInternalExecutorSessionExceptions(sd)
@@ -1133,7 +1176,7 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	if ie.sessionDataStack != nil {
 		sd = ie.sessionDataStack.Top().Clone()
 	} else {
-		sd = newSessionData(SessionArgs{})
+		sd = NewInternalSessionData(ctx, ie.s.cfg.Settings, "" /* opName */)
 	}
 
 	rw := newAsyncIEResultChannel()
@@ -1525,7 +1568,11 @@ type internalExecutorCommitTxnFunc func(ctx context.Context) error
 // the internal executor infrastructure with a single conn executor for all
 // sql statement executions within a txn.
 func (ief *InternalDB) newInternalExecutorWithTxn(
-	sd *sessiondata.SessionData, sv *settings.Values, txn *kv.Txn, descCol *descs.Collection,
+	ctx context.Context,
+	sd *sessiondata.SessionData,
+	settings *cluster.Settings,
+	txn *kv.Txn,
+	descCol *descs.Collection,
 ) (InternalExecutor, internalExecutorCommitTxnFunc) {
 	// By default, if not given session data, we initialize a sessionData that
 	// would be the same as what would be created if root logged in.
@@ -1535,7 +1582,7 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 	// than the actual user, a security boundary should be added to the error
 	// handling of internal executor.
 	if sd == nil {
-		sd = NewFakeSessionData(sv, "" /* opName */)
+		sd = NewInternalSessionData(ctx, settings, "" /* opName */)
 		sd.UserProto = username.RootUserName().EncodeProto()
 	}
 
@@ -1672,8 +1719,9 @@ func (ief *InternalDB) txn(
 			descsCol := cf.NewCollection(ctx, descs.WithMonitor(ief.monitor))
 			defer descsCol.ReleaseAll(ctx)
 			ie, commitTxnFn := ief.newInternalExecutorWithTxn(
+				ctx,
 				cfg.GetSessionData(),
-				&cf.GetClusterSettings().SV,
+				cf.GetClusterSettings(),
 				kvTxn,
 				descsCol,
 			)
@@ -1713,7 +1761,7 @@ func (ief *InternalDB) txn(
 type SessionDataOverride = func(sd *sessiondata.SessionData)
 
 type internalDBWithOverrides struct {
-	baseDB               isql.DB
+	baseDB               *InternalDB
 	sessionDataOverrides []SessionDataOverride
 }
 
@@ -1725,7 +1773,7 @@ var _ isql.DB = (*internalDBWithOverrides)(nil)
 // sessiondata.InternalExecutorOverride parameter to the "*Ex()"
 // methods of Executor.
 func NewInternalDBWithSessionDataOverrides(
-	baseDB isql.DB, sessionDataOverrides ...SessionDataOverride,
+	baseDB *InternalDB, sessionDataOverrides ...SessionDataOverride,
 ) isql.DB {
 	return &internalDBWithOverrides{
 		baseDB:               baseDB,
@@ -1756,9 +1804,9 @@ func (db *internalDBWithOverrides) Executor(opts ...isql.ExecutorOption) isql.Ex
 	cfg.Init(opts...)
 	sd := cfg.GetSessionData()
 	if sd == nil {
-		// newSessionData is the default value used by InternalExecutor
+		// NewInternalSessionData is the default value used by InternalExecutor
 		// when no session data is provided otherwise.
-		sd = newSessionData(SessionArgs{})
+		sd = NewInternalSessionData(context.Background(), db.baseDB.server.cfg.Settings, "" /* opName */)
 	}
 	for _, o := range db.sessionDataOverrides {
 		o(sd)

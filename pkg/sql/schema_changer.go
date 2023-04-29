@@ -48,11 +48,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -289,7 +287,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			username.RootUserName(),
 			&MemoryMetrics{},
 			sc.execCfg,
-			sessiondatapb.SessionData{},
+			NewInternalSessionData(ctx, sc.execCfg.Settings, "backfillQueryIntoTable"),
 		)
 
 		defer cleanup()
@@ -2521,42 +2519,6 @@ func createSchemaChangeEvalCtx(
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, ts.WallTime))
 
 	return evalCtx
-}
-
-// NewFakeSessionData returns "fake" session data for use in internal queries
-// that are not run on behalf of a user session, such as those run during the
-// steps of background jobs and schema changes.
-func NewFakeSessionData(sv *settings.Values, opName string) *sessiondata.SessionData {
-	sd := &sessiondata.SessionData{
-		SessionData: sessiondatapb.SessionData{
-			// The database is not supposed to be needed in schema changes, as there
-			// shouldn't be unqualified identifiers in backfills, and the pure functions
-			// that need it should have already been evaluated.
-			//
-			// TODO(andrei): find a way to assert that this field is indeed not used.
-			// And in fact it is used by `current_schemas()`, which, although is a pure
-			// function, takes arguments which might be impure (so it can't always be
-			// pre-evaluated).
-			Database:      "",
-			UserProto:     username.NodeUserName().EncodeProto(),
-			VectorizeMode: sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(sv)),
-			Internal:      true,
-		},
-		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-			DistSQLMode:              sessiondatapb.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
-			OptimizerFKCascadesLimit: optDrivenFKCascadesClusterLimit.Get(sv),
-		},
-		SearchPath:    sessiondata.DefaultSearchPathForUser(username.NodeUserName()),
-		SequenceState: sessiondata.NewSequenceState(),
-		Location:      time.UTC,
-	}
-
-	sd.ApplicationName = catconstants.InternalAppNamePrefix
-	if opName != "" {
-		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
-	}
-
-	return sd
 }
 
 type schemaChangeResumer struct {
