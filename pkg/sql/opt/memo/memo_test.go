@@ -308,6 +308,15 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerAlwaysUseHistograms = false
 	notStale()
 
+	// User no longer has access to view.
+	catalog.View(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abcview")).Revoked = true
+	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
+	if exp := "user does not have privilege"; !testutils.IsError(err, exp) {
+		t.Fatalf("expected %q error, but got %+v", exp, err)
+	}
+	catalog.View(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abcview")).Revoked = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()
@@ -319,15 +328,6 @@ func TestMemoIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// User no longer has access to view.
-	catalog.View(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abcview")).Revoked = true
-	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
-	if exp := "user does not have privilege"; !testutils.IsError(err, exp) {
-		t.Fatalf("expected %q error, but got %+v", exp, err)
-	}
-	catalog.View(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abcview")).Revoked = false
-	notStale()
 
 	// Table ID changes.
 	catalog.Table(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abc")).TabID = 1
