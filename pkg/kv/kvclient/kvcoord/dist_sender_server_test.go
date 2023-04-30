@@ -2055,7 +2055,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 
 	type expect struct {
 		expClientRefreshSuccess        bool   // pre-emptive or reactive client-side refresh success
-		expClientAutoRetryAfterRefresh bool   // auto-retries of batches after client-side refresh
+		expClientRefreshFailure        bool   // pre-emptive or reactive client-side refresh failure
+		expClientAutoRetryAfterRefresh bool   // auto-retries of batches after reactive client-side refresh
 		expClientRestart               bool   // client-side txn restart
 		expServerRefresh               bool   // server-side refresh
 		expOnePhaseCommit              bool   // 1PC commits
@@ -2509,7 +2510,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.Put(ctx, "a", "put")
 			},
 			allIsoLevels: &expect{
-				expClientRestart: true,
+				expClientRefreshFailure: true,
+				expClientRestart:        true,
 			},
 		},
 		{
@@ -2571,7 +2573,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.Put(ctx, "a", "txn-value2")
 			},
 			allIsoLevels: &expect{
-				expClientRestart: true, // expect a client-side retry as refresh should fail
+				expClientRefreshFailure: true,
+				expClientRestart:        true,
 			},
 		},
 		{
@@ -2928,7 +2931,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			allIsoLevels: &expect{
-				expClientRestart: true, // can't refresh
+				expClientRefreshFailure: true,
+				expClientRestart:        true,
 			},
 		},
 		{
@@ -3362,7 +3366,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			filter: newUncertaintyFilter(roachpb.Key("ac")),
 			allIsoLevels: &expect{
-				expClientRestart: true, // note this txn is read-only but still restarts
+				expClientRefreshFailure: true,
+				expClientRestart:        true, // note this txn is read-only but still restarts
 			},
 		},
 		{
@@ -3409,8 +3414,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			filter: newUncertaintyFilter(roachpb.Key("a")),
+			// Will fail because of conflict on refresh span for the Get.
 			allIsoLevels: &expect{
-				expClientRestart: true, // will fail because of conflict on refresh span for the Get
+				expClientRefreshFailure: true,
+				expClientRestart:        true,
 			},
 		},
 		{
@@ -3603,6 +3610,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 
 		// Verify metrics.
 		require.Equal(t, exp.expClientRefreshSuccess, metrics.ClientRefreshSuccess.Count() != 0, "TxnMetrics.ClientRefreshSuccess")
+		require.Equal(t, exp.expClientRefreshFailure, metrics.ClientRefreshFail.Count() != 0, "TxnMetrics.ClientRefreshFail")
 		require.Equal(t, exp.expClientAutoRetryAfterRefresh, metrics.ClientRefreshAutoRetries.Count() != 0, "TxnMetrics.ClientRefreshAutoRetries")
 		require.Equal(t, exp.expServerRefresh, metrics.ServerRefreshSuccess.Count() != 0, "TxnMetrics.ServerRefreshSuccess")
 		require.Equal(t, exp.expClientRestart, metrics.Restarts.TotalSum() != 0, "TxnMetrics.Restarts")
