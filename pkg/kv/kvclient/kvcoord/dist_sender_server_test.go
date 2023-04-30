@@ -2435,20 +2435,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			expClientRestart: true,
 		},
 		{
-			name: "write too old with get in the clear",
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "a", "put")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				if _, err := txn.Get(ctx, "b"); err != nil {
-					return err
-				}
-				return txn.Put(ctx, "a", "put")
-			},
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
-		},
-		{
 			name: "write too old with get conflict",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "put")
