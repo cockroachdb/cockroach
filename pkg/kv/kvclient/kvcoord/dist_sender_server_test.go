@@ -2051,7 +2051,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	}
 
 	type expect struct {
-		expClientRefresh               bool   // pre-emptive or reactive client-side refresh
+		expClientRefreshSuccess        bool   // pre-emptive or reactive client-side refresh success
 		expClientAutoRetryAfterRefresh bool   // auto-retries of batches after client-side refresh
 		expClientRestart               bool   // client-side txn restart
 		expServerRefresh               bool   // server-side refresh
@@ -2084,7 +2084,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive refresh before commit.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2114,7 +2114,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive (no-op) refresh before commit.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2132,7 +2132,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive (no-op) refresh before commit.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2165,7 +2165,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive (no-op) refresh before commit.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2181,7 +2181,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive refresh before commit.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2238,7 +2238,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive refresh before get.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2258,7 +2258,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive refresh before scan.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2279,7 +2279,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive refresh before commit.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2300,7 +2300,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive refresh before commit.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2321,7 +2321,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// perIsoLevel mechanism.
 			perIsoLevel: map[isolation.Level]*expect{
 				isolation.Serializable: {
-					expClientRefresh:               true,
+					expClientRefreshSuccess:        true,
 					expClientAutoRetryAfterRefresh: true,
 				},
 			},
@@ -2340,7 +2340,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// Read-only request (Scan) prevents server-side refresh.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -2411,7 +2411,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive refresh before commit.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2451,7 +2451,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive refresh before commit.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2477,7 +2477,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			priorReads: true,
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -2537,7 +2537,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			// No retry, preemptive refresh before Get.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -2631,7 +2631,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			priorReads: true,
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -2681,7 +2681,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			priorReads: true,
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -2707,7 +2707,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			priorReads: true,
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true, // fails on first attempt at cput with write too old
 				// Succeeds on second attempt.
 			},
@@ -2741,7 +2741,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			priorReads: true,
 			// Expect a transaction coord retry, which should succeed.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -2835,7 +2835,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			priorReads: true,
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 				expOnePhaseCommit:              true,
 			},
@@ -2850,7 +2850,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 				expOnePhaseCommit:              true,
 			},
@@ -2865,7 +2865,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 				expOnePhaseCommit:              true,
 			},
@@ -2882,7 +2882,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.Run(ctx, b)
 			},
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 				expOnePhaseCommit:              true,
 			},
@@ -2904,7 +2904,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true, // can refresh
 			},
 		},
@@ -3036,7 +3036,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// refresh.
 			allIsoLevels: &expect{
 				expServerRefresh:               true,
-				expClientRefresh:               false,
+				expClientRefreshSuccess:        false,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -3057,7 +3057,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// result, it does not qualify for the implicit commit condition and
 			// requires a client-side refresh.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3099,7 +3099,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry from get
 			},
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3119,7 +3119,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
 			},
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3140,7 +3140,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// refresh.
 			allIsoLevels: &expect{
 				expServerRefresh:               true,
-				expClientRefresh:               false,
+				expClientRefreshSuccess:        false,
 				expClientAutoRetryAfterRefresh: false,
 			},
 		},
@@ -3161,7 +3161,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// requires a client-side refresh.
 			allIsoLevels: &expect{
 				expServerRefresh:               true,
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3181,7 +3181,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// client-side refresh.
 			allIsoLevels: &expect{
 				expServerRefresh:               false,
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3201,7 +3201,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// client-side refresh.
 			allIsoLevels: &expect{
 				expServerRefresh:               false,
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3281,7 +3281,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.Commit(ctx)
 			},
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3333,7 +3333,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			filter: newUncertaintyFilter(roachpb.Key("ac")),
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3382,7 +3382,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// requires a client-side refresh.
 			allIsoLevels: &expect{
 				expServerRefresh:               true,
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3428,7 +3428,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// requires a client-side refresh.
 			allIsoLevels: &expect{
 				expServerRefresh:               true,
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3441,7 +3441,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			filter: newUncertaintyFilter(roachpb.Key("c")),
 			// Expect a transaction coord retry, which should succeed.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3454,7 +3454,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			filter: newUncertaintyFilter(roachpb.Key("c")),
 			// Expect a transaction coord retry, which should succeed.
 			allIsoLevels: &expect{
-				expClientRefresh:               true,
+				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
 			},
 		},
@@ -3599,7 +3599,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		}
 
 		// Verify metrics.
-		require.Equal(t, exp.expClientRefresh, metrics.ClientRefreshSuccess.Count() != 0, "TxnMetrics.ClientRefreshSuccess")
+		require.Equal(t, exp.expClientRefreshSuccess, metrics.ClientRefreshSuccess.Count() != 0, "TxnMetrics.ClientRefreshSuccess")
 		require.Equal(t, exp.expClientAutoRetryAfterRefresh, metrics.ClientRefreshAutoRetries.Count() != 0, "TxnMetrics.ClientRefreshAutoRetries")
 		require.Equal(t, exp.expServerRefresh, metrics.ServerRefreshSuccess.Count() != 0, "TxnMetrics.ServerRefreshSuccess")
 		require.Equal(t, exp.expClientRestart, metrics.Restarts.TotalSum() != 0, "TxnMetrics.Restarts")
