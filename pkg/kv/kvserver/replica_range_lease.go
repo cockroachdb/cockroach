@@ -354,35 +354,21 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// which may trigger client timeouts).
 	ctx := p.repl.AnnotateCtx(context.Background())
 
-	const opName = "request range lease"
-	tr := p.repl.AmbientContext.Tracer
-	tagsOpt := tracing.WithLogTags(logtags.FromContext(parentCtx))
+	// Attach the parent's tracing span to the lease request, if any. It might
+	// outlive the parent in case the parent's ctx is canceled, so we use
+	// FollowsFrom. We can't include the trace for any other requests that join
+	// this one, but let's try to include it where we can.
 	var sp *tracing.Span
 	if parentSp := tracing.SpanFromContext(parentCtx); parentSp != nil {
-		// We use FollowsFrom because the lease request's span can outlive the
-		// parent request. This is possible if parentCtx is canceled after others
-		// have coalesced on to this lease request (see leaseRequestHandle.Cancel).
-		ctx, sp = tr.StartSpanCtx(
-			ctx,
-			opName,
-			tracing.WithParent(parentSp),
-			tracing.WithFollowsFrom(),
-			tagsOpt,
-		)
-	} else {
-		ctx, sp = tr.StartSpanCtx(ctx, opName, tagsOpt)
+		ctx, sp = p.repl.AmbientContext.Tracer.StartSpanCtx(ctx, "request range lease",
+			tracing.WithParent(parentSp), tracing.WithFollowsFrom())
 	}
 
 	err := p.repl.store.Stopper().RunAsyncTaskEx(
 		ctx,
 		stop.TaskOpts{
 			TaskName: "pendingLeaseRequest: requesting lease",
-			// Trace the lease acquisition as a child even though it might outlive the
-			// parent in case the parent's ctx is canceled. Other requests might
-			// later block on this lease acquisition too, and we can't include the
-			// acquisition's trace in all of them, but let's at least include it in
-			// the request that triggered it.
-			SpanOpt: stop.ChildSpan,
+			SpanOpt:  stop.ChildSpan,
 		},
 		func(ctx context.Context) {
 			defer sp.Finish()
