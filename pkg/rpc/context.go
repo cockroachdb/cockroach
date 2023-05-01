@@ -385,7 +385,7 @@ type Context struct {
 
 	heartbeatInterval time.Duration
 	heartbeatTimeout  time.Duration
-	HeartbeatCB       func()
+	HeartbeatCB       func() // for testing
 
 	rpcCompression bool
 
