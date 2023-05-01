@@ -41,7 +41,21 @@ type Options struct {
 	// not seeing any usage.
 	AsyncProbe func(report func(error), done func())
 
+	// SignalInterceptor gets to see and change the return value of the Signal
+	// method. This is useful for testing, as it allows "pretending" that the
+	// breaker is tripped without having to replace the probe method and
+	// coordinating with a running probe.
+	SignalInterceptor func(Signal) Signal
+
 	// EventHandler receives events from the Breaker. For an implementation that
 	// performs unstructured logging, see EventLogger.
 	EventHandler EventHandler
+
+	// signalInterceptor gets to see and change the return value of the Signal
+	// method. This is useful for testing, as it allows "pretending" that the
+	// breaker is tripped without having to replace the probe method and
+	// coordinating with a running probe.
+	//
+	// Accessible only via TestingSetTripped and TestingReset.
+	signalInterceptor func(Signal) Signal
 }

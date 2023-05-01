@@ -384,6 +384,65 @@ func TestBreakerRealistic(t *testing.T) {
 	})
 }
 
+var closedCh = func() <-chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}()
+
+type alwaysTrippedSignaler struct {
+	err error
+}
+
+func (a *alwaysTrippedSignaler) Err() error {
+	return a.err
+}
+
+func (a *alwaysTrippedSignaler) C() <-chan struct{} {
+	return closedCh
+}
+
+func TestingSetTripped(b *Breaker, err error) (undo func()) {
+	a := &alwaysTrippedSignaler{
+		err: err,
+	}
+	opts := b.Opts()
+	orig := opts
+	opts.signalInterceptor = func(sig Signal) Signal {
+		return a
+	}
+	b.Reconfigure(opts)
+	return func() {
+		b.Reconfigure(orig)
+	}
+}
+
+func TestTestingSetTripped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	_, tl := testLogBridge(t)
+
+	// Spawn a never-terminating probe just to prove that we can simulate a
+	// breaker trip without communicating with the probe at all.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	br := NewBreaker(Options{
+		Name: "test",
+		AsyncProbe: func(report func(error), done func()) {
+			report(nil)
+			<-ctx.Done()
+		},
+		EventHandler: tl,
+	})
+
+	require.NoError(t, br.Signal().Err())
+	errBoom := errors.New("boom")
+	undo := TestingSetTripped(br, errBoom)
+	require.ErrorIs(t, br.Signal().Err(), errBoom)
+	undo()
+	require.NoError(t, br.Signal().Err())
+	require.Zero(t, tl.trip)
+}
+
 func BenchmarkBreaker_Signal(b *testing.B) {
 	br := NewBreaker(Options{
 		Name: redact.Sprint("Breaker"),

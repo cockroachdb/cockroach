@@ -79,6 +79,9 @@ func (b *Breaker) Signal() interface {
 } {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+	if fn := b.mu.signalInterceptor; fn != nil {
+		return fn(b.mu.errAndCh)
+	}
 	// NB: we need to return errAndCh here, returning (errAndCh.C(), errAndCh.Err)
 	// allocates.
 	return b.mu.errAndCh
