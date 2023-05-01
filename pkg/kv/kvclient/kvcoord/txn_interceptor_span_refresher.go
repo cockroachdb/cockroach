@@ -426,21 +426,18 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 		return ba, nil
 	}
 
-	// If the transaction can tolerate write skew, no preemptive refresh is
-	// necessary, even if its write timestamp has been bumped. Transactions run at
-	// weak isolation levels may refresh in response to WriteTooOld errors or
-	// ReadWithinUncertaintyInterval errors returned by requests, but they do not
-	// need to refresh preemptively ahead of an EndTxn request.
-	if ba.Txn.IsoLevel.ToleratesWriteSkew() {
-		return ba, nil
-	}
-
 	// If true, tryRefreshTxnSpans will trivially succeed.
 	refreshFree := ba.CanForwardReadTimestamp
 
 	// If true, this batch is guaranteed to fail without a refresh.
 	args, hasET := ba.GetArg(kvpb.EndTxn)
-	refreshInevitable := hasET && args.(*kvpb.EndTxnRequest).Commit
+	refreshInevitable := hasET && args.(*kvpb.EndTxnRequest).Commit &&
+		// If the transaction can tolerate write skew, no preemptive refresh is
+		// necessary, even if its write timestamp has been bumped. Transactions run
+		// at weak isolation levels may refresh in response to WriteTooOld errors or
+		// ReadWithinUncertaintyInterval errors returned by requests, but they do
+		// not need to refresh preemptively ahead of an EndTxn request.
+		!ba.Txn.IsoLevel.ToleratesWriteSkew()
 
 	// If neither condition is true, defer the refresh.
 	if !refreshFree && !refreshInevitable {
