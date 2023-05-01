@@ -462,9 +462,8 @@ func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Co
 // non-Internal users of the Context are free to dial nodes without
 // specifying a node ID (see GRPCUnvalidatedDial()) however later calls to
 // Dial with the same target and class with a node ID will create a new
-// underlying connection. The inverse however is not true, a connection
-// dialed without a node ID will use an existing connection to a matching
-// (targetAddr, class) pair.
+// underlying connection which will not be reused by calls specifying the
+// NodeID.
 type connKey struct {
 	targetAddr string
 	// Note: this ought to be renamed, see:
