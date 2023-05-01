@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package encoding exposes some utilities for encoding data as bytes.
 package encoding
 
 import (
