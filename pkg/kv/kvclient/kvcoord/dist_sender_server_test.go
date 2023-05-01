@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2028,19 +2029,21 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	newUncertaintyFilter := func(key roachpb.Key) func(kvserverbase.FilterArgs) *kvpb.Error {
-		var count int32
-		return func(fArgs kvserverbase.FilterArgs) *kvpb.Error {
-			if (fArgs.Req.Header().Key.Equal(key) ||
-				fArgs.Req.Header().Span().ContainsKey(key)) && fArgs.Hdr.Txn != nil {
-				if atomic.AddInt32(&count, 1) > 1 {
-					return nil
+	newUncertaintyFilter := func(key roachpb.Key) func() func(kvserverbase.FilterArgs) *kvpb.Error {
+		return func() func(kvserverbase.FilterArgs) *kvpb.Error {
+			var count int32
+			return func(fArgs kvserverbase.FilterArgs) *kvpb.Error {
+				if (fArgs.Req.Header().Key.Equal(key) ||
+					fArgs.Req.Header().Span().ContainsKey(key)) && fArgs.Hdr.Txn != nil {
+					if atomic.AddInt32(&count, 1) > 1 {
+						return nil
+					}
+					err := kvpb.NewReadWithinUncertaintyIntervalError(
+						fArgs.Hdr.Timestamp, hlc.ClockTimestamp{}, fArgs.Hdr.Txn, s.Clock().Now(), hlc.ClockTimestamp{})
+					return kvpb.NewErrorWithTxn(err, fArgs.Hdr.Txn)
 				}
-				err := kvpb.NewReadWithinUncertaintyIntervalError(
-					fArgs.Hdr.Timestamp, hlc.ClockTimestamp{}, fArgs.Hdr.Txn, s.Clock().Now(), hlc.ClockTimestamp{})
-				return kvpb.NewErrorWithTxn(err, fArgs.Hdr.Txn)
+				return nil
 			}
-			return nil
 		}
 	}
 
@@ -2050,23 +2053,29 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testCases := []struct {
-		name                       string
-		beforeTxnStart             func(context.Context, *kv.DB) error  // called before the txn starts
-		afterTxnStart              func(context.Context, *kv.DB) error  // called after the txn chooses a timestamp
-		retryable                  func(context.Context, *kv.Txn) error // called during the txn; may be retried
-		filter                     func(kvserverbase.FilterArgs) *kvpb.Error
-		refreshSpansCondenseFilter func() bool
-		priorReads                 bool
-		tsLeaked                   bool
-		// Testing expectations.
+	type expect struct {
 		expClientRefresh               bool   // pre-emptive or reactive client-side refresh
 		expClientAutoRetryAfterRefresh bool   // auto-retries of batches after client-side refresh
 		expClientRestart               bool   // client-side txn restart
 		expServerRefresh               bool   // server-side refresh
 		expOnePhaseCommit              bool   // 1PC commits
 		expFailure                     string // regexp pattern to match on error, if not empty
-	}{
+	}
+	type testCase struct {
+		name                       string
+		beforeTxnStart             func(context.Context, *kv.DB) error  // called before the txn starts
+		afterTxnStart              func(context.Context, *kv.DB) error  // called after the txn chooses a timestamp
+		retryable                  func(context.Context, *kv.Txn) error // called during the txn; may be retried
+		filter                     func() func(kvserverbase.FilterArgs) *kvpb.Error
+		refreshSpansCondenseFilter func() bool
+		priorReads                 bool
+		tsLeaked                   bool
+		// Testing expectations. Exactly one should be set.
+		allIsoLevels *expect
+		perIsoLevel  map[isolation.Level]*expect
+	}
+
+	testCases := []testCase{
 		{
 			name: "forwarded timestamp with get and put",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
@@ -2077,8 +2086,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.Put(ctx, "a", "put") // put to advance txn ts
 			},
 			// No retry, preemptive refresh before commit.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "forwarded timestamp with get and put after timestamp leaked",
@@ -2091,7 +2102,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			tsLeaked: true,
 			// Cannot refresh, so must restart the transaction.
-			expClientRestart: true,
+			allIsoLevels: &expect{
+				expClientRestart: true,
+			},
 		},
 		{
 			name: "forwarded timestamp with get and initput",
@@ -2103,11 +2116,16 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.InitPut(ctx, "a", "put", false /* failOnTombstones */) // put to advance txn ts
 			},
 			// No retry, preemptive (no-op) refresh before commit.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "forwarded timestamp with get and cput",
+			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				_, err := db.Get(ctx, "a") // read key to set ts cache
 				return err
@@ -2116,8 +2134,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("put")) // cput to advance txn ts, set update span
 			},
 			// No retry, preemptive (no-op) refresh before commit.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "forwarded timestamp with get and cput after timestamp leaked",
@@ -2133,7 +2153,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			tsLeaked: true,
 			// Cannot refresh, so must restart the transaction.
-			expClientRestart: true,
+			allIsoLevels: &expect{
+				expClientRestart: true,
+			},
 		},
 		{
 			name: "forwarded timestamp with scan and cput",
@@ -2145,8 +2167,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CPut(ctx, "ab", "cput", nil) // cput advances, sets update span
 			},
 			// No retry, preemptive (no-op) refresh before commit.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "forwarded timestamp with delete range",
@@ -2159,8 +2183,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			// No retry, preemptive refresh before commit.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "forwarded timestamp with put in batch commit",
@@ -2174,8 +2200,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// No retries, server-side refresh, 1pc commit.
-			expServerRefresh:  true,
-			expOnePhaseCommit: true,
+			allIsoLevels: &expect{
+				expServerRefresh:  true,
+				expOnePhaseCommit: true,
+			},
 		},
 		{
 			name: "forwarded timestamp with cput in batch commit",
@@ -2192,8 +2220,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// No retries, server-side refresh, 1pc commit.
-			expServerRefresh:  true,
-			expOnePhaseCommit: true,
+			allIsoLevels: &expect{
+				expServerRefresh:  true,
+				expOnePhaseCommit: true,
+			},
 		},
 		{
 			name: "forwarded timestamp with get before commit",
@@ -2210,8 +2240,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			// No retry, preemptive refresh before get.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "forwarded timestamp with scan before commit",
@@ -2228,8 +2260,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			// No retry, preemptive refresh before scan.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "forwarded timestamp with get in batch commit",
@@ -2247,8 +2281,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// No retry, preemptive refresh before commit.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "forwarded timestamp with scan in batch commit",
@@ -2266,8 +2302,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// No retry, preemptive refresh before commit.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "forwarded timestamp with put and get in batch commit",
@@ -2282,8 +2320,14 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// Read-only request (Get) prevents server-side refresh.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			// TODO(nvanbenschoten): This is written like this to exercise the
+			// perIsoLevel mechanism.
+			perIsoLevel: map[isolation.Level]*expect{
+				isolation.Serializable: {
+					expClientRefresh:               true,
+					expClientAutoRetryAfterRefresh: true,
+				},
+			},
 		},
 		{
 			name: "forwarded timestamp with put and scan in batch commit",
@@ -2298,8 +2342,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// Read-only request (Scan) prevents server-side refresh.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			// If we've exhausted the limit for tracking refresh spans but we
@@ -2328,8 +2374,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			filter: newUncertaintyFilter(roachpb.Key("a")),
 			// We expect the request to succeed after a server-side retry.
-			expClientAutoRetryAfterRefresh: false,
-			expServerRefresh:               true,
+			allIsoLevels: &expect{
+				expClientAutoRetryAfterRefresh: false,
+				expServerRefresh:               true,
+			},
 		},
 		{
 			// Even if accounting for the refresh spans would have exhausted the
@@ -2365,8 +2413,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// No retry, preemptive refresh before commit.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			// Even if accounting for the refresh spans would have exhausted the
@@ -2403,8 +2453,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// No retry, preemptive refresh before commit.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "write too old with put",
@@ -2414,7 +2466,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.Put(ctx, "a", "put")
 			},
-			expServerRefresh: true,
+			allIsoLevels: &expect{
+				expServerRefresh: true,
+			},
 		},
 		{
 			name: "write too old with put after prior read",
@@ -2424,9 +2478,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.Put(ctx, "a", "put")
 			},
-			priorReads:                     true,
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			priorReads: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "write too old with put after timestamp leaked",
@@ -2436,8 +2492,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.Put(ctx, "a", "put")
 			},
-			tsLeaked:         true,
-			expClientRestart: true,
+			tsLeaked: true,
+			allIsoLevels: &expect{
+				expClientRestart: true,
+			},
 		},
 		{
 			name: "write too old with get conflict",
@@ -2450,7 +2508,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return txn.Put(ctx, "a", "put")
 			},
-			expClientRestart: true,
+			allIsoLevels: &expect{
+				expClientRestart: true,
+			},
 		},
 		{
 			name: "write too old with get conflict after forwarded timestamp",
@@ -2479,8 +2539,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.Put(ctx, "b", "put")
 			},
 			// No retry, preemptive refresh before Get.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "write too old with multiple puts to same key",
@@ -2508,7 +2570,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				// out-of-band Put's value would be missed (see #23032).
 				return txn.Put(ctx, "a", "txn-value2")
 			},
-			expClientRestart: true, // expect a client-side retry as refresh should fail
+			allIsoLevels: &expect{
+				expClientRestart: true, // expect a client-side retry as refresh should fail
+			},
 		},
 		{
 			name: "write too old with cput matching newer value",
@@ -2521,8 +2585,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("put"))
 			},
-			expClientAutoRetryAfterRefresh: false,              // fails on first attempt at cput
-			expFailure:                     "unexpected value", // the failure we get is a condition failed error
+			allIsoLevels: &expect{
+				expClientAutoRetryAfterRefresh: false,              // fails on first attempt at cput
+				expFailure:                     "unexpected value", // the failure we get is a condition failed error
+			},
 		},
 		{
 			name: "write too old with cput matching older value",
@@ -2535,8 +2601,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
-			expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
-			expFailure:       "unexpected value", // the failure we get is a condition failed error
+			allIsoLevels: &expect{
+				expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
+				expFailure:       "unexpected value", // the failure we get is a condition failed error
+			},
 		},
 		{
 			name: "write too old with cput matching older and newer values",
@@ -2549,7 +2617,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
-			expServerRefresh: true,
+			allIsoLevels: &expect{
+				expServerRefresh: true,
+			},
 		},
 		{
 			name: "write too old with cput matching older and newer values after prior read",
@@ -2562,9 +2632,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
-			priorReads:                     true,
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			priorReads: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "write too old with increment",
@@ -2586,7 +2658,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return nil
 			},
-			expServerRefresh: true,
+			allIsoLevels: &expect{
+				expServerRefresh: true,
+			},
 		},
 		{
 			name: "write too old with increment after prior read",
@@ -2608,9 +2682,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return nil
 			},
-			priorReads:                     true,
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			priorReads: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "write too old with initput",
@@ -2620,7 +2696,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put", false)
 			},
-			expServerRefresh: true,
+			allIsoLevels: &expect{
+				expServerRefresh: true,
+			},
 		},
 		{
 			name: "write too old with initput after prior read",
@@ -2630,10 +2708,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put", false)
 			},
-			priorReads:                     true,
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true, // fails on first attempt at cput with write too old
-			// Succeeds on second attempt.
+			priorReads: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true, // fails on first attempt at cput with write too old
+				// Succeeds on second attempt.
+			},
 		},
 		{
 			name: "write too old with initput matching older and newer values",
@@ -2646,7 +2726,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put", false)
 			},
-			expServerRefresh: true,
+			allIsoLevels: &expect{
+				expServerRefresh: true,
+			},
 		},
 		{
 			name: "write too old with initput matching older and newer values after prior read",
@@ -2661,8 +2743,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			priorReads: true,
 			// Expect a transaction coord retry, which should succeed.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "write too old with initput matching older value",
@@ -2675,8 +2759,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put1", false)
 			},
-			expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
-			expFailure:       "unexpected value", // the failure we get is a condition failed error
+			allIsoLevels: &expect{
+				expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
+				expFailure:       "unexpected value", // the failure we get is a condition failed error
+			},
 		},
 		{
 			name: "write too old with initput matching newer value",
@@ -2690,7 +2776,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.InitPut(ctx, "iput", "put2", false)
 			},
 			// No txn coord retry as we get condition failed error.
-			expFailure: "unexpected value", // the failure we get is a condition failed error
+			allIsoLevels: &expect{
+				expFailure: "unexpected value", // the failure we get is a condition failed error
+			},
 		},
 		{
 			name: "write too old with initput failing on tombstone before",
@@ -2704,7 +2792,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put2", true)
 			},
-			expFailure: "unexpected value", // condition failed error when failing on tombstones
+			allIsoLevels: &expect{
+				expFailure: "unexpected value", // condition failed error when failing on tombstones
+			},
 		},
 		{
 			name: "write too old with initput failing on tombstone after",
@@ -2718,8 +2808,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put", true)
 			},
-			expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
-			expFailure:       "unexpected value", // condition failed error when failing on tombstones
+			allIsoLevels: &expect{
+				expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
+				expFailure:       "unexpected value", // condition failed error when failing on tombstones
+			},
 		},
 		{
 			name: "write too old with locking read",
@@ -2730,8 +2822,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				_, err := txn.ScanForUpdate(ctx, "a", "a\x00", 0)
 				return err
 			},
-			expServerRefresh:  true,
-			expOnePhaseCommit: true,
+			allIsoLevels: &expect{
+				expServerRefresh:  true,
+				expOnePhaseCommit: true,
+			},
 		},
 		{
 			name: "write too old with locking read after prior read",
@@ -2742,10 +2836,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				_, err := txn.ScanForUpdate(ctx, "a", "a\x00", 0)
 				return err
 			},
-			priorReads:                     true,
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
-			expOnePhaseCommit:              true,
+			priorReads: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
 		},
 		{
 			name: "write too old with multi-range locking read (err on first range)",
@@ -2756,9 +2852,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				_, err := txn.ScanForUpdate(ctx, "a", "c", 0)
 				return err
 			},
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
-			expOnePhaseCommit:              true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
 		},
 		{
 			name: "write too old with multi-range locking read (err on second range)",
@@ -2769,9 +2867,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				_, err := txn.ScanForUpdate(ctx, "a", "c", 0)
 				return err
 			},
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
-			expOnePhaseCommit:              true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
 		},
 		{
 			name: "write too old with multi-range batch of locking reads",
@@ -2784,9 +2884,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.ScanForUpdate("b", "b\x00")
 				return txn.Run(ctx, b)
 			},
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
-			expOnePhaseCommit:              true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
 		},
 		{
 			name: "write too old with delete range after prior read on other key",
@@ -2804,8 +2906,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true, // can refresh
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true, // can refresh
+			},
 		},
 		{
 			name: "write too old with delete range after prior read on same key",
@@ -2823,7 +2927,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
-			expClientRestart: true, // can't refresh
+			allIsoLevels: &expect{
+				expClientRestart: true, // can't refresh
+			},
 		},
 		{
 			// This test sends a 1PC batch with Put+EndTxn.
@@ -2839,8 +2945,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b) // will be a 1PC, won't get auto retry
 			},
 			// No retries, server-side refresh, 1pc commit.
-			expServerRefresh:  true,
-			expOnePhaseCommit: true,
+			allIsoLevels: &expect{
+				expServerRefresh:  true,
+				expOnePhaseCommit: true,
+			},
 		},
 		{
 			// This test is like the previous one in that the commit batch succeeds at
@@ -2865,8 +2973,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// The request will succeed after a server-side refresh.
-			expClientAutoRetryAfterRefresh: false,
-			expServerRefresh:               true,
+			allIsoLevels: &expect{
+				expClientAutoRetryAfterRefresh: false,
+				expServerRefresh:               true,
+			},
 		},
 		{
 			name: "write too old with cput in batch commit",
@@ -2886,8 +2996,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// WriteTooOldError, and then once at the pushed timestamp. The
 			// server-side retry is enabled by the fact that there have not been any
 			// previous reads and so the transaction can commit at a pushed timestamp.
-			expServerRefresh:  true,
-			expOnePhaseCommit: true,
+			allIsoLevels: &expect{
+				expServerRefresh:  true,
+				expOnePhaseCommit: true,
+			},
 		},
 		{
 			// This test is like the previous one, except the 1PC batch cannot commit
@@ -2904,8 +3016,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("orig"))
 				return txn.CommitInBatch(ctx, b) // will be a 1PC, won't get auto retry
 			},
-			expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
-			expFailure:       "unexpected value", // The CPut cannot succeed.
+			allIsoLevels: &expect{
+				expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
+				expFailure:       "unexpected value", // The CPut cannot succeed.
+			},
 		},
 		{
 			name: "multi-range batch commit with forwarded timestamp (err on first range)",
@@ -2923,9 +3037,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// This will instruct the txn to stage at the post-refresh timestamp,
 			// qualifying for the implicit commit condition and avoiding a client-side
 			// refresh.
-			expServerRefresh:               true,
-			expClientRefresh:               false,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expServerRefresh:               true,
+				expClientRefresh:               false,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "multi-range batch commit with forwarded timestamp (err on second range)",
@@ -2943,8 +3059,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// txn has already staged on the other range at an earlier timestamp. As a
 			// result, it does not qualify for the implicit commit condition and
 			// requires a client-side refresh.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "multi-range batch commit with forwarded timestamp and cput",
@@ -2961,7 +3079,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, no retry
 			},
-			expServerRefresh: true,
+			allIsoLevels: &expect{
+				expServerRefresh: true,
+			},
 		},
 		{
 			name: "multi-range batch commit with forwarded timestamp and cput and get",
@@ -2981,8 +3101,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry from get
 			},
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "multi-range batch commit with forwarded timestamp and cput and delete range",
@@ -2999,8 +3121,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("c", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
 			},
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "multi-range batch commit with write too old (err on first range)",
@@ -3017,9 +3141,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// This will instruct the txn to stage at the post-refresh timestamp,
 			// qualifying for the implicit commit condition and avoiding a client-side
 			// refresh.
-			expServerRefresh:               true,
-			expClientRefresh:               false,
-			expClientAutoRetryAfterRefresh: false,
+			allIsoLevels: &expect{
+				expServerRefresh:               true,
+				expClientRefresh:               false,
+				expClientAutoRetryAfterRefresh: false,
+			},
 		},
 		{
 			name: "multi-range batch commit with write too old (err on second range)",
@@ -3036,9 +3162,51 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// txn has already staged on the other range at the pre-refresh timestamp.
 			// As a result, it does not qualify for the implicit commit condition and
 			// requires a client-side refresh.
-			expServerRefresh:               true,
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			allIsoLevels: &expect{
+				expServerRefresh:               true,
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
+		},
+		{
+			name: "multi-range batch commit with write too old after prior read (err on first range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.Put("a", "put")
+				b.Put("c", "put")
+				return txn.CommitInBatch(ctx, b)
+			},
+			priorReads: true,
+			// The Put to "a" will fail, failing the parallel commit and forcing a
+			// client-side refresh.
+			allIsoLevels: &expect{
+				expServerRefresh:               false,
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
+		},
+		{
+			name: "multi-range batch commit with write too old after prior read (err on second range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "c", "value")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.Put("a", "put")
+				b.Put("c", "put")
+				return txn.CommitInBatch(ctx, b)
+			},
+			priorReads: true,
+			// The Put to "c" will fail, failing the parallel commit and forcing a
+			// client-side refresh.
+			allIsoLevels: &expect{
+				expServerRefresh:               false,
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "multi-range batch commit with write too old and failed cput",
@@ -3054,8 +3222,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
-			expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
-			expFailure:       "unexpected value", // the failure we get is a condition failed error
+			allIsoLevels: &expect{
+				expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
+				expFailure:       "unexpected value", // the failure we get is a condition failed error
+			},
 		},
 		{
 			name: "multi-range batch commit with write too old and successful cput",
@@ -3072,8 +3242,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// We expect the request to succeed after a server-side retry.
-			expClientAutoRetryAfterRefresh: false,
-			expServerRefresh:               true,
+			allIsoLevels: &expect{
+				expClientAutoRetryAfterRefresh: false,
+				expServerRefresh:               true,
+			},
 		},
 		{
 			// This test checks the behavior of batches that were split by the
@@ -3111,8 +3283,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return txn.Commit(ctx)
 			},
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "cput within uncertainty interval",
@@ -3124,8 +3298,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			filter: newUncertaintyFilter(roachpb.Key("a")),
 			// We expect the request to succeed after a server-side retry.
-			expClientAutoRetryAfterRefresh: false,
-			expServerRefresh:               true,
+			allIsoLevels: &expect{
+				expClientAutoRetryAfterRefresh: false,
+				expServerRefresh:               true,
+			},
 		},
 		{
 			name: "cput within uncertainty interval after timestamp leaked",
@@ -3135,9 +3311,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
-			filter:           newUncertaintyFilter(roachpb.Key("a")),
-			expClientRestart: true,
-			tsLeaked:         true,
+			filter:   newUncertaintyFilter(roachpb.Key("a")),
+			tsLeaked: true,
+			allIsoLevels: &expect{
+				expClientRestart: true,
+			},
 		},
 		{
 			name: "reads within uncertainty interval",
@@ -3156,9 +3334,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
-			filter:                         newUncertaintyFilter(roachpb.Key("ac")),
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			filter: newUncertaintyFilter(roachpb.Key("ac")),
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "reads within uncertainty interval and violating concurrent put",
@@ -3180,8 +3360,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return nil
 			},
-			filter:           newUncertaintyFilter(roachpb.Key("ac")),
-			expClientRestart: true, // note this txn is read-only but still restarts
+			filter: newUncertaintyFilter(roachpb.Key("ac")),
+			allIsoLevels: &expect{
+				expClientRestart: true, // note this txn is read-only but still restarts
+			},
 		},
 		{
 			name: "multi-range batch commit with uncertainty interval error",
@@ -3201,9 +3383,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// txn has already staged on the other range at the pre-refresh timestamp.
 			// As a result, it does not qualify for the implicit commit condition and
 			// requires a client-side refresh.
-			expServerRefresh:               true,
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			allIsoLevels: &expect{
+				expServerRefresh:               true,
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "multi-range batch commit with uncertainty interval error and get conflict",
@@ -3224,8 +3408,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
-			filter:           newUncertaintyFilter(roachpb.Key("a")),
-			expClientRestart: true, // will fail because of conflict on refresh span for the Get
+			filter: newUncertaintyFilter(roachpb.Key("a")),
+			allIsoLevels: &expect{
+				expClientRestart: true, // will fail because of conflict on refresh span for the Get
+			},
 		},
 		{
 			name: "multi-range batch commit with uncertainty interval error and mixed success",
@@ -3243,9 +3429,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// txn has already staged on the other range at the pre-refresh timestamp.
 			// As a result, it does not qualify for the implicit commit condition and
 			// requires a client-side refresh.
-			expServerRefresh:               true,
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			allIsoLevels: &expect{
+				expServerRefresh:               true,
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "multi-range scan with uncertainty interval error",
@@ -3255,8 +3443,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			filter: newUncertaintyFilter(roachpb.Key("c")),
 			// Expect a transaction coord retry, which should succeed.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "multi-range delete range with uncertainty interval error",
@@ -3266,8 +3456,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			filter: newUncertaintyFilter(roachpb.Key("c")),
 			// Expect a transaction coord retry, which should succeed.
-			expClientRefresh:               true,
-			expClientAutoRetryAfterRefresh: true,
+			allIsoLevels: &expect{
+				expClientRefresh:               true,
+				expClientAutoRetryAfterRefresh: true,
+			},
 		},
 		{
 			name: "missing pipelined write caught on chain",
@@ -3294,7 +3486,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			// The missing intent write results in a RETRY_ASYNC_WRITE_FAILURE error.
-			expClientRestart: true,
+			allIsoLevels: &expect{
+				expClientRestart: true,
+			},
 		},
 		{
 			name: "missing pipelined write caught on commit",
@@ -3319,85 +3513,110 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return nil // commit
 			},
 			// The missing intent write results in a RETRY_ASYNC_WRITE_FAILURE error.
-			expClientRestart: true,
+			allIsoLevels: &expect{
+				expClientRestart: true,
+			},
 		},
 	}
 
+	run := func(t *testing.T, tc testCase, iso isolation.Level) {
+		exp, ok := tc.perIsoLevel[iso]
+		if ok {
+			require.Nil(t, tc.allIsoLevels, "both per iso level and all iso levels expectations set")
+		} else {
+			exp = tc.allIsoLevels
+			require.NotNil(t, exp, "no expectation set")
+		}
+
+		// Clear keyspace before each subtest.
+		_, err := db.DelRange(ctx, "a", "z", false /* returnKeys */)
+		require.NoError(t, err)
+
+		if tc.beforeTxnStart != nil {
+			err := tc.beforeTxnStart(ctx, db)
+			require.NoError(t, err, "beforeTxnStart")
+		}
+
+		filterFn.Store((func(kvserverbase.FilterArgs) *kvpb.Error)(nil))
+		if tc.filter != nil {
+			filterFn.Store(tc.filter())
+		}
+		refreshSpansCondenseFilter.Store((func() bool)(nil))
+		if tc.refreshSpansCondenseFilter != nil {
+			refreshSpansCondenseFilter.Store(tc.refreshSpansCondenseFilter)
+		}
+
+		// Construct a new DB with a fresh set of TxnMetrics. This allows the test
+		// to precisely assert on the metrics without having to worry about other
+		// transactions in the system affecting them.
+		metrics := kvcoord.MakeTxnMetrics(metric.TestSampleInterval)
+		tcsFactoryCfg := kvcoord.TxnCoordSenderFactoryConfig{
+			AmbientCtx:   s.AmbientCtx(),
+			Settings:     s.ClusterSettings(),
+			Clock:        s.Clock(),
+			Stopper:      s.Stopper(),
+			Metrics:      metrics,
+			TestingKnobs: *s.TestingKnobs().KVClient.(*kvcoord.ClientTestingKnobs),
+		}
+		distSender := s.DistSenderI().(*kvcoord.DistSender)
+		tcsFactory := kvcoord.NewTxnCoordSenderFactory(tcsFactoryCfg, distSender)
+		testDB := kv.NewDBWithContext(s.AmbientCtx(), tcsFactory, s.Clock(), db.Context())
+
+		err = testDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if txn.Epoch() > 0 {
+				// We expected a new epoch and got it; return success.
+				return nil
+			}
+			if err := txn.SetIsoLevel(iso); err != nil {
+				return err
+			}
+
+			if tc.tsLeaked {
+				if iso != isolation.Serializable {
+					skip.IgnoreLint(t, "fixed commit timestamp unsupported")
+				}
+				// Read the commit timestamp so the expectation is that
+				// this transaction cannot be restarted internally.
+				_ = txn.CommitTimestamp()
+			}
+
+			if tc.priorReads {
+				_, err := txn.Get(ctx, "prior read")
+				require.NoError(t, err, "prior read")
+			}
+
+			if tc.afterTxnStart != nil {
+				err := tc.afterTxnStart(ctx, db)
+				require.NoError(t, err, "afterTxnStart")
+			}
+
+			return tc.retryable(ctx, txn)
+		})
+
+		// Verify success or failure.
+		if len(exp.expFailure) == 0 {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+			require.Regexp(t, exp.expFailure, err)
+		}
+
+		// Verify metrics.
+		require.Equal(t, exp.expClientRefresh, metrics.ClientRefreshSuccess.Count() != 0, "TxnMetrics.ClientRefreshSuccess")
+		require.Equal(t, exp.expClientAutoRetryAfterRefresh, metrics.ClientRefreshAutoRetries.Count() != 0, "TxnMetrics.ClientRefreshAutoRetries")
+		require.Equal(t, exp.expServerRefresh, metrics.ServerRefreshSuccess.Count() != 0, "TxnMetrics.ServerRefreshSuccess")
+		require.Equal(t, exp.expClientRestart, metrics.Restarts.TotalSum() != 0, "TxnMetrics.Restarts")
+		require.Equal(t, exp.expOnePhaseCommit, metrics.Commits1PC.Count() != 0, "TxnMetrics.Commits1PC")
+	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.beforeTxnStart != nil {
-				if err := tc.beforeTxnStart(ctx, db); err != nil {
-					t.Fatalf("failed beforeTxnStart: %s", err)
-				}
+			// TODO(nvanbenschoten): test Snapshot isolation.
+			testLevels := []isolation.Level{isolation.Serializable}
+			for _, iso := range testLevels {
+				t.Run(iso.String(), func(t *testing.T) {
+					run(t, tc, iso)
+				})
 			}
-
-			filterFn.Store((func(kvserverbase.FilterArgs) *kvpb.Error)(nil))
-			if tc.filter != nil {
-				filterFn.Store(tc.filter)
-			}
-			refreshSpansCondenseFilter.Store((func() bool)(nil))
-			if tc.refreshSpansCondenseFilter != nil {
-				refreshSpansCondenseFilter.Store(tc.refreshSpansCondenseFilter)
-			}
-
-			// Construct a new DB with a fresh set of TxnMetrics. This allows the test
-			// to precisely assert on the metrics without having to worry about other
-			// transactions in the system affecting them.
-			metrics := kvcoord.MakeTxnMetrics(metric.TestSampleInterval)
-			tcsFactoryCfg := kvcoord.TxnCoordSenderFactoryConfig{
-				AmbientCtx:   s.AmbientCtx(),
-				Settings:     s.ClusterSettings(),
-				Clock:        s.Clock(),
-				Stopper:      s.Stopper(),
-				Metrics:      metrics,
-				TestingKnobs: *s.TestingKnobs().KVClient.(*kvcoord.ClientTestingKnobs),
-			}
-			distSender := s.DistSenderI().(*kvcoord.DistSender)
-			tcsFactory := kvcoord.NewTxnCoordSenderFactory(tcsFactoryCfg, distSender)
-			testDB := kv.NewDBWithContext(s.AmbientCtx(), tcsFactory, s.Clock(), db.Context())
-
-			err := testDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				if txn.Epoch() > 0 {
-					// We expected a new epoch and got it; return success.
-					return nil
-				}
-
-				if tc.tsLeaked {
-					// Read the commit timestamp so the expectation is that
-					// this transaction cannot be restarted internally.
-					_ = txn.CommitTimestamp()
-				}
-
-				if tc.priorReads {
-					_, err := txn.Get(ctx, "prior read")
-					if err != nil {
-						t.Fatalf("unexpected error during prior read: %v", err)
-					}
-				}
-
-				if tc.afterTxnStart != nil {
-					if err := tc.afterTxnStart(ctx, db); err != nil {
-						t.Fatalf("failed afterTxnStart: %s", err)
-					}
-				}
-
-				return tc.retryable(ctx, txn)
-			})
-
-			// Verify success or failure.
-			if len(tc.expFailure) == 0 {
-				require.NoError(t, err)
-			} else {
-				require.Error(t, err)
-				require.Regexp(t, tc.expFailure, err)
-			}
-
-			// Verify metrics.
-			require.Equal(t, tc.expClientRefresh, metrics.ClientRefreshSuccess.Count() != 0, "TxnMetrics.ClientRefreshSuccess")
-			require.Equal(t, tc.expClientAutoRetryAfterRefresh, metrics.ClientRefreshAutoRetries.Count() != 0, "TxnMetrics.ClientRefreshAutoRetries")
-			require.Equal(t, tc.expServerRefresh, metrics.ServerRefreshSuccess.Count() != 0, "TxnMetrics.ServerRefreshSuccess")
-			require.Equal(t, tc.expClientRestart, metrics.Restarts.TotalSum() != 0, "TxnMetrics.Restarts")
-			require.Equal(t, tc.expOnePhaseCommit, metrics.Commits1PC.Count() != 0, "TxnMetrics.Commits1PC")
 		})
 	}
 }
