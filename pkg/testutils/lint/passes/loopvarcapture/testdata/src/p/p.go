@@ -11,6 +11,7 @@
 package p
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -429,4 +430,46 @@ func RespectsNolintComments() {
 
 		wg.Wait()
 	}
+}
+
+// regression test for https://github.com/cockroachdb/cockroach/issues/102678
+func registerKVScalability() {
+	runScalability := func(ctx context.Context, percent int) {
+		nodes := 3
+
+		const maxPerNodeConcurrency = 64
+		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
+			fmt.Println("running workload")
+
+			m := NewMonitor(ctx)
+			m.Go(func(ctx context.Context) error {
+				cmd := fmt.Sprintf("./workload run kv --init --read-percent=%d "+
+					"--splits=1000 --duration=1m "+fmt.Sprintf("--concurrency=%d", i), // want `loop variable 'i' captured by reference`
+					percent, nodes)
+
+				return fmt.Errorf("failed to run workload: %s", cmd)
+			})
+		}
+	}
+	runScalability(nil, 0)
+}
+
+type Monitor interface {
+	Go(fn func(context.Context) error)
+}
+
+type monitorImpl struct {
+	ctx context.Context
+}
+
+func (m monitorImpl) Go(fn func(context.Context) error) {
+	panic("implement me")
+}
+
+func NewMonitor(ctx context.Context) Monitor {
+	return newMonitor(ctx)
+}
+
+func newMonitor(ctx context.Context) *monitorImpl {
+	return &monitorImpl{ctx: ctx}
 }
