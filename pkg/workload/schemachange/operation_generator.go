@@ -1353,17 +1353,30 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	}()
 	// Forward indexes for arrays were added in 23.1, so check the index
 	// definitions for them in mixed version states.
-	forwardIndexesOnNewTypesSupported, err := isClusterVersionLessThan(
+	forwardIndexesOnArraysNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
 		clusterversion.ByKey(clusterversion.V23_1))
 	if err != nil {
 		return nil, err
 	}
-	hasUnsupportedForwardIdxQueries, err := func() (bool, error) {
-		if !forwardIndexesOnNewTypesSupported {
-			return false, nil
-		}
+	// Forward indexes for JSON were added in 23.2.
+	forwardIndexesOnJSONNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_2))
+	if err != nil {
+		return nil, err
+	}
+	// Configuring the visibility of indexes was added in 23.2.
+	indexVisibilityNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_2))
+	if err != nil {
+		return nil, err
+	}
+	hasUnsupportedIdxQueries, err := func() (bool, error) {
 		colInfoMap := make(map[tree.Name]*tree.ColumnTableDef)
 		for _, def := range stmt.Defs {
 			if colDef, ok := def.(*tree.ColumnTableDef); ok {
@@ -1376,6 +1389,9 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 				idxDef = &(def.(*tree.UniqueConstraintTableDef)).IndexTableDef
 			}
 			if idxDef != nil {
+				if indexVisibilityNotSupported && idxDef.Invisibility != 0 && idxDef.Invisibility != 1.0 {
+					return true, nil
+				}
 				for _, col := range idxDef.Columns {
 					if col.Column != "" {
 						colInfo := colInfoMap[col.Column]
@@ -1383,9 +1399,11 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 						if err != nil {
 							return false, err
 						}
-						if typ.Family() == types.ArrayFamily ||
-							typ.Family() == types.JsonFamily {
-							return true, err
+						if forwardIndexesOnArraysNotSupported && typ.Family() == types.ArrayFamily {
+							return true, nil
+						}
+						if forwardIndexesOnJSONNotSupported && typ.Family() == types.JsonFamily {
+							return true, nil
 						}
 					}
 				}
@@ -1415,7 +1433,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	codesWithConditions{
 		{code: pgcode.Syntax, condition: hasUnsupportedTSQuery},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedTSQuery},
-		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedForwardIdxQueries},
+		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedIdxQueries},
 	}.add(opStmt.potentialExecErrors)
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
