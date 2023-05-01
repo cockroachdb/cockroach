@@ -5,7 +5,6 @@ go_library(
     name = "ttljob",
     srcs = [
         "ttljob.go",
-        "ttljob_keydecoder.go",
         "ttljob_metrics.go",
         "ttljob_processor.go",
         "ttljob_query_builder.go",
@@ -57,7 +56,6 @@ go_test(
     name = "ttljob_test",
     srcs = [
         "main_test.go",
-        "ttljob_keydecoder_test.go",
         "ttljob_query_builder_test.go",
         "ttljob_test.go",
     ],
@@ -90,7 +88,6 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
-        "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",

@@ -142,9 +142,7 @@ func EncDatumFromEncoded(enc descpb.DatumEncoding, encoded []byte) EncDatum {
 // possibly followed by other data. Similar to EncDatumFromEncoded,
 // except that this function figures out where the encoding stops and returns a
 // slice for the rest of the buffer.
-func EncDatumFromBuffer(
-	typ *types.T, enc descpb.DatumEncoding, buf []byte,
-) (EncDatum, []byte, error) {
+func EncDatumFromBuffer(enc descpb.DatumEncoding, buf []byte) (EncDatum, []byte, error) {
 	if len(buf) == 0 {
 		return EncDatum{}, nil, errors.New("empty encoded value")
 	}

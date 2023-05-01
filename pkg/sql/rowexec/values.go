@@ -86,10 +86,10 @@ func (v *valuesProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 
 		if len(v.typs) != 0 {
 			rowData := v.data[0]
-			for i, typ := range v.typs {
+			for i := range v.typs {
 				var err error
 				v.rowBuf[i], rowData, err = rowenc.EncDatumFromBuffer(
-					typ, descpb.DatumEncoding_VALUE, rowData,
+					descpb.DatumEncoding_VALUE, rowData,
 				)
 				if err != nil {
 					v.MoveToDraining(err)

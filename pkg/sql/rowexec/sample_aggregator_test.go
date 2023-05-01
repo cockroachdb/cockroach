@@ -251,7 +251,7 @@ func runSampleAggregator(
 
 			for _, b := range h.Buckets {
 				ed, _, err := rowenc.EncDatumFromBuffer(
-					types.Int, descpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+					descpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {
 					t.Fatal(err)

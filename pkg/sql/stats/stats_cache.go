@@ -195,7 +195,7 @@ func decodeTableStatisticsKV(
 	types := []*types.T{types.Int, types.Int}
 	dirs := []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC}
 	keyVals := make([]rowenc.EncDatum, 2)
-	if _, _, err := rowenc.DecodeIndexKey(codec, types, keyVals, dirs, kv.Key); err != nil {
+	if _, err := rowenc.DecodeIndexKey(codec, keyVals, dirs, kv.Key); err != nil {
 		return 0, err
 	}
 
