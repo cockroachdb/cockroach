@@ -530,7 +530,23 @@ func (g *lockTableGuardImpl) CurState() waitingState {
 	return g.mu.state
 }
 
-func (g *lockTableGuardImpl) updateStateLocked(newState waitingState) {
+// updateStateToDoneWaitingLocked updates the request's waiting state to
+// indicate that it is done waiting.
+// REQUIRES: g.mu to be locked.
+func (g *lockTableGuardImpl) updateStateToDoneWaitingLocked() {
+	g.mu.state = waitingState{kind: doneWaiting}
+}
+
+// updateWaitingStateLocked updates the request's waiting state to indicate
+// to the one supplied. The supplied waiting state must imply the request is
+// still waiting. Typically, this function is called for the first time when
+// the request discovers a conflict while scanning the lock table.
+// REQUIRES: g.mu to be locked.
+func (g *lockTableGuardImpl) updateWaitingStateLocked(newState waitingState) {
+	if newState.kind == doneWaiting {
+		panic(errors.AssertionFailedf("unexpected waiting state kind: %d", newState.kind))
+	}
+	newState.guardStrength = g.str // copy over the strength which caused the conflict
 	g.mu.state = newState
 }
 
@@ -717,7 +733,7 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.updateStateLocked(waitingState{kind: doneWaiting})
+	g.updateStateToDoneWaitingLocked()
 	// We are doneWaiting but may have some locks to resolve. There are
 	// two cases:
 	// - notify=false: the caller was already waiting and will look at this list
@@ -1276,7 +1292,6 @@ func (l *lockState) informActiveWaiters() {
 	}
 
 	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
-		state := waitForState
 		// Since there are waiting readers we could not have transitioned out of
 		// or into a state with a reservation, since readers do not wait for
 		// reservations.
@@ -1285,9 +1300,8 @@ func (l *lockState) informActiveWaiters() {
 			l.distinguishedWaiter = g
 			findDistinguished = false
 		}
-		state.guardStrength = g.str
 		g.mu.Lock()
-		g.updateStateLocked(state)
+		g.updateWaitingStateLocked(waitForState)
 		if l.distinguishedWaiter == g {
 			g.mu.state.kind = waitForDistinguished
 		}
@@ -1304,7 +1318,6 @@ func (l *lockState) informActiveWaiters() {
 		if g.isSameTxnAsReservation(state) {
 			state.kind = waitSelf
 		} else {
-			state.guardStrength = qg.guard.str
 			if findDistinguished {
 				l.distinguishedWaiter = g
 				findDistinguished = false
@@ -1314,7 +1327,7 @@ func (l *lockState) informActiveWaiters() {
 			}
 		}
 		g.mu.Lock()
-		g.updateStateLocked(state)
+		g.updateWaitingStateLocked(state)
 		g.notify()
 		g.mu.Unlock()
 	}
@@ -1659,7 +1672,6 @@ func (l *lockState) tryActiveWait(
 		key:           l.key,
 		queuedWriters: l.queuedWriters.Len(),
 		queuedReaders: l.waitingReaders.Len(),
-		guardStrength: str,
 	}
 	if lockHolderTxn != nil {
 		waitForState.txn = lockHolderTxn
@@ -1735,7 +1747,7 @@ func (l *lockState) tryActiveWait(
 				g.mu.startWait = true
 				state := waitForState
 				state.kind = waitQueueMaxLengthExceeded
-				g.updateStateLocked(state)
+				g.updateWaitingStateLocked(state)
 				if notify {
 					g.notify()
 				}
@@ -1788,14 +1800,14 @@ func (l *lockState) tryActiveWait(
 	if g.isSameTxnAsReservation(waitForState) {
 		state := waitForState
 		state.kind = waitSelf
-		g.updateStateLocked(state)
+		g.updateWaitingStateLocked(state)
 	} else {
 		state := waitForState
 		if l.distinguishedWaiter == nil {
 			l.distinguishedWaiter = g
 			state.kind = waitForDistinguished
 		}
-		g.updateStateLocked(state)
+		g.updateWaitingStateLocked(state)
 	}
 	if notify {
 		g.notify()
@@ -2099,24 +2111,27 @@ func (l *lockState) tryClearLock(force bool) bool {
 		return false
 	}
 
-	// Clear lock holder. While doing so, determine which waitingState to
-	// transition waiters to.
-	var waitState waitingState
+	// Clear lock holder. While doing so, construct the closure used to transition
+	// waiters.
+	lockHolderTxn, _ := l.getLockHolder() // only needed if this is a replicated lock
 	replicatedHeld := l.holder.locked && l.holder.holder[lock.Replicated].txn != nil
-	if replicatedHeld && !force {
-		lockHolderTxn, _ := l.getLockHolder()
-		// Note that none of the current waiters can be requests from lockHolderTxn,
-		// so they will never be told to waitElsewhere on themselves.
-		waitState = waitingState{
-			kind: waitElsewhere,
-			txn:  lockHolderTxn,
-			key:  l.key,
-			held: true,
+	transitionWaiter := func(g *lockTableGuardImpl) {
+		if replicatedHeld && !force {
+			// Note that none of the current waiters can be requests from
+			// lockHolderTxn, so they will never be told to waitElsewhere on
+			// themselves.
+			waitState := waitingState{
+				kind: waitElsewhere,
+				txn:  lockHolderTxn,
+				key:  l.key,
+				held: true,
+			}
+			g.updateWaitingStateLocked(waitState)
+		} else {
+			// !replicatedHeld || force. Both are handled as doneWaiting since the
+			// system is no longer tracking the lock that was possibly held.
+			g.updateStateToDoneWaitingLocked()
 		}
-	} else {
-		// !replicatedHeld || force. Both are handled as doneWaiting since the
-		// system is no longer tracking the lock that was possibly held.
-		waitState = waitingState{kind: doneWaiting}
 	}
 	l.clearLockHolder()
 
@@ -2132,14 +2147,13 @@ func (l *lockState) tryClearLock(force bool) bool {
 	// Clear waitingReaders.
 	for e := l.waitingReaders.Front(); e != nil; {
 		g := e.Value.(*lockTableGuardImpl)
-		waitState.guardStrength = g.str
 
 		curr := e
 		e = e.Next()
 		l.waitingReaders.Remove(curr)
 
 		g.mu.Lock()
-		g.updateStateLocked(waitState)
+		transitionWaiter(g)
 		g.notify()
 		delete(g.mu.locks, l)
 		g.mu.Unlock()
@@ -2148,7 +2162,6 @@ func (l *lockState) tryClearLock(force bool) bool {
 	// Clear queuedWriters.
 	for e := l.queuedWriters.Front(); e != nil; {
 		qg := e.Value.(*queuedGuard)
-		waitState.guardStrength = qg.guard.str
 
 		curr := e
 		e = e.Next()
@@ -2157,7 +2170,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 		g := qg.guard
 		g.mu.Lock()
 		if qg.active {
-			g.updateStateLocked(waitState)
+			transitionWaiter(g)
 			g.notify()
 		}
 		delete(g.mu.locks, l)
