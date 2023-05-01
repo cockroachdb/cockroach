@@ -52,15 +52,14 @@ func (d *decoder) decode(kv roachpb.KeyValue) (tenantcapabilities.Entry, error) 
 	var tenID roachpb.TenantID
 	types := []*types.T{d.columns[0].GetType()}
 	tenantIDRow := make([]rowenc.EncDatum, 1)
-	_, _, err := rowenc.DecodeIndexKey(keys.SystemSQLCodec, types, tenantIDRow, nil /* colDirs */, kv.Key)
-	if err != nil {
+	if _, err := rowenc.DecodeIndexKey(keys.SystemSQLCodec, tenantIDRow, nil /* colDirs */, kv.Key); err != nil {
 		return tenantcapabilities.Entry{}, err
 	}
 	if err := tenantIDRow[0].EnsureDecoded(types[0], &d.alloc); err != nil {
 		return tenantcapabilities.Entry{},
 			errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode key in system.tenants %v", kv.Key)
 	}
-	tenID, err = roachpb.MakeTenantID(uint64(tree.MustBeDInt(tenantIDRow[0].Datum)))
+	tenID, err := roachpb.MakeTenantID(uint64(tree.MustBeDInt(tenantIDRow[0].Datum)))
 	if err != nil {
 		return tenantcapabilities.Entry{}, err
 	}
