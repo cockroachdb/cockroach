@@ -161,7 +161,6 @@ func runDrainAndDecommission(
 
 		// Speed up the decommissioning.
 		run(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
-		run(`SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
 
 		// Wait for initial up-replication.
 		err := WaitForReplication(ctx, t, db, defaultReplicationFactor)
@@ -999,8 +998,6 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		// Increase the speed of decommissioning.
 		err = run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 		require.NoError(t, err)
-		err = run(db, `SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
-		require.NoError(t, err)
 
 		// Wait for initial up-replication.
 		err := WaitFor3XReplication(ctx, t, db)
@@ -1095,7 +1092,6 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		// Increase the speed of decommissioning.
 		run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
-		run(db, `SET CLUSTER SETTING kv.snapshot_recovery.max_rate='2GiB'`)
 
 		// Wait for initial up-replication.
 		err := WaitForReplication(ctx, t, db, replicationFactor)

@@ -604,12 +604,10 @@ func setDBRangeLimits(ctx context.Context, db *gosql.DB, dbName string, size int
 func setSnapshotRate(ctx context.Context, db *gosql.DB, sizeMB int64) error {
 	queries := []string{
 		"RESET CLUSTER SETTING kv.snapshot_rebalance.max_rate",
-		"RESET CLUSTER SETTING kv.snapshot_recovery.max_rate",
 	}
 	if sizeMB > 0 {
 		queries = []string{
 			fmt.Sprintf("SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '%dMiB'", sizeMB),
-			fmt.Sprintf("SET CLUSTER SETTING kv.snapshot_recovery.max_rate = '%dMiB'", sizeMB),
 		}
 	}
 	for _, query := range queries {

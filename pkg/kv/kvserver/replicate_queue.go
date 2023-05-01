@@ -559,7 +559,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 		purgCh:    time.NewTicker(replicateQueuePurgatoryCheckInterval).C,
 		updateCh:  make(chan time.Time, 1),
 		logTracesThresholdFunc: makeRateLimitedTimeoutFuncByPermittedSlowdown(
-			permittedRangeScanSlowdown/2, rebalanceSnapshotRate, recoverySnapshotRate,
+			permittedRangeScanSlowdown/2, rebalanceSnapshotRate,
 		),
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
@@ -574,7 +574,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			// so we use the raftSnapshotQueueTimeoutFunc. This function sets a
 			// timeout based on the range size and the sending rate in addition
 			// to consulting the setting which controls the minimum timeout.
-			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate, recoverySnapshotRate),
+			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
 			successes:          store.metrics.ReplicateQueueSuccesses,
 			failures:           store.metrics.ReplicateQueueFailures,
 			pending:            store.metrics.ReplicateQueuePending,
