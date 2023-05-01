@@ -679,3 +679,13 @@ func fallBackIfVirtualColumnWithNotNullConstraint(t *tree.AlterTableAddColumn) {
 			"virtual column with NOT NULL constraint is not supported"))
 	}
 }
+
+// panicIfSystemColumn blocks alter operations on system columns.
+func panicIfSystemColumn(column *scpb.Column, columnName string) {
+	if column.IsSystemColumn {
+		// Block alter operations on system columns.
+		panic(pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot alter system column %q", columnName))
+	}
+}

@@ -100,7 +100,13 @@ func (p *planner) findColumnToRename(
 	if err != nil {
 		return nil, err
 	}
-
+	// Block renaming of system columns.
+	if col.IsSystemColumn() {
+		return nil, pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot rename system column %q", col.ColName(),
+		)
+	}
 	for _, tableRef := range tableDesc.DependedOnBy {
 		found := false
 		for _, colID := range tableRef.ColumnIDs {
