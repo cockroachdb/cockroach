@@ -1705,7 +1705,7 @@ func (rpcCtx *Context) makeDialCtx(
 	dialCtx := rpcCtx.MasterCtx
 	var rnodeID interface{} = remoteNodeID
 	if remoteNodeID == 0 {
-		rnodeID = '?'
+		rnodeID = redact.SafeString("?")
 	}
 	dialCtx = logtags.AddTag(dialCtx, "rnode", rnodeID)
 	dialCtx = logtags.AddTag(dialCtx, "raddr", target)
