@@ -6972,6 +6972,38 @@ Note that the top vertex of the segment touching another line does not count as 
 		},
 	),
 
+	"st_bdpolyfromtext": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "str", Typ: types.String}, {Name: "srid", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				srid := geopb.SRID(tree.MustBeDInt(args[1]))
+				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
+				if err != nil {
+					return nil, err
+				}
+				polygon, err := geomfn.MakePolygonFromMultiLineString(g, srid)
+				if err != nil {
+					return nil, err
+				}
+				polygonT, err := polygon.AsGeomT()
+				if err != nil {
+					return tree.NewDGeometry(geo.Geometry{}), err
+				}
+				if _, ok := polygonT.(*geom.MultiPolygon); ok {
+					return tree.NewDGeometry(geo.Geometry{}), pgerror.Newf(pgcode.Internal, "function must not return a MULTIPOLYGON internally")
+				}
+				return tree.NewDGeometry(polygon), nil
+			},
+			Info: infoBuilder{
+				info: "Returns a Polygon from multilinestring WKT with a SRID. If the input is not a multilinestring an error will be thrown.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	//
 	// Unimplemented.
 	//
@@ -7004,7 +7036,6 @@ Note that the top vertex of the segment touching another line does not count as 
 	"st_split":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
 	"st_tileenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
 	"st_wrapx":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
-	"st_bdpolyfromtext":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48801}),
 	"st_geomfromgml":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48807}),
 	"st_geomfromtwkb":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48809}),
 	"st_gmltosql":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48810}),
