@@ -215,3 +215,14 @@ CREATE INDEX idx ON tab3(x) STORING (crdb_internal_mvcc_timestamp)
 
 statement error pgcode 42703 column "crdb_internal_mvcc_timestamp" does not exist
 CREATE INDEX idx ON tab3(x, (crdb_internal_mvcc_timestamp + 10))
+
+subtest alter_commands
+
+statement error pq: cannot rename system column "crdb_internal_mvcc_timestamp"
+ALTER TABLE tab3 RENAME crdb_internal_mvcc_timestamp TO blah;
+
+statement error pq: cannot alter system column "crdb_internal_mvcc_timestamp"
+ALTER TABLE tab3 DROP COLUMN crdb_internal_mvcc_timestamp;
+
+statement error pq: cannot alter system column "crdb_internal_mvcc_timestamp"
+ALTER TABLE tab3 ALTER COLUMN crdb_internal_mvcc_timestamp SET NOT NULL;
