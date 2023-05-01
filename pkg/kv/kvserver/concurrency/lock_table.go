@@ -502,7 +502,12 @@ func releaseLockTableGuardImpl(g *lockTableGuardImpl) {
 func (g *lockTableGuardImpl) ShouldWait() bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.mu.startWait
+	// The request needs to drop latches and wait if:
+	// 1. The lock table indicated as such (e.g. the request ran into a
+	// conflicting lock).
+	// 2. OR the request successfully performed its scan but discovered replicated
+	// locks that need to be resolved before it can evaluate.
+	return g.mu.startWait || len(g.toResolve) > 0
 }
 
 func (g *lockTableGuardImpl) ResolveBeforeScanning() []roachpb.LockUpdate {
@@ -734,20 +739,7 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.updateStateToDoneWaitingLocked()
-	// We are doneWaiting but may have some locks to resolve. There are
-	// two cases:
-	// - notify=false: the caller was already waiting and will look at this list
-	//   of locks.
-	// - notify=true: this is a scan initiated by the caller, and it is holding
-	//   latches. We need to tell it to "wait", so that it does this resolution
-	//   first. startWait is currently false. This is the case handled below.
 	if notify {
-		if len(g.toResolve) > 0 {
-			// Force caller to release latches and resolve intents. The first
-			// state it will see after releasing latches is doneWaiting, which
-			// will cause it to resolve intents.
-			g.mu.startWait = true
-		}
 		g.notify()
 	}
 }
