@@ -17,6 +17,7 @@
 
 // This code was derived from https://github.com/youtube/vitess.
 
+// Package lexbase contains utilities for lexing sql.
 package lexbase
 
 import (
