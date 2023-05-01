@@ -86,3 +86,32 @@ SHOW GRANTS FOR testuser3
 database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
 test           s2           q              testuser3  ALL             false
 test           s2           t              testuser3  ALL             false
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT USAGE ON SEQUENCES TO testuser3;
+
+statement ok
+CREATE SCHEMA s3;
+CREATE SCHEMA s4;
+CREATE SEQUENCE s3.q;
+CREATE SEQUENCE s4.q;
+
+query TTTTTB colnames
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           s            q              testuser   ALL             false
+test           s            q              testuser2  ALL             false
+test           s2           q              testuser   ALL             false
+test           s2           q              testuser2  ALL             false
+
+
+
+query TTTTTB colnames
+SHOW GRANTS FOR testuser3
+----
+database_name  schema_name  relation_name  grantee    privilege_type  is_grantable
+test           s2           q              testuser3  ALL             false
+test           s2           t              testuser3  ALL             false
+test           s3           q              testuser3  USAGE           false
+test           s4           q              testuser3  USAGE           false
