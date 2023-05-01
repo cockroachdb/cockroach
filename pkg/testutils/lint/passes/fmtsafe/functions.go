@@ -73,7 +73,8 @@ var requireConstFmt = map[string]bool{
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash.ReportOrPanic": true,
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb.NewAmbiguousResultErrorf": true,
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb.NewAmbiguousResultErrorf":      true,
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb.NewDecommissionedStatusErrorf": true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/util/tracing.Span).Recordf":      true,
 	"(*github.com/cockroachdb/cockroach/pkg/util/tracing.spanInner).Recordf": true,
