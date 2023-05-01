@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -78,13 +79,21 @@ import (
 
 // restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
 // tables we process in a single txn when restoring their table statistics.
-var restoreStatsInsertBatchSize = 10
+const restoreStatsInsertBatchSize = 10
 
 var useSimpleImportSpans = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"bulkio.restore.use_simple_import_spans",
 	"if set to true, restore will generate its import spans using the makeSimpleImportSpans algorithm",
 	false,
+)
+
+var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"bulkio.restore.insert_stats_workers",
+	"number of concurrent workers that will restore backed up table statistics",
+	5,
+	settings.PositiveInt,
 )
 
 // rewriteBackupSpanKey rewrites a backup span start key for the purposes of
@@ -2011,52 +2020,90 @@ func insertStats(
 	if details.StatsInserted {
 		return nil
 	}
-
-	totalNumBatches := len(latestStats) / restoreStatsInsertBatchSize
-	log.Infof(ctx, "restore will insert %d TableStatistics in %d batches", len(latestStats), totalNumBatches)
-	insertStatsProgress := log.Every(10 * time.Second)
+	if len(latestStats) == 0 {
+		return nil
+	}
 
 	// We could be restoring hundreds of tables, so insert the new stats in
 	// batches instead of all in a single, long-running txn. This prevents intent
 	// buildup in the face of txn retries.
+	batchSize := restoreStatsInsertBatchSize
+	totalNumBatches := len(latestStats) / batchSize
+	if len(latestStats)%batchSize != 0 {
+		totalNumBatches += 1
+	}
+	log.Infof(ctx, "restore will insert %d TableStatistics in %d batches", len(latestStats), totalNumBatches)
+	insertStatsProgress := log.Every(10 * time.Second)
+
+	startingStatsInsertion := timeutil.Now()
+	batchCh := make(chan []*stats.TableStatisticProto, totalNumBatches)
 	for {
 		if len(latestStats) == 0 {
-			return nil
+			break
 		}
-
-		if len(latestStats) < restoreStatsInsertBatchSize {
-			restoreStatsInsertBatchSize = len(latestStats)
+		if len(latestStats) < batchSize {
+			batchSize = len(latestStats)
 		}
-
-		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			if err := stats.InsertNewStats(
-				ctx, execCfg.Settings, txn, latestStats[:restoreStatsInsertBatchSize],
-			); err != nil {
-				return errors.Wrapf(err, "inserting stats from backup")
-			}
-
-			// If this is the last batch, mark the stats insertion complete.
-			if restoreStatsInsertBatchSize == len(latestStats) {
-				details.StatsInserted = true
-				if err := job.WithTxn(txn).SetDetails(ctx, details); err != nil {
-					return errors.Wrapf(err, "updating job marking stats insertion complete")
-				}
-				return nil
-			}
-
-			return nil
-		}); err != nil {
-			return err
-		}
+		batchCh <- latestStats[:batchSize]
 
 		// Truncate the stats that we have inserted in the txn above.
-		latestStats = latestStats[restoreStatsInsertBatchSize:]
-
-		if insertStatsProgress.ShouldLog() {
-			remainingBatches := len(latestStats) / restoreStatsInsertBatchSize
-			log.Infof(ctx, "restore has %d/%d TableStatistics batches remaining to insert", remainingBatches, totalNumBatches)
-		}
+		latestStats = latestStats[batchSize:]
 	}
+	close(batchCh)
+
+	logStatsProgress := func(remainingBatches, completedBatches int) {
+		msg := fmt.Sprintf("restore has %d/%d TableStatistics batches remaining to insert",
+			remainingBatches, totalNumBatches)
+		timeSinceStart := int(timeutil.Since(startingStatsInsertion).Seconds())
+		if completedBatches != 0 && timeSinceStart != 0 {
+			rate := completedBatches / timeSinceStart
+			msg = fmt.Sprintf("%s; ingesting at the rate of %d batches/sec", msg, rate)
+		}
+		log.Infof(ctx, "%s", msg)
+	}
+
+	mu := struct {
+		syncutil.Mutex
+		completedBatches int
+	}{}
+	if err := ctxgroup.GroupWorkers(ctx, int(restoreStatsInsertionConcurrency.Get(&execCfg.Settings.SV)),
+		func(ctx context.Context, i int) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case b, ok := <-batchCh:
+					if !ok {
+						return nil
+					}
+					if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+						if err := stats.InsertNewStats(
+							ctx, execCfg.Settings, txn, b,
+						); err != nil {
+							return errors.Wrapf(err, "inserting stats from backup")
+						}
+						return nil
+					}); err != nil {
+						return err
+					}
+					mu.Lock()
+					mu.completedBatches++
+					remainingBatches := totalNumBatches - mu.completedBatches
+					completedBatches := mu.completedBatches
+					mu.Unlock()
+					if insertStatsProgress.ShouldLog() {
+						logStatsProgress(remainingBatches, completedBatches)
+					}
+				}
+			}
+		}); err != nil {
+		return errors.Wrap(err, "failed to restore stats")
+	}
+	logStatsProgress(0, totalNumBatches)
+
+	// Mark the stats insertion complete.
+	details.StatsInserted = true
+	return errors.Wrap(job.NoTxn().SetDetails(ctx, details), "updating job marking stats insertion complete")
 }
 
 // publishDescriptors updates the RESTORED descriptors' status from OFFLINE to
