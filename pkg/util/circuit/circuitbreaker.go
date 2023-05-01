@@ -61,6 +61,12 @@ func NewBreaker(opts Options) *Breaker {
 	return br
 }
 
+// Signal is returned from the Breaker.Signal method.
+type Signal interface {
+	Err() error
+	C() <-chan struct{}
+}
+
 // Signal returns a channel that is closed once the breaker trips and a function
 // (which may be invoked multiple times) returning a pertinent error. This is
 // similar to context.Context's Done() and Err().
@@ -73,10 +79,7 @@ func NewBreaker(opts Options) *Breaker {
 //
 // Signal is allocation-free and suitable for use in performance-sensitive code
 // paths. See ExampleBreaker_Signal for a usage example.
-func (b *Breaker) Signal() interface {
-	Err() error
-	C() <-chan struct{}
-} {
+func (b *Breaker) Signal() Signal {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	// NB: we need to return errAndCh here, returning (errAndCh.C(), errAndCh.Err)
