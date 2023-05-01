@@ -2566,8 +2566,10 @@ func newRegisteredServer(
 		Knobs:           ContextTestingKnobs{NoLoopbackDialer: true},
 	}
 	// Heartbeat faster so we don't have to wait as long.
+	// Going too low on the timeout makes the test fragile under (heavy) stress.
+	// It's nice to be able to stress this kind of test.
 	opts.Config.RPCHeartbeatInterval = 10 * time.Millisecond
-	opts.Config.RPCHeartbeatTimeout = 100 * time.Millisecond
+	opts.Config.RPCHeartbeatTimeout = 500 * time.Millisecond
 
 	rpcCtx := NewContext(context.Background(), opts)
 	// This is normally set up inside the server, we want to hold onto all PingRequests that come through.
