@@ -17,20 +17,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 )
 
-type errorCodeSet map[pgcode.Code]bool
+type errorCodeSet map[pgcode.Code]struct{}
 
 func makeExpectedErrorSet() errorCodeSet {
-	return errorCodeSet(map[pgcode.Code]bool{})
+	return errorCodeSet(map[pgcode.Code]struct{}{})
 }
 
 func (set errorCodeSet) merge(otherSet errorCodeSet) {
 	for code := range otherSet {
-		set[code] = true
+		set[code] = struct{}{}
 	}
 }
 
 func (set errorCodeSet) add(code pgcode.Code) {
-	set[code] = true
+	set[code] = struct{}{}
 }
 
 func (set errorCodeSet) reset() {
