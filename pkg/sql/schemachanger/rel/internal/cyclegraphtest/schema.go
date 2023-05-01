@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package cyclegraphtest contains test utilities and a "Suite" for reltest.
 package cyclegraphtest
 
 import (

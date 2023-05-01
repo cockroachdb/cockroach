@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package scgraph contains utilities for describing a schema change operation
+// as a graph of screl nodes.
 package scgraph
 
 import (

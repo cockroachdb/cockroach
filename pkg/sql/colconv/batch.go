@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package colconv exposes utilities for working with vectorized columns.
 package colconv
 
 import (

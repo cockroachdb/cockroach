@@ -6,6 +6,8 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
+// Package schemafeed provides SchemaFeed, which can be used to track schema
+// updates.
 package schemafeed
 
 import (

@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package scop describes ops within a schema change.
 package scop
 
 // Op represents an action to be taken on a single descriptor.
