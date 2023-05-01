@@ -52,7 +52,7 @@ func newRaftSnapshotQueue(store *Store) *raftSnapshotQueue {
 			needsLease:           false,
 			needsSpanConfigs:     false,
 			acceptsUnsplitRanges: true,
-			processTimeoutFunc:   makeRateLimitedTimeoutFunc(recoverySnapshotRate, rebalanceSnapshotRate),
+			processTimeoutFunc:   makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
 			successes:            store.metrics.RaftSnapshotQueueSuccesses,
 			failures:             store.metrics.RaftSnapshotQueueFailures,
 			pending:              store.metrics.RaftSnapshotQueuePending,

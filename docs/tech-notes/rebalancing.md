@@ -135,7 +135,7 @@ are:
   up-replicate or rebalance, because their snapshots can't complete in time
   and just get canceled on every attempt. This shouldn't happen with the
   default settings of `kv.snapshot_rebalance.max_rate`,
-  `kv.snapshot_recovery.max_rate`, and `ZoneConfig.RangeMaxBytes`, but
+  and `ZoneConfig.RangeMaxBytes`, but
   modifications to one or more of them can put a cluster in danger.
 * We limit lease transfers away from each node to one per second. This is a
   very long-standing policy that hasn't been reconsidered in a long time, but

@@ -77,7 +77,6 @@ import (
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 )
 
 var testIdent = roachpb.StoreIdent{
@@ -3394,26 +3393,9 @@ func TestSnapshotRateLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCases := []struct {
-		priority      kvserverpb.SnapshotRequest_Priority
-		expectedLimit rate.Limit
-		expectedErr   string
-	}{
-		{kvserverpb.SnapshotRequest_UNKNOWN, 0, "unknown snapshot priority"},
-		{kvserverpb.SnapshotRequest_RECOVERY, 32 << 20, ""},
-		{kvserverpb.SnapshotRequest_REBALANCE, 32 << 20, ""},
-	}
-	for _, c := range testCases {
-		t.Run(c.priority.String(), func(t *testing.T) {
-			limit, err := snapshotRateLimit(cluster.MakeTestingClusterSettings(), c.priority)
-			if !testutils.IsError(err, c.expectedErr) {
-				t.Fatalf("expected \"%s\", but found %v", c.expectedErr, err)
-			}
-			if c.expectedLimit != limit {
-				t.Fatalf("expected %v, but found %v", c.expectedLimit, limit)
-			}
-		})
-	}
+	st := cluster.MakeTestingClusterSettings()
+	limit := rebalanceSnapshotRate.Get(&st.SV)
+	require.Equal(t, int64(32<<20), limit)
 }
 
 type mockSpanConfigReader struct {

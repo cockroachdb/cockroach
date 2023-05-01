@@ -1001,7 +1001,6 @@ func TestQueueRateLimitedTimeoutFunc(t *testing.T) {
 	ctx := context.Background()
 	type testCase struct {
 		guaranteedProcessingTime time.Duration
-		recoverySnapshotRate     int64 // bytes/s
 		rebalanceSnapshotRate    int64 // bytes/s
 		replicaSize              int64 // bytes
 		expectedTimeout          time.Duration
@@ -1010,9 +1009,8 @@ func TestQueueRateLimitedTimeoutFunc(t *testing.T) {
 		return fmt.Sprintf("%+v", tc), func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			queueGuaranteedProcessingTimeBudget.Override(ctx, &st.SV, tc.guaranteedProcessingTime)
-			recoverySnapshotRate.Override(ctx, &st.SV, tc.recoverySnapshotRate)
 			rebalanceSnapshotRate.Override(ctx, &st.SV, tc.rebalanceSnapshotRate)
-			tf := makeRateLimitedTimeoutFunc(recoverySnapshotRate, rebalanceSnapshotRate)
+			tf := makeRateLimitedTimeoutFunc(rebalanceSnapshotRate)
 			repl := mvccStatsReplicaInQueue{
 				size: tc.replicaSize,
 			}
@@ -1022,56 +1020,30 @@ func TestQueueRateLimitedTimeoutFunc(t *testing.T) {
 	for _, tc := range []testCase{
 		{
 			guaranteedProcessingTime: time.Minute,
-			recoverySnapshotRate:     1 << 30,
-			rebalanceSnapshotRate:    1 << 20, // minimum rate for timeout calculation.
-			replicaSize:              1 << 20,
-			expectedTimeout:          time.Minute, // the minimum timeout (guaranteedProcessingTime).
-		},
-		{
-			guaranteedProcessingTime: time.Minute,
-			recoverySnapshotRate:     1 << 20, // minimum rate for timeout calculation.
-			rebalanceSnapshotRate:    1 << 30,
-			replicaSize:              1 << 20,
-			expectedTimeout:          time.Minute, // the minimum timeout (guaranteedProcessingTime).
-		},
-		{
-			guaranteedProcessingTime: time.Minute,
-			recoverySnapshotRate:     1 << 20, // minimum rate for timeout calculation.
-			rebalanceSnapshotRate:    2 << 20,
-			replicaSize:              100 << 20,
-			expectedTimeout:          100 * time.Second * permittedRangeScanSlowdown,
-		},
-		{
-			guaranteedProcessingTime: time.Minute,
-			recoverySnapshotRate:     2 << 20,
-			rebalanceSnapshotRate:    1 << 20, // minimum rate for timeout calculation.
-			replicaSize:              100 << 20,
-			expectedTimeout:          100 * time.Second * permittedRangeScanSlowdown,
-		},
-		{
-			guaranteedProcessingTime: time.Hour,
-			recoverySnapshotRate:     1 << 20, // minimum rate for timeout calculation.
-			rebalanceSnapshotRate:    1 << 30,
-			replicaSize:              100 << 20,
-			expectedTimeout:          time.Hour, // the minimum timeout (guaranteedProcessingTime).
-		},
-		{
-			guaranteedProcessingTime: time.Hour,
-			recoverySnapshotRate:     1 << 30,
-			rebalanceSnapshotRate:    1 << 20, // minimum rate for timeout calculation.
-			replicaSize:              100 << 20,
-			expectedTimeout:          time.Hour, // the minimum timeout (guaranteedProcessingTime).
-		},
-		{
-			guaranteedProcessingTime: time.Minute,
-			recoverySnapshotRate:     1 << 10, // minimum rate for timeout calculation.
 			rebalanceSnapshotRate:    1 << 20,
+			replicaSize:              1 << 20,
+			expectedTimeout:          time.Minute, // the minimum timeout (guaranteedProcessingTime).
+		},
+		{
+			guaranteedProcessingTime: time.Minute,
+			rebalanceSnapshotRate:    1 << 20, // minimum rate for timeout calculation.
+			replicaSize:              100 << 20,
+			expectedTimeout:          100 * time.Second * permittedRangeScanSlowdown,
+		},
+		{
+			guaranteedProcessingTime: time.Hour,
+			rebalanceSnapshotRate:    1 << 20, // minimum rate for timeout calculation.
+			replicaSize:              100 << 20,
+			expectedTimeout:          time.Hour, // the minimum timeout (guaranteedProcessingTime).
+		},
+		{
+			guaranteedProcessingTime: time.Minute,
+			rebalanceSnapshotRate:    1 << 10,
 			replicaSize:              100 << 20,
 			expectedTimeout:          100 * (1 << 10) * time.Second * permittedRangeScanSlowdown,
 		},
 		{
 			guaranteedProcessingTime: time.Minute,
-			recoverySnapshotRate:     1 << 20,
 			rebalanceSnapshotRate:    1 << 10, // minimum rate for timeout calculation.
 			replicaSize:              100 << 20,
 			expectedTimeout:          100 * (1 << 10) * time.Second * permittedRangeScanSlowdown,

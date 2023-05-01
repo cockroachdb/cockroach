@@ -66,15 +66,15 @@ const (
 	DefaultSnapshotApplyLimit = 1
 )
 
-// snapshotPrioritizationEnabled will allow the sender and receiver of snapshots
-// to prioritize the snapshots. If disabled, the behavior will be FIFO on both
-// send and receive sides.
-var snapshotPrioritizationEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.snapshot_prioritization.enabled",
-	"if true, then prioritize enqueued snapshots on both the send or receive sides",
-	true,
-)
+// TODO(baptist): Remove in v24.1, no longer read in v23.2.
+func init() {
+	settings.RegisterBoolSetting(
+		settings.SystemOnly,
+		"kv.snapshot_prioritization.enabled",
+		"deprecated no longer used",
+		true,
+	).SetRetired()
+}
 
 // snapshotMetrics contains metrics on the number and size of snapshots in
 // progress or in the snapshot queue.
@@ -1172,9 +1172,7 @@ type SnapshotStorePool interface {
 // limit of 1mb/s, a 512mb snapshot will take just under 9 minutes to send.
 const minSnapshotRate = 1 << 20 // 1mb/s
 
-// rebalanceSnapshotRate is the rate at which snapshots can be sent in the
-// context of up-replication or rebalancing (i.e. any snapshot that was not
-// requested by raft itself, to which `kv.snapshot_recovery.max_rate` applies).
+// rebalanceSnapshotRate is the rate at which all snapshots are sent.
 var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.snapshot_rebalance.max_rate",
@@ -1189,28 +1187,15 @@ var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	},
 ).WithPublic()
 
-// recoverySnapshotRate is the rate at which Raft-initiated snapshot can be
-// sent. Ideally, one would never see a Raft-initiated snapshot; we'd like all
-// replicas to start out as learners or via splits, and to never be cut off from
-// the log. However, it has proved unfeasible to completely get rid of them.
-//
-// TODO(tbg): The existence of this rate, separate from rebalanceSnapshotRate,
-// does not make a whole lot of sense. Both sources of snapshots compete thanks
-// to a semaphore at the receiver, and so the slower one ultimately determines
-// the pace at which things can move along.
-var recoverySnapshotRate = settings.RegisterByteSizeSetting(
-	settings.SystemOnly,
-	"kv.snapshot_recovery.max_rate",
-	"the rate limit (bytes/sec) to use for recovery snapshots",
-	32<<20, // 32mb/s
-	func(v int64) error {
-		if v < minSnapshotRate {
-			return errors.Errorf("snapshot rate cannot be set to a value below %s: %s",
-				humanizeutil.IBytes(minSnapshotRate), humanizeutil.IBytes(v))
-		}
-		return nil
-	},
-).WithPublic()
+// TODO(baptist): Remove in v24.1, no longer read in v23.2.
+func init() {
+	settings.RegisterByteSizeSetting(
+		settings.SystemOnly,
+		"kv.snapshot_recovery.max_rate",
+		"use kv.snapshot_rebalance.max_rate instead",
+		32<<20, // 32mb/s
+	).SetRetired()
+}
 
 // snapshotSenderBatchSize is the size that key-value batches are allowed to
 // grow to during Range snapshots before being sent to the receiver. This limit
@@ -1338,19 +1323,6 @@ var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
 	kvserverbase.BulkIOWriteBurst,
 	settings.PositiveInt,
 )
-
-func snapshotRateLimit(
-	st *cluster.Settings, priority kvserverpb.SnapshotRequest_Priority,
-) (rate.Limit, error) {
-	switch priority {
-	case kvserverpb.SnapshotRequest_RECOVERY:
-		return rate.Limit(recoverySnapshotRate.Get(&st.SV)), nil
-	case kvserverpb.SnapshotRequest_REBALANCE:
-		return rate.Limit(rebalanceSnapshotRate.Get(&st.SV)), nil
-	default:
-		return 0, errors.Errorf("unknown snapshot priority: %s", priority)
-	}
-}
 
 // SendEmptySnapshot creates an OutgoingSnapshot for the input range
 // descriptor and seeds it with an empty range. Then, it sends this
@@ -1558,10 +1530,7 @@ func sendSnapshot(
 	start = timeutil.Now()
 
 	// Consult cluster settings to determine rate limits and batch sizes.
-	targetRate, err := snapshotRateLimit(st, header.Priority)
-	if err != nil {
-		return errors.Wrapf(err, "%s", to)
-	}
+	targetRate := rate.Limit(rebalanceSnapshotRate.Get(&st.SV))
 	batchSize := snapshotSenderBatchSize.Get(&st.SV)
 
 	// Convert the bytes/sec rate limit to batches/sec.
