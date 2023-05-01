@@ -78,7 +78,14 @@ message PingRequest {
     // If there is already an established reverse connection, respond
     // immediately, otherwise if there is no reverse connection, attempt to
     // create one asynchronously.  If that fails to connect, then respond with
-    // failure to the next PingRequest on this connection.
+    // failure to the next PingRequest on this connection. This failure is
+    // then permanent (even if a redial would succeed) until the caller
+    // uses a BLOCKING heartbeat.
+    //
+    // TODO(tbg): is this last part desired behavior? Should we kick off a
+    // re-dial on NON_BLOCKING that resets the error only once it succeeds?
+    // This is essentially moving from checking the *Connection's error to
+    // checking the surrounding `*peer`'s circuit breaker instead.
     NON_BLOCKING = 2;
   }
   // What type of dialback is requested for the recipient of this PingRequest
