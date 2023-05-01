@@ -32,7 +32,7 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid        defaclrole  defaclnamespace  defaclobjtype  defaclacl
 456512573  1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
-456512573  1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+456512573  1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 456512573  1546506610  0                T              {bar=U*/,foo=U*/}
 456512573  1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 456512573  1546506610  0                f              {bar=X*/,foo=X*/,=X/}
@@ -53,17 +53,17 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,foo=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/,foo=C*U*/}
 625980300   1791217281  0                f              {bar=X*/,foo=X*/}
 1062786855  2026795574  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
-1062786855  2026795574  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {bar=U*/,foo=U*/,=U/}
 1062786855  2026795574  0                n              {bar=C*U*/,foo=C*U*/}
 1062786855  2026795574  0                f              {bar=X*/,foo=X*/}
 456512573   1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
-456512573   1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+456512573   1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 456512573   1546506610  0                T              {bar=U*/,foo=U*/}
 456512573   1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 456512573   1546506610  0                f              {bar=X*/,foo=X*/,=X/}
@@ -92,7 +92,7 @@ oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 1062786855  2026795574  0                n              {}
 1062786855  2026795574  0                f              {}
 456512573   1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
-456512573   1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+456512573   1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 456512573   1546506610  0                T              {bar=U*/,foo=U*/}
 456512573   1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 456512573   1546506610  0                f              {bar=X*/,foo=X*/,=X/}
@@ -116,17 +116,17 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/}
 625980300   1791217281  0                f              {bar=X*/}
 1062786855  2026795574  0                r              {foo=C*a*d*r*w*/}
-1062786855  2026795574  0                S              {foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {foo=U*/,=U/}
 1062786855  2026795574  0                n              {foo=C*U*/}
 1062786855  2026795574  0                f              {foo=X*/}
 456512573   1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
-456512573   1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+456512573   1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 456512573   1546506610  0                T              {bar=U*/,foo=U*/}
 456512573   1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 456512573   1546506610  0                f              {bar=X*/,foo=X*/,=X/}
@@ -141,17 +141,17 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/}
 625980300   1791217281  0                f              {bar=X*/}
 1062786855  2026795574  0                r              {foo=C*a*d*w*/}
-1062786855  2026795574  0                S              {foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {foo=U*/,=U/}
 1062786855  2026795574  0                n              {foo=C*U*/}
 1062786855  2026795574  0                f              {foo=X*/}
 456512573   1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
-456512573   1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+456512573   1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 456512573   1546506610  0                T              {bar=U*/,foo=U*/}
 456512573   1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 456512573   1546506610  0                f              {bar=X*/,foo=X*/,=X/}
@@ -164,17 +164,17 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/}
 625980300   1791217281  0                f              {bar=X*/}
 1062786855  2026795574  0                r              {foo=C*a*d*rw*/}
-1062786855  2026795574  0                S              {foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {foo=U*/,=U/}
 1062786855  2026795574  0                n              {foo=C*U*/}
 1062786855  2026795574  0                f              {foo=X*/}
 456512573   1546506610  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
-456512573   1546506610  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/,=r/}
+456512573   1546506610  0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/,=r/}
 456512573   1546506610  0                T              {bar=U*/,foo=U*/}
 456512573   1546506610  0                n              {bar=C*U*/,foo=C*U*/,=U/}
 456512573   1546506610  0                f              {bar=X*/,foo=X*/,=X/}
@@ -193,12 +193,12 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/}
 625980300   1791217281  0                f              {bar=X*/}
 1062786855  2026795574  0                r              {foo=C*a*d*rw*/}
-1062786855  2026795574  0                S              {foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {foo=U*/,=U/}
 1062786855  2026795574  0                n              {foo=C*U*/}
 1062786855  2026795574  0                f              {foo=X*/}
@@ -214,12 +214,12 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/}
 625980300   1791217281  0                f              {bar=X*/}
 1062786855  2026795574  0                r              {foo=C*a*d*rw*/}
-1062786855  2026795574  0                S              {foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {foo=U*/,=U/}
 1062786855  2026795574  0                n              {foo=C*U*/}
 1062786855  2026795574  0                f              {foo=X*/}
@@ -242,17 +242,17 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/}
 625980300   1791217281  0                f              {bar=X*/}
 1062786855  2026795574  0                r              {foo=C*a*d*rw*/}
-1062786855  2026795574  0                S              {foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {foo=U*/,=U/}
 1062786855  2026795574  0                n              {foo=C*U*/}
 1062786855  2026795574  0                f              {foo=X*/}
 2946850121  0           0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
-2946850121  0           0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
+2946850121  0           0                S              {bar=C*U*a*d*r*w*/,foo=C*U*a*d*r*w*/}
 2946850121  0           0                T              {bar=U*/,foo=U*/}
 2946850121  0           0                n              {bar=C*U*/,foo=C*U*/}
 2946850121  0           0                f              {bar=X*/,foo=X*/}
@@ -269,12 +269,12 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/}
 625980300   1791217281  0                f              {bar=X*/}
 1062786855  2026795574  0                r              {foo=C*a*d*rw*/}
-1062786855  2026795574  0                S              {foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {foo=U*/,=U/}
 1062786855  2026795574  0                n              {foo=C*U*/}
 1062786855  2026795574  0                f              {foo=X*/}
@@ -295,12 +295,12 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/}
 625980300   1791217281  0                f              {bar=X*/}
 1062786855  2026795574  0                r              {foo=C*a*d*rw*/}
-1062786855  2026795574  0                S              {foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {foo=U*/,=U/}
 1062786855  2026795574  0                n              {foo=C*U*/}
 1062786855  2026795574  0                f              {foo=X*/}
@@ -319,12 +319,12 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/}
 625980300   1791217281  0                f              {bar=X*/}
 1062786855  2026795574  0                r              {foo=C*a*d*rw*/}
-1062786855  2026795574  0                S              {foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {foo=U*/,=U/}
 1062786855  2026795574  0                n              {foo=C*U*/}
 1062786855  2026795574  0                f              {foo=X*/}
@@ -345,12 +345,12 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/}
 625980300   1791217281  0                f              {bar=X*/}
 1062786855  2026795574  0                r              {foo=C*a*d*rw*/}
-1062786855  2026795574  0                S              {foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {foo=U*/,=U/}
 1062786855  2026795574  0                n              {foo=C*U*/}
 1062786855  2026795574  0                f              {foo=X*/}
@@ -374,17 +374,17 @@ SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
 625980300   1791217281  0                r              {bar=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/}
+625980300   1791217281  0                S              {bar=C*U*a*d*r*w*/}
 625980300   1791217281  0                T              {bar=U*/,=U/}
 625980300   1791217281  0                n              {bar=C*U*/}
 625980300   1791217281  0                f              {bar=X*/}
 1062786855  2026795574  0                r              {foo=C*a*d*rw*/}
-1062786855  2026795574  0                S              {foo=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {foo=C*U*a*d*r*w*/}
 1062786855  2026795574  0                T              {foo=U*/,=U/}
 1062786855  2026795574  0                n              {foo=C*U*/}
 1062786855  2026795574  0                f              {foo=X*/}
 2295354276  2264919399  0                r              {foo=C*a*d*r*w*/}
-2295354276  2264919399  0                S              {foo=C*a*d*r*w*/}
+2295354276  2264919399  0                S              {foo=C*U*a*d*r*w*/}
 2295354276  2264919399  0                T              {foo=U*/,testuser=U*/}
 2295354276  2264919399  0                n              {foo=C*U*/}
 2295354276  2264919399  0                f              {foo=X*/}
