@@ -500,7 +500,7 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 		return nil, err
 	}
 	op := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	op.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.DuplicateColumn, condition: columnExistsOnTable},
 		{code: pgcode.UndefinedObject, condition: typ == nil},
 		{code: pgcode.NotNullViolation, condition: hasRows && def.Nullable.Nullability == tree.NotNull},
@@ -510,7 +510,7 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 			code:      pgcode.FeatureNotSupported,
 			condition: def.Unique.IsUnique && typ != nil && !colinfo.ColumnTypeIsIndexable(typ),
 		},
-	}.add(op.expectedExecErrors)
+	})
 	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def))
 	return op, nil
 }
@@ -578,13 +578,13 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedColumn, condition: !columnExistsOnTable},
 		{code: pgcode.DuplicateObject, condition: constraintExists},
 		{code: pgcode.FeatureNotSupported, condition: columnExistsOnTable && !colinfo.ColumnTypeIsIndexable(columnForConstraint.typ)},
 		{pgcode.FeatureNotSupported, hasAlterPKSchemaChange},
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: databaseHasRegionChange && tableIsRegionalByRow},
-	}.add(stmt.expectedExecErrors)
+	})
 
 	if !canApplyConstraint {
 		og.candidateExpectedCommitErrors.add(pgcode.UniqueViolation)
@@ -979,15 +979,15 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: !parentColumnHasUniqueConstraint},
 		{code: pgcode.FeatureNotSupported, condition: childColumnIsVirtualComputed},
 		{code: pgcode.FeatureNotSupported, condition: childColumnIsStoredVirtual},
 		{code: pgcode.FeatureNotSupported, condition: parentColumnIsVirtualComputed},
 		{code: pgcode.DuplicateObject, condition: constraintExists},
 		{code: pgcode.DatatypeMismatch, condition: !childColumn.typ.Equivalent(parentColumn.typ)},
-	}.add(stmt.expectedExecErrors)
-	codesWithConditions{}.add(og.expectedCommitErrors)
+	})
+	og.expectedCommitErrors.addAll(codesWithConditions{})
 
 	// TODO(fqazi): We need to do after the fact validation for foreign key violations
 	// errors. Due to how adding foreign key constraints are implemented with a
@@ -1186,7 +1186,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// When an index exists, but `IF NOT EXISTS` is used, then
 	// the index will not be created and the op will complete without errors.
 	if !(indexExists && def.IfNotExists) {
-		codesWithConditions{
+		stmt.expectedExecErrors.addAll(codesWithConditions{
 			{code: pgcode.DuplicateRelation, condition: indexExists},
 			// Inverted indexes do not support stored columns.
 			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Inverted},
@@ -1203,7 +1203,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			{code: pgcode.FeatureNotSupported, condition: duplicateRegionColumn},
 			{code: pgcode.Uncategorized, condition: virtualComputedStored},
 			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
-		}.add(stmt.expectedExecErrors)
+		})
 	}
 
 	stmt.sql = tree.Serialize(def)
@@ -1233,19 +1233,19 @@ func (og *operationGenerator) createSequence(ctx context.Context, tx pgx.Tx) (*o
 		ifNotExists = false
 	}
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedSchema, condition: !schemaExists},
 		{code: pgcode.DuplicateRelation, condition: sequenceExists && !ifNotExists},
-	}.add(stmt.expectedExecErrors)
+	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow this to be detected.
 	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	codesWithConditions{
+	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	}.add(stmt.potentialExecErrors)
+	})
 
 	var seqOptions tree.SequenceOptions
 	// Decide if the sequence should be owned by a column. If so, it can
@@ -1353,17 +1353,30 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	}()
 	// Forward indexes for arrays were added in 23.1, so check the index
 	// definitions for them in mixed version states.
-	forwardIndexesOnNewTypesSupported, err := isClusterVersionLessThan(
+	forwardIndexesOnArraysNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
 		clusterversion.ByKey(clusterversion.V23_1))
 	if err != nil {
 		return nil, err
 	}
-	hasUnsupportedForwardIdxQueries, err := func() (bool, error) {
-		if !forwardIndexesOnNewTypesSupported {
-			return false, nil
-		}
+	// Forward indexes for JSON were added in 23.2.
+	forwardIndexesOnJSONNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_2))
+	if err != nil {
+		return nil, err
+	}
+	// Configuring the visibility of indexes was added in 23.2.
+	indexVisibilityNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_2))
+	if err != nil {
+		return nil, err
+	}
+	hasUnsupportedIdxQueries, err := func() (bool, error) {
 		colInfoMap := make(map[tree.Name]*tree.ColumnTableDef)
 		for _, def := range stmt.Defs {
 			if colDef, ok := def.(*tree.ColumnTableDef); ok {
@@ -1376,6 +1389,9 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 				idxDef = &(def.(*tree.UniqueConstraintTableDef)).IndexTableDef
 			}
 			if idxDef != nil {
+				if indexVisibilityNotSupported && idxDef.Invisibility != 0 && idxDef.Invisibility != 1.0 {
+					return true, nil
+				}
 				for _, col := range idxDef.Columns {
 					if col.Column != "" {
 						colInfo := colInfoMap[col.Column]
@@ -1383,9 +1399,11 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 						if err != nil {
 							return false, err
 						}
-						if typ.Family() == types.ArrayFamily ||
-							typ.Family() == types.JsonFamily {
-							return true, err
+						if forwardIndexesOnArraysNotSupported && typ.Family() == types.ArrayFamily {
+							return true, nil
+						}
+						if forwardIndexesOnJSONNotSupported && typ.Family() == types.JsonFamily {
+							return true, nil
 						}
 					}
 				}
@@ -1406,26 +1424,26 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 	opStmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.DuplicateRelation, condition: tableExists && !stmt.IfNotExists},
 		{code: pgcode.UndefinedSchema, condition: !schemaExists},
-	}.add(opStmt.expectedExecErrors)
+	})
 	// Compatibility errors aren't guaranteed since the cluster version update is not
 	// fully transaction aware.
-	codesWithConditions{
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Syntax, condition: hasUnsupportedTSQuery},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedTSQuery},
-		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedForwardIdxQueries},
-	}.add(opStmt.potentialExecErrors)
+		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedIdxQueries},
+	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
 	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	codesWithConditions{
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	}.add(opStmt.potentialExecErrors)
+	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
 }
@@ -1440,19 +1458,19 @@ func (og *operationGenerator) createEnum(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 	opStmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.DuplicateObject, condition: typeExists},
 		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
-	}.add(opStmt.expectedExecErrors)
+	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
 	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	codesWithConditions{
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	}.add(opStmt.potentialExecErrors)
+	})
 	stmt := randgen.RandCreateType(og.params.rng, typName.Object(), "asdf")
 	stmt.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
 	opStmt.sql = tree.Serialize(stmt)
@@ -1568,22 +1586,22 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
-	codesWithConditions{
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
 		{code: pgcode.DuplicateRelation, condition: tableExists},
 		{code: pgcode.Syntax, condition: len(selectStatement.Exprs) == 0},
 		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
 		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
-	}.add(opStmt.expectedExecErrors)
+	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
 	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	codesWithConditions{
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	}.add(opStmt.potentialExecErrors)
+	})
 	// Confirm the select itself doesn't run into any column generation errors,
 	// by executing it independently first until we add validation when adding
 	// generated columns. See issue: #81698?, which will allow us to remove this
@@ -1706,22 +1724,22 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	codesWithConditions{
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
 		{code: pgcode.DuplicateRelation, condition: viewExists},
 		{code: pgcode.Syntax, condition: len(selectStatement.Exprs) == 0},
 		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
 		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
-	}.add(opStmt.expectedExecErrors)
+	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
 	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	codesWithConditions{
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	}.add(opStmt.potentialExecErrors)
+	})
 	opStmt.sql = fmt.Sprintf(`CREATE VIEW %s AS %s`,
 		destViewName, selectStatement.String())
 	return opStmt, nil
@@ -1773,13 +1791,13 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey},
 		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
-	}.add(stmt.expectedExecErrors)
+	})
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName)
 	return stmt, nil
 }
@@ -1855,10 +1873,10 @@ func (og *operationGenerator) dropColumnNotNull(ctx context.Context, tx pgx.Tx) 
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedColumn, !columnExists},
 		{pgcode.InvalidTableDefinition, colIsPrimaryKey},
-	}.add(stmt.expectedExecErrors)
+	})
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName)
 	return stmt, nil
 }
@@ -1897,10 +1915,10 @@ func (og *operationGenerator) dropColumnStored(ctx context.Context, tx pgx.Tx) (
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.InvalidColumnDefinition, condition: !columnIsStored},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
-	}.add(stmt.expectedExecErrors)
+	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP STORED`, tableName, columnName)
 	return stmt, nil
@@ -2070,10 +2088,10 @@ func (og *operationGenerator) dropTable(ctx context.Context, tx pgx.Tx) (*opStmt
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedTable, !ifExists && !tableExists},
 		{pgcode.DependentObjectsStillExist, dropBehavior != tree.DropCascade && tableHasDependencies},
-	}.add(stmt.expectedExecErrors)
+	})
 	stmt.sql = dropTable.String()
 	return stmt, nil
 }
@@ -2102,10 +2120,10 @@ func (og *operationGenerator) dropView(ctx context.Context, tx pgx.Tx) (*opStmt,
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedTable, !ifExists && !viewExists},
 		{pgcode.DependentObjectsStillExist, dropBehavior != tree.DropCascade && viewHasDependencies},
-	}.add(stmt.expectedExecErrors)
+	})
 	stmt.sql = dropView.String()
 	return stmt, nil
 }
@@ -2155,11 +2173,11 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedColumn, !srcColumnExists},
 		{pgcode.DuplicateColumn, destColumnExists && srcColumnName != destColumnName},
 		{pgcode.DependentObjectsStillExist, columnIsDependedOn},
-	}.add(stmt.expectedExecErrors)
+	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN "%s" TO "%s"`,
 		tableName, srcColumnName, destColumnName)
@@ -2207,10 +2225,10 @@ func (og *operationGenerator) renameIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedObject, condition: !srcIndexExists},
 		{code: pgcode.DuplicateRelation, condition: destIndexExists && srcIndexName != destIndexName},
-	}.add(stmt.expectedExecErrors)
+	})
 
 	stmt.sql = fmt.Sprintf(`ALTER INDEX %s@"%s" RENAME TO "%s"`,
 		tableName, srcIndexName, destIndexName)
@@ -2251,12 +2269,12 @@ func (og *operationGenerator) renameSequence(ctx context.Context, tx pgx.Tx) (*o
 
 	srcEqualsDest := srcSequenceName.String() == destSequenceName.String()
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcSequenceExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
 		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destSequenceExists},
 		{code: pgcode.InvalidName, condition: srcSequenceName.Schema() != destSequenceName.Schema()},
-	}.add(stmt.expectedExecErrors)
+	})
 
 	stmt.sql = fmt.Sprintf(`ALTER SEQUENCE %s RENAME TO %s`, srcSequenceName, destSequenceName)
 	return stmt, nil
@@ -2306,13 +2324,13 @@ func (og *operationGenerator) renameTable(ctx context.Context, tx pgx.Tx) (*opSt
 
 	srcEqualsDest := destTableName.String() == srcTableName.String()
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcTableExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
 		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destTableExists},
 		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
 		{code: pgcode.InvalidName, condition: srcTableName.Schema() != destTableName.Schema()},
-	}.add(stmt.expectedExecErrors)
+	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, srcTableName, destTableName)
 	return stmt, nil
@@ -2356,13 +2374,13 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (*opStm
 
 	srcEqualsDest := destViewName.String() == srcViewName.String()
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcViewExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
 		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destViewExists},
 		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
 		{code: pgcode.InvalidName, condition: srcViewName.Schema() != destViewName.Schema()},
-	}.add(stmt.expectedExecErrors)
+	})
 
 	stmt.sql = fmt.Sprintf(`ALTER VIEW %s RENAME TO %s`, srcViewName, destViewName)
 	return stmt, nil
@@ -2546,16 +2564,16 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		// Ignoring the error here intentionally, as we want to carry on with
 		// the operation and not fail it prematurely.
 		kind, _ := schemachange.ClassifyConversion(context.Background(), columnForTypeChange.typ, newType)
-		codesWithConditions{
+		stmt.expectedExecErrors.addAll(codesWithConditions{
 			{code: pgcode.CannotCoerce, condition: kind == schemachange.ColumnConversionImpossible},
 			{code: pgcode.FeatureNotSupported, condition: kind != schemachange.ColumnConversionTrivial},
-		}.add(stmt.expectedExecErrors)
+		})
 	}
 
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedObject, condition: newType == nil},
 		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies},
-	}.add(stmt.expectedExecErrors)
+	})
 
 	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
 		setSessionVariableString, tableName, columnForTypeChange.name, newTypeName.SQLString())
@@ -2579,7 +2597,7 @@ func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, 
 	// Expect 0 regions to fail, and less than three regions to fail
 	// if there are < 3 regions.
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{
 			code:      pgcode.InvalidName,
 			condition: len(dbRegions) == 0,
@@ -2588,7 +2606,7 @@ func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, 
 			code:      pgcode.InvalidParameterValue,
 			condition: needsAtLeastThreeRegions && len(dbRegions) < 3,
 		},
-	}.add(stmt.expectedExecErrors)
+	})
 
 	dbName, err := og.getDatabase(ctx, tx)
 	if err != nil {
@@ -2666,9 +2684,9 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			return nil, err
 		}
 		// We may have errors that are possible, but not guaranteed.
-		potentialErrors.add(stmt.potentialExecErrors)
+		stmt.potentialExecErrors.addAll(potentialErrors)
 		if invalidInsert {
-			generatedErrors.add(stmt.expectedExecErrors)
+			stmt.expectedExecErrors.addAll(generatedErrors)
 			// We will be pessimistic and assume that other column related errors can
 			// be hit, since the function above fails only on generated columns. But,
 			// there maybe index expressions with the exact same problem.
@@ -2692,7 +2710,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			return nil, err
 		}
 		if !uniqueConstraintViolation {
-			generatedErrors.add(stmt.expectedExecErrors)
+			stmt.expectedExecErrors.addAll(generatedErrors)
 		}
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
@@ -2702,15 +2720,15 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 	}
 
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: uniqueConstraintViolation},
-	}.add(stmt.expectedExecErrors)
-	codesWithConditions{
+	})
+	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
-	}.add(stmt.potentialExecErrors)
-	codesWithConditions{
+	})
+	og.expectedCommitErrors.addAll(codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
-	}.add(og.expectedCommitErrors)
+	})
 
 	var formattedRows []string
 	for _, row := range rows {
@@ -3570,9 +3588,9 @@ func (og *operationGenerator) createSchema(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	codesWithConditions{
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	}.add(opStmt.potentialExecErrors)
+	})
 	return opStmt, nil
 }
 
@@ -3613,11 +3631,11 @@ func (og *operationGenerator) dropSchema(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 	stmt := makeOpStmt(OpStmtDDL)
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedSchema, !schemaExists},
 		{pgcode.InvalidSchemaName, schemaName == tree.PublicSchema},
 		{pgcode.FeatureNotSupported, crossReferences},
-	}.add(stmt.expectedExecErrors)
+	})
 
 	stmt.sql = fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName)
 	return stmt, nil
@@ -3736,9 +3754,9 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 		}
 		return nil
 	}
-	codesWithConditions{
+	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !allTableExists},
-	}.add(stmt.expectedExecErrors)
+	})
 	// TODO(fqazi): Temporarily allow out of memory errors on select queries. Not
 	// sure where we are hitting these, need to investigate further.
 	stmt.potentialExecErrors.add(pgcode.OutOfMemory)
