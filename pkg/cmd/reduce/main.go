@@ -56,6 +56,7 @@ var (
 	unknown           = flags.Bool("unknown", false, "print unknown types during walk")
 	workers           = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
 	chunkReductions   = flags.Int("chunk", 0, "number of consecutive chunk reduction failures allowed before halting chunk reduction (default 0)")
+	multiRegion       = flags.Bool("multi-region", false, "test with a 9-node multi-region demo cluster")
 	tlp               = flags.Bool("tlp", false, "last two statements in file are equivalent queries returning different results")
 	costfuzz          = flags.Bool("costfuzz", false, "last four statements in file are two identical queries separated by settings changes")
 	unoptimizedOracle = flags.Bool("unoptimized-query-oracle", false, "last several statements in file are two identical queries separated by settings changes")
@@ -118,7 +119,8 @@ func main() {
 	}
 	reducesql.LogUnknown = *unknown
 	out, err := reduceSQL(
-		*binary, *contains, file, *workers, *verbose, *chunkReductions, *tlp, *costfuzz, *unoptimizedOracle,
+		*binary, *contains, file, *workers, *verbose, *chunkReductions, *multiRegion,
+		*tlp, *costfuzz, *unoptimizedOracle,
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -132,6 +134,7 @@ func reduceSQL(
 	workers int,
 	verbose bool,
 	chunkReductions int,
+	multiRegion bool,
 	tlp, costfuzz, unoptimizedOracle bool,
 ) (string, error) {
 	var settings string
@@ -282,15 +285,28 @@ SELECT '%[1]s';
 	}
 
 	isInteresting := func(ctx context.Context, sql string) (interesting bool, logOriginalHint func()) {
-		// Disable telemetry and license generation. Do not exit on errors so
+		// If not multi-region, disable license generation. Do not exit on errors so
 		// the entirety of the input SQL is processed.
-		cmd := exec.CommandContext(ctx, binary,
-			"demo",
-			"--empty",
-			"--disable-demo-license",
-			"--set=errexit=false",
-			"--format=tsv",
-		)
+		var cmd *exec.Cmd
+		if multiRegion {
+			cmd = exec.CommandContext(ctx, binary,
+				"demo",
+				"--empty",
+				"--nodes=9",
+				"--multitenant=false",
+				"--set=errexit=false",
+				"--format=tsv",
+			)
+		} else {
+			cmd = exec.CommandContext(ctx, binary,
+				"demo",
+				"--empty",
+				"--disable-demo-license",
+				"--set=errexit=false",
+				"--format=tsv",
+			)
+		}
+		// Disable telemetry.
 		cmd.Env = []string{"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", "true"}
 		sql = settings + sql
 		if !strings.HasSuffix(sql, ";") {
