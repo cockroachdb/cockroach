@@ -12,7 +12,10 @@ go_test(
         ":test_gen_backup_non_ccl",  # keep
         ":test_gen_ccl",  # keep
     ],
-    args = ["-test.timeout=3595s"],
+    args = select({
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=3595s"],
+    }),
     data = glob(["testdata/**"]) + [
         "//pkg/sql/schemachanger:testdata",
     ],

@@ -507,3 +507,10 @@ config_setting(
     },
     visibility = ["//c-deps:__pkg__"],
 )
+
+config_setting(
+    name = "use_ci_timeouts",
+    values = {
+        "define": "use_ci_timeouts=true",
+    },
+)
