@@ -6128,6 +6128,169 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	})
 }
 
+// Verifies changefeed updates checkpoint when cluster undergoes rolling
+// restart.
+func TestChangefeedHandlesRollingRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer testingUseFastRetry()()
+
+	skip.UnderRace(t, "Takes too long with race enabled")
+
+	const numNodes = 4
+
+	opts := makeOptions(feedTestForceSink("coudstorage"))
+	opts.forceRootUserConnection = true
+	defer addCloudStorageOptions(t, &opts)()
+
+	var checkpointHW atomic.Value
+	checkpointHW.Store(hlc.Timestamp{})
+	var nodeDrainChannels [numNodes]atomic.Value // of chan struct
+
+	proceed := make(chan struct{}, 1)
+	errCh := make(chan error, 1)
+
+	makeTestServerArgs := func(n int) base.TestServerArgs {
+		nodeDrainChannels[n].Store(make(chan struct{}))
+
+		return base.TestServerArgs{
+			// Test uses SPLIT AT, which isn't currently supported for
+			// secondary tenants. Tracked with #76378.
+			DefaultTestTenant: base.TestTenantDisabled,
+			UseDatabase:       "test",
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					DrainFast: true,
+					Changefeed: &TestingKnobs{
+						// Filter out draining nodes; normally we rely on dist sql planner
+						// to do that for us.
+						FilterDrainingNodes: true,
+
+						// Disable all checkpoints.  This test verifies that even when
+						// checkpoints are behind, changefeed can handle rolling restarts by
+						// utilizing the most up-to-date checkpoint information transmitted by
+						// the aggregators to the change frontier processor.
+						ShouldCheckpoint: func(hw hlc.Timestamp) bool {
+							checkpointHW.Store(hw)
+							return false
+						},
+
+						OnDrain: func() <-chan struct{} {
+							return nodeDrainChannels[n].Load().(chan struct{})
+						},
+
+						BeforeDistChangefeed: func() {
+							<-proceed
+						},
+						// Handle tarnsient changefeed error.  We expect to see node drain error.
+						// When we do, notify drainNotification, and reset node drain channel.
+						HandleDistChangefeedError: func(err error) error {
+							errCh <- err
+							return err
+						},
+					},
+				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+			ExternalIODir: opts.externalIODir,
+		}
+	}
+
+	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgsPerNode: func() map[int]base.TestServerArgs {
+			perNode := make(map[int]base.TestServerArgs)
+			for i := 0; i < numNodes; i++ {
+				perNode[i] = makeTestServerArgs(i)
+			}
+			return perNode
+		}(),
+	})
+	defer tc.Stopper().Stop(context.Background())
+
+	db := tc.ServerConn(1)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	serverutils.SetClusterSetting(t, tc, "kv.rangefeed.enabled", true)
+	serverutils.SetClusterSetting(t, tc, "kv.closed_timestamp.target_duration", 10*time.Millisecond)
+	serverutils.SetClusterSetting(t, tc, "changefeed.experimental_poll_interval", 10*time.Millisecond)
+	serverutils.SetClusterSetting(t, tc, "changefeed.aggregator.heartbeat", 10*time.Millisecond)
+
+	sqlutils.CreateTable(
+		t, db, "foo",
+		"k INT PRIMARY KEY, v INT",
+		400,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(2)),
+	)
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		tc.Server(0).DB(), keys.SystemSQLCodec, "test", "foo")
+	tc.SplitTable(t, tableDesc, []serverutils.SplitPoint{
+		{TargetNodeIdx: 1, Vals: []interface{}{100}},
+		{TargetNodeIdx: 2, Vals: []interface{}{200}},
+		{TargetNodeIdx: 3, Vals: []interface{}{300}},
+	})
+
+	// Create a factory which executes the CREATE CHANGEFEED statement on server 1.
+	// Feed logic (helpers) running on node 4.
+
+	f, closeSink := makeFeedFactoryWithOptions(t, "cloudstorage", tc.Server(3), tc.ServerConn(0), opts)
+	defer closeSink()
+
+	proceed <- struct{}{} // Allow changefeed to start.
+	feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH initial_scan='no', min_checkpoint_frequency='100ms'")
+	defer closeFeed(t, feed)
+
+	jf := feed.(cdctest.EnterpriseTestFeed)
+
+	// waitCheckpointAttempt waits until an attempt to checkpoint is made.
+	waitCheckpoint := func(minHW hlc.Timestamp) {
+		t.Helper()
+		initial := checkpointHW.Load().(hlc.Timestamp)
+		testutils.SucceedsSoon(t, func() error {
+			if initial.Less(checkpointHW.Load().(hlc.Timestamp)) {
+				return nil
+			}
+			return errors.New("still waiting for checkpoint")
+		})
+	}
+
+	// Shutdown each node, one at a time.
+	// Insert few values on each iteration.
+	// Even though checkpointing is disabled via testing knobs,
+	// the drain logic should preserve up-to-date restart information.
+	for i := 0; i < numNodes; i++ {
+		beforeInsert := tc.Server(3).Clock().Now()
+		sqlDB.Exec(t, "UPDATE test.foo SET v=$1 WHERE k IN (10, 110, 220, 330)", 42+i)
+		assertPayloads(t, feed, []string{
+			fmt.Sprintf(`foo: [10]->{"after": {"k": 10, "v": %d}}`, 42+i),
+			fmt.Sprintf(`foo: [110]->{"after": {"k": 110, "v": %d}}`, 42+i),
+			fmt.Sprintf(`foo: [220]->{"after": {"k": 220, "v": %d}}`, 42+i),
+			fmt.Sprintf(`foo: [330]->{"after": {"k": 330, "v": %d}}`, 42+i),
+		})
+
+		// Wait for a checkpoint attempt.  The checkpoint will not be committed
+		// to the jobs table (due to testing knobs), but when we trigger drain
+		// below, we expect correct restart information to be checkpointed anyway.
+		waitCheckpoint(beforeInsert)
+
+		// Send drain notification.
+		close(nodeDrainChannels[i].Load().(chan struct{}))
+
+		// Changefeed should encounter node draining error.
+		require.True(t, errors.Is(<-errCh, changefeedbase.ErrNodeDraining))
+
+		// Reset drain channel.
+		nodeDrainChannels[i].Store(make(chan struct{}))
+
+		// Even though checkpointing was disabled, when we drain, an attempt is
+		// made to persist up-to-date checkpoint.
+		require.NoError(t, jf.TickHighWaterMark(beforeInsert))
+
+		// Let the retry proceed.
+		proceed <- struct{}{}
+	}
+}
+
 func TestChangefeedPropagatesTerminalError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6800,9 +6963,7 @@ func TestCheckpointFrequency(t *testing.T) {
 	// It's pretty difficult to set up a fast end-to-end test since we need to simulate slow
 	// job table update.  Instead, we just test canCheckpointHighWatermark directly.
 	ts := timeutil.NewManualTime(timeutil.Now())
-	js := newJobState(
-		nil, /* job */
-		nil, /* core progress */
+	js := newJobState(nil, /* job */
 		cluster.MakeTestingClusterSettings(),
 		MakeMetrics(time.Second).(*Metrics), ts,
 	)
