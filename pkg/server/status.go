@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -83,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/google/pprof/profile"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	raft "go.etcd.io/raft/v3"
 	"google.golang.org/grpc"
@@ -1464,6 +1466,96 @@ func (s *statusServer) Stacks(
 	return stacksLocal(req)
 }
 
+// fetchProfileFromAllNodes fetches the CPU profiles from all live nodes in the
+// cluster and merges the samples across all profiles.
+func (s *statusServer) fetchProfileFromAllNodes(
+	ctx context.Context, req *serverpb.ProfileRequest,
+) (*serverpb.JSONResponse, error) {
+	var wg sync.WaitGroup
+	type profData struct {
+		nodeID roachpb.NodeID
+		data   []byte
+		err    error
+	}
+
+	nodeStatuses, err := s.serverIterator.getAllNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(nodeStatuses) == 0 {
+		return nil, errors.AssertionFailedf("nodes list is empty; nothing to do")
+	}
+
+	nodeList := make([]serverID, 0, len(nodeStatuses))
+	for node, st := range nodeStatuses {
+		if st == livenesspb.NodeLivenessStatus_LIVE {
+			nodeList = append(nodeList, node)
+		}
+	}
+
+	resps := make([]profData, len(nodeList))
+	for i := range nodeList {
+		nodeID := roachpb.NodeID(nodeList[i])
+		wg.Add(1)
+		go func(ctx context.Context, i int) {
+			defer wg.Done()
+
+			var pd profData
+			err := contextutil.RunWithTimeout(ctx, "fetch cpu profile", 1*time.Minute, func(ctx context.Context) error {
+				log.Infof(ctx, "fetching a CPU profile for %d", nodeID)
+				resp, err := s.Profile(ctx, &serverpb.ProfileRequest{
+					NodeId:  fmt.Sprintf("%d", nodeID),
+					Type:    serverpb.ProfileRequest_CPU,
+					Seconds: req.Seconds,
+					Labels:  req.Labels,
+				})
+				if err != nil {
+					return err
+				}
+				pd = profData{data: resp.Data, nodeID: nodeID}
+				return nil
+			})
+			if err != nil {
+				resps[i] = profData{err: err, nodeID: nodeID}
+			} else {
+				resps[i] = pd
+			}
+		}(ctx, i)
+	}
+
+	wg.Wait()
+
+	profs := make([]*profile.Profile, len(resps))
+	for i, pd := range resps {
+		if len(pd.data) == 0 && pd.err == nil {
+			log.Warningf(ctx, "no profile collected for node %d", pd.nodeID)
+			continue // skipped node
+		}
+
+		if pd.err != nil {
+			log.Warningf(ctx, "failed to collect profile for node %d: %v", pd.nodeID, pd.err)
+			continue
+		}
+
+		p, err := profile.ParseData(pd.data)
+		if err != nil {
+			return nil, err
+		}
+		p.Comments = append(p.Comments, fmt.Sprintf("n%d", pd.nodeID))
+		profs[i] = p
+	}
+	mergedProfiles, err := profile.Merge(profs)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	if err := mergedProfiles.Write(&buf); err != nil {
+		return nil, status.Errorf(codes.Internal, err.Error())
+	}
+	return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
+}
+
 // TODO(tschottdorf): significant overlap with /debug/pprof/heap, except that
 // this one allows querying by NodeID.
 //
@@ -1479,6 +1571,12 @@ func (s *statusServer) Profile(
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
+	}
+
+	// If the request is for "all" nodes then we collect profiles from all nodes
+	// in the cluster and merge them before returning to the user.
+	if req.NodeId == "all" {
+		return s.fetchProfileFromAllNodes(ctx, req)
 	}
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
