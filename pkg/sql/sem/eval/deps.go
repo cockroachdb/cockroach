@@ -561,7 +561,7 @@ type SequenceOperators interface {
 // over the SQL connection, this state belongs in the EvalCtx.
 type ChangefeedState interface {
 	// SetHighwater sets the frontier timestamp for the changefeed.
-	SetHighwater(frontier *hlc.Timestamp)
+	SetHighwater(frontier hlc.Timestamp)
 
 	// SetCheckpoint sets the checkpoint for the changefeed.
 	SetCheckpoint(spans []roachpb.Span, timestamp hlc.Timestamp)

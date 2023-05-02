@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -25,6 +26,8 @@ type TestingKnobs struct {
 	BeforeEmitRow func(context.Context) error
 	// MemMonitor, if non-nil, overrides memory monitor to use for changefeed..
 	MemMonitor *mon.BytesMonitor
+	// BeforeDistChangefeed invoked before dist changefeed starts.
+	BeforeDistChangefeed func()
 	// HandleDistChangfeedError is called with the result error from
 	// the distributed changefeed.
 	HandleDistChangefeedError func(error) error
@@ -57,6 +60,20 @@ type TestingKnobs struct {
 	// knobs as current statement time will only be available once the create changefeed statement
 	// starts executing.
 	OverrideCursor func(currentTime *hlc.Timestamp) string
+
+	// FilterDrainingNodes is a callback that's invoked by changefeed dist planner
+	// in order to filter draining nodes from the list of eligible nodes.
+	// Normally, we rely on dist sql planner to do that for us.
+	FilterDrainingNodes func(
+		partitions []sql.SpanPartition, draining []roachpb.NodeID,
+	) ([]sql.SpanPartition, error)
+
+	// ShouldCheckpointToJobRecord returns true if change frontier should checkpoint itself
+	// to the job record.
+	ShouldCheckpointToJobRecord func(hw hlc.Timestamp) bool
+
+	// OnDrain returns the channel to select on to detect node drain
+	OnDrain func() <-chan struct{}
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

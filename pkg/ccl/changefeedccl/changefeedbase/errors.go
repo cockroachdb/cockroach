@@ -137,3 +137,6 @@ func AsTerminalError(ctx context.Context, lm *lease.Manager, cause error) (termE
 	// All other errors retry.
 	return nil
 }
+
+// ErrNodeDraining indicates that this node is being drained.
+var ErrNodeDraining = errors.New("node draining")

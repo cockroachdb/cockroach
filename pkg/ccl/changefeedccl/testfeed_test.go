@@ -507,7 +507,7 @@ func (f *jobFeed) TickHighWaterMark(minHWM hlc.Timestamp) error {
 		if minHWM.Less(current) {
 			return nil
 		}
-		return errors.New("waiting to tick")
+		return errors.Newf("waiting to tick: current=%s min=%s", current, minHWM)
 	}, 10*time.Second)
 }
 
