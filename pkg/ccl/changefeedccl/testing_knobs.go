@@ -25,6 +25,8 @@ type TestingKnobs struct {
 	BeforeEmitRow func(context.Context) error
 	// MemMonitor, if non-nil, overrides memory monitor to use for changefeed..
 	MemMonitor *mon.BytesMonitor
+	// BeforeDistChangefeed invoked before dist changefeed starts.
+	BeforeDistChangefeed func()
 	// HandleDistChangfeedError is called with the result error from
 	// the distributed changefeed.
 	HandleDistChangefeedError func(error) error
@@ -57,6 +59,17 @@ type TestingKnobs struct {
 	// knobs as current statement time will only be available once the create changefeed statement
 	// starts executing.
 	OverrideCursor func(currentTime *hlc.Timestamp) string
+
+	// FilterDrainingNodes, when true instructs that nodes that
+	// are draining should be filtered out from the set of nodes participating
+	// in dist flow.
+	FilterDrainingNodes bool
+
+	// ShouldCheckpoint returns true if change frontier should checkpoint.
+	ShouldCheckpoint func(hw hlc.Timestamp) bool
+
+	// OnDrain returns the channel to select on to detect node drain
+	OnDrain func() <-chan struct{}
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

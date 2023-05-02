@@ -66,6 +66,15 @@ var (
 		0*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
 	).WithPublic()
+
+	jobRegistryWait = settings.RegisterDurationSetting(
+		settings.TenantWritable,
+		"server.shutdown.jobs_wait",
+		"the maximum amount of time a server waits for all currently executing jobs "+
+			"to notice drain request and to perform orderly shutdown",
+		10*time.Second,
+		settings.NonNegativeDurationWithMaximum(10*time.Hour),
+	).WithPublic()
 )
 
 // Drain puts the node into the specified drain mode(s) and optionally
@@ -392,7 +401,12 @@ func (s *drainServer) drainClients(
 	// issues a BACKUP or some other job-based statement before it
 	// disconnects, and encounters a job error as a result -- that the
 	// registry is now unavailable due to the drain.
-	s.sqlServer.jobRegistry.SetDraining()
+	drainJobRegistry := s.sqlServer.jobRegistry.DrainRequested()
+	if delay := jobRegistryWait.Get(&s.sqlServer.execCfg.Settings.SV); delay > 0 && shouldDelayDraining {
+		log.Ops.Info(ctx, "waiting for executing jobs to notice that the node is draining")
+		s.drainSleepFn(delay)
+	}
+	drainJobRegistry()
 
 	// Inform the auto-stats tasks that the node is draining.
 	s.sqlServer.statsRefresher.SetDraining()

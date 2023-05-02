@@ -135,6 +135,7 @@ func (m *Outbox) Init(typs []*types.T) {
 func (m *Outbox) AddRow(
 	ctx context.Context, row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) error {
+	log.Infof(ctx, "addRow: meta=%v row=%v", meta, row)
 	mustFlush := false
 	var encodingErr error
 	if meta != nil {
