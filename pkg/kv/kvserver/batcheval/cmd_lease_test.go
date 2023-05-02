@@ -336,3 +336,181 @@ func TestCheckCanReceiveLease(t *testing.T) {
 			rngDesc.Replicas(), true))
 	})
 }
+
+// TestNonCooperativeLeaseTransfersDontInvalidateFutureReads ensures that
+// non-cooperative lease transfers don't invalidate future reads served by
+// previous leaseholders. This can happen because cooperative lease transfers
+// may cause regressions in a lease's expiration time. Concretely, consider
+// the following case:
+// - n1 has a lease from [1, 11]. Say it serves a future read at 10.
+// - n1 transfers the lease to n2 at 6. The new lease expiration is 8.
+// - n2 doesn't renew its lease (maybe it died). n3 takes the lease at 9.
+// - Ensure that n3 knows about the future read at 10.
+// We also test the case when the future time read was at 7 (below n3s lease
+// start). In this case, we must pessimistically assume that the n2 could have
+// served reads up to its expiration of 8 (as opposed to assuming 7).
+func TestNonCooperativeLeaseTransfersDontInvalidateFutureReads(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := func(seconds int) *hlc.Timestamp {
+		return &hlc.Timestamp{
+			WallTime: int64(seconds) * time.Second.Nanoseconds(),
+		}
+	}
+
+	// TODO(arul): There's nothing stopping us from testing expiration based
+	// leases here, but is this a realistic scenario in practice? To confirm.
+	testutils.RunTrueAndFalse(t, "epoch", func(t *testing.T, epoch bool) {
+		testutils.RunTrueAndFalse(t, "serve-future-read-above-non-cooperative-lease-start-time",
+			func(t *testing.T, serveFutureReadAboveNonCooperativeLeaseStartTime bool) {
+				ctx := context.Background()
+				db := storage.NewDefaultInMemForTesting()
+				defer db.Close()
+				batch := db.NewBatch()
+				defer batch.Close()
+
+				replicas := []roachpb.ReplicaDescriptor{
+					{NodeID: 1, StoreID: 1, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 1},
+					{NodeID: 2, StoreID: 2, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 2},
+					{NodeID: 3, StoreID: 3, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 3},
+				}
+				desc := roachpb.RangeDescriptor{}
+				desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
+				// Start our test time 1.
+				manual := hlc.NewManualClock(1 * time.Second.Nanoseconds())
+				clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+
+				firstLease := roachpb.Lease{
+					Replica: replicas[0],
+					Start:   clock.NowAsClockTimestamp(),
+				}
+				if epoch {
+					firstLease.Epoch = 11 * time.Second.Nanoseconds()
+				} else {
+					firstLease.Expiration = ts(11)
+				}
+
+				// We'll use ts(8) as the time to start the third lease (which is the one
+				// we acquire non-cooperatively).
+				var maxPriorReadTS hlc.Timestamp
+				if serveFutureReadAboveNonCooperativeLeaseStartTime {
+					maxPriorReadTS = *ts(10)
+				} else {
+					maxPriorReadTS = *ts(7)
+				}
+				readSummary := rspb.FromTimestamp(maxPriorReadTS)
+
+				// Transfer the lease at time 6.
+				manual.Increment(5 * time.Second.Nanoseconds())
+
+				secondLease := roachpb.Lease{
+					Replica: replicas[1],
+					Start:   clock.NowAsClockTimestamp(),
+				}
+				// The second lease expires at time 8.
+				if epoch {
+					secondLease.Epoch = 8 * time.Second.Nanoseconds()
+				} else {
+					secondLease.Expiration = ts(8)
+				}
+
+				// Transfer the lease cooperatively.
+				evalCtx := &MockEvalCtx{
+					ClusterSettings:    cluster.MakeTestingClusterSettings(),
+					StoreID:            1,
+					Desc:               &desc,
+					Clock:              clock,
+					Lease:              firstLease,
+					CurrentReadSummary: readSummary,
+				}
+				cArgs := CommandArgs{
+					EvalCtx: evalCtx.EvalContext(),
+					Args: &roachpb.TransferLeaseRequest{
+						Lease:     firstLease,
+						PrevLease: secondLease,
+					},
+				}
+
+				beforeEval := clock.NowAsClockTimestamp()
+				res, err := TransferLease(ctx, batch, cArgs, nil)
+				require.NoError(t, err)
+
+				// The proposed lease start time should be assigned at eval time.
+				propLease := res.Replicated.State.Lease
+				require.NotNil(t, propLease)
+				require.True(t, secondLease.Start.Less(propLease.Start))
+				require.True(t, beforeEval.Less(propLease.Start))
+				require.Equal(t, secondLease.Sequence+1, propLease.Sequence)
+
+				// The previous lease should have been revoked.
+				require.Equal(t, firstLease.Sequence, evalCtx.RevokedLeaseSeq)
+
+				// The prior read summary should reflect the maximum read times
+				// served under the current leaseholder.
+				propReadSum, err := readsummary.Load(ctx, batch, desc.RangeID)
+				require.NoError(t, err)
+				require.NotNil(t, propReadSum, "should write prior read summary")
+				require.Equal(t, maxPriorReadTS, propReadSum.Local.LowWater)
+				require.Equal(t, maxPriorReadTS, propReadSum.Global.LowWater)
+
+				// Advance the clock by 3 seconds to 9 now. The second lease has expired
+				// at this point.
+				manual.Increment(3 * time.Second.Nanoseconds())
+
+				thirdLease := roachpb.Lease{
+					Replica: replicas[2],
+					Start:   clock.NowAsClockTimestamp(),
+				}
+				// Expire the lease at some arbitrary time in the future, doesn't really
+				// matter.
+				if epoch {
+					thirdLease.Epoch = 20 * time.Second.Nanoseconds()
+				} else {
+					thirdLease.Expiration = ts(20)
+				}
+
+				cArgs = CommandArgs{
+					EvalCtx: (&MockEvalCtx{
+						ClusterSettings: cluster.MakeTestingClusterSettings(),
+						StoreID:         3,
+						Desc:            &desc,
+						Clock:           clock,
+						Lease:           secondLease,
+					}).EvalContext(),
+					Args: &roachpb.RequestLeaseRequest{
+						Lease: thirdLease,
+					},
+				}
+
+				res, err = RequestLease(ctx, batch, cArgs, nil)
+				require.NoError(t, err)
+
+				acquiredLease := res.Replicated.State.Lease
+				require.NotNil(t, acquiredLease)
+				// Check the start lease's start time is what we expect.
+				if epoch {
+					// Epoch based leases will start at the time in the lease request.
+					require.True(t, thirdLease.Start.Equal(acquiredLease.Start))
+				} else {
+					// Expiration based leases get wound down to the previous lease's
+					// expiration, regardless of the start time in the lease request.
+					require.True(t, secondLease.Expiration.Less(acquiredLease.Start.ToTimestamp()))
+				}
+				require.Equal(t, thirdLease.Sequence+1, acquiredLease.Sequence)
+
+				// The read summary should reflect the maximum read time that was (or
+				// could have been) served by the old leaseholder.
+				acquiredReadSummary, err := readsummary.Load(ctx, batch, desc.RangeID)
+				require.NoError(t, err)
+				require.NotNil(t, acquiredReadSummary, "prior read summary should exist")
+				if serveFutureReadAboveNonCooperativeLeaseStartTime {
+					require.Equal(t, maxPriorReadTS, acquiredReadSummary.Local.LowWater)
+					require.Equal(t, maxPriorReadTS, acquiredReadSummary.Global.LowWater)
+				} else {
+					require.Equal(t, acquiredLease.Start.ToTimestamp(), acquiredReadSummary.Local.LowWater)
+					require.Equal(t, acquiredLease.Start.ToTimestamp(), acquiredReadSummary.Global.LowWater)
+				}
+			})
+	})
+}
