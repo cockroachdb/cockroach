@@ -143,6 +143,8 @@ func TestSQLStatsCompactor(t *testing.T) {
 
 	// Disable automatic flush since the test will handle the flush manually.
 	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
+	// Disable activity update flush which also does a scan on the stats table
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.activity.flush.enabled = false")
 	// Change the automatic compaction job to avoid it running during the test.
 	// Test creates a new compactor and calls it directly.
 	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = '@yearly';")
@@ -221,9 +223,9 @@ func TestSQLStatsCompactor(t *testing.T) {
 
 			err = statsCompactor.DeleteOldestEntries(ctx)
 			kvInterceptor.disable()
+			expectedNumberOfWideScans := cleanupInterceptor.getExpectedNumberOfWideScans()
 			require.NoError(t, err)
 
-			expectedNumberOfWideScans := cleanupInterceptor.getExpectedNumberOfWideScans()
 			actualNumberOfWideScans := kvInterceptor.getTotalWideScans()
 
 			require.Equal(t,
