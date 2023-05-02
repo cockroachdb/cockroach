@@ -75,7 +75,10 @@ go_test(
         "flow_diagram_external_test.go",
         "flow_diagram_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":execinfrapb"],
     deps = [
         "//pkg/base",

@@ -41,7 +41,10 @@ go_test(
         "blocking_buffer_test.go",
         "chunked_event_queue_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":kvevent"],
     tags = ["ccl_test"],
     deps = [

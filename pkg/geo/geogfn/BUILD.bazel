@@ -49,7 +49,10 @@ go_test(
         "topology_operations_test.go",
         "unary_operators_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     data = ["//c-deps:libgeos"],
     embed = [":geogfn"],
     deps = [

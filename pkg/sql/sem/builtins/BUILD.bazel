@@ -171,7 +171,10 @@ go_test(
         "show_create_all_tables_builtin_test.go",
         "window_frame_builtins_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     data = glob(["testdata/**"]),
     embed = [":builtins"],
     deps = [

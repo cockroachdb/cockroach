@@ -14,7 +14,10 @@ go_library(
 go_test(
     name = "ssh_test",
     srcs = ["io_test.go"],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":ssh"],
 )
 

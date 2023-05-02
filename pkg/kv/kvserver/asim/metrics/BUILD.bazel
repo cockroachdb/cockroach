@@ -23,7 +23,10 @@ go_test(
         "metrics_test.go",
         "tracker_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     deps = [
         ":metrics",
         "//pkg/kv/kvserver/asim",

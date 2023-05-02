@@ -38,7 +38,10 @@ go_test(
         "local_storage_test.go",
         "service_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":blobs"],
     deps = [
         "//pkg/base",

@@ -26,7 +26,10 @@ go_test(
     name = "rand_test",
     size = "small",
     srcs = ["rand_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":rand"],
     deps = [
         "//pkg/base",

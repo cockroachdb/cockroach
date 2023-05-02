@@ -42,7 +42,10 @@ go_test(
         "scalars_test.go",
         "walk_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":screl"],
     deps = [
         "//pkg/sql/catalog/catpb",

@@ -51,7 +51,10 @@ go_test(
         "datadriven_test.go",
         "recorderdriven_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     data = glob(["testdata/**"]),
     embed = [":dev_lib"],
     deps = [

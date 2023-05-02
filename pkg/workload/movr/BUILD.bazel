@@ -26,7 +26,10 @@ go_test(
     name = "movr_test",
     size = "small",
     srcs = ["movr_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":movr"],
     deps = ["@com_github_stretchr_testify//require"],
 )

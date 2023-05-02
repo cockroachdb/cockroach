@@ -54,7 +54,10 @@ go_test(
         "ordinality_test.go",
         "simple_project_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     tags = ["no-remote"],
     deps = [
         ":colexecbase",

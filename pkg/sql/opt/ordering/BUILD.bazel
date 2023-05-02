@@ -50,7 +50,10 @@ go_test(
         "row_number_test.go",
         "scan_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":ordering"],
     deps = [
         "//pkg/settings/cluster",

@@ -37,7 +37,10 @@ go_test(
         "iter_bench_test.go",
         "iter_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":raftlog"],
     deps = [
         "//pkg/keys",

@@ -49,7 +49,10 @@ go_test(
         "main_test.go",
         "partitioned_stream_client_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":streamclient"],
     tags = ["ccl_test"],
     deps = [

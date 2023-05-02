@@ -26,7 +26,10 @@ go_test(
         "main_test.go",
         "revision_reader_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":kvclient"],
     deps = [
         "//pkg/base",

@@ -74,7 +74,10 @@ go_test(
         "lease_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=895s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=895s"],
+    }),
     embed = [":lease"],
     deps = [
         "//pkg/base",

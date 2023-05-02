@@ -63,7 +63,10 @@ go_test(
     name = "testcat_test",
     size = "small",
     srcs = ["test_catalog_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     data = glob(["testdata/**"]),
     deps = [
         ":testcat",

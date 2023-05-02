@@ -59,7 +59,10 @@ go_test(
         "truncate_test.go",
         "virtual_table_test.go",
     ],
-    args = ["-test.timeout=895s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=895s"],
+    }),
     data = glob(["testdata/**"]),
     embed = [":tests"],
     shard_count = 16,

@@ -21,7 +21,10 @@ go_library(
 go_test(
     name = "jobsauth_test",
     srcs = ["authorization_test.go"],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     deps = [
         ":jobsauth",
         "//pkg/ccl/changefeedccl",

@@ -53,7 +53,10 @@ go_test(
         "topk_test.go",
         "unresolved_addr_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":util"],
     deps = [
         "//pkg/util/randutil",

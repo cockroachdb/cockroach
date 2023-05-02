@@ -68,7 +68,10 @@ go_test(
         "tsquery_test.go",
         "tsvector_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":tsearch"],
     deps = [
         "//pkg/sql/inverted",

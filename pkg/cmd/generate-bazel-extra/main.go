@@ -32,6 +32,12 @@ var (
 		"large":    900,
 		"enormous": 3600,
 	}
+	testSizeToCiTimeout = map[string]int{
+		"small":    60,
+		"medium":   300,
+		"large":    900,
+		"enormous": 900,
+	}
 )
 
 func runBuildozer(args []string) {
@@ -262,6 +268,14 @@ test_suite(
 	fmt.Fprintln(w, `
 unused_checker(srcs = GET_X_DATA_TARGETS)`)
 
+	fmt.Fprintln(w, `
+config_setting(
+    name = "use_ci_timeouts",
+    values = {
+        "define": "use_ci_timeouts=true"
+    }
+)`)
+
 	// Use buildozer to add the get_x_data target wherever it is relevant.
 	// NB: We expect buildozer to have been built by build/bazelutil/bazel-generate.sh.
 
@@ -338,7 +352,7 @@ func generateTestsTimeouts() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for size, timeout := range testSizeToDefaultTimeout {
+	for size, defaultTimeout := range testSizeToDefaultTimeout {
 		if size == "enormous" {
 			// Exclude really enormous targets since they have a custom timeout that
 			// exceeds the default 1h.
@@ -350,7 +364,7 @@ func generateTestsTimeouts() {
 		// to the next size because it shouldn't be passing at the edge of its deadline
 		// anyways to avoid flakiness.
 		runBuildozer(append([]string{
-			fmt.Sprintf(`set args "-test.timeout=%ds"`, timeout-5)},
+			fmt.Sprintf(`set_select args //pkg:use_ci_timeouts "-test.timeout=%ds" //conditions:default "-test.timeout=%ds"`, testSizeToCiTimeout[size]-5, defaultTimeout-5)},
 			targets[size]...,
 		))
 	}

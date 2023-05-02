@@ -20,7 +20,10 @@ go_test(
         "reader_test.go",
         "writer_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":csv"],
     deps = [
         "//pkg/util/log",

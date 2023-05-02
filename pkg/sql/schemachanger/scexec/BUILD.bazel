@@ -56,7 +56,10 @@ go_test(
         "main_test.go",
         ":mock_scexec",  # keep
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     deps = [
         ":scexec",
         "//pkg/base",

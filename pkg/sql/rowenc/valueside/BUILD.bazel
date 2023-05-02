@@ -39,7 +39,10 @@ go_test(
         "array_test.go",
         "valueside_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":valueside"],
     deps = [
         "//pkg/roachpb",

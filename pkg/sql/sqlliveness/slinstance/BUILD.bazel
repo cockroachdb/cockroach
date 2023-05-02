@@ -29,7 +29,10 @@ go_test(
     name = "slinstance_test",
     size = "small",
     srcs = ["slinstance_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     deps = [
         ":slinstance",
         "//pkg/clusterversion",

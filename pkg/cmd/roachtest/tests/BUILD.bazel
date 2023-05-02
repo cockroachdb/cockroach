@@ -285,7 +285,10 @@ go_test(
         "util_load_group_test.go",
         ":mocks_drt",  # keep
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":tests"],
     deps = [
         "//pkg/cmd/roachtest/option",

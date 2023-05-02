@@ -51,7 +51,10 @@ go_test(
         "aws_kms_test.go",
         "s3_storage_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":amazon"],
     deps = [
         "//pkg/base",

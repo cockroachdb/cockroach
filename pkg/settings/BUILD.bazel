@@ -49,7 +49,10 @@ go_test(
         "internal_test.go",
         "settings_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":settings"],
     deps = [
         "//pkg/testutils",

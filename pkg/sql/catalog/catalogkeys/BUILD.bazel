@@ -27,7 +27,10 @@ go_test(
     name = "catalogkeys_test",
     size = "small",
     srcs = ["keys_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":catalogkeys"],
     deps = [
         "//pkg/keys",

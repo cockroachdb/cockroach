@@ -36,7 +36,10 @@ go_test(
         "storage_test.go",
         "validate_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":ptstorage"],
     shard_count = 16,
     deps = [

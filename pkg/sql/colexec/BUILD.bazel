@@ -135,7 +135,10 @@ go_test(
         "types_integration_test.go",
         "values_test.go",
     ],
-    args = ["-test.timeout=895s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=895s"],
+    }),
     embed = [":colexec"],
     shard_count = 16,
     deps = [

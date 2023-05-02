@@ -14,7 +14,10 @@ go_test(
         "temp_table_clean_test.go",
         "tenant_gc_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     data = [
         "//c-deps:libgeos",  # keep
     ],

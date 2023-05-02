@@ -18,7 +18,10 @@ go_test(
     name = "limit_test",
     size = "small",
     srcs = ["limiter_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":limit"],
     deps = [
         "//pkg/util/leaktest",

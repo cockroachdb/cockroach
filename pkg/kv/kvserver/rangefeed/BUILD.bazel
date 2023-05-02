@@ -54,7 +54,10 @@ go_test(
         "resolved_timestamp_test.go",
         "task_test.go",
     ],
-    args = ["-test.timeout=895s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=895s"],
+    }),
     embed = [":rangefeed"],
     deps = [
         "//pkg/base",

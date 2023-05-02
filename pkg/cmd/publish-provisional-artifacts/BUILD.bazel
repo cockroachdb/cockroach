@@ -23,7 +23,10 @@ go_test(
     name = "publish-provisional-artifacts_test",
     size = "small",
     srcs = ["main_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":publish-provisional-artifacts_lib"],
     deps = [
         "//pkg/release",

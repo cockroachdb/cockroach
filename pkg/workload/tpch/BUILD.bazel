@@ -32,7 +32,10 @@ go_library(
 go_test(
     name = "tpch_test",
     srcs = ["random_test.go"],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":tpch"],
     deps = [
         "//pkg/util/bufalloc",

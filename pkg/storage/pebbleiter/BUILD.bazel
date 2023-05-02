@@ -39,7 +39,10 @@ genrule(
 go_test(
     name = "pebbleiter_test",
     srcs = ["crdb_test_test.go"],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":pebbleiter"],  # keep
     deps = ["@com_github_stretchr_testify//require"],
 )

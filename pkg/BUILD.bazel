@@ -3521,3 +3521,10 @@ test_suite(
 )
 
 unused_checker(srcs = GET_X_DATA_TARGETS)
+
+config_setting(
+    name = "use_ci_timeouts",
+    values = {
+        "define": "use_ci_timeouts=true"
+    }
+)

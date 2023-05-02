@@ -36,7 +36,10 @@ go_test(
         "data_driven_test.go",
         "helpers_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     data = glob(["testdata/**"]),
     embed = [":spanconfigbounds"],
     deps = [

@@ -23,7 +23,10 @@ go_test(
     name = "codeowners_test",
     size = "small",
     srcs = ["codeowners_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     data = [
         "//:TEAMS.yaml",
         "//.github:CODEOWNERS",

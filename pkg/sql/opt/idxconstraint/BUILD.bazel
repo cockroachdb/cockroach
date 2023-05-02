@@ -24,7 +24,10 @@ go_test(
     name = "idxconstraint_test",
     size = "small",
     srcs = ["index_constraints_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     data = glob(["testdata/**"]),
     deps = [
         ":idxconstraint",

@@ -58,7 +58,10 @@ go_test(
         "node_id_test.go",
         "store_spec_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     data = glob(["testdata/**"]),
     deps = [
         ":base",

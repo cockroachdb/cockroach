@@ -43,7 +43,10 @@ go_test(
         "gc_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=895s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=895s"],
+    }),
     embed = [":gc"],
     deps = [
         "//pkg/base",

@@ -17,7 +17,10 @@ go_test(
     name = "bitarray_test",
     size = "small",
     srcs = ["bitarray_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":bitarray"],
     deps = ["//pkg/util/randutil"],
 )

@@ -59,7 +59,10 @@ go_library(
 go_test(
     name = "catpb_test",
     srcs = ["privilege_test.go"],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     deps = [
         ":catpb",
         "//pkg/keys",

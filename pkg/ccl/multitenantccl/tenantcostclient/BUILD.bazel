@@ -43,7 +43,10 @@ go_test(
         "tenant_side_test.go",
         "token_bucket_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     data = glob(["testdata/**"]),
     embed = [":tenantcostclient"],
     tags = [

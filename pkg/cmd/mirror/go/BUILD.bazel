@@ -32,7 +32,10 @@ go_binary(
 go_test(
     name = "mirror_test",
     srcs = ["mirror_test.go"],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":mirror_lib"],
     deps = ["@com_github_stretchr_testify//require"],
 )
@@ -55,7 +58,10 @@ go_library(
 go_test(
     name = "go_test",
     srcs = ["mirror_test.go"],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":go_lib"],
     deps = ["@com_github_stretchr_testify//require"],
 )

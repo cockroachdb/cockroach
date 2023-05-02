@@ -20,7 +20,10 @@ go_test(
         "lint_test.go",
         "nightly_lint_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     data = glob(["testdata/**"]),
     embed = [":lint"],
     embedsrcs = ["gcassert_paths.txt"],

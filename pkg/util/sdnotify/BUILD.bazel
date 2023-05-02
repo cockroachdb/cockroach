@@ -22,7 +22,10 @@ go_test(
     name = "sdnotify_test",
     size = "small",
     srcs = ["sdnotify_unix_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":sdnotify"],
     deps = select({
         "@io_bazel_rules_go//go/platform:aix": [

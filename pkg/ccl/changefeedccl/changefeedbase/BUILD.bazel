@@ -29,7 +29,10 @@ go_library(
 go_test(
     name = "changefeedbase_test",
     srcs = ["options_test.go"],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":changefeedbase"],
     tags = ["ccl_test"],
     deps = [

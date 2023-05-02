@@ -62,7 +62,10 @@ go_test(
         "ttljob_query_builder_test.go",
         "ttljob_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     deps = [
         ":ttljob",
         "//pkg/base",

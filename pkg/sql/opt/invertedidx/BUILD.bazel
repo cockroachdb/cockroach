@@ -52,7 +52,10 @@ go_test(
         "trigram_test.go",
         "tsearch_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     deps = [
         ":invertedidx",
         "//pkg/geo",

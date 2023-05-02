@@ -34,7 +34,10 @@ go_test(
     name = "dbdesc_test",
     size = "small",
     srcs = ["database_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":dbdesc"],
     deps = [
         "//pkg/clusterversion",

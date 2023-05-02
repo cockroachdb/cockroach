@@ -21,7 +21,10 @@ go_test(
         "scan_test.go",
         ":gen-token-names",  # keep
     ],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     data = glob(["testdata/**"]),
     embed = [":scanner"],
     deps = [

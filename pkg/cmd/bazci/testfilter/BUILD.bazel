@@ -12,7 +12,10 @@ go_library(
 go_test(
     name = "testfilter_test",
     srcs = ["testfilter_test.go"],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     data = glob(["testdata/**"]),
     embed = [":testfilter"],
     deps = [

@@ -36,7 +36,10 @@ go_test(
         "fixture_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     tags = ["ccl_test"],
     deps = [
         ":workloadccl",

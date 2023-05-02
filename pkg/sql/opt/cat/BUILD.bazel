@@ -42,7 +42,10 @@ go_test(
     name = "cat_test",
     size = "small",
     srcs = ["utils_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     deps = [
         ":cat",
         "//pkg/sql/catalog/descpb",

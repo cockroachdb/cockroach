@@ -34,7 +34,10 @@ go_test(
         "notify_queue_test.go",
         "token_bucket_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":quotapool"],
     deps = [
         "//pkg/testutils",

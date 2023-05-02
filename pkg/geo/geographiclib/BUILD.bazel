@@ -26,7 +26,10 @@ go_test(
     name = "geographiclib_test",
     size = "small",
     srcs = ["geographiclib_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":geographiclib"],
     deps = [
         "@com_github_golang_geo//s1",

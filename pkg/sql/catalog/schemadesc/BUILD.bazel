@@ -41,7 +41,10 @@ go_test(
     name = "schemadesc_test",
     size = "small",
     srcs = ["schema_desc_test.go"],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     deps = [
         ":schemadesc",
         "//pkg/clusterversion",

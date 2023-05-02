@@ -41,7 +41,10 @@ go_test(
         "profiler_common_test.go",
         "profilestore_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=55s"],
+        "//conditions:default": ["-test.timeout=55s"],
+    }),
     embed = [":profiler"],
     deps = [
         "//pkg/clusterversion",

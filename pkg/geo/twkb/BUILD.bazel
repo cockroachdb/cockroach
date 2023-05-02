@@ -16,7 +16,10 @@ go_library(
 go_test(
     name = "twkb_test",
     srcs = ["twkb_test.go"],
-    args = ["-test.timeout=295s"],
+    args = select({
+        "//pkg:use_ci_timeouts": ["-test.timeout=295s"],
+        "//conditions:default": ["-test.timeout=295s"],
+    }),
     embed = [":twkb"],
     deps = [
         "@com_github_stretchr_testify//require",
