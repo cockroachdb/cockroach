@@ -75,11 +75,11 @@ func distChangefeedFlow(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
-	progress jobspb.Progress,
+	localState *cachedState,
 	resultsCh chan<- tree.Datums,
 ) error {
-
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
+	progress := localState.progress
 
 	// NB: A non-empty high water indicates that we have checkpointed a resolved
 	// timestamp. Skipping the initial scan is equivalent to starting the
@@ -124,13 +124,8 @@ func distChangefeedFlow(
 		}
 	}
 
-	var checkpoint jobspb.ChangefeedProgress_Checkpoint
-	if cf := progress.GetChangefeed(); cf != nil && cf.Checkpoint != nil {
-		checkpoint = *cf.Checkpoint
-	}
-
 	return startDistChangefeed(
-		ctx, execCtx, jobID, schemaTS, details, initialHighWater, checkpoint, resultsCh)
+		ctx, execCtx, jobID, schemaTS, details, initialHighWater, localState, resultsCh)
 }
 
 func fetchTableDescriptors(
@@ -238,7 +233,7 @@ func startDistChangefeed(
 	schemaTS hlc.Timestamp,
 	details jobspb.ChangefeedDetails,
 	initialHighWater hlc.Timestamp,
-	checkpoint jobspb.ChangefeedProgress_Checkpoint,
+	localState *cachedState,
 	resultsCh chan<- tree.Datums,
 ) error {
 	execCfg := execCtx.ExecCfg()
@@ -254,6 +249,7 @@ func startDistChangefeed(
 	if err != nil {
 		return err
 	}
+	localState.trackedSpans = trackedSpans
 	cfKnobs := execCfg.DistSQLSrv.TestingKnobs.Changefeed
 
 	// Changefeed flows handle transactional consistency themselves.
@@ -262,7 +258,7 @@ func startDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
 
-	p, planCtx, err := makePlan(execCtx, jobID, details, initialHighWater, checkpoint, trackedSpans)(ctx, dsp)
+	p, planCtx, err := makePlan(execCtx, jobID, details, initialHighWater, localState, trackedSpans)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -278,7 +274,7 @@ func startDistChangefeed(
 
 	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
 		p,
-		makePlan(execCtx, jobID, details, initialHighWater, checkpoint, trackedSpans),
+		makePlan(execCtx, jobID, details, initialHighWater, localState, trackedSpans),
 		execCtx,
 		replanOracle,
 		func() time.Duration { return replanChangefeedFrequency.Get(execCtx.ExecCfg().SV()) },
@@ -291,7 +287,23 @@ func startDistChangefeed(
 		ctx, cancel := execCtx.ExecCfg().DistSQLSrv.Stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		resultRows := makeChangefeedResultWriter(resultsCh, cancel)
+		// clear out previous drain/shutdown information.
+		localState.drainingNodes = localState.drainingNodes[:0]
+		localState.aggregatorFrontier = localState.aggregatorFrontier[:0]
+
+		resultRows := sql.NewMetadataCallbackWriter(
+			makeChangefeedResultWriter(resultsCh, cancel),
+			func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+				if meta.Changefeed != nil {
+					if meta.Changefeed.DrainInfo != nil {
+						localState.drainingNodes = append(localState.drainingNodes, meta.Changefeed.DrainInfo.NodeID)
+					}
+					localState.aggregatorFrontier = append(localState.aggregatorFrontier, meta.Changefeed.Checkpoint...)
+				}
+				return nil
+			},
+		)
+
 		recv := sql.MakeDistSQLReceiver(
 			ctx,
 			resultRows,
@@ -344,7 +356,7 @@ func makePlan(
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
 	initialHighWater hlc.Timestamp,
-	checkpoint jobspb.ChangefeedProgress_Checkpoint,
+	localState *cachedState,
 	trackedSpans []roachpb.Span,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
@@ -370,6 +382,12 @@ func makePlan(
 			return nil, nil, err
 		}
 
+		cfKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed
+		if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil &&
+			knobs.FilterDrainingNodes && len(localState.drainingNodes) > 0 {
+			spanPartitions = testingFilterDrainingNodes(spanPartitions, localState.drainingNodes)
+		}
+
 		sv := &execCtx.ExecCfg().Settings.SV
 		if enableBalancedRangeDistribution.Get(sv) {
 			scanType, err := changefeedbase.MakeStatementOptions(details.Opts).GetInitialScanType()
@@ -389,6 +407,11 @@ func makePlan(
 					return nil, nil, err
 				}
 			}
+		}
+
+		var checkpoint jobspb.ChangefeedProgress_Checkpoint
+		if progress := localState.progress.GetChangefeed(); progress != nil && progress.Checkpoint != nil {
+			checkpoint = *progress.Checkpoint
 		}
 
 		// Use the same checkpoint for all aggregators; each aggregator will only look at
@@ -437,7 +460,6 @@ func makePlan(
 			UserProto:    execCtx.User().EncodeProto(),
 		}
 
-		cfKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed
 		if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil && knobs.OnDistflowSpec != nil {
 			knobs.OnDistflowSpec(aggregatorSpecs, &changeFrontierSpec)
 		}
@@ -463,6 +485,32 @@ func makePlan(
 
 		return p, planCtx, nil
 	}
+}
+
+func testingFilterDrainingNodes(
+	partitions []sql.SpanPartition, draining []roachpb.NodeID,
+) []sql.SpanPartition {
+	skip := map[roachpb.NodeID]struct{}{}
+	for _, n := range draining {
+		skip[n] = struct{}{}
+	}
+	var filtered []sql.SpanPartition
+	var filteredSpans []roachpb.Span
+	for _, p := range partitions {
+		if _, skip := skip[roachpb.NodeID(p.SQLInstanceID)]; skip {
+			filteredSpans = append(filteredSpans, p.Spans...)
+		} else {
+			filtered = append(filtered, p)
+		}
+	}
+	if len(filtered) == 0 {
+		return partitions // Maybe panic.
+	}
+	if len(filteredSpans) == 0 {
+		return partitions
+	}
+	filtered[0].Spans = append(filtered[0].Spans, filteredSpans...)
+	return filtered
 }
 
 // changefeedResultWriter implements the `sql.rowResultWriter` that sends
@@ -497,7 +545,15 @@ func (w *changefeedResultWriter) SetRowsAffected(ctx context.Context, n int) {
 }
 func (w *changefeedResultWriter) SetError(err error) {
 	w.err = err
-	w.cancel()
+	switch {
+	case errors.Is(err, changefeedbase.ErrNodeDraining):
+		// Let drain signal proceed w/out cancellation.
+		// We want to make sure change frontier processor gets a chance
+		// to send out cancellation to the aggregator so that everything
+		// transitions to "drain metadata" stage.
+	default:
+		w.cancel()
+	}
 }
 
 func (w *changefeedResultWriter) Err() error {
