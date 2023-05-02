@@ -7,13 +7,14 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
+import React from "react";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import { Col, Row } from "antd";
+import { Col, Row, Tabs } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
+import "antd/lib/tabs/style";
 import Long from "long";
-import React from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import { JobRequest, JobResponse } from "src/api/jobsApi";
@@ -39,8 +40,14 @@ import jobStyles from "src/jobs/jobs.module.scss";
 import classNames from "classnames/bind";
 import { Timestamp } from "../../timestamp";
 
+const { TabPane } = Tabs;
+
 const cardCx = classNames.bind(summaryCardStyles);
 const jobCx = classNames.bind(jobStyles);
+
+enum TabKeysEnum {
+  OVERVIEW = "Overview",
+}
 
 export interface JobDetailsStateProps {
   job: JobResponse;
@@ -92,82 +99,77 @@ export class JobDetails extends React.Component<JobDetailsProps> {
 
   prevPage = (): void => this.props.history.goBack();
 
-  renderContent = (): React.ReactElement => {
-    const job = this.props.job;
-    const nextRun = TimestampToMoment(job.next_run);
-    const hasNextRun = nextRun.isAfter();
+  renderOverviewTabContent = (
+    hasNextRun: boolean,
+    nextRun: moment.Moment,
+    job: cockroach.server.serverpb.JobResponse,
+  ): React.ReactElement => {
     return (
-      <>
-        <Row gutter={24}>
-          <Col className="gutter-row" span={24}>
-            <SqlBox
-              value={job.description}
-              size={SqlBoxSize.custom}
-              format={true}
+      <Row gutter={24}>
+        <Col className="gutter-row" span={24}>
+          <SummaryCard className={cardCx("summary-card")}>
+            <SummaryCardItem
+              label="Status"
+              value={
+                <JobStatusCell job={job} lineWidth={1.5} hideDuration={true} />
+              }
             />
-          </Col>
-        </Row>
-        <Row gutter={24}>
-          <Col className="gutter-row" span={12}>
-            <SummaryCard>
-              <h3 className={jobCx("summary--card--title")}>Status</h3>
-              <JobStatusCell job={job} lineWidth={1.5} hideDuration={true} />
-              {hasNextRun && (
-                <>
-                  <h3 className={jobCx("summary--card--title", "secondary")}>
-                    Next Planned Execution Time:
-                  </h3>
-                  <Timestamp time={nextRun} format={DATE_FORMAT_24_TZ} />
-                </>
-              )}
-            </SummaryCard>
-          </Col>
-          <Col className="gutter-row" span={12}>
-            <SummaryCard className={cardCx("summary-card")}>
-              <SummaryCardItem
-                label="Creation Time"
-                value={
-                  <Timestamp
-                    time={TimestampToMoment(job.created)}
-                    format={DATE_FORMAT_24_TZ}
-                  />
-                }
-              />
-              <SummaryCardItem
-                label="Last Execution Time"
-                value={
-                  <Timestamp
-                    time={TimestampToMoment(job.last_run)}
-                    format={DATE_FORMAT_24_TZ}
-                  />
-                }
-              />
-              <SummaryCardItem
-                label="Execution Count"
-                value={String(job.num_runs)}
-              />
-              <SummaryCardItem label="User Name" value={job.username} />
-              {job.highwater_timestamp && (
+            {hasNextRun && (
+              <>
                 <SummaryCardItem
-                  label="High-water Timestamp"
+                  label="Next Planned Execution Time"
                   value={
-                    <HighwaterTimestamp
-                      timestamp={job.highwater_timestamp}
-                      decimalString={job.highwater_decimal}
-                    />
+                    <Timestamp time={nextRun} format={DATE_FORMAT_24_TZ} />
                   }
                 />
-              )}
-            </SummaryCard>
-          </Col>
-        </Row>
-      </>
+              </>
+            )}
+            <SummaryCardItem
+              label="Creation Time"
+              value={
+                <Timestamp
+                  time={TimestampToMoment(job.created)}
+                  format={DATE_FORMAT_24_TZ}
+                />
+              }
+            />
+            <SummaryCardItem
+              label="Last Execution Time"
+              value={
+                <Timestamp
+                  time={TimestampToMoment(job.last_run)}
+                  format={DATE_FORMAT_24_TZ}
+                />
+              }
+            />
+            <SummaryCardItem
+              label="Execution Count"
+              value={String(job.num_runs)}
+            />
+            <SummaryCardItem label="User Name" value={job.username} />
+            {job.highwater_timestamp && (
+              <SummaryCardItem
+                label="High-water Timestamp"
+                value={
+                  <HighwaterTimestamp
+                    timestamp={job.highwater_timestamp}
+                    decimalString={job.highwater_decimal}
+                  />
+                }
+              />
+            )}
+          </SummaryCard>
+        </Col>
+      </Row>
     );
   };
 
   render(): React.ReactElement {
     const isLoading = !this.props.job || this.props.jobLoading;
     const error = this.props.jobError;
+    const job = this.props.job;
+    const nextRun = TimestampToMoment(job?.next_run);
+    const hasNextRun = nextRun?.isAfter();
     return (
       <div className={jobCx("job-details")}>
         <Helmet title={"Details | Job"} />
@@ -191,7 +193,29 @@ export class JobDetails extends React.Component<JobDetailsProps> {
             loading={isLoading}
             page={"job details"}
             error={error}
-            render={this.renderContent}
+            render={() => (
+              <>
+                <section className={cardCx("summary-card")}>
+                  <Row gutter={24}>
+                    <Col className="gutter-row" span={24}>
+                      <SqlBox
+                        value={job.description}
+                        size={SqlBoxSize.custom}
+                        format={true}
+                      />
+                    </Col>
+                  </Row>
+                </section>
+                <Tabs
+                  className={commonStyles("cockroach--tabs")}
+                  defaultActiveKey={TabKeysEnum.OVERVIEW}
+                >
+                  <TabPane tab={TabKeysEnum.OVERVIEW} key="overview">
+                    {this.renderOverviewTabContent(hasNextRun, nextRun, job)}
+                  </TabPane>
+                </Tabs>
+              </>
+            )}
           />
         </section>
       </div>
