@@ -145,11 +145,6 @@ type Registry struct {
 		// draining indicates whether this node is draining or
 		// not. It is set by the drain server when the drain
 		// process starts.
-		//
-		// TODO(ssd): We may want to prevent the adoption of
-		// jobs onto a draining node. At the moment, jobs can
-		// access this to make per-job decisions about what to
-		// do.
 		draining bool
 
 		// ingestingJobs is a map of jobs which are actively ingesting on this node
@@ -157,7 +152,16 @@ type Registry struct {
 		ingestingJobs map[jobspb.JobID]struct{}
 	}
 
-	drainJobs                chan struct{}
+	// drainRequested signaled to indicate that this registry will shut
+	// down soon.  It's an opportunity for currently running jobs
+	// to detect this (OnDrain) and to have a bit of time to do cleanup/shutdown
+	// in an orderly fashion, prior to resumer context being canceled.
+	// The registry will no longer adopt new jobs once this channel closed.
+	drainRequested chan struct{}
+	// drainJobs closed when registry should drain/cancel all active
+	// jobs and should no longer adopt new jobs.
+	drainJobs chan struct{}
+
 	startedControllerTasksWG sync.WaitGroup
 
 	// withSessionEvery ensures that logging when failing to get a live session
@@ -233,6 +237,7 @@ func MakeRegistry(
 		adoptionCh:       make(chan adoptionNotice, 1),
 		withSessionEvery: log.Every(time.Second),
 		drainJobs:        make(chan struct{}),
+		drainRequested:   make(chan struct{}),
 	}
 	if knobs != nil {
 		r.knobs = *knobs
@@ -1189,6 +1194,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				lc.onUpdate()
 			case <-stopper.ShouldQuiesce():
 				return
+			case <-r.drainRequested:
+				return
 			case <-r.drainJobs:
 				return
 			case shouldClaim := <-r.adoptionCh:
@@ -1978,22 +1985,36 @@ func (r *Registry) IsDraining() bool {
 	return r.mu.draining
 }
 
-// WaitForJobShutdown(ctx context.Context) {
+// WaitForRegistryShutdown waits for all background job registry tasks to complete.
 func (r *Registry) WaitForRegistryShutdown(ctx context.Context) {
 	log.Infof(ctx, "starting to wait for job registry to shut down")
 	defer log.Infof(ctx, "job registry tasks successfully shut down")
 	r.startedControllerTasksWG.Wait()
 }
 
-// SetDraining informs the job system if the node is draining.
-func (r *Registry) SetDraining() {
+// DrainRequested informs the job system that this node is being drained.
+// Returns a function that, when invoked, will initiate drain process
+// by requesting all currently running jobs, as well as various job registry
+// processes terminate.
+// WaitForRegistryShutdown can then be used to wait for those tasks to complete.
+func (r *Registry) DrainRequested() func() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	alreadyDraining := r.mu.draining
 	r.mu.draining = true
-	if !alreadyDraining {
-		close(r.drainJobs)
+	r.mu.Unlock()
+
+	if alreadyDraining {
+		return func() {}
 	}
+
+	close(r.drainRequested)
+	return func() { close(r.drainJobs) }
+}
+
+// OnDrain returns a channel that can be selected on to detect when the job
+// registry begins draining.
+func (r *Registry) OnDrain() <-chan struct{} {
+	return r.drainRequested
 }
 
 // TestingIsJobIdle returns true if the job is adopted and currently idle.
