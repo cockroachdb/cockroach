@@ -32,6 +32,12 @@ var (
 		"large":    900,
 		"enormous": 3600,
 	}
+	testSizeToCiTimeout = map[string]int{
+		"small":    60,
+		"medium":   300,
+		"large":    900,
+		"enormous": 900,
+	}
 )
 
 func runBuildozer(args []string) {
@@ -338,7 +344,7 @@ func generateTestsTimeouts() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for size, timeout := range testSizeToDefaultTimeout {
+	for size, defaultTimeout := range testSizeToDefaultTimeout {
 		if size == "enormous" {
 			// Exclude really enormous targets since they have a custom timeout that
 			// exceeds the default 1h.
@@ -349,10 +355,17 @@ func generateTestsTimeouts() {
 		// (because of the 5 seconds taken) then the troubled test target size must be bumped
 		// to the next size because it shouldn't be passing at the edge of its deadline
 		// anyways to avoid flakiness.
-		runBuildozer(append([]string{
-			fmt.Sprintf(`set args "-test.timeout=%ds"`, timeout-5)},
-			targets[size]...,
-		))
+		if size == "enormous" {
+			runBuildozer(append([]string{
+				fmt.Sprintf(`set_select args //build/toolchains:use_ci_timeouts "-test.timeout=%ds" //conditions:default "-test.timeout=%ds"`, testSizeToCiTimeout[size]-5, defaultTimeout-5)},
+				targets[size]...,
+			))
+		} else {
+			runBuildozer(append([]string{
+				fmt.Sprintf(`set args "-test.timeout=%ds"`, defaultTimeout-5)},
+				targets[size]...,
+			))
+		}
 	}
 	var ccl_targets []string
 	for _, targetsForSize := range targets {

@@ -203,7 +203,10 @@ go_test(
         "testfeed_test.go",
         "validations_test.go",
     ],
-    args = ["-test.timeout=3595s"],
+    args = select({
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=3595s"],
+    }),
     embed = [":changefeedccl"],
     shard_count = 16,
     tags = ["ccl_test"],

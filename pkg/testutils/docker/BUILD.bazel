@@ -8,7 +8,7 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]) + [
         "//pkg/testutils/docker:testdata",
-        "//pkg/testutils/docker/docker-fsnotify:docker-fsnotify",
+        "//pkg/testutils/docker/docker-fsnotify",
     ],
     gotags = ["docker"],
     tags = ["integration"],
