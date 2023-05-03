@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -410,7 +411,8 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	ctx context.Context, ba *kvpb.BatchRequest, fn batchExecutionFn,
 ) (br *kvpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *kvpb.Error) {
 	// Try to execute command; exit retry loop on success.
-	var latchSpans, lockSpans *spanset.SpanSet
+	var latchSpans *spanset.SpanSet
+	var lockSpans *lockspanset.LockSpanSet
 	var requestEvalKind concurrency.RequestEvalKind
 	var g *concurrency.Guard
 	defer func() {
@@ -1086,8 +1088,13 @@ func (r *Replica) checkBatchRequest(ba *kvpb.BatchRequest, isReadOnly bool) erro
 
 func (r *Replica) collectSpans(
 	ba *kvpb.BatchRequest,
-) (latchSpans, lockSpans *spanset.SpanSet, requestEvalKind concurrency.RequestEvalKind, _ error) {
-	latchSpans, lockSpans = spanset.New(), spanset.New()
+) (
+	latchSpans *spanset.SpanSet,
+	lockSpans *lockspanset.LockSpanSet,
+	requestEvalKind concurrency.RequestEvalKind,
+	_ error,
+) {
+	latchSpans, lockSpans = spanset.New(), lockspanset.New()
 	r.mu.RLock()
 	desc := r.descRLocked()
 	liveCount := r.mu.state.Stats.LiveCount
@@ -1109,10 +1116,11 @@ func (r *Replica) collectSpans(
 			latchGuess += len(et.(*kvpb.EndTxnRequest).LockSpans) - 1
 		}
 		latchSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, latchGuess)
-		lockSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, len(ba.Requests))
+		// TODO(arul): Use the correct locking strength here.
+		lockSpans.Reserve(lock.Intent, len(ba.Requests))
 	} else {
 		latchSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
-		lockSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
+		lockSpans.Reserve(lock.None, len(ba.Requests))
 	}
 
 	// Note that we are letting locking readers be considered for optimistic
@@ -1176,15 +1184,17 @@ func (r *Replica) collectSpans(
 	}
 
 	// Commands may create a large number of duplicate spans. De-duplicate
-	// them to reduce the number of spans we pass to the spanlatch manager.
-	for _, s := range [...]*spanset.SpanSet{latchSpans, lockSpans} {
-		s.SortAndDedup()
+	// them to reduce the number of spans we pass to the {spanlatch,Lock}Manager.
+	latchSpans.SortAndDedup()
+	lockSpans.SortAndDeDup()
 
-		// If any command gave us spans that are invalid, bail out early
-		// (before passing them to the spanlatch manager, which may panic).
-		if err := s.Validate(); err != nil {
-			return nil, nil, concurrency.PessimisticEval, err
-		}
+	// If any command gave us spans that are invalid, bail out early
+	// (before passing them to the {spanlatch,Lock}Manager, which may panic).
+	if err := latchSpans.Validate(); err != nil {
+		return nil, nil, concurrency.PessimisticEval, err
+	}
+	if err := lockSpans.Validate(); err != nil {
+		return nil, nil, concurrency.PessimisticEval, err
 	}
 
 	optEvalForLimit := false

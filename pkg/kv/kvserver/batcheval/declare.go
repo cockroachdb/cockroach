@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,7 +32,8 @@ func DefaultDeclareKeys(
 	_ ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	latchSpans *spanset.SpanSet,
+	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
 ) {
 	access := spanset.SpanReadWrite
@@ -49,13 +52,17 @@ func DefaultDeclareIsolatedKeys(
 	_ ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
-	latchSpans, lockSpans *spanset.SpanSet,
+	latchSpans *spanset.SpanSet,
+	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
 ) {
 	access := spanset.SpanReadWrite
+	// TODO(arul): pass in the correct lock strength here based on the request.
+	str := lock.Intent
 	timestamp := header.Timestamp
 	if kvpb.IsReadOnly(req) && !kvpb.IsLocking(req) {
 		access = spanset.SpanReadOnly
+		str = lock.None
 
 		// For non-locking reads, acquire read latches all the way up to the
 		// request's worst-case (i.e. global) uncertainty limit, because reads may
@@ -81,7 +88,7 @@ func DefaultDeclareIsolatedKeys(
 		timestamp.Forward(in.GlobalLimit)
 	}
 	latchSpans.AddMVCC(access, req.Header().Span(), timestamp)
-	lockSpans.AddNonMVCC(access, req.Header().Span())
+	lockSpans.Add(str, req.Header().Span())
 }
 
 // DeclareKeysForBatch adds all keys that the batch with the provided header

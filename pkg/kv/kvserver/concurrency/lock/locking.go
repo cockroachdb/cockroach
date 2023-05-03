@@ -53,6 +53,9 @@ var ExclusiveLocksBlockNonLockingReads = settings.RegisterBoolSetting(
 // MaxStrength is the maximum value in the Strength enum.
 const MaxStrength = Intent
 
+// NumLockStrength is the total number of lock strengths in the Strength enum.
+const NumLockStrength = MaxStrength + 1
+
 // MaxDurability is the maximum value in the Durability enum.
 const MaxDurability = Unreplicated
 
@@ -61,6 +64,10 @@ func init() {
 		if st := Strength(v); st > MaxStrength {
 			panic(fmt.Sprintf("Strength (%s) with value larger than MaxDurability", st))
 		}
+	}
+	if int(NumLockStrength) != len(Strength_name) {
+		panic(fmt.Sprintf("mismatched numer of lock strengths: NumLockStrength %d, lock strengths %d",
+			int(NumLockStrength), len(Strength_name)))
 	}
 	for v := range Durability_name {
 		if d := Durability(v); d > MaxDurability {

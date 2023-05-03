@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -999,8 +1000,8 @@ func (c *cluster) resetNamespace() {
 // Its logic mirrors that in Replica.collectSpans.
 func (c *cluster) collectSpans(
 	t *testing.T, txn *roachpb.Transaction, ts hlc.Timestamp, reqs []kvpb.Request,
-) (latchSpans, lockSpans *spanset.SpanSet) {
-	latchSpans, lockSpans = &spanset.SpanSet{}, &spanset.SpanSet{}
+) (latchSpans *spanset.SpanSet, lockSpans *lockspanset.LockSpanSet) {
+	latchSpans, lockSpans = &spanset.SpanSet{}, &lockspanset.LockSpanSet{}
 	h := kvpb.Header{Txn: txn, Timestamp: ts}
 	for _, req := range reqs {
 		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
@@ -1011,12 +1012,14 @@ func (c *cluster) collectSpans(
 	}
 
 	// Commands may create a large number of duplicate spans. De-duplicate
-	// them to reduce the number of spans we pass to the spanlatch manager.
-	for _, s := range [...]*spanset.SpanSet{latchSpans, lockSpans} {
-		s.SortAndDedup()
-		if err := s.Validate(); err != nil {
-			t.Fatal(err)
-		}
+	// them to reduce the number of spans we pass to the {spanlatch,Lock}Manager.
+	latchSpans.SortAndDedup()
+	lockSpans.SortAndDeDup()
+	if err := latchSpans.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lockSpans.Validate(); err != nil {
+		t.Fatal(err)
 	}
 	return latchSpans, lockSpans
 }

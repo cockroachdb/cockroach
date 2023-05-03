@@ -17,12 +17,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func declareKeysProbe(
-	_ ImmutableRangeState, _ *kvpb.Header, _ kvpb.Request, _, _ *spanset.SpanSet, _ time.Duration,
+	_ ImmutableRangeState,
+	_ *kvpb.Header,
+	_ kvpb.Request,
+	_ *spanset.SpanSet,
+	_ *lockspanset.LockSpanSet,
+	_ time.Duration,
 ) {
 	// Declare no keys. This means that we're not even serializing with splits
 	// (i.e. a probe could be directed at a key that will become the right-hand

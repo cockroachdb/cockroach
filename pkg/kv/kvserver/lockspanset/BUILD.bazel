@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
