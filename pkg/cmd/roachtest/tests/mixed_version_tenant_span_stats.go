@@ -85,7 +85,7 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 			})
 
 			mvt.InMixedVersion("fetch span stats - mixed", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-				prevToCurrentError := "unable to service a mixed version request"
+				mixedVersionReqError := "unable to service a mixed version request"
 				currentToPrevError := "An internal server error has occurred"
 				unknownFieldError := "unknown field"
 
@@ -107,9 +107,9 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 						return err
 					}
 					// Ensure we get the expected error.
-					expected := assertExpectedError(errOutput.Error, prevToCurrentError)
+					expected := assertExpectedError(errOutput.Error, mixedVersionReqError)
 					if !expected {
-						return errors.Newf("expected '%s' in error message, got: '%v'", prevToCurrentError, errOutput.Error)
+						return errors.Newf("expected '%s' in error message, got: '%v'", mixedVersionReqError, errOutput.Error)
 					}
 
 					// Fetch span stats from current version node, dialing to a previous version node.
@@ -176,11 +176,11 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 					}
 					// Ensure we get the expected error.
 					// We get a mixed cluster version error if we nodes are on 23.1 but cluster version 22.2
-					mixedClusterVersionErr := assertExpectedError(errOutput.Message, prevToCurrentError)
+					mixedClusterVersionErr := assertExpectedError(errOutput.Message, mixedVersionReqError)
 					// We get an unknown field if nodes are on 22.2.
 					expectedUnknown := assertExpectedError(errOutput.Message, unknownFieldError)
 					if !mixedClusterVersionErr && !expectedUnknown {
-						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", prevToCurrentError, unknownFieldError, errOutput.Error)
+						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, unknownFieldError, errOutput.Error)
 					}
 				}
 				return nil
