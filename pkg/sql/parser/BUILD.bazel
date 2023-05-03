@@ -80,7 +80,7 @@ go_test(
 
 sh_binary(
     name = "sql-gen",
-    srcs = ["sql-gen.sh"],
+    srcs = ["//pkg/sql/lexbase:sql-gen.sh"],
 )
 
 # Define the target to auto-generate sql.go from the grammar file.
@@ -92,7 +92,7 @@ genrule(
     ],
     outs = ["sql.go"],
     cmd = """
-      $(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
+      $(location :sql-gen) $(location sql.y) sql $(location replace_help_rules.awk) \
           $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
           $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
     """,
