@@ -17,16 +17,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
 
+// DBOrTxn is used to provide flexibility for logging rangelog events either
+// transactionally (using a Txn), or non-transactionally (using a DB)
+type DBOrTxn interface {
+	Run(ctx context.Context, b *kv.Batch) error
+	NewBatch() *kv.Batch
+}
+
 // RangeLogWriter is used to write range log events to the rangelog
 // table.
 type RangeLogWriter interface {
-	WriteRangeLogEvent(context.Context, *kv.Txn, kvserverpb.RangeLogEvent) error
+	WriteRangeLogEvent(context.Context, DBOrTxn, kvserverpb.RangeLogEvent) error
 }
 
 // wrappedRangeLogWriter implements RangeLogWriter, performing logging and
@@ -55,14 +61,14 @@ func newWrappedRangeLogWriter(
 var _ RangeLogWriter = (*wrappedRangeLogWriter)(nil)
 
 func (w *wrappedRangeLogWriter) WriteRangeLogEvent(
-	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
+	ctx context.Context, runner DBOrTxn, event kvserverpb.RangeLogEvent,
 ) error {
 	maybeLogRangeLogEvent(ctx, event)
 	if c := w.getCounter(event.EventType); c != nil {
 		c.Inc(1)
 	}
 	if w.shouldWrite() && w.underlying != nil {
-		return w.underlying.WriteRangeLogEvent(ctx, txn, event)
+		return w.underlying.WriteRangeLogEvent(ctx, runner, event)
 	}
 	return nil
 }
@@ -84,10 +90,10 @@ func maybeLogRangeLogEvent(ctx context.Context, event kvserverpb.RangeLogEvent) 
 // the range which previously existed and is being split in half; the "other"
 // range is the new range which is being created.
 func (s *Store) logSplit(
-	ctx context.Context, txn *kv.Txn, updatedDesc, newDesc roachpb.RangeDescriptor, reason string,
+	ctx context.Context, runner DBOrTxn, updatedDesc, newDesc roachpb.RangeDescriptor, reason string,
 ) error {
-	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
-		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
+	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, runner, kvserverpb.RangeLogEvent{
+		Timestamp:    selectEventTimestamp(s, runner),
 		RangeID:      updatedDesc.RangeID,
 		EventType:    kvserverpb.RangeLogEventType_split,
 		StoreID:      s.StoreID(),
@@ -106,10 +112,10 @@ func (s *Store) logSplit(
 // TODO(benesch): There are several different reasons that a range merge
 // could occur, and that information should be logged.
 func (s *Store) logMerge(
-	ctx context.Context, txn *kv.Txn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor,
+	ctx context.Context, runner DBOrTxn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor,
 ) error {
-	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
-		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
+	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, runner, kvserverpb.RangeLogEvent{
+		Timestamp:    selectEventTimestamp(s, runner),
 		RangeID:      updatedLHSDesc.RangeID,
 		EventType:    kvserverpb.RangeLogEventType_merge,
 		StoreID:      s.StoreID(),
@@ -127,7 +133,7 @@ func (s *Store) logMerge(
 // could occur, and that information should be logged.
 func (s *Store) logChange(
 	ctx context.Context,
-	txn *kv.Txn,
+	runner DBOrTxn,
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
@@ -173,8 +179,8 @@ func (s *Store) logChange(
 		return errors.Errorf("unknown replica change type %s", changeType)
 	}
 
-	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
-		Timestamp: selectEventTimestamp(s, txn.ReadTimestamp()),
+	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, runner, kvserverpb.RangeLogEvent{
+		Timestamp: selectEventTimestamp(s, runner),
 		RangeID:   desc.RangeID,
 		EventType: logType,
 		StoreID:   s.StoreID(),
@@ -183,16 +189,17 @@ func (s *Store) logChange(
 }
 
 // selectEventTimestamp selects a timestamp for this log message. If the
-// transaction this event is being written in has a non-zero timestamp, then that
-// timestamp should be used; otherwise, the store's physical clock is used.
-// This helps with testing; in normal usage, the logging of an event will never
-// be the first action in the transaction, and thus the transaction will have an
+// provided runner is a transation, and it has a non-zero timestamp, then that
+// timestamp should be used; otherwise, the store's physical clock is used. This
+// helps with testing; in normal usage, the logging of an event will never be
+// the first action in the transaction, and thus the transaction will have an
 // assigned database timestamp. However, in the case of our tests log events
 // *are* the first action in a transaction, and we must elect to use the store's
 // physical time instead.
-func selectEventTimestamp(s *Store, input hlc.Timestamp) time.Time {
-	if input.IsEmpty() {
+func selectEventTimestamp(s *Store, runner DBOrTxn) time.Time {
+	txn, ok := runner.(*kv.Txn)
+	if !ok || txn.ReadTimestamp().IsEmpty() {
 		return s.Clock().PhysicalTime()
 	}
-	return input.GoTime()
+	return txn.ReadTimestamp().GoTime()
 }

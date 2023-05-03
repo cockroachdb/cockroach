@@ -287,6 +287,11 @@ func (db *DB) Clock() *hlc.Clock {
 	return db.clock
 }
 
+// NewBatch creates a new empty batch.
+func (db *DB) NewBatch() *Batch {
+	return &Batch{}
+}
+
 // NewDB returns a new DB.
 func NewDB(
 	actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock, stopper *stop.Stopper,

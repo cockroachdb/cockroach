@@ -208,10 +208,13 @@ func splitTxnAttempt(
 		}
 	}
 
-	// Log the split into the range event log.
-	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc, reason); err != nil {
-		return err
-	}
+	// Log the split into the range event log. Use txn.DB() (instead of just txn)
+	// to do so non-transactionally after txn commits.
+	txn.AddCommitTrigger(func(ctx context.Context) {
+		if err := store.logSplit(ctx, txn.DB(), *leftDesc, *rightDesc, reason); err != nil {
+			log.Errorf(ctx, "error logging split to system.rangelog: %v", err)
+		}
+	})
 
 	b := txn.NewBatch()
 
@@ -688,14 +691,13 @@ func (r *Replica) AdminMerge(
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
-		// Log the merge into the range event log.
-		// TODO(spencer): event logging API should accept a batch
-		// instead of a transaction; there's no reason this logging
-		// shouldn't be done in parallel via the batch with the updated
-		// range addressing.
-		if err := r.store.logMerge(ctx, txn, updatedLeftDesc, rightDesc); err != nil {
-			return err
-		}
+		// Log the merge into the range event log. Use txn.DB() (instead of just txn)
+		// to do so non-transactionally after txn commits.
+		txn.AddCommitTrigger(func(ctx context.Context) {
+			if err := r.store.logMerge(ctx, txn.DB(), updatedLeftDesc, rightDesc); err != nil {
+				log.Errorf(ctx, "error logging merge to system.rangelog: %v", err)
+			}
+		})
 
 		b := txn.NewBatch()
 
@@ -2388,19 +2390,22 @@ func execChangeReplicasTxn(
 				}
 			}
 
-			// Log replica change into range event log.
-			err = recordRangeEventsInLog(
-				ctx, txn, true /* added */, crt.Added(), crt.Desc, reason, details, args.logChange,
-			)
-			if err != nil {
-				return err
-			}
-			err = recordRangeEventsInLog(
-				ctx, txn, false /* added */, crt.Removed(), crt.Desc, reason, details, args.logChange,
-			)
-			if err != nil {
-				return err
-			}
+			// Log replica change into range event log. Use txn.DB() (instead of just txn)
+			// to do so non-transactionally after txn commits.
+			txn.AddCommitTrigger(func(ctx context.Context) {
+				err = recordRangeEventsInLog(
+					ctx, txn.DB(), true /* added */, crt.Added(), crt.Desc, reason, details, args.logChange,
+				)
+				if err != nil {
+					log.Errorf(ctx, "error logging replica change to system.rangelog: %v", err)
+				}
+				err = recordRangeEventsInLog(
+					ctx, txn.DB(), false /* added */, crt.Removed(), crt.Desc, reason, details, args.logChange,
+				)
+				if err != nil {
+					log.Errorf(ctx, "error logging replica change to system.rangelog: %v", err)
+				}
+			})
 
 			// End the transaction manually instead of letting RunTransaction
 			// loop do it, in order to provide a commit trigger.
@@ -2468,7 +2473,7 @@ func getInternalChangesForExplicitPromotionsAndDemotions(
 
 type logChangeFn func(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn DBOrTxn,
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
@@ -2478,7 +2483,7 @@ type logChangeFn func(
 
 func recordRangeEventsInLog(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn DBOrTxn,
 	added bool,
 	repDescs []roachpb.ReplicaDescriptor,
 	rangeDesc *roachpb.RangeDescriptor,
