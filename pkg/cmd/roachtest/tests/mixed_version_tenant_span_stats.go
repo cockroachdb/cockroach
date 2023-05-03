@@ -86,6 +86,7 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 
 			mvt.InMixedVersion("fetch span stats - mixed", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 				mixedVersionReqError := "unable to service a mixed version request"
+				unknownFieldError := "unknown field"
 
 				// If we have nodes in mixed versions.
 				if len(h.Context().FromVersionNodes) > 0 && len(h.Context().ToVersionNodes) > 0 {
@@ -124,8 +125,9 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 					}
 					// Ensure we get the expected error.
 					expectedCurrToPrev := assertExpectedError(errOutput.Message, mixedVersionReqError)
-					if !expectedCurrToPrev {
-						return errors.Newf("expected '%s' in error message, got: '%v'", mixedVersionReqError, errOutput.Error)
+					expectedUnknown := assertExpectedError(errOutput.Message, unknownFieldError)
+					if !expectedCurrToPrev && !expectedUnknown {
+						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, expectedUnknown, errOutput.Error)
 					}
 
 					// Fanout from current version node.
@@ -142,8 +144,9 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 					}
 					// Ensure we get the expected error.
 					expectedCurrToPrev = assertExpectedError(errOutput.Message, mixedVersionReqError)
-					if !expectedCurrToPrev {
-						return errors.Newf("expected '%s' in error message, got: '%v'", mixedVersionReqError, errOutput.Error)
+					expectedUnknown = assertExpectedError(errOutput.Message, unknownFieldError)
+					if !expectedCurrToPrev && !expectedUnknown {
+						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, expectedUnknown, errOutput.Error)
 					}
 				} else {
 					// All nodes are on one version, but we're in mixed state (i.e. cluster version is on a different version)
@@ -172,8 +175,9 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 					}
 					// Ensure we get the expected error.
 					mixedClusterVersionErr := assertExpectedError(errOutput.Message, mixedVersionReqError)
-					if !mixedClusterVersionErr {
-						return errors.Newf("expected '%s' in error message, got: '%v'", mixedVersionReqError, errOutput.Error)
+					expectedUnknown := assertExpectedError(errOutput.Message, unknownFieldError)
+					if !mixedClusterVersionErr && !expectedUnknown {
+						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, unknownFieldError, errOutput.Error)
 					}
 				}
 				return nil
