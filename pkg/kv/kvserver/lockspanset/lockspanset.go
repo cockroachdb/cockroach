@@ -17,12 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/errors"
 )
 
-const NumLockStrength = lock.MaxStrength + 1
-
 type LockSpanSet struct {
-	spans [NumLockStrength][]roachpb.Span
+	spans [lock.NumLockStrength][]roachpb.Span
 }
 
 var lockSpanSetPool = sync.Pool{
@@ -78,10 +77,10 @@ func (l *LockSpanSet) Empty() bool {
 // String prints a string representation of the LockSpanSet.
 func (l *LockSpanSet) String() string {
 	var buf strings.Builder
-	for st := lock.Strength(0); st < NumLockStrength; st++ {
-		for _, span := range l.GetSpans(st) {
+	for st, spans := range l.spans {
+		for _, span := range spans {
 			fmt.Fprintf(&buf, "%s: %s\n",
-				st, span)
+				lock.Strength(st), span)
 		}
 	}
 	return buf.String()
@@ -90,8 +89,8 @@ func (l *LockSpanSet) String() string {
 // Len returns the total number of spans tracked across all strengths.
 func (l *LockSpanSet) Len() int {
 	var count int
-	for st := lock.Strength(0); st < NumLockStrength; st++ {
-		count += len(l.GetSpans(st))
+	for _, spans := range l.spans {
+		count += len(spans)
 	}
 	return count
 }
@@ -103,4 +102,27 @@ func (l *LockSpanSet) Copy() *LockSpanSet {
 		n.spans[st] = append(n.spans[st], l.spans[st]...)
 	}
 	return n
+}
+
+// Reserve space for N additional spans.
+func (l *LockSpanSet) Reserve(str lock.Strength, n int) {
+	existing := l.spans[str]
+	if n <= cap(existing)-len(existing) {
+		return
+	}
+	l.spans[str] = make([]roachpb.Span, len(existing), n+len(existing))
+	copy(l.spans[str], existing)
+}
+
+// Validate returns an error if any spans that have been added to the set are
+// invalid.
+func (l *LockSpanSet) Validate() error {
+	for _, spans := range l.spans {
+		for _, span := range spans {
+			if !span.Valid() {
+				return errors.Errorf("invalid span %s %s", span.Key, span.EndKey)
+			}
+		}
+	}
+	return nil
 }

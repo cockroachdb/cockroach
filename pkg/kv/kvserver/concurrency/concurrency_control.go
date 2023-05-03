@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -418,22 +419,15 @@ type Request struct {
 	// not also passed an exiting Guard.
 	LatchSpans *spanset.SpanSet
 
-	// The maximal set of spans within which the request expects to have
-	// isolation from conflicting transactions. Conflicting locks within
-	// these spans will be queued on and conditionally pushed.
+	// The maximal set of spans within which the request expects to have isolation
+	// from conflicting transactions. The level of isolation for a span is
+	// dictated by its corresponding lock Strength. Conflicting locks within these
+	// spans will be queued on and conditionally pushed.
 	//
-	// Note that unlike LatchSpans, the timestamps that these spans are
-	// declared at are NOT consulted. All read spans are considered to take
-	// place at the transaction's read timestamp (Txn.ReadTimestamp) and all
-	// write spans are considered to take place the transaction's write
-	// timestamp (Txn.WriteTimestamp). If the request is non-transactional
-	// (Txn == nil), all reads and writes are considered to take place at
-	// Timestamp.
-	//
-	// Note: ownership of the SpanSet is assumed by the Request once it is
+	// Note: ownership of the LockSpanSet is assumed by the Request once it is
 	// passed to SequenceReq. Only supplied to SequenceReq if the method is
 	// not also passed an exiting Guard.
-	LockSpans *spanset.SpanSet
+	LockSpans *lockspanset.LockSpanSet
 }
 
 // Guard is returned from Manager.SequenceReq. The guard is passed back in to
@@ -758,14 +752,14 @@ type lockTableGuard interface {
 	//   the discovered locks have been added.
 	ResolveBeforeScanning() []roachpb.LockUpdate
 
-	// CheckOptimisticNoConflicts uses the SpanSet representing the spans that
+	// CheckOptimisticNoConflicts uses the LockSpanSet representing the spans that
 	// were actually read, to check for conflicting locks, after an optimistic
 	// evaluation. It returns true if there were no conflicts. See
 	// lockTable.ScanOptimistic for context. Note that the evaluation has
 	// already seen any intents (replicated single-key locks) that conflicted,
 	// so this checking is practically only going to find unreplicated locks
 	// that conflict.
-	CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool)
+	CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool)
 
 	// IsKeyLockedByConflictingTxn returns whether the specified key is locked or
 	// reserved (see lockTable "reservations") by a conflicting transaction in the
