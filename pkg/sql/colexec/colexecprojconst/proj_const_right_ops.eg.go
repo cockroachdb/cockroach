@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -22422,7 +22423,7 @@ func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
 							if _text == nil {
 								_outNulls.SetNull(i)
 							} else {
-								projCol.Set(i, []byte(*_text))
+								projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 							}
 						}
 					}
@@ -22453,7 +22454,7 @@ func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
 							if _text == nil {
 								_outNulls.SetNull(i)
 							} else {
-								projCol.Set(i, []byte(*_text))
+								projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 							}
 						}
 					}
@@ -22484,7 +22485,7 @@ func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
 						if _text == nil {
 							_outNulls.SetNull(i)
 						} else {
-							projCol.Set(i, []byte(*_text))
+							projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 						}
 					}
 				}
@@ -22512,7 +22513,7 @@ func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
 						if _text == nil {
 							_outNulls.SetNull(i)
 						} else {
-							projCol.Set(i, []byte(*_text))
+							projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 						}
 					}
 				}
@@ -22567,7 +22568,7 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
 							if _text == nil {
 								_outNulls.SetNull(i)
 							} else {
-								projCol.Set(i, []byte(*_text))
+								projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 							}
 						}
 					}
@@ -22596,7 +22597,7 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
 							if _text == nil {
 								_outNulls.SetNull(i)
 							} else {
-								projCol.Set(i, []byte(*_text))
+								projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 							}
 						}
 					}
@@ -22624,7 +22625,7 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
 						if _text == nil {
 							_outNulls.SetNull(i)
 						} else {
-							projCol.Set(i, []byte(*_text))
+							projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 						}
 					}
 				}
@@ -22650,7 +22651,7 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
 						if _text == nil {
 							_outNulls.SetNull(i)
 						} else {
-							projCol.Set(i, []byte(*_text))
+							projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 						}
 					}
 				}
@@ -22705,7 +22706,7 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
 							if _text == nil {
 								_outNulls.SetNull(i)
 							} else {
-								projCol.Set(i, []byte(*_text))
+								projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 							}
 						}
 					}
@@ -22734,7 +22735,7 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
 							if _text == nil {
 								_outNulls.SetNull(i)
 							} else {
-								projCol.Set(i, []byte(*_text))
+								projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 							}
 						}
 					}
@@ -22762,7 +22763,7 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
 						if _text == nil {
 							_outNulls.SetNull(i)
 						} else {
-							projCol.Set(i, []byte(*_text))
+							projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 						}
 					}
 				}
@@ -22788,7 +22789,7 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
 						if _text == nil {
 							_outNulls.SetNull(i)
 						} else {
-							projCol.Set(i, []byte(*_text))
+							projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 						}
 					}
 				}
@@ -22843,7 +22844,7 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
 							if _text == nil {
 								_outNulls.SetNull(i)
 							} else {
-								projCol.Set(i, []byte(*_text))
+								projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 							}
 						}
 					}
@@ -22872,7 +22873,7 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
 							if _text == nil {
 								_outNulls.SetNull(i)
 							} else {
-								projCol.Set(i, []byte(*_text))
+								projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 							}
 						}
 					}
@@ -22900,7 +22901,7 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
 						if _text == nil {
 							_outNulls.SetNull(i)
 						} else {
-							projCol.Set(i, []byte(*_text))
+							projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 						}
 					}
 				}
@@ -22926,7 +22927,7 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
 						if _text == nil {
 							_outNulls.SetNull(i)
 						} else {
-							projCol.Set(i, []byte(*_text))
+							projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 						}
 					}
 				}
@@ -23081,7 +23082,7 @@ func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
 							if _text == nil {
 								_outNulls.SetNull(i)
 							} else {
-								projCol.Set(i, []byte(*_text))
+								projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 							}
 
 						}
@@ -23110,7 +23111,7 @@ func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
 							if _text == nil {
 								_outNulls.SetNull(i)
 							} else {
-								projCol.Set(i, []byte(*_text))
+								projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 							}
 
 						}
@@ -23139,7 +23140,7 @@ func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
 						if _text == nil {
 							_outNulls.SetNull(i)
 						} else {
-							projCol.Set(i, []byte(*_text))
+							projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 						}
 
 					}
@@ -23165,7 +23166,7 @@ func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
 						if _text == nil {
 							_outNulls.SetNull(i)
 						} else {
-							projCol.Set(i, []byte(*_text))
+							projCol.Set(i, encoding.UnsafeConvertStringToBytes(*_text))
 						}
 
 					}
