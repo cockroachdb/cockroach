@@ -14,19 +14,28 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
+
+// DBOrTxn is used to provide flexibility for logging rangelog events either
+// transactionally (using a Txn), or non-transactionally (using a DB)
+type DBOrTxn interface {
+	Run(ctx context.Context, b *kv.Batch) error
+	NewBatch() *kv.Batch
+}
 
 // RangeLogWriter is used to write range log events to the rangelog
 // table.
 type RangeLogWriter interface {
-	WriteRangeLogEvent(context.Context, *kv.Txn, kvserverpb.RangeLogEvent) error
+	WriteRangeLogEvent(context.Context, DBOrTxn, kvserverpb.RangeLogEvent) error
 }
 
 // wrappedRangeLogWriter implements RangeLogWriter, performing logging and
@@ -55,14 +64,14 @@ func newWrappedRangeLogWriter(
 var _ RangeLogWriter = (*wrappedRangeLogWriter)(nil)
 
 func (w *wrappedRangeLogWriter) WriteRangeLogEvent(
-	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
+	ctx context.Context, runner DBOrTxn, event kvserverpb.RangeLogEvent,
 ) error {
 	maybeLogRangeLogEvent(ctx, event)
 	if c := w.getCounter(event.EventType); c != nil {
 		c.Inc(1)
 	}
 	if w.shouldWrite() && w.underlying != nil {
-		return w.underlying.WriteRangeLogEvent(ctx, txn, event)
+		return w.underlying.WriteRangeLogEvent(ctx, runner, event)
 	}
 	return nil
 }
@@ -84,9 +93,13 @@ func maybeLogRangeLogEvent(ctx context.Context, event kvserverpb.RangeLogEvent) 
 // the range which previously existed and is being split in half; the "other"
 // range is the new range which is being created.
 func (s *Store) logSplit(
-	ctx context.Context, txn *kv.Txn, updatedDesc, newDesc roachpb.RangeDescriptor, reason string,
+	ctx context.Context,
+	txn *kv.Txn,
+	updatedDesc, newDesc roachpb.RangeDescriptor,
+	reason string,
+	logAsync bool,
 ) error {
-	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
+	logEvent := kvserverpb.RangeLogEvent{
 		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedDesc.RangeID,
 		EventType:    kvserverpb.RangeLogEventType_split,
@@ -97,7 +110,9 @@ func (s *Store) logSplit(
 			NewDesc:     &newDesc,
 			Details:     reason,
 		},
-	})
+	}
+
+	return writeToRangeLogTable(ctx, s, txn, logEvent, logAsync)
 }
 
 // logMerge logs a range split event into the event table. The affected range is
@@ -106,9 +121,9 @@ func (s *Store) logSplit(
 // TODO(benesch): There are several different reasons that a range merge
 // could occur, and that information should be logged.
 func (s *Store) logMerge(
-	ctx context.Context, txn *kv.Txn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor,
+	ctx context.Context, txn *kv.Txn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor, logAsync bool,
 ) error {
-	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
+	logEvent := kvserverpb.RangeLogEvent{
 		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedLHSDesc.RangeID,
 		EventType:    kvserverpb.RangeLogEventType_merge,
@@ -118,7 +133,9 @@ func (s *Store) logMerge(
 			UpdatedDesc: &updatedLHSDesc,
 			RemovedDesc: &rhsDesc,
 		},
-	})
+	}
+
+	return writeToRangeLogTable(ctx, s, txn, logEvent, logAsync)
 }
 
 // logChange logs a replica change event, which represents a replica being added
@@ -133,6 +150,7 @@ func (s *Store) logChange(
 	desc roachpb.RangeDescriptor,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
+	logAsync bool,
 ) error {
 	var logType kvserverpb.RangeLogEventType
 	var info kvserverpb.RangeLogEvent_Info
@@ -170,16 +188,18 @@ func (s *Store) logChange(
 			Details:        details,
 		}
 	default:
-		return errors.Errorf("unknown replica change type %s", changeType)
+		log.Warningf(ctx, "unknown replica change type %s", changeType)
 	}
 
-	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
+	logEvent := kvserverpb.RangeLogEvent{
 		Timestamp: selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:   desc.RangeID,
 		EventType: logType,
 		StoreID:   s.StoreID(),
 		Info:      &info,
-	})
+	}
+
+	return writeToRangeLogTable(ctx, s, txn, logEvent, logAsync)
 }
 
 // selectEventTimestamp selects a timestamp for this log message. If the
@@ -195,4 +215,36 @@ func selectEventTimestamp(s *Store, input hlc.Timestamp) time.Time {
 		return s.Clock().PhysicalTime()
 	}
 	return input.GoTime()
+}
+
+func writeToRangeLogTable(
+	ctx context.Context, s *Store, txn *kv.Txn, logEvent kvserverpb.RangeLogEvent, logAsync bool,
+) error {
+	if !logAsync {
+		return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn, logEvent)
+	}
+
+	const perAttemptTimeout time.Duration = 5 * time.Second
+	stopper := txn.DB().Context().Stopper
+	return stopper.RunAsyncTask(
+		context.Background(), "write-rangelog", func(ctx context.Context) {
+			// Stop writing when the server shuts down.
+			ctx, stopCancel := stopper.WithCancelOnQuiesce(ctx)
+			defer stopCancel()
+
+			for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
+				if err := contextutil.RunWithTimeout(ctx, "write-rangelog", perAttemptTimeout, func(ctx context.Context) error {
+					txn.AddCommitTrigger(func(ctx context.Context) {
+						if err := s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn.DB(), logEvent); err != nil {
+							log.Warningf(ctx, "error logging to system.rangelog: %v", err)
+						}
+					})
+					return nil
+				}); err != nil {
+					log.Warningf(ctx, "attempt to write to system.rangelog failed: %v", err)
+					continue
+				}
+				break
+			}
+		})
 }
