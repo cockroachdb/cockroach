@@ -3489,6 +3489,7 @@ func (s *systemStatusServer) SpanStats(
 	if len(req.Spans) > int(roachpb.SpanStatsBatchLimit.Get(&s.st.SV)) {
 		return nil, errors.Newf(exceedSpanLimitPlaceholder, len(req.Spans), int(roachpb.SpanStatsBatchLimit.Get(&s.st.SV)))
 	}
+
 	return s.getSpanStatsInternal(ctx, req)
 }
 

@@ -85,9 +85,7 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 			})
 
 			mvt.InMixedVersion("fetch span stats - mixed", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-				prevToCurrentError := "unable to service a mixed version request"
-				currentToPrevError := "An internal server error has occurred"
-				unknownFieldError := "unknown field"
+				mixedVersionReqError := "unable to service a mixed version request"
 
 				// If we have nodes in mixed versions.
 				if len(h.Context().FromVersionNodes) > 0 && len(h.Context().ToVersionNodes) > 0 {
@@ -107,9 +105,9 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 						return err
 					}
 					// Ensure we get the expected error.
-					expected := assertExpectedError(errOutput.Error, prevToCurrentError)
+					expected := assertExpectedError(errOutput.Error, mixedVersionReqError)
 					if !expected {
-						return errors.Newf("expected '%s' in error message, got: '%v'", prevToCurrentError, errOutput.Error)
+						return errors.Newf("expected '%s' in error message, got: '%v'", mixedVersionReqError, errOutput.Error)
 					}
 
 					// Fetch span stats from current version node, dialing to a previous version node.
@@ -125,10 +123,9 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 						return err
 					}
 					// Ensure we get the expected error.
-					expectedCurrToPrev := assertExpectedError(errOutput.Message, currentToPrevError)
-					expectedUnknown := assertExpectedError(errOutput.Message, unknownFieldError)
-					if !expectedCurrToPrev && !expectedUnknown {
-						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", currentToPrevError, unknownFieldError, errOutput.Error)
+					expectedCurrToPrev := assertExpectedError(errOutput.Message, mixedVersionReqError)
+					if !expectedCurrToPrev {
+						return errors.Newf("expected '%s' in error message, got: '%v'", mixedVersionReqError, errOutput.Error)
 					}
 
 					// Fanout from current version node.
@@ -144,10 +141,9 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 						return err
 					}
 					// Ensure we get the expected error.
-					expectedCurrToPrev = assertExpectedError(errOutput.Message, currentToPrevError)
-					expectedUnknown = assertExpectedError(errOutput.Message, unknownFieldError)
-					if !expectedCurrToPrev && !expectedUnknown {
-						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", currentToPrevError, unknownFieldError, errOutput.Error)
+					expectedCurrToPrev = assertExpectedError(errOutput.Message, mixedVersionReqError)
+					if !expectedCurrToPrev {
+						return errors.Newf("expected '%s' in error message, got: '%v'", mixedVersionReqError, errOutput.Error)
 					}
 				} else {
 					// All nodes are on one version, but we're in mixed state (i.e. cluster version is on a different version)
@@ -175,10 +171,9 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 						return err
 					}
 					// Ensure we get the expected error.
-					expectedCurrToPrev := assertExpectedError(errOutput.Message, currentToPrevError)
-					expectedUnknown := assertExpectedError(errOutput.Message, unknownFieldError)
-					if !expectedCurrToPrev && !expectedUnknown {
-						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", currentToPrevError, unknownFieldError, errOutput.Error)
+					mixedClusterVersionErr := assertExpectedError(errOutput.Message, mixedVersionReqError)
+					if !mixedClusterVersionErr {
+						return errors.Newf("expected '%s' in error message, got: '%v'", mixedVersionReqError, errOutput.Error)
 					}
 				}
 				return nil
