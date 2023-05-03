@@ -175,10 +175,12 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 						return err
 					}
 					// Ensure we get the expected error.
-					expectedCurrToPrev := assertExpectedError(errOutput.Message, currentToPrevError)
+					// We get a mixed cluster version error if we nodes are on 23.1 but cluster version 22.2
+					mixedClusterVersionErr := assertExpectedError(errOutput.Message, prevToCurrentError)
+					// We get an unknown field if nodes are on 22.2.
 					expectedUnknown := assertExpectedError(errOutput.Message, unknownFieldError)
-					if !expectedCurrToPrev && !expectedUnknown {
-						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", currentToPrevError, unknownFieldError, errOutput.Error)
+					if !mixedClusterVersionErr && !expectedUnknown {
+						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", prevToCurrentError, unknownFieldError, errOutput.Error)
 					}
 				}
 				return nil
