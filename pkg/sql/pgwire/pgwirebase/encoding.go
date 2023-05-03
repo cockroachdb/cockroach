@@ -128,6 +128,13 @@ func MakeReadBuffer(opts ...ReadBufferOption) ReadBuffer {
 	return buf
 }
 
+// SetOption allows outside packages to initialize ReadBuffer options.
+func (b *ReadBuffer) SetOption(opts ...ReadBufferOption) {
+	for _, opt := range opts {
+		opt(b)
+	}
+}
+
 // reset sets b.Msg to exactly size, attempting to use spare capacity
 // at the end of the existing slice when possible and allocating a new
 // slice when necessary.
@@ -158,9 +165,21 @@ func (b *ReadBuffer) reset(size int) {
 // If the error is related to consuming a buffer that is larger than the
 // maxMessageSize, the remaining bytes will be read but discarded.
 func (b *ReadBuffer) ReadUntypedMsg(rd io.Reader) (int, error) {
+	nread, size, err := b.ReadUntypedMsgSize(rd)
+	if err != nil {
+		return 0, err
+	}
+	b.reset(size)
+	n, err := io.ReadFull(rd, b.Msg)
+	return nread + n, err
+}
+
+// ReadUntypedMsgSize reads the length prefix for ReadUntypedMsgSize. Its exposed
+// external for use cases bypassing the ReadBuffer's buffer.
+func (b *ReadBuffer) ReadUntypedMsgSize(rd io.Reader) (int, int, error) {
 	nread, err := io.ReadFull(rd, b.tmp[:])
 	if err != nil {
-		return nread, err
+		return nread, 0, err
 	}
 	size := int(binary.BigEndian.Uint32(b.tmp[:]))
 	// size includes itself.
@@ -178,12 +197,9 @@ func (b *ReadBuffer) ReadUntypedMsg(rd io.Reader) (int, error) {
 		if size > 0 {
 			err = withMessageTooBigError(err, size)
 		}
-		return nread, err
+		return nread, size, err
 	}
-
-	b.reset(size)
-	n, err := io.ReadFull(rd, b.Msg)
-	return nread + n, err
+	return nread, size, nil
 }
 
 // SlurpBytes will consume n bytes from the read buffer, using the existing

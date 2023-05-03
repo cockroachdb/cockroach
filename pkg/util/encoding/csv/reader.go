@@ -160,6 +160,9 @@ type Reader struct {
 	// By default, each call to Read returns newly allocated memory owned by the caller.
 	ReuseRecord bool
 
+	// Report parse error on empty lines.
+	DontSkipEmptyLines bool
+
 	r *bufio.Reader
 
 	// numLine is the current line being read in the CSV file.
@@ -189,6 +192,11 @@ func NewReader(r io.Reader) *Reader {
 		Escape: '"',
 		r:      bufio.NewReader(r),
 	}
+}
+
+// GetBuffer allows access to underlying buffer for memory accounting purposes.
+func (r *Reader) GetBuffer() *bufio.Reader {
+	return r.r
 }
 
 // Read reads one record (a slice of fields) from r.
@@ -331,7 +339,9 @@ func (r *Reader) readRecord(dst []Record) ([]Record, error) {
 		}
 		if errRead == nil && len(line) == lengthCRLF(line) {
 			line = nil
-			continue // Skip empty lines
+			if !r.DontSkipEmptyLines {
+				continue // Skip empty lines
+			}
 		}
 		fullLine = line
 		break

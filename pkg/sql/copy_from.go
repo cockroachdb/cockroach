@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/copy"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -38,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -214,11 +215,14 @@ type copyMachine struct {
 	// NULL. The spec says this is only supported for CSV, and also must specify
 	// which columns it applies to.
 	forceNotNull bool
-	csvInput     bytes.Buffer
-	csvReader    *csv.Reader
-	// buf is used to parse input data into rows. It also accumulates a partial
-	// row between protocol messages.
-	buf []byte
+	// buf is a buffer on top of copy.Reader for text mode and is a pointer to
+	// csvReader's underlying buffer for CSV (so we can account for that memory).
+	buf *bufio.Reader
+	// reader is an io.Reader for binary data, its a copy.Reader unless we're
+	// doing a retry in which case its reading from an in memory buffer.
+	reader io.Reader
+	//csvReader reads directly from the reader since it has a buffer internally.
+	csvReader *csv.Reader
 	// rows accumulates a batch of rows to be eventually inserted.
 	rows rowcontainer.RowContainer
 	// insertedRows keeps track of the total number of rows inserted by the
@@ -515,7 +519,14 @@ func (c *copyMachine) Close(ctx context.Context) {
 
 // run consumes all the copy-in data from the network connection and inserts it
 // in the database.
-func (c *copyMachine) run(ctx context.Context) error {
+func (c *copyMachine) run(ctx context.Context) (err error) {
+	// reader is used to parse input data into rows. It coalesces CopyData
+	// protocol messages into a stream of just the data bytes.
+	cr := copy.NewReader(c.conn.Rd(), c.p.execCfg.SV())
+	defer func() {
+		// Discard any bytes we haven't read yet.
+		err = errors.CombineErrors(err, cr.Drain())
+	}()
 	format := pgwirebase.FormatText
 	if c.format == tree.CopyFormatBinary {
 		format = pgwirebase.FormatBinary
@@ -525,78 +536,68 @@ func (c *copyMachine) run(ctx context.Context) error {
 		return err
 	}
 
-	// Read from the connection until we see an ClientMsgCopyDone.
-	readBuf := pgwirebase.MakeReadBuffer(
-		pgwirebase.ReadBufferOptionWithClusterSettings(&c.p.execCfg.Settings.SV),
-	)
-
+	var readFn func(ctx context.Context) error
 	switch c.format {
 	case tree.CopyFormatText:
 		c.textDelim = []byte{c.delimiter}
+		readFn = c.readTextData
+		c.buf = bufio.NewReader(cr)
+	case tree.CopyFormatBinary:
+		readFn = c.readBinaryData
+		c.buf = nil
+		c.reader = cr
 	case tree.CopyFormatCSV:
-		c.csvInput.Reset()
-		c.csvReader = csv.NewReader(&c.csvInput)
+		readFn = c.readCSVData
+		c.csvReader = csv.NewReader(cr)
+		c.buf = c.csvReader.GetBuffer()
 		c.csvReader.Comma = rune(c.delimiter)
 		c.csvReader.ReuseRecord = true
 		c.csvReader.FieldsPerRecord = len(c.resultColumns) + len(c.expectedHiddenColumnIdxs)
+		c.csvReader.DontSkipEmptyLines = true
 		if c.csvEscape != 0 {
 			c.csvReader.Escape = c.csvEscape
 		}
-	}
-
-Loop:
-	for {
-		typ, _, err := readBuf.ReadTypedMsg(c.conn.Rd())
-		if err != nil {
-			if pgwirebase.IsMessageTooBigError(err) && typ == pgwirebase.ClientMsgCopyData {
-				// Slurp the remaining bytes.
-				_, slurpErr := readBuf.SlurpBytes(c.conn.Rd(), pgwirebase.GetMessageTooBigSize(err))
-				if slurpErr != nil {
-					return errors.CombineErrors(err, errors.Wrapf(slurpErr, "error slurping remaining bytes in COPY"))
-				}
-
-				// As per the pgwire spec, we must continue reading until we encounter
-				// CopyDone or CopyFail. We don't support COPY in the extended
-				// protocol, so we don't need to look for Sync messages. See
-				// https://www.postgresql.org/docs/13/protocol-flow.html#PROTOCOL-COPY
-				for {
-					typ, _, slurpErr = readBuf.ReadTypedMsg(c.conn.Rd())
-					if typ == pgwirebase.ClientMsgCopyDone || typ == pgwirebase.ClientMsgCopyFail {
-						break
-					}
-					if slurpErr != nil && !pgwirebase.IsMessageTooBigError(slurpErr) {
-						return errors.CombineErrors(err, errors.Wrapf(slurpErr, "error slurping remaining bytes in COPY"))
-					}
-
-					_, slurpErr = readBuf.SlurpBytes(c.conn.Rd(), pgwirebase.GetMessageTooBigSize(slurpErr))
-					if slurpErr != nil {
-						return errors.CombineErrors(err, errors.Wrapf(slurpErr, "error slurping remaining bytes in COPY"))
-					}
-				}
-			}
-			return err
+		// If we are expecting a header, PostgreSQL ignores the header row in all circumstances. Do the same.
+		if c.csvExpectHeader {
+			_, _ = c.csvReader.Read()
 		}
-
-		switch typ {
-		case pgwirebase.ClientMsgCopyData:
-			if err := c.processCopyData(
-				ctx, unsafeUint8ToString(readBuf.Msg), false, /* final */
-			); err != nil {
+	default:
+		panic("unknown copy format")
+	}
+	final := false
+	for !final {
+		if err := readFn(ctx); err != nil {
+			if err != io.EOF {
+				return err
+			} else {
+				final = true
+			}
+		}
+		// Buffer will grow when data move in from pgwire and shrink as rows are
+		// consumed so just hard adjust on each row.
+		if c.buf != nil {
+			if err := c.bufMemAcc.ResizeTo(ctx, int64(c.buf.Buffered())); err != nil {
 				return err
 			}
-		case pgwirebase.ClientMsgCopyDone:
-			if err := c.processCopyData(
-				ctx, "" /* data */, true, /* final */
-			); err != nil {
+		}
+		batchDone := false
+		if c.vectorized && !final {
+			if err := colexecerror.CatchVectorizedRuntimeError(func() {
+				batchDone = c.accHelper.AccountForSet(c.batch.Length() - 1)
+			}); err != nil {
 				return err
 			}
-			break Loop
-		case pgwirebase.ClientMsgCopyFail:
-			return pgerror.Newf(pgcode.QueryCanceled, "COPY from stdin failed: %s", string(readBuf.Msg))
-		case pgwirebase.ClientMsgFlush, pgwirebase.ClientMsgSync:
-			// Spec says to "ignore Flush and Sync messages received during copy-in mode".
-		default:
-			return pgwirebase.NewUnrecognizedMsgTypeErr(typ)
+		}
+		if len := c.currentBatchSize(); c.rowsMemAcc.Used() > c.maxRowMem || // flush on wide row
+			len == c.copyBatchRowSize || // flush when we reach batch size
+			batchDone || // flush when coldata.Batch is full
+			final {
+			if len != c.copyBatchRowSize {
+				log.VEventf(ctx, 2, "copy batch of %d rows flushing due to memory usage %d > %d", len, c.rowsMemAcc.Used(), c.maxRowMem)
+			}
+			if err := c.processRows(ctx, final); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -608,82 +609,6 @@ const (
 	endOfData = `\.`
 )
 
-// processCopyData buffers incoming data and, once the buffer fills up, inserts
-// the accumulated rows.
-//
-// Args:
-// final: If set, buffered data is written even if the buffer is not full.
-func (c *copyMachine) processCopyData(ctx context.Context, data string, final bool) (retErr error) {
-	// At the end, adjust the mem accounting to reflect what's left in the buffer.
-	defer func() {
-		if err := c.bufMemAcc.ResizeTo(ctx, int64(cap(c.buf))); err != nil && retErr == nil {
-			retErr = err
-		}
-	}()
-
-	if len(data) > (cap(c.buf) - len(c.buf)) {
-		// If it looks like the buffer will need to allocate to accommodate data,
-		// account for the memory here. This is not particularly accurate - we don't
-		// know how much the buffer will actually grow by.
-		if err := c.bufMemAcc.Grow(ctx, int64(len(data))); err != nil {
-			return err
-		}
-	}
-	c.buf = append(c.buf, data...)
-	var readFn func(ctx context.Context, final bool) (brk bool, err error)
-	switch c.format {
-	case tree.CopyFormatText:
-		readFn = c.readTextData
-	case tree.CopyFormatBinary:
-		readFn = c.readBinaryData
-	case tree.CopyFormatCSV:
-		readFn = c.readCSVData
-	default:
-		panic("unknown copy format")
-	}
-	for len(c.buf) > 0 {
-		brk, err := readFn(ctx, final)
-		if err != nil {
-			return err
-		}
-		var batchDone bool
-		if !brk && c.vectorized {
-			if err := colexecerror.CatchVectorizedRuntimeError(func() {
-				batchDone = c.accHelper.AccountForSet(c.batch.Length() - 1)
-			}); err != nil {
-				if sqlerrors.IsOutOfMemoryError(err) {
-					// Getting the COPY to complete is a hail mary but the
-					// vectorized inserter will fall back to inserting a row at
-					// a time so give it a shot.
-					batchDone = true
-				} else {
-					return err
-				}
-			}
-		}
-		// If we have a full batch of rows or we have exceeded maxRowMem process
-		// them. Only set finalBatch to true if this is the last
-		// CopyData segment AND we have no more data in the buffer.
-		if length := c.currentBatchSize(); length > 0 && (c.rowsMemAcc.Used() > c.maxRowMem || length >= c.copyBatchRowSize || batchDone) {
-			if length != c.copyBatchRowSize {
-				log.VEventf(ctx, 2, "copy batch of %d rows flushing due to memory usage %d > %d", length, c.rowsMemAcc.Used(), c.maxRowMem)
-			}
-			if err := c.processRows(ctx, final && len(c.buf) == 0); err != nil {
-				return err
-			}
-		}
-		if brk {
-			break
-		}
-	}
-	// If we're done, process any remainder, if we're not done let more rows
-	// accumulate.
-	if final {
-		return c.processRows(ctx, final)
-	}
-	return nil
-}
-
 func (c *copyMachine) currentBatchSize() int {
 	if c.vectorized {
 		return c.batch.Length()
@@ -691,119 +616,46 @@ func (c *copyMachine) currentBatchSize() int {
 	return c.rows.Len()
 }
 
-func (c *copyMachine) readTextData(ctx context.Context, final bool) (brk bool, err error) {
-	idx := bytes.IndexByte(c.buf, lineDelim)
-	var line []byte
-	if idx == -1 {
-		if !final {
-			// Leave the incomplete row in the buffer, to be processed next time.
-			return true, nil
-		}
-		// If this is the final batch, use the whole buffer.
-		line = c.buf[:len(c.buf)]
-		c.buf = c.buf[len(c.buf):]
-	} else {
+func (c *copyMachine) readTextData(ctx context.Context) (err error) {
+	line, err := c.buf.ReadBytes(lineDelim)
+	if err != nil && err != io.EOF {
+		return err
+	}
+	if len(line) > 0 && line[len(line)-1] == lineDelim {
 		// Remove lineDelim from end.
-		line = c.buf[:idx]
-		c.buf = c.buf[idx+1:]
+		line = line[:len(line)-1]
 		// Remove a single '\r' at EOL, if present.
 		if len(line) > 0 && line[len(line)-1] == '\r' {
 			line = line[:len(line)-1]
 		}
 	}
-	if len(c.buf) == 0 && bytes.Equal(line, []byte(`\.`)) {
-		return true, nil
+	if bytes.Equal(line, []byte(`\.`)) {
+		return nil
 	}
-	err = c.readTextTuple(ctx, line)
-	return false, err
+	if err == io.EOF && len(line) == 0 {
+		return err
+	}
+	// If readTextTuple returns nil we want to return EOF if we saw it.
+	if e := c.readTextTuple(ctx, line); e != nil {
+		return e
+	}
+	return err
 }
 
-func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, err error) {
-	var fullLine []byte
-	quoteCharsSeen := 0
-	offset := 0
-	// Keep reading lines until we encounter a newline that is not inside a
-	// quoted field, and therefore signifies the end of a CSV record.
-	for {
-		idx := bytes.IndexByte(c.buf[offset:], lineDelim)
-		if idx == -1 {
-			if final {
-				// If we reached EOF and this is the final chunk of input data, then
-				// try to process it.
-				fullLine = append(fullLine, c.buf[offset:]...)
-				c.buf = c.buf[len(c.buf):]
-				break
-			} else {
-				// If there's more CopyData, keep the incomplete row in the
-				// buffer, to be processed next time.
-				return true, nil
-			}
-		}
-		// Include the delimiter in the line.
-		line := c.buf[offset : offset+idx+1]
-		offset += idx + 1
-		fullLine = append(fullLine, line...)
-		// Now we need to calculate if we have reached the end of the quote.
-		// If so, break out.
-		if c.csvEscape == 0 {
-			// CSV escape is not specified and hence defaults to '"'.¥
-			// At this point, we know fullLine ends in '\n'. Keep track of the total
-			// number of QUOTE chars in fullLine -- if it is even, then it means that
-			// the quotes are balanced and '\n' is not in a quoted field.
-			// Currently, the QUOTE char and ESCAPE char are both always equal to '"'
-			// and are not configurable. As per the COPY spec, any appearance of the
-			// QUOTE or ESCAPE characters in an actual value must be preceded by an
-			// ESCAPE character. This means that an escaped '"' also results in an even
-			// number of '"' characters.
-			// This branch is kept in the interests of "backporting safely" - this
-			// was the old code. Users who use COPY ... ESCAPE will be the only
-			// ones hitting the new code below.
-			quoteCharsSeen += bytes.Count(line, []byte{'"'})
-		} else {
-			// Otherwise, we have to do a manual count of double quotes and
-			// ignore any escape characters preceding quotes for counting.
-			// For example, if the escape character is '\', we should ignore
-			// the intermediate quotes in a string such as `"start"\"\"end"`.
-			skipNextChar := false
-			for _, ch := range line {
-				if skipNextChar {
-					skipNextChar = false
-					continue
-				}
-				if ch == '"' {
-					quoteCharsSeen++
-				}
-				if rune(ch) == c.csvEscape {
-					skipNextChar = true
-				}
-			}
-		}
-		if quoteCharsSeen%2 == 0 {
-			c.buf = c.buf[offset:]
-			break
-		}
-	}
-
-	// If we are using COPY FROM and expecting a header, PostgreSQL ignores
-	// the header row in all circumstances. Do the same.
-	if c.csvExpectHeader {
-		c.csvExpectHeader = false
-		return c.readCSVData(ctx, final)
-	}
-
-	c.csvInput.Write(fullLine)
+func (c *copyMachine) readCSVData(ctx context.Context) error {
 	record, err := c.csvReader.Read()
 	// Look for end of data before checking for errors, since a field count
 	// error will still return record data.
-	if len(record) == 1 && !record[0].Quoted && record[0].Val == endOfData && len(c.buf) == 0 {
-		return true, nil
+	if len(record) == 1 && !record[0].Quoted && record[0].Val == endOfData {
+		return io.EOF
 	}
 	if err != nil {
-		return false, pgerror.Wrap(err, pgcode.BadCopyFileFormat,
-			"read CSV record")
+		if err == io.EOF {
+			return err
+		}
+		return pgerror.Wrap(err, pgcode.BadCopyFileFormat, "read CSV record")
 	}
-	err = c.readCSVTuple(ctx, record)
-	return false, err
+	return c.readCSVTuple(ctx, record)
 }
 
 func (c *copyMachine) maybeIgnoreHiddenColumnsStr(in []csv.Record) []csv.Record {
@@ -862,76 +714,55 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []csv.Record) err
 	return nil
 }
 
-func (c *copyMachine) readBinaryData(ctx context.Context, final bool) (brk bool, err error) {
+func (c *copyMachine) readBinaryData(ctx context.Context) (err error) {
 	if len(c.expectedHiddenColumnIdxs) > 0 {
-		return false, pgerror.Newf(
+		return pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"expect_and_ignore_not_visible_columns_in_copy not supported in binary mode",
 		)
 	}
 	switch c.binaryState {
 	case binaryStateNeedSignature:
-		n, err := c.readBinarySignature()
-		if err != nil {
-			// If this isn't the last message and we saw incomplete data, then
-			// leave it in the buffer to process more next time.
-			if !final && err == io.ErrUnexpectedEOF {
-				return true, nil
-			}
-			c.buf = c.buf[n:]
-			return false, err
+		if err := c.readBinarySignature(); err != nil {
+			return err
 		}
-		c.buf = c.buf[n:]
-		return false, nil
 	case binaryStateRead:
-		n, err := c.readBinaryTuple(ctx)
-		if err != nil {
-			// If this isn't the last message and we saw incomplete data, then
-			// leave it in the buffer to process more next time.
-			if !final && err == io.ErrUnexpectedEOF {
-				return true, nil
+		if err := c.readBinaryTuple(ctx); err != nil {
+			if err != io.EOF {
+				return errors.Wrapf(err, "read binary tuple")
 			}
-			c.buf = c.buf[n:]
-			return false, errors.Wrapf(err, "read binary tuple")
+			return err
 		}
-		c.buf = c.buf[n:]
-		return false, nil
 	case binaryStateFoundTrailer:
-		if !final {
-			return false, pgerror.New(pgcode.BadCopyFileFormat,
-				"copy data present after trailer")
-		}
-		return true, nil
+		return pgerror.New(pgcode.BadCopyFileFormat,
+			"copy data present after trailer")
 	default:
 		panic("unknown binary state")
 	}
+	return nil
 }
 
-func (c *copyMachine) readBinaryTuple(ctx context.Context) (bytesRead int, err error) {
+func (c *copyMachine) readBinaryTuple(ctx context.Context) error {
 	var fieldCount int16
 	var fieldCountBytes [2]byte
-	n := copy(fieldCountBytes[:], c.buf[bytesRead:])
-	bytesRead += n
-	if n < len(fieldCountBytes) {
-		return bytesRead, io.ErrUnexpectedEOF
+	if _, err := io.ReadFull(c.reader, fieldCountBytes[:]); err != nil {
+		return err
 	}
 	fieldCount = int16(binary.BigEndian.Uint16(fieldCountBytes[:]))
 	if fieldCount == -1 {
 		c.binaryState = binaryStateFoundTrailer
-		return bytesRead, nil
+		return nil
 	}
 	if fieldCount < 1 {
-		return bytesRead, pgerror.Newf(pgcode.BadCopyFileFormat,
+		return pgerror.Newf(pgcode.BadCopyFileFormat,
 			"unexpected field count: %d", fieldCount)
 	}
 	datums := make(tree.Datums, fieldCount)
 	var byteCount int32
 	var byteCountBytes [4]byte
 	for i := range datums {
-		n := copy(byteCountBytes[:], c.buf[bytesRead:])
-		bytesRead += n
-		if n < len(byteCountBytes) {
-			return bytesRead, io.ErrUnexpectedEOF
+		if _, err := io.ReadFull(c.reader, byteCountBytes[:]); err != nil {
+			return err
 		}
 		byteCount = int32(binary.BigEndian.Uint32(byteCountBytes[:]))
 		if byteCount == -1 {
@@ -939,10 +770,8 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (bytesRead int, err e
 			continue
 		}
 		data := make([]byte, byteCount)
-		n = copy(data, c.buf[bytesRead:])
-		bytesRead += n
-		if n < len(data) {
-			return bytesRead, io.ErrUnexpectedEOF
+		if _, err := io.ReadFull(c.reader, data); err != nil {
+			return err
 		}
 		d, err := pgwirebase.DecodeDatum(
 			ctx,
@@ -952,16 +781,15 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (bytesRead int, err e
 			data,
 		)
 		if err != nil {
-			return bytesRead, pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
+			return pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
 				"decode datum as %s: %s", c.resultColumns[i].Typ.SQLString(), data)
 		}
 		datums[i] = d
 	}
-	_, err = c.rows.AddRow(ctx, datums)
-	if err != nil {
-		return bytesRead, err
+	if _, err := c.rows.AddRow(ctx, datums); err != nil {
+		return err
 	}
-	return bytesRead, nil
+	return nil
 }
 
 // This is the standard 11-byte binary signature with the flags and
@@ -969,18 +797,17 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (bytesRead int, err e
 // of them.
 var copyBinarySignature = [19]byte{'P', 'G', 'C', 'O', 'P', 'Y', '\n', '\377', '\r', '\n', '\000', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00'}
 
-func (c *copyMachine) readBinarySignature() (int, error) {
-	var sig [19]byte
-	n := copy(sig[:], c.buf)
-	if n < len(sig) {
-		return n, io.ErrUnexpectedEOF
+func (c *copyMachine) readBinarySignature() error {
+	var sig [11 + 8]byte
+	if _, err := io.ReadFull(c.reader, sig[:]); err != nil {
+		return err
 	}
 	if sig != copyBinarySignature {
-		return n, pgerror.New(pgcode.BadCopyFileFormat,
+		return pgerror.New(pgcode.BadCopyFileFormat,
 			"unrecognized binary copy signature")
 	}
 	c.binaryState = binaryStateRead
-	return n, nil
+	return nil
 }
 
 // preparePlannerForCopy resets the planner so that it can be used during
