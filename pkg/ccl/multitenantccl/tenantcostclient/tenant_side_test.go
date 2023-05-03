@@ -791,12 +791,17 @@ func TestWaitingRU(t *testing.T) {
 
 		var doneCount int64
 		for i := 0; i < count; i++ {
+			require.NoError(t, ctrl.OnRequestWait(ctx))
+		}
+		for i := 0; i < count; i++ {
 			go func(i int) {
-				require.NoError(t, ctrl.OnRequestWait(ctx))
 				require.NoError(t, ctrl.OnResponseWait(ctx, req, resp))
 				atomic.AddInt64(&doneCount, 1)
 			}(i)
 		}
+
+		// Allow some responses to queue up before refilling the available RUs.
+		time.Sleep(time.Millisecond)
 
 		// If available RUs drop below -1K, then multiple responses must be waiting.
 		succeeded := false
