@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -760,7 +761,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if asString == nil {
 					return tree.DNull, nil
 				}
-				g, err := geo.ParseGeometryFromGeoJSON([]byte(*asString))
+				g, err := geo.ParseGeometryFromGeoJSON(encoding.UnsafeConvertStringToBytes(*asString))
 				if err != nil {
 					return nil, err
 				}
@@ -1063,7 +1064,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if asString == nil {
 					return tree.DNull, nil
 				}
-				g, err := geo.ParseGeographyFromGeoJSON([]byte(*asString))
+				g, err := geo.ParseGeographyFromGeoJSON(encoding.UnsafeConvertStringToBytes(*asString))
 				if err != nil {
 					return nil, err
 				}
