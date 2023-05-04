@@ -501,8 +501,10 @@ func TestNewReplicaRankingsMap(t *testing.T) {
 				}
 			}
 			replsCopy := rr.TopQPS(roachpb.MustMakeTenantID(tID))
-			if !reflect.DeepEqual(repls, replsCopy) {
-				t.Errorf("got different replicas on second call to topQPS; first call: %v, second call: %v", repls, replsCopy)
+			for i := 0; i < len(repls); i++ {
+				if repls[i].RangeUsageInfo().QueriesPerSecond != replsCopy[i].RangeUsageInfo().QueriesPerSecond {
+					t.Errorf("got different results Range ID: %d, QPS: %f, second call: Range ID: %d, QPS: %f", repls[i].GetRangeID(), repls[i].RangeUsageInfo().QueriesPerSecond, replsCopy[i].GetRangeID(), replsCopy[i].RangeUsageInfo().QueriesPerSecond)
+				}
 			}
 		}
 	}

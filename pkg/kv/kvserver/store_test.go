@@ -2585,6 +2585,53 @@ func TestStoreBadRequests(t *testing.T) {
 	}
 }
 
+func TestStore_HottestReplicasByTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store, _ := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
+
+	type testData struct {
+		tenantID uint64
+		qps      float64
+	}
+
+	td := []testData{{1, 2}, {1, 3}, {1, 4}, {1, 5},
+		{2, 1}, {2, 2}, {2, 3}, {2, 4}}
+
+	acc := NewTenantReplicaAccumulator()
+
+	for i, c := range td {
+		cr := candidateReplica{
+			Replica: &Replica{RangeID: roachpb.RangeID(i)},
+			usage:   allocator.RangeUsageInfo{QueriesPerSecond: c.qps},
+		}
+		cr.mu.tenantID = roachpb.MustMakeTenantID(c.tenantID)
+		acc.AddReplica(cr)
+	}
+
+	store.replRankingsByTenant.Update(acc)
+
+	hotReplicas := store.HottestReplicasByTenant(roachpb.MustMakeTenantID(1))
+	require.NotNil(t, hotReplicas)
+	require.Equal(t, 4, len(hotReplicas))
+
+	// test requesting data under race
+	iterationsNum := 100
+	wg := sync.WaitGroup{}
+	wg.Add(iterationsNum)
+	for i := 0; i < iterationsNum; i++ {
+		go func() {
+			require.NotNil(t, store.HottestReplicasByTenant(roachpb.MustMakeTenantID(1)))
+			require.NotNil(t, store.HottestReplicasByTenant(roachpb.MustMakeTenantID(2)))
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+}
+
 // fakeRangeQueue implements the rangeQueue interface and
 // records which range is passed to MaybeRemove.
 type fakeRangeQueue struct {

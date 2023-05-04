@@ -151,7 +151,6 @@ type RRAccumulator struct {
 func (a *RRAccumulator) AddReplica(repl CandidateReplica) {
 	for dim := range a.dims {
 		a.addReplicaForDimension(repl, dim)
-
 	}
 }
 
@@ -176,6 +175,7 @@ func (a *RRAccumulator) addReplicaForDimension(repl CandidateReplica, dim load.D
 func consumeAccumulator(pq *rrPriorityQueue) []CandidateReplica {
 	length := pq.Len()
 	sorted := make([]CandidateReplica, length)
+	heap.Init(pq)
 	for i := 1; i <= length; i++ {
 		sorted[length-i] = heap.Pop(pq).(CandidateReplica)
 	}
@@ -257,7 +257,9 @@ func (rr *ReplicaRankingMap) TopQPS(tenantID roachpb.TenantID) []CandidateReplic
 		r.entries = consumeAccumulator(&r)
 		rr.mu.items[tenantID] = r
 	}
-	return r.entries
+	res := make([]CandidateReplica, len(r.entries))
+	copy(res, r.entries)
+	return res
 }
 
 // RRAccumulatorByTenant accumulates replicas per tenant to update the replicas tracked by ReplicaRankingMap.
