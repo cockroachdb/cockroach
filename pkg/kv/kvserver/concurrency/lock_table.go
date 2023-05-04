@@ -818,7 +818,7 @@ type lockState struct {
 	// replicated and unreplicated mode at different stages.
 	holder struct {
 		locked bool
-		// LockStrength is always Exclusive
+		// Lock strength is always lock.Intent.
 		holder [lock.MaxDurability + 1]lockHolderInfo
 
 		// The start time of the lockholder being marked as held in the lock table.
@@ -2710,17 +2710,15 @@ func (t *lockTableImpl) AddDiscoveredLock(
 }
 
 // AcquireLock implements the lockTable interface.
-func (t *lockTableImpl) AcquireLock(
-	txn *enginepb.TxnMeta, key roachpb.Key, strength lock.Strength, durability lock.Durability,
-) error {
+func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	t.enabledMu.RLock()
 	defer t.enabledMu.RUnlock()
 	if !t.enabled {
 		// If not enabled, don't track any locks.
 		return nil
 	}
-	if strength != lock.Exclusive {
-		return errors.AssertionFailedf("lock strength not Exclusive")
+	if acq.Strength != lock.Intent {
+		return errors.AssertionFailedf("lock strength not Intent")
 	}
 	var l *lockState
 	t.locks.mu.Lock()
@@ -2729,10 +2727,10 @@ func (t *lockTableImpl) AcquireLock(
 	// will already be in tree we can optimize this by first trying with a
 	// tree.mu.RLock().
 	iter := t.locks.MakeIter()
-	iter.FirstOverlap(&lockState{key: key})
+	iter.FirstOverlap(&lockState{key: acq.Key})
 	checkMaxLocks := false
 	if !iter.Valid() {
-		if durability == lock.Replicated {
+		if acq.Durability == lock.Replicated {
 			// Don't remember uncontended replicated locks. The downside is that
 			// sometimes contention won't be noticed until when the request
 			// evaluates. Remembering here would be better, but our behavior when
@@ -2744,14 +2742,14 @@ func (t *lockTableImpl) AcquireLock(
 		}
 		var lockSeqNum uint64
 		lockSeqNum, checkMaxLocks = t.locks.nextLockSeqNum()
-		l = &lockState{id: lockSeqNum, key: key}
+		l = &lockState{id: lockSeqNum, key: acq.Key}
 		l.queuedWriters.Init()
 		l.waitingReaders.Init()
 		t.locks.Set(l)
 		atomic.AddInt64(&t.locks.numLocks, 1)
 	} else {
 		l = iter.Cur()
-		if durability == lock.Replicated && l.tryFreeLockOnReplicatedAcquire() {
+		if acq.Durability == lock.Replicated && l.tryFreeLockOnReplicatedAcquire() {
 			// Don't remember uncontended replicated locks. Just like in the
 			// case where the lock is initially added as replicated, we drop
 			// replicated locks from the lockTable when being upgraded from
@@ -2765,7 +2763,7 @@ func (t *lockTableImpl) AcquireLock(
 			return nil
 		}
 	}
-	err := l.acquireLock(strength, durability, txn, txn.WriteTimestamp, t.clock)
+	err := l.acquireLock(acq.Strength, acq.Durability, &acq.Txn, acq.Txn.WriteTimestamp, t.clock)
 	t.locks.mu.Unlock()
 
 	if checkMaxLocks {
