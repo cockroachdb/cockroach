@@ -3045,7 +3045,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	testutils.SucceedsWithin(t, func() error {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		_, err := decomSrv.DB().Scan(timeoutCtx, keys.MinKey, keys.MaxKey, 0)
+		_, err := decomSrv.DB().Scan(timeoutCtx, keys.LocalMax, keys.MaxKey, 0)
 		if err == nil {
 			return errors.New("expected error")
 		}
