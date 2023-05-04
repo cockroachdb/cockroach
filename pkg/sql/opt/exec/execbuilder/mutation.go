@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -144,31 +143,48 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		return execPlan{}, false, nil
 	}
 
-	//  - the input is Values with at most mutations.MaxBatchSize, and there are no
-	//    subqueries;
-	//    (note that mutations.MaxBatchSize() is a quantity of keys in the batch
-	//     that we send, not a number of rows. We use this as a guideline only,
-	//     and there is no guarantee that we won't produce a bigger batch.)
-	values, ok := ins.Input.(*memo.ValuesExpr)
-	if !ok ||
-		values.ChildCount() > mutations.MaxBatchSize(false /* forceProductionMaxBatchSize */) ||
-		values.Relational().HasSubquery ||
-		values.Relational().HasUDF {
-		return execPlan{}, false, nil
-	}
-
-	// We cannot use the fast path if any uniqueness checks are needed.
-	// TODO(rytaft): try to relax this restriction (see #58047).
-	if len(ins.UniqueChecks) > 0 {
+	insInput := ins.Input
+	values, ok := insInput.(*memo.ValuesExpr)
+	// Values expressions containing subqueries or UDFs, or having a size larger
+	// than the max mutation batch size are disallowed.
+	if !ok || !memo.ValuesLegalForInsertFastPath(values) {
 		return execPlan{}, false, nil
 	}
 
 	md := b.mem.Metadata()
 	tab := md.Table(ins.Table)
 
+	uniqChecks := make([]exec.InsertFastPathFKUniqCheck, len(ins.UniqueChecks))
+	for i := range ins.UniqueChecks {
+		c := &ins.UniqueChecks[i]
+		if c.FastPathCheck == nil {
+			return execPlan{}, false, nil
+		}
+
+		if len(c.FastPathCheck.DatumsFromConstraint) == 0 {
+			// We need at least one DatumsFromConstraint in order to perform
+			// uniqueness checks during fast-path insert. Even if DatumsFromConstraint
+			// contains no Datums, that case indicates that all values to check come
+			// from the input row.
+			return execPlan{}, false, nil
+		}
+		execFastPathCheck := &uniqChecks[i]
+		// Copy the elements built during exploration into the execbuilder
+		// structures.
+		execFastPathCheck.ReferencedTable = c.FastPathCheck.ReferencedTable
+		execFastPathCheck.ReferencedIndex = c.FastPathCheck.ReferencedIndex
+		execFastPathCheck.InsertCols = make([]exec.TableColumnOrdinal, len(c.FastPathCheck.InsertCols))
+		for j, insertCol := range c.FastPathCheck.InsertCols {
+			execFastPathCheck.InsertCols[j] = exec.TableColumnOrdinal(insertCol)
+		}
+		execFastPathCheck.MatchMethod = c.FastPathCheck.MatchMethod
+		execFastPathCheck.DatumsFromConstraint = c.FastPathCheck.DatumsFromConstraint
+		execFastPathCheck.MkErr = exec.MkErrFn(c.FastPathCheck.MkErr)
+	}
+
 	//  - there are no self-referencing foreign keys;
 	//  - all FK checks can be performed using direct lookups into unique indexes.
-	fkChecks := make([]exec.InsertFastPathFKCheck, len(ins.FKChecks))
+	fkChecks := make([]exec.InsertFastPathFKUniqCheck, len(ins.FKChecks))
 	for i := range ins.FKChecks {
 		c := &ins.FKChecks[i]
 		if md.Table(c.ReferencedTable).ID() == md.Table(ins.Table).ID() {
@@ -207,19 +223,20 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 
 		out := &fkChecks[i]
 		out.InsertCols = make([]exec.TableColumnOrdinal, len(lookupJoin.KeyCols))
-		for i, keyCol := range lookupJoin.KeyCols {
+		for j, keyCol := range lookupJoin.KeyCols {
 			// The keyCol comes from the WithScan operator. We must find the matching
 			// column in the mutation input.
-			withColOrd, ok := withScan.OutCols.Find(keyCol)
+			var withColOrd, inputColOrd int
+			withColOrd, ok = withScan.OutCols.Find(keyCol)
 			if !ok {
 				return execPlan{}, false, errors.AssertionFailedf("cannot find column %d", keyCol)
 			}
 			inputCol := withScan.InCols[withColOrd]
-			inputColOrd, ok := ins.InsertCols.Find(inputCol)
+			inputColOrd, ok = ins.InsertCols.Find(inputCol)
 			if !ok {
 				return execPlan{}, false, errors.AssertionFailedf("cannot find column %d", inputCol)
 			}
-			out.InsertCols[i] = exec.TableColumnOrdinal(inputColOrd)
+			out.InsertCols[j] = exec.TableColumnOrdinal(inputColOrd)
 		}
 
 		out.ReferencedTable = md.Table(lookupJoin.Table)
@@ -275,6 +292,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		returnOrds,
 		checkOrds,
 		fkChecks,
+		uniqChecks,
 		b.allowAutoCommit,
 	)
 	if err != nil {
@@ -734,7 +752,7 @@ func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
 				}
 				keyVals[i] = row[ord]
 			}
-			return mkUniqueCheckErr(md, c, keyVals)
+			return memo.MkUniqueCheckErr(md, c, keyVals)
 		}
 		node, err := b.factory.ConstructErrorIfRows(query.root, mkErr)
 		if err != nil {
@@ -773,48 +791,6 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 		b.checks = append(b.checks, node)
 	}
 	return nil
-}
-
-// mkUniqueCheckErr generates a user-friendly error describing a uniqueness
-// violation. The keyVals are the values that correspond to the
-// cat.UniqueConstraint columns.
-func mkUniqueCheckErr(md *opt.Metadata, c *memo.UniqueChecksItem, keyVals tree.Datums) error {
-	tabMeta := md.TableMeta(c.Table)
-	uc := tabMeta.Table.Unique(c.CheckOrdinal)
-	constraintName := uc.Name()
-	var msg, details bytes.Buffer
-
-	// Generate an error of the form:
-	//   ERROR:  duplicate key value violates unique constraint "foo"
-	//   DETAIL: Key (k)=(2) already exists.
-	msg.WriteString("duplicate key value violates unique constraint ")
-	lexbase.EncodeEscapedSQLIdent(&msg, constraintName)
-
-	details.WriteString("Key (")
-	for i := 0; i < uc.ColumnCount(); i++ {
-		if i > 0 {
-			details.WriteString(", ")
-		}
-		col := tabMeta.Table.Column(uc.ColumnOrdinal(tabMeta.Table, i))
-		details.WriteString(string(col.ColName()))
-	}
-	details.WriteString(")=(")
-	for i, d := range keyVals {
-		if i > 0 {
-			details.WriteString(", ")
-		}
-		details.WriteString(d.String())
-	}
-
-	details.WriteString(") already exists.")
-
-	return errors.WithDetail(
-		pgerror.WithConstraintName(
-			pgerror.Newf(pgcode.UniqueViolation, "%s", msg.String()),
-			constraintName,
-		),
-		details.String(),
-	)
 }
 
 // mkFKCheckErr generates a user-friendly error describing a foreign key
