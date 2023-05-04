@@ -14,7 +14,7 @@ new-txn txn=txn3 ts=10 epoch=0
 new-txn txn=txn4 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=w@a,e
+new-request r=req1 txn=txn1 ts=10 spans=intent@a,e
 ----
 
 scan r=req1
