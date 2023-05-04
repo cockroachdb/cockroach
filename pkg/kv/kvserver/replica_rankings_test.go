@@ -459,7 +459,7 @@ func TestNewReplicaRankingsMap(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		acc := NewTenantReplicaAccumulator()
+		acc := NewTenantReplicaAccumulator(aload.Queries, aload.CPU)
 
 		// Randomize the order of the inputs each time the test is run.
 		rand.Shuffle(len(tc), func(i, j int) {
@@ -476,10 +476,6 @@ func TestNewReplicaRankingsMap(t *testing.T) {
 			cr.mu.tenantID = roachpb.MustMakeTenantID(c.tenantID)
 			acc.AddReplica(cr)
 
-			if c.qps <= 1 {
-				continue
-			}
-
 			if l, ok := expectedReplicasPerTenant[c.tenantID]; ok {
 				expectedReplicasPerTenant[c.tenantID] = l + 1
 			} else {
@@ -489,9 +485,9 @@ func TestNewReplicaRankingsMap(t *testing.T) {
 		rr.Update(acc)
 
 		for tID, count := range expectedReplicasPerTenant {
-			repls := rr.TopQPS(roachpb.MustMakeTenantID(tID))
+			repls := rr.TopLoad(roachpb.MustMakeTenantID(tID), aload.Queries)
 			if len(repls) != count {
-				t.Errorf("wrong number of replicas in output; got: %v; want: %v", repls, tc)
+				t.Errorf("wrong number of replicas in output; got: %v; want: %v", len(repls), count)
 				continue
 			}
 			for i := 0; i < len(repls)-1; i++ {
@@ -500,9 +496,11 @@ func TestNewReplicaRankingsMap(t *testing.T) {
 					break
 				}
 			}
-			replsCopy := rr.TopQPS(roachpb.MustMakeTenantID(tID))
-			if !reflect.DeepEqual(repls, replsCopy) {
-				t.Errorf("got different replicas on second call to topQPS; first call: %v, second call: %v", repls, replsCopy)
+			replsCopy := rr.TopLoad(roachpb.MustMakeTenantID(tID), aload.Queries)
+			for i := 0; i < len(repls); i++ {
+				if repls[i].RangeUsageInfo().QueriesPerSecond != replsCopy[i].RangeUsageInfo().QueriesPerSecond {
+					t.Errorf("got different results Range ID: %d, QPS: %f, second call: Range ID: %d, QPS: %f", repls[i].GetRangeID(), repls[i].RangeUsageInfo().QueriesPerSecond, replsCopy[i].GetRangeID(), replsCopy[i].RangeUsageInfo().QueriesPerSecond)
+				}
 			}
 		}
 	}
