@@ -1,0 +1,79 @@
+# Verify that when a node is decommissioned, it transitions
+# into inactive mode and is deleted once enough time has passed.
+
+connect n1 class=def
+----
+ok
+
+soon healthy=1
+----
+ok
+
+set-hb-err n1
+----
+ok
+
+soon unhealthy=1
+----
+ok
+
+reset-hb-err n1
+----
+ok
+
+set-hb-err n1 decommissioned=true
+----
+ok
+
+soon inactive=1
+----
+ok
+
+show n1 class=def
+----
+tripped:   true
+inactive:  true
+deletable: false
+
+tick 25h
+----
+1970-01-02 01:00:09 +0000 UTC
+
+show n1 class=def
+----
+tripped:   true
+inactive:  true
+deletable: true
+
+# We want to check that n1 gets removed since lots of
+# time has passed, and we do so indirectly: we make
+# another peer that fails a heartbeat. Whenever that
+# happens we also groom the peers map, which should
+# end up removing n1. The same would happen if we directly
+# dialed n1 but in practice that isn't the frequent path
+# since n1 as a node has long disappeared from the cluster.
+
+connect n1' class=sys
+----
+ok
+
+set-hb-err n1'
+----
+ok
+
+# Note that the inactive peer is gone.
+soon unhealthy=1
+----
+ok
+
+show n1 class=def
+----
+<nil>
+
+reset-hb-err n1'
+----
+ok
+
+soon healthy=1
+----
+ok

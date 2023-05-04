@@ -11,6 +11,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/util/circuit",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
@@ -46,6 +47,7 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes",
     ],
 )
 
