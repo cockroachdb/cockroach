@@ -1795,15 +1795,15 @@ func (rpcCtx *Context) dialOptsNetwork(
 	// We need to define a MaxBackoff but it should never be used due to
 	// our setup with onlyOnceDialer below. So note that our choice here is
 	// inconsequential assuming all works as designed.
-	backoff := time.Second
-	if backoff > base.DialTimeout {
+	bo := time.Second
+	if bo > base.DialTimeout {
 		// This is for testing where we set a small DialTimeout. gRPC will
 		// internally round up the min connection timeout to the max backoff. This
 		// can be unintuitive and so we opt out of it by lowering the max backoff.
-		backoff = base.DialTimeout
+		bo = base.DialTimeout
 	}
-	backoffConfig.BaseDelay = backoff
-	backoffConfig.MaxDelay = backoff
+	backoffConfig.BaseDelay = bo
+	backoffConfig.MaxDelay = bo
 	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
 		Backoff:           backoffConfig,
 		MinConnectTimeout: base.DialTimeout}))
