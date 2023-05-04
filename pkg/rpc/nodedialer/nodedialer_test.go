@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 )
 
 const staticNodeID = 1
@@ -135,8 +137,19 @@ func TestConnHealth(t *testing.T) {
 	defer stopper.Stop(ctx)
 	nd := New(rpcCtx, newSingleNodeResolver(staticNodeID, ln.Addr()))
 
-	// When no connection exists, we expect ConnHealth to return ErrNoConnection.
-	require.Equal(t, rpc.ErrNoConnection, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+	var hbDecommission atomic.Value
+	hbDecommission.Store(false)
+	rpcCtx.OnOutgoingPing = func(ctx context.Context, req *rpc.PingRequest) error {
+		if hbDecommission.Load().(bool) {
+			return kvpb.NewDecommissionedStatusErrorf(
+				codes.PermissionDenied, "target node n%s is decommissioned", req.TargetNodeID,
+			)
+		}
+		return nil
+	}
+
+	// When no connection exists, we expect ConnHealth to return ErrNotHeartbeated.
+	require.Equal(t, rpc.ErrNotHeartbeated, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
 
 	// After dialing the node, ConnHealth should return nil.
 	_, err := nd.Dial(ctx, staticNodeID, rpc.DefaultClass)
@@ -147,7 +160,7 @@ func TestConnHealth(t *testing.T) {
 
 	// ConnHealth should still error for other node ID and class.
 	require.Error(t, nd.ConnHealth(9, rpc.DefaultClass))
-	require.Equal(t, rpc.ErrNoConnection, nd.ConnHealth(staticNodeID, rpc.SystemClass))
+	require.Equal(t, rpc.ErrNotHeartbeated, nd.ConnHealth(staticNodeID, rpc.SystemClass))
 
 	// When the heartbeat errors, ConnHealth should eventually error too.
 	hb.setErr(errors.New("boom"))
@@ -185,6 +198,7 @@ func TestConnHealth(t *testing.T) {
 
 	// Closing the remote connection should fail ConnHealth.
 	require.NoError(t, ln.popConn().Close())
+	hbDecommission.Store(true)
 	require.Eventually(t, func() bool {
 		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) != nil
 	}, time.Second, 10*time.Millisecond)
@@ -204,7 +218,7 @@ func TestConnHealthTryDial(t *testing.T) {
 	nd := New(rpcCtx, newSingleNodeResolver(staticNodeID, ln.Addr()))
 
 	// Make sure no connection exists yet, via ConnHealth().
-	require.Equal(t, rpc.ErrNoConnection, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+	require.Equal(t, rpc.ErrNotHeartbeated, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
 
 	// When no connection exists, we expect ConnHealthTryDial to dial the node,
 	// which will return ErrNoHeartbeat at first but eventually succeed.
