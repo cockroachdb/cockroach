@@ -5450,6 +5450,7 @@ CREATE TABLE t.test (a INT, b INT, c JSON, d JSON);
 func TestCreateStatsAfterSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "sometimes the timer in stats.Refresher doesn't fire fast enough under race")
 
 	defer func(oldRefreshInterval, oldAsOf time.Duration) {
 		stats.DefaultRefreshInterval = oldRefreshInterval
