@@ -199,7 +199,7 @@ func TestGrpcDialInternal_ReconnectWithPeerBreaker(t *testing.T) {
 	var hbSuccess atomic.Value
 	hbSuccess.Store(true)
 
-	go func() {
+	require.NoError(t, stopper.RunAsyncTask(context.Background(), "hb-producer", func(ctx context.Context) {
 		for {
 			var err error
 			if !hbSuccess.Load().(bool) {
@@ -212,7 +212,7 @@ func TestGrpcDialInternal_ReconnectWithPeerBreaker(t *testing.T) {
 			case heartbeat.ready <- err:
 			}
 		}
-	}()
+	}))
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
 	if err != nil {
@@ -279,6 +279,97 @@ func TestGrpcDialInternal_ReconnectWithPeerBreaker(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestReconnectAfterAddressChange verifies that when a peer restarts under a
+// different IP, a connection can be establihed and removes the previous
+// connection from the Context.
+func TestReconnectAfterAddressChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Shared cluster ID by all RPC peers (this ensures that the peers
+	// don't talk to servers from unrelated tests by accident).
+	clusterID := uuid.MakeV4()
+
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 20))
+	maxOffset := time.Duration(250)
+	serverCtx := newTestContext(clusterID, clock, maxOffset, stopper)
+
+	const serverNodeID = 1
+	serverCtx.NodeID.Set(context.Background(), serverNodeID)
+	s := newTestServer(t, serverCtx)
+
+	heartbeat := &ManualHeartbeatService{
+		ready:              make(chan error),
+		stopper:            stopper,
+		clock:              clock,
+		maxOffset:          maxOffset,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		version:            serverCtx.Settings.Version,
+		nodeID:             serverCtx.NodeID,
+	}
+	RegisterHeartbeatServer(s, heartbeat)
+
+	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
+	clientCtx.heartbeatInterval = 10 * time.Millisecond
+
+	ln1, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	require.NoError(t, err)
+
+	k1 := connKey{
+		targetAddr: ln1.Addr().String(),
+		nodeID:     serverNodeID,
+		class:      DefaultClass,
+	}
+
+	{
+
+		conn := clientCtx.GRPCDialNode(k1.targetAddr, serverNodeID, DefaultClass)
+		_, err := conn.Connect(context.Background())
+		require.NoError(t, err)
+		testutils.SucceedsSoon(t, conn.Health)
+
+		// Peer is in map.
+		_, _, ok := clientCtx.conns.getWithBreaker(k1)
+		require.True(t, ok)
+	}
+
+	{
+		require.NoError(t, ln1.Close())
+		// Peer stays in map despite becoming unhealthy (due to listener closing).
+		testutils.SucceedsSoon(t, func() error {
+			_, err := clientCtx.GRPCDialNode(k1.targetAddr, serverNodeID, DefaultClass).Connect(ctx)
+			if err == nil {
+				return errors.New("waiting for error")
+			}
+			return nil
+		})
+		_, _, ok := clientCtx.conns.getWithBreaker(k1)
+		require.True(t, ok)
+	}
+
+	// Now connect to n1 but now listening on ln2. This should work.
+	ln2, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	require.NoError(t, err)
+	k2 := connKey{
+		targetAddr: ln2.Addr().String(),
+		nodeID:     serverNodeID,
+		class:      DefaultClass,
+	}
+	conn := clientCtx.GRPCDialNode(k2.targetAddr, serverNodeID, DefaultClass)
+	_, err = conn.Connect(context.Background())
+	require.NoError(t, err)
+	testutils.SucceedsSoon(t, conn.Health)
+	// Peer should be in map (with ln2's address), and the previous peer (with
+	// ln1's address) was removed in reaction to the listener disappearing.
+	_, _, ok := clientCtx.conns.getWithBreaker(k2)
+	require.True(t, ok)
+	_, _, ok = clientCtx.conns.getWithBreaker(k1)
+	require.False(t, ok)
 }
 
 // TestPingInterceptors checks that OnOutgoingPing and OnIncomingPing can inject errors.
