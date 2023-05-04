@@ -454,6 +454,9 @@ message Transaction {
   // with a bumped write timestamp, so this flag is only telling us that a
   // refresh is less likely to succeed than in other cases where
   // ReadTimestamp != WriteTimestamp.
+  //
+  // TODO(nvanbenschoten): this flag is no longer assigned by v23.2 nodes.
+  // Remove it when compatibility with v23.1 nodes is no longer a concern.
   bool write_too_old = 12;
   // Set of spans that the transaction has acquired locks within. These are
   // spans which must be resolved on txn completion. Note that these spans
