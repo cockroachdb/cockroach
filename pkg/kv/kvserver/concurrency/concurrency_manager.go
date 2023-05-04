@@ -514,7 +514,12 @@ func (m *managerImpl) HandleTransactionPushError(
 
 // OnLockAcquired implements the LockManager interface.
 func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcquisition) {
-	if err := m.lt.AcquireLock(&acq.Txn, acq.Key, lock.Exclusive, acq.Durability); err != nil {
+	// TODO(arul): The lock table currently only supports/expects locks with
+	// Intent locking strength.
+	if acq.Strength != lock.Intent {
+		log.Fatalf(ctx, "unsupported lock strength %s", acq.Strength)
+	}
+	if err := m.lt.AcquireLock(acq); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 }
