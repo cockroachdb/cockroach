@@ -3215,8 +3215,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			allIsoLevels: &expect{
 				expServerRefresh:               false,
 				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: false,
-				expParallelCommitAutoRetry:     true,
+				expClientAutoRetryAfterRefresh: true,
+				expParallelCommitAutoRetry:     false,
 			},
 		},
 		{
