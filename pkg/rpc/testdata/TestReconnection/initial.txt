@@ -1,0 +1,59 @@
+dial class=def
+----
+ok
+
+soon healthy=1
+----
+ok
+
+connect class=def
+----
+ok
+
+set-hb-err
+----
+ok
+
+soon unhealthy=1
+----
+ok
+
+connect class=def
+----
+‹error code: Unknown›
+
+reset-hb-err
+----
+ok
+
+soon healthy=1
+----
+ok
+
+connect class=def
+----
+ok
+
+connect class=sys
+----
+ok
+
+soon healthy=2
+----
+ok
+
+connect class=rf
+----
+ok
+
+soon healthy=3
+----
+ok
+
+set-hb-err
+----
+ok
+
+soon unhealthy=3
+----
+ok
