@@ -107,6 +107,8 @@ func NewReplicaAccumulator(dims ...load.Dimension) *RRAccumulator {
 		dims: map[load.Dimension]*rrPriorityQueue{},
 	}
 	for _, dim := range dims {
+		// Reassign dim variable to ensure correct values is captured down below in val() func.
+		dim := dim
 		res.dims[dim] = &rrPriorityQueue{}
 		res.dims[dim].val = func(r CandidateReplica) float64 {
 			return r.RangeUsageInfo().Load().Dim(dim)
@@ -150,7 +152,6 @@ type RRAccumulator struct {
 func (a *RRAccumulator) AddReplica(repl CandidateReplica) {
 	for dim := range a.dims {
 		a.addReplicaForDimension(repl, dim)
-
 	}
 }
 
@@ -223,77 +224,68 @@ func (pq *rrPriorityQueue) Pop() interface{} {
 type ReplicaRankingMap struct {
 	mu struct {
 		syncutil.Mutex
-		items RRAccumulatorByTenant
+		dimAccumulators *RRAccumulatorByTenant
+		// byDims map keeps last computed values per tenant.
+		byDims map[roachpb.TenantID][]CandidateReplica
 	}
 }
 
 // NewReplicaRankingsMap returns a new ReplicaRankingMap struct.
 func NewReplicaRankingsMap() *ReplicaRankingMap {
-	return &ReplicaRankingMap{}
+	rr := &ReplicaRankingMap{}
+	rr.mu.byDims = map[roachpb.TenantID][]CandidateReplica{}
+	rr.mu.dimAccumulators = NewTenantReplicaAccumulator()
+	return rr
 }
 
 // NewTenantReplicaAccumulator returns a new RRAccumulatorByTenant.
-func NewTenantReplicaAccumulator() *RRAccumulatorByTenant {
-	return &RRAccumulatorByTenant{}
+func NewTenantReplicaAccumulator(dims ...load.Dimension) *RRAccumulatorByTenant {
+	return &RRAccumulatorByTenant{
+		dims:   dims,
+		accums: map[roachpb.TenantID]*RRAccumulator{},
+	}
 }
 
 // Update sets the accumulator for replica tracking to be the passed in value.
 func (rr *ReplicaRankingMap) Update(acc *RRAccumulatorByTenant) {
 	rr.mu.Lock()
-	rr.mu.items = *acc
+	rr.mu.dimAccumulators = acc
 	rr.mu.Unlock()
 }
 
-// TopQPS returns the highest QPS CandidateReplicas that are tracked.
-func (rr *ReplicaRankingMap) TopQPS(tenantID roachpb.TenantID) []CandidateReplica {
+// TopLoad returns the highest load CandidateReplicas that are tracked.
+func (rr *ReplicaRankingMap) TopLoad(
+	tenantID roachpb.TenantID, dimension load.Dimension,
+) []CandidateReplica {
 	rr.mu.Lock()
 	defer rr.mu.Unlock()
-	r, ok := rr.mu.items[tenantID]
+	r, ok := rr.mu.dimAccumulators.accums[tenantID]
 	if !ok {
 		return []CandidateReplica{}
 	}
-	if r.Len() > 0 {
-		r.entries = consumeAccumulator(&r)
-		rr.mu.items[tenantID] = r
+	if dim, ok := r.dims[dimension]; ok && dim.Len() > 0 {
+		rr.mu.byDims[tenantID] = consumeAccumulator(dim)
 	}
-	return r.entries
+	return rr.mu.byDims[tenantID]
 }
 
 // RRAccumulatorByTenant accumulates replicas per tenant to update the replicas tracked by ReplicaRankingMap.
 // It should be used in the same way as RRAccumulator (see doc string).
-type RRAccumulatorByTenant map[roachpb.TenantID]rrPriorityQueue
+type RRAccumulatorByTenant struct {
+	accums map[roachpb.TenantID]*RRAccumulator
+	dims   []load.Dimension
+}
 
 // AddReplica adds a replica to the replica accumulator.
-func (a RRAccumulatorByTenant) AddReplica(repl CandidateReplica) {
-	// Do not consider ranges as hot when they are accessed once or less times.
-	if repl.RangeUsageInfo().QueriesPerSecond <= 1 {
-		return
-	}
-
+func (ra RRAccumulatorByTenant) AddReplica(repl CandidateReplica) {
 	tID, ok := repl.Repl().TenantID()
 	if !ok {
 		return
 	}
-
-	r, ok := a[tID]
+	acc, ok := ra.accums[tID]
 	if !ok {
-		q := rrPriorityQueue{
-			val: func(r CandidateReplica) float64 { return r.RangeUsageInfo().QueriesPerSecond },
-		}
-		heap.Push(&q, repl)
-		a[tID] = q
-		return
+		acc = NewReplicaAccumulator(ra.dims...)
 	}
-
-	if r.Len() < numTopReplicasToTrack {
-		heap.Push(&r, repl)
-		a[tID] = r
-		return
-	}
-
-	if repl.RangeUsageInfo().QueriesPerSecond > r.entries[0].RangeUsageInfo().QueriesPerSecond {
-		heap.Pop(&r)
-		heap.Push(&r, repl)
-		a[tID] = r
-	}
+	acc.AddReplica(repl)
+	ra.accums[tID] = acc
 }
