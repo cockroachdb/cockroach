@@ -365,10 +365,11 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 	require.NoError(t, err)
 	testutils.SucceedsSoon(t, conn.Health)
 	// Peer should be in map (with ln2's address), and the previous peer (with
-	// ln1's address) was removed in reaction to the listener disappearing.
+	// ln1's address) was removed in reaction to having a healthy connection to
+	// n1 via ln2.
 	_, _, ok := clientCtx.conns.getWithBreaker(k2)
 	require.True(t, ok)
-	_, _, ok = clientCtx.conns.getWithBreaker(k1)
+	_, _, ok = clientCtx.conns.getWithBreaker(k1) // TODO fix code to actually evict superseded conns
 	require.False(t, ok)
 }
 
