@@ -182,6 +182,7 @@ type MockEvalCtx struct {
 	RevokedLeaseSeq      roachpb.LeaseSequence
 	MaxBytes             int64
 	ApproxDiskBytes      uint64
+	EvalKnobs            kvserverbase.BatchEvalTestingKnobs
 }
 
 // EvalContext returns the MockEvalCtx as an EvalContext. It will reflect future
@@ -203,7 +204,7 @@ func (m *mockEvalCtxImpl) ClusterSettings() *cluster.Settings {
 	return m.MockEvalCtx.ClusterSettings
 }
 func (m *mockEvalCtxImpl) EvalKnobs() kvserverbase.BatchEvalTestingKnobs {
-	return kvserverbase.BatchEvalTestingKnobs{}
+	return m.MockEvalCtx.EvalKnobs
 }
 func (m *mockEvalCtxImpl) Clock() *hlc.Clock {
 	return m.MockEvalCtx.Clock

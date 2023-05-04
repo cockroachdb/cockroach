@@ -4253,15 +4253,16 @@ func TestEndTxnWithMalformedSplitTrigger(t *testing.T) {
 func TestEndTxnBeforeHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tc := testContext{}
+	tsc := TestStoreConfig(nil)
 	// Don't automatically GC the Txn record: We want to heartbeat the
 	// committed Transaction and compare it against our expectations.
 	// When it's removed, the heartbeat would recreate it.
-	defer setTxnAutoGC(false)()
-	ctx := context.Background()
-	tc := testContext{}
+	tsc.TestingKnobs.EvalKnobs.DisableTxnAutoGc = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	key := []byte("a")
 	testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
@@ -5485,18 +5486,18 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 	// using the timestamp cache. It doesn't know whether the transaction
 	// was COMMITTED or ABORTED, so it is forced to be conservative and return
 	// an ABORTED transaction.
-	testutils.RunTrueAndFalse(t, "auto-gc", func(t *testing.T, autoGC bool) {
-		defer setTxnAutoGC(autoGC)()
-
+	testutils.RunTrueAndFalse(t, "disable-auto-gc", func(t *testing.T, disableAutoGC bool) {
 		// Test for COMMITTED and ABORTED transactions.
 		testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
 			ctx := context.Background()
 			tc := testContext{}
+			tsc := TestStoreConfig(nil)
+			tsc.TestingKnobs.EvalKnobs.DisableTxnAutoGc = disableAutoGC
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			tc.Start(ctx, t, stopper)
+			tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
-			key := roachpb.Key(fmt.Sprintf("key-%t-%t", autoGC, commit))
+			key := roachpb.Key(fmt.Sprintf("key-%t-%t", disableAutoGC, commit))
 			pusher := newTransaction("test", key, 1, tc.Clock())
 			pushee := newTransaction("test", key, 1, tc.Clock())
 
@@ -5529,7 +5530,7 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 			// the pusher won't end up removing a still-pending intent for a
 			// COMMITTED transaction.
 			expStatus := roachpb.ABORTED
-			if commit && !autoGC {
+			if commit && disableAutoGC {
 				expStatus = roachpb.COMMITTED
 			}
 			if reply.PusheeTxn.Status != expStatus {
@@ -13237,8 +13238,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			defer setTxnAutoGC(!c.disableTxnAutoGC)()
-
+			tc.store.cfg.TestingKnobs.EvalKnobs.DisableTxnAutoGc = c.disableTxnAutoGC
 			txn := newTransaction(c.name, roachpb.Key(c.name), 1, tc.Clock())
 			manual.Advance(99)
 			runTs := tc.Clock().Now()

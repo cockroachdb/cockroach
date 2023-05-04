@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -1188,10 +1189,6 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 	}
 	intents := []roachpb.Span{{Key: k}}
 
-	// We want to inspect the final txn record after EndTxn, to
-	// ascertain that it persists the ignore list.
-	defer TestingSetTxnAutoGC(false)()
-
 	testutils.RunTrueAndFalse(t, "withStoredTxnRecord", func(t *testing.T, storeTxnBeforeEndTxn bool) {
 		db := storage.NewDefaultInMemForTesting()
 		defer db.Close()
@@ -1237,6 +1234,9 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		if _, err := EndTxn(ctx, batch, CommandArgs{
 			EvalCtx: (&MockEvalCtx{
 				Desc: &desc,
+				// We want to inspect the final txn record after EndTxn, to
+				// ascertain that it persists the ignore list.
+				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{DisableTxnAutoGc: true},
 			}).EvalContext(),
 			Args: &req,
 			Header: kvpb.Header{

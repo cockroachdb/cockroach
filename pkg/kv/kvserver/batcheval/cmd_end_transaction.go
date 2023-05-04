@@ -289,7 +289,7 @@ func EndTxn(
 					return result.Result{}, err
 				}
 				if err := updateFinalizedTxn(
-					ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
+					ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks, cArgs.EvalCtx,
 				); err != nil {
 					return result.Result{}, err
 				}
@@ -437,7 +437,7 @@ func EndTxn(
 		return result.Result{}, err
 	}
 	if err := updateFinalizedTxn(
-		ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
+		ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks, cArgs.EvalCtx,
 	); err != nil {
 		return result.Result{}, err
 	}
@@ -702,8 +702,9 @@ func updateFinalizedTxn(
 	txn *roachpb.Transaction,
 	recordAlreadyExisted bool,
 	externalLocks []roachpb.Span,
+	evalCtx EvalContext,
 ) error {
-	if txnAutoGC && len(externalLocks) == 0 {
+	if !evalCtx.EvalKnobs().DisableTxnAutoGc && len(externalLocks) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
 		}
@@ -1407,17 +1408,4 @@ func computeSplitRangeKeyStatsDelta(
 	}
 
 	return ms, nil
-}
-
-// txnAutoGC controls whether Transaction entries are automatically gc'ed upon
-// EndTxn if they only have local locks (which can be resolved synchronously
-// with EndTxn). Certain tests become simpler with this being turned off.
-var txnAutoGC = true
-
-// TestingSetTxnAutoGC is used in tests to temporarily enable/disable
-// txnAutoGC.
-func TestingSetTxnAutoGC(to bool) func() {
-	prev := txnAutoGC
-	txnAutoGC = to
-	return func() { txnAutoGC = prev }
 }
