@@ -4721,27 +4721,22 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 
 		// Send a batch with put & end txn.
 		ba := &kvpb.BatchRequest{}
+		ba.Txn = txn
 		ba.CanForwardReadTimestamp = noPriorReads
 		put := putArgs(key, []byte("value"))
 		et, _ := endTxnArgs(txn, true)
 		et.LockSpans = []roachpb.Span{{Key: key, EndKey: nil}}
-		ba.Header = kvpb.Header{Txn: txn}
-		ba.Add(&put)
-		ba.Add(&et)
+		ba.Add(&put, &et)
 		assignSeqNumsForReqs(txn, &put, &et)
 		_, pErr := tc.Sender().Send(ctx, ba)
-		if pErr != nil {
-			t.Fatalf("unexpected error: %s", pErr)
-		}
+		require.Nil(t, pErr)
 
 		// Replay the request. It initially tries to execute as a 1PC transaction,
 		// but will fail because of a WriteTooOldError that pushes the transaction.
 		// This forces the txn to execute normally, at which point it fails because
 		// the EndTxn is detected to be a duplicate.
 		_, pErr = tc.Sender().Send(ctx, ba)
-		if pErr == nil {
-			t.Fatalf("expected error, got nil")
-		}
+		require.NotNil(t, pErr)
 		require.Regexp(t,
 			`TransactionAbortedError\(ABORT_REASON_RECORD_ALREADY_WRITTEN_POSSIBLE_REPLAY\)`,
 			pErr)
