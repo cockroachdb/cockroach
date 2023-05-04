@@ -6,7 +6,7 @@ new-txn txn=txn1 ts=10,1 epoch=0
 
 # req1 will acquire locks for txn1
 
-new-request r=req1 txn=txn1 ts=10,1 spans=r@a,b+w@c,f
+new-request r=req1 txn=txn1 ts=10,1 spans=none@a,b+intent@c,f
 ----
 
 scan r=req1
@@ -51,7 +51,7 @@ num locks: 1, bytes returned: 41, resume reason: RESUME_UNKNOWN, resume span: <n
 
 # req2 is also for txn1 and will not wait for locks that are held by self.
 
-new-request r=req2 txn=txn1 ts=10,2 spans=w@b,d+r@d,g
+new-request r=req2 txn=txn1 ts=10,2 spans=intent@b,d+none@d,g
 ----
 
 scan r=req2
@@ -109,7 +109,7 @@ new-txn txn=txn2 ts=8,12 epoch=0
 # req3 from txn2 will conflict with locks on b, c since wants to write to [a, d). But does
 # not conflict with lock on e since wants to read there and the read is at a lower timestamp
 # than the lock.
-new-request r=req3 txn=txn2 ts=8,12 spans=w@a,d+r@d,g
+new-request r=req3 txn=txn2 ts=8,12 spans=intent@a,d+none@d,g
 ----
 
 scan r=req3
@@ -120,7 +120,7 @@ new-txn txn=txn3 ts=9,1 epoch=0
 ----
 
 # req4 from txn3 will conflict with locks on e since wants to write to [d, g).
-new-request r=req4 txn=txn3 ts=9,1 spans=w@d,g
+new-request r=req4 txn=txn3 ts=9,1 spans=intent@d,g
 ----
 
 scan r=req4
