@@ -233,6 +233,15 @@ func evalExport(
 				return result.Result{}, maybeAnnotateExceedMaxSizeError(err)
 			}
 		}
+
+		// Check if our ctx has been cancelled while we were constructing the SST.
+		// If it has been cancelled the client is no longer expecting a response.
+		select {
+		case <-ctx.Done():
+			return result.Result{}, ctx.Err()
+		default:
+		}
+
 		data := destFile.Bytes()
 
 		// NB: This should only happen in two cases:
