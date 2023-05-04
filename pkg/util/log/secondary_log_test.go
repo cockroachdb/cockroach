@@ -71,7 +71,7 @@ func TestSecondaryLog(t *testing.T) {
 	Infof(context.Background(), "test2")
 
 	// Make sure the content made it to disk.
-	FlushFileSinks()
+	Flush()
 
 	// Check that the messages indeed made it to different files.
 
@@ -151,7 +151,7 @@ func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
 	// Emit some logging and ensure the files gets created.
 	ctx := context.Background()
 	Sessions.Infof(ctx, "story time")
-	FlushFileSinks()
+	Flush()
 
 	results, err := ListLogFiles()
 	if err != nil {
