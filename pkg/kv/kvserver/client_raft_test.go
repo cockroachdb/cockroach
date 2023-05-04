@@ -3300,7 +3300,9 @@ func TestDecommission(t *testing.T) {
 	require.NoError(t, err)
 
 	requireNoReplicas := func(storeID roachpb.StoreID, repFactor int) {
+		attempt := 0
 		testutils.SucceedsSoon(t, func() error {
+			attempt++
 			desc := tc.LookupRangeOrFatal(t, k)
 			for _, rDesc := range desc.Replicas().VoterDescriptors() {
 				store, err := tc.Servers[int(rDesc.NodeID-1)].Stores().GetStore(rDesc.StoreID)
@@ -3312,10 +3314,10 @@ func TestDecommission(t *testing.T) {
 			if sl := desc.Replicas().FilterToDescriptors(func(rDesc roachpb.ReplicaDescriptor) bool {
 				return rDesc.StoreID == storeID
 			}); len(sl) > 0 {
-				return errors.Errorf("still a replica on s%d: %s", storeID, &desc)
+				return errors.Errorf("still a replica on s%d: %s on attempt %d", storeID, &desc, attempt)
 			}
 			if len(desc.Replicas().VoterDescriptors()) != repFactor {
-				return errors.Errorf("expected %d replicas: %s", repFactor, &desc)
+				return errors.Errorf("expected %d replicas: %s on attempt %d", repFactor, &desc, attempt)
 			}
 			return nil
 		})
