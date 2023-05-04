@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -142,6 +143,12 @@ type DistSQLPlanner struct {
 	codec keys.SQLCodec
 
 	clock *hlc.Clock
+
+	mu struct {
+		syncutil.RWMutex
+
+		sqlInstanceIDToRegion map[base.SQLInstanceID]string
+	}
 }
 
 // DistributionType is an enum defining when a plan should be distributed.
@@ -1171,9 +1178,54 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 		return []SpanPartition{{dsp.gatewaySQLInstanceID, spans}}, nil
 	}
 	if dsp.useGossipPlanning(ctx, planCtx) {
-		return dsp.deprecatedPartitionSpansSystem(ctx, planCtx, spans)
+		result, err := dsp.deprecatedPartitionSpansSystem(ctx, planCtx, spans)
+		if err == nil && planCtx.planner != nil {
+			planCtx.planner.curPlan.sqlInstanceIds = result
+			planCtx.planner.curPlan.regions = dsp.getRegionFromPartitions(ctx, result)
+		}
+
+		return result, err
 	}
-	return dsp.partitionSpans(ctx, planCtx, spans)
+
+	result, regions, err := dsp.partitionSpans(ctx, planCtx, spans)
+	if err == nil && planCtx.planner != nil {
+		planCtx.planner.curPlan.sqlInstanceIds = result
+		planCtx.planner.curPlan.regions = regions
+	}
+	return result, err
+}
+
+func (dsp *DistSQLPlanner) getRegionFromPartitions(
+	ctx context.Context, partitions []SpanPartition,
+) (regions []string) {
+	g, err := dsp.gossip.OptionalErr(1234)
+	if err != nil {
+		log.Errorf(ctx, "getRegionFromPartitions failed when getting gossip: %v", err)
+		return nil
+	}
+
+	if len(partitions) == 1 && partitions[0].SQLInstanceID == dsp.gatewaySQLInstanceID {
+		return nil
+	}
+
+	regionsSet := make(map[string]struct{})
+	regions = make([]string, len(partitions))
+	for _, partition := range partitions {
+		node, err := g.GetNodeDescriptor(roachpb.NodeID(partition.SQLInstanceID))
+		if err != nil {
+			log.Errorf(ctx, "getRegionFromPartitions failed when GetNodeDescriptor: %v", err)
+			continue
+		}
+
+		if region, ok := node.Locality.Find("region"); ok {
+			if _, exist := regionsSet[region]; !exist {
+				regionsSet[region] = struct{}{}
+				regions = append(regions, region)
+			}
+		}
+	}
+
+	return regions
 }
 
 // partitionSpan takes a single span and splits it up according to the owning
@@ -1300,6 +1352,7 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 			return nil, err
 		}
 	}
+
 	return partitions, nil
 }
 
@@ -1311,10 +1364,10 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 // the instances, and it falls back to naive round-robin assignment if not.
 func (dsp *DistSQLPlanner) partitionSpans(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
-) (partitions []SpanPartition, _ error) {
+) (partitions []SpanPartition, regions []string, _ error) {
 	resolver, instances, err := dsp.makeInstanceResolver(ctx, planCtx.localityFilter)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	nodeMap := make(map[base.SQLInstanceID]int)
 	var lastKey roachpb.Key
@@ -1338,15 +1391,86 @@ func (dsp *DistSQLPlanner) partitionSpans(
 			ctx, planCtx, span, partitions, nodeMap, resolver,
 		)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
+
 	if planCtx.localityFilter.Empty() {
 		if err = dsp.maybeReassignToGatewaySQLInstance(partitions, instances); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return partitions, nil
+
+	// Take a read lock to get the map
+	var mapIdToRegion map[base.SQLInstanceID]string
+	func() {
+		dsp.mu.RLock()
+		defer dsp.mu.RUnlock()
+		mapIdToRegion = dsp.mu.sqlInstanceIDToRegion
+	}()
+
+	// Create and update the map if it doesn't exist.
+	mapIdToRegionUpdated := false
+	if mapIdToRegion == nil {
+		mapIdToRegion = dsp.updateSqlInstanceIDToRegionMap(instances, partitions)
+		mapIdToRegionUpdated = true
+	}
+
+	// Avoid overhead of creating a map and removing duplicates if it is just
+	// one node.
+	if len(partitions) == 1 {
+		if region, ok := mapIdToRegion[partitions[0].SQLInstanceID]; ok {
+			return partitions, []string{region}, nil
+		}
+	}
+
+	regionsSet := make(map[string]struct{})
+	regions = make([]string, len(partitions))
+	if mapIdToRegion != nil {
+		for _, partition := range partitions {
+			if region, ok := mapIdToRegion[partition.SQLInstanceID]; ok {
+				regionsSet[region] = struct{}{}
+				regions = append(regions, region)
+				continue
+			}
+
+			// Likely a new sql instance id was added, so update the map
+			// Only update it once to avoid unnecessarily recalculating it.
+			if !mapIdToRegionUpdated {
+				mapIdToRegion = dsp.updateSqlInstanceIDToRegionMap(instances, partitions)
+				mapIdToRegionUpdated = true
+			}
+		}
+	}
+
+	return partitions, regions, nil
+}
+
+// create a new map and populate with SQL instance id to region name
+// then replace the cached instance. Creating a new map and populating
+// it
+func (dsp *DistSQLPlanner) updateSqlInstanceIDToRegionMap(
+	instances []sqlinstance.InstanceInfo, partitions []SpanPartition,
+) map[base.SQLInstanceID]string {
+	// Avoid lock contention by creating a new map and only taking a lock
+	// to replace it.
+	mapIdToRegion := make(map[base.SQLInstanceID]string, len(partitions))
+	for _, instance := range instances {
+		if val, ok := mapIdToRegion[instance.InstanceID]; ok && val != "" {
+			continue
+		}
+
+		if regionName, ok := instance.Locality.Find("region"); ok {
+			mapIdToRegion[instance.InstanceID] = regionName
+		} else {
+			mapIdToRegion[instance.InstanceID] = ""
+		}
+	}
+
+	dsp.mu.Lock()
+	defer dsp.mu.Unlock()
+	dsp.mu.sqlInstanceIDToRegion = mapIdToRegion
+	return mapIdToRegion
 }
 
 // deprecatedSQLInstanceIDForKVNodeIDSystem returns the SQL instance that should
