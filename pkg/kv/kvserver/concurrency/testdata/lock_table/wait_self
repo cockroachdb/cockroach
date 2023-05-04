@@ -17,16 +17,16 @@ new-txn txn=txn2 ts=10 epoch=0
 new-txn txn=txn3 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=w@a
+new-request r=req1 txn=txn1 ts=10 spans=intent@a
 ----
 
-new-request r=req2 txn=txn2 ts=10 spans=w@a
+new-request r=req2 txn=txn2 ts=10 spans=intent@a
 ----
 
-new-request r=req3 txn=txn3 ts=10 spans=w@a
+new-request r=req3 txn=txn3 ts=10 spans=intent@a
 ----
 
-new-request r=req4 txn=txn2 ts=10 spans=w@a
+new-request r=req4 txn=txn2 ts=10 spans=intent@a
 ----
 
 scan r=req1

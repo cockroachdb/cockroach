@@ -13,7 +13,7 @@ new-txn txn=txn1 ts=10 epoch=0 seq=2
 new-txn txn=txn2 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=w@a
+new-request r=req1 txn=txn1 ts=10 spans=intent@a
 ----
 
 acquire r=req1 k=a durability=u
@@ -37,7 +37,7 @@ num=1
 new-txn txn=txn1 ts=8 epoch=0 seq=3
 ----
 
-new-request r=req2 txn=txn1 ts=8 spans=w@a
+new-request r=req2 txn=txn1 ts=8 spans=intent@a
 ----
 
 acquire r=req2 k=a durability=u
@@ -55,7 +55,7 @@ num=1
 # of uncontended replicated locks.
 # ---------------------------------------------------------------------------------
 
-new-request r=reqContend txn=none ts=10 spans=w@a
+new-request r=reqContend txn=none ts=10 spans=intent@a
 ----
 
 scan r=reqContend
@@ -84,7 +84,7 @@ num=1
 new-txn txn=txn1 ts=10 epoch=1 seq=0
 ----
 
-new-request r=req3 txn=txn1 ts=10 spans=w@a
+new-request r=req3 txn=txn1 ts=10 spans=intent@a
 ----
 
 acquire r=req3 k=a durability=u
@@ -102,7 +102,7 @@ num=1
 new-txn txn=txn1 ts=6 epoch=2 seq=0
 ----
 
-new-request r=req4 txn=txn1 ts=6 spans=w@a
+new-request r=req4 txn=txn1 ts=6 spans=intent@a
 ----
 
 acquire r=req4 k=a durability=u
@@ -115,7 +115,7 @@ num=1
 # Reader waits until the timestamp of the lock is updated.
 # ---------------------------------------------------------------------------------
 
-new-request r=req5 txn=txn2 ts=12 spans=r@a
+new-request r=req5 txn=txn2 ts=12 spans=none@a
 ----
 
 scan r=req5
@@ -138,7 +138,7 @@ num=1
 new-txn txn=txn1 ts=14 epoch=1 seq=1
 ----
 
-new-request r=req6 txn=txn1 ts=14 spans=w@a
+new-request r=req6 txn=txn1 ts=14 spans=intent@a
 ----
 
 acquire r=req6 k=a durability=r
@@ -171,7 +171,7 @@ new: state=doneWaiting
 # that the lock table is used.
 # ---------------------------------------------------------------------------------
 
-new-request r=req7 txn=txn2 ts=17 spans=r@a
+new-request r=req7 txn=txn2 ts=17 spans=none@a
 ----
 
 scan r=req7

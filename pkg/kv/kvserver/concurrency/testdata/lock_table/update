@@ -14,7 +14,7 @@ new-txn txn=txn3 ts=14,1 epoch=0
 # Acquire a lock on key a at timestamp 10,1
 # -------------------------------------------------------------
 
-new-request r=req1 txn=txn1 ts=10,1 spans=w@a
+new-request r=req1 txn=txn1 ts=10,1 spans=intent@a
 ----
 
 scan r=req1
@@ -45,16 +45,16 @@ num=1
 # 4. non-transactional read-write request
 # -------------------------------------------------------------
 
-new-request r=req2 txn=txn2 ts=12,1 spans=r@a
+new-request r=req2 txn=txn2 ts=12,1 spans=none@a
 ----
 
-new-request r=req3 txn=txn3 ts=14,1 spans=w@a
+new-request r=req3 txn=txn3 ts=14,1 spans=intent@a
 ----
 
-new-request r=req4 txn=none ts=16,1 spans=r@a
+new-request r=req4 txn=none ts=16,1 spans=none@a
 ----
 
-new-request r=req5 txn=none ts=18,1 spans=w@a
+new-request r=req5 txn=none ts=18,1 spans=intent@a
 ----
 
 scan r=req2
@@ -386,7 +386,7 @@ new-lock-table maxlocks=10000
 new-txn txn=txn1 ts=10 epoch=1 seq=1
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=w@a
+new-request r=req1 txn=txn1 ts=10 spans=intent@a
 ----
 
 acquire r=req1 k=a durability=u
@@ -398,7 +398,7 @@ num=1
 new-txn txn=txn1 ts=10 epoch=1 seq=5
 ----
 
-new-request r=req2 txn=txn1 ts=10 spans=w@a
+new-request r=req2 txn=txn1 ts=10 spans=intent@a
 ----
 
 acquire r=req2 k=a durability=u
@@ -410,7 +410,7 @@ num=1
 new-txn txn=txn1 ts=10 epoch=1 seq=7
 ----
 
-new-request r=req3 txn=txn1 ts=10 spans=w@a
+new-request r=req3 txn=txn1 ts=10 spans=intent@a
 ----
 
 acquire r=req3 k=a durability=u
@@ -422,7 +422,7 @@ num=1
 new-txn txn=txn1 ts=10 epoch=1 seq=10
 ----
 
-new-request r=req4 txn=txn1 ts=10 spans=w@a
+new-request r=req4 txn=txn1 ts=10 spans=intent@a
 ----
 
 acquire r=req4 k=a durability=u

@@ -14,7 +14,7 @@ new-lock-table maxlocks=10000
 new-txn txn=txn1 ts=10,1 epoch=0 seq=1
 ----
 
-new-request r=req1 txn=txn1 ts=10,1 spans=w@a
+new-request r=req1 txn=txn1 ts=10,1 spans=intent@a
 ----
 
 scan r=req1
@@ -36,7 +36,7 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=2
 ----
 
-new-request r=req2 txn=txn1 ts=10,1 spans=w@a
+new-request r=req2 txn=txn1 ts=10,1 spans=intent@a
 ----
 
 scan r=req2
@@ -58,7 +58,7 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=4
 ----
 
-new-request r=req3 txn=txn1 ts=10,1 spans=w@a
+new-request r=req3 txn=txn1 ts=10,1 spans=intent@a
 ----
 
 scan r=req3
@@ -84,7 +84,7 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=4
 ----
 
-new-request r=req3 txn=txn1 ts=10,1 spans=w@a
+new-request r=req3 txn=txn1 ts=10,1 spans=intent@a
 ----
 
 scan r=req3
@@ -110,7 +110,7 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=2
 ----
 
-new-request r=req4 txn=txn1 ts=10,1 spans=w@a
+new-request r=req4 txn=txn1 ts=10,1 spans=intent@a
 ----
 
 scan r=req4
@@ -138,7 +138,7 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=3
 ----
 
-new-request r=req5 txn=txn1 ts=10,1 spans=w@a
+new-request r=req5 txn=txn1 ts=10,1 spans=intent@a
 ----
 
 scan r=req5
@@ -164,7 +164,7 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=5
 ----
 
-new-request r=req6 txn=txn1 ts=10,1 spans=w@a
+new-request r=req6 txn=txn1 ts=10,1 spans=intent@a
 ----
 
 scan r=req6

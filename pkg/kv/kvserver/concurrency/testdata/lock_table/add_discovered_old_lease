@@ -7,7 +7,7 @@ new-txn txn=txn1 ts=10 epoch=0
 new-txn txn=txn2 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=w@a+r@b+w@c
+new-request r=req1 txn=txn1 ts=10 spans=intent@a+none@b+intent@c
 ----
 
 clear disable

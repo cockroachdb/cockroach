@@ -9,7 +9,7 @@ new-txn txn=txn2 ts=11,1 epoch=0
 
 # req1 will acquire locks for txn1
 
-new-request r=req1 txn=txn1 ts=10,1 spans=w@c,h
+new-request r=req1 txn=txn1 ts=10,1 spans=intent@c,h
 ----
 
 scan r=req1
@@ -42,7 +42,7 @@ num=2
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
-new-request r=req2 txn=txn2 ts=11,1 spans=r@a,d
+new-request r=req2 txn=txn2 ts=11,1 spans=none@a,d
 ----
 
 scan r=req2
@@ -61,7 +61,7 @@ num=2
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
-new-request r=req3 txn=txn2 ts=11,1 spans=r@a,d+r@f,i
+new-request r=req3 txn=txn2 ts=11,1 spans=none@a,d+none@f,i
 ----
 
 scan-opt r=req3
@@ -80,19 +80,19 @@ num=2
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
-check-opt-no-conflicts r=req3 spans=r@a,c
+check-opt-no-conflicts r=req3 spans=none@a,c
 ----
 no-conflicts: true
 
-check-opt-no-conflicts r=req3 spans=r@a,d
+check-opt-no-conflicts r=req3 spans=none@a,d
 ----
 no-conflicts: false
 
-check-opt-no-conflicts r=req3 spans=r@a,c+r@f,g
+check-opt-no-conflicts r=req3 spans=none@a,c+none@f,g
 ----
 no-conflicts: true
 
-check-opt-no-conflicts r=req3 spans=r@a,c+r@f,h
+check-opt-no-conflicts r=req3 spans=none@a,c+none@f,h
 ----
 no-conflicts: false
 
@@ -110,7 +110,7 @@ num=2
 # does not trigger a conflict.
 # ---------------------------------------------------------------------------------
 
-new-request r=req4 txn=txn2 ts=11,1 spans=r@a,i skip-locked
+new-request r=req4 txn=txn2 ts=11,1 spans=none@a,i skip-locked
 ----
 
 scan-opt r=req4
@@ -121,7 +121,7 @@ should-wait r=req4
 ----
 false
 
-check-opt-no-conflicts r=req4 spans=r@a,i
+check-opt-no-conflicts r=req4 spans=none@a,i
 ----
 no-conflicts: true
 

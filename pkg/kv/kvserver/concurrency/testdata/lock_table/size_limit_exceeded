@@ -15,7 +15,7 @@ new-txn txn=txn1 ts=10 epoch=0
 new-txn txn=txn2 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=w@a,e
+new-request r=req1 txn=txn1 ts=10 spans=intent@a,e
 ----
 
 scan r=req1
@@ -53,7 +53,7 @@ num=3
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
 
-new-request r=reqContend txn=none ts=10 spans=w@c
+new-request r=reqContend txn=none ts=10 spans=intent@c
 ----
 
 scan r=reqContend
@@ -93,14 +93,14 @@ num=3
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0], unrepl epoch: 0, seqs: [0]
 
-new-request r=req2 txn=txn2 ts=10 spans=w@a,c
+new-request r=req2 txn=txn2 ts=10 spans=intent@a,c
 ----
 
 scan r=req2
 ----
 start-waiting: true
 
-new-request r=req3 txn=txn2 ts=10 spans=w@a,c
+new-request r=req3 txn=txn2 ts=10 spans=intent@a,c
 ----
 
 scan r=req3
@@ -156,28 +156,28 @@ num=3
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0], unrepl epoch: 0, seqs: [0]
 
-new-request r=req4 txn=txn2 ts=10 spans=r@b
+new-request r=req4 txn=txn2 ts=10 spans=none@b
 ----
 
 scan r=req4
 ----
 start-waiting: true
 
-new-request r=req5 txn=txn2 ts=10 spans=w@b
+new-request r=req5 txn=txn2 ts=10 spans=intent@b
 ----
 
 scan r=req5
 ----
 start-waiting: true
 
-new-request r=req6 txn=txn2 ts=10 spans=w@c
+new-request r=req6 txn=txn2 ts=10 spans=intent@c
 ----
 
 scan r=req6
 ----
 start-waiting: true
 
-new-request r=req7 txn=txn2 ts=10 spans=w@d
+new-request r=req7 txn=txn2 ts=10 spans=intent@d
 ----
 
 scan r=req7
@@ -213,7 +213,7 @@ num=4
    queued writers:
     active: false req: 8, txn: 00000000-0000-0000-0000-000000000002
 
-new-request r=req8 txn=txn2 ts=10 spans=w@e
+new-request r=req8 txn=txn2 ts=10 spans=intent@e
 ----
 
 scan r=req8
