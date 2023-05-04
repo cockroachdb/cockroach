@@ -50,6 +50,13 @@ type BatchEvalTestingKnobs struct {
 	// tombstones when deleting point keys, to increase test coverage. These
 	// should not appear different from a point tombstone to a KV client.
 	UseRangeTombstonesForPointDeletes bool
+
+	// DisableTxnAutoGC disables automatically gc-ing transaction record entries
+	// upon EndTxn. Without this knob, synchronous transaction record cleanup is
+	// performed in cases when a transaction has only locks on the same range as
+	// its record (which can be resolved synchronously with EndTxn). This is
+	// useful in certain tests.
+	DisableTxnAutoGC bool
 }
 
 // IntentResolverTestingKnobs contains testing helpers that are used during
