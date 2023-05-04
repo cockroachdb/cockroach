@@ -858,6 +858,11 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				"FK check", fmt.Sprintf("%s@%s", fk.ReferencedTable.Name(), fk.ReferencedIndex.Name()),
 			)
 		}
+		for _, uniq := range a.UniqChecks {
+			ob.Attr(
+				"uniqueness check", fmt.Sprintf("%s@%s", uniq.ReferencedTable.Name(), uniq.ReferencedIndex.Name()),
+			)
+		}
 		if len(a.Rows) > 0 {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Rows[0]))
 		}

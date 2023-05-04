@@ -59,7 +59,9 @@ var _ mutationPlanNode = &insertFastPathNode{}
 type insertFastPathRun struct {
 	insertRun
 
-	fkChecks []insertFastPathFKCheck
+	uniqChecks []insertFastPathFKUniqCheck
+
+	fkChecks []insertFastPathFKUniqCheck
 
 	numInputCols int
 
@@ -69,27 +71,32 @@ type insertFastPathRun struct {
 	// an FK check fails.
 	inputBuf tree.Datums
 
+	// uniqBatch accumulates the uniqueness checks.
+	uniqBatch kvpb.BatchRequest
+	// uniqSpanInfo keeps track of information for each uniqBatch.Request entry.
+	uniqSpanInfo []insertFastPathFKUniqSpanInfo
+
 	// fkBatch accumulates the FK existence checks.
 	fkBatch kvpb.BatchRequest
 	// fkSpanInfo keeps track of information for each fkBatch.Request entry.
-	fkSpanInfo []insertFastPathFKSpanInfo
+	fkSpanInfo []insertFastPathFKUniqSpanInfo
 
 	// fkSpanMap is used to de-duplicate FK existence checks. Only used if there
 	// is more than one input row.
 	fkSpanMap map[string]struct{}
 }
 
-// insertFastPathFKSpanInfo records information about each Request in the
-// fkBatch, associating it with a specific check and row index.
-type insertFastPathFKSpanInfo struct {
-	check  *insertFastPathFKCheck
+// insertFastPathFKUniqSpanInfo records information about each Request in the
+// fkBatch or uniqBatch, associating it with a specific check and row index.
+type insertFastPathFKUniqSpanInfo struct {
+	check  *insertFastPathFKUniqCheck
 	rowIdx int
 }
 
-// insertFastPathFKCheck extends exec.InsertFastPathFKCheck with metadata that
-// is computed once and can be reused across rows.
-type insertFastPathFKCheck struct {
-	exec.InsertFastPathFKCheck
+// insertFastPathFKUniqCheck extends exec.InsertFastPathFKUniqCheck with
+// metadata that is computed once and can be reused across rows.
+type insertFastPathFKUniqCheck struct {
+	exec.InsertFastPathFKUniqCheck
 
 	tabDesc      catalog.TableDescriptor
 	idx          catalog.Index
@@ -99,7 +106,7 @@ type insertFastPathFKCheck struct {
 	spanSplitter span.Splitter
 }
 
-func (c *insertFastPathFKCheck) init(params runParams) error {
+func (c *insertFastPathFKUniqCheck) init(params runParams) error {
 	idx := c.ReferencedIndex.(*optIndex)
 	c.tabDesc = c.ReferencedTable.(*optTable).desc
 	c.idx = idx.idx
@@ -129,13 +136,13 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 
 // generateSpan returns the span that we need to look up to confirm existence of
 // the referenced row.
-func (c *insertFastPathFKCheck) generateSpan(inputRow tree.Datums) (roachpb.Span, error) {
-	return row.FKCheckSpan(&c.spanBuilder, c.spanSplitter, inputRow, c.colMap, len(c.InsertCols))
+func (c *insertFastPathFKUniqCheck) generateSpan(inputRow tree.Datums) (roachpb.Span, error) {
+	return row.FKUniqCheckSpan(&c.spanBuilder, c.spanSplitter, inputRow, c.colMap, len(c.InsertCols))
 }
 
-// errorForRow returns an error indicating failure of this FK check for the
-// given row.
-func (c *insertFastPathFKCheck) errorForRow(inputRow tree.Datums) error {
+// errorForRow returns an error indicating failure of this FK or uniqueness
+// check for the given row.
+func (c *insertFastPathFKUniqCheck) errorForRow(inputRow tree.Datums) error {
 	values := make(tree.Datums, len(c.InsertCols))
 	for i, ord := range c.InsertCols {
 		values[i] = inputRow[ord]
@@ -147,6 +154,72 @@ func (r *insertFastPathRun) inputRow(rowIdx int) tree.Datums {
 	start := rowIdx * r.numInputCols
 	end := start + r.numInputCols
 	return r.inputBuf[start:end:end]
+}
+
+// addUniqChecks adds Requests to uniqBatch and entries in uniqSpanInfo as
+// needed for checking uniqueness for the given row.
+func (r *insertFastPathRun) addUniqChecks(
+	ctx context.Context, rowIdx int, inputRow tree.Datums,
+) error {
+	for i := range r.uniqChecks {
+		c := &r.uniqChecks[i]
+
+		// See if we have any nulls.
+		hasNulls := false
+		for _, ord := range c.InsertCols {
+			if inputRow[ord] == tree.DNull {
+				hasNulls = true
+				break
+			}
+		}
+		if hasNulls {
+			// We have a row with at least one NULL. NULLs are treated as distinct
+			// and we currently don't support the NULLS NOT DISTINCT clause, so this
+			// row is always distinct with respect to this particular uniqueness
+			// check.
+			continue
+		}
+
+		// DatumsFromConstraint contains constant values from the WHERE clause
+		// constraint which are part of the index key to look up, while inputRow
+		// contains the remaining values which are part of the key to look up.
+		// Combine them together to get the final index prefix key to search.
+		var combinedRow tree.Datums
+		for templateRowNum, templateRow := range c.DatumsFromConstraint {
+			// We can't build the combined row in-place in the template row because
+			// the template row will be reused for the next insert row, and
+			// overwriting the nil entries would mean we could no longer tell which
+			// values must be populated from the input row.
+			if templateRowNum == 0 {
+				combinedRow = make(tree.Datums, len(templateRow))
+			}
+			copy(combinedRow, templateRow)
+			for j := 0; j < len(c.InsertCols); j++ {
+				// Datums from single-table constraints are already present in
+				// DatumsFromConstraint. Fill in other values from the input row.
+				if combinedRow[c.InsertCols[j]] == nil {
+					combinedRow[c.InsertCols[j]] = inputRow[c.InsertCols[j]]
+				}
+			}
+			span, err := c.generateSpan(combinedRow)
+			if err != nil {
+				return err
+			}
+			if r.traceKV {
+				log.VEventf(ctx, 2, "UniqScan %s", span)
+			}
+			reqIdx := len(r.uniqBatch.Requests)
+			r.uniqBatch.Requests = append(r.uniqBatch.Requests, kvpb.RequestUnion{})
+			r.uniqBatch.Requests[reqIdx].MustSetInner(&kvpb.ScanRequest{
+				RequestHeader: kvpb.RequestHeaderFromSpan(span),
+			})
+			r.uniqSpanInfo = append(r.uniqSpanInfo, insertFastPathFKUniqSpanInfo{
+				check:  c,
+				rowIdx: rowIdx,
+			})
+		}
+	}
+	return nil
 }
 
 // addFKChecks adds Requests to fkBatch and entries in fkSpanInfo / fkSpanMap as
@@ -193,11 +266,37 @@ func (r *insertFastPathRun) addFKChecks(
 		r.fkBatch.Requests[reqIdx].MustSetInner(&kvpb.ScanRequest{
 			RequestHeader: kvpb.RequestHeaderFromSpan(span),
 		})
-		r.fkSpanInfo = append(r.fkSpanInfo, insertFastPathFKSpanInfo{
+		r.fkSpanInfo = append(r.fkSpanInfo, insertFastPathFKUniqSpanInfo{
 			check:  c,
 			rowIdx: rowIdx,
 		})
 	}
+	return nil
+}
+
+// runUniqChecks runs the uniqBatch and checks that no spans return rows.
+func (n *insertFastPathNode) runUniqChecks(params runParams) error {
+	if len(n.run.uniqBatch.Requests) == 0 {
+		return nil
+	}
+	defer n.run.uniqBatch.Reset()
+
+	// Run the uniqueness checks batch.
+	ba := n.run.uniqBatch.ShallowCopy()
+	br, err := params.p.txn.Send(params.ctx, ba)
+	if err != nil {
+		return err.GoError()
+	}
+
+	for i := range br.Responses {
+		resp := br.Responses[i].GetInner().(*kvpb.ScanResponse)
+		if len(resp.Rows) > 0 {
+			// Found results for lookup; generate the uniqueness violation error.
+			info := n.run.uniqSpanInfo[i]
+			return info.check.errorForRow(n.run.inputRow(info.rowIdx))
+		}
+	}
+
 	return nil
 }
 
@@ -249,10 +348,25 @@ func (n *insertFastPathNode) startExec(params runParams) error {
 		}
 		maxSpans := len(n.run.fkChecks) * len(n.input)
 		n.run.fkBatch.Requests = make([]kvpb.RequestUnion, 0, maxSpans)
-		n.run.fkSpanInfo = make([]insertFastPathFKSpanInfo, 0, maxSpans)
+		n.run.fkSpanInfo = make([]insertFastPathFKUniqSpanInfo, 0, maxSpans)
 		if len(n.input) > 1 {
 			n.run.fkSpanMap = make(map[string]struct{}, maxSpans)
 		}
+	}
+
+	if len(n.run.uniqChecks) > 0 {
+		numChecksPerInputRow := 0
+		for i := range n.run.uniqChecks {
+			if err := n.run.uniqChecks[i].init(params); err != nil {
+				return err
+			}
+			// Each row inserted may result in multiple KV requests to perform the
+			// uniqueness checks (1 KV request per entry in DatumsFromConstraint).
+			numChecksPerInputRow += len(n.run.uniqChecks[i].DatumsFromConstraint)
+		}
+		maxSpans := len(n.input) * numChecksPerInputRow
+		n.run.uniqBatch.Requests = make([]kvpb.RequestUnion, 0, maxSpans)
+		n.run.uniqSpanInfo = make([]insertFastPathFKUniqSpanInfo, 0, maxSpans)
 	}
 
 	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
@@ -295,12 +409,24 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 			return false, err
 		}
 
+		// Add uniqueness checks.
+		if len(n.run.uniqChecks) > 0 {
+			if err := n.run.addUniqChecks(params.ctx, rowIdx, inputRow); err != nil {
+				return false, err
+			}
+		}
+
 		// Add FK existence checks.
 		if len(n.run.fkChecks) > 0 {
 			if err := n.run.addFKChecks(params.ctx, rowIdx, inputRow); err != nil {
 				return false, err
 			}
 		}
+	}
+
+	// Perform the uniqueness checks.
+	if err := n.runUniqChecks(params); err != nil {
+		return false, err
 	}
 
 	// Perform the FK checks.
