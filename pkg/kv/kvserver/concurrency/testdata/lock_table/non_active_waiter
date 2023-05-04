@@ -95,7 +95,7 @@ start-waiting: true
 
 guard-state r=req1
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=Intent
 
 print
 ----
@@ -131,7 +131,7 @@ num=3
 
 guard-state r=req1
 ----
-new: state=waitFor txn=txn2 key="c" held=true guard-access=write
+new: state=waitFor txn=txn2 key="c" held=true guard-strength=Intent
 
 print
 ----
@@ -163,7 +163,7 @@ num=3
 
 guard-state r=req1
 ----
-new: state=waitForDistinguished txn=txn2 key="b" held=true guard-access=read
+new: state=waitForDistinguished txn=txn2 key="b" held=true guard-strength=None
 
 guard-state r=req2
 ----

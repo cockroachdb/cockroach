@@ -113,11 +113,11 @@ num=1
 
 guard-state r=reqContendReader
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
 
 guard-state r=reqContendWriter
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
 
 clear
 ----
@@ -164,7 +164,7 @@ start-waiting: true
 
 guard-state r=req3
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
 
 acquire r=req2 k=b durability=r
 ----

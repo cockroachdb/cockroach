@@ -99,7 +99,7 @@ start-waiting: true
 
 guard-state r=req1
 ----
-new: state=waitForDistinguished txn=txn4 key="d" held=true guard-access=write
+new: state=waitForDistinguished txn=txn4 key="d" held=true guard-strength=Intent
 
 dequeue r=req1
 ----

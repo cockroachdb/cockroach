@@ -131,7 +131,7 @@ new: state=doneWaiting
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=false guard-access=write
+new: state=waitForDistinguished txn=txn2 key="a" held=false guard-strength=Intent
 
 guard-state r=req5
 ----
@@ -176,7 +176,7 @@ num=3
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn3 key="b" held=false guard-access=write
+new: state=waitForDistinguished txn=txn3 key="b" held=false guard-strength=Intent
 
 guard-state r=req6
 ----
@@ -249,11 +249,11 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn2 key="c" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="c" held=true guard-strength=Intent
 
 guard-state r=req5
 ----
-new: state=waitFor txn=txn2 key="c" held=true guard-access=write
+new: state=waitFor txn=txn2 key="c" held=true guard-strength=Intent
 
 # Release the lock. The non-transactional request does not acquire the reservation.
 

@@ -578,21 +578,8 @@ func TestLockTableBasic(t *testing.T) {
 				if txnS == "" {
 					txnS = fmt.Sprintf("unknown txn with ID: %v", state.txn.ID)
 				}
-				// TODO(arul): We're translating the lock strength back to guardAccess
-				// for now to reduce test churn. A followup patch should teach these
-				// datadriven tests to use lock.Strength correctly -- both in its input
-				// and output.
-				var sa spanset.SpanAccess
-				switch state.guardStrength {
-				case lock.None:
-					sa = spanset.SpanReadOnly
-				case lock.Intent:
-					sa = spanset.SpanReadWrite
-				default:
-					t.Fatalf("unexpected guard strength %s", state.guardStrength)
-				}
-				return fmt.Sprintf("%sstate=%s txn=%s key=%s held=%t guard-access=%s",
-					str, typeStr, txnS, state.key, state.held, sa)
+				return fmt.Sprintf("%sstate=%s txn=%s key=%s held=%t guard-strength=%s",
+					str, typeStr, txnS, state.key, state.held, state.guardStrength)
 
 			case "resolve-before-scanning":
 				var reqName string
