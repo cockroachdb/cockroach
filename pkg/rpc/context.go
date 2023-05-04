@@ -628,7 +628,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 			hasher := fnv.New64a()
 			var b [8]byte
 			binary.BigEndian.PutUint64(b[:], opts.TenantID.ToUint64())
-			hasher.Write(b[:])
+			_, _ = hasher.Write(b[:])
 			hashedTenantID := hasher.Sum64()
 
 			prevOnSet := opts.StorageClusterID.OnSet
