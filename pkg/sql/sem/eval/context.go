@@ -437,6 +437,11 @@ func (p *fakePlannerWithMonitor) EnforceHomeRegion() bool {
 func (p *fakePlannerWithMonitor) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) {
 }
 
+// AutoCommit is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) AutoCommit() bool {
+	return false
+}
+
 type fakeStreamManagerFactory struct {
 	StreamManagerFactory
 }

@@ -958,9 +958,9 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		f.Buffer.WriteString(": ")
 	}
 	switch scalar.Op() {
-	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp:
-		// Omit empty lists (except filters).
-		if scalar.ChildCount() == 0 {
+	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp, opt.FastPathUniqueChecksOp:
+		// Omit empty lists (except filters) and special-purpose fast path check expressions.
+		if scalar.ChildCount() == 0 || scalar.Op() == opt.FastPathUniqueChecksOp {
 			return
 		}
 
@@ -1106,7 +1106,7 @@ func (f *ExprFmtCtx) scalarPropsStrings(scalar opt.ScalarExpr) []string {
 	typ := scalar.DataType()
 	if typ == nil {
 		if scalar.Op() == opt.UniqueChecksItemOp || scalar.Op() == opt.FKChecksItemOp ||
-			scalar.Op() == opt.KVOptionsItemOp {
+			scalar.Op() == opt.KVOptionsItemOp || scalar.Op() == opt.FastPathUniqueChecksItemOp {
 			// These are not true scalars and have no properties.
 			return nil
 		}

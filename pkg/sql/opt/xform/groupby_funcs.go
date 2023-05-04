@@ -76,7 +76,7 @@ func (c *CustomFuncs) MakeMinMaxScalarSubqueriesWithFilter(
 		if !ok {
 			panic(errors.AssertionFailedf("expected a variable as input to the aggregate, but found %T", aggs[i].Agg.Child(0)))
 		}
-		newVarExpr := c.remapScanColsInScalarExpr(variable, scanPrivate, newScanPrivate)
+		newVarExpr := c.RemapScanColsInScalarExpr(variable, scanPrivate, newScanPrivate)
 		var newAggrFunc opt.ScalarExpr
 		switch aggs[i].Agg.(type) {
 		case *memo.MaxExpr:

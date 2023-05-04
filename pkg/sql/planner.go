@@ -975,3 +975,8 @@ func (p *planner) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) 
 	p.SemaCtx().Annotations = tree.MakeAnnotations(numAnnotations)
 	p.ExtendedEvalContext().Annotations = &p.SemaCtx().Annotations
 }
+
+// AutoCommit is part of the eval.Planner interface.
+func (p *planner) AutoCommit() bool {
+	return p.autoCommit
+}

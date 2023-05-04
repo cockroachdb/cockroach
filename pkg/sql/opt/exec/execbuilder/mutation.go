@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -144,31 +143,50 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		return execPlan{}, false, nil
 	}
 
-	//  - the input is Values with at most mutations.MaxBatchSize, and there are no
-	//    subqueries;
-	//    (note that mutations.MaxBatchSize() is a quantity of keys in the batch
-	//     that we send, not a number of rows. We use this as a guideline only,
-	//     and there is no guarantee that we won't produce a bigger batch.)
-	values, ok := ins.Input.(*memo.ValuesExpr)
-	if !ok ||
-		values.ChildCount() > mutations.MaxBatchSize(false /* forceProductionMaxBatchSize */) ||
-		values.Relational().HasSubquery ||
-		values.Relational().HasUDF {
-		return execPlan{}, false, nil
-	}
-
-	// We cannot use the fast path if any uniqueness checks are needed.
-	// TODO(rytaft): try to relax this restriction (see #58047).
-	if len(ins.UniqueChecks) > 0 {
+	insInput := ins.Input
+	values, ok := insInput.(*memo.ValuesExpr)
+	// Values expressions containing subqueries or UDFs, or having a size larger
+	// than the max mutation batch size are disallowed.
+	if !ok || !memo.ValuesLegalForInsertFastPath(values) {
 		return execPlan{}, false, nil
 	}
 
 	md := b.mem.Metadata()
 	tab := md.Table(ins.Table)
 
+	uniqChecks := make([]exec.InsertFastPathFKUniqCheck, len(ins.UniqueChecks))
+	for i := range ins.FastPathUniqueChecks {
+		c := &ins.FastPathUniqueChecks[i]
+		if c.FastPathCheck == nil {
+			return execPlan{}, false, nil
+		}
+
+		if len(c.FastPathCheck.DatumsFromConstraint) == 0 {
+			// We need at least one DatumsFromConstraint in order to perform
+			// uniqueness checks during fast-path insert. Even if DatumsFromConstraint
+			// contains no Datums, that case indicates that all values to check come
+			// from the input row.
+			return execPlan{}, false, nil
+		}
+		execFastPathCheck := &uniqChecks[i]
+		// Set up the execbuilder structure from the elements built during
+		// exploration.
+		execFastPathCheck.ReferencedTable = md.Table(c.FastPathCheck.ReferencedTableID)
+		execFastPathCheck.ReferencedIndex = execFastPathCheck.ReferencedTable.Index(c.FastPathCheck.ReferencedIndexOrdinal)
+		execFastPathCheck.InsertCols = make([]exec.TableColumnOrdinal, len(c.FastPathCheck.InsertCols))
+		for j, insertCol := range c.FastPathCheck.InsertCols {
+			execFastPathCheck.InsertCols[j] = exec.TableColumnOrdinal(md.ColumnMeta(insertCol).Table.ColumnOrdinal(insertCol))
+		}
+		execFastPathCheck.MatchMethod = tree.MatchFull
+		execFastPathCheck.DatumsFromConstraint = c.FastPathCheck.DatumsFromConstraint
+		execFastPathCheck.MkErr = func(values tree.Datums) error {
+			return mkFastPathUniqueCheckErr(md, &ins.UniqueChecks[i], values, execFastPathCheck.ReferencedIndex)
+		}
+	}
+
 	//  - there are no self-referencing foreign keys;
 	//  - all FK checks can be performed using direct lookups into unique indexes.
-	fkChecks := make([]exec.InsertFastPathFKCheck, len(ins.FKChecks))
+	fkChecks := make([]exec.InsertFastPathFKUniqCheck, len(ins.FKChecks))
 	for i := range ins.FKChecks {
 		c := &ins.FKChecks[i]
 		if md.Table(c.ReferencedTable).ID() == md.Table(ins.Table).ID() {
@@ -207,19 +225,20 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 
 		out := &fkChecks[i]
 		out.InsertCols = make([]exec.TableColumnOrdinal, len(lookupJoin.KeyCols))
-		for i, keyCol := range lookupJoin.KeyCols {
+		for j, keyCol := range lookupJoin.KeyCols {
 			// The keyCol comes from the WithScan operator. We must find the matching
 			// column in the mutation input.
-			withColOrd, ok := withScan.OutCols.Find(keyCol)
+			var withColOrd, inputColOrd int
+			withColOrd, ok = withScan.OutCols.Find(keyCol)
 			if !ok {
 				return execPlan{}, false, errors.AssertionFailedf("cannot find column %d", keyCol)
 			}
 			inputCol := withScan.InCols[withColOrd]
-			inputColOrd, ok := ins.InsertCols.Find(inputCol)
+			inputColOrd, ok = ins.InsertCols.Find(inputCol)
 			if !ok {
 				return execPlan{}, false, errors.AssertionFailedf("cannot find column %d", inputCol)
 			}
-			out.InsertCols[i] = exec.TableColumnOrdinal(inputColOrd)
+			out.InsertCols[j] = exec.TableColumnOrdinal(inputColOrd)
 		}
 
 		out.ReferencedTable = md.Table(lookupJoin.Table)
@@ -275,6 +294,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		returnOrds,
 		checkOrds,
 		fkChecks,
+		uniqChecks,
 		b.allowAutoCommit,
 	)
 	if err != nil {
@@ -815,6 +835,40 @@ func mkUniqueCheckErr(md *opt.Metadata, c *memo.UniqueChecksItem, keyVals tree.D
 		),
 		details.String(),
 	)
+}
+
+// mkFastPathUniqueCheckErr is a wrapper for mkUniqueCheckErr in the insert fast
+// path flow, which reorders the keyVals row according to the ordering of the
+// key columns in index `idx`. This is needed because mkUniqueCheckErr assumes
+// the ordering of columns in `keyVals` matches the ordering of columns in
+// `cat.UniqueConstraint.ColumnOrdinal(tabMeta.Table, i)`.
+func mkFastPathUniqueCheckErr(
+	md *opt.Metadata, c *memo.UniqueChecksItem, keyVals tree.Datums, idx cat.Index,
+) error {
+
+	tabMeta := md.TableMeta(c.Table)
+	uc := tabMeta.Table.Unique(c.CheckOrdinal)
+
+	newKeyVals := make(tree.Datums, 0, uc.ColumnCount())
+
+	for i := 0; i < uc.ColumnCount(); i++ {
+		ord := uc.ColumnOrdinal(tabMeta.Table, i)
+		found := false
+		for j := 0; j < idx.ColumnCount(); j++ {
+			keyCol := idx.Column(j)
+			keyColOrd := keyCol.Column.Ordinal()
+			if ord == keyColOrd {
+				newKeyVals = append(newKeyVals, keyVals[j])
+				found = true
+				break
+			}
+		}
+		if !found {
+			panic(errors.AssertionFailedf(
+				"insert fast path failed uniqueness check, but could not find unique columns for row, %v", keyVals))
+		}
+	}
+	return mkUniqueCheckErr(md, c, newKeyVals)
 }
 
 // mkFKCheckErr generates a user-friendly error describing a foreign key
