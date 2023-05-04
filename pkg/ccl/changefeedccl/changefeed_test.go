@@ -1802,7 +1802,7 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 
 	cdcTest(t, testFn)
 
-	log.FlushFileSinks()
+	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1, regexp.MustCompile("cdc ux violation"),
 		log.WithFlattenedSensitiveData)
 	if err != nil {
@@ -2172,7 +2172,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
 
-	log.FlushFileSinks()
+	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
 	if err != nil {
@@ -2358,7 +2358,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 
 	cdcTestWithSystem(t, testFn)
 
-	log.FlushFileSinks()
+	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
 	if err != nil {
@@ -2410,7 +2410,7 @@ func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
 	}
 
 	cdcTestWithSystem(t, testFn)
-	log.FlushFileSinks()
+	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
 	if err != nil {
@@ -2517,7 +2517,7 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 	}
 
 	cdcTest(t, testFn)
-	log.FlushFileSinks()
+	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
 	if err != nil {
