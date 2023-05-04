@@ -107,7 +107,7 @@ func TestTelemetryLogRegions(t *testing.T) {
 		sqlDB.Exec(t, tc.query)
 	}
 
-	log.FlushFileSinks()
+	log.FlushAllSync()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -322,7 +322,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		execTimestamp++
 	}
 
-	log.FlushFileSinks()
+	log.FlushAllSync()
 
 	var filteredSampleQueries []logpb.Entry
 	testutils.SucceedsSoon(t, func() error {

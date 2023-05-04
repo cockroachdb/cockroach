@@ -663,7 +663,7 @@ func requireRecoveryEvent(
 	expected eventpb.RecoveryEvent,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		log.FlushFileSinks()
+		log.FlushAllSync()
 		entries, err := log.FetchEntriesFromFiles(
 			startTime,
 			math.MaxInt64,

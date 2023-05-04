@@ -83,8 +83,8 @@
 //
 // # Output
 //
-// Log output is buffered and written periodically using FlushFileSinks.
-// Programs should call FlushFileSinks before exiting to guarantee all
+// Log output is buffered and written periodically using FlushAllSync.
+// Programs should call FlushAllSync before exiting to guarantee all
 // log output is written to files. Note that buffered network sinks also
 // exist. If you'd like to flush these as well, call FlushAllSync.
 //

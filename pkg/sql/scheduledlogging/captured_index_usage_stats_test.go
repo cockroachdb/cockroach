@@ -281,7 +281,7 @@ func checkNumTotalEntriesAndNumIndexEntries(
 	expectedIndividualIndexEntries int,
 	scheduleCompleteChan chan struct{},
 ) error {
-	log.FlushFileSinks()
+	log.FlushAllSync()
 	// Fetch log entries.
 	entries, err := log.FetchEntriesFromFiles(
 		0,

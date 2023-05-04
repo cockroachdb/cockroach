@@ -1238,7 +1238,7 @@ func (s *statusServer) LogFilesList(
 		}
 		return status.LogFilesList(ctx, req)
 	}
-	log.FlushFileSinks()
+	log.FlushAllSync()
 	logFiles, err := log.ListLogFiles()
 	if err != nil {
 		return nil, serverError(ctx, err)
@@ -1278,7 +1278,7 @@ func (s *statusServer) LogFile(
 	inputEditMode := log.SelectEditMode(req.Redact, log.KeepRedactable)
 
 	// Ensure that the latest log entries are available in files.
-	log.FlushFileSinks()
+	log.FlushAllSync()
 
 	// Read the logs.
 	reader, err := log.GetLogReader(req.File)
@@ -1408,7 +1408,7 @@ func (s *statusServer) Logs(
 	}
 
 	// Ensure that the latest log entries are available in files.
-	log.FlushFileSinks()
+	log.FlushAllSync()
 
 	// Read the logs.
 	entries, err := log.FetchEntriesFromFiles(
