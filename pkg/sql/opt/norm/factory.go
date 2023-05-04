@@ -178,6 +178,8 @@ func (f *Factory) DetachMemo() *memo.Memo {
 func (f *Factory) ReleaseMemo() *memo.Memo {
 	m := f.mem
 	f.mem = nil
+	// Make sure the factory has a non-nil memo structure.
+	f.Init(f.ctx, f.evalCtx, nil /* catalog */)
 	return m
 }
 

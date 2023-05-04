@@ -684,12 +684,13 @@ CREATE TABLE fk_child (a INT, b INT REFERENCES fk_parent(p), FAMILY f1 (a, b));
 statement ok
 SELECT * FROM fk_parent JOIN fk_child ON p = b
 
+# Insert fast path with auto commit is expected.
 query B
 SELECT count(*) > 0 FROM [
   EXPLAIN (VERBOSE) INSERT INTO fk_child VALUES (1, 1), (2, 2)
 ] WHERE info LIKE '%auto commit%'
 ----
-false
+true
 
 statement ok
 SET TRACING=ON;
@@ -706,9 +707,8 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r63: sending batch 2 CPut to (n1,s1):1
-dist sender send  r63: sending batch 2 Get to (n1,s1):1
-dist sender send  r63: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r63: sending batch 2 Scan to (n1,s1):1
+dist sender send  r63: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
 query B
 SELECT count(*) > 0 FROM [
