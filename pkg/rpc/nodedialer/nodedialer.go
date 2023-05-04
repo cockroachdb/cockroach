@@ -119,9 +119,8 @@ func (n *Dialer) Dial(
 }
 
 // DialNoBreaker is like Dial, but will not check the circuit breaker before
-// trying to connect. The breaker is notified of the outcome. This function
-// should only be used when there is good reason to believe that the node is
-// reachable.
+// trying to connect. This function should only be used when there is good
+// reason to believe that the node is reachable.
 func (n *Dialer) DialNoBreaker(
 	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
@@ -196,7 +195,12 @@ func (n *Dialer) dial(
 			log.Health.Warningf(ctx, "unable to connect to n%d: %s", nodeID, err)
 		}
 	}()
-	conn, err := n.rpcContext.GRPCDialNode(addr.String(), nodeID, class).Connect(ctx)
+	rpcConn := n.rpcContext.GRPCDialNode(addr.String(), nodeID, class)
+	connect := rpcConn.Connect
+	if checkBreaker {
+		connect = rpcConn.ConnectNoBreaker
+	}
+	conn, err := connect(ctx)
 	if err != nil {
 		// If we were canceled during the dial, don't trip the breaker.
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -256,6 +260,12 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 // a connection attempt in the background if it doesn't and always return
 // immediately. It is only used today by DistSQL and it should probably be
 // removed and moved into that code.
+//
+// TODO(during PR): callers can now just blindly dial because circuit breakers are built
+// into rpc.Context, meaning the only blocking dial is the very first time a peer is tried
+// after this node has booted up. Callers who don't even want to block there can use a
+// newly introduced n.DialConn (returning `*rpc.Connection`) and then verify `conn.Health()`
+// prior to `conn.Connect(ctx)`.
 func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
 	err := n.ConnHealth(nodeID, class)
 	if err == nil || !n.getBreaker(nodeID, class).Ready() {

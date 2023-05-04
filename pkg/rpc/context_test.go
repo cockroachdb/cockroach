@@ -165,6 +165,122 @@ func TestHeartbeatCB(t *testing.T) {
 	})
 }
 
+func TestGrpcDialInternal_ReconnectWithPeerBreaker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	// Shared cluster ID by all RPC peers (this ensures that the peers
+	// don't talk to servers from unrelated tests by accident).
+	clusterID := uuid.MakeV4()
+
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 20))
+	maxOffset := time.Duration(250)
+	serverCtx := newTestContext(clusterID, clock, maxOffset, stopper)
+
+	const serverNodeID = 1
+	serverCtx.NodeID.Set(context.Background(), serverNodeID)
+	s := newTestServer(t, serverCtx)
+
+	heartbeat := &ManualHeartbeatService{
+		ready:              make(chan error),
+		stopper:            stopper,
+		clock:              clock,
+		maxOffset:          maxOffset,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		version:            serverCtx.Settings.Version,
+		nodeID:             serverCtx.NodeID,
+	}
+	RegisterHeartbeatServer(s, heartbeat)
+
+	errFailedHeartbeat := errors.New("failed heartbeat")
+
+	var hbSuccess atomic.Value
+	hbSuccess.Store(true)
+
+	go func() {
+		for {
+			var err error
+			if !hbSuccess.Load().(bool) {
+				err = errFailedHeartbeat
+			}
+
+			select {
+			case <-stopper.ShouldQuiesce():
+				return
+			case heartbeat.ready <- err:
+			}
+		}
+	}()
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+
+	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
+	clientCtx.heartbeatInterval = 10 * time.Millisecond
+
+	// simulate decommissioned node
+	var hbDecommission atomic.Value
+	hbDecommission.Store(false)
+	clientCtx.OnOutgoingPing = func(ctx context.Context, req *PingRequest) error {
+		if hbDecommission.Load().(bool) {
+			return kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "injected decommissioned error")
+		}
+		return nil
+	}
+
+	k := connKey{
+		targetAddr: remoteAddr,
+		nodeID:     serverNodeID,
+		class:      DefaultClass,
+	}
+	conn := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass)
+	_, err = conn.Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		return conn.Health()
+	})
+
+	hbSuccess.Store(false)
+
+	// validate that peer tracks correct info about failed connection
+	testutils.SucceedsSoon(t, func() error {
+		p, b, _ := clientCtx.conns.getWithBreaker(k)
+		require.NotNil(t, p)
+		if err := b.Signal().Err(); err == nil {
+			return errors.New("expecting error from breaker, but got nil")
+		}
+		if p.disconnected.IsZero() {
+			return errors.Errorf("expecting peer.mu.disconnected to be set to current time")
+		}
+		return nil
+	})
+
+	hbSuccess.Store(true)
+	// Wait to reconnect to server with new connection.
+	testutils.SucceedsSoon(t, func() error {
+		p, b, _ := clientCtx.conns.getWithBreaker(k)
+		require.NotNil(t, p)
+		return b.Signal().Err()
+	})
+
+	hbDecommission.Store(true)
+	testutils.SucceedsSoon(t, func() error {
+		p, _, _ := clientCtx.conns.getWithBreaker(k)
+		require.NotNil(t, p)
+		if !p.decommissioned {
+			return errors.New("expecting peer.mu.decommissioned to be true")
+		}
+		return nil
+	})
+}
+
 // TestPingInterceptors checks that OnOutgoingPing and OnIncomingPing can inject errors.
 func TestPingInterceptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -218,10 +334,10 @@ func TestPingInterceptors(t *testing.T) {
 	{
 		_, err := rpcCtx.GRPCDialNode(remoteAddr, blockedOriginNodeID, SystemClass).Connect(ctx)
 		require.True(t, errors.HasType(err, errBoomRecv))
-		status, ok := status.FromError(errors.UnwrapAll(err))
+		st, ok := status.FromError(errors.UnwrapAll(err))
 		require.True(t, ok)
-		require.Equal(t, codes.FailedPrecondition, status.Code())
-		require.Equal(t, recvMsg, status.Message())
+		require.Equal(t, codes.FailedPrecondition, st.Code())
+		require.Equal(t, recvMsg, st.Message())
 	}
 }
 
@@ -900,6 +1016,15 @@ func TestHeartbeatHealth(t *testing.T) {
 	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
 	clientCtx.NodeID.Set(context.Background(), clientNodeID)
 
+	var hbDecommission atomic.Value
+	hbDecommission.Store(false)
+	clientCtx.OnOutgoingPing = func(ctx context.Context, req *PingRequest) error {
+		if hbDecommission.Load().(bool) {
+			return kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "injected decommissioned error")
+		}
+		return nil
+	}
+
 	lisNotLocalServer, err := net.Listen("tcp", "127.0.0.1:0")
 	t.Logf("lisNotLocal: %s", lisNotLocalServer.Addr())
 	require.NoError(t, err)
@@ -955,11 +1080,11 @@ func TestHeartbeatHealth(t *testing.T) {
 		if n != 0 {
 			return errors.Errorf("%d nominal heartbeats", n)
 		}
-		// It might take a brief moment for ConnHealth to come back
-		// as ErrNotHeartbeated, but it should be non-nil immediately.
+		// It might take a brief moment for ConnHealth to come back, but it should
+		// be non-nil immediately.
 		err := clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
 		require.Error(t, err)
-		if !errors.Is(err, ErrNotHeartbeated) {
+		if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) {
 			return err
 		}
 		return nil
@@ -981,7 +1106,7 @@ func TestHeartbeatHealth(t *testing.T) {
 		// See above for rationale.
 		err := clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
 		require.Error(t, err)
-		if !errors.Is(err, ErrNotHeartbeated) {
+		if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) {
 			return err
 		}
 		return nil
@@ -1020,15 +1145,12 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Connections should shut down again and now that we're nearing the test it's
 	// a good opportunity to check that what came up must go down.
 	hbSuccess.Store(false)
+	hbDecommission.Store(true)
 	// Need to close these or we eat a 20s timeout.
 	netutil.FatalIfUnexpected(lisNonExistentConnection.Close())
 	netutil.FatalIfUnexpected(lisNotLocalServer.Close())
 	testutils.SucceedsSoon(t, func() error {
-		started, exited := m.HeartbeatLoopsStarted.Count(), m.HeartbeatLoopsExited.Count()
-		if started != exited {
-			return errors.Errorf("started(%d) != exited(%d)", started, exited)
-		}
-		return nil
+		return checkNominal(m, 0)
 	})
 }
 
@@ -1037,44 +1159,6 @@ func checkNominal(m *Metrics, exp int64) error {
 		return errors.Errorf("%d nominal, want %d", n, exp)
 	}
 	return nil
-}
-
-// TestConnectionRemoveNodeIDZero verifies that when a connection initiated via
-// GRPCDialNode fails, we also clean up the connection returned by
-// GRPCUnvalidatedDial.
-//
-// See #37200.
-func TestConnectionRemoveNodeIDZero(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	clock := &timeutil.DefaultTimeSource{}
-	maxOffset := time.Nanosecond
-	clientCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
-	// Provoke an error.
-	_, err := clientCtx.GRPCDialNode("127.0.0.1:notaport", 1, DefaultClass).Connect(context.Background())
-	if err == nil {
-		t.Fatal("expected some kind of error, got nil")
-	}
-
-	// NB: this takes a moment because GRPCDialRaw only gives up on the initial
-	// connection after 1s (more precisely, the redialChan gets closed only after
-	// 1s), which seems difficult to configure ad-hoc.
-	testutils.SucceedsSoon(t, func() error {
-		var keys []connKey
-		clientCtx.m.mu.RLock()
-		defer clientCtx.m.mu.RUnlock()
-		for k := range clientCtx.m.mu.m {
-			keys = append(keys, k)
-		}
-		if len(keys) > 0 {
-			return errors.Errorf("still have connections %v", keys)
-		}
-		return nil
-	})
 }
 
 type interceptingListener struct {
@@ -1187,13 +1271,14 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	}
 
 	isUnhealthy := func(err error) bool {
-		// Most of the time, an unhealthy connection will get
-		// ErrNotHeartbeated, but there are brief periods during which we
-		// could get one of the grpc errors below (while the old
-		// connection is in the middle of closing).
+		// We could get ErrNotHeartbeated if err came from Connection.Health and this
+		// during the first ever heartbeat attempt...
 		if errors.Is(err, ErrNotHeartbeated) {
 			return true
 		}
+		// ... but on any reconnection we'd see a circuit breaker error, i.e. one having
+		// to do with the heartbeat loop having encountered an issue.
+		//
 		// The expected code here is Unavailable, but at least on OSX you can also get
 		//
 		// rpc error: code = Internal desc = connection error: desc = "transport: authentication
@@ -1469,6 +1554,17 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 	clientCtx.Config.RPCHeartbeatInterval = 1 * time.Millisecond
 	clientCtx.Config.RPCHeartbeatTimeout = 1 * time.Millisecond
 
+	var hbDecommission atomic.Value
+	hbDecommission.Store(false)
+	clientCtx.OnOutgoingPing = func(ctx context.Context, req *PingRequest) error {
+		if hbDecommission.Load().(bool) {
+			return kvpb.NewDecommissionedStatusErrorf(
+				codes.PermissionDenied, "injected decommissioned error for n%d", req.TargetNodeID,
+			)
+		}
+		return nil
+	}
+
 	conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -1508,7 +1604,7 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 	// Close last anotherConn to simulate network disruption.
 	err = anotherConn.Close() // nolint:grpcconnclose
 	require.NoError(t, err)
-
+	hbDecommission.Store(true)
 	testutils.SucceedsSoon(t, func() error {
 		clientCtx.RemoteClocks.mu.Lock()
 		defer clientCtx.RemoteClocks.mu.Unlock()
@@ -2525,7 +2621,7 @@ func TestRejectDialOnQuiesce(t *testing.T) {
 	// First, we shouldn't be able to dial again, even though we already have a
 	// connection.
 	_, err = rpcCtx.GRPCDialNode(addr, serverNodeID, SystemClass).Connect(ctx)
-	require.ErrorIs(t, err, errDialRejected)
+	require.ErrorIs(t, err, errQuiescing)
 	require.True(t, grpcutil.IsConnectionRejected(err))
 	require.True(t, grpcutil.IsAuthError(err))
 
@@ -2602,11 +2698,15 @@ func (d *trackingListener) Close() error {
 }
 
 func newRegisteredServer(
-	t testing.TB, stopper *stop.Stopper, clusterID uuid.UUID, nodeID roachpb.NodeID,
+	t testing.TB,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	clusterID uuid.UUID,
+	nodeID roachpb.NodeID,
 ) (*Context, string, chan *PingRequest, *trackingListener) {
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 1))
 	// We don't want to stall sending to this channel.
-	pingChan := make(chan *PingRequest, 5)
+	pingChan := make(chan *PingRequest, 1)
 
 	opts := ContextOptions{
 		TenantID:        roachpb.SystemTenantID,
@@ -2625,14 +2725,21 @@ func newRegisteredServer(
 	rpcCtx := NewContext(context.Background(), opts)
 	// This is normally set up inside the server, we want to hold onto all PingRequests that come through.
 	rpcCtx.OnIncomingPing = func(ctx context.Context, req *PingRequest, resp *PingResponse) error {
-		pingChan <- req
 		err := rpcCtx.VerifyDialback(ctx, req, resp, roachpb.Locality{})
+		if err != nil {
+			t.Logf("dialback error: %s", err)
+			return err
+		}
 		// On success store the ping to the channel for test analysis.
-		return err
+		select {
+		case pingChan <- req:
+		default:
+		}
+		return nil
 	}
 
-	rpcCtx.NodeID.Set(context.Background(), nodeID)
-	rpcCtx.StorageClusterID.Set(context.Background(), clusterID)
+	rpcCtx.NodeID.Set(ctx, nodeID)
+	rpcCtx.StorageClusterID.Set(ctx, clusterID)
 	s := newTestServer(t, rpcCtx)
 
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
@@ -2640,13 +2747,17 @@ func newRegisteredServer(
 	ln, err := net.Listen("tcp", util.TestAddr.String())
 	require.Nil(t, err)
 	tracker := trackingListener{Listener: ln}
-	_ = stopper.RunAsyncTask(context.Background(), "serve", func(context.Context) {
+	stopper.OnQuiesce(func() { netutil.FatalIfUnexpected(ln.Close()) })
+
+	rpcCtx.OnOutgoingPing = func(ctx context.Context, req *PingRequest) error { return nil }
+
+	_ = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		closeReason := s.Serve(&tracker)
-		log.Infof(context.Background(), "Closed listener with reason %v", closeReason)
+		log.Infof(ctx, "Closed listener with reason %v", closeReason)
 	})
 
 	addr := ln.Addr().String()
-	log.Infof(context.Background(), "Listening on %s", addr)
+	log.Infof(ctx, "Listening on %s", addr)
 	// This needs to be set once we know our address so that ping requests have
 	// the correct reverse addr in them.
 	rpcCtx.Config.AdvertiseAddr = addr
@@ -2657,16 +2768,13 @@ func newRegisteredServer(
 // into bidirectional partitions. The test sets up two nodes that are pinging each
 func TestHeartbeatDialback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	clusterID := uuid.MakeV4()
 
-	ctx1, remoteAddr1, pingChan1, ln1 := newRegisteredServer(t, stopper, clusterID, 1)
-	ctx2, remoteAddr2, pingChan2, ln2 := newRegisteredServer(t, stopper, clusterID, 2)
-	defer func() { netutil.FatalIfUnexpected(ln1.Close()) }()
-	defer func() { netutil.FatalIfUnexpected(ln2.Close()) }()
+	ctx1, remoteAddr1, nonRejectedPings1, _ := newRegisteredServer(t, context.Background(), stopper, clusterID, 1)
+	ctx2, remoteAddr2, nonRejectedPings2, ln2 := newRegisteredServer(t, context.Background(), stopper, clusterID, 2)
 
 	// Test an incorrect remoteNodeID, this should fail with a heartbeat error.
 	// This invariant is important to make sure we don't try and connect to the
@@ -2676,8 +2784,8 @@ func TestHeartbeatDialback(t *testing.T) {
 		var respErr *netutil.InitialHeartbeatFailedError
 		require.ErrorAs(t, err, &respErr)
 		// Verify no heartbeat received in either direction.
-		require.Equal(t, 0, len(pingChan1))
-		require.Equal(t, 0, len(pingChan2))
+		require.Equal(t, 0, len(nonRejectedPings1))
+		require.Equal(t, 0, len(nonRejectedPings2))
 	}
 
 	// Initiate connection from node 1 to node 2 which will create a dialback
@@ -2690,14 +2798,14 @@ func TestHeartbeatDialback(t *testing.T) {
 		}()
 		require.NoError(t, err)
 		require.NotNil(t, conn)
-		require.Equal(t, 1, len(pingChan2))
-		pingReq := <-pingChan2
+		require.Equal(t, 1, len(nonRejectedPings2))
+		pingReq := <-nonRejectedPings2
 		require.Equal(t, PingRequest_BLOCKING, pingReq.NeedsDialback)
-		require.Equal(t, 0, len(pingChan1))
+		require.Equal(t, 0, len(nonRejectedPings1))
 	}
 
-	//Now connect back in the opposite direction. This should not initiate any
-	//dialback since we are already connected.
+	// Now connect back in the opposite direction. This should not initiate any
+	// dialback since we are already connected.
 	{
 		conn, err := ctx1.GRPCDialNode(remoteAddr2, 2, DefaultClass).Connect(ctx)
 		defer func() {
@@ -2706,42 +2814,78 @@ func TestHeartbeatDialback(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, conn)
 		// The reverse connection was already set up, but we are still blocking.
-		pingReq := <-pingChan1
+		pingReq := <-nonRejectedPings1
 		require.Equal(t, PingRequest_BLOCKING, pingReq.NeedsDialback)
 
 		// At this point, node 1 has a fully established connection to node 2, however node 2 has not yet finished connecting back.
 		require.Equal(t, nil, ctx1.ConnHealth(remoteAddr2, 2, DefaultClass))
 	}
 
-	// Verify we get non-blocking requests in both directions now.
-	require.Equal(t, PingRequest_NON_BLOCKING, (<-pingChan2).NeedsDialback)
-	require.Equal(t, PingRequest_NON_BLOCKING, (<-pingChan1).NeedsDialback)
+	// Verify we get non-blocking requests in both directions now. A blocking one might
+	// still be on the channel, so we need to retry.
+	testutils.SucceedsSoon(t, func() error {
+		nd1 := (<-nonRejectedPings1).NeedsDialback
+		nd2 := (<-nonRejectedPings2).NeedsDialback
+		if nd1 != PingRequest_NON_BLOCKING || nd2 != PingRequest_NON_BLOCKING {
+			return errors.Errorf("n1: %v n2: %v", nd1, nd2)
+		}
+		return nil
+	})
 
 	// Verify we are fully healthy in both directions (note the dialback is on the
 	// system class).
-	require.Equal(t, nil, ctx1.ConnHealth(remoteAddr2, 2, DefaultClass))
-	require.Equal(t, nil, ctx2.ConnHealth(remoteAddr1, 1, SystemClass))
+	require.NoError(t, ctx1.ConnHealth(remoteAddr2, 2, DefaultClass))
+	require.NoError(t, ctx2.ConnHealth(remoteAddr1, 1, SystemClass))
 
 	// Forcibly shut down listener 2 and the connection node1 -> node2.
 	// Test the reverse connection also closes within ~RPCHeartbeatTimeout.
-	log.Info(ctx, "Closing node 2 listener")
+	t.Logf("Closing node 2 listener")
 	_ = ln2.Close()
 
-	// Wait for a few more pings to go through to make sure it has a chance to
-	// shut down the reverse connection. Normally the connect attempt times out
-	// immediately and returns an error, but occasionally it needs to wait for the
-	// RPCHeartbeatTimeout (100 ms). Wait until pings have stopped in both
-	// directions for at least 1 second before checking health.
+	// n1 -> n2 can not be healthy for much longer since the listener for n2 is
+	// closed, and n2 should terminate its connection to n1 within ~100ms
+	// (heartbeat interval in this test) since n1 can't dial-back. We'll give a
+	// generous 10s for that to happen, but bail early once we see connections in
+	// both directions marked as unhealthy.
+	tr := timeutil.NewTimer()
+	defer tr.Stop()
+	tr.Reset(10 * time.Second)
 	for {
+		strict := false
+		// After a short moment, should no longer see pings n2->n1 here because
+		// n1's dialback will fail (so they're rejected), even though n2's circuit
+		// breaker will regularly try to reach out.
 		select {
-		case ping := <-pingChan1:
-			log.Infof(ctx, "Received %+v", ping)
-		case ping := <-pingChan2:
-			log.Infof(ctx, "Received %+v", ping)
-		case <-time.After(1 * time.Second):
-			require.ErrorAs(t, ctx1.ConnHealth(remoteAddr2, 2, DefaultClass), &ErrNoConnection)
-			require.ErrorAs(t, ctx2.ConnHealth(remoteAddr1, 1, SystemClass), &ErrNoConnection)
+		case ping := <-nonRejectedPings1:
+			t.Logf("Received ping n%d->n%d", ping.OriginNodeID, ping.TargetNodeID)
+		case ping := <-nonRejectedPings2:
+			t.Logf("Received ping n%d->n%d", ping.OriginNodeID, ping.TargetNodeID)
+		case <-tr.C:
+			tr.Read = true
+			strict = true
+		case <-time.After(time.Millisecond):
+		}
+
+		errDef, errSys := ctx1.ConnHealth(remoteAddr2, 2, DefaultClass), ctx2.ConnHealth(remoteAddr1, 1, SystemClass)
+		if errors.Is(errDef, ErrNotHeartbeated) {
+			errDef = nil
+		}
+		if errors.Is(errSys, ErrNotHeartbeated) {
+			errSys = nil
+		}
+		if errors.HasType(errDef, (*netutil.InitialHeartbeatFailedError)(nil)) {
+			errDef = nil
+		}
+		if errors.HasType(errSys, (*netutil.InitialHeartbeatFailedError)(nil)) {
+			errSys = nil
+		}
+		if errDef == nil && errSys == nil {
 			return
+		}
+
+		if strict {
+			require.NoError(t, errDef)
+			require.NoError(t, errSys)
 		}
 	}
 }
