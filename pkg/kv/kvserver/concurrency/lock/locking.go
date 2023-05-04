@@ -59,6 +59,10 @@ const NumLockStrength = MaxStrength + 1
 // MaxDurability is the maximum value in the Durability enum.
 const MaxDurability = Unreplicated
 
+// NumLockDurability is the total number of lock durabilities in the Durability
+// enum.
+const NumLockDurability = MaxDurability + 1
+
 func init() {
 	for v := range Strength_name {
 		if st := Strength(v); st > MaxStrength {
@@ -66,13 +70,17 @@ func init() {
 		}
 	}
 	if int(NumLockStrength) != len(Strength_name) {
-		panic(fmt.Sprintf("mismatched numer of lock strengths: NumLockStrength %d, lock strengths %d",
+		panic(fmt.Sprintf("mismatched number of lock strengths: NumLockStrength %d, lock strengths %d",
 			int(NumLockStrength), len(Strength_name)))
 	}
 	for v := range Durability_name {
 		if d := Durability(v); d > MaxDurability {
 			panic(fmt.Sprintf("Durability (%s) with value larger than MaxDurability", d))
 		}
+	}
+	if int(NumLockDurability) != len(Durability_name) {
+		panic(fmt.Sprintf("mismatched number of lock durabilities: NumLockDurability %d, lock durabilities %d",
+			int(NumLockDurability), len(Durability_name)))
 	}
 }
 

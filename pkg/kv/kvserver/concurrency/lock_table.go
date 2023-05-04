@@ -1865,11 +1865,48 @@ func (l *lockState) acquireLock(
 		if txn.ID != beforeTxn.ID {
 			return errors.AssertionFailedf("existing lock cannot be acquired by different transaction")
 		}
-		seqs := l.holder.holder[durability].seqs
-		if l.holder.holder[durability].txn != nil && l.holder.holder[durability].txn.Epoch < txn.Epoch {
-			// Clear the sequences for the older epoch.
-			seqs = seqs[:0]
+		if l.holder.holder[durability].txn != nil && txn.Epoch < l.holder.holder[durability].txn.Epoch {
+			return errors.AssertionFailedf(
+				"lock acquisition must have monotonically increasing epochs; previous %v, supplied %v",
+				l.holder.holder[durability].txn.Epoch, txn.Epoch,
+			)
 		}
+		// Remove any locks (tracked by sequence numbers) that were held at prior
+		// epochs. We do so for both replicated and unreplicated locks that we are
+		// tracking, regardless of the supplied durability. This implies that there
+		// will exactly be one type of {,un}replicated locks on this key when this
+		// function exits.
+		// NB: The decision to discard both {,un}replicated locks from prior epochs
+		// means that we may be forgetting intents that were previously discovered
+		// by concurrent requests during evaluation. This can only happen if this
+		// lock acquisition is happening with durability=unreplicated. Note that
+		// this is fine, as those requests will continue to wait on this new lock
+		// being acquired -- waiting requests don't care about the durability of the
+		// lock they're waiting on. However, if this unreplicated lock is
+		// subsequently released in the future because of a savepoint rollback[1],
+		// it would allow these waiting requests to proceed with their scan of the
+		// lock table followed by evaluation. At that point, these requests may
+		// re-discover the intent at the old epoch. This should be fine.
+		//
+		// [1] We currently do not release locks on savepoint rollback. The above
+		// description is written assuming that's something we want to do.
+		//
+		// TODO(arul): What if a waiting request reserves this lock and then starts
+		// waiting on a different lock? Would that cause the transaction that
+		// previously wrote intents at lower epochs from re-writing them at its
+		// current epoch without waiting (or potentially resolving a deadlock with
+		// the reservation holder)?
+		for i := lock.Durability(0); i < lock.NumLockDurability; i++ {
+			if l.holder.holder[i].txn == nil {
+				continue // lock isn't held at this durability
+			}
+			if l.holder.holder[i].txn.Epoch < txn.Epoch {
+				// Clear the sequences for older epochs.
+				l.holder.holder[i].seqs = l.holder.holder[i].seqs[:0]
+			}
+		}
+
+		seqs := l.holder.holder[durability].seqs
 		if len(seqs) > 0 && seqs[len(seqs)-1] >= txn.Sequence {
 			// Idempotent lock acquisition. In this case, we simply ignore the lock
 			// acquisition as long as it corresponds to an existing sequence number.
@@ -1933,6 +1970,15 @@ func (l *lockState) acquireLock(
 		_, afterTs := l.getLockHolder()
 		if beforeTs.Less(afterTs) {
 			l.increasedLockTs(afterTs)
+		}
+		// Clean up lockHolderInfo if we no longer hold locks with a particular
+		// durability. This can happen if lock reacquisition heard about epoch
+		// changes or savepoint rollbacks for the transaction that holds this lock.
+		for i := lock.Durability(0); i < lock.NumLockDurability; i++ {
+			holder := &l.holder.holder[i]
+			if len(holder.seqs) == 0 {
+				*holder = lockHolderInfo{}
+			}
 		}
 		return nil
 	}

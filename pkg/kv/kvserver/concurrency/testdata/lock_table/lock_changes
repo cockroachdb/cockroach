@@ -77,9 +77,12 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 0, seqs: [2, 3]
 
-# ---------------------------------------------------------------------------------
-# Lock is reacquired at a different epoch. The old sequence numbers are discarded.
-# ---------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# Lock is reacquired at a different epoch. The old sequence numbers are
+# discarded for both replicated and unreplicated durabilities. As the lock is
+# acquired with unreplicated durability, we no longer track information about
+# the replicated lock anymore.
+# ------------------------------------------------------------------------------
 
 new-txn txn=txn1 ts=10 epoch=1 seq=0
 ----
@@ -91,38 +94,105 @@ acquire r=req3 k=a durability=u
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 1, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [0]
 
-# ---------------------------------------------------------------------------------
-# Lock is reacquired at a different epoch with lower timestamp. This is allowed,
-# see TestMVCCHistories/put_new_epoch_lower_timestamp. The old sequence numbers are
-# discarded but the timestamp is not regressed.
-# ---------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# Lock is reacquired at a higher epoch. However, this time we do so with
+# replicated durability. We need to jump through some hoops to actually have
+# the acquire codepath be triggered for replicated locks -- we only consider
+# storing replicated locks if there is a contending request.
+# ------------------------------------------------------------------------------
 
-new-txn txn=txn1 ts=6 epoch=2 seq=0
+new-request r=reqContend txn=none ts=10 spans=w@a
 ----
 
-new-request r=req4 txn=txn1 ts=6 spans=w@a
+scan r=reqContend
+----
+start-waiting: true
+
+new-txn txn=txn1 ts=10 epoch=2 seq=3
 ----
 
-acquire r=req4 k=a durability=u
+new-request r=req4 txn=txn1 ts=10 spans=w@a
+----
+
+acquire r=req4 k=a durability=r
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 2, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 2, seqs: [3]
+   queued writers:
+    active: true req: 2, txn: none
+   distinguished req: 2
+
+dequeue r=reqContend
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 2, seqs: [3]
+
+# ------------------------------------------------------------------------------
+# Lock is reacquired at a lower epoch. The lock table doesn't allow for this
+# and we should get an assertion failed error.
+# ------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=10 epoch=1 seq=0
+----
+
+new-request r=req5 txn=txn1 ts=10 spans=w@a
+----
+
+acquire r=req5 k=a durability=r
+----
+lock acquisition must have monotonically increasing epochs; previous 2, supplied 1
+
+# ------------------------------------------------------------------------------
+# Lock is reacquired at a different epoch with lower timestamp. This is allowed,
+# see TestMVCCHistories/put_new_epoch_lower_timestamp. The old sequence numbers
+# are discarded but the timestamp is not regressed.
+# ------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=6 epoch=3 seq=0
+----
+
+new-request r=req6 txn=txn1 ts=6 spans=w@a
+----
+
+acquire r=req6 k=a durability=r
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 3, seqs: [0]
 
 # ---------------------------------------------------------------------------------
 # Reader waits until the timestamp of the lock is updated.
 # ---------------------------------------------------------------------------------
 
-new-request r=req5 txn=txn2 ts=12 spans=r@a
+# Add a unreplicated lock at higher timestmap than the replicated lock (11)
+# but lower than the read's timestamp to ensure we wait on both {,un}replicated
+# locks.
+
+new-txn txn=txn1 ts=14 epoch=3 seq=0
 ----
 
-scan r=req5
+new-request r=req7 txn=txn1 ts=11 spans=w@a
+----
+
+acquire r=req7 k=a durability=u
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 3, seqs: [0], unrepl epoch: 3, seqs: [0]
+
+
+new-request r=req8 txn=txn2 ts=12 spans=r@a
+----
+
+scan r=req8
 ----
 start-waiting: true
 
-guard-state r=req5
+guard-state r=req8
 ----
 new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
@@ -130,40 +200,39 @@ print
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 2, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 3, seqs: [0], unrepl epoch: 3, seqs: [0]
    waiting readers:
-    req: 2, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 2
+    req: 3, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 3
 
-new-txn txn=txn1 ts=14 epoch=1 seq=1
+new-txn txn=txn1 ts=14 epoch=3 seq=1
 ----
 
-new-request r=req6 txn=txn1 ts=14 spans=w@a
+new-request r=req9 txn=txn1 ts=14 spans=w@a
 ----
 
-acquire r=req6 k=a durability=r
+acquire r=req9 k=a durability=r
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 2, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 11.000000000,0, info: repl epoch: 3, seqs: [0, 1], unrepl epoch: 3, seqs: [0]
    waiting readers:
-    req: 2, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 2
+    req: 3, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 3
 
-guard-state r=req5
+guard-state r=req8
 ----
 old: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
-acquire r=req6 k=a durability=u
+acquire r=req9 k=a durability=u
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 3, seqs: [0, 1], unrepl epoch: 3, seqs: [0, 1]
 
-guard-state r=req5
+guard-state r=req8
 ----
 new: state=doneWaiting
-
 
 # ---------------------------------------------------------------------------------
 # Discovery of replicated lock that was already held as unreplicated. The waiters
@@ -171,26 +240,26 @@ new: state=doneWaiting
 # that the lock table is used.
 # ---------------------------------------------------------------------------------
 
-new-request r=req7 txn=txn2 ts=17 spans=r@a
+new-request r=req10 txn=txn2 ts=17 spans=r@a
 ----
 
-scan r=req7
+scan r=req10
 ----
 start-waiting: true
 
-guard-state r=req7
+guard-state r=req10
 ----
 new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
-add-discovered r=req7 k=a txn=txn1
+add-discovered r=req10 k=a txn=txn1
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 3, seqs: [0, 1], unrepl epoch: 3, seqs: [0, 1]
    waiting readers:
-    req: 3, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
+    req: 4, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 4
 
-guard-state r=req7
+guard-state r=req10
 ----
 new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
