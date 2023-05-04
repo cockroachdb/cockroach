@@ -232,7 +232,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &WriteTooOldError{},
-			expect: "WriteTooOldError: write at timestamp 0,0 too old; wrote at 0,0",
+			expect: "WriteTooOldError: write at timestamp 0,0 too old; must write at or above 0,0",
 		},
 		{
 			err:    &OpRequiresTxnError{},
