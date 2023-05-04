@@ -12,19 +12,16 @@ package sql
 
 import (
 	"context"
-	"strconv"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 // EngineMetrics groups a set of SQL metrics.
@@ -178,19 +175,8 @@ func (ex *connExecutor) recordStatementSummary(
 	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecs)
 	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
 
-	// We only have node information when it was collected with trace, but we know at least the current
-	// node should be on the list.
-	nodeID, err := strconv.ParseInt(ex.server.sqlStats.GetSQLInstanceID().String(), 10, 64)
-	if err != nil {
-		log.Warningf(ctx, "failed to convert node ID to int: %s", err)
-	}
-
-	nodes := util.CombineUnique(getNodesFromPlanner(planner), []int64{nodeID})
-
-	regions := []string{}
-	if region, ok := ex.server.cfg.Locality.Find("region"); ok {
-		regions = append(regions, region)
-	}
+	regions := ex.getRegionsFromPlanner(planner)
+	sqlInstanceIds := ex.getSqlInstanceIdsFromPlanner(planner)
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{
 		SessionID:            ex.sessionID,
@@ -207,7 +193,7 @@ func (ex *connExecutor) recordStatementSummary(
 		BytesRead:            stats.bytesRead,
 		RowsRead:             stats.rowsRead,
 		RowsWritten:          stats.rowsWritten,
-		Nodes:                nodes,
+		Nodes:                sqlInstanceIds,
 		Regions:              regions,
 		StatementType:        stmt.AST.StatementType(),
 		Plan:                 planner.instrumentation.PlanForStats(ctx),
@@ -301,6 +287,58 @@ func (ex *connExecutor) recordStatementSummary(
 	return stmtFingerprintID
 }
 
+func (ex *connExecutor) getSqlInstanceIdsFromPlanner(planner *planner) []int64 {
+	gatewaySQLInstanceID := int64(ex.server.cfg.DistSQLPlanner.gatewaySQLInstanceID)
+	sqlInstanceIds := []int64{gatewaySQLInstanceID}
+
+	if len(planner.curPlan.sqlInstanceIds) == 0 {
+		return sqlInstanceIds
+	}
+
+	// Optimize the scenario where there is only one instance.
+	if len(planner.curPlan.sqlInstanceIds) == 1 {
+		planInstanceId := planner.curPlan.sqlInstanceIds[0].SQLInstanceID
+		if planInstanceId == ex.server.cfg.DistSQLPlanner.gatewaySQLInstanceID {
+			return sqlInstanceIds
+		}
+	}
+
+	for _, span := range planner.curPlan.sqlInstanceIds {
+		// Don't add gateway instance again.
+		if gatewaySQLInstanceID == int64(span.SQLInstanceID) {
+			continue
+		}
+
+		sqlInstanceIds = append(sqlInstanceIds, int64(span.SQLInstanceID))
+	}
+
+	if len(sqlInstanceIds) > 1 {
+		sort.SliceStable(sqlInstanceIds, func(i, j int) bool {
+			return i < j
+		})
+	}
+
+	return sqlInstanceIds
+}
+
+func (ex *connExecutor) getRegionsFromPlanner(planner *planner) []string {
+	regions := planner.curPlan.regions
+	if gatewayRegion, regionOk := ex.server.cfg.Locality.Find("region"); regionOk {
+		for _, region := range regions {
+			if len(regions) > 0 && gatewayRegion == region {
+				return regions
+			}
+		}
+		regions = append(regions, gatewayRegion)
+	}
+
+	if len(regions) > 1 {
+		sort.Strings(regions)
+	}
+
+	return regions
+}
+
 func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 	m := &ex.metrics.EngineMetrics
 
@@ -314,17 +352,4 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 // We only want to keep track of DML (Data Manipulation Language) statements in our latency metrics.
 func shouldIncludeStmtInLatencyMetrics(stmt *Statement) bool {
 	return stmt.AST.StatementType() == tree.TypeDML
-}
-
-func getNodesFromPlanner(planner *planner) []int64 {
-	// Retrieve the list of all nodes which the statement was executed on.
-	var nodes []int64
-	if _, ok := planner.instrumentation.Tracing(); !ok {
-		trace := planner.instrumentation.sp.GetRecording(tracingpb.RecordingStructured)
-		// ForEach returns nodes in order.
-		execinfrapb.ExtractNodesFromSpans(trace).ForEach(func(i int) {
-			nodes = append(nodes, int64(i))
-		})
-	}
-	return nodes
 }

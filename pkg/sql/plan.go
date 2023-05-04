@@ -324,6 +324,12 @@ type planTop struct {
 	distSQLFlowInfos []flowInfo
 
 	instrumentation *instrumentationHelper
+
+	// the sql instance ids the plan will go to
+	sqlInstanceIds []SpanPartition
+
+	// the unique regions
+	regions []string
 }
 
 // physicalPlanTop is a utility wrapper around PhysicalPlan that allows for
@@ -485,6 +491,7 @@ func (p *planTop) savePlanInfo() {
 		distribution = physicalplan.PartiallyDistributedPlan
 	}
 	containsMutation := p.flags.IsSet(planFlagContainsMutation)
+
 	p.instrumentation.RecordPlanInfo(distribution, vectorized, containsMutation)
 }
 
