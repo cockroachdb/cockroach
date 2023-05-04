@@ -1158,10 +1158,8 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1), (2, 2)] OFFSET 2
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │
-│           └── • values
-│                 size: 2 columns, 2 rows
+│       └── • values
+│             size: 4 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -2945,29 +2943,11 @@ VALUES ('Craig Roacher', 'craig@cockroachlabs.com')
 distribution: local
 vectorized: true
 ·
-• root
-│
-├── • insert
-│   │ into: users(id, name, email, crdb_region)
-│   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             size: 5 columns, 1 row
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │
-        └── • lookup join (semi)
-            │ table: users@users_email_key
-            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column2 = email)
-            │ pred: (id_default != id) OR (crdb_region_default != crdb_region)
-            │
-            └── • scan buffer
-                  estimated row count: 1
-                  label: buffer 1
+• insert fast path
+  into: users(id, name, email, crdb_region)
+  auto commit
+  uniqueness check: users@users_email_key
+  size: 5 columns, 1 row
 
 statement ok
 SET index_recommendations_enabled = false;
@@ -3475,3 +3455,170 @@ SELECT pk FROM regional_by_row_table_virt GROUP BY v;
 # can be proven to be monotonically increasing or decreasing.
 statement error pq: column "pk" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT pk FROM regional_by_row_table_virt GROUP BY (a+10);
+
+subtest insertFastPathUnique
+
+statement ok
+SET database = multi_region_test_db
+
+statement ok
+CREATE TABLE users2 (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name STRING NOT NULL,
+  email STRING NOT NULL UNIQUE,
+  INDEX (name)
+) LOCALITY REGIONAL BY ROW
+
+# Single-row insert fast path which needs no special handling.
+query T
+EXPLAIN INSERT INTO users2 (crdb_region, name, email)
+VALUES ('ap-southeast-2', 'Craig Roacher', 'craig@cockroachlabs.com')
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: users2(id, name, email, crdb_region)
+  auto commit
+  uniqueness check: users2@users2_email_key
+  size: 5 columns, 1 row
+
+statement ok
+INSERT INTO users2 (crdb_region, name, email)
+VALUES ('us-east-1', 'Craig Roacher', 'craig@cockroachlabs.com')
+
+# Verify insert fast path detects unique constraint violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('craig@cockroachlabs.com'\) already exists\.
+INSERT INTO users2 (name, email)
+VALUES ('Craig Roacher', 'craig@cockroachlabs.com')
+
+# Verify insert fast path detects unique constraint violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('craig@cockroachlabs.com'\) already exists\.
+INSERT INTO users2 (crdb_region, name, email)
+VALUES ('ap-southeast-2', 'Craig Roacher', 'craig@cockroachlabs.com')
+
+# Verify insert fast path detects unique constraint violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('craig@cockroachlabs.com'\) already exists\.
+INSERT INTO users2 (crdb_region, name, email)
+VALUES ('ca-central-1', 'Craig Roacher', 'craig@cockroachlabs.com')
+
+# Multi-row insert fast path is supported.
+query T
+EXPLAIN INSERT INTO users2 (name, email)
+VALUES ('Bill Roacher', 'bill@cockroachlabs.com'), ('Jill Roacher', 'jill@cockroachlabs.com')
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: users2(id, name, email, crdb_region)
+  auto commit
+  uniqueness check: users2@users2_email_key
+  size: 5 columns, 2 rows
+
+statement ok
+INSERT INTO users2 (name, email)
+VALUES ('Bill Roacher', 'bill@cockroachlabs.com'), ('Jill Roacher', 'jill@cockroachlabs.com')
+
+# Verify multi-row insert fast path detects unique constraint violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('bill@cockroachlabs.com'\) already exists\.
+INSERT INTO users2 (name, email)
+VALUES ('Bill Roacher', 'bill@cockroachlabs.com'), ('Jill Roacher', 'jill@cockroachlabs.com')
+
+# Multi-row insert fast path is supported as a prepared statement.
+statement ok
+PREPARE e1 AS EXPLAIN INSERT INTO users2 (name, email)
+VALUES ($1, $2), ($3, $4)
+
+query T nosort
+EXECUTE e1 ('Bill Roacher', 'bill@cockroachlabs.com', 'Jo Roacher', 'jo@cockroachlabs.com')
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: users2(id, name, email, crdb_region)
+  auto commit
+  uniqueness check: users2@users2_email_key
+  size: 5 columns, 2 rows
+
+statement ok
+PREPARE p1 AS INSERT INTO users2 (name, email)
+VALUES ($1, $2), ($3, $4)
+
+# Verify parameterized multi-row insert fast path detects unique constraint
+# violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('bill@cockroachlabs.com'\) already exists\.
+EXECUTE p1 ('Bill Roacher', 'bill@cockroachlabs.com', 'Jo Roacher', 'jo@cockroachlabs.com')
+
+statement ok
+CREATE TABLE users4 (
+  id UUID,
+  name STRING NOT NULL PRIMARY KEY,
+  email STRING NOT NULL UNIQUE
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO users4 SELECT * FROM users2
+
+statement ok
+ALTER TABLE users2 ADD CONSTRAINT users4_fk FOREIGN KEY (name) REFERENCES users4 (name) ON DELETE CASCADE
+
+# Verify multi-row insert fast path detects FK constraint violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('bill@cockroachlabs.com'\) already exists\.
+INSERT INTO users2 (name, email)
+VALUES ('Bill Roacher', 'bill@cockroachlabs.com'), ('Jo Roacher', 'jo@cockroachlabs.com')
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE users3 (
+  id UUID DEFAULT gen_random_uuid(),
+  name STRING NOT NULL,
+  email STRING NOT NULL,
+  UNIQUE WITHOUT INDEX (email) WHERE email != name,
+  INDEX (name),
+  PRIMARY KEY (email, id)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+RESET experimental_enable_unique_without_index_constraints
+
+# Verify a partial UNIQUE WITHOUT INDEX with a predicate similar to the PK
+# values check created in `buildInsertionCheck` to prevent rows from matching
+# themselves doesn't mistakenly allow insert fast path.
+query T
+EXPLAIN INSERT INTO users3 (crdb_region, name, email)
+VALUES ('ap-southeast-2', 'craig@cockroachlabs.com', 'craig@cockroachlabs.com')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: users3(id, name, email, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 5 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: users3@users3_pkey
+            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column3 = email)
+            │ pred: ((id_default != id) OR (column1 != crdb_region)) AND (email != name)
+            │
+            └── • filter
+                │ estimated row count: 0
+                │ filter: column3 != column2
+                │
+                └── • scan buffer
+                      estimated row count: 1
+                      label: buffer 1
