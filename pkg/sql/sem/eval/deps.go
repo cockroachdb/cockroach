@@ -401,6 +401,10 @@ type Planner interface {
 	// less than numAnnotations entries. If updated, the annotations in the eval
 	// context held in the planner is also updated.
 	MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx)
+
+	// AutoCommit indicates whether the Planner has flagged the current statement
+	// as eligible for transaction auto-commit.
+	AutoCommit() bool
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

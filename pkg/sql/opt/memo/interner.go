@@ -715,7 +715,12 @@ func (h *hasher) HashFKChecksExpr(val FKChecksExpr) {
 func (h *hasher) HashUniqueChecksExpr(val UniqueChecksExpr) {
 	for i := range val {
 		h.HashRelExpr(val[i].Check)
+		h.HashInsertFastPathFKUniqCheck(val[i].FastPathCheck)
 	}
+}
+
+func (h *hasher) HashInsertFastPathFKUniqCheck(val *opt.InsertFastPathFKUniqCheck) {
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
 func (h *hasher) HashKVOptionsExpr(val KVOptionsExpr) {

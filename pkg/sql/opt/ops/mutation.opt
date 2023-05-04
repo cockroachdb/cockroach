@@ -295,4 +295,8 @@ define UniqueChecksItemPrivate {
 
     # OpName is the name that should be used for this check in error messages.
     OpName string
+
+    # FastPathCheck holds information pertaining to the construction of an
+    # insert fast path in the execbuilder.
+    FastPathCheck InsertFastPathFKUniqCheck
 }
