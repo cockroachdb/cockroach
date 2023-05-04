@@ -64,7 +64,7 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-access=read
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
 
 dequeue r=req4
 ----
@@ -92,7 +92,7 @@ start-waiting: true
 
 guard-state r=req5
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
 
 dequeue r=req5
 ----
@@ -120,7 +120,7 @@ start-waiting: true
 
 guard-state r=req6
 ----
-new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-access=write
+new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-strength=Intent
 
 dequeue r=req6
 ----
@@ -145,7 +145,7 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
 
 dequeue r=req7
 ----
@@ -166,7 +166,7 @@ start-waiting: true
 
 guard-state r=req8
 ----
-new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-access=write
+new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-strength=Intent
 
 dequeue r=req8
 ----
