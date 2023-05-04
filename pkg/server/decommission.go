@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -138,16 +139,12 @@ func getPingCheckDecommissionFn(
 	return nodeTombStorage, func(ctx context.Context, nodeID roachpb.NodeID, errorCode codes.Code) error {
 		ts, err := nodeTombStorage.IsDecommissioned(ctx, nodeID)
 		if err != nil {
-			// An error here means something very basic is not working. Better to terminate
-			// than to limp along.
-			log.Fatalf(ctx, "unable to read decommissioned status for n%d: %v", nodeID, err)
+			return errors.Wrapf(err, "unable to read decommissioned status for n%d", nodeID)
 		}
 		if !ts.IsZero() {
-			// The node was decommissioned.
-			return grpcstatus.Errorf(errorCode,
+			return kvpb.NewDecommissionedStatusErrorf(errorCode,
 				"n%d was permanently removed from the cluster at %s; it is not allowed to rejoin the cluster",
-				nodeID, ts,
-			)
+				nodeID, ts)
 		}
 		// The common case - target node is not decommissioned.
 		return nil
