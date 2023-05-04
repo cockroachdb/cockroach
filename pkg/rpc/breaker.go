@@ -91,17 +91,21 @@ func newBackOff(clock backoff.Clock) backoff.BackOff {
 	return b
 }
 
-func newBreaker(ctx context.Context, name string, clock clock.Clock) *circuit.Breaker {
+func newBreaker(ctx context.Context, name string, clock clock.Clock, noop bool) *circuit.Breaker {
+	shouldTrip := circuit.ThresholdTripFunc(1)
+	if noop {
+		shouldTrip = func(*circuit.Breaker) bool {
+			return false
+		}
+	}
 	return circuit.NewBreakerWithOptions(&circuit.Options{
 		Name:       name,
 		BackOff:    newBackOff(clock),
 		Clock:      clock,
-		ShouldTrip: circuit.ThresholdTripFunc(1),
+		ShouldTrip: shouldTrip,
 		Logger:     breakerLogger{ctx},
 	})
 }
-
-var _ DeprecatedBreaker // TODO(tbg): rename breakerLogger -> deprecatedBreakerLogger
 
 // breakerLogger implements circuit.Logger to expose logging from the
 // circuitbreaker package. Debugf is logged with a vmodule level of 2 so to see
