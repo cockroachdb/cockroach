@@ -1523,3 +1523,33 @@ func TestSizeOfEvent(t *testing.T) {
 	size := int(unsafe.Sizeof(e))
 	require.Equal(t, 72, size)
 }
+
+func TestProcessorShutdownSendsError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	p, stopper := newTestProcessor(t, nil /* rtsIter */)
+	defer stopper.Stop(context.Background())
+
+	s := newTestStream()
+	var done future.ErrorFuture
+	errC := make(chan error)
+	done.WhenReady(func(err error) {
+		errC <- err
+	})
+	p.Register(p.Span, hlc.Timestamp{}, nil, false,
+		s, func() {}, &done)
+	p.syncEventAndRegistrations()
+	p.Stop()
+
+	select {
+	case stopErr := <-errC:
+		if detail := (*kvpb.RangeFeedRetryError)(nil); errors.As(stopErr, &detail) {
+			require.Equal(t, kvpb.RangeFeedRetryError_REASON_PROCESSOR_CLOSED, detail.Reason,
+				"feed termination cause on processor stop")
+		} else {
+			require.Fail(t, "expecting kvpb.RangeFeedRetryError. got %s", stopErr)
+		}
+	case <-time.After(time.Second * 30):
+		require.Fail(t, "registration not closed after 30 sec of processor stop")
+	}
+}

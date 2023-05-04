@@ -1469,7 +1469,16 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 	_, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 	defer restore()
 
-	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, stream))); err != nil {
+	if err, ferr := future.Wait(ctx, n.stores.RangeFeed(args, stream)); err != nil || ferr != nil {
+		// TODO(oleg): remove version handling after 23.2 and revert to combining
+		// errors unconditionally as in 23.1.
+		if detail := (*kvpb.RangeFeedRetryError)(nil); errors.As(err, &detail) {
+			if detail.Reason == kvpb.RangeFeedRetryError_REASON_PROCESSOR_CLOSED && !n.storeCfg.Settings.Version.IsActive(
+				context.TODO(), clusterversion.V23_2) {
+				err = kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED)
+			}
+		}
+		err = errors.CombineErrors(err, ferr)
 		// Got stream context error, probably won't be able to propagate it to the stream,
 		// but give it a try anyway.
 		var event kvpb.RangeFeedEvent
@@ -1521,8 +1530,9 @@ func (s *lockedMuxStream) Context() context.Context {
 
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.sendMu.Lock()
-	defer s.sendMu.Unlock()
-	return s.wrapped.Send(e)
+	err := s.wrapped.Send(e)
+	s.sendMu.Unlock()
+	return err
 }
 
 // newMuxRangeFeedCompletionWatcher returns 2 functions: one to forward mux
@@ -1624,13 +1634,18 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		// TODO(yevgeniy): Add observability into actively running rangefeeds.
 		f := n.stores.RangeFeed(req, &sink)
 		f.WhenReady(func(err error) {
-			if err == nil {
-				// RangeFeed usually finishes with an error.  However, if future
-				// completes with nil error (which could happen e.g. during processor
-				// shutdown), treat it as a normal stream termination so that the caller
-				// restarts.
-				// TODO(101330): Add an explicit retry reason instead of REPLICA_REMOVED.
-				err = kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED)
+			err = assertRangeFeedErrorIsNotNil(stream.Context(), err)
+
+			// Context is only used for logging in underlying code. We have a choice
+			// of using background or stream context, but stream context might be
+			// cancelled by this time.
+			// TODO(oleg): remove version handling after 23.2 and revert to combining
+			// errors unconditionally as in 23.1.
+			if detail := (*kvpb.RangeFeedRetryError)(nil); errors.As(err, &detail) {
+				if detail.Reason == kvpb.RangeFeedRetryError_REASON_PROCESSOR_CLOSED && !n.storeCfg.Settings.Version.IsActive(
+					context.TODO(), clusterversion.V23_2) {
+					err = kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED)
+				}
 			}
 
 			e := &kvpb.MuxRangeFeedEvent{
@@ -1653,6 +1668,20 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			rangefeedCompleted(e)
 		})
 	}
+}
+
+// Note we only want to panic in dev builds, in production we'd rather apply
+// mitigation that forces rangefeed to restart if client still wants it.
+func assertRangeFeedErrorIsNotNil(ctx context.Context, err error) error {
+	if err != nil {
+		return err
+	}
+	if buildutil.CrdbTestBuild {
+		panic(errors.AssertionFailedf("range feed terminated with nil error"))
+	} else {
+		log.Error(ctx, "range feed terminated with nil error")
+	}
+	return kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED)
 }
 
 // ResetQuorum implements the kvpb.InternalServer interface.

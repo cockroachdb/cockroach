@@ -415,7 +415,11 @@ func (p *Processor) run(
 // nil Processor. It is not valid to restart a processor after it has been
 // stopped.
 func (p *Processor) Stop() {
-	p.StopWithErr(nil)
+	// We return an error here to protect outselves from erroneous processor
+	// shutdowns when rangefeeds are active. If feed is not active, error will
+	// be dropped, if it is active it will retry.
+	// This is needed in particular for MuxRangeFeeds stability.
+	p.StopWithErr(kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_PROCESSOR_CLOSED)))
 }
 
 // StopWithErr shuts down the processor and closes all registrations with the

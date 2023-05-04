@@ -564,6 +564,10 @@ message RangeFeedRetryError {
     REASON_SLOW_CONSUMER = 5;
     // No leaseholder exists or could be created, so closed timestamps won't be emitted.
     REASON_NO_LEASEHOLDER = 6;
+    // Rangefeed was closed because underlying processor was closed. This should
+    // not happen normally as processor should never stop when range feeds are
+    // active. If this error code is received it is safe to restart feed.
+    REASON_PROCESSOR_CLOSED = 7;
   }
   optional Reason reason = 1 [(gogoproto.nullable) = false];
 }
