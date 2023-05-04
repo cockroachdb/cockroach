@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -67,32 +68,56 @@ func (c *CustomFuncs) MergeProjections(
 //	SELECT column1, 3 FROM (VALUES (1, 2))
 //	=>
 //	(VALUES (1, 3))
+//
+// MergeProjectWithValues can also be called in cases with more than one tuple
+// in the VALUES expression, such as in INSERT fast path processing, but this
+// may be incorrect when projection expressions reference columns.
 func (c *CustomFuncs) MergeProjectWithValues(
 	projections memo.ProjectionsExpr, passthrough opt.ColSet, input memo.RelExpr,
 ) memo.RelExpr {
-	newExprs := make(memo.ScalarListExpr, 0, len(projections)+passthrough.Len())
-	newTypes := make([]*types.T, 0, len(newExprs))
-	newCols := make(opt.ColList, 0, len(newExprs))
-
 	values := input.(*memo.ValuesExpr)
-	tuple := values.Rows[0].(*memo.TupleExpr)
-	for i, colID := range values.Cols {
+	rows := make(memo.ScalarListExpr, len(values.Rows))
+	numExprs := len(projections) + passthrough.Len()
+	newCols := make(opt.ColList, 0, numExprs)
+	for _, colID := range values.Cols {
 		if passthrough.Contains(colID) {
-			newExprs = append(newExprs, tuple.Elems[i])
-			newTypes = append(newTypes, tuple.Elems[i].DataType())
 			newCols = append(newCols, colID)
 		}
 	}
-
 	for i := range projections {
 		item := &projections[i]
-		newExprs = append(newExprs, item.Element)
-		newTypes = append(newTypes, item.Element.DataType())
 		newCols = append(newCols, item.Col)
+		if len(values.Rows) > 1 {
+			var sharedProps props.Shared
+			memo.BuildSharedProps(item.Element, &sharedProps, c.f.evalCtx)
+			if !sharedProps.OuterCols.Empty() {
+				panic(errors.AssertionFailedf(
+					"expected no projections with column references in MergeProjectWithValues when merging multiple VALUES"))
+			}
+		}
 	}
 
-	tupleTyp := types.MakeTuple(newTypes)
-	rows := memo.ScalarListExpr{c.f.ConstructTuple(newExprs, tupleTyp)}
+	for j := 0; j < len(values.Rows); j++ {
+		newExprs := make(memo.ScalarListExpr, 0, numExprs)
+		newTypes := make([]*types.T, 0, len(newExprs))
+
+		tuple := values.Rows[j].(*memo.TupleExpr)
+		for i, colID := range values.Cols {
+			if passthrough.Contains(colID) {
+				newExprs = append(newExprs, tuple.Elems[i])
+				newTypes = append(newTypes, tuple.Elems[i].DataType())
+			}
+		}
+
+		for i := range projections {
+			item := &projections[i]
+			newExprs = append(newExprs, item.Element)
+			newTypes = append(newTypes, item.Element.DataType())
+		}
+
+		tupleTyp := types.MakeTuple(newTypes)
+		rows[j] = c.f.ConstructTuple(newExprs, tupleTyp)
+	}
 	return c.f.ConstructValues(rows, &memo.ValuesPrivate{
 		Cols: newCols,
 		ID:   values.ID,
