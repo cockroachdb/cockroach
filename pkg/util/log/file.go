@@ -67,7 +67,7 @@ type fileSink struct {
 	// name generator for log files.
 	nameGenerator fileNameGenerator
 
-	// bufferedWrites if false calls file.FlushFileSinks on every log
+	// bufferedWrites if false calls file.Flush on every log
 	// write. This can be set per-logger e.g. for audit logging.
 	//
 	// Note that synchronization for all log files simultaneously can
