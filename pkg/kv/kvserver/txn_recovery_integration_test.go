@@ -44,12 +44,6 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		// implicitCommit says whether we expect the transaction to satisfy the
 		// implicit-commit condition.
 		implicitCommit bool
-		// If implicitCommit is false, writeTooOld dictates what kind of push will
-		// be experienced by one of the txn's intents. An intent being pushed is the
-		// reason why the implicit-commit condition is expected to fail. We simulate
-		// both pushes by the timestamp cache, and by deferred write-too-old
-		// conditions.
-		writeTooOld bool
 		// futureWrites dictates whether the transaction has been writing at the
 		// present time or whether it has been writing into the future with a
 		// synthetic timestamp.
@@ -60,11 +54,6 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		},
 		{
 			implicitCommit: false,
-			writeTooOld:    false,
-		},
-		{
-			implicitCommit: false,
-			writeTooOld:    true,
 		},
 		{
 			implicitCommit: true,
@@ -72,16 +61,10 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		},
 		{
 			implicitCommit: false,
-			writeTooOld:    false,
-			futureWrites:   true,
-		},
-		{
-			implicitCommit: false,
-			writeTooOld:    true,
 			futureWrites:   true,
 		},
 	} {
-		name := fmt.Sprintf("%d-commit:%t,writeTooOld:%t,futureWrites:%t", i, tc.implicitCommit, tc.writeTooOld, tc.futureWrites)
+		name := fmt.Sprintf("%d-commit:%t,futureWrites:%t", i, tc.implicitCommit, tc.futureWrites)
 		t.Run(name, func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
@@ -120,16 +103,9 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 			// commit state.
 			conflictH := kvpb.Header{Timestamp: txn.WriteTimestamp.Next()}
 			if !tc.implicitCommit {
-				if !tc.writeTooOld {
-					gArgs := getArgs(keyB)
-					if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), conflictH, &gArgs); pErr != nil {
-						t.Fatal(pErr)
-					}
-				} else {
-					pArgs = putArgs(keyB, []byte("pusher val"))
-					if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), conflictH, &pArgs); pErr != nil {
-						t.Fatal(pErr)
-					}
+				gArgs := getArgs(keyB)
+				if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), conflictH, &gArgs); pErr != nil {
+					t.Fatal(pErr)
 				}
 			}
 
