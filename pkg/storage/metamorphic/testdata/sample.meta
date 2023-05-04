@@ -151,7 +151,7 @@ mvcc_put(engine, t3, "yggswhfeyqv"/6, etewicdmbq) -> ok
 iterator_seekge(iter2, "wbpcepef"/6) -> valid = false
 mvcc_get(engine, "uwdvyohbpsgcr"/6, t2) -> val = <nil>, intent = <nil>
 ingest("rfdgrsmg"/6, "gukoaxqohrakhx"/4, "tjbotfrbtxoyta"/6, "tjbotfrbtxoyta"/6, "snoojmhoaqte"/6) -> ok
-mvcc_put(engine, t3, "tjbotfrbtxoyta"/6, svyqs) -> error: WriteTooOldError: write for key "tjbotfrbtxoyta" at timestamp 0.000000005,0 too old; wrote at 0.000000006,1
+mvcc_put(engine, t3, "tjbotfrbtxoyta"/6, svyqs) -> error: WriteTooOldError: write for key "tjbotfrbtxoyta" at timestamp 0.000000005,0 too old; must write at or above 0.000000006,1
 mvcc_put(engine, t2, "gukoaxqohrakhx"/4, edqawhknloa) -> ok
 mvcc_put(engine, t3, "qpdaulhik"/6, rkuhimkl) -> ok
 mvcc_reverse_scan("snoojmhoaqte"/6, "yggswhfeyqv"/6, t2, 0.5142, 0.1074, false, true) -> kvs = [{"wbpcepef" {[0 0 0 0 3 104 104 103 108 100 113 108 116 117 100 109 103 114] 0.000000003,0}} {"tktluohcljr" {[0 0 0 0 3 117 109 113 116 107 119 117 113 108 112] 0.000000003,0}}], intents = [], resumeSpan = <nil>, numBytes = 88, numKeys = 2
