@@ -101,6 +101,8 @@ func newBreaker(ctx context.Context, name string, clock clock.Clock) *circuit.Br
 	})
 }
 
+var _ DeprecatedBreaker // TODO(tbg): rename breakerLogger -> deprecatedBreakerLogger
+
 // breakerLogger implements circuit.Logger to expose logging from the
 // circuitbreaker package. Debugf is logged with a vmodule level of 2 so to see
 // the circuitbreaker debug messages set --vmodule=breaker=2
