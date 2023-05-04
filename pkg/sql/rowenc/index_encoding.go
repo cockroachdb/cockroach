@@ -714,8 +714,11 @@ func EncodeExistsInvertedIndexSpans(
 		}
 		var expr inverted.Expression
 		for _, d := range val.(*tree.DArray).Array {
-			s := string(*d.(*tree.DString))
-			newExpr, err := json.EncodeExistsInvertedIndexSpans(nil /* inKey */, s)
+			ds, ok := tree.AsDString(d)
+			if !ok {
+				continue
+			}
+			newExpr, err := json.EncodeExistsInvertedIndexSpans(nil /* inKey */, string(ds))
 			if err != nil {
 				return nil, err
 			}
