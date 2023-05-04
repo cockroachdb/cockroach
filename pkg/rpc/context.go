@@ -1519,15 +1519,15 @@ type serverStream struct {
 	sender   pipeWriter
 }
 
-func (s serverStream) SetHeader(md metadata.MD) error {
+func (s serverStream) SetHeader(_ metadata.MD) error {
 	panic("unimplemented")
 }
 
-func (s serverStream) SendHeader(md metadata.MD) error {
+func (s serverStream) SendHeader(_ metadata.MD) error {
 	panic("unimplemented")
 }
 
-func (s serverStream) SetTrailer(md metadata.MD) {
+func (s serverStream) SetTrailer(_ metadata.MD) {
 	panic("unimplemented")
 }
 
