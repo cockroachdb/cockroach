@@ -18,6 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -424,10 +427,35 @@ func SendWrappedWith(
 	return SendWrappedWithAdmission(ctx, sender, h, kvpb.AdmissionHeader{}, args)
 }
 
-// SendWrappedWithAdmission is a convenience function which wraps the request
-// in a batch and sends it via the provided Sender and headers. It returns the
-// unwrapped response or an error. It's valid to pass a `nil` context; an
-// empty one is used in that case.
+// SendWrappedWithAdmissionTraced is a convenience function that calls
+// SendWrappedWithAdmission but with the execution wrapped in a tracing span.
+// This method returns the unwrapped response or an error along with the trace
+// recording of the span.
+func SendWrappedWithAdmissionTraced(
+	ctx context.Context,
+	sender Sender,
+	h kvpb.Header,
+	ah kvpb.AdmissionHeader,
+	args kvpb.Request,
+	opName string,
+	opts ...tracing.SpanOption,
+) (kvpb.Response, tracingpb.Recording, *kvpb.Error) {
+	sp := tracing.SpanFromContext(ctx)
+	if sp.IsNoop() {
+		sp.Finish()
+		return nil, nil, kvpb.NewError(errors.AssertionFailedf("unexpected noop tracing span: %s", args.String()))
+	}
+
+	opts = append(opts, tracing.WithParent(sp))
+	ctx, sp = sp.Tracer().StartSpanCtx(ctx, opName, opts...)
+	resp, err := SendWrappedWithAdmission(ctx, sender, h, ah, args)
+	return resp, sp.FinishAndGetConfiguredRecording(), err
+}
+
+// SendWrappedWithAdmission is a convenience function which wraps the request in
+// a batch and sends it via the provided Sender and headers. It returns the
+// unwrapped response or an error. It's valid to pass a `nil` context; an empty
+// one is used in that case.
 func SendWrappedWithAdmission(
 	ctx context.Context, sender Sender, h kvpb.Header, ah kvpb.AdmissionHeader, args kvpb.Request,
 ) (kvpb.Response, *kvpb.Error) {
