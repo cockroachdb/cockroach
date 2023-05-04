@@ -494,10 +494,11 @@ type copyTxnOpt struct {
 }
 
 func (c *copyMachine) Close(ctx context.Context) {
-	c.rows.Close(ctx)
-	// TODO(cucaroach): if this isn't close'd the Stop below errors out
-	// saying there's 10240 bytes left, investigate.
-	c.rowsMemAcc.Close(ctx)
+	if c.vectorized {
+		c.rowsMemAcc.Close(ctx)
+	} else {
+		c.rows.Close(ctx)
+	}
 	c.bufMemAcc.Close(ctx)
 	c.copyMon.Stop(ctx)
 }

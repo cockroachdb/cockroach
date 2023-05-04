@@ -87,9 +87,6 @@ func TestEncoderEqualityDatums(t *testing.T) {
 		// enum Datums) is left to the copy data driven tests. Also
 		// check constraints and partial index support.
 
-		// TODO: tsvector
-		// TODO: covering secondary indexes?
-
 		{"a INT ARRAY PRIMARY KEY", []tree.Datum{randgen.RandArray(rng, types.MakeArray(types.Int), 2)}, nil},
 		{"i INT PRIMARY KEY, a INT ARRAY", []tree.Datum{tree.NewDInt(1234), randgen.RandArray(rng, types.MakeArray(types.Int), 2)}, nil},
 		{"i INT PRIMARY KEY, a INT ARRAY UNIQUE", []tree.Datum{tree.NewDInt(1234), randgen.RandArray(rng, types.MakeArray(types.Int), 2)}, nil},
