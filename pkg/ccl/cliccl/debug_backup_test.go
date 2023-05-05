@@ -508,11 +508,35 @@ func TestExportDataWithMultipleRanges(t *testing.T) {
 			backupPath,
 			dir))
 		require.NoError(t, err)
-		var expectedOut string
-		for i := 1; i <= 10; i++ {
-			expectedOut = fmt.Sprintf("%s%d\n", expectedOut, i)
+
+		keysByFile := map[string][]int{
+			"f1": {1},
+			"f2": {2, 3, 4},
+			"f3": {5, 6},
+			"f4": {7, 8, 9, 10},
+			"f5": {11, 12, 13, 14, 15},
 		}
-		checkExpectedOutput(t, expectedOut, out)
+
+		// Because the end key of the span for one range overlaps the start key
+		// of the file for the next range, most files will show up twice in the
+		// restore span covering.
+		cov := [][]string{
+			{"f1", "f2"}, // ["1", "2\x00")
+			{"f2", "f3"}, // ["2\x00", "5\x00")
+			{"f3", "f4"}, // ["5\x00", "7\x00")
+			{"f4"},       // ["7\x00", nextTable)
+		}
+
+		var expectedOut bytes.Buffer
+		for _, covEntry := range cov {
+			for _, file := range covEntry {
+				for _, k := range keysByFile[file] {
+					expectedOut.WriteString(fmt.Sprintf("%d\n", k))
+				}
+			}
+		}
+
+		checkExpectedOutput(t, expectedOut.String(), out)
 	})
 
 	t.Run("export-data-with-multiple-ranges-in-incremental-backups", func(t *testing.T) {
@@ -521,11 +545,34 @@ func TestExportDataWithMultipleRanges(t *testing.T) {
 			backupPath, backupPath+"/incrementals"+ts.GoTime().Format(backupccl.DateBasedIncFolderName),
 			dir))
 		require.NoError(t, err)
-		var expectedOut string
-		for i := 1; i <= 15; i++ {
-			expectedOut = fmt.Sprintf("%s%d,false\n", expectedOut, i)
+
+		keysByFile := map[string][]int{
+			"f1": {1},
+			"f2": {2, 3, 4},
+			"f3": {5, 6},
+			"f4": {7, 8, 9, 10, 11, 12, 13, 14, 15},
 		}
-		checkExpectedOutput(t, expectedOut, out)
+
+		// Because the end key of the span for one range overlaps the start key
+		// of the file for the next range, most files will show up twice in the
+		// restore span covering.
+		cov := [][]string{
+			{"f1", "f2"}, // ["1", "2\x00")
+			{"f2", "f3"}, // ["2\x00", "5\x00")
+			{"f3", "f4"}, // ["5\x00", "7\x00")
+			{"f4"},       // ["7\x00", nextTable)
+		}
+
+		var expectedOut bytes.Buffer
+		for _, covEntry := range cov {
+			for _, file := range covEntry {
+				for _, k := range keysByFile[file] {
+					expectedOut.WriteString(fmt.Sprintf("%d,false\n", k))
+				}
+			}
+		}
+
+		checkExpectedOutput(t, expectedOut.String(), out)
 	})
 }
 
