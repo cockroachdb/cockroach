@@ -657,16 +657,10 @@ func TestChangefeedTenants(t *testing.T) {
 		)
 	})
 	t.Run("sinkless changefeed works", func(t *testing.T) {
-		sqlAddr := tenantServer.SQLAddr()
-		sink, cleanup := sqlutils.PGUrl(t, sqlAddr, t.Name(), url.User(username.RootUser))
+		coreFeedFactory, cleanup := makeFeedFactory(t, "sinkless", tenantServer, tenantDB)
 		defer cleanup()
-
-		// kvServer is used here because we require a
-		// TestServerInterface implementor. It is only used as
-		// the return value for f.Server()
-		f := makeSinklessFeedFactory(kvServer, sink, nil)
 		tenantSQL.Exec(t, `INSERT INTO foo_in_tenant VALUES (1)`)
-		feed := feed(t, f, `CREATE CHANGEFEED FOR foo_in_tenant`)
+		feed := feed(t, coreFeedFactory, `CREATE CHANGEFEED FOR foo_in_tenant`)
 		assertPayloads(t, feed, []string{
 			`foo_in_tenant: [1]->{"after": {"pk": 1}}`,
 		})
@@ -3094,7 +3088,7 @@ func TestChangefeedExpressionUsesSerializedSessionData(t *testing.T) {
 		defer closeFeed(t, foo)
 		assertPayloads(t, foo, []string{`foo: [1]->{"a": 1, "b": "howdy"}`})
 	}
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
 }
 
 func TestChangefeedBareJSON(t *testing.T) {
@@ -6104,7 +6098,12 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	// Create a factory which executes the CREATE CHANGEFEED statement on server 0.
 	// This statement should fail, but the job itself ought to be created.
 	// After some time, that job should be adopted by another node, and executed successfully.
-	f, closeSink := makeFeedFactory(t, randomSinkType(feedTestEnterpriseSinks), tc.Server(1), tc.ServerConn(0))
+	//
+	// We use feedTestUseRootUserConnection to prevent the
+	// feed factory from trying to create a test user. Because the registry is draining, creating the test user
+	// will fail and the test will fail prematurely.
+	f, closeSink := makeFeedFactory(t, randomSinkType(feedTestEnterpriseSinks), tc.Server(1), tc.ServerConn(0),
+		feedTestUseRootUserConnection)
 	defer closeSink()
 
 	atomic.StoreInt32(&shouldDrain, 1)
@@ -7860,6 +7859,7 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	tenant1Args := base.TestTenantArgs{
 		TenantID:     serverutils.TestTenantID(),
 		TestingKnobs: tenantKnobs,
+		UseDatabase:  `d`,
 	}
 	tenant1Server, tenant1DB := serverutils.StartTenant(t, tc.Server(0), tenant1Args)
 	tenantRunner := sqlutils.MakeSQLRunner(tenant1DB)
@@ -7911,9 +7911,8 @@ func TestChangefeedCreateTelemetryLogs(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'initial')`)
 
 	t.Run(`core_sink_type`, func(t *testing.T) {
-		coreSink, cleanup := sqlutils.PGUrl(t, s.Server.SQLAddr(), t.Name(), url.User(username.RootUser))
+		coreFeedFactory, cleanup := makeFeedFactory(t, "sinkless", s.Server, s.DB)
 		defer cleanup()
-		coreFeedFactory := makeSinklessFeedFactory(s.Server, coreSink, nil)
 
 		beforeCreateSinkless := timeutil.Now()
 		coreFeed := feed(t, coreFeedFactory, `CREATE CHANGEFEED FOR foo`)
