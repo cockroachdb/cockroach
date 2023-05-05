@@ -142,12 +142,13 @@ func NewSpanResolver(
 	return &spanResolver{
 		st: st,
 		oracle: replicaoracle.NewOracle(policy, replicaoracle.Config{
-			NodeDescs:  nodeDescs,
-			NodeID:     nodeID,
-			Locality:   locality,
-			Settings:   st,
-			Clock:      clock,
-			RPCContext: rpcCtx,
+			NodeDescs:   nodeDescs,
+			NodeID:      nodeID,
+			Locality:    locality,
+			Settings:    st,
+			Clock:       clock,
+			RPCContext:  rpcCtx,
+			LatencyFunc: distSender.LatencyFunc(),
 		}),
 		distSender: distSender,
 	}
