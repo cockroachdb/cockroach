@@ -830,10 +830,19 @@ func TestErrorOnSlowHandshake(t *testing.T) {
 		t.Fatalf("unexpected error from ConnectInboundStream: %v", err)
 	}
 	// We expect that "no inbound stream connection" error is pushed into the
-	// receiver.
-	if len(receiver.Mu.Records) != 1 {
-		t.Fatalf("expected a single meta object with an error, got %v", receiver.Mu.Records)
-	} else if r := receiver.Mu.Records[0]; !IsNoInboundStreamConnectionError(r.Meta.Err) {
-		t.Fatalf("unexpected error: %v", r)
+	// receiver. That error is pushed in a separate goroutine, so we block until
+	// the push occurs, within a timeout.
+	var record distsqlutils.BufferedRecord
+	testutils.SucceedsSoon(t, func() error {
+		receiver.Mu.Lock()
+		defer receiver.Mu.Unlock()
+		if len(receiver.Mu.Records) != 1 {
+			return errors.Newf("expected a single meta object with an error, got %v", receiver.Mu.Records)
+		}
+		record = receiver.Mu.Records[0]
+		return nil
+	})
+	if !IsNoInboundStreamConnectionError(record.Meta.Err) {
+		t.Fatalf("unexpected record: %v", record)
 	}
 }
