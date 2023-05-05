@@ -319,10 +319,10 @@ func logRestoreTelemetry(
 ) {
 	var requestedTargets []descpb.Descriptor
 	for _, desc := range descsByTablePattern {
-		requestedTargets = append(requestedTargets, *desc.DescriptorProto())
+		requestedTargets = append(requestedTargets, *getDescriptorProtoForLogging(desc))
 	}
 	for _, desc := range restoreDBs {
-		requestedTargets = append(requestedTargets, *desc.DescriptorProto())
+		requestedTargets = append(requestedTargets, *getDescriptorProtoForLogging(desc))
 	}
 
 	largestScope := getLargestScope(details.DescriptorCoverage == tree.AllDescriptors, requestedTargets)
@@ -430,4 +430,22 @@ func logRestoreTelemetry(
 	sort.Strings(event.DestinationStorageTypes)
 
 	log.StructuredEvent(ctx, event)
+}
+
+func getDescriptorProtoForLogging(desc catalog.Descriptor) *descpb.Descriptor {
+	if schema, ok := desc.(catalog.SchemaDescriptor); ok {
+		if schema.SchemaKind() != catalog.SchemaUserDefined {
+			return &descpb.Descriptor{Union: &descpb.Descriptor_Schema{Schema: makeSyntheticSchemaDescForLogging(schema)}}
+		}
+	}
+
+	return desc.DescriptorProto()
+}
+func makeSyntheticSchemaDescForLogging(sc catalog.SchemaDescriptor) *descpb.SchemaDescriptor {
+	return &descpb.SchemaDescriptor{
+		ID:       sc.GetID(),
+		ParentID: sc.GetParentID(),
+		Version:  sc.GetVersion(),
+		Name:     sc.GetName(),
+	}
 }
