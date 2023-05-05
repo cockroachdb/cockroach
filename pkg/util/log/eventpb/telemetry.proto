@@ -27,6 +27,7 @@ import "util/log/logpb/event.proto";
 // The comment at the top has a specific format for the doc generator.
 // *Really look at doc.go before modifying this file.*
 
+
 // SampledQuery is the SQL query event logged to the telemetry channel. It
 // contains common SQL event/execution details.
 message SampledQuery {
@@ -187,8 +188,101 @@ message SampledQuery {
   // The list of indexes used by this query.
   repeated string indexes = 51 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
+  // Collects the cumulative CPU time spent executing SQL operations in
+  // nanoseconds. Currently, it is only collected for statements without
+  // mutations that have a vectorized plan.
+  int64 cpu_time_nanos  = 52 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of grpc calls done to get data form KV nodes
+  int64 kv_grpc_calls = 53 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Cumulated time spent waiting for a KV request. This includes disk IO time
+  // and potentially network time (if any of the keys are not local).
+  int64 kv_time_nanos = 54 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The time to service the query, from start of parse to end of execute.
+  int64 service_latency_nanos =      56 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The difference between service latency and the sum of parse latency + plan latency + run latency .
+  int64 overhead_latency_nanos =      57 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The time to run the query and fetch or compute the result rows.
+  int64 run_latency_nanos    =      58 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The time to transform the AST into a logical query plan.
+  int64 plan_latency_nanos    =      59 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The time between statement executions in a transaction
+  int64 idle_latency_nanos    =      60 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The time to transform the SQL string into an abstract syntax tree (AST).
+  int64 parse_latency_nanos    =      61 [(gogoproto.jsontag) = ",omitempty"];
+
+  // StepCount collects the number of times the iterator moved forward or backward over the
+  // DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 mvcc_step_count = 62 [(gogoproto.jsontag) = ",omitempty"];
+
+  // StepCountInternal collects the number of times the iterator moved forward or backward
+  // over LSM internal keys.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 mvcc_step_count_internal = 63 [(gogoproto.jsontag) = ",omitempty"];
+
+  // SeekCount collects the number of times the iterator moved to a specific key/value pair
+  // in the DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 mvcc_seek_count = 64 [(gogoproto.jsontag) = ",omitempty"];
+
+  // SeekCountInternal collects the number of times the iterator moved to a specific LSM
+  // internal key.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 mvcc_seek_count_internal = 65 [(gogoproto.jsontag) = ",omitempty"];
+
+  // BlockBytes collects the bytes in the loaded SSTable data blocks.
+  // For details, see pebble.InternalIteratorStats.
+  int64 mvcc_block_bytes = 66 [(gogoproto.jsontag) = ",omitempty"];
+
+  // BlockBytesInCache collects the subset of BlockBytes in the block cache.
+  // For details, see pebble.InternalIteratorStats.
+  int64 mvcc_block_bytes_in_cache = 67 [(gogoproto.jsontag) = ",omitempty"];
+
+  // KeyBytes collects the bytes in keys that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 mvcc_key_bytes = 68 [(gogoproto.jsontag) = ",omitempty"];
+
+  // ValueBytes collects the bytes in values that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 mvcc_value_bytes = 69 [(gogoproto.jsontag) = ",omitempty"];
+
+  // PointCount collects the count of point keys iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 mvcc_point_count = 70 [(gogoproto.jsontag) = ",omitempty"];
+
+  // PointsCoveredByRangeTombstones collects the count of point keys that were iterated over that
+  // were covered by range tombstones.
+  // For details, see pebble.InternalIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 mvcc_points_covered_by_range_tombstones = 71 [(gogoproto.jsontag) = ",omitempty"];
+
+  // RangeKeyCount collects the count of range keys encountered during iteration.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 mvcc_range_key_count = 72 [(gogoproto.jsontag) = ",omitempty"];
+
+  // RangeKeyContainedPoints collects the count of point keys encountered within the bounds of
+  // a range key.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 mvcc_range_key_contained_points = 73 [(gogoproto.jsontag) = ",omitempty"];
+
+  // RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that
+  // were skipped during iteration due to range-key masking.
+  // For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 mvcc_range_key_skipped_points = 74 [(gogoproto.jsontag) = ",omitempty"];
   reserved 12;
 }
+
 
 // CapturedIndexUsageStats
 message CapturedIndexUsageStats {
