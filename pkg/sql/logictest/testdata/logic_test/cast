@@ -13,7 +13,9 @@ CREATE TABLE assn_cast (
   t timestamp,
   d DECIMAL(10, 0),
   a DECIMAL(10, 0)[],
-  s STRING
+  s STRING,
+  ca CHAR[],
+  vba VARBIT(1)[]
 )
 
 statement ok
@@ -271,6 +273,24 @@ SELECT s FROM assn_cast WHERE s IS NOT NULL
 ----
 1
 2
+
+statement error pgcode 22001 value too long for type CHAR
+INSERT INTO assn_cast(ca) VALUES (ARRAY['foo', 'a'])
+
+statement ok
+PREPARE insert_ca AS INSERT INTO assn_cast(ca) VALUES ($1)
+
+statement error pgcode 22001 value too long for type CHAR
+EXECUTE insert_ca(ARRAY['a', 'foo'])
+
+statement error pgcode 22001 bit string length 2 too large for type VARBIT\(1\)
+INSERT INTO assn_cast(vba) VALUES (ARRAY[B'11', B'1'])
+
+statement ok
+PREPARE insert_vba AS INSERT INTO assn_cast(vba) VALUES ($1)
+
+statement error pgcode 22001 bit string length 2 too large for type VARBIT\(1\)
+EXECUTE insert_vba(ARRAY[B'1', B'11'])
 
 # Tests for assignment casts of DEFAULT expressions.
 subtest assignment_casts_default

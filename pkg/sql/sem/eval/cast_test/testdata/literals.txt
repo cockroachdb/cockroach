@@ -1,3 +1,4 @@
+''
 '+0'
 '-0'
 '-1'
@@ -54,3 +55,9 @@ VARBIT '111111111111111111111111'
 VARBIT(16) '1111111111111111'
 false
 true
+ARRAY[]::TEXT[]
+ARRAY[]::VARBIT(1)[]
+ARRAY['true', 'false']
+ARRAY['32767', '-32768']
+ARRAY[B'0', B'3']
+ARRAY['0000', '1111']

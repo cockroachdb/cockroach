@@ -179,15 +179,10 @@ SELECT * FROM kv ORDER BY (k, v)
 140 14
 150 17
 
-# TODO(knz): Enable the 1st statement and remove the 2nd once #33313 is fixed.
-#query II rowsort
-#UPSERT INTO kv(k) VALUES (6), (8) RETURNING k,v
-#----
-#6 6
-#8 NULL
 query II rowsort
-UPSERT INTO kv(k) VALUES (8) RETURNING k,v
+UPSERT INTO kv(k) VALUES (6), (8) RETURNING k,v
 ----
+6 6
 8 NULL
 
 query II rowsort

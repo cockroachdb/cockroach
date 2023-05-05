@@ -9,7 +9,7 @@ set -euo pipefail
 # Usage:
 #   ./explicit_casts_gen.sh > explicit_casts.csv
 
-pgversion=$(psql -Aqtc 'SHOW server_version')
+pgversion=$(psql -AXqtc "SELECT substring(version(), 'PostgreSQL (\d+\.\d+)')")
 
 echo "# Testcases for TestExplicitCastsMatchPostgres."
 echo "#"
@@ -24,6 +24,6 @@ while read -r type; do
     # Quote literal and type in case they contain quotes or commas.
     printf '"%s","%s",' "${literal//\"/\"\"}" "${type//\"/\"\"}"
     cast=$(printf '(%s)::%s' "$literal" "$type")
-    psql --csv -qtc "SELECT quote_nullable($cast)" 2>/dev/null || echo 'error'
+    psql --csv -Xqtc "SELECT quote_nullable($cast)" 2>/dev/null || echo 'error'
   done <literals.txt
 done <types.txt

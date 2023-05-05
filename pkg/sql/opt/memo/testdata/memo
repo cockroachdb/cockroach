@@ -128,7 +128,7 @@ WHERE a.y>1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
-memo (optimized, ~24KB, required=[presentation: y:2,x:6,c:11] [ordering: +2])
+memo (optimized, ~25KB, required=[presentation: y:2,x:6,c:11] [ordering: +2])
  ├── G1: (project G2 G3 y x)
  │    ├── [presentation: y:2,x:6,c:11] [ordering: +2]
  │    │    ├── best: (project G2="[ordering: +2]" G3 y x)
@@ -238,7 +238,7 @@ memo (optimized, ~7KB, required=[presentation: a:5,b:6,c:7,d:8])
 memo
 SELECT x FROM a WHERE x = 1 AND x+y = 1
 ----
-memo (optimized, ~8KB, required=[presentation: x:1])
+memo (optimized, ~9KB, required=[presentation: x:1])
  ├── G1: (project G2 G3 x)
  │    └── [presentation: x:1]
  │         ├── best: (project G2 G3 x)
@@ -441,7 +441,7 @@ memo (optimized, ~9KB, required=[presentation: info:3])
 memo
 SELECT DISTINCT tag FROM [SHOW TRACE FOR SESSION]
 ----
-memo (optimized, ~7KB, required=[presentation: tag:11])
+memo (optimized, ~8KB, required=[presentation: tag:11])
  ├── G1: (distinct-on G2 G3 cols=(11))
  │    └── [presentation: tag:11]
  │         ├── best: (distinct-on G2 G3 cols=(11))
