@@ -956,7 +956,7 @@ func TestAlterChangefeedDatabaseScope(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection, feedTestUseRootUserConnection)
 }
 
 func TestAlterChangefeedDatabaseScopeUnqualifiedName(t *testing.T) {
@@ -1005,7 +1005,7 @@ func TestAlterChangefeedDatabaseScopeUnqualifiedName(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection, feedTestUseRootUserConnection)
 }
 
 func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
@@ -1050,7 +1050,7 @@ func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection, feedTestUseRootUserConnection)
 }
 
 func TestAlterChangefeedAlterTableName(t *testing.T) {
@@ -1107,7 +1107,7 @@ func TestAlterChangefeedAlterTableName(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection, feedTestUseRootUserConnection)
 }
 
 func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
@@ -1661,9 +1661,10 @@ func TestAlterChangefeedAccessControl(t *testing.T) {
 		closeCf()
 
 		// No one can modify changefeeds created by admins, except for admins.
-		// In this case, the root user creates the changefeed.
-		currentFeed, closeCf = createFeed(`CREATE CHANGEFEED FOR table_a, table_b`)
-		asUser(t, f, `adminUser`, func(userDB *sqlutils.SQLRunner) {
+		asUser(t, f, `adminUser`, func(_ *sqlutils.SQLRunner) {
+			currentFeed, closeCf = createFeed(`CREATE CHANGEFEED FOR table_a, table_b`)
+		})
+		asUser(t, f, `otherAdminUser`, func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
 			require.NoError(t, currentFeed.WaitForStatus(func(s jobs.Status) bool {
 				return s == jobs.StatusPaused

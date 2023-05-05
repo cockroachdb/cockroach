@@ -709,7 +709,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
 }
 
 func TestAvroSchemaNamespace(t *testing.T) {
@@ -751,7 +751,7 @@ func TestAvroSchemaNamespace(t *testing.T) {
 		require.Contains(t, foo.registry.SchemaForSubject(`superdrivers-value`), `"namespace":"super"`)
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
 }
 
 func TestTableNameCollision(t *testing.T) {
@@ -801,7 +801,7 @@ func TestTableNameCollision(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
 }
 
 func TestAvroMigrateToUnsupportedColumn(t *testing.T) {

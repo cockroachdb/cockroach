@@ -529,6 +529,7 @@ type updateKnobsFn func(knobs *base.TestingKnobs)
 type feedTestOptions struct {
 	useTenant                    bool
 	forceNoExternalConnectionURI bool
+	forceRootUserConnection      bool
 	argsFn                       updateArgsFn
 	knobsFn                      updateKnobsFn
 	externalIODir                string
@@ -548,6 +549,12 @@ var feedTestNoTenants = func(opts *feedTestOptions) { opts.useTenant = false }
 // from randomly creating an external connection URI and providing that as the sink
 // rather than directly specifying it. (Feed tests never actually connect to anything external.)
 var feedTestNoExternalConnection = func(opts *feedTestOptions) { opts.forceNoExternalConnectionURI = true }
+
+// feedTestUseRootUserConnection is a feedTestOption that will force the cdctest.TestFeedFactory
+// to use the root user connection when creating changefeeds. This disables the typical behavior of cdc tests where
+// tests randomly choose between the root user connection or a test user connection where the test user
+// has privileges to create changefeeds on tables in the default database `d` only.
+var feedTestUseRootUserConnection = func(opts *feedTestOptions) { opts.forceRootUserConnection = true }
 
 // feedTestNoForcedSyntheticTimestamps is a feedTestOption that will prevent
 // the test from randomly forcing timestamps to be synthetic and offset five seconds into the future from
@@ -918,36 +925,129 @@ func makeFeedFactoryWithOptions(
 	switch sinkType {
 	case "kafka":
 		f := makeKafkaFeedFactory(srvOrCluster, db)
-		return f, func() {}
+		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
+		f.(*kafkaFeedFactory).configureUserDB(userDB)
+		return f, func() { cleanup() }
 	case "cloudstorage":
 		if options.externalIODir == "" {
 			t.Fatalf("expected externalIODir option to be set")
 		}
 		f := makeCloudFeedFactory(srvOrCluster, db, options.externalIODir)
+		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
+		f.(*cloudFeedFactory).configureUserDB(userDB)
 		return f, func() {
 			TestingSetIncludeParquetMetadata()()
+			cleanup()
 		}
 	case "enterprise":
 		sink, cleanup := pgURLForUser(username.RootUser)
 		f := makeTableFeedFactory(srvOrCluster, db, sink)
-		return f, cleanup
+		userDB, cleanupUserDB := getInitialDBForEnterpriseFactory(t, s, db, options)
+		f.(*tableFeedFactory).configureUserDB(userDB)
+		return f, func() {
+			cleanup()
+			cleanupUserDB()
+		}
 	case "webhook":
 		f := makeWebhookFeedFactory(srvOrCluster, db)
-		return f, func() {}
+		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
+		f.(*webhookFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
+		return f, func() { cleanup() }
 	case "pubsub":
 		f := makePubsubFeedFactory(srvOrCluster, db)
-		return f, func() {}
+		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
+		f.(*pubsubFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
+		return f, func() { cleanup() }
 	case "sinkless":
-		sink, cleanup := pgURLForUser(username.RootUser)
-		f := makeSinklessFeedFactory(s, sink, pgURLForUser)
-		f.(*sinklessFeedFactory).currentDB = func(currentDB *string) error {
-			r := db.QueryRow("SELECT current_database()")
-			return r.Scan(currentDB)
+		pgURLForUserSinkless := func(u string, pass ...string) (url.URL, func()) {
+			t.Logf("pgURL %s %s", sinkType, u)
+			if len(pass) < 1 {
+				sink, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(u))
+				sink.Path = "d"
+				return sink, cleanup
+			}
+			return url.URL{
+				Scheme: "postgres",
+				User:   url.UserPassword(u, pass[0]),
+				Host:   s.SQLAddr(), Path: "d"}, func() {}
 		}
-		return f, cleanup
+		sink, cleanup := getInitialSinkForSinklessFactory(t, db, pgURLForUserSinkless)
+		root, cleanupRoot := pgURLForUserSinkless(username.RootUser)
+		f := makeSinklessFeedFactory(s, sink, root, pgURLForUserSinkless)
+		return f, func() {
+			cleanup()
+			cleanupRoot()
+		}
 	}
 	t.Fatalf("unhandled sink type %s", sinkType)
 	return nil, nil
+}
+
+func getInitialDBForEnterpriseFactory(
+	t *testing.T, s serverutils.TestTenantInterface, rootDB *gosql.DB, opts feedTestOptions,
+) (*gosql.DB, func()) {
+	// Instead of creating enterprise changefeeds on the root connection, we may
+	// choose to create them on a test user connection. This user should have the
+	// minimum privileges to create a changefeed in the default database `d`. This
+	// means they default to having the CHANGEFEED privilege on all tables in the db.
+	// For changefeed expressions to work, the SELECT privilege is also granted.
+	const percentNonRoot = 1
+	if !opts.forceRootUserConnection && rand.Float32() < percentNonRoot {
+		user := "EnterpriseFeedUser"
+		password := "hunter2"
+		createUserWithDefaultPrivilege(t, rootDB, user, password, "CHANGEFEED", "SELECT")
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(user, password),
+			Host:   s.SQLAddr(),
+			Path:   `d`,
+		}
+		userDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return userDB, func() { _ = userDB.Close() }
+	}
+	return rootDB, func() {}
+}
+
+func getInitialSinkForSinklessFactory(
+	t *testing.T, db *gosql.DB, sinkForUser sinkForUser,
+) (url.URL, func()) {
+	// Instead of creating sinkless changefeeds on the root connection, we may choose to create
+	// them on a test user connection. This user should have the minimum privileges to create a changefeed,
+	// which means they default to having the SELECT privilege on all tables.
+	const percentNonRoot = 1
+	if rand.Float32() < percentNonRoot {
+		user := "SinklessFeedUser"
+		password := "hunter2"
+		createUserWithDefaultPrivilege(t, db, user, password, "SELECT")
+		return sinkForUser(user, password)
+	}
+	return sinkForUser(username.RootUser)
+}
+
+// createUserWithDefaultPrivilege creates a user using the provided db connection
+// such that they have the provided privilege on all existing tables and future tables.
+func createUserWithDefaultPrivilege(
+	t *testing.T, rootDB *gosql.DB, user string, password string, privs ...string,
+) {
+	_, err := rootDB.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS %s WITH PASSWORD '%s'`, user, password))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, priv := range privs {
+		// Ensure the user has privileges on all existing tables.
+		_, err = rootDB.Exec(fmt.Sprintf(`GRANT %s ON * TO %s`, priv, user))
+		if err != nil && !testutils.IsError(err, "no object matched") {
+			t.Fatal(err)
+		}
+		// Ensure the user has privileges on all tables added in the future.
+		_, err = rootDB.Exec(fmt.Sprintf(`ALTER DEFAULT PRIVILEGES GRANT %s ON TABLES TO %s`, priv, user))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func cdcTest(t *testing.T, testFn cdcTestFn, testOpts ...feedTestOption) {
@@ -1213,6 +1313,9 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 
 		`CREATE USER adminUser`,
 		`GRANT ADMIN TO adminUser`,
+
+		`CREATE USER otherAdminUser`,
+		`GRANT ADMIN TO otherAdminUser`,
 
 		`CREATE USER feedCreator`,
 		`GRANT CHANGEFEED ON table_a TO feedCreator`,
