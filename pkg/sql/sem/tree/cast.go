@@ -1471,11 +1471,7 @@ func LookupCastVolatility(from, to *types.T, sd *sessiondata.SessionData) (_ Vol
 // types.T. The original datum is returned if its type is identical
 // to the specified type.
 func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
-	ret, err := performCastWithoutPrecisionTruncation(ctx, d, t, true /* truncateWidth */)
-	if err != nil {
-		return nil, err
-	}
-	return AdjustValueToType(t, ret)
+	return performCast(ctx, d, t, true /* truncateWidth */)
 }
 
 // PerformAssignmentCast performs an assignment cast from the provided Datum to
@@ -1493,11 +1489,15 @@ func PerformAssignmentCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error)
 			"invalid assignment cast: %s -> %s", d.ResolvedType(), t,
 		)
 	}
-	d, err := performCastWithoutPrecisionTruncation(ctx, d, t, false /* truncateWidth */)
+	return performCast(ctx, d, t, false /* truncateWidth */)
+}
+
+func performCast(ctx *EvalContext, d Datum, t *types.T, truncateWidth bool) (Datum, error) {
+	ret, err := performCastWithoutPrecisionTruncation(ctx, d, t, truncateWidth)
 	if err != nil {
 		return nil, err
 	}
-	return AdjustValueToType(t, d)
+	return AdjustValueToType(t, ret)
 }
 
 // AdjustValueToType checks that the width (for strings, byte arrays, and bit
@@ -2455,7 +2455,7 @@ func performCastWithoutPrecisionTruncation(
 				ecast := DNull
 				if e != DNull {
 					var err error
-					ecast, err = PerformCast(ctx, e, t.ArrayContents())
+					ecast, err = performCast(ctx, e, t.ArrayContents(), truncateWidth)
 					if err != nil {
 						return nil, err
 					}
