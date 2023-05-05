@@ -16,39 +16,43 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	rafttracker "go.etcd.io/raft/v3/tracker"
 )
 
-// replicaFlowControlIntegration is used to integrate with replication flow
-// control. It's intercepts various points in a replica's lifecycle, like it
-// acquiring raft leadership or losing it, or its raft membership changing, etc.
-//
-// Accessing it requires Replica.mu to be held, exclusively (this is asserted on
-// in the canonical implementation).
-type replicaFlowControlIntegration interface {
-	handle() (kvflowcontrol.Handle, bool)
-	onBecameLeader(context.Context)
-	onBecameFollower(context.Context)
-	onDescChanged(context.Context)
-	onFollowersPaused(context.Context)
-	onReplicaDestroyed(context.Context)
-	onProposalQuotaUpdated(context.Context)
-	onRaftTransportDisconnected(context.Context, ...roachpb.StoreID)
-}
-
-var _ replicaFlowControlIntegration = &replicaFlowControlIntegrationImpl{}
-
+// replicaFlowControlIntegrationImpl is the canonical implementation of the
+// replicaFlowControlIntegration interface.
 type replicaFlowControlIntegrationImpl struct {
 	replicaForFlowControl replicaForFlowControl
 	handleFactory         kvflowcontrol.HandleFactory
+	knobs                 *kvflowcontrol.TestingKnobs
 
-	innerHandle         kvflowcontrol.Handle
-	lastKnownReplicas   roachpb.ReplicaSet
+	// The fields below are non-nil iff the replica is a raft leader and part of
+	// the range.
+
+	// innerHandle is the underlying kvflowcontrol.Handle, which we
+	// deduct/return flow tokens to, and inform of connected/disconnected
+	// replication streams.
+	innerHandle kvflowcontrol.Handle
+	// lastKnownReplicas tracks the set of last know replicas in the range. This
+	// is updated whenever the range descriptor is changed, and we react to any
+	// deltas by disconnecting streams for replicas no longer part of the range,
+	// connecting streams for new members of the range, or closing innerHandle
+	// if we ourselves are no longer part of the range.
+	lastKnownReplicas roachpb.ReplicaSet
+	// disconnectedStreams tracks the set of replication streams we're not
+	// currently connected to, but want to in the near future should things
+	// change. This includes paused followers (who could be unpaused),
+	// inactive/dead followers (who could become active if the node they're on
+	// is restarted), followers we're not connected to via the raft transport
+	// (the transport streams could re-establish), replicas that are being
+	// caught up via snapshots or are being probed for the last committed index.
+	// This does not include replicas that are no longer part of the range,
+	// since we're not looking to reconnect to them in the future.
 	disconnectedStreams map[roachpb.ReplicaID]kvflowcontrol.Stream
-
-	knobs *kvflowcontrol.TestingKnobs
 }
+
+var _ replicaFlowControlIntegration = &replicaFlowControlIntegrationImpl{}
 
 func newReplicaFlowControlIntegration(
 	replicaForFlowControl replicaForFlowControl,
@@ -65,11 +69,7 @@ func newReplicaFlowControlIntegration(
 	}
 }
 
-func (f *replicaFlowControlIntegrationImpl) handle() (kvflowcontrol.Handle, bool) {
-	f.replicaForFlowControl.assertLocked()
-	return f.innerHandle, f.innerHandle != nil
-}
-
+// onBecameLeader is part of the replicaFlowControlIntegration interface.
 func (f *replicaFlowControlIntegrationImpl) onBecameLeader(ctx context.Context) {
 	f.replicaForFlowControl.assertLocked()
 	if f.innerHandle != nil {
@@ -78,13 +78,14 @@ func (f *replicaFlowControlIntegrationImpl) onBecameLeader(ctx context.Context) 
 	if !f.replicaForFlowControl.getTenantID().IsSet() {
 		log.Fatal(ctx, "unset tenant ID")
 	}
-
 	if f.knobs.UseOnlyForScratchRanges && !f.replicaForFlowControl.isScratchRange() {
-		return
+		return // nothing to do
 	}
 
 	// See I5 from kvflowcontrol/doc.go. The per-replica kvflowcontrol.Handle is
-	// tied to the lifetime of a leaseholder replica having raft leadership.
+	// tied to the lifetime of a leaseholder replica having raft leadership. We
+	// don't intercept lease acquisitions/transfers -- simply raft leadership.
+	// This is ok since leadership follows the lease.
 	f.innerHandle = f.handleFactory.NewHandle(
 		f.replicaForFlowControl.getRangeID(),
 		f.replicaForFlowControl.getTenantID(),
@@ -92,21 +93,29 @@ func (f *replicaFlowControlIntegrationImpl) onBecameLeader(ctx context.Context) 
 	f.lastKnownReplicas = f.replicaForFlowControl.getDescriptor().Replicas()
 	f.disconnectedStreams = make(map[roachpb.ReplicaID]kvflowcontrol.Stream)
 
-	appliedLogPosition := f.replicaForFlowControl.getAppliedLogPosition()
-	for _, desc := range f.replicaForFlowControl.getDescriptor().Replicas().Descriptors() {
-		// Start off every remote stream as disconnected. Later we'll try to
-		// reconnect them.
-		stream := kvflowcontrol.Stream{
-			TenantID: f.replicaForFlowControl.getTenantID(),
-			StoreID:  desc.StoreID,
-		}
-		if f.replicaForFlowControl.getReplicaID() != desc.ReplicaID {
-			f.disconnectedStreams[desc.ReplicaID] = stream
-			continue
-		}
-		// Connect to the local stream.
-		f.innerHandle.ConnectStream(ctx, appliedLogPosition, stream)
+	// Connect to the local stream.
+	localRepl, found := f.lastKnownReplicas.GetReplicaDescriptorByID(f.replicaForFlowControl.getReplicaID())
+	if !found {
+		log.Fatalf(ctx, "leader (replid=%d) didn't find self in last known replicas (%s)",
+			f.replicaForFlowControl.getReplicaID(), f.lastKnownReplicas)
 	}
+	f.innerHandle.ConnectStream(ctx,
+		f.replicaForFlowControl.getAppliedLogPosition(),
+		kvflowcontrol.Stream{
+			TenantID: f.replicaForFlowControl.getTenantID(),
+			StoreID:  localRepl.StoreID,
+		},
+	)
+
+	// Start off every remote stream as disconnected. Later we'll try to
+	// reconnect them.
+	var toDisconnect []roachpb.ReplicaDescriptor
+	for _, desc := range f.replicaForFlowControl.getDescriptor().Replicas().Descriptors() {
+		if desc.ReplicaID != localRepl.ReplicaID {
+			toDisconnect = append(toDisconnect, desc)
+		}
+	}
+	f.disconnectStreams(ctx, toDisconnect, "unknown followers on new leader")
 	f.tryReconnect(ctx)
 
 	if log.V(1) {
@@ -117,11 +126,15 @@ func (f *replicaFlowControlIntegrationImpl) onBecameLeader(ctx context.Context) 
 		sort.Slice(disconnected, func(i, j int) bool {
 			return disconnected[i].StoreID < disconnected[j].StoreID
 		})
-		log.Infof(ctx, "assumed raft leadership: initializing flow handle for %s starting at %s (disconnected streams: %s)",
-			f.replicaForFlowControl.getDescriptor(), appliedLogPosition, disconnected)
+		log.VInfof(ctx, 1, "assumed raft leadership: initializing flow handle for %s starting at %s (disconnected streams: %s)",
+			f.replicaForFlowControl.getDescriptor(),
+			f.replicaForFlowControl.getAppliedLogPosition(),
+			disconnected,
+		)
 	}
 }
 
+// onBecameFollower is part of the replicaFlowControlIntegration interface.
 func (f *replicaFlowControlIntegrationImpl) onBecameFollower(ctx context.Context) {
 	f.replicaForFlowControl.assertLocked()
 	if f.innerHandle == nil {
@@ -135,12 +148,10 @@ func (f *replicaFlowControlIntegrationImpl) onBecameFollower(ctx context.Context
 	// scenarios.
 	log.VInfof(ctx, 1, "lost raft leadership: releasing flow tokens and closing handle for %s",
 		f.replicaForFlowControl.getDescriptor())
-	f.innerHandle.Close(ctx)
-	f.innerHandle = nil
-	f.lastKnownReplicas = roachpb.MakeReplicaSet(nil)
-	f.disconnectedStreams = nil
+	f.clearState(ctx)
 }
 
+// onDescChanged is part of the replicaFlowControlIntegration interface.
 func (f *replicaFlowControlIntegrationImpl) onDescChanged(ctx context.Context) {
 	f.replicaForFlowControl.assertLocked()
 	if f.innerHandle == nil {
@@ -150,45 +161,32 @@ func (f *replicaFlowControlIntegrationImpl) onDescChanged(ctx context.Context) {
 	addedReplicas, removedReplicas := f.lastKnownReplicas.Difference(
 		f.replicaForFlowControl.getDescriptor().Replicas(),
 	)
+
+	ourReplicaID := f.replicaForFlowControl.getReplicaID()
 	for _, repl := range removedReplicas {
-		if repl.ReplicaID == f.replicaForFlowControl.getReplicaID() {
+		if repl.ReplicaID == ourReplicaID {
 			// We're observing ourselves get removed from the raft group, but
 			// are still retaining raft leadership. Close the underlying handle
 			// and bail.
-			//
-			// TODO(irfansharif): Is this even possible?
-			f.innerHandle.Close(ctx)
-			f.innerHandle = nil
-			f.lastKnownReplicas = roachpb.MakeReplicaSet(nil)
-			f.disconnectedStreams = nil
+			f.clearState(ctx)
 			return
 		}
-		// See I10 from kvflowcontrol/doc.go. We stop deducting flow tokens for
-		// replicas that are no longer part of the raft group, free-ing up all
-		// held tokens.
-		f.innerHandle.DisconnectStream(ctx, kvflowcontrol.Stream{
-			TenantID: f.replicaForFlowControl.getTenantID(),
-			StoreID:  repl.StoreID,
-		})
+	}
+
+	// See I10 from kvflowcontrol/doc.go. We stop deducting flow tokens for
+	// replicas that are no longer part of the raft group, free-ing up all
+	// held tokens.
+	f.disconnectStreams(ctx, removedReplicas, "removed replicas")
+	for _, repl := range removedReplicas {
+		// We'll not reconnect to these replicas either, so untrack them.
 		delete(f.disconnectedStreams, repl.ReplicaID)
 	}
 
-	for _, repl := range addedReplicas {
-		// Start off new replicas as disconnected. We'll subsequently try to
-		// re-add them, once we know their log positions and consider them
-		// sufficiently caught up. See I3a from kvflowcontrol/doc.go.
-		if repl.ReplicaID == f.replicaForFlowControl.getReplicaID() {
-			log.Fatalf(ctx, "observed replica adding itself to the range descriptor")
-		}
-		if _, found := f.disconnectedStreams[repl.ReplicaID]; found {
-			continue // already disconnected, nothing to do
-		}
-		stream := kvflowcontrol.Stream{
-			TenantID: f.replicaForFlowControl.getTenantID(),
-			StoreID:  repl.StoreID,
-		}
-		f.disconnectedStreams[repl.ReplicaID] = stream
-	}
+	// Start off new replicas as disconnected. We'll subsequently try to
+	// re-add them, once we know their log positions and consider them
+	// sufficiently caught up. See I3a from kvflowcontrol/doc.go.
+	f.disconnectStreams(ctx, addedReplicas, "newly added replicas")
+
 	if len(addedReplicas) > 0 || len(removedReplicas) > 0 {
 		log.VInfof(ctx, 1, "desc changed from %s to %s: added=%s removed=%s",
 			f.lastKnownReplicas, f.replicaForFlowControl.getDescriptor(), addedReplicas, removedReplicas,
@@ -197,170 +195,19 @@ func (f *replicaFlowControlIntegrationImpl) onDescChanged(ctx context.Context) {
 	f.lastKnownReplicas = f.replicaForFlowControl.getDescriptor().Replicas()
 }
 
+// onFollowersPaused is part of the replicaFlowControlIntegration interface.
 func (f *replicaFlowControlIntegrationImpl) onFollowersPaused(ctx context.Context) {
 	f.replicaForFlowControl.assertLocked()
 	if f.innerHandle == nil {
 		return // nothing to do
 	}
 
-	var toDisconnect []roachpb.ReplicaDescriptor
 	// See I3 from kvflowcontrol/doc.go. We don't deduct flow tokens for
 	// replication traffic that's not headed to paused replicas.
-	for replID := range f.replicaForFlowControl.getPausedFollowers() {
-		repl, ok := f.lastKnownReplicas.GetReplicaDescriptorByID(replID)
-		if !ok {
-			// As of 4/23, we don't make any strong guarantees around the set of
-			// paused followers we're tracking, nothing that ensures that what's
-			// tracked is guaranteed to be a member of the range descriptor. We
-			// treat the range descriptor derived state as authoritative.
-			continue
-		}
-		if repl.ReplicaID == f.replicaForFlowControl.getReplicaID() {
-			log.Fatalf(ctx, "observed replica pausing replication traffic to itself")
-		}
-		toDisconnect = append(toDisconnect, repl)
-	}
-
-	f.disconnectStreams(ctx, toDisconnect, "paused followers")
-	f.tryReconnect(ctx)
+	f.refreshStreams(ctx, "paused followers")
 }
 
-func (f *replicaFlowControlIntegrationImpl) onReplicaDestroyed(ctx context.Context) {
-	f.replicaForFlowControl.assertLocked()
-	if f.innerHandle == nil {
-		return // nothing to do
-	}
-
-	// During merges, the context might have the subsuming range, so we
-	// explicitly (re-)annotate it here.
-	ctx = f.replicaForFlowControl.annotateCtx(ctx)
-
-	// See I6, I9 from kvflowcontrol/doc.go. We want to free up all held flow
-	// tokens when a replica is being removed, for example when it's being
-	// rebalanced away, is no longer part of the raft group, is being GC-ed,
-	// destroyed as part of the EndTxn merge trigger, or subsumed if applying
-	// the merge as part of an incoming snapshot.
-	f.innerHandle.Close(ctx)
-	f.innerHandle = nil
-	f.lastKnownReplicas = roachpb.MakeReplicaSet(nil)
-	f.disconnectedStreams = nil
-}
-
-func (f *replicaFlowControlIntegrationImpl) onProposalQuotaUpdated(ctx context.Context) {
-	f.replicaForFlowControl.assertLocked()
-	if f.innerHandle == nil {
-		return // nothing to do
-	}
-
-	var toDisconnect []roachpb.ReplicaDescriptor
-
-	// Disconnect any recently inactive followers.
-	//
-	// TODO(irfansharif): Experimentally this gets triggered quite often. It
-	// might be too sensitive and may result in ineffective flow control as
-	// a result. Fix as part of #95563.
-	for _, repl := range f.lastKnownReplicas.Descriptors() {
-		if f.replicaForFlowControl.isFollowerLive(ctx, repl.ReplicaID) {
-			continue // nothing to do
-		}
-		if repl.ReplicaID == f.replicaForFlowControl.getReplicaID() {
-			// NB: We ignore ourselves from this last-updated map. For followers
-			// we update the timestamps when we step a message from them into
-			// the local raft group, but for the leader we only update it
-			// whenever it ticks. So in workloads where the leader only sees
-			// occasional writes, it could see itself as non-live. This is
-			// likely unintentional, but we paper over it here.
-			continue // nothing to do
-		}
-		if fn := f.knobs.MaintainStreamsForInactiveFollowers; fn != nil && fn() {
-			continue // nothing to do
-		}
-		toDisconnect = append(toDisconnect, repl)
-	}
-	f.disconnectStreams(ctx, toDisconnect, "inactive followers")
-
-	// Disconnect any streams we're not actively replicating to.
-	toDisconnect = nil
-	for _, replID := range f.notActivelyReplicatingTo() {
-		repl, ok := f.lastKnownReplicas.GetReplicaDescriptorByID(replID)
-		if !ok {
-			continue
-		}
-		if repl.ReplicaID == f.replicaForFlowControl.getReplicaID() {
-			log.Fatalf(ctx, "leader replica observed that it was not being actively replicated to")
-		}
-		toDisconnect = append(toDisconnect, repl)
-	}
-	f.disconnectStreams(ctx, toDisconnect, "not actively replicating")
-
-	f.tryReconnect(ctx)
-}
-
-// notActivelyReplicatingTo lists the replicas that aren't actively receiving
-// log entries to append to its log, from raft's perspective (i.e. this is
-// unrelated to CRDB-level follower pausing). This encompasses newly added
-// replicas that we're still probing to figure out its last index, replicas
-// that are pending raft snapshots because the leader has truncated away entries
-// higher than its last position, and replicas we're not currently connected to
-// via the raft transport.
-func (f *replicaFlowControlIntegrationImpl) notActivelyReplicatingTo() []roachpb.ReplicaID {
-	var res []roachpb.ReplicaID
-	f.replicaForFlowControl.withReplicaProgress(func(replID roachpb.ReplicaID, progress rafttracker.Progress) {
-		if replID == f.replicaForFlowControl.getReplicaID() {
-			return
-		}
-		repl, ok := f.lastKnownReplicas.GetReplicaDescriptorByID(replID)
-		if !ok {
-			return
-		}
-
-		if progress.State != rafttracker.StateReplicate {
-			res = append(res, replID)
-			// TODO(irfansharif): Integrating with these other progress fields
-			// from raft. For replicas exiting rafttracker.StateProbe, perhaps
-			// compare progress.Match against status.Commit to make sure it's
-			// sufficiently caught up with respect to its raft log before we
-			// start deducting tokens for it (lest we run into I3a from
-			// kvflowcontrol/doc.go). To play well with the replica-level
-			// proposal quota pool, maybe we also factor its base index?
-			// Replicas that crashed and came back could come back in
-			// StateReplicate but be behind on their logs. If we're deducting
-			// tokens right away for subsequent proposals, it would take some
-			// time for it to catch up and then later return those tokens to us.
-			// This is I3a again; do it as part of #95563.
-			_ = progress.RecentActive
-			_ = progress.MsgAppFlowPaused
-			_ = progress.Match
-			return
-		}
-
-		if !f.replicaForFlowControl.isRaftTransportConnectedTo(repl.StoreID) {
-			if fn := f.knobs.MaintainStreamsForBrokenRaftTransport; fn != nil && fn() {
-				return // nothing to do
-			}
-			res = append(res, replID)
-		}
-	})
-	return res
-}
-
-func (f *replicaFlowControlIntegrationImpl) disconnectStreams(
-	ctx context.Context, toDisconnect []roachpb.ReplicaDescriptor, reason string,
-) {
-	for _, repl := range toDisconnect {
-		if _, found := f.disconnectedStreams[repl.ReplicaID]; found {
-			continue // already disconnected, nothing to do
-		}
-		stream := kvflowcontrol.Stream{
-			TenantID: f.replicaForFlowControl.getTenantID(),
-			StoreID:  repl.StoreID,
-		}
-		f.innerHandle.DisconnectStream(ctx, stream)
-		f.disconnectedStreams[repl.ReplicaID] = stream
-		log.VInfof(ctx, 1, "tracked disconnected stream: %s (reason: %s)", stream, reason)
-	}
-}
-
+// onRaftTransportDisconnected is part of the replicaFlowControlIntegration interface.
 func (f *replicaFlowControlIntegrationImpl) onRaftTransportDisconnected(
 	ctx context.Context, storeIDs ...roachpb.StoreID,
 ) {
@@ -378,8 +225,12 @@ func (f *replicaFlowControlIntegrationImpl) onRaftTransportDisconnected(
 		disconnectedStores[storeID] = struct{}{}
 	}
 
+	ourReplicaID := f.replicaForFlowControl.getReplicaID()
 	var toDisconnect []roachpb.ReplicaDescriptor
 	for _, repl := range f.lastKnownReplicas.Descriptors() {
+		if repl.ReplicaID == ourReplicaID {
+			continue
+		}
 		if _, found := disconnectedStores[repl.StoreID]; found {
 			toDisconnect = append(toDisconnect, repl)
 		}
@@ -388,54 +239,183 @@ func (f *replicaFlowControlIntegrationImpl) onRaftTransportDisconnected(
 	f.tryReconnect(ctx)
 }
 
-func (f *replicaFlowControlIntegrationImpl) tryReconnect(ctx context.Context) {
-	// Try reconnecting streams we disconnected.
-	pausedFollowers := f.replicaForFlowControl.getPausedFollowers()
-	notActivelyReplicatingTo := f.notActivelyReplicatingTo()
-	appliedLogPosition := f.replicaForFlowControl.getAppliedLogPosition()
+// onProposalQuotaUpdated is part of the replicaFlowControlIntegration interface.
+func (f *replicaFlowControlIntegrationImpl) onRaftTicked(ctx context.Context) {
+	f.replicaForFlowControl.assertLocked()
+	if f.innerHandle == nil {
+		return // nothing to do
+	}
 
+	f.refreshStreams(ctx, "refreshing streams")
+}
+
+// onDestroyed is part of the replicaFlowControlIntegration interface.
+func (f *replicaFlowControlIntegrationImpl) onDestroyed(ctx context.Context) {
+	f.replicaForFlowControl.assertLocked()
+	if f.innerHandle == nil {
+		return // nothing to do
+	}
+
+	// During merges, the context might have the subsuming range, so we
+	// explicitly (re-)annotate it here.
+	ctx = f.replicaForFlowControl.annotateCtx(ctx)
+
+	// See I6, I9 from kvflowcontrol/doc.go. We want to free up all held flow
+	// tokens when a replica is being removed, for example when it's being
+	// rebalanced away, is no longer part of the raft group, is being GC-ed,
+	// destroyed as part of the EndTxn merge trigger, or subsumed if applying
+	// the merge as part of an incoming snapshot.
+	f.clearState(ctx)
+}
+
+// handle is part of the replicaFlowControlIntegration interface.
+func (f *replicaFlowControlIntegrationImpl) handle() (kvflowcontrol.Handle, bool) {
+	f.replicaForFlowControl.assertLocked()
+	return f.innerHandle, f.innerHandle != nil
+}
+
+// refreshStreams disconnects any streams we're not actively replicating to, and
+// reconnect previously disconnected streams if we're able.
+func (f *replicaFlowControlIntegrationImpl) refreshStreams(ctx context.Context, reason string) {
+	f.disconnectStreams(ctx, f.notActivelyReplicatingTo(), reason)
+	f.tryReconnect(ctx)
+}
+
+// notActivelyReplicatingTo lists the replicas that aren't actively receiving
+// log entries to append to its log. This encompasses newly added replicas that
+// we're still probing to figure out its last index (I4), replicas that are
+// pending raft snapshots because the leader has truncated away entries higher
+// than its last position (I4), replicas on dead nodes (I2), replicas we're not
+// connected to via the raft transport (I1), and paused followers (I3).
+func (f *replicaFlowControlIntegrationImpl) notActivelyReplicatingTo() []roachpb.ReplicaDescriptor {
+	pausedFollowers := f.replicaForFlowControl.getPausedFollowers()
+	behindFollowers := f.replicaForFlowControl.getBehindFollowers()
+	inactiveFollowers := f.replicaForFlowControl.getInactiveFollowers()
+	disconnectedFollowers := f.replicaForFlowControl.getDisconnectedFollowers()
+
+	maintainStreamsForBrokenRaftTransport := f.knobs.MaintainStreamsForBrokenRaftTransport != nil &&
+		f.knobs.MaintainStreamsForBrokenRaftTransport()
+	maintainStreamsForInactiveFollowers := f.knobs.MaintainStreamsForInactiveFollowers != nil &&
+		f.knobs.MaintainStreamsForInactiveFollowers()
+
+	notActivelyReplicatingTo := make(map[roachpb.ReplicaDescriptor]struct{})
+	ourReplicaID := f.replicaForFlowControl.getReplicaID()
+	for _, repl := range f.lastKnownReplicas.Descriptors() {
+		if repl.ReplicaID == ourReplicaID {
+			// NB: We ignore ourselves from the {paused,behind}-followers
+			// blocklist (we're the leader), the raft transport check (we're not
+			// connected to ourselves through the transport), and the
+			// last-updated map. The latter is a bit odd - for followers we
+			// update the timestamps when we step a message from them into the
+			// local raft group, but for the leader we only update it whenever
+			// it ticks. So in workloads where the leader only sees occasional
+			// writes, it could see itself as non-live. This is likely
+			// unintentional, but we paper over it here anyway.
+			continue
+		}
+
+		if _, found := pausedFollowers[repl.ReplicaID]; found {
+			// As of 4/23, we don't make any strong guarantees around the set of
+			// paused followers we're tracking, nothing that ensures that what's
+			// tracked is guaranteed to be a member of the range descriptor. We
+			// treat the range descriptor derived state as authoritative.
+			notActivelyReplicatingTo[repl] = struct{}{}
+		}
+
+		if _, found := behindFollowers[repl.ReplicaID]; found {
+			notActivelyReplicatingTo[repl] = struct{}{}
+		}
+
+		if _, found := inactiveFollowers[repl.ReplicaID]; found &&
+			!maintainStreamsForInactiveFollowers {
+			notActivelyReplicatingTo[repl] = struct{}{}
+
+			// TODO(irfansharif): Experimentally this gets triggered quite often. It
+			// might be too sensitive and may result in ineffective flow control as
+			// a result. Fix as part of #95563.
+		}
+
+		if _, found := disconnectedFollowers[repl.ReplicaID]; found &&
+			!maintainStreamsForBrokenRaftTransport {
+			notActivelyReplicatingTo[repl] = struct{}{}
+		}
+	}
+
+	var repls []roachpb.ReplicaDescriptor
+	for repl := range notActivelyReplicatingTo {
+		repls = append(repls, repl)
+	}
+	return repls
+}
+
+// disconnectStreams disconnects replication streams for the given replicas.
+func (f *replicaFlowControlIntegrationImpl) disconnectStreams(
+	ctx context.Context, toDisconnect []roachpb.ReplicaDescriptor, reason string,
+) {
+	ourReplicaID := f.replicaForFlowControl.getReplicaID()
+	for _, repl := range toDisconnect {
+		if repl.ReplicaID == ourReplicaID {
+			log.Fatal(ctx, "replica attempting to disconnect from itself")
+		}
+		if _, found := f.disconnectedStreams[repl.ReplicaID]; found {
+			continue // already disconnected, nothing to do
+		}
+		stream := kvflowcontrol.Stream{
+			TenantID: f.replicaForFlowControl.getTenantID(),
+			StoreID:  repl.StoreID,
+		}
+		f.innerHandle.DisconnectStream(ctx, stream)
+		f.disconnectedStreams[repl.ReplicaID] = stream
+		log.VInfof(ctx, 1, "tracked disconnected stream: %s (reason: %s)", stream, reason)
+	}
+}
+
+// tryReconnect tries to reconnect to previously disconnected streams.
+func (f *replicaFlowControlIntegrationImpl) tryReconnect(ctx context.Context) {
 	var disconnectedRepls []roachpb.ReplicaID
 	for replID := range f.disconnectedStreams {
 		disconnectedRepls = append(disconnectedRepls, replID)
 	}
-	sort.Slice(disconnectedRepls, func(i, j int) bool { // for determinism in tests
-		return disconnectedRepls[i] < disconnectedRepls[j]
-	})
-	for _, replID := range disconnectedRepls {
-		stream := f.disconnectedStreams[replID]
-		if _, ok := pausedFollowers[replID]; ok {
-			continue // still paused, nothing to reconnect
-		}
+	if buildutil.CrdbTestBuild {
+		sort.Slice(disconnectedRepls, func(i, j int) bool { // for determinism in tests
+			return disconnectedRepls[i] < disconnectedRepls[j]
+		})
+	}
 
-		repl, ok := f.lastKnownReplicas.GetReplicaDescriptorByID(replID)
-		if !ok {
+	notActivelyReplicatingTo := f.notActivelyReplicatingTo()
+	appliedLogPosition := f.replicaForFlowControl.getAppliedLogPosition()
+	for _, replID := range disconnectedRepls {
+		if _, ok := f.lastKnownReplicas.GetReplicaDescriptorByID(replID); !ok {
 			log.Fatalf(ctx, "%s: tracking %s in disconnected streams despite it not being in descriptor: %s",
 				f.replicaForFlowControl.getReplicaID(), replID, f.lastKnownReplicas)
-		}
-		if !f.replicaForFlowControl.isFollowerLive(ctx, replID) {
-			continue // still inactive, nothing to reconnect
 		}
 
 		notReplicatedTo := false
 		for _, notReplicatedToRepl := range notActivelyReplicatingTo {
-			if replID == notReplicatedToRepl {
+			if replID == notReplicatedToRepl.ReplicaID {
 				notReplicatedTo = true
 				break
 			}
 		}
 		if notReplicatedTo {
-			continue // not actively replicated to, yet; nothing to reconnect
-		}
-
-		if !f.replicaForFlowControl.isRaftTransportConnectedTo(repl.StoreID) {
-			continue // not connected to via raft transport
+			continue // not being actively replicated to, yet; nothing to reconnect
 		}
 
 		// See I1, I2, I3, I3a, I4 from kvflowcontrol/doc.go. Replica is
 		// connected to via the RaftTransport (I1), on a live node (I2), not
 		// paused (I3), and is being actively replicated to through log entries
 		// (I3a, I4). Re-connect so we can start deducting tokens for it.
+		stream := f.disconnectedStreams[replID]
 		f.innerHandle.ConnectStream(ctx, appliedLogPosition, stream)
 		delete(f.disconnectedStreams, replID)
 	}
+}
+
+// clearState closes the underlying kvflowcontrol.Handle and clears internal
+// tracking state.
+func (f *replicaFlowControlIntegrationImpl) clearState(ctx context.Context) {
+	f.innerHandle.Close(ctx)
+	f.innerHandle = nil
+	f.lastKnownReplicas = roachpb.MakeReplicaSet(nil)
+	f.disconnectedStreams = nil
 }
