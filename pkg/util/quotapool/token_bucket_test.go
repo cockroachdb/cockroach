@@ -28,7 +28,7 @@ func TestTokenBucket(t *testing.T) {
 		t.Helper()
 		const eps = 1e-10
 		tb.Update()
-		if delta := tb.current - expected; delta > eps || delta < -eps {
+		if delta := tb.Available() - expected; delta > eps || delta < -eps {
 			t.Fatalf("expected current amount %v, got %v", expected, tb.current)
 		}
 	}
@@ -46,6 +46,13 @@ func TestTokenBucket(t *testing.T) {
 			} else if tryAgainAfter.Round(time.Microsecond) != expected.Round(time.Microsecond) {
 				t.Fatalf("expected tryAgainAfter %v, got %v", expected, tryAgainAfter)
 			}
+		}
+	}
+
+	checkExhausted := func(expDur time.Duration) {
+		t.Helper()
+		if got := tb.Exhausted(); got != expDur {
+			t.Fatalf("expected exhausted duration %s, got %s", expDur, got)
 		}
 	}
 
@@ -85,4 +92,34 @@ func TestTokenBucket(t *testing.T) {
 	tb.UpdateConfig(10, 20)
 	check(-980)
 	checkFulfill(20, 100*time.Second)
+
+	// Verify that resetting the bucket resets it to the burst size.
+	tb.Reset()
+	check(20)
+
+	tb.UpdateConfig(100, 100)
+	tb.Reset()
+	check(100)
+
+	// Ensure that the exhaustion metric behaves as expected.
+	initialExhausted := tb.Exhausted()
+	// Put the token bucket into debt.
+	tb.Adjust(-110)
+	check(-10)
+	// Advance the clock by 20ms, but it should still be in debt.
+	mt.Advance(20 * time.Millisecond)
+	check(-8)
+	// Verify that we've accumulated this 20ms into our exhaustion value.
+	checkExhausted(initialExhausted + 20*time.Millisecond)
+	// Advance the clock by just enough to no longer be exhausted.
+	mt.Advance(90 * time.Millisecond)
+	check(1)
+	// Verify that we've accumulated the 90ms into our exhaustion metric.
+	checkExhausted(initialExhausted + (20+90)*time.Millisecond)
+	// Add more tokens by advancing the clock.
+	mt.Advance(200 * time.Millisecond)
+	check(21)
+	// Check that our exhaustion duration is unchanged, since we've stayed in
+	// the positive.
+	checkExhausted(initialExhausted + (20+90)*time.Millisecond)
 }
