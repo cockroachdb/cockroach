@@ -2672,10 +2672,7 @@ CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'DROP TABLE t'
 
 subtest mutation
 
-# Mutations are not currently supported in UDF bodies.
-statement error pgcode 0A000 unimplemented: UPDATE usage inside a function definition
-CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'UPDATE t SET a = 1'
-
+# Not all mutations are currently supported in UDF bodies.
 statement error pgcode 0A000 unimplemented: DELETE usage inside a function definition
 CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'DELETE FROM t WHERE a = 1'
 
