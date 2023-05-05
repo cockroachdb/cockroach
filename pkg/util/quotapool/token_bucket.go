@@ -36,6 +36,9 @@ type TokenBucket struct {
 
 	current     Tokens
 	lastUpdated time.Time
+
+	exhaustedStart  time.Time
+	exhaustedMicros int64
 }
 
 // Init the token bucket.
@@ -60,6 +63,14 @@ func (tb *TokenBucket) Update() {
 			tb.current = tb.burst
 		}
 		tb.lastUpdated = now
+
+		if tb.current <= 0 && tb.exhaustedStart.IsZero() {
+			tb.exhaustedStart = now
+		}
+		if tb.current > 0 && !tb.exhaustedStart.IsZero() {
+			tb.exhaustedMicros += now.Sub(tb.exhaustedStart).Microseconds()
+			tb.exhaustedStart = time.Time{}
+		}
 	}
 }
 
@@ -77,6 +88,12 @@ func (tb *TokenBucket) UpdateConfig(rate TokensPerSecond, burst Tokens) {
 	tb.burst = burst
 
 	tb.current += burstDelta
+}
+
+// Reset resets the current tokens to whatever the burst is.
+func (tb *TokenBucket) Reset() {
+	tb.current = tb.burst
+	tb.Update()
 }
 
 // Adjust returns tokens to the bucket (positive delta) or accounts for a debt
@@ -113,6 +130,18 @@ func (tb *TokenBucket) TryToFulfill(amount Tokens) (fulfilled bool, tryAgainAfte
 
 	tb.current -= amount
 	return true, 0
+}
+
+// Exhausted returns the cumulative duration over which this token bucket was
+// exhausted. Exported only for metrics.
+func (tb *TokenBucket) Exhausted() time.Duration {
+	return time.Duration(tb.exhaustedMicros) * time.Microsecond
+}
+
+// Available returns the currently available tokens (can be -ve). Exported only
+// for metrics.
+func (tb *TokenBucket) Available() Tokens {
+	return tb.current
 }
 
 // TestingInternalParameters returns the refill rate (configured), burst tokens

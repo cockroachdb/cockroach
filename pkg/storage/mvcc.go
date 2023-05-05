@@ -6441,6 +6441,14 @@ func mvccExportToWriter(
 	}
 
 	elasticCPUHandle := admission.ElasticCPUWorkHandleFromContext(ctx)
+	// See #102817. We re-set the internal timers and risk over-admission given
+	// that Export requests, before hitting this code-path, may have already
+	// used up their entire allotted CPU slice resolving intents, or doing
+	// conflict resolution. The effect is that OverLimit() will be immediate
+	// true, and we'll have exported just a single key for the entire request,
+	// making for extremely inefficient backups.
+	elasticCPUHandle.ResetTimer()
+
 	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
 		StartKey:             opts.StartKey.Key,
