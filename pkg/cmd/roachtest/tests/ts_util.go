@@ -38,9 +38,13 @@ const (
 	rate
 )
 
+// defaultSamplePeriod is the default sampling period for getMetrics.
+const defaultSamplePeriod = time.Minute
+
 type tsQuery struct {
 	name      string
 	queryType tsQueryType
+	sources   []string
 }
 
 func mustGetMetrics(
@@ -56,6 +60,12 @@ func mustGetMetrics(
 func getMetrics(
 	adminURL string, start, end time.Time, tsQueries []tsQuery,
 ) (tspb.TimeSeriesQueryResponse, error) {
+	return getMetricsWithSamplePeriod(adminURL, start, end, defaultSamplePeriod, tsQueries)
+}
+
+func getMetricsWithSamplePeriod(
+	adminURL string, start, end time.Time, samplePeriod time.Duration, tsQueries []tsQuery,
+) (tspb.TimeSeriesQueryResponse, error) {
 	url := "http://" + adminURL + "/ts/query"
 	queries := make([]tspb.Query, len(tsQueries))
 	for i := 0; i < len(tsQueries); i++ {
@@ -65,6 +75,7 @@ func getMetrics(
 				Name:             tsQueries[i].name,
 				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
 				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+				Sources:          tsQueries[i].sources,
 			}
 		case rate:
 			queries[i] = tspb.Query{
@@ -72,6 +83,7 @@ func getMetrics(
 				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
 				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
 				Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
+				Sources:          tsQueries[i].sources,
 			}
 		default:
 			panic("unexpected")
@@ -83,7 +95,7 @@ func getMetrics(
 		// Ask for one minute intervals. We can't just ask for the whole hour
 		// because the time series query system does not support downsampling
 		// offsets.
-		SampleNanos: (1 * time.Minute).Nanoseconds(),
+		SampleNanos: samplePeriod.Nanoseconds(),
 		Queries:     queries,
 	}
 	var response tspb.TimeSeriesQueryResponse
