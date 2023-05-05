@@ -320,7 +320,6 @@ func (b *Builder) buildStmt(
 			panic(unimplemented.NewWithIssuef(87289, "%s usage inside a function definition", stmt.StatementTag()))
 		case *tree.Insert:
 		case *tree.Update:
-			panic(unimplemented.NewWithIssuef(87289, "%s usage inside a function definition", stmt.StatementTag()))
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}
