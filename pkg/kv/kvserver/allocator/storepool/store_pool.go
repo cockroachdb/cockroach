@@ -1087,7 +1087,7 @@ func MakeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 func (sl StoreList) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf,
-		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-queries-per-second=%v avg-store-cpu-per-second=%v",
+		"  candidate: avg-ranges=%.2f avg-leases=%.2f avg-disk-usage=%s avg-queries-per-second=%.2f avg-store-cpu-per-second=%s",
 		sl.CandidateRanges.Mean,
 		sl.CandidateLeases.Mean,
 		humanizeutil.IBytes(int64(sl.candidateLogicalBytes.Mean)),
