@@ -45,12 +45,13 @@ var (
 
 // Config is used to construct an OracleFactory.
 type Config struct {
-	NodeDescs  kvcoord.NodeDescStore
-	NodeID     roachpb.NodeID   // current node's ID. 0 for secondary tenants.
-	Locality   roachpb.Locality // current node's locality.
-	Settings   *cluster.Settings
-	Clock      *hlc.Clock
-	RPCContext *rpc.Context
+	NodeDescs   kvcoord.NodeDescStore
+	NodeID      roachpb.NodeID   // current node's ID. 0 for secondary tenants.
+	Locality    roachpb.Locality // current node's locality.
+	Settings    *cluster.Settings
+	Clock       *hlc.Clock
+	RPCContext  *rpc.Context
+	LatencyFunc kvcoord.LatencyFunc
 }
 
 // Oracle is used to choose the lease holder for ranges. This
@@ -163,11 +164,15 @@ type closestOracle struct {
 }
 
 func newClosestOracle(cfg Config) Oracle {
+	latencyFn := cfg.LatencyFunc
+	if latencyFn == nil {
+		latencyFn = latencyFunc(cfg.RPCContext)
+	}
 	return &closestOracle{
 		nodeDescs:   cfg.NodeDescs,
 		nodeID:      cfg.NodeID,
 		locality:    cfg.Locality,
-		latencyFunc: latencyFunc(cfg.RPCContext),
+		latencyFunc: latencyFn,
 	}
 }
 

@@ -527,6 +527,11 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	return ds
 }
 
+// LatencyFunc returns the LatencyFunc of the DistSender.
+func (ds *DistSender) LatencyFunc() LatencyFunc {
+	return ds.latencyFunc
+}
+
 // DisableFirstRangeUpdates disables updates of the first range via
 // gossip. Used by tests which want finer control of the contents of the range
 // cache.
