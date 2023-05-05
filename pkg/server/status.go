@@ -2270,7 +2270,6 @@ func (s *systemStatusServer) TenantRanges(
 
 	tID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
-		log.Infof(ctx, "COULD NOT FIND TENANT ID")
 		return nil, status.Error(codes.Internal, "no tenant ID found in context")
 	}
 
