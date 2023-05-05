@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -165,10 +166,11 @@ func (p *planner) maybeLogStatement(
 	telemetryLoggingMetrics *TelemetryLoggingMetrics,
 	stmtFingerprintID appstatspb.StmtFingerprintID,
 	queryStats *topLevelQueryStats,
+	statsCollector sqlstats.StatsCollector,
 ) {
 	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter,
 		rows, bulkJobId, err, queryReceived, hasAdminRoleCache,
-		telemetryLoggingMetrics, stmtFingerprintID, queryStats,
+		telemetryLoggingMetrics, stmtFingerprintID, queryStats, statsCollector,
 	)
 }
 
@@ -185,7 +187,8 @@ func (p *planner) maybeLogStatementInternal(
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryMetrics *TelemetryLoggingMetrics,
 	stmtFingerprintID appstatspb.StmtFingerprintID,
-	queryStats *topLevelQueryStats,
+	topLevelQueryStats *topLevelQueryStats,
+	statsCollector sqlstats.StatsCollector,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -424,18 +427,38 @@ func (p *planner) maybeLogStatementInternal(
 				txnID = p.txn.ID().String()
 			}
 
-			var stats execstats.QueryLevelStats
-			if queryLevelStats, ok := p.instrumentation.GetQueryLevelStats(); ok {
-				stats = *queryLevelStats
+			var queryLevelStats execstats.QueryLevelStats
+			if stats, ok := p.instrumentation.GetQueryLevelStats(); ok {
+				queryLevelStats = *stats
 			}
 
-			stats = telemetryMetrics.getQueryLevelStats(stats)
+			queryLevelStats = telemetryMetrics.getQueryLevelStats(queryLevelStats)
 			indexRecs := make([]string, 0, len(p.curPlan.instrumentation.indexRecs))
 			for _, rec := range p.curPlan.instrumentation.indexRecs {
 				indexRecs = append(indexRecs, rec.SQL)
 			}
 
+			phaseTimes := statsCollector.PhaseTimes()
+
+			// Collect the statistics.
+			idleLatRaw := phaseTimes.GetIdleLatency(statsCollector.PreviousPhaseTimes())
+			idleLatNanos := idleLatRaw.Nanoseconds()
+			runLatRaw := phaseTimes.GetRunLatency()
+			runLatNanos := runLatRaw.Nanoseconds()
+			parseLatNanos := phaseTimes.GetParsingLatency().Nanoseconds()
+			planLatNanos := phaseTimes.GetPlanningLatency().Nanoseconds()
+			// We want to exclude any overhead to reduce possible confusion.
+			svcLatRaw := phaseTimes.GetServiceLatencyNoOverhead()
+			svcLatNanos := svcLatRaw.Nanoseconds()
+
+			// processing latency: contributing towards SQL results.
+			processingLatNanos := parseLatNanos + planLatNanos + runLatNanos
+
+			// overhead latency: txn/retry management, error checking, etc
+			execOverheadNanos := svcLatNanos - processingLatNanos
+
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
+
 			sampledQuery := eventpb.SampledQuery{
 				CommonSQLExecDetails:                  execDetails,
 				SkippedQueries:                        skippedQueries,
@@ -452,9 +475,9 @@ func (p *planner) maybeLogStatementInternal(
 				OutputRowsEstimate:                    p.curPlan.instrumentation.outputRows,
 				StatsAvailable:                        p.curPlan.instrumentation.statsAvailable,
 				NanosSinceStatsCollected:              int64(p.curPlan.instrumentation.nanosSinceStatsCollected),
-				BytesRead:                             queryStats.bytesRead,
-				RowsRead:                              queryStats.rowsRead,
-				RowsWritten:                           queryStats.rowsWritten,
+				BytesRead:                             topLevelQueryStats.bytesRead,
+				RowsRead:                              topLevelQueryStats.rowsRead,
+				RowsWritten:                           topLevelQueryStats.rowsWritten,
 				InnerJoinCount:                        int64(p.curPlan.instrumentation.joinTypeCounts[descpb.InnerJoin]),
 				LeftOuterJoinCount:                    int64(p.curPlan.instrumentation.joinTypeCounts[descpb.LeftOuterJoin]),
 				FullOuterJoinCount:                    int64(p.curPlan.instrumentation.joinTypeCounts[descpb.FullOuterJoin]),
@@ -470,14 +493,17 @@ func (p *planner) maybeLogStatementInternal(
 				InvertedJoinCount:                     int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.InvertedJoin]),
 				ApplyJoinCount:                        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ApplyJoin]),
 				ZigZagJoinCount:                       int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
-				ContentionNanos:                       stats.ContentionTime.Nanoseconds(),
+				ContentionNanos:                       queryLevelStats.ContentionTime.Nanoseconds(),
 				Regions:                               p.curPlan.instrumentation.regions,
-				NetworkBytesSent:                      stats.NetworkBytesSent,
-				MaxMemUsage:                           stats.MaxMemUsage,
-				MaxDiskUsage:                          stats.MaxDiskUsage,
-				KVBytesRead:                           stats.KVBytesRead,
-				KVRowsRead:                            stats.KVRowsRead,
-				NetworkMessages:                       stats.NetworkMessages,
+				NetworkBytesSent:                      queryLevelStats.NetworkBytesSent,
+				MaxMemUsage:                           queryLevelStats.MaxMemUsage,
+				MaxDiskUsage:                          queryLevelStats.MaxDiskUsage,
+				KVBytesRead:                           queryLevelStats.KVBytesRead,
+				KVRowsRead:                            queryLevelStats.KVRowsRead,
+				KvTimeNanos:                           queryLevelStats.KVTime.Nanoseconds(),
+				KvGrpcCalls:                           queryLevelStats.KVBatchRequestsIssued,
+				NetworkMessages:                       queryLevelStats.NetworkMessages,
+				CpuTimeNanos:                          queryLevelStats.CPUTime.Nanoseconds(),
 				IndexRecommendations:                  indexRecs,
 				Indexes:                               p.curPlan.instrumentation.indexesUsed,
 				ScanCount:                             int64(p.curPlan.instrumentation.scanCounts[exec.ScanCount]),
@@ -485,7 +511,27 @@ func (p *planner) maybeLogStatementInternal(
 				ScanWithStatsForecastCount:            int64(p.curPlan.instrumentation.scanCounts[exec.ScanWithStatsForecastCount]),
 				TotalScanRowsWithoutForecastsEstimate: p.curPlan.instrumentation.totalScanRowsWithoutForecasts,
 				NanosSinceStatsForecasted:             int64(p.curPlan.instrumentation.nanosSinceStatsForecasted),
+				IdleLatencyNanos:                      idleLatNanos,
+				ServiceLatencyNanos:                   svcLatNanos,
+				RunLatencyNanos:                       runLatNanos,
+				PlanLatencyNanos:                      planLatNanos,
+				ParseLatencyNanos:                     parseLatNanos,
+				OverheadLatencyNanos:                  execOverheadNanos,
+				MvccBlockBytes:                        queryLevelStats.MvccBlockBytes,
+				MvccBlockBytesInCache:                 queryLevelStats.MvccBlockBytesInCache,
+				MvccKeyBytes:                          queryLevelStats.MvccKeyBytes,
+				MvccPointCount:                        queryLevelStats.MvccPointCount,
+				MvccPointsCoveredByRangeTombstones:    queryLevelStats.MvccPointsCoveredByRangeTombstones,
+				MvccRangeKeyContainedPoints:           queryLevelStats.MvccRangeKeyContainedPoints,
+				MvccRangeKeyCount:                     queryLevelStats.MvccRangeKeyCount,
+				MvccRangeKeySkippedPoints:             queryLevelStats.MvccRangeKeySkippedPoints,
+				MvccSeekCountInternal:                 queryLevelStats.MvccSeeksInternal,
+				MvccSeekCount:                         queryLevelStats.MvccSeeks,
+				MvccStepCountInternal:                 queryLevelStats.MvccStepsInternal,
+				MvccStepCount:                         queryLevelStats.MvccSteps,
+				MvccValueBytes:                        queryLevelStats.MvccValueBytes,
 			}
+
 			p.logOperationalEventsOnlyExternally(ctx, isCopy, &sampledQuery)
 		} else {
 			telemetryMetrics.incSkippedQueryCount()
