@@ -36,6 +36,9 @@ type TokenBucket struct {
 
 	current     Tokens
 	lastUpdated time.Time
+
+	exhaustedStart  time.Time
+	exhaustedMicros int64
 }
 
 // Init the token bucket.
@@ -60,6 +63,7 @@ func (tb *TokenBucket) Update() {
 			tb.current = tb.burst
 		}
 		tb.lastUpdated = now
+		tb.updateExhaustedMicros()
 	}
 }
 
@@ -77,6 +81,13 @@ func (tb *TokenBucket) UpdateConfig(rate TokensPerSecond, burst Tokens) {
 	tb.burst = burst
 
 	tb.current += burstDelta
+	tb.updateExhaustedMicros()
+}
+
+// Reset resets the current tokens to whatever the burst is.
+func (tb *TokenBucket) Reset() {
+	tb.current = tb.burst
+	tb.updateExhaustedMicros()
 }
 
 // Adjust returns tokens to the bucket (positive delta) or accounts for a debt
@@ -87,6 +98,7 @@ func (tb *TokenBucket) Adjust(delta Tokens) {
 	if tb.current > tb.burst {
 		tb.current = tb.burst
 	}
+	tb.updateExhaustedMicros()
 }
 
 // TryToFulfill either removes the given amount if is available, or returns a
@@ -112,7 +124,35 @@ func (tb *TokenBucket) TryToFulfill(amount Tokens) (fulfilled bool, tryAgainAfte
 	}
 
 	tb.current -= amount
+	tb.updateExhaustedMicros()
 	return true, 0
+}
+
+// Exhausted returns the cumulative duration over which this token bucket was
+// exhausted. Exported only for metrics.
+func (tb *TokenBucket) Exhausted() time.Duration {
+	var ongoingExhaustionMicros int64
+	if !tb.exhaustedStart.IsZero() {
+		ongoingExhaustionMicros = tb.timeSource.Now().Sub(tb.exhaustedStart).Microseconds()
+	}
+	return time.Duration(tb.exhaustedMicros+ongoingExhaustionMicros) * time.Microsecond
+}
+
+// Available returns the currently available tokens (can be -ve). Exported only
+// for metrics.
+func (tb *TokenBucket) Available() Tokens {
+	return tb.current
+}
+
+func (tb *TokenBucket) updateExhaustedMicros() {
+	now := tb.timeSource.Now()
+	if tb.current <= 0 && tb.exhaustedStart.IsZero() {
+		tb.exhaustedStart = now
+	}
+	if tb.current > 0 && !tb.exhaustedStart.IsZero() {
+		tb.exhaustedMicros += now.Sub(tb.exhaustedStart).Microseconds()
+		tb.exhaustedStart = time.Time{}
+	}
 }
 
 // TestingInternalParameters returns the refill rate (configured), burst tokens
