@@ -24,6 +24,9 @@ type TestingKnobs struct {
 	// OverrideTokenDeduction is used to override how many tokens are deducted
 	// post-evaluation.
 	OverrideTokenDeduction func() Tokens
+	// MaintainStreamsForBehindFollowers is used in tests to maintain
+	// replication streams for behind followers.
+	MaintainStreamsForBehindFollowers func() bool
 	// MaintainStreamsForInactiveFollowers is used in tests to maintain
 	// replication streams for inactive followers.
 	MaintainStreamsForInactiveFollowers func() bool
