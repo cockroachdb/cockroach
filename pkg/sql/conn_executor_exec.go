@@ -1514,6 +1514,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						ex.server.TelemetryLoggingMetrics,
 						ppInfo.dispatchToExecutionEngine.stmtFingerprintID,
 						ppInfo.dispatchToExecutionEngine.queryStats,
+						ex.statsCollector,
 					)
 				},
 			})
@@ -1540,6 +1541,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				ex.server.TelemetryLoggingMetrics,
 				stmtFingerprintID,
 				&stats,
+				ex.statsCollector,
 			)
 		}
 	}()
