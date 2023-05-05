@@ -92,6 +92,17 @@ const (
 	LBRebalancingCPU
 )
 
+// LoadBasedRebalancingObjectiveMap maps the LoadBasedRebalancingObjective enum
+// value to a string.
+var LoadBasedRebalancingObjectiveMap map[int64]string = map[int64]string{
+	int64(LBRebalancingQueries): "qps",
+	int64(LBRebalancingCPU):     "cpu",
+}
+
+func (lbro LBRebalancingObjective) String() string {
+	return LoadBasedRebalancingObjectiveMap[int64(lbro)]
+}
+
 // LoadBasedRebalancingObjective is a cluster setting that defines the load
 // balancing objective of the cluster.
 var LoadBasedRebalancingObjective = settings.RegisterEnumSetting(
@@ -101,10 +112,7 @@ var LoadBasedRebalancingObjective = settings.RegisterEnumSetting(
 		"the cluster will attempt to balance qps among stores, if set to "+
 		"`cpu` the cluster will attempt to balance cpu usage among stores",
 	"cpu",
-	map[int64]string{
-		int64(LBRebalancingQueries): "qps",
-		int64(LBRebalancingCPU):     "cpu",
-	},
+	LoadBasedRebalancingObjectiveMap,
 ).WithPublic()
 
 // ToDimension returns the equivalent allocator load dimension of a rebalancing
