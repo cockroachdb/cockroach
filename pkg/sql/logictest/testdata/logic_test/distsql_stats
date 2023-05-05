@@ -1963,3 +1963,22 @@ u_defaults       {d,c}
 u_defaults       {d,c,a}
 u_c_d_b          {d,c,b}
 u_defaults       {d,c,b,a}
+
+# Regression test for #100909. Ensure enum is hydrated in SHOW HISTOGRAM.
+statement ok
+CREATE TYPE enum1 as ENUM ('hello', 'hi');
+CREATE TABLE t100909 (x int, y enum1);
+INSERT INTO t100909 VALUES (1, 'hello'), (2, 'hello'), (3, 'hi');
+
+statement ok
+CREATE STATISTICS s1 ON y FROM t100909;
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t100909] WHERE statistics_name = 's1'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+'hello'      0           0                    2
+'hi'         0           0                    1
