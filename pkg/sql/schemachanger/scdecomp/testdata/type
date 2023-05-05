@@ -25,6 +25,16 @@ ElementState:
     isMultiRegion: false
     typeId: 104
   Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: hello
+    physicalRepresentation: QA==
+    typeId: 104
+  Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: hi
+    physicalRepresentation: gA==
+    typeId: 104
+  Status: PUBLIC
 - Namespace:
     databaseId: 100
     descriptorId: 104
@@ -34,6 +44,10 @@ ElementState:
 - Owner:
     descriptorId: 104
     owner: root
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 104
+    schemaId: 101
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
@@ -53,34 +67,27 @@ ElementState:
     userName: public
     withGrantOption: "0"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 104
-    schemaId: 101
-  Status: PUBLIC
-- EnumTypeValue:
-    logicalRepresentation: hello
-    physicalRepresentation: QA==
-    typeId: 104
-  Status: PUBLIC
-- EnumTypeValue:
-    logicalRepresentation: hi
-    physicalRepresentation: gA==
-    typeId: 104
-  Status: PUBLIC
 
 decompose
 tbl
 ----
 BackReferencedIDs:
 ElementState:
-- Table:
-    isTemporary: false
+- CheckConstraint:
+    columnIds:
+    - 3
+    - 5
+    constraintId: 2
+    expr: s::STRING = name
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    referencedColumnIds:
+    - 3
+    - 5
     tableId: 108
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
-    tableId: 108
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
 - Column:
     columnId: 1
@@ -152,75 +159,9 @@ ElementState:
     pgAttributeNum: 0
     tableId: 108
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    invisibility: 0
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
-    tableId: 108
-    temporaryIndexId: 0
-  Status: PUBLIC
-- SecondaryIndex:
-    constraintId: 0
-    expr: g::STRING = 'hi':::STRING
-    geoConfig: null
-    indexId: 2
-    invisibility: 0
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: false
-    referencedColumnIds:
-    - 2
-    sharding: null
-    sourceIndexId: 0
-    tableId: 108
-    temporaryIndexId: 0
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- UniqueWithoutIndexConstraint:
-    columnIds:
-    - 5
-    constraintId: 3
-    indexIdForValidation: 0
-    predicate:
-      expr: x'80':::@100104::STRING = 'hi':::STRING
-      referencedColumnIds: []
-      usesFunctionIds: []
-      usesSequenceIds: []
-      usesTypeIds:
-      - 104
-      - 105
-    tableId: 108
-  Status: PUBLIC
-- CheckConstraint:
-    columnIds:
-    - 3
-    - 5
-    constraintId: 2
-    expr: s::STRING = name
-    fromHashShardedColumn: false
-    indexIdForValidation: 0
-    referencedColumnIds:
-    - 3
-    - 5
-    tableId: 108
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- TableData:
-    databaseId: 100
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 108
   Status: PUBLIC
 - ColumnName:
@@ -256,6 +197,16 @@ ElementState:
 - ColumnName:
     columnId: 5
     name: name
+    tableId: 108
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 108
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 5
+    indexIdForValidation: 0
     tableId: 108
   Status: PUBLIC
 - ColumnType:
@@ -485,24 +436,14 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnNotNull:
-    columnId: 1
-    indexIdForValidation: 0
+- ConstraintWithoutIndexName:
+    constraintId: 2
+    name: mycheck
     tableId: 108
   Status: PUBLIC
-- ColumnNotNull:
-    columnId: 5
-    indexIdForValidation: 0
-    tableId: 108
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: tbl_pkey
-    tableId: 108
-  Status: PUBLIC
-- IndexName:
-    indexId: 2
-    name: partial
+- ConstraintWithoutIndexName:
+    constraintId: 3
+    name: myuwi
     tableId: 108
   Status: PUBLIC
 - IndexColumn:
@@ -573,14 +514,14 @@ ElementState:
     indexId: 2
     tableId: 108
   Status: PUBLIC
-- ConstraintWithoutIndexName:
-    constraintId: 2
-    name: mycheck
+- IndexName:
+    indexId: 1
+    name: tbl_pkey
     tableId: 108
   Status: PUBLIC
-- ConstraintWithoutIndexName:
-    constraintId: 3
-    name: myuwi
+- IndexName:
+    indexId: 2
+    name: partial
     tableId: 108
   Status: PUBLIC
 - Namespace:
@@ -593,6 +534,69 @@ ElementState:
     descriptorId: 108
     owner: root
   Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    invisibility: 0
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 108
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 108
+    schemaId: 101
+  Status: PUBLIC
+- SecondaryIndex:
+    constraintId: 0
+    expr: g::STRING = 'hi':::STRING
+    geoConfig: null
+    indexId: 2
+    invisibility: 0
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: false
+    referencedColumnIds:
+    - 2
+    sharding: null
+    sourceIndexId: 0
+    tableId: 108
+    temporaryIndexId: 0
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 108
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 108
+  Status: PUBLIC
+- UniqueWithoutIndexConstraint:
+    columnIds:
+    - 5
+    constraintId: 3
+    indexIdForValidation: 0
+    predicate:
+      expr: x'80':::@100104::STRING = 'hi':::STRING
+      referencedColumnIds: []
+      usesFunctionIds: []
+      usesSequenceIds: []
+      usesTypeIds:
+      - 104
+      - 105
+    tableId: 108
+  Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
     privileges: "2"
@@ -604,10 +608,6 @@ ElementState:
     privileges: "2"
     userName: root
     withGrantOption: "2"
-  Status: PUBLIC
-- SchemaChild:
-    childObjectId: 108
-    schemaId: 101
   Status: PUBLIC
 
 setup
@@ -634,37 +634,13 @@ ElementState:
     arrayTypeId: 110
     typeId: 109
   Status: PUBLIC
-- Namespace:
-    databaseId: 100
-    descriptorId: 109
-    name: comp
-    schemaId: 101
+- CompositeTypeAttrName:
+    compositeTypeId: 109
+    name: a
   Status: PUBLIC
-- Owner:
-    descriptorId: 109
-    owner: root
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 109
-    privileges: "2"
-    userName: admin
-    withGrantOption: "2"
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 109
-    privileges: "2"
-    userName: root
-    withGrantOption: "2"
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 109
-    privileges: "512"
-    userName: public
-    withGrantOption: "0"
-  Status: PUBLIC
-- SchemaChild:
-    childObjectId: 109
-    schemaId: 101
+- CompositeTypeAttrName:
+    compositeTypeId: 109
+    name: b
   Status: PUBLIC
 - CompositeTypeAttrType:
     closedTypeIds: []
@@ -706,13 +682,37 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- CompositeTypeAttrName:
-    compositeTypeId: 109
-    name: a
+- Namespace:
+    databaseId: 100
+    descriptorId: 109
+    name: comp
+    schemaId: 101
   Status: PUBLIC
-- CompositeTypeAttrName:
-    compositeTypeId: 109
-    name: b
+- Owner:
+    descriptorId: 109
+    owner: root
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 109
+    schemaId: 101
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 109
+    privileges: "2"
+    userName: admin
+    withGrantOption: "2"
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 109
+    privileges: "2"
+    userName: root
+    withGrantOption: "2"
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 109
+    privileges: "512"
+    userName: public
+    withGrantOption: "0"
   Status: PUBLIC
 
 decompose
@@ -720,14 +720,19 @@ tbl2
 ----
 BackReferencedIDs:
 ElementState:
-- Table:
-    isTemporary: false
+- CheckConstraint:
+    columnIds:
+    - 2
+    constraintId: 2
+    expr: (c).b = 'foo':::STRING
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    referencedColumnIds:
+    - 2
     tableId: 111
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
-    tableId: 111
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
 - Column:
     columnId: 1
@@ -819,58 +824,9 @@ ElementState:
     pgAttributeNum: 0
     tableId: 111
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    invisibility: 0
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
-    tableId: 111
-    temporaryIndexId: 0
-  Status: PUBLIC
-- SecondaryIndex:
-    constraintId: 0
-    expr: (c).a = 3:::INT8
-    geoConfig: null
-    indexId: 2
-    invisibility: 0
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: false
-    referencedColumnIds:
-    - 2
-    sharding: null
-    sourceIndexId: 0
-    tableId: 111
-    temporaryIndexId: 0
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- CheckConstraint:
-    columnIds:
-    - 2
-    constraintId: 2
-    expr: (c).b = 'foo':::STRING
-    fromHashShardedColumn: false
-    indexIdForValidation: 0
-    referencedColumnIds:
-    - 2
-    tableId: 111
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- TableData:
-    databaseId: 100
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 111
   Status: PUBLIC
 - ColumnName:
@@ -916,6 +872,16 @@ ElementState:
 - ColumnName:
     columnId: 7
     name: crdb_internal_idx_expr
+    tableId: 111
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 111
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 6
+    indexIdForValidation: 0
     tableId: 111
   Status: PUBLIC
 - ColumnType:
@@ -1329,24 +1295,9 @@ ElementState:
       visibleType: 0
       width: 64
   Status: PUBLIC
-- ColumnNotNull:
-    columnId: 1
-    indexIdForValidation: 0
-    tableId: 111
-  Status: PUBLIC
-- ColumnNotNull:
-    columnId: 6
-    indexIdForValidation: 0
-    tableId: 111
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: tbl2_pkey
-    tableId: 111
-  Status: PUBLIC
-- IndexName:
-    indexId: 2
-    name: comppartial
+- ConstraintWithoutIndexName:
+    constraintId: 2
+    name: compcheck
     tableId: 111
   Status: PUBLIC
 - IndexColumn:
@@ -1427,9 +1378,14 @@ ElementState:
     indexId: 2
     tableId: 111
   Status: PUBLIC
-- ConstraintWithoutIndexName:
-    constraintId: 2
-    name: compcheck
+- IndexName:
+    indexId: 1
+    name: tbl2_pkey
+    tableId: 111
+  Status: PUBLIC
+- IndexName:
+    indexId: 2
+    name: comppartial
     tableId: 111
   Status: PUBLIC
 - Namespace:
@@ -1442,6 +1398,54 @@ ElementState:
     descriptorId: 111
     owner: root
   Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    invisibility: 0
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 111
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 111
+    schemaId: 101
+  Status: PUBLIC
+- SecondaryIndex:
+    constraintId: 0
+    expr: (c).a = 3:::INT8
+    geoConfig: null
+    indexId: 2
+    invisibility: 0
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: false
+    referencedColumnIds:
+    - 2
+    sharding: null
+    sourceIndexId: 0
+    tableId: 111
+    temporaryIndexId: 0
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 111
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 111
+  Status: PUBLIC
 - UserPrivileges:
     descriptorId: 111
     privileges: "2"
@@ -1453,8 +1457,4 @@ ElementState:
     privileges: "2"
     userName: root
     withGrantOption: "2"
-  Status: PUBLIC
-- SchemaChild:
-    childObjectId: 111
-    schemaId: 101
   Status: PUBLIC

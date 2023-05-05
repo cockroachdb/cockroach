@@ -14,7 +14,7 @@ ToPublicOrTransient($target1, $target2):
     - $target2[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
 descriptorIsNotBeingDropped-23.1($element):
     not-join:
-        - $descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType', '*scpb.CompositeType', '*scpb.Function']
+        - $descriptor[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
         - joinTarget($descriptor, $descriptor-Target)
         - joinOnDescID($descriptor, $element, $id)
         - $descriptor-Target[TargetStatus] = ABSENT
