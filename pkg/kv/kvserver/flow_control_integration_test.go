@@ -57,11 +57,11 @@ import (
 //               tracker=1,client_raft_helpers_test=1'
 //
 // TODO(irfansharif): Add end-to-end tests for the following:
-// - [ ] Node with full RaftTransport receive queue.
-// - [ ] Node with full RaftTransport send queue, with proposals dropped.
+// - [ ] Node with full RaftTransport receive queue (I8).
+// - [ ] Node with full RaftTransport send queue, with proposals dropped (I8).
 // - [ ] Raft commands getting reproposed, either due to timeouts or not having
 //       the right MLAI. See TestReplicaRefreshPendingCommandsTicks,
-//       TestLogGrowthWhenRefreshingPendingCommands.
+//       TestLogGrowthWhenRefreshingPendingCommands. I7.
 // - [ ] Raft proposals getting dropped/abandoned. See
 //       (*Replica).cleanupFailedProposalLocked and its uses.
 
@@ -133,9 +133,9 @@ ORDER BY name ASC;
 `)
 
 		h.comment(`-- (Issuing + admitting a regular 1MiB, triply replicated write...)`)
-		t.Log("sending put request")
+		h.log("sending put request")
 		h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
-		t.Log("sent put request")
+		h.log("sent put request")
 
 		h.waitForAllTokensReturned(ctx, 3)
 		h.comment(`
@@ -277,9 +277,9 @@ func TestFlowControlRangeSplitMerge(t *testing.T) {
 	require.NoError(t, err)
 
 	h.waitForConnectedStreams(ctx, desc.RangeID, 3)
-	t.Log("sending put request to pre-split range")
+	h.log("sending put request to pre-split range")
 	h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
-	t.Log("sent put request to pre-split range")
+	h.log("sent put request to pre-split range")
 
 	h.waitForAllTokensReturned(ctx, 3)
 	h.comment(`
@@ -302,13 +302,13 @@ ORDER BY name ASC;
 	// [T1,n1,s1,r64/1:/{Table/Max-Max},raft] connected to stream: t1/s2
 	// [T1,n1,s1,r64/1:/{Table/Max-Max},raft] connected to stream: t1/s3
 
-	t.Log("sending 2MiB put request to post-split LHS")
+	h.log("sending 2MiB put request to post-split LHS")
 	h.put(ctx, k, 2<<20 /* 2MiB */, admissionpb.NormalPri)
-	t.Log("sent 2MiB put request to post-split LHS")
+	h.log("sent 2MiB put request to post-split LHS")
 
-	t.Log("sending 3MiB put request to post-split RHS")
+	h.log("sending 3MiB put request to post-split RHS")
 	h.put(ctx, roachpb.Key(right.StartKey), 3<<20 /* 3MiB */, admissionpb.NormalPri)
-	t.Log("sent 3MiB put request to post-split RHS")
+	h.log("sent 3MiB put request to post-split RHS")
 
 	h.waitForAllTokensReturned(ctx, 3)
 	h.comment(`
@@ -343,9 +343,9 @@ ORDER BY streams DESC;
 	// [T1,n1,s1,r65/1:{\xfa\x00-/Max},raft] disconnected stream: t1/s2
 	// [T1,n1,s1,r65/1:{\xfa\x00-/Max},raft] disconnected stream: t1/s3
 
-	t.Log("sending 4MiB put request to post-merge range")
+	h.log("sending 4MiB put request to post-merge range")
 	h.put(ctx, roachpb.Key(merged.StartKey), 4<<20 /* 4MiB */, admissionpb.NormalPri)
-	t.Log("sent 4MiB put request to post-merged range")
+	h.log("sent 4MiB put request to post-merged range")
 
 	h.waitForAllTokensReturned(ctx, 3)
 	h.comment(`
@@ -415,11 +415,11 @@ func TestFlowControlBlockedAdmission(t *testing.T) {
 	h.waitForConnectedStreams(ctx, desc.RangeID, 3)
 
 	h.comment(`-- (Issuing regular 1MiB, 3x replicated write that's not admitted.)`)
-	t.Log("sending put requests")
+	h.log("sending put requests")
 	for i := 0; i < 5; i++ {
 		h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
 	}
-	t.Log("sent put requests")
+	h.log("sent put requests")
 
 	h.comment(`
 -- Flow token metrics from n1 after issuing 5 regular 1MiB 3x replicated writes
@@ -488,13 +488,25 @@ func TestFlowControlCrashedNode(t *testing.T) {
 	const numNodes = 2
 	var maintainStreamsForBrokenRaftTransport atomic.Bool
 
+	st := cluster.MakeTestingClusterSettings()
+	// See I13 from kvflowcontrol/doc.go. We disable the raft-transport-break
+	// mechanism below, and for quiesced ranges, that can effectively disable
+	// the last-updated mechanism since quiesced ranges aren't being ticked, and
+	// we only check the last-updated state when ticked. So we disable range
+	// quiescence.
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			RaftConfig: base.RaftConfig{
 				// Suppress timeout-based elections. This test doesn't want to
 				// deal with leadership changing hands.
 				RaftElectionTimeoutTicks: 1000000,
+				// Reduce the RangeLeaseDuration to speeds up failure detection
+				// below.
+				RangeLeaseDuration: time.Second,
 			},
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -531,11 +543,11 @@ func TestFlowControlCrashedNode(t *testing.T) {
 	h.waitForConnectedStreams(ctx, desc.RangeID, 2)
 
 	h.comment(`-- (Issuing regular 5x1MiB, 2x replicated writes that are not admitted.)`)
-	t.Log("sending put requests")
+	h.log("sending put requests")
 	for i := 0; i < 5; i++ {
 		h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
 	}
-	t.Log("sent put requests")
+	h.log("sent put requests")
 
 	h.comment(`
 -- Flow token metrics from n1 after issuing 5 regular 1MiB 2x replicated writes
@@ -933,11 +945,11 @@ func TestFlowControlRaftTransportBreak(t *testing.T) {
 	h.waitForConnectedStreams(ctx, desc.RangeID, 3)
 
 	h.comment(`-- (Issuing regular 5x1MiB, 3x replicated writes that are not admitted.)`)
-	t.Log("sending put requests")
+	h.log("sending put requests")
 	for i := 0; i < 5; i++ {
 		h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
 	}
-	t.Log("sent put requests")
+	h.log("sent put requests")
 
 	h.comment(`
 -- Flow token metrics from n1 after issuing 5 regular 1MiB 3x replicated writes
@@ -1003,6 +1015,7 @@ func TestFlowControlRaftTransportCulled(t *testing.T) {
 	const numNodes = 3
 	workerTeardownCh := make(chan roachpb.NodeID, 1)
 	markSendQueueAsIdleCh := make(chan roachpb.NodeID)
+	var disableWorkerTeardown atomic.Bool
 
 	baseServerArgs := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -1031,6 +1044,9 @@ func TestFlowControlRaftTransportCulled(t *testing.T) {
 	baseServerArgsWithRaftTransportKnobs.Knobs.RaftTransport = &kvserver.RaftTransportTestingKnobs{
 		MarkSendQueueAsIdleCh: markSendQueueAsIdleCh,
 		OnWorkerTeardown: func(nodeID roachpb.NodeID) {
+			if disableWorkerTeardown.Load() {
+				return
+			}
 			workerTeardownCh <- nodeID
 		},
 	}
@@ -1061,11 +1077,11 @@ func TestFlowControlRaftTransportCulled(t *testing.T) {
 	h.waitForConnectedStreams(ctx, desc.RangeID, 3)
 
 	h.comment(`-- (Issuing regular 5x1MiB, 3x replicated writes that are not admitted.)`)
-	t.Log("sending put requests")
+	h.log("sending put requests")
 	for i := 0; i < 5; i++ {
 		h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
 	}
-	t.Log("sent put requests")
+	h.log("sent put requests")
 
 	h.comment(`
 -- Flow token metrics from n1 after issuing 5 regular 1MiB 3x replicated writes
@@ -1124,6 +1140,8 @@ ORDER BY name ASC;
    WHERE name LIKE '%kvadmission%tokens%'
 ORDER BY name ASC;
 `)
+
+	disableWorkerTeardown.Store(true)
 }
 
 // TestFlowControlRaftMembership tests flow token behavior when the raft
@@ -1269,9 +1287,24 @@ func TestFlowControlRaftMembershipRemoveSelf(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				RaftConfig: base.RaftConfig{
-					// Suppress timeout-based elections. This test doesn't want to
-					// deal with leadership changing hands.
-					RaftElectionTimeoutTicks: 1000000,
+					// TODO(irfansharif): The AdminRelocateRange used below can
+					// occasionally flake if we suppress timeout-based
+					// elections. We get logging of the following form:
+					//
+					// 	I230507 19:47:03.143463 31 kv/kvserver_test/flow_control_integration_test.go:2065  [-] 349  -- (Replacing current raft leader on n1 in raft group with new n4 replica.)
+					//	I230507 19:47:03.153105 5430 kv/kvserver/replica_raftstorage.go:514  [T1,n4,s4,r64/4:/{Table/Max-Max}] 352  applied INITIAL snapshot b8cdcb09 from (n1,s1):1 at applied index 23 (total=1ms data=1.0 MiB ingestion=6@1ms)
+					//	I230507 19:47:03.167504 629 kv/kvserver/kvflowcontrol/kvflowhandle/kvflowhandle.go:249  [T1,n1,s1,r64/1:/{Table/Max-Max},raft] 353  connected to stream: t1/s4
+					//	W230507 19:47:03.186303 4268 go.etcd.io/raft/v3/raft.go:924  [T1,n4,s4,r64/4:/{Table/Max-Max}] 354  4 cannot campaign at term 6 since there are still 1 pending configuration changes to apply
+					//	...
+					//	W230507 19:47:18.194829 5507 kv/kvserver/spanlatch/manager.go:559  [T1,n4,s4,r64/4:/{Table/Max-Max}] 378  have been waiting 15s to acquire read latch /Local/Range/Table/Max/RangeDescriptor@0,0, held by write latch /Local/Range/Table/Max/RangeDescriptor@0,0
+					//	W230507 19:47:19.082183 5891 kv/kvserver/spanlatch/manager.go:559  [T1,n4,s4,r64/4:/{Table/Max-Max}] 379  have been waiting 15s to acquire read latch /Local/Range/Table/Max/RangeDescriptor@0,0, held by write latch /Local/Range/Table/Max/RangeDescriptor@0,0
+					//
+					// Followed by range unavailability. Are we relying on the
+					// new leader to be able to campaign immediately, in order
+					// to release the latch? And we're simultaneously preventing
+					// other replicas from calling elections?
+					//
+					// 	RaftElectionTimeoutTicks: 1000000,
 				},
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
@@ -2079,12 +2112,18 @@ func (h *flowControlTestHelper) comment(comment string) {
 
 	comment = strings.TrimSpace(comment)
 	h.buf.WriteString(fmt.Sprintf("%s\n", comment))
-	h.t.Log(comment)
+	h.log(comment)
+}
+
+func (h *flowControlTestHelper) log(msg string) {
+	if log.ShowLogs() {
+		log.Infof(context.Background(), "%s", msg)
+	}
 }
 
 func (h *flowControlTestHelper) query(runner *sqlutils.SQLRunner, sql string, headers ...string) {
 	sql = strings.TrimSpace(sql)
-	h.t.Log(sql)
+	h.log(sql)
 	h.buf.WriteString(fmt.Sprintf("%s\n\n", sql))
 
 	rows := runner.Query(h.t, sql)

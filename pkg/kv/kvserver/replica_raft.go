@@ -2308,7 +2308,7 @@ func (m lastUpdateTimesMap) updateOnBecomeLeader(descs []roachpb.ReplicaDescript
 // isFollowerActiveSince returns whether the specified follower has made
 // communication with the leader recently (since threshold).
 func (m lastUpdateTimesMap) isFollowerActiveSince(
-	ctx context.Context, replicaID roachpb.ReplicaID, now time.Time, threshold time.Duration,
+	replicaID roachpb.ReplicaID, now time.Time, threshold time.Duration,
 ) bool {
 	lastUpdateTime, ok := m[replicaID]
 	if !ok {
