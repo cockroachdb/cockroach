@@ -2138,6 +2138,13 @@ func TestTenantLogic_udf_star(
 	runLogicTest(t, "udf_star")
 }
 
+func TestTenantLogic_udf_update(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_update")
+}
+
 func TestTenantLogic_udf_volatility_check(
 	t *testing.T,
 ) {
