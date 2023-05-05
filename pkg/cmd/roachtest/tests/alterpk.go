@@ -179,7 +179,7 @@ func registerAlterPK(r registry.Registry) {
 	}
 	r.Add(registry.TestSpec{
 		Name:  "alterpk-bank",
-		Owner: registry.OwnerSQLSchema,
+		Owner: registry.OwnerSQLFoundations,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		Cluster: r.MakeClusterSpec(4),
@@ -187,7 +187,7 @@ func registerAlterPK(r registry.Registry) {
 	})
 	r.Add(registry.TestSpec{
 		Name:  "alterpk-tpcc-250",
-		Owner: registry.OwnerSQLSchema,
+		Owner: registry.OwnerSQLFoundations,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		Cluster: r.MakeClusterSpec(4, spec.CPU(32)),
@@ -197,7 +197,7 @@ func registerAlterPK(r registry.Registry) {
 	})
 	r.Add(registry.TestSpec{
 		Name:  "alterpk-tpcc-500",
-		Owner: registry.OwnerSQLSchema,
+		Owner: registry.OwnerSQLFoundations,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
