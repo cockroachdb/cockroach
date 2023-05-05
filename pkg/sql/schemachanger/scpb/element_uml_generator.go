@@ -51,9 +51,13 @@ func run(out string) error {
 	}
 
 	buf.WriteString("@startuml\n")
-	elementProtoType := reflect.TypeOf((*scpb.ElementProto)(nil)).Elem()
-	for i := 0; i < elementProtoType.NumField(); i++ {
-		fieldType := elementProtoType.Field(i).Type.Elem()
+	elementProtoType := reflect.TypeOf((*scpb.ElementProto)(nil))
+	for i := 0; i < elementProtoType.NumMethod(); i++ {
+		if !strings.HasPrefix(elementProtoType.Method(i).Name, "Get") ||
+			elementProtoType.Method(i).Name == "GetElementOneOf" {
+			continue
+		}
+		fieldType := elementProtoType.Method(i).Type.Out(0).Elem()
 		buf.WriteString(fmt.Sprintf(
 			"object %s\n\n",
 			fieldType.Name()))
@@ -73,7 +77,15 @@ func run(out string) error {
 		// The parent tag has a list of elements that are the parents
 		// to this element. We will collect these and emit them later
 		// in the PlantUML syntax.
-		for _, parent := range getParentsFromField(elementProtoType.Field(i)) {
+		oneOfTypes := scpb.GetElementOneOfProtos()
+		typeProto := reflect.TypeOf(scpb.GetElementOneOfProtos()[0]).Elem()
+		for _, oneOf := range oneOfTypes {
+			oneOfType := reflect.TypeOf(oneOf).Elem()
+			if oneOfType.Field(0).Type.Elem() == fieldType {
+				typeProto = oneOfType
+			}
+		}
+		for _, parent := range getParentsFromField(typeProto.Field(0)) {
 			parentRelations.WriteString(fmt.Sprintf(
 				"%s <|-- %s\n", parent, fieldType.Name()))
 		}

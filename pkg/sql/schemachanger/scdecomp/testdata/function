@@ -71,44 +71,6 @@ ElementState:
         visibleType: 0
         width: 64
   Status: PUBLIC
-- Owner:
-    descriptorId: 110
-    owner: root
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 110
-    privileges: "2"
-    userName: admin
-    withGrantOption: "2"
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 110
-    privileges: "2"
-    userName: root
-    withGrantOption: "2"
-  Status: PUBLIC
-- SchemaChild:
-    childObjectId: 110
-    schemaId: 101
-  Status: PUBLIC
-- FunctionName:
-    functionId: 110
-    name: f
-  Status: PUBLIC
-- FunctionVolatility:
-    functionId: 110
-    volatility:
-      volatility: VOLATILE
-  Status: PUBLIC
-- FunctionLeakProof:
-    functionId: 110
-    leakProof: false
-  Status: PUBLIC
-- FunctionNullInputBehavior:
-    functionId: 110
-    nullInputBehavior:
-      nullInputBehavior: CALLED_ON_NULL_INPUT
-  Status: PUBLIC
 - FunctionBody:
     body: |-
       SELECT a FROM defaultdb.public.t;
@@ -141,4 +103,42 @@ ElementState:
     - columnIds:
       - 1
       viewId: 107
+  Status: PUBLIC
+- FunctionLeakProof:
+    functionId: 110
+    leakProof: false
+  Status: PUBLIC
+- FunctionName:
+    functionId: 110
+    name: f
+  Status: PUBLIC
+- FunctionNullInputBehavior:
+    functionId: 110
+    nullInputBehavior:
+      nullInputBehavior: CALLED_ON_NULL_INPUT
+  Status: PUBLIC
+- FunctionVolatility:
+    functionId: 110
+    volatility:
+      volatility: VOLATILE
+  Status: PUBLIC
+- Owner:
+    descriptorId: 110
+    owner: root
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 110
+    schemaId: 101
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    privileges: "2"
+    userName: admin
+    withGrantOption: "2"
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    privileges: "2"
+    userName: root
+    withGrantOption: "2"
   Status: PUBLIC
