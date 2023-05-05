@@ -2074,26 +2074,6 @@ func mvccPutInternal(
 			// before committing.
 			writeTimestamp.Forward(metaTimestamp.Next())
 			writeTooOldErr := kvpb.NewWriteTooOldError(readTimestamp, writeTimestamp, key)
-			{
-				// NOTE TO REVIEWERS: the code currently favors ConditionFailedErrors
-				// over WriteTooOldErrors, and jumps through some hoops to make sure
-				// that this works correctly. The following commit will remove this
-				// behavior and update tests accordingly. For this commit, we keep the
-				// existing behavior to avoid multiple moving parts.
-
-				// If we're in a transaction, always get the value at the orig
-				// timestamp. Outside of a transaction, the read timestamp advances
-				// to the the latest value's timestamp + 1 as well. The new
-				// timestamp is returned to the caller in maybeTooOldErr. Because
-				// we're outside of a transaction, we'll never actually commit this
-				// value, but that's a concern of evaluateBatch and not here.
-				if txn == nil {
-					readTimestamp = writeTimestamp
-				}
-				if _, err = maybeGetValue(ctx, iter, key, value, ok, readTimestamp, valueFn); err != nil {
-					return false, err
-				}
-			}
 			return false, writeTooOldErr
 		} else {
 			if value, err = maybeGetValue(ctx, iter, key, value, ok, readTimestamp, valueFn); err != nil {
