@@ -276,6 +276,9 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				continue
 			}
 			objective := sr.RebalanceObjective()
+			sr.AddLogTag("obj", objective)
+			ctx = sr.AnnotateCtx(ctx)
+
 			hottestRanges := sr.replicaRankings.TopLoad(objective.ToDimension())
 			options := sr.scorerOptions(ctx, objective.ToDimension())
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, mode)
