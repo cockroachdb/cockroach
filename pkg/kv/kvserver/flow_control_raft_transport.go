@@ -20,16 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 )
 
-// raftTransportForFlowControl abstracts the node-level raft transport, and is
-// used by the canonical replicaFlowControlIntegration implementation. It
-// exposes the set of (remote) stores the raft transport is connected to. If the
-// underlying gRPC streams break and don't reconnect, this indicates as much.
-// Ditto if they're reconnected to. Also see RaftTransportDisconnectListener,
-// which is used to observe every instance of gRPC streams breaking.
-type raftTransportForFlowControl interface {
-	isConnectedTo(storeID roachpb.StoreID) bool
-}
-
 var _ raftTransportForFlowControl = &RaftTransport{}
 
 // isConnectedTo implements the raftTransportForFlowControl interface.
@@ -37,12 +27,6 @@ func (r *RaftTransport) isConnectedTo(storeID roachpb.StoreID) bool {
 	r.kvflowControl.mu.RLock()
 	defer r.kvflowControl.mu.RUnlock()
 	return r.kvflowControl.mu.connectionTracker.isStoreConnected(storeID)
-}
-
-// RaftTransportDisconnectListener observes every instance of the raft
-// transport disconnecting replication traffic to the given (remote) stores.
-type RaftTransportDisconnectListener interface {
-	OnRaftTransportDisconnected(context.Context, ...roachpb.StoreID)
 }
 
 // connectionTrackerForFlowControl tracks the set of client-side stores and

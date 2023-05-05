@@ -120,12 +120,11 @@ ORDER BY name ASC;
 -- for n2 and n3 anymore.
 SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
    FROM crdb_internal.kv_flow_control_handles
+   WHERE total_tracked_tokens > 0
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
   64       | 1        | 2.0 MiB               
-  64       | 2        | 0 B                   
-  64       | 3        | 0 B                   
   64       | 4        | 2.0 MiB               
   64       | 5        | 2.0 MiB               
 

@@ -19,14 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// StoresForFlowControl is used to integrate with replication flow control. It
-// exposes the underlying kvflowcontrol.Handles and is informed of (remote)
-// stores we're no longer connected via the raft transport.
-type StoresForFlowControl interface {
-	kvflowcontrol.Handles
-	RaftTransportDisconnectListener
-}
-
 // storesForFlowControl is a concrete implementation of the
 // StoresForFlowControl interface, backed by a set of Stores.
 type storesForFlowControl Stores
@@ -221,7 +213,7 @@ func (l NoopStoresFlowControlIntegration) Inspect() []roachpb.RangeID {
 	return nil
 }
 
-// OnRaftTransportDisconnected is part of the RaftTransportDisconnectListener
+// OnRaftTransportDisconnected is part of the StoresForFlowControl
 // interface.
 func (NoopStoresFlowControlIntegration) OnRaftTransportDisconnected(
 	context.Context, ...roachpb.StoreID,

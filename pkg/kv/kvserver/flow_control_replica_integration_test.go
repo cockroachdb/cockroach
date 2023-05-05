@@ -42,20 +42,21 @@ import (
 //   - "state" [applied=<int>/<int>] [descriptor=(<int>[,<int]*)] \
 //     [paused=([<int>][,<int>]*) [inactive=([<int>][,<int>]*) \
 //     [progress=([<int>@<int>:[probe | replicate | snapshot]:[!,]active:[!,]paused]*] \
-//     [connected=([<int>][,<int>]*)]
+//     [disconnected=([<int>][,<int>]*)]
 //     ----
 //     Set up relevant state of the underlying replica and/or raft transport.
 //
 //     A. For replicas, we can control the applied state (term/index),
 //     descriptor (set of replica IDs), paused and/or inactive replicas, and
 //     per-replica raft progress. The raft progress syntax is structured as
-//     follows:
-//     => progress=(replid@match:<state>:<active>:<paused>,...)
-//     Where <state> is one of {probe,replicate,snapshot}, <active> is
-//     {active,!inactive}, and <paused> is {paused,!paused}.
+//     follows: progress=(replid@match:<state>:<active>:<paused>,...).
+//     <state> is one of {probe,replicate,snapshot}, <active> is
+//     {active,!inactive}, and <paused> is {paused,!paused}. The latter controls
+//     MsgAppFlowPaused in the raft library, not the CRDB-level follower
+//     pausing.
 //
-//     B. For the raft transport, we can specify the set of store IDs we're
-//     connected to.
+//     B. For the raft transport, we can specify the set of replica IDs we're
+//     not connected to.
 //
 //   - "integration" op=[became-leader | became-follower | desc-changed |
 //     followers-paused |replica-destroyed |
@@ -123,7 +124,7 @@ func TestFlowControlReplicaIntegration(t *testing.T) {
 						for _, arg := range d.CmdArgs {
 							replicas := roachpb.MakeReplicaSet(nil)
 							progress := make(map[roachpb.ReplicaID]tracker.Progress)
-							connected := make(map[roachpb.StoreID]struct{})
+							disconnected := make(map[roachpb.ReplicaID]struct{})
 							for i := range arg.Vals {
 								if arg.Vals[i] == "" {
 									continue // we support syntax like inactive=(); there's nothing to do
@@ -192,11 +193,11 @@ func TestFlowControlReplicaIntegration(t *testing.T) {
 								case "applied":
 									// Fall through.
 
-								case "connected":
+								case "disconnected":
 									// Parse key=(<int>,<int>,...).
 									var id uint64
 									arg.Scan(t, i, &id)
-									connected[roachpb.StoreID(id)] = struct{}{}
+									disconnected[roachpb.ReplicaID(id)] = struct{}{}
 
 								default:
 									t.Fatalf("unknown: %s", arg.Key)
@@ -226,8 +227,8 @@ func TestFlowControlReplicaIntegration(t *testing.T) {
 								// Parse applied=<int>/<int>.
 								mockReplica.applied = parseLogPosition(t, arg.Vals[0])
 
-							case "connected":
-								mockReplica.connected = connected
+							case "disconnected":
+								mockReplica.disconnected = disconnected
 
 							default:
 								t.Fatalf("unknown: %s", arg.Key)
@@ -247,10 +248,10 @@ func TestFlowControlReplicaIntegration(t *testing.T) {
 							integration.onDescChanged(ctx)
 						case "followers-paused":
 							integration.onFollowersPaused(ctx)
-						case "replica-destroyed":
-							integration.onReplicaDestroyed(ctx)
-						case "proposal-quota-updated":
-							integration.onProposalQuotaUpdated(ctx)
+						case "destroyed":
+							integration.onDestroyed(ctx)
+						case "raft-ticked":
+							integration.onRaftTicked(ctx)
 						default:
 							t.Fatalf("unknown op: %s", op)
 						}
@@ -270,12 +271,12 @@ type mockReplicaForFlowControl struct {
 	tenantID  roachpb.TenantID
 	replicaID roachpb.ReplicaID
 
-	paused     map[roachpb.ReplicaID]struct{}
-	inactive   map[roachpb.ReplicaID]struct{}
-	progress   map[roachpb.ReplicaID]tracker.Progress
-	connected  map[roachpb.StoreID]struct{}
-	applied    kvflowcontrolpb.RaftLogPosition
-	descriptor *roachpb.RangeDescriptor
+	paused       map[roachpb.ReplicaID]struct{}
+	inactive     map[roachpb.ReplicaID]struct{}
+	disconnected map[roachpb.ReplicaID]struct{}
+	progress     map[roachpb.ReplicaID]tracker.Progress
+	applied      kvflowcontrolpb.RaftLogPosition
+	descriptor   *roachpb.RangeDescriptor
 }
 
 var _ replicaForFlowControl = &mockReplicaForFlowControl{}
@@ -328,28 +329,29 @@ func (m *mockReplicaForFlowControl) getPausedFollowers() map[roachpb.ReplicaID]s
 	return m.paused
 }
 
-func (m *mockReplicaForFlowControl) isFollowerLive(
-	ctx context.Context, replID roachpb.ReplicaID,
-) bool {
-	_, inactive := m.inactive[replID]
-	return !inactive
+func (m *mockReplicaForFlowControl) getBehindFollowers() map[roachpb.ReplicaID]struct{} {
+	// NB: Keep this identical to the canonical implementation of
+	// getBehindFollowers.
+	behindFollowers := make(map[roachpb.ReplicaID]struct{})
+	for replID, progress := range m.progress {
+		if progress.State == tracker.StateReplicate {
+			continue
+		}
+		behindFollowers[replID] = struct{}{}
+	}
+	return behindFollowers
 }
 
-func (m *mockReplicaForFlowControl) isRaftTransportConnectedTo(storeID roachpb.StoreID) bool {
-	_, found := m.connected[storeID]
-	return found
+func (m *mockReplicaForFlowControl) getInactiveFollowers() map[roachpb.ReplicaID]struct{} {
+	return m.inactive
+}
+
+func (m *mockReplicaForFlowControl) getDisconnectedFollowers() map[roachpb.ReplicaID]struct{} {
+	return m.disconnected
 }
 
 func (m *mockReplicaForFlowControl) getAppliedLogPosition() kvflowcontrolpb.RaftLogPosition {
 	return m.applied
-}
-
-func (m *mockReplicaForFlowControl) withReplicaProgress(
-	f func(roachpb.ReplicaID, tracker.Progress),
-) {
-	for replID, progress := range m.progress {
-		f(replID, progress)
-	}
 }
 
 func (m *mockReplicaForFlowControl) isScratchRange() bool {

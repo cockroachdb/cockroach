@@ -449,6 +449,42 @@ package kvflowcontrol
 //     we're able to look up the right kvflowcontrol.Handle since the replica is
 //     still around. When quiescing a range, we don't need to release all-held
 //     tokens, or wait until there are no held flow tokens.
+//   - We use the replica ticking to periodically refresh the set of
+//     replication streams we're connected to, ticking that's disabled for
+//     quiesced ranges. The mechanism is responsible for disconnecting streams
+//     from paused, disconnected (per the raft transport), behind (per the raft
+//     log), and inactive (those we haven't heard from recently) followers. We
+//     don't quiesce ranges in the presence of paused followers, and if
+//     followers disconnect, we intercept that directly and release flow tokens.
+//     We don't quiesce if live followers are behind on the raft log (dead
+//     followers are allowed to be behind). Since the ticking is the only
+//     mechanism that frees up tokens for inactive followers, what happens if a
+//     range quiesces after observing caught up replicas, one of which is
+//     holding onto tokens due to slow below-raft admission, and post-quiescence
+//     the node crashes? We do react to the raft transport breaking, so that
+//     frees up tokens. But it's perhaps surprising that the replica-inactivity
+//     check is disabled. It's not clear what to do here.
+//     - We could observe node liveness directly, but we're already effectively
+//       doing that when reacting to raft transport streams breaking.
+//     - We could release all flow tokens whenever replicas quiesce (though
+//       risking over-admission).
+//     - We could make the last-updated map more evented, releasing tokens
+//       directly whenever replicas expire, to not need depend on this explicit
+//       ticking that's disabled when quiesced. We could continue ticking (at
+//       low frequency) even when quiesced.
+//     - If we only had expiration based leases/no quiescence, this would not be
+//       a problem.
+//
+// See kvserver/flow_control_*.go for where we address all the interactions
+// above. The guiding principle is to 'only deduct flow tokens when actively
+// replicating a proposal along specific streams', which excludes
+// dead/paused/lagging/pre-split RHS/non-longer-group-member replicas, and
+// explains why we only do it on replicas that are both leaseholder and leader.
+// It also explains why we don't re-deduct on reproposals, or try to intercept
+// raft-initiated re-transmissions. For each of these scenarios, we know when
+// not to deduct flow tokens, and we simply free up all held tokens and
+// safeguard against a subsequent double returns. We care about safety (no token
+// leaks, no double returns) and liveness (eventual token returns).
 //
 // ---
 //
@@ -510,27 +546,3 @@ package kvflowcontrol
 // [^13]: See admission.sequencer and its use in admission.StoreWorkQueue.
 // [^14]: See the high_create_time_low_position_different_range test case for
 //        TestReplicatedWriteAdmission.
-//
-// TODO(irfansharif): These descriptions are too high-level, imprecise and
-// possibly wrong. Fix that. After implementing these interfaces and integrating
-// it into KV, write tests for each one of them and document the precise
-// interactions/integration points. It needs to be distilled to crisper
-// invariants. The guiding principle seems to be 'only grab flow tokens when
-// actively replicating a proposal along specific streams', which excludes
-// dead/paused/lagging/pre-split RHS/non-longer-group-member replicas, and
-// explains why we only do it on replicas that are both leaseholder and leader.
-// It also explains why we don't re-deduct on reproposals, or try to intercept
-// raft-initiated re-transmissions. For each of these scenarios, we know when
-// not to deduct flow tokens. If we observe getting into the scenarios, we
-// simply free up all held tokens and safeguard against a subsequent double
-// returns, relying entirely on low water marks or RangeIDs not being re-used.
-// - When framing invariants, talk about how we're achieving safety (no token
-//   leaks, no double returns) and liveness (eventual token returns).
-// - Other than I8 above, are there cases where the sender has deducted tokens
-//   and something happens on the receiver/sender/sender-receiver stream that:
-//   (a) doesn't cause the sender to "return all tokens", i.e. it's relying on
-//       the receiver to send messages to return tokens up to some point, and
-//   (b) the receiver has either not received the message for which we've
-//   deducted tokens, or forgotten about it.
-// - Ensure that flow tokens aren't leaked, by checking that after the tests
-//   quiesce, flow tokens are back to their original limits.

@@ -169,9 +169,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// such for the purposes of releasing quota can have bad consequences
 		// (writes will stall), whereas for quiescing the downside is lower.
 
-		if !r.mu.lastUpdateTimes.isFollowerActiveSince(
-			ctx, rep.ReplicaID, now, r.store.cfg.RangeLeaseDuration,
-		) {
+		if !r.mu.lastUpdateTimes.isFollowerActiveSince(rep.ReplicaID, now, r.store.cfg.RangeLeaseDuration) {
 			return
 		}
 		// At this point, we know that either we communicated with this replica
@@ -262,5 +260,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,
 			status.Applied)
 	}
-	r.mu.replicaFlowControlIntegration.onProposalQuotaUpdated(ctx)
+
+	// Tick the replicaFlowControlIntegration interface. This is as convenient a
+	// place to do it as any other. Much like the quota pool code above, the
+	// flow control integration layer considers raft progress state for
+	// individual replicas, and whether they've been recently active.
+	r.mu.replicaFlowControlIntegration.onRaftTicked(ctx)
 }

@@ -20,24 +20,6 @@ import (
 	rafttracker "go.etcd.io/raft/v3/tracker"
 )
 
-// replicaForFlowControl abstracts the interface of an individual Replica, as
-// needed by replicaFlowControlIntegration.
-type replicaForFlowControl interface {
-	annotateCtx(context.Context) context.Context
-	getTenantID() roachpb.TenantID
-	getReplicaID() roachpb.ReplicaID
-	getRangeID() roachpb.RangeID
-	getDescriptor() *roachpb.RangeDescriptor
-	getAppliedLogPosition() kvflowcontrolpb.RaftLogPosition
-	getPausedFollowers() map[roachpb.ReplicaID]struct{}
-	isFollowerLive(context.Context, roachpb.ReplicaID) bool
-	isRaftTransportConnectedTo(roachpb.StoreID) bool
-	withReplicaProgress(f func(roachpb.ReplicaID, rafttracker.Progress))
-
-	assertLocked()        // only affects test builds
-	isScratchRange() bool // only used in tests
-}
-
 // replicaFlowControl is a concrete implementation of the replicaForFlowControl
 // interface.
 type replicaFlowControl Replica
@@ -76,23 +58,66 @@ func (rf *replicaFlowControl) getPausedFollowers() map[roachpb.ReplicaID]struct{
 	return rf.mu.pausedFollowers
 }
 
-func (rf *replicaFlowControl) isFollowerLive(ctx context.Context, replID roachpb.ReplicaID) bool {
-	rf.mu.AssertHeld()
-	return rf.mu.lastUpdateTimes.isFollowerActiveSince(
-		ctx,
-		replID,
-		timeutil.Now(),
-		rf.store.cfg.RangeLeaseDuration,
-	)
+func (rf *replicaFlowControl) getBehindFollowers() map[roachpb.ReplicaID]struct{} {
+	rf.assertLocked()
+	behindFollowers := make(map[roachpb.ReplicaID]struct{})
+	rf.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress rafttracker.Progress) {
+		if progress.State == rafttracker.StateReplicate {
+			return
+		}
+
+		replID := roachpb.ReplicaID(id)
+		behindFollowers[replID] = struct{}{}
+
+		// TODO(irfansharif): Integrating with these other progress fields
+		// from raft. For replicas exiting rafttracker.StateProbe, perhaps
+		// compare progress.Match against status.Commit to make sure it's
+		// sufficiently caught up with respect to its raft log before we
+		// start deducting tokens for it (lest we run into I3a from
+		// kvflowcontrol/doc.go). To play well with the replica-level
+		// proposal quota pool, maybe we also factor its base index?
+		// Replicas that crashed and came back could come back in
+		// StateReplicate but be behind on their logs. If we're deducting
+		// tokens right away for subsequent proposals, it would take some
+		// time for it to catch up and then later return those tokens to us.
+		// This is I3a again; do it as part of #95563.
+		_ = progress.RecentActive
+		_ = progress.MsgAppFlowPaused
+		_ = progress.Match
+	})
+	return behindFollowers
 }
 
-func (rf *replicaFlowControl) isRaftTransportConnectedTo(storeID roachpb.StoreID) bool {
-	rf.mu.AssertHeld()
-	return rf.store.cfg.Transport.isConnectedTo(storeID)
+func (rf *replicaFlowControl) getInactiveFollowers() map[roachpb.ReplicaID]struct{} {
+	rf.assertLocked()
+	inactiveFollowers := make(map[roachpb.ReplicaID]struct{})
+	for _, desc := range rf.getDescriptor().Replicas().Descriptors() {
+		if desc.ReplicaID == rf.getReplicaID() {
+			continue
+		}
+		if !rf.mu.lastUpdateTimes.isFollowerActiveSince(desc.ReplicaID, timeutil.Now(), rf.store.cfg.RangeLeaseDuration) {
+			inactiveFollowers[desc.ReplicaID] = struct{}{}
+		}
+	}
+	return inactiveFollowers
+}
+
+func (rf *replicaFlowControl) getDisconnectedFollowers() map[roachpb.ReplicaID]struct{} {
+	rf.assertLocked()
+	disconnectedFollowers := make(map[roachpb.ReplicaID]struct{})
+	for _, desc := range rf.getDescriptor().Replicas().Descriptors() {
+		if desc.ReplicaID == rf.getReplicaID() {
+			continue
+		}
+		if !rf.store.raftTransportForFlowControl.isConnectedTo(desc.StoreID) {
+			disconnectedFollowers[desc.ReplicaID] = struct{}{}
+		}
+	}
+	return disconnectedFollowers
 }
 
 func (rf *replicaFlowControl) getAppliedLogPosition() kvflowcontrolpb.RaftLogPosition {
-	rf.mu.AssertHeld()
+	rf.assertLocked()
 	status := rf.mu.internalRaftGroup.BasicStatus()
 	return kvflowcontrolpb.RaftLogPosition{
 		Term:  status.Term,
@@ -100,16 +125,8 @@ func (rf *replicaFlowControl) getAppliedLogPosition() kvflowcontrolpb.RaftLogPos
 	}
 }
 
-func (rf *replicaFlowControl) withReplicaProgress(f func(roachpb.ReplicaID, rafttracker.Progress)) {
-	rf.mu.AssertHeld()
-	rf.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress rafttracker.Progress) {
-		f(roachpb.ReplicaID(id), progress)
-	})
-}
-
 func (rf *replicaFlowControl) isScratchRange() bool {
-	rf.mu.AssertHeld()
+	rf.assertLocked()
 	r := (*Replica)(rf)
 	return r.isScratchRangeRLocked()
 }
-
