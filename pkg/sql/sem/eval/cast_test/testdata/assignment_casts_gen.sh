@@ -9,7 +9,7 @@ set -euo pipefail
 # Usage:
 #   ./assignment_casts_gen.sh > assignment_casts.csv
 
-pgversion=$(psql -Aqtc 'SHOW server_version')
+pgversion=$(psql -AXqtc "SELECT substring(version(), 'PostgreSQL (\d+\.\d+)')")
 
 echo "# Testcases for TestAssignmentCastsMatchPostgres."
 echo "#"
@@ -20,11 +20,11 @@ echo "# contents of 'literals.txt' and 'types.txt'. To skip a testcase please ad
 echo "# to assignment_casts_skip.csv rather than commenting it out here."
 echo "literal,type,expect"
 while read -r type; do
-  psql -qc "CREATE TABLE assignment_casts (val $type)"
+  psql -Xqc "CREATE TABLE assignment_casts (val $type)"
   while read -r literal; do
     # Quote literal and type in case they contain quotes or commas.
     printf '"%s","%s",' "${literal//\"/\"\"}" "${type//\"/\"\"}"
-    psql --csv -qtc "INSERT INTO assignment_casts VALUES ($literal) RETURNING quote_nullable(val)" 2>/dev/null || echo 'error'
+    psql --csv -Xqtc "INSERT INTO assignment_casts VALUES ($literal) RETURNING quote_nullable(val)" 2>/dev/null || echo 'error'
   done <literals.txt
-  psql -qc "DROP TABLE IF EXISTS assignment_casts" 2>/dev/null
+  psql -Xqc "DROP TABLE IF EXISTS assignment_casts" 2>/dev/null
 done <types.txt
