@@ -4,9 +4,11 @@ package parser
 import (
   "fmt"
 
+  "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/lexbase"
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
   "github.com/cockroachdb/errors"
+  "github.com/cockroachdb/redact"
 )
 %}
 
@@ -688,7 +690,8 @@ getdiag_item: unreserved_keyword {
     case "returned_sqlstate":
       $$.val = plpgsqltree.PlpgsqlGetdiagReturnedSqlstate;
     default:
-      setErr(plpgsqllex, errors.New("unrecognized GET DIAGNOSTICS item " + $1 ))
+      // TODO(jane): Should this use an unimplemented error instead?
+      setErr(plpgsqllex, errors.Newf("unrecognized GET DIAGNOSTICS item: %s", redact.Safe($1)))
   }
 }
 ;
