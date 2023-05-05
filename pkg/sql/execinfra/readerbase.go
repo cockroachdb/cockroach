@@ -57,6 +57,12 @@ func MisplannedRanges(
 		if err != nil {
 			panic(err)
 		}
+		if rSpan.EndKey == nil {
+			// GetCachedOverlapping simply ignores spans if EndKey is not set.
+			// Here we have a point span, so we explicitly set the EndKey
+			// accordingly.
+			rSpan.EndKey = rSpan.Key.Next()
+		}
 		overlapping := rdc.GetCachedOverlapping(ctx, rSpan)
 
 		for _, ri := range overlapping {
