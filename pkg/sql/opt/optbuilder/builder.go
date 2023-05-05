@@ -314,10 +314,8 @@ func (b *Builder) buildStmt(
 	// An allowlist of statements supported for user defined function.
 	if b.insideFuncDef {
 		switch stmt := stmt.(type) {
-		case *tree.Select, tree.SelectStatement, *tree.Insert:
+		case *tree.Select, tree.SelectStatement, *tree.Insert, *tree.Update:
 		case *tree.Delete:
-			panic(unimplemented.NewWithIssuef(87289, "%s usage inside a function definition", stmt.StatementTag()))
-		case *tree.Update:
 			panic(unimplemented.NewWithIssuef(87289, "%s usage inside a function definition", stmt.StatementTag()))
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
