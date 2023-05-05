@@ -2736,6 +2736,7 @@ func (ex *connExecutor) execCopyOut(
 			ex.server.TelemetryLoggingMetrics,
 			stmtFingerprintID,
 			&stats,
+			ex.statsCollector,
 		)
 	}()
 
@@ -2969,7 +2970,16 @@ func (ex *connExecutor) execCopyIn(
 			ex.planner.CurrentDatabase(),
 		)
 		var stats topLevelQueryStats
-		ex.planner.maybeLogStatement(ctx, ex.executorType, true, int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter, numInsertedRows, 0 /* bulkJobId */, copyErr, ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived), &ex.extraTxnState.hasAdminRoleCache, ex.server.TelemetryLoggingMetrics, stmtFingerprintID, &stats)
+		ex.planner.maybeLogStatement(ctx, ex.executorType, true,
+			int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter,
+			numInsertedRows, 0, /* bulkJobId */
+			copyErr,
+			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
+			&ex.extraTxnState.hasAdminRoleCache,
+			ex.server.TelemetryLoggingMetrics,
+			stmtFingerprintID,
+			&stats,
+			ex.statsCollector)
 	}()
 
 	var copyErr error

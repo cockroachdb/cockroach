@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -93,7 +94,7 @@ func (t *TelemetryLoggingMetrics) maybeUpdateLastEmittedTime(
 	defer t.mu.Unlock()
 
 	lastEmittedTime := t.mu.lastEmittedTime
-
+	fmt.Printf("maybe %f >= %f", float64(newTime.Sub(lastEmittedTime))*1e-9, requiredSecondsElapsed)
 	if float64(newTime.Sub(lastEmittedTime))*1e-9 >= requiredSecondsElapsed {
 		t.mu.lastEmittedTime = newTime
 		return true
