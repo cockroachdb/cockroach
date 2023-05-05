@@ -21,10 +21,10 @@ new-txn txn=txn4 ts=11,1 epoch=0
 # req1 to finish scanning. It needs to resolve the locks held by txn2, txn3.
 # -----------------------------------------------------------------------------
 
-new-request r=req1 txn=txn1 ts=10,1 spans=w@a+w@b+w@c+w@d+w@e
+new-request r=req1 txn=txn1 ts=10,1 spans=intent@a+intent@b+intent@c+intent@d+intent@e
 ----
 
-new-request r=req2 txn=txn4 ts=11,1 spans=w@c
+new-request r=req2 txn=txn4 ts=11,1 spans=intent@c
 ----
 
 scan r=req1
@@ -171,7 +171,7 @@ start-waiting: true
 
 guard-state r=req1
 ----
-new: state=waitForDistinguished txn=txn4 key="c" held=true guard-access=write
+new: state=waitForDistinguished txn=txn4 key="c" held=true guard-strength=Intent
 
 print
 ----
@@ -263,10 +263,10 @@ num=0
 # the list of locks to resolve.
 # -----------------------------------------------------------------------------
 
-new-request r=req3 txn=txn1 ts=10,1 spans=w@a+w@b+w@c
+new-request r=req3 txn=txn1 ts=10,1 spans=intent@a+intent@b+intent@c
 ----
 
-new-request r=req4 txn=txn2 ts=11,1 spans=w@b
+new-request r=req4 txn=txn2 ts=11,1 spans=intent@b
 ----
 
 scan r=req3
@@ -361,10 +361,10 @@ num=0
 # req5 notices the finalization (via pushing) and scans again and resolves.
 # -----------------------------------------------------------------------------
 
-new-request r=req5 txn=txn1 ts=12,1 spans=w@a+w@b
+new-request r=req5 txn=txn1 ts=12,1 spans=intent@a+intent@b
 ----
 
-new-request r=req6 txn=txn3 ts=12,1 spans=w@a
+new-request r=req6 txn=txn3 ts=12,1 spans=intent@a
 ----
 
 scan r=req5
@@ -417,11 +417,11 @@ start-waiting: true
 
 guard-state r=req6
 ----
-new: state=waitFor txn=txn2 key="a" held=true guard-access=write
+new: state=waitFor txn=txn2 key="a" held=true guard-strength=Intent
 
 guard-state r=req5
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=Intent
 
 print
 ----
@@ -452,7 +452,7 @@ num=2
 
 guard-state r=req6
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=false guard-access=write
+new: state=waitForDistinguished txn=txn1 key="a" held=false guard-strength=Intent
 
 guard-state r=req5
 ----
@@ -491,10 +491,10 @@ num=0
 # reader.
 # -----------------------------------------------------------------------------
 
-new-request r=req7 txn=txn1 ts=12,1 spans=w@a+w@b
+new-request r=req7 txn=txn1 ts=12,1 spans=intent@a+intent@b
 ----
 
-new-request r=req8 txn=txn3 ts=12,1 spans=r@a+r@b
+new-request r=req8 txn=txn3 ts=12,1 spans=none@a+none@b
 ----
 
 scan r=req7
@@ -527,7 +527,7 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=Intent
 
 print
 ----
@@ -586,10 +586,10 @@ num=0
 # and resolves txn3 locks before req9.
 # -----------------------------------------------------------------------------
 
-new-request r=req9 txn=txn1 ts=12,1 spans=r@a+r@b+r@c+r@d
+new-request r=req9 txn=txn1 ts=12,1 spans=none@a+none@b+none@c+none@d
 ----
 
-new-request r=req10 txn=txn2 ts=12,1 spans=r@a+r@b
+new-request r=req10 txn=txn2 ts=12,1 spans=none@a+none@b
 ----
 
 scan r=req9
@@ -641,7 +641,7 @@ start-waiting: true
 
 guard-state r=req9
 ----
-new: state=waitForDistinguished txn=txn4 key="c" held=true guard-access=read
+new: state=waitForDistinguished txn=txn4 key="c" held=true guard-strength=None
 
 print
 ----
@@ -695,7 +695,7 @@ num=0
 # waiters.
 # -----------------------------------------------------------------------------
 
-new-request r=req11 txn=none ts=12,1 spans=w@a
+new-request r=req11 txn=none ts=12,1 spans=intent@a
 ----
 
 scan r=req11
@@ -740,7 +740,7 @@ num=0
 # when scanning.
 # -----------------------------------------------------------------------------
 
-new-request r=req12 txn=none ts=12,1 spans=r@a
+new-request r=req12 txn=none ts=12,1 spans=none@a
 ----
 
 scan r=req12

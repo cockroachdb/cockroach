@@ -64,7 +64,7 @@ new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
 
  Creates a TxnMeta.
 
-new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+... [skip-locked] [max-lock-wait-queue-length=<int>]
+new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=none|shared|update|exclusive|intent@<start>[,<end>]+... [skip-locked] [max-lock-wait-queue-length=<int>]
 ----
 
  Creates a Request.
@@ -112,7 +112,7 @@ add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>] [consult-finalized-
 
  Adds a discovered lock that is discovered by the named request.
 
-check-opt-no-conflicts r=<name> spans=r|w@<start>[,<end>]+...
+check-opt-no-conflicts r=<name> spans=none|shared|update|exclusive|intent@<start>[,<end>]+...
 ----
 no-conflicts: <bool>
 
@@ -578,21 +578,8 @@ func TestLockTableBasic(t *testing.T) {
 				if txnS == "" {
 					txnS = fmt.Sprintf("unknown txn with ID: %v", state.txn.ID)
 				}
-				// TODO(arul): We're translating the lock strength back to guardAccess
-				// for now to reduce test churn. A followup patch should teach these
-				// datadriven tests to use lock.Strength correctly -- both in its input
-				// and output.
-				var sa spanset.SpanAccess
-				switch state.guardStrength {
-				case lock.None:
-					sa = spanset.SpanReadOnly
-				case lock.Intent:
-					sa = spanset.SpanReadWrite
-				default:
-					t.Fatalf("unexpected guard strength %s", state.guardStrength)
-				}
-				return fmt.Sprintf("%sstate=%s txn=%s key=%s held=%t guard-access=%s",
-					str, typeStr, txnS, state.key, state.held, sa)
+				return fmt.Sprintf("%sstate=%s txn=%s key=%s held=%t guard-strength=%s",
+					str, typeStr, txnS, state.key, state.held, state.guardStrength)
 
 			case "resolve-before-scanning":
 				var reqName string
@@ -710,28 +697,27 @@ func scanSpans(
 	lockSpans := &lockspanset.LockSpanSet{}
 	var spansStr string
 	d.ScanArgs(t, "spans", &spansStr)
-	parts := strings.Split(spansStr, "+")
-	for _, p := range parts {
-		if len(p) < 2 || p[1] != '@' {
-			d.Fatalf(t, "incorrect span with access format: %s", p)
+	lockSpanStrs := strings.Split(spansStr, "+")
+	for _, lockSpanStr := range lockSpanStrs {
+		parts := strings.Split(lockSpanStr, "@")
+		if len(parts) != 2 {
+			d.Fatalf(t, "incorrect span with strength format: %s", parts)
 		}
-		c := p[0]
-		p = p[2:]
+		strS := parts[0]
+		spanStr := parts[1]
+		str := getStrength(t, d, strS)
+		// Compute latch span access based on the supplied strength.
 		var sa spanset.SpanAccess
-		var str lock.Strength
-		// TODO(arul): Switch the datadriven input to use lock strengths instead.
-		switch c {
-		case 'r':
+		switch str {
+		case lock.None:
 			sa = spanset.SpanReadOnly
-			str = lock.None
-		case 'w':
+		case lock.Intent:
 			sa = spanset.SpanReadWrite
-			str = lock.Intent
 		default:
-			d.Fatalf(t, "incorrect span access: %c", c)
+			d.Fatalf(t, "unsupported lock strength: %s", str)
 		}
-		latchSpans.AddMVCC(sa, getSpan(t, d, p), ts)
-		lockSpans.Add(str, getSpan(t, d, p))
+		latchSpans.AddMVCC(sa, getSpan(t, d, spanStr), ts)
+		lockSpans.Add(str, getSpan(t, d, spanStr))
 	}
 	return latchSpans, lockSpans
 }
@@ -739,6 +725,10 @@ func scanSpans(
 func ScanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
 	var strS string
 	d.ScanArgs(t, "strength", &strS)
+	return getStrength(t, d, strS)
+}
+
+func getStrength(t *testing.T, d *datadriven.TestData, strS string) lock.Strength {
 	switch strS {
 	case "none":
 		return lock.None
@@ -748,6 +738,8 @@ func ScanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
 		return lock.Update
 	case "exclusive":
 		return lock.Exclusive
+	case "intent":
+		return lock.Intent
 	default:
 		d.Fatalf(t, "unknown lock strength: %s", strS)
 		return 0

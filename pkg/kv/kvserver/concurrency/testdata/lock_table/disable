@@ -19,7 +19,7 @@ clear disable
 ----
 num=0
 
-new-request r=req1 txn=txn1 ts=10,1 spans=w@a+w@c
+new-request r=req1 txn=txn1 ts=10,1 spans=intent@a+intent@c
 ----
 
 scan r=req1
@@ -58,7 +58,7 @@ num=0
 enable
 ----
 
-new-request r=req2 txn=txn1 ts=10,1 spans=w@a+w@c
+new-request r=req2 txn=txn1 ts=10,1 spans=intent@a+intent@c
 ----
 
 scan r=req2
@@ -83,7 +83,7 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=Intent
 
 release txn=txn2 span=a
 ----

@@ -11,7 +11,7 @@ new-txn txn=txn3 ts=10 epoch=0
 ----
 
 # First locks at a, b, c are acquired by txn1
-new-request r=req1 txn=txn1 ts=10 spans=w@a+w@b+w@c
+new-request r=req1 txn=txn1 ts=10 spans=intent@a+intent@b+intent@c
 ----
 
 scan r=req1
@@ -53,14 +53,14 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
 
 # Next, two different transactional requests wait at a and b.
-new-request r=req2 txn=txn2 ts=10 spans=w@a
+new-request r=req2 txn=txn2 ts=10 spans=intent@a
 ----
 
 scan r=req2
 ----
 start-waiting: true
 
-new-request r=req3 txn=txn3 ts=10 spans=w@b
+new-request r=req3 txn=txn3 ts=10 spans=intent@b
 ----
 
 scan r=req3
@@ -69,7 +69,7 @@ start-waiting: true
 
 # Next, a non-transactional request that wants to write a, b, c waits at a.
 
-new-request r=req4 txn=none ts=10 spans=w@a+w@b+w@c
+new-request r=req4 txn=none ts=10 spans=intent@a+intent@b+intent@c
 ----
 
 scan r=req4
@@ -78,7 +78,7 @@ start-waiting: true
 
 # Next, a transactional request that arrives later than the non-transactional request waits at c
 
-new-request r=req5 txn=txn3 ts=10 spans=w@c
+new-request r=req5 txn=txn3 ts=10 spans=intent@c
 ----
 
 scan r=req5
@@ -131,7 +131,7 @@ new: state=doneWaiting
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=false guard-access=write
+new: state=waitForDistinguished txn=txn2 key="a" held=false guard-strength=Intent
 
 guard-state r=req5
 ----
@@ -139,7 +139,7 @@ new: state=doneWaiting
 
 # Add another transactional request at a. It will wait behind the non-transactional request.
 
-new-request r=req6 txn=txn1 ts=10 spans=w@a
+new-request r=req6 txn=txn1 ts=10 spans=intent@a
 ----
 
 scan r=req6
@@ -176,7 +176,7 @@ num=3
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn3 key="b" held=false guard-access=write
+new: state=waitForDistinguished txn=txn3 key="b" held=false guard-strength=Intent
 
 guard-state r=req6
 ----
@@ -249,11 +249,11 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn2 key="c" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="c" held=true guard-strength=Intent
 
 guard-state r=req5
 ----
-new: state=waitFor txn=txn2 key="c" held=true guard-access=write
+new: state=waitFor txn=txn2 key="c" held=true guard-strength=Intent
 
 # Release the lock. The non-transactional request does not acquire the reservation.
 

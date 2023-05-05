@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -137,7 +136,7 @@ func (s waitingState) String() string {
 // - metrics about lockTable state to export to observability debug pages:
 //   number of locks, number of waiting requests, wait time?, ...
 
-// The btree for a particular SpanScope.
+// The btree for a particular key.
 type treeMu struct {
 	mu syncutil.RWMutex // Protects everything in this struct.
 
@@ -276,7 +275,7 @@ func newLockTable(maxLocks int64, rangeID roachpb.RangeID, clock *hlc.Clock) *lo
 
 func (t *lockTableImpl) setMaxLocks(maxLocks int64) {
 	// Check at 5% intervals of the max count.
-	lockAddMaxLocksCheckInterval := maxLocks / (int64(spanset.NumSpanScope) * 20)
+	lockAddMaxLocksCheckInterval := maxLocks / int64(20)
 	if lockAddMaxLocksCheckInterval == 0 {
 		lockAddMaxLocksCheckInterval = 1
 	}
@@ -974,6 +973,11 @@ type lockWaitQueue struct {
 	//   since those are also shared lockers. In that case it will depend on the
 	//   first waiter since that waiter must be desiring a lock that is
 	//   incompatible with a shared lock.
+	//
+	// TODO(arul): The paragraph above still talks about declaring access on keys
+	// in terms of SpanAccess instead of lock strength. Switch over this verbiage
+	// to reference locking/non-locking requests once we support multiple lock
+	// strengths and add support for joint reservations.
 
 	reservation *lockTableGuardImpl
 
@@ -1673,10 +1677,10 @@ func (l *lockState) tryActiveWait(
 			// Already reserved by this request.
 			return false, false
 		}
-		// A non-transactional write request never makes or breaks reservations,
-		// and only waits for a reservation if the reservation has a lower
-		// seqNum. Note that `sa == spanset.SpanRead && lockHolderTxn == nil`
-		// was already checked above.
+		// A non-transactional write request never makes or breaks reservations, and
+		// only waits for a reservation if the reservation has a lower seqNum. Note
+		// that `str == lock.None && lockHolderTxn == nil` was already checked
+		// above.
 		if g.txn == nil && l.reservation.seqNum > g.seqNum {
 			// Reservation is held by a request with a higher seqNum and g is a
 			// non-transactional request. Ignore the reservation.
@@ -2790,34 +2794,30 @@ func (t *lockTableImpl) lockCountForTesting() int64 {
 // Waiters of removed locks are told to wait elsewhere or that they are done
 // waiting.
 func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
-	done := false
 	clearCount := 0
-	for i := 0; i < int(spanset.NumSpanScope) && !done; i++ {
-		t.locks.mu.Lock()
-		var locksToClear []*lockState
-		iter := t.locks.MakeIter()
-		for iter.First(); iter.Valid(); iter.Next() {
-			l := iter.Cur()
-			if l.tryClearLock(force) {
-				locksToClear = append(locksToClear, l)
-				clearCount++
-				if !force && clearCount >= numToClear {
-					done = true
-					break
-				}
+	t.locks.mu.Lock()
+	var locksToClear []*lockState
+	iter := t.locks.MakeIter()
+	for iter.First(); iter.Valid(); iter.Next() {
+		l := iter.Cur()
+		if l.tryClearLock(force) {
+			locksToClear = append(locksToClear, l)
+			clearCount++
+			if !force && clearCount >= numToClear {
+				break
 			}
 		}
-		atomic.AddInt64(&t.locks.numLocks, int64(-len(locksToClear)))
-		if t.locks.Len() == len(locksToClear) {
-			// Fast-path full clear.
-			t.locks.Reset()
-		} else {
-			for _, l := range locksToClear {
-				t.locks.Delete(l)
-			}
-		}
-		t.locks.mu.Unlock()
 	}
+	atomic.AddInt64(&t.locks.numLocks, int64(-len(locksToClear)))
+	if t.locks.Len() == len(locksToClear) {
+		// Fast-path full clear.
+		t.locks.Reset()
+	} else {
+		for _, l := range locksToClear {
+			t.locks.Delete(l)
+		}
+	}
+	t.locks.mu.Unlock()
 }
 
 // findHighestLockStrengthInSpans returns the highest lock strength specified

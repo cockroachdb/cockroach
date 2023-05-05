@@ -14,7 +14,7 @@ new-txn txn=txn3 ts=12,1 epoch=0
 
 # txn1 acquires unreplicated exclusive locks at a and b.
 
-new-request r=req1 txn=txn1 ts=10,1 spans=w@a+w@b
+new-request r=req1 txn=txn1 ts=10,1 spans=intent@a+intent@b
 ----
 
 scan r=req1
@@ -49,7 +49,7 @@ num=2
 
 # In its next request, txn1 discovers a lock at c held by txn2.
 
-new-request r=req2 txn=txn1 ts=10,1 spans=r@c
+new-request r=req2 txn=txn1 ts=10,1 spans=none@c
 ----
 
 scan r=req2
@@ -72,7 +72,7 @@ num=3
 
 # A non-transactional read comes in at a and blocks on the lock.
 
-new-request r=req3 txn=none ts=10,1 spans=r@a
+new-request r=req3 txn=none ts=10,1 spans=none@a
 ----
 
 scan r=req3
@@ -81,11 +81,11 @@ start-waiting: true
 
 guard-state r=req3
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
 
 # Similarly, a non-transactional write at a arrives and blocks.
 
-new-request r=req4 txn=none ts=10,1 spans=w@a
+new-request r=req4 txn=none ts=10,1 spans=intent@a
 ----
 
 scan r=req4
@@ -94,11 +94,11 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
 
 # txn3 tries to write to b which also has a lock held, so txn3 has to wait.
 
-new-request r=req5 txn=txn3 ts=12,1 spans=w@b
+new-request r=req5 txn=txn3 ts=12,1 spans=intent@b
 ----
 
 scan r=req5
@@ -107,7 +107,7 @@ start-waiting: true
 
 guard-state r=req5
 ----
-new: state=waitForDistinguished txn=txn1 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="b" held=true guard-strength=Intent
 
 print
 ----

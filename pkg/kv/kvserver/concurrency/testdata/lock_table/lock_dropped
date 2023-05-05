@@ -10,7 +10,7 @@ new-lock-table maxlocks=10000
 new-txn txn=txn1 ts=10 epoch=0 seq=2
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=w@a
+new-request r=req1 txn=txn1 ts=10 spans=intent@a
 ----
 
 acquire r=req1 k=a durability=r
@@ -37,7 +37,7 @@ num=0
 # causes that lock to be dropped and the readers to be released.
 # ---------------------------------------------------------------------------------
 
-new-request r=reqContendReader txn=none ts=10 spans=r@a
+new-request r=reqContendReader txn=none ts=10 spans=none@a
 ----
 
 acquire r=req1 k=a durability=u
@@ -72,7 +72,7 @@ new: state=doneWaiting
 # writers causes the lock to be retained.
 # ---------------------------------------------------------------------------------
 
-new-request r=reqContendWriter txn=none ts=10 spans=w@a
+new-request r=reqContendWriter txn=none ts=10 spans=intent@a
 ----
 
 acquire r=req1 k=a durability=u
@@ -113,11 +113,11 @@ num=1
 
 guard-state r=reqContendReader
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
 
 guard-state r=reqContendWriter
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
 
 clear
 ----
@@ -144,7 +144,7 @@ num=1
 new-txn txn=txn2 ts=10 epoch=0 seq=0
 ----
 
-new-request r=req2 txn=txn2 ts=10 spans=w@b
+new-request r=req2 txn=txn2 ts=10 spans=intent@b
 ----
 
 acquire r=req2 k=b durability=u
@@ -155,7 +155,7 @@ num=2
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
 
-new-request r=req3 txn=none ts=10 spans=r@a,c
+new-request r=req3 txn=none ts=10 spans=none@a,c
 ----
 
 scan r=req3
@@ -164,7 +164,7 @@ start-waiting: true
 
 guard-state r=req3
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
 
 acquire r=req2 k=b durability=r
 ----
