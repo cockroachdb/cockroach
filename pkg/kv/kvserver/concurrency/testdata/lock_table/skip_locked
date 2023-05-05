@@ -15,7 +15,7 @@ new-txn txn=txn2 ts=9,1 epoch=0
 #  e: unlocked
 #  f: reservation by txn1
 
-new-request r=req1 txn=txn1 ts=10,1 spans=w@b,d
+new-request r=req1 txn=txn1 ts=10,1 spans=intent@b,d
 ----
 
 scan r=req1
@@ -48,7 +48,7 @@ num=2
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
-new-request r=req2 txn=txn2 ts=9,1 spans=w@c+w@f
+new-request r=req2 txn=txn2 ts=9,1 spans=intent@c+intent@f
 ----
 
 scan r=req2
@@ -93,7 +93,7 @@ num=4
  lock: "f"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
-new-request r=req3 txn=txn1 ts=10,1 spans=w@f
+new-request r=req3 txn=txn1 ts=10,1 spans=intent@f
 ----
 
 scan r=req3
@@ -122,7 +122,7 @@ num=4
 # keys to skip.
 # ---------------------------------------------------------------------------------
 
-new-request r=req4 txn=txn2 ts=9,1 spans=r@a,g skip-locked
+new-request r=req4 txn=txn2 ts=9,1 spans=none@a,g skip-locked
 ----
 
 scan r=req4
@@ -198,7 +198,7 @@ num=4
 # exercise the strength=none cases again.
 # ---------------------------------------------------------------------------------
 
-new-request r=req5 txn=txn2 ts=10,1 spans=r@a,g skip-locked
+new-request r=req5 txn=txn2 ts=10,1 spans=none@a,g skip-locked
 ----
 
 scan r=req5

@@ -17,7 +17,7 @@ new-txn txn=txn2 ts=10 epoch=0
 new-txn txn=txn3 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=w@a+w@b+w@c
+new-request r=req1 txn=txn1 ts=10 spans=intent@a+intent@b+intent@c
 ----
 
 scan r=req1
@@ -36,7 +36,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
 
-new-request r=req2 txn=txn2 ts=10 spans=w@a+r@a
+new-request r=req2 txn=txn2 ts=10 spans=intent@a+none@a
 ----
 
 scan r=req2
@@ -45,7 +45,7 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=Intent
 
 print
 ----
@@ -75,7 +75,7 @@ num=0
 # broken, but ignores "b" when encounters it as reader.
 # ---------------------------------------------------------------------------------
 
-new-request r=req3 txn=txn1 ts=10 spans=w@a+w@b+w@c
+new-request r=req3 txn=txn1 ts=10 spans=intent@a+intent@b+intent@c
 ----
 
 scan r=req3
@@ -116,7 +116,7 @@ num=3
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
 
-new-request r=req4 txn=txn2 ts=10 spans=w@a+w@b
+new-request r=req4 txn=txn2 ts=10 spans=intent@a+intent@b
 ----
 
 scan r=req4
@@ -125,9 +125,9 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=Intent
 
-new-request r=req5 txn=txn3 ts=10 spans=w@b+w@c+r@b
+new-request r=req5 txn=txn3 ts=10 spans=intent@b+intent@c+none@b
 ----
 
 scan r=req5
@@ -136,7 +136,7 @@ start-waiting: true
 
 guard-state r=req5
 ----
-new: state=waitForDistinguished txn=txn1 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="b" held=true guard-strength=Intent
 
 print
 ----
@@ -171,7 +171,7 @@ num=3
 
 guard-state r=req5
 ----
-new: state=waitForDistinguished txn=txn1 key="c" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="c" held=true guard-strength=Intent
 
 print
 ----
@@ -281,7 +281,7 @@ num=0
 # previous test.
 # ---------------------------------------------------------------------------------
 
-new-request r=req6 txn=txn1 ts=10 spans=w@a+w@b+w@c
+new-request r=req6 txn=txn1 ts=10 spans=intent@a+intent@b+intent@c
 ----
 
 scan r=req6
@@ -322,7 +322,7 @@ num=3
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
 
-new-request r=req7 txn=txn2 ts=10 spans=w@a+w@b
+new-request r=req7 txn=txn2 ts=10 spans=intent@a+intent@b
 ----
 
 scan r=req7
@@ -331,9 +331,9 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=Intent
 
-new-request r=req8 txn=none ts=10 spans=w@b+w@c+r@b
+new-request r=req8 txn=none ts=10 spans=intent@b+intent@c+none@b
 ----
 
 scan r=req8
@@ -342,12 +342,12 @@ start-waiting: true
 
 guard-state r=req8
 ----
-new: state=waitForDistinguished txn=txn1 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="b" held=true guard-strength=Intent
 
 # req9 is just to prevent the lock for "b" from being gc'd and then a new one
 # created when req7 acquires "b", which due to the old snapshot held by req8
 # would not be seen until the next scan.
-new-request r=req9 txn=txn2 ts=10 spans=w@b
+new-request r=req9 txn=txn2 ts=10 spans=intent@b
 ----
 
 scan r=req9
@@ -356,7 +356,7 @@ start-waiting: true
 
 guard-state r=req9
 ----
-new: state=waitFor txn=txn1 key="b" held=true guard-access=write
+new: state=waitFor txn=txn1 key="b" held=true guard-strength=Intent
 
 print
 ----
@@ -392,7 +392,7 @@ num=3
 
 guard-state r=req8
 ----
-new: state=waitForDistinguished txn=txn1 key="c" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="c" held=true guard-strength=Intent
 
 print
 ----
@@ -472,7 +472,7 @@ num=2
 
 guard-state r=req8
 ----
-new: state=waitForDistinguished txn=txn2 key="b" held=true guard-access=read
+new: state=waitForDistinguished txn=txn2 key="b" held=true guard-strength=None
 
 print
 ----
@@ -510,7 +510,7 @@ num=0
 # it ignores the lock at "b".
 # ---------------------------------------------------------------------------------
 
-new-request r=req10 txn=txn1 ts=10 spans=w@a+w@b
+new-request r=req10 txn=txn1 ts=10 spans=intent@a+intent@b
 ----
 
 scan r=req10
@@ -539,7 +539,7 @@ num=2
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
 
-new-request r=req11 txn=txn2 ts=10 spans=w@a+w@b
+new-request r=req11 txn=txn2 ts=10 spans=intent@a+intent@b
 ----
 
 scan r=req11
@@ -548,9 +548,9 @@ start-waiting: true
 
 guard-state r=req11
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=Intent
 
-new-request r=req12 txn=txn3 ts=10 spans=w@b+r@b
+new-request r=req12 txn=txn3 ts=10 spans=intent@b+none@b
 ----
 
 scan r=req12
@@ -559,7 +559,7 @@ start-waiting: true
 
 guard-state r=req12
 ----
-new: state=waitForDistinguished txn=txn1 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="b" held=true guard-strength=Intent
 
 print
 ----
@@ -639,7 +639,7 @@ start-waiting: true
 
 guard-state r=req12
 ----
-new: state=waitForDistinguished txn=txn2 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="b" held=true guard-strength=Intent
 
 dequeue r=req11
 ----

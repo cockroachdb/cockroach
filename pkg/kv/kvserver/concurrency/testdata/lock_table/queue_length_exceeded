@@ -10,13 +10,13 @@ new-txn txn=txn2 ts=10 epoch=0
 new-txn txn=txn3 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=w@a
+new-request r=req1 txn=txn1 ts=10 spans=intent@a
 ----
 
-new-request r=req2 txn=txn2 ts=10 spans=w@a
+new-request r=req2 txn=txn2 ts=10 spans=intent@a
 ----
 
-new-request r=req3 txn=txn3 ts=10 spans=w@a
+new-request r=req3 txn=txn3 ts=10 spans=intent@a
 ----
 
 scan r=req1
@@ -55,7 +55,7 @@ num=1
 new-txn txn=txn4 ts=10 epoch=0
 ----
 
-new-request r=req4 txn=txn4 ts=10 spans=r@a max-lock-wait-queue-length=2
+new-request r=req4 txn=txn4 ts=10 spans=none@a max-lock-wait-queue-length=2
 ----
 
 scan r=req4
@@ -64,7 +64,7 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-access=read
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
 
 dequeue r=req4
 ----
@@ -83,7 +83,7 @@ num=1
 new-txn txn=txn5 ts=10 epoch=0
 ----
 
-new-request r=req5 txn=txn5 ts=10 spans=w@a max-lock-wait-queue-length=3
+new-request r=req5 txn=txn5 ts=10 spans=intent@a max-lock-wait-queue-length=3
 ----
 
 scan r=req5
@@ -92,7 +92,7 @@ start-waiting: true
 
 guard-state r=req5
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
 
 dequeue r=req5
 ----
@@ -111,7 +111,7 @@ num=1
 new-txn txn=txn6 ts=10 epoch=0
 ----
 
-new-request r=req6 txn=txn6 ts=10 spans=w@a max-lock-wait-queue-length=2
+new-request r=req6 txn=txn6 ts=10 spans=intent@a max-lock-wait-queue-length=2
 ----
 
 scan r=req6
@@ -120,7 +120,7 @@ start-waiting: true
 
 guard-state r=req6
 ----
-new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-access=write
+new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-strength=Intent
 
 dequeue r=req6
 ----
@@ -136,7 +136,7 @@ num=1
 # Same as previous two cases, but for non-transactional writes.
 # ---------------------------------------------------------------------------------
 
-new-request r=req7 txn=none ts=10 spans=w@a max-lock-wait-queue-length=3
+new-request r=req7 txn=none ts=10 spans=intent@a max-lock-wait-queue-length=3
 ----
 
 scan r=req7
@@ -145,7 +145,7 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
 
 dequeue r=req7
 ----
@@ -157,7 +157,7 @@ num=1
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 2
 
-new-request r=req8 txn=none ts=10 spans=w@a max-lock-wait-queue-length=2
+new-request r=req8 txn=none ts=10 spans=intent@a max-lock-wait-queue-length=2
 ----
 
 scan r=req8
@@ -166,7 +166,7 @@ start-waiting: true
 
 guard-state r=req8
 ----
-new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-access=write
+new: state=waitQueueMaxLengthExceeded txn=txn1 key="a" held=true guard-strength=Intent
 
 dequeue r=req8
 ----

@@ -17,16 +17,16 @@ new-txn txn=txn2 ts=10 epoch=0
 new-txn txn=txn3 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=w@a
+new-request r=req1 txn=txn1 ts=10 spans=intent@a
 ----
 
-new-request r=req2 txn=txn2 ts=10 spans=w@a
+new-request r=req2 txn=txn2 ts=10 spans=intent@a
 ----
 
-new-request r=req3 txn=txn3 ts=10 spans=w@a
+new-request r=req3 txn=txn3 ts=10 spans=intent@a
 ----
 
-new-request r=req4 txn=txn2 ts=10 spans=w@a
+new-request r=req4 txn=txn2 ts=10 spans=intent@a
 ----
 
 scan r=req1
@@ -59,15 +59,15 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=Intent
 
 guard-state r=req3
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
 
 guard-state r=req4
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
 
 print
 ----
@@ -96,7 +96,7 @@ new: state=doneWaiting
 
 guard-state r=req3
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=false guard-access=write
+new: state=waitForDistinguished txn=txn2 key="a" held=false guard-strength=Intent
 
 guard-state r=req4
 ----
@@ -137,7 +137,7 @@ num=1
 
 guard-state r=req3
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=Intent
 
 guard-state r=req4
 ----

@@ -6,7 +6,7 @@ new-txn txn=txn1 ts=10,1 epoch=0
 
 # req1 will acquire locks for txn1
 
-new-request r=req1 txn=txn1 ts=10,1 spans=r@a,b+w@c,f
+new-request r=req1 txn=txn1 ts=10,1 spans=none@a,b+intent@c,f
 ----
 
 scan r=req1
@@ -51,7 +51,7 @@ time-tick ms=200
 
 # req2 is also for txn1 and will not wait for locks that are held by self.
 
-new-request r=req2 txn=txn1 ts=10,2 spans=w@b,d+r@d,g
+new-request r=req2 txn=txn1 ts=10,2 spans=intent@b,d+none@d,g
 ----
 
 scan r=req2
@@ -89,7 +89,7 @@ new-txn txn=txn2 ts=8,12 epoch=0
 ----
 
 # A read request for txn2 does not need to wait for locks held by txn1.
-new-request r=req3 txn=txn2 ts=8,12 spans=r@a,g
+new-request r=req3 txn=txn2 ts=8,12 spans=none@a,g
 ----
 
 scan r=req3
@@ -114,7 +114,7 @@ time-tick ms=200
 # req4 from txn2 will conflict with locks on b, c since wants to write to [a, d). But does
 # not conflict with lock on e since wants to read there and the read is at a lower timestamp
 # than the lock.
-new-request r=req4 txn=txn2 ts=8,12 spans=w@a,d+r@d,g
+new-request r=req4 txn=txn2 ts=8,12 spans=intent@a,d+none@d,g
 ----
 
 scan r=req4
@@ -123,7 +123,7 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn1 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="b" held=true guard-strength=Intent
 
 # 3s passes while req4 is waiting on locks on b,c
 time-tick s=3
@@ -145,7 +145,7 @@ num=3
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn1 key="c" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="c" held=true guard-strength=Intent
 
 # 1s passes while req4 continues to wait on c (and only has reservation on b)
 time-tick s=1
@@ -241,7 +241,7 @@ time-tick s=2
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn3 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn3 key="a" held=true guard-strength=Intent
 
 print
 ----
@@ -368,7 +368,7 @@ time-tick ms=300
 # req5 is again from transaction 1. Since it is reading from b, c, and even though txn1
 # conflicts with the reservation holder since txn1.ts > txn2.ts, reads don't wait for
 # reservations.
-new-request r=req5 txn=txn1 ts=11,1 spans=r@b+r@c
+new-request r=req5 txn=txn1 ts=11,1 spans=none@b+none@c
 ----
 
 scan r=req5
@@ -399,7 +399,7 @@ time-tick ms=100
 
 # req6 from txn1 conflicts with lock at f, and reservations at b, c.
 
-new-request r=req6 txn=txn1 ts=11,1 spans=r@f+w@b,d
+new-request r=req6 txn=txn1 ts=11,1 spans=none@f+intent@b,d
 ----
 
 scan r=req6
@@ -537,7 +537,7 @@ topklocksbywaitduration:
 
 guard-state r=req6
 ----
-new: state=waitForDistinguished txn=txn2 key="b" held=false guard-access=write
+new: state=waitForDistinguished txn=txn2 key="b" held=false guard-strength=Intent
 
 # 250ms passes between req6 and req7
 time-tick ms=250
@@ -546,7 +546,7 @@ time-tick ms=250
 
 # req7 from txn3 only wants to write to c
 
-new-request r=req7 txn=txn3 ts=6 spans=w@c
+new-request r=req7 txn=txn3 ts=6 spans=intent@c
 ----
 
 scan r=req7
@@ -571,7 +571,7 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn2 key="c" held=false guard-access=write
+new: state=waitForDistinguished txn=txn2 key="c" held=false guard-strength=Intent
 
 print
 ----
@@ -737,11 +737,11 @@ num=5
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn3 key="f" held=true guard-access=read
+new: state=waitForDistinguished txn=txn3 key="f" held=true guard-strength=None
 
 guard-state r=req6
 ----
-old: state=waitForDistinguished txn=txn2 key="b" held=false guard-access=write
+old: state=waitForDistinguished txn=txn2 key="b" held=false guard-strength=Intent
 
 print
 ----
@@ -948,11 +948,11 @@ num=4
 
 guard-state r=req6
 ----
-new: state=waitForDistinguished txn=txn2 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="b" held=true guard-strength=Intent
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn2 key="c" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="c" held=true guard-strength=Intent
 
 print
 ----
@@ -1121,7 +1121,7 @@ new: state=doneWaiting
 
 guard-state r=req6
 ----
-old: state=waitForDistinguished txn=txn2 key="b" held=true guard-access=write
+old: state=waitForDistinguished txn=txn2 key="b" held=true guard-strength=Intent
 
 print
 ----
@@ -1377,7 +1377,7 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn1 key="c" held=false guard-access=write
+new: state=waitForDistinguished txn=txn1 key="c" held=false guard-strength=Intent
 
 scan r=req6
 ----
@@ -1413,7 +1413,7 @@ time-tick s=15
 ----
 
 
-new-request r=req8 txn=txn3 ts=6 spans=w@e
+new-request r=req8 txn=txn3 ts=6 spans=intent@e
 ----
 
 scan r=req8
@@ -1422,7 +1422,7 @@ start-waiting: true
 
 guard-state r=req8
 ----
-new: state=waitForDistinguished txn=txn1 key="e" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="e" held=true guard-strength=Intent
 
 dequeue r=req8
 ----
@@ -1533,7 +1533,7 @@ topklocksbywaitduration:
 # All requests have been retired and the lock table is empty.
 # The following tests multiple requests from the same transaction.
 
-new-request r=req9 txn=txn1 ts=10,1 spans=w@c
+new-request r=req9 txn=txn1 ts=10,1 spans=intent@c
 ----
 
 scan r=req9
@@ -1646,7 +1646,7 @@ topklocksbywaitduration:
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 
-new-request r=req10 txn=txn2 ts=8,12 spans=w@c
+new-request r=req10 txn=txn2 ts=8,12 spans=intent@c
 ----
 
 scan r=req10
@@ -1655,9 +1655,9 @@ start-waiting: true
 
 guard-state r=req10
 ----
-new: state=waitForDistinguished txn=txn1 key="c" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="c" held=true guard-strength=Intent
 
-new-request r=req11 txn=txn3 ts=6 spans=w@c
+new-request r=req11 txn=txn3 ts=6 spans=intent@c
 ----
 
 scan r=req11
@@ -1666,9 +1666,9 @@ start-waiting: true
 
 guard-state r=req11
 ----
-new: state=waitFor txn=txn1 key="c" held=true guard-access=write
+new: state=waitFor txn=txn1 key="c" held=true guard-strength=Intent
 
-new-request r=req12 txn=txn2 ts=8,12 spans=w@c
+new-request r=req12 txn=txn2 ts=8,12 spans=intent@c
 ----
 
 scan r=req12
@@ -1677,7 +1677,7 @@ start-waiting: true
 
 guard-state r=req12
 ----
-new: state=waitFor txn=txn1 key="c" held=true guard-access=write
+new: state=waitFor txn=txn1 key="c" held=true guard-strength=Intent
 
 print
 ----
@@ -1796,7 +1796,7 @@ new: state=doneWaiting
 
 guard-state r=req11
 ----
-new: state=waitForDistinguished txn=txn2 key="c" held=false guard-access=write
+new: state=waitForDistinguished txn=txn2 key="c" held=false guard-strength=Intent
 
 guard-state r=req12
 ----
@@ -1916,7 +1916,7 @@ num=1
 
 guard-state r=req11
 ----
-new: state=waitForDistinguished txn=txn2 key="c" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="c" held=true guard-strength=Intent
 
 # Since req10 that is also txn2 has acquired the lock, req12 does not need to wait here anymore.
 guard-state r=req12
@@ -2051,7 +2051,7 @@ num=1
 
 guard-state r=req11
 ----
-old: state=waitForDistinguished txn=txn2 key="c" held=true guard-access=write
+old: state=waitForDistinguished txn=txn2 key="c" held=true guard-strength=Intent
 
 release txn=txn2 span=b,d
 ----
@@ -2163,7 +2163,7 @@ num=0
 # Tests with non-transactional requests that triggered nil pointer
 # dereference bugs.
 
-new-request r=req13 txn=txn2 ts=8,12 spans=w@c
+new-request r=req13 txn=txn2 ts=8,12 spans=intent@c
 ----
 
 scan r=req13
@@ -2176,14 +2176,14 @@ num=1
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, info: unrepl epoch: 0, seqs: [0]
 
-new-request r=req14 txn=txn1 ts=9,0 spans=w@c
+new-request r=req14 txn=txn1 ts=9,0 spans=intent@c
 ----
 
 scan r=req14
 ----
 start-waiting: true
 
-new-request r=req15 txn=none ts=10,12 spans=r@c
+new-request r=req15 txn=none ts=10,12 spans=none@c
 ----
 
 scan r=req15
@@ -2202,7 +2202,7 @@ num=1
  lock: "c"
   res: req: 14, txn: 00000000-0000-0000-0000-000000000001, ts: 9.000000000,0, seq: 0
 
-new-request r=req16 txn=none ts=10,12 spans=r@c
+new-request r=req16 txn=none ts=10,12 spans=none@c
 ----
 
 scan r=req16
@@ -2312,7 +2312,7 @@ topklocksbywaitduration:
 # transaction that eventually grabs a reservation. Triggered a bug
 # in not replacing the distinguished waiter.
 
-new-request r=req17 txn=txn1 ts=9,0 spans=w@c+w@d
+new-request r=req17 txn=txn1 ts=9,0 spans=intent@c+intent@d
 ----
 
 scan r=req17
@@ -2341,14 +2341,14 @@ num=2
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 9.000000000,0, info: unrepl epoch: 1, seqs: [0]
 
-new-request r=req18 txn=txn2 ts=10,0 spans=w@c+w@d
+new-request r=req18 txn=txn2 ts=10,0 spans=intent@c+intent@d
 ----
 
 scan r=req18
 ----
 start-waiting: true
 
-new-request r=req19 txn=txn2 ts=10,0 spans=w@d
+new-request r=req19 txn=txn2 ts=10,0 spans=intent@d
 ----
 
 scan r=req19
@@ -2475,7 +2475,7 @@ num=2
 
 guard-state r=req18
 ----
-new: state=waitFor txn=txn1 key="d" held=true guard-access=write
+new: state=waitFor txn=txn1 key="d" held=true guard-strength=Intent
 
 print
 ----
@@ -2628,7 +2628,7 @@ num=0
 # Reservation can be broken while holding latches because a different
 # lock is released
 
-new-request r=req20 txn=txn1 ts=10 spans=w@c
+new-request r=req20 txn=txn1 ts=10 spans=intent@c
 ----
 
 scan r=req20
@@ -2647,7 +2647,7 @@ num=1
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [0]
 
-new-request r=req21 txn=txn1 ts=10 spans=w@d
+new-request r=req21 txn=txn1 ts=10 spans=intent@d
 ----
 
 scan r=req21
@@ -2670,7 +2670,7 @@ num=2
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 1, seqs: [0]
 
-new-request r=req22 txn=txn2 ts=10 spans=w@c+w@d
+new-request r=req22 txn=txn2 ts=10 spans=intent@c+intent@d
 ----
 
 scan r=req22
@@ -2779,7 +2779,7 @@ topklocksbywaitduration:
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 
-new-request r=req23 txn=txn3 ts=10 spans=w@d
+new-request r=req23 txn=txn3 ts=10 spans=intent@d
 ----
 
 scan r=req23

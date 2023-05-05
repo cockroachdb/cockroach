@@ -9,7 +9,7 @@ new-txn txn=txn1 ts=10 epoch=0
 new-txn txn=txn2 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=w@a+r@b+w@c
+new-request r=req1 txn=txn1 ts=10 spans=intent@a+none@b+intent@c
 ----
 
 scan r=req1
@@ -64,7 +64,7 @@ num=3
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
-new-request r=req2 txn=txn1 ts=10 spans=w@c
+new-request r=req2 txn=txn1 ts=10 spans=intent@c
 ----
 
 scan r=req2
@@ -95,7 +95,7 @@ start-waiting: true
 
 guard-state r=req1
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=Intent
 
 print
 ----
@@ -131,7 +131,7 @@ num=3
 
 guard-state r=req1
 ----
-new: state=waitFor txn=txn2 key="c" held=true guard-access=write
+new: state=waitFor txn=txn2 key="c" held=true guard-strength=Intent
 
 print
 ----
@@ -163,7 +163,7 @@ num=3
 
 guard-state r=req1
 ----
-new: state=waitForDistinguished txn=txn2 key="b" held=true guard-access=read
+new: state=waitForDistinguished txn=txn2 key="b" held=true guard-strength=None
 
 guard-state r=req2
 ----
