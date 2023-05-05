@@ -99,14 +99,35 @@ func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
 	if h == nil {
 		return // nothing to do
 	}
+
+	e.metrics.PreWorkNanos.Inc(h.preWork.Nanoseconds())
 	overLimit, difference := h.OverLimit()
 	if overLimit {
-		e.granter.tookWithoutPermission(difference.Nanoseconds())
-		e.metrics.AcquiredNanos.Inc(difference.Nanoseconds())
+		// We've used up our allotted slice, which we've already deducted tokens
+		// for. But we've gone over by difference, and we've also done some
+		// pre-work which we've yet to deduct tokens for. Do so now.
+		additionalNanosToAcquire := h.preWork.Nanoseconds() + difference.Nanoseconds()
+		e.granter.tookWithoutPermission(additionalNanosToAcquire) // +difference+preWork
+		e.metrics.AcquiredNanos.Inc(additionalNanosToAcquire)
+		e.metrics.OverLimitDuration.RecordValue(difference.Nanoseconds())
 		return
 	}
-	e.granter.returnGrant(difference.Nanoseconds())
-	e.metrics.ReturnedNanos.Inc(difference.Nanoseconds())
+
+	// We've done some pre-work that we want to tokens for, but from the
+	// allotted slice, we've not used some difference, which we want to return.
+	if d := -difference.Nanoseconds() + h.preWork.Nanoseconds(); d > 0 {
+		// If -difference+preWork > 0, we need to additionally acquire
+		// -difference+preWork nanos.
+		additionalNanosToAcquire := d
+		e.granter.tookWithoutPermission(additionalNanosToAcquire)
+		e.metrics.AcquiredNanos.Inc(additionalNanosToAcquire)
+	} else {
+		// If -difference+preWork < 0, we need return -(-difference+preWork)
+		// nanos
+		nanosToReturn := -d
+		e.granter.returnGrant(nanosToReturn)
+		e.metrics.ReturnedNanos.Inc(nanosToReturn)
+	}
 }
 
 // SetTenantWeights passes through to WorkQueue.SetTenantWeights.

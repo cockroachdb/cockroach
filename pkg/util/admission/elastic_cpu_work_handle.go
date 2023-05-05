@@ -28,6 +28,11 @@ type ElasticCPUWorkHandle struct {
 	// before indicating that it's over limit. It measures the duration since
 	// cpuStart.
 	allotted time.Duration
+	// preWork measures how much on-CPU running time this request accrued before
+	// starting doing the actual work it intended to. We don't want the preWork
+	// duration to count against what it was allotted, but we still want to
+	// track to deduct an appropriate number of granter tokens.
+	preWork time.Duration
 
 	// This handle is used in tight loops that are sensitive to per-iteration
 	// overhead (checking against the running time too can have an effect). To
@@ -51,6 +56,22 @@ func newElasticCPUWorkHandle(allotted time.Duration) *ElasticCPUWorkHandle {
 	h := &ElasticCPUWorkHandle{allotted: allotted}
 	h.cpuStart = h.runningTime()
 	return h
+}
+
+// StartTimer is used to denote that we're just starting to do the actual on-CPU
+// work we acquired CPU tokens for. It's possible for requests to do
+// semi-unrelated pre-work up until this point, time spent that we don't want to
+// count against our allotted CPU time. But we still want to deduct granter
+// tokens for that time to avoid over-admission. StartTimer makes note of how
+// much pre-work was done and starts counting any subsequent on-CPU time against
+// what was allotted. If StartTimer is never invoked, all on-CPU time is counted
+// against what was allotted. It can only be called once.
+func (h *ElasticCPUWorkHandle) StartTimer() {
+	if h == nil {
+		return
+	}
+	h.preWork = h.runningTime()
+	h.cpuStart = grunning.Time()
 }
 
 func (h *ElasticCPUWorkHandle) runningTime() time.Duration {
@@ -151,9 +172,8 @@ func TestingNewElasticCPUHandle() *ElasticCPUWorkHandle {
 	return newElasticCPUWorkHandle(420 * time.Hour) // use a very high allotment
 }
 
-// TestingNewElasticCPUWithCallback constructs an
-// ElascticCPUWorkHandle with a testing override for the behaviour of
-// OverLimit().
+// TestingNewElasticCPUHandleWithCallback constructs an ElasticCPUWorkHandle
+// with a testing override for the behaviour of OverLimit().
 func TestingNewElasticCPUHandleWithCallback(cb func() (bool, time.Duration)) *ElasticCPUWorkHandle {
 	h := TestingNewElasticCPUHandle()
 	h.testingOverrideOverLimit = cb
