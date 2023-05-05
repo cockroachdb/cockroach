@@ -99,10 +99,13 @@ func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
 	if h == nil {
 		return // nothing to do
 	}
+
+	e.metrics.OverAdmittedNanos.Inc(h.overAdmitted.Nanoseconds())
 	overLimit, difference := h.OverLimit()
 	if overLimit {
 		e.granter.tookWithoutPermission(difference.Nanoseconds())
 		e.metrics.AcquiredNanos.Inc(difference.Nanoseconds())
+		e.metrics.OverLimitDuration.RecordValue(difference.Nanoseconds())
 		return
 	}
 	e.granter.returnGrant(difference.Nanoseconds())

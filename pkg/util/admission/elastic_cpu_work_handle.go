@@ -28,6 +28,12 @@ type ElasticCPUWorkHandle struct {
 	// before indicating that it's over limit. It measures the duration since
 	// cpuStart.
 	allotted time.Duration
+	// overAdmitted measures how much on-CPU running time this request
+	// over-admitted. This is not how much over the allotted time we ran, since
+	// we deduct that amount from the elastic CPU granter post-hoc thus
+	// penalizing a subsequent request. This is how much on-CPU running time
+	// we're simply not deducting granter tokens for.
+	overAdmitted time.Duration
 
 	// This handle is used in tight loops that are sensitive to per-iteration
 	// overhead (checking against the running time too can have an effect). To
@@ -51,6 +57,17 @@ func newElasticCPUWorkHandle(allotted time.Duration) *ElasticCPUWorkHandle {
 	h := &ElasticCPUWorkHandle{allotted: allotted}
 	h.cpuStart = h.runningTime()
 	return h
+}
+
+// ResetTimer is used to reset the internal timers before we start doing on-CPU
+// work. Any on-CPU work before this point is not counted towards the allotted
+// CPU slice.
+func (h *ElasticCPUWorkHandle) ResetTimer() {
+	if h == nil {
+		return
+	}
+	h.overAdmitted = h.runningTime()
+	h.cpuStart = grunning.Time()
 }
 
 func (h *ElasticCPUWorkHandle) runningTime() time.Duration {
@@ -151,9 +168,8 @@ func TestingNewElasticCPUHandle() *ElasticCPUWorkHandle {
 	return newElasticCPUWorkHandle(420 * time.Hour) // use a very high allotment
 }
 
-// TestingNewElasticCPUWithCallback constructs an
-// ElascticCPUWorkHandle with a testing override for the behaviour of
-// OverLimit().
+// TestingNewElasticCPUHandleWithCallback constructs an ElasticCPUWorkHandle
+// with a testing override for the behaviour of OverLimit().
 func TestingNewElasticCPUHandleWithCallback(cb func() (bool, time.Duration)) *ElasticCPUWorkHandle {
 	h := TestingNewElasticCPUHandle()
 	h.testingOverrideOverLimit = cb

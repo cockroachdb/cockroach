@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -108,6 +109,7 @@ type elasticCPUGranter struct {
 		// requester.granted() is called while holding GrantCoordinator.mu.
 		syncutil.Mutex
 		tb               *quotapool.TokenBucket
+		tbReset          *util.EveryN
 		utilizationLimit float64
 	}
 	requester requester
@@ -135,6 +137,8 @@ func newElasticCPUGranterWithTokenBucket(
 		metrics: metrics,
 	}
 	e.mu.tb = tokenBucket
+	every30s := util.Every(30 * time.Second) // TODO(irfansharif): make this is a cluster setting?
+	e.mu.tbReset = &every30s
 	e.setUtilizationLimit(elasticCPUMinUtilization.Get(&st.SV))
 	return e
 }
@@ -210,6 +214,16 @@ func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 	rate := utilizationLimit * float64(int64(runtime.GOMAXPROCS(0))*time.Second.Nanoseconds())
 	e.mu.utilizationLimit = utilizationLimit
 	e.mu.tb.UpdateConfig(quotapool.TokensPerSecond(rate), quotapool.Tokens(rate))
+	if e.mu.tbReset.ShouldProcess(timeutil.Now()) {
+		// Periodically reset the token bucket. This is just defense-in-depth
+		// and at worst, over-admits. We've seen production clusters where the
+		// token bucket was severely in debt and caused wait queue times of
+		// minutes, which can be long enough to fail backups completely
+		// (#102817).
+		e.mu.tb.Reset()
+	}
+	e.metrics.NanosExhaustedDuration.Update(e.mu.tb.Exhausted().Microseconds())
+	e.metrics.AvailableNanos.Update(int64(e.mu.tb.Available()))
 
 	e.metrics.UtilizationLimit.Update(utilizationLimit)
 	if log.V(1) {
@@ -236,8 +250,13 @@ func (e *elasticCPUGranter) computeUtilizationMetric() {
 		return // nothing to do
 	}
 
-	currentCumAcquiredNanos := e.metrics.AcquiredNanos.Count()
+	// NB: Read the returned-nanos atomic before the acquired-nanos one, to
+	// avoid spurious negative values given these we don't read these two under
+	// a mutex. It's still possible for returned-nanos > acquired-nanos,
+	// resulting in a negative utilization -- it needs to be investigated
+	// (#103359).
 	currentCumReturnedNanos := e.metrics.ReturnedNanos.Count()
+	currentCumAcquiredNanos := e.metrics.AcquiredNanos.Count()
 	currentCumUsedNanos := currentCumAcquiredNanos - currentCumReturnedNanos
 
 	if e.metrics.lastCumUsedNanos != 0 {
@@ -269,11 +288,39 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
+	elasticCPUOverAdmittedNanos = metric.Metadata{
+		Name:        "admission.elastic_cpu.over_admitted_nanos",
+		Help:        "Total CPU nanoseconds over-admitted by elastic work",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
 	// elasticCPUMaxAvailableNanos is a static metric, useful for computing the
 	// % utilization: (acquired - returned)/max available.
 	elasticCPUMaxAvailableNanos = metric.Metadata{
 		Name:        "admission.elastic_cpu.max_available_nanos",
 		Help:        "Maximum available CPU nanoseconds per second ignoring utilization limit",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	elasticCPUNanosExhaustedDuration = metric.Metadata{
+		Name:        "admission.elastic_cpu.nanos_exhausted_duration",
+		Help:        "Total duration when elastic CPU nanoseconds were exhausted, in micros",
+		Measurement: "Microseconds",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	elasticCPUOverLimitDurations = metric.Metadata{
+		Name:        "admission.elastic_cpu.over_limit_durations",
+		Help:        "Measurement of how much over the prescribed limit each elastic request ran",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	elasticCPUAvailableNanos = metric.Metadata{
+		Name:        "admission.elastic_cpu.available_nanos",
+		Help:        "Instantaneous available CPU nanoseconds per second ignoring utilization limit",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -297,10 +344,14 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 // elasticCPUGranterMetrics are the metrics associated with an instance of the
 // ElasticCPUGranter.
 type elasticCPUGranterMetrics struct {
-	AcquiredNanos     *metric.Counter
-	ReturnedNanos     *metric.Counter
-	MaxAvailableNanos *metric.Counter
-	UtilizationLimit  *metric.GaugeFloat64
+	AcquiredNanos          *metric.Counter
+	ReturnedNanos          *metric.Counter
+	OverAdmittedNanos      *metric.Counter
+	MaxAvailableNanos      *metric.Counter
+	AvailableNanos         *metric.Gauge
+	UtilizationLimit       *metric.GaugeFloat64
+	NanosExhaustedDuration *metric.Gauge
+	OverLimitDuration      metric.IHistogram
 
 	Utilization      *metric.GaugeFloat64 // updated every elasticCPUUtilizationMetricInterval, using fields below
 	everyInterval    util.EveryN
@@ -311,12 +362,21 @@ const elasticCPUUtilizationMetricInterval = 10 * time.Second
 
 func makeElasticCPUGranterMetrics() *elasticCPUGranterMetrics {
 	metrics := &elasticCPUGranterMetrics{
-		AcquiredNanos:     metric.NewCounter(elasticCPUAcquiredNanos),
-		ReturnedNanos:     metric.NewCounter(elasticCPUReturnedNanos),
-		MaxAvailableNanos: metric.NewCounter(elasticCPUMaxAvailableNanos),
-		Utilization:       metric.NewGaugeFloat64(elasticCPUGranterUtilization),
-		UtilizationLimit:  metric.NewGaugeFloat64(elasticCPUGranterUtilizationLimit),
-		everyInterval:     util.Every(elasticCPUUtilizationMetricInterval),
+		AcquiredNanos:          metric.NewCounter(elasticCPUAcquiredNanos),
+		ReturnedNanos:          metric.NewCounter(elasticCPUReturnedNanos),
+		OverAdmittedNanos:      metric.NewCounter(elasticCPUOverAdmittedNanos),
+		MaxAvailableNanos:      metric.NewCounter(elasticCPUMaxAvailableNanos),
+		AvailableNanos:         metric.NewGauge(elasticCPUAvailableNanos),
+		NanosExhaustedDuration: metric.NewGauge(elasticCPUNanosExhaustedDuration),
+		OverLimitDuration: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePrometheus,
+			Metadata: elasticCPUOverLimitDurations,
+			Duration: base.DefaultHistogramWindowInterval(),
+			Buckets:  metric.IOLatencyBuckets,
+		}),
+		Utilization:      metric.NewGaugeFloat64(elasticCPUGranterUtilization),
+		UtilizationLimit: metric.NewGaugeFloat64(elasticCPUGranterUtilizationLimit),
+		everyInterval:    util.Every(elasticCPUUtilizationMetricInterval),
 	}
 
 	metrics.MaxAvailableNanos.Inc(int64(runtime.GOMAXPROCS(0)) * time.Second.Nanoseconds())
