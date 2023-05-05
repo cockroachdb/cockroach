@@ -1653,18 +1653,18 @@ func TestResolveLocalLocks(t *testing.T) {
 			}
 			resolvedLocks, externalLocks, err := resolveLocalLocksWithPagination(
 				ctx,
-				&roachpb.RangeDescriptor{
-					StartKey: roachpb.RKeyMin,
-					EndKey:   roachpb.RKeyMax,
-				},
 				batch,
+				(&MockEvalCtx{
+					Desc: &roachpb.RangeDescriptor{
+						StartKey: roachpb.RKeyMin,
+						EndKey:   roachpb.RKeyMax,
+					}}).EvalContext(),
 				nil,
 				&kvpb.EndTxnRequest{
 					LockSpans:             tc.lockSpans,
 					InternalCommitTrigger: &roachpb.InternalCommitTrigger{},
 				},
 				&txn,
-				(&MockEvalCtx{}).EvalContext(),
 				tc.resolveAllowance,
 				tc.targetBytes,
 			)
