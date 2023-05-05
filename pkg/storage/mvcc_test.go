@@ -2271,46 +2271,32 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 	txn := *txn1
 	txn.Sequence++
 	err := MVCCInitPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value1, false, &txn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// A repeat of the command will still succeed.
 	txn.Sequence++
 	err = MVCCInitPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value1, false, &txn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// A repeat of the command with a different value at a different epoch
 	// will still succeed.
 	txn.Sequence++
 	txn.Epoch = 2
 	err = MVCCInitPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value2, false, &txn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Commit value3.
 	txnCommit := txn
 	txnCommit.Status = roachpb.COMMITTED
 	txnCommit.WriteTimestamp = clock.Now().Add(1, 0)
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
+	_, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(&txnCommit, roachpb.Span{Key: testKey1}),
-		MVCCResolveWriteIntentOptions{}); err != nil {
-		t.Fatal(err)
-	}
+		MVCCResolveWriteIntentOptions{})
+	require.NoError(t, err)
 
 	// Write value4 with an old timestamp without txn...should get an error.
 	err = MVCCInitPut(ctx, engine, nil, testKey1, clock.Now(), hlc.ClockTimestamp{}, value4, false, nil)
-	if e := (*kvpb.ConditionFailedError)(nil); errors.As(err, &e) {
-		if !bytes.Equal(e.ActualValue.RawBytes, value2.RawBytes) {
-			t.Fatalf("the value %s in get result does not match the value %s in request",
-				e.ActualValue.RawBytes, value2.RawBytes)
-		}
-	} else {
-		t.Fatalf("unexpected error %T", e)
-	}
+	require.ErrorAs(t, err, new(*kvpb.WriteTooOldError))
 }
 
 // TestMVCCReverseScan verifies that MVCCReverseScan scans [start,
@@ -2817,10 +2803,8 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 
 // TestMVCCConditionalPutOldTimestamp tests a case where a conditional
 // put with an older timestamp happens after a put with a newer timestamp.
-//
-// The conditional put uses the actual value at the timestamp as the
-// basis for comparison first, and then may fail later with a
-// WriteTooOldError if that timestamp isn't recent.
+// The conditional put fails with WriteTooOld errors, regardless of whether
+// the condition succeeds or not.
 func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2833,20 +2817,23 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 	err = MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, value2, nil)
 	require.NoError(t, err)
 
-	// Check that a condition failed error is thrown if the value doesn't match.
-	err = MVCCConditionalPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, hlc.ClockTimestamp{}, value3, value1.TagAndDataBytes(), CPutFailIfMissing, nil)
-	require.ErrorAs(t, err, new(*kvpb.ConditionFailedError))
+	// Check that a write too old error is thrown, regardless of whether the value
+	// matches.
+	for _, expVal := range []roachpb.Value{
+		// Condition does not match.
+		value1,
+		// Condition matches.
+		value2,
+	} {
+		err = MVCCConditionalPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, hlc.ClockTimestamp{}, value3, expVal.TagAndDataBytes(), CPutFailIfMissing, nil)
+		require.ErrorAs(t, err, new(*kvpb.WriteTooOldError))
 
-	// But if value does match the most recently written version, we'll get
-	// a write too old error.
-	err = MVCCConditionalPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, hlc.ClockTimestamp{}, value3, value2.TagAndDataBytes(), CPutFailIfMissing, nil)
-	require.ErrorAs(t, err, new(*kvpb.WriteTooOldError))
-
-	// Either way, no new value is written.
-	ts := hlc.Timestamp{WallTime: 3}
-	valueRes, err := MVCCGet(ctx, engine, testKey1, ts, MVCCGetOptions{})
-	require.NoError(t, err)
-	require.Equal(t, value2.RawBytes, valueRes.Value.RawBytes)
+		// Either way, no new value is written.
+		ts := hlc.Timestamp{WallTime: 3}
+		valueRes, err := MVCCGet(ctx, engine, testKey1, ts, MVCCGetOptions{})
+		require.NoError(t, err)
+		require.Equal(t, value2.RawBytes, valueRes.Value.RawBytes)
+	}
 }
 
 // TestMVCCMultiplePutOldTimestamp tests a case where multiple transactional

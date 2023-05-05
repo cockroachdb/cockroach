@@ -7093,28 +7093,31 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 
 	ba := &kvpb.BatchRequest{}
+	ba.Txn = newTransaction("test", roachpb.Key("k"), 1, tc.Clock())
 	// This one succeeds.
-	ba.Add(&kvpb.PutRequest{
+	put := &kvpb.PutRequest{
 		RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("k")},
 		Value:         roachpb.MakeValueFromString("not nil"),
-	})
+	}
 	// This one fails with a ConditionalPutError, which will populate the
 	// returned error's index.
-	ba.Add(&kvpb.ConditionalPutRequest{
+	cput := &kvpb.ConditionalPutRequest{
 		RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("k")},
 		Value:         roachpb.MakeValueFromString("irrelevant"),
 		ExpBytes:      nil, // not true after above Put
-	})
-	// This one is never executed.
-	ba.Add(&kvpb.GetRequest{
-		RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("k")},
-	})
-
-	if _, pErr := tc.Sender().Send(ctx, ba); pErr == nil {
-		t.Fatal("expected an error")
-	} else if pErr.Index == nil || pErr.Index.Index != 1 || !testutils.IsPError(pErr, "unexpected value") {
-		t.Fatalf("invalid index or error type: %s", pErr)
 	}
+	// This one is never executed.
+	get := &kvpb.GetRequest{
+		RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("k")},
+	}
+	assignSeqNumsForReqs(ba.Txn, put, cput, get)
+	ba.Add(put, cput, get)
+
+	_, pErr := tc.Sender().Send(ctx, ba)
+	require.NotNil(t, pErr)
+	require.NotNil(t, pErr.Index)
+	require.Equal(t, int32(1), pErr.Index.Index)
+	require.Regexp(t, "unexpected value", pErr)
 }
 
 func TestReplicaDestroy(t *testing.T) {
@@ -10519,7 +10522,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 }
 
 // TestReplicaServersideRefreshes verifies local retry logic for transactional
-// and non transactional batches. Verifies the timestamp cache is updated to
+// and non-transactional batches. Verifies the timestamp cache is updated to
 // reflect the timestamp at which retried batches are executed.
 func TestReplicaServersideRefreshes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -10739,11 +10742,9 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				return
 			},
 		},
-		// This test tests a scenario where an InitPut is failing at its timestamp,
-		// but it would succeed if it'd evaluate at a bumped timestamp. The request
-		// is not retried at the bumped timestamp. We don't necessarily like this
-		// current behavior; for example since there's nothing to refresh, the
-		// request could be retried.
+		// This test tests a scenario where an InitPut would fail at its original
+		// timestamp, but it succeeds when evaluated at a bumped timestamp after a
+		// server-side refresh.
 		{
 			name: "serverside-refresh of write too old on non-1PC txn initput without prior reads",
 			setupFn: func() (hlc.Timestamp, error) {
@@ -10754,6 +10755,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				return put("c-iput", "put2")
 			},
 			batchFn: func(ts hlc.Timestamp) (ba *kvpb.BatchRequest, expTS hlc.Timestamp) {
+				expTS = ts.Next()
 				ba = &kvpb.BatchRequest{}
 				ba.Txn = newTxn("c-iput", ts.Prev())
 				ba.CanForwardReadTimestamp = true
@@ -10762,7 +10764,6 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &iput)
 				return
 			},
-			expErr: "unexpected value: .*",
 		},
 		// Non-1PC serializable txn locking scan with CanForwardReadTimestamp
 		// set to true will succeed with write too old error.
@@ -10839,18 +10840,18 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				return
 			},
 		},
-		// This test tests a scenario where a CPut is failing at its timestamp, but it would
-		// succeed if it'd evaluate at a bumped timestamp. The request is not retried at the
-		// bumped timestamp. We don't necessarily like this current behavior; for example if
-		// there's nothing to refresh, the request could be retried.
+		// This test tests a scenario where an CPut would fail at its original
+		// timestamp, but it succeeds when evaluated at a bumped timestamp after a
+		// server-side refresh.
 		// The previous test shows different behavior for a non-transactional
 		// request or a 1PC one.
 		{
-			name: "no serverside-refresh with failed cput despite write too old errors on txn",
+			name: "serverside-refresh with failed cput despite write too old errors on txn",
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("e1", "put")
 			},
 			batchFn: func(ts hlc.Timestamp) (ba *kvpb.BatchRequest, expTS hlc.Timestamp) {
+				expTS = ts.Next()
 				txn := newTxn("e1", ts.Prev())
 
 				// Send write to another key first to avoid 1PC.
@@ -10876,7 +10877,6 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &et)
 				return
 			},
-			expErr: "unexpected value: <nil>",
 		},
 		// Handle multiple write too old errors on a non-transactional request.
 		//
