@@ -51,7 +51,7 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 	{ // Invoke once; we should see internal state primed for future iterations.
 		overLimit, difference := handle.OverLimit()
 		require.False(t, overLimit)
-		require.Equal(t, allotment, difference)
+		require.Equal(t, -allotment, difference)
 		require.Equal(t, 0, handle.itersSinceLastCheck)
 		require.Equal(t, 1, handle.itersUntilCheck)
 		require.Equal(t, zero, handle.runningTimeAtLastCheck)
@@ -64,7 +64,7 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 
 		overLimit, difference := handle.OverLimit()
 		require.False(t, overLimit)
-		require.Equal(t, expDifference, difference)
+		require.Equal(t, -expDifference, difference)
 		require.Equal(t, 0, handle.itersSinceLastCheck)
 		require.Equal(t, 2, handle.itersUntilCheck)
 		require.Equal(t, 100*time.Microsecond, handle.runningTimeAtLastCheck)
@@ -156,4 +156,42 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 		require.True(t, overLimit)
 		require.Equal(t, 50*time.Microsecond, difference)
 	}
+}
+
+func TestElasticCPUWorkHandlePreWork(t *testing.T) {
+	overrideMu := struct {
+		syncutil.Mutex
+		running time.Duration
+	}{}
+	setRunning := func(running time.Duration) {
+		overrideMu.Lock()
+		defer overrideMu.Unlock()
+		overrideMu.running = running
+	}
+
+	const allotment = 100 * time.Millisecond
+	const zero = time.Duration(0)
+
+	setRunning(zero)
+
+	handle := newElasticCPUWorkHandle(allotment)
+	handle.testingOverrideRunningTime = func() time.Duration {
+		overrideMu.Lock()
+		defer overrideMu.Unlock()
+		return overrideMu.running
+	}
+
+	setRunning(450 * time.Millisecond)
+	handle.StartTimer()
+	require.Equal(t, handle.preWork, 450*time.Millisecond)
+
+	setRunning(50 * time.Millisecond)
+	overLimit, difference := handle.OverLimit()
+	require.False(t, overLimit)
+	require.Equal(t, difference, (450-50)*time.Millisecond)
+
+	setRunning(150 * time.Millisecond)
+	overLimit, difference = handle.OverLimit()
+	require.True(t, overLimit)
+	require.Equal(t, difference, (50+450)*time.Millisecond)
 }

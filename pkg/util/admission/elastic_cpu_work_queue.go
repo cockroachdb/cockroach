@@ -99,14 +99,21 @@ func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
 	if h == nil {
 		return // nothing to do
 	}
-	overLimit, difference := h.OverLimit()
-	if overLimit {
+
+	e.metrics.PreWorkNanos.Inc(h.preWork.Nanoseconds())
+	_, difference := h.OverLimit()
+	if difference > 0 {
+		// We've used up our allotted slice, which we've already deducted tokens
+		// for. But we've gone over by difference, which we now need to deduct
+		// tokens for.
 		e.granter.tookWithoutPermission(difference.Nanoseconds())
 		e.metrics.AcquiredNanos.Inc(difference.Nanoseconds())
+		e.metrics.OverLimitDuration.RecordValue(difference.Nanoseconds())
 		return
 	}
-	e.granter.returnGrant(difference.Nanoseconds())
-	e.metrics.ReturnedNanos.Inc(difference.Nanoseconds())
+
+	e.granter.returnGrant(-difference.Nanoseconds())
+	e.metrics.ReturnedNanos.Inc(-difference.Nanoseconds())
 }
 
 // SetTenantWeights passes through to WorkQueue.SetTenantWeights.
