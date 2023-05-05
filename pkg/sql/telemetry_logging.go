@@ -93,7 +93,6 @@ func (t *TelemetryLoggingMetrics) maybeUpdateLastEmittedTime(
 	defer t.mu.Unlock()
 
 	lastEmittedTime := t.mu.lastEmittedTime
-
 	if float64(newTime.Sub(lastEmittedTime))*1e-9 >= requiredSecondsElapsed {
 		t.mu.lastEmittedTime = newTime
 		return true

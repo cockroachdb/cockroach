@@ -4444,6 +4444,204 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, ']')
 	}
 
+	if m.CpuTimeNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CpuTimeNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.CpuTimeNanos), 10)
+	}
+
+	if m.KvGrpcCalls != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KvGrpcCalls\":"...)
+		b = strconv.AppendInt(b, int64(m.KvGrpcCalls), 10)
+	}
+
+	if m.KvTimeNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KvTimeNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.KvTimeNanos), 10)
+	}
+
+	if m.ServiceLatencyNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ServiceLatencyNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.ServiceLatencyNanos), 10)
+	}
+
+	if m.OverheadLatencyNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"OverheadLatencyNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.OverheadLatencyNanos), 10)
+	}
+
+	if m.RunLatencyNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RunLatencyNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.RunLatencyNanos), 10)
+	}
+
+	if m.PlanLatencyNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"PlanLatencyNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.PlanLatencyNanos), 10)
+	}
+
+	if m.IdleLatencyNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IdleLatencyNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.IdleLatencyNanos), 10)
+	}
+
+	if m.ParseLatencyNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ParseLatencyNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.ParseLatencyNanos), 10)
+	}
+
+	if m.MvccStepCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccStepCount\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccStepCount), 10)
+	}
+
+	if m.MvccStepCountInternal != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccStepCountInternal\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccStepCountInternal), 10)
+	}
+
+	if m.MvccSeekCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccSeekCount\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccSeekCount), 10)
+	}
+
+	if m.MvccSeekCountInternal != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccSeekCountInternal\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccSeekCountInternal), 10)
+	}
+
+	if m.MvccBlockBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccBlockBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccBlockBytes), 10)
+	}
+
+	if m.MvccBlockBytesInCache != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccBlockBytesInCache\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccBlockBytesInCache), 10)
+	}
+
+	if m.MvccKeyBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccKeyBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccKeyBytes), 10)
+	}
+
+	if m.MvccValueBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccValueBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccValueBytes), 10)
+	}
+
+	if m.MvccPointCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccPointCount\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccPointCount), 10)
+	}
+
+	if m.MvccPointsCoveredByRangeTombstones != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccPointsCoveredByRangeTombstones\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccPointsCoveredByRangeTombstones), 10)
+	}
+
+	if m.MvccRangeKeyCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccRangeKeyCount\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccRangeKeyCount), 10)
+	}
+
+	if m.MvccRangeKeyContainedPoints != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccRangeKeyContainedPoints\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccRangeKeyContainedPoints), 10)
+	}
+
+	if m.MvccRangeKeySkippedPoints != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MvccRangeKeySkippedPoints\":"...)
+		b = strconv.AppendInt(b, int64(m.MvccRangeKeySkippedPoints), 10)
+	}
+
 	return printComma, b
 }
 
