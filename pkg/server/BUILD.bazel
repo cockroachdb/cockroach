@@ -442,7 +442,10 @@ go_test(
         "user_test.go",
         "version_cluster_test.go",
     ],
-    args = ["-test.timeout=3595s"],
+    args = select({
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=3595s"],
+    }),
     data = glob(["testdata/**"]),
     embed = [":server"],
     shard_count = 16,
