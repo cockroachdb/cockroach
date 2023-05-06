@@ -2045,6 +2045,26 @@ scan t100206
  ├── key: (1,2)
  └── fd: (1,2)-->(3)
 
+# This should not derive the value of c when improved filter derivation is
+# disabled.
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=false
+SELECT a,b,c FROM t100206 WHERE (a,b) IN ((3,4), (5,6))
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cardinality: [0 - 2]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3)
+ ├── scan t100206
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── computed column expressions
+ │    │    └── c:3
+ │    │         └── a:1 + b:2
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ └── filters
+      └── (a:1, b:2) IN ((3, 4), (5, 6)) [outer=(1,2), constraints=(/1/2: [/3/4 - /3/4] [/5/6 - /5/6]; /2: [/4 - /4] [/6 - /6]; tight)]
+
 # The presence of a non-single-key constraint should not prevent derivation
 # of filters on computed columns.
 opt expect=GenerateConstrainedScans
