@@ -135,6 +135,7 @@ const (
 	timeAllocIdx
 	intervalAllocIdx
 	jsonAllocIdx
+	inetAllocIdx
 	datumAllocIdx
 	numCanonicalTypes
 )
@@ -167,6 +168,8 @@ func toAllocIdx(canonicalTypeFamily types.Family, width int32) int {
 		return intervalAllocIdx
 	case types.JsonFamily:
 		return jsonAllocIdx
+	case types.INetFamily:
+		return inetAllocIdx
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return datumAllocIdx
 	default:
@@ -211,6 +214,8 @@ func toCanonicalType(allocIdx int) *types.T {
 		return types.Interval
 	case jsonAllocIdx:
 		return types.Json
+	case inetAllocIdx:
+		return types.INet
 	case datumAllocIdx:
 		return datumBackedType
 	default:

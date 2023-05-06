@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/buildutil",
         "//pkg/util/duration",
+        "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/metamorphic",
         "@com_github_cockroachdb_apd_v3//:apd",

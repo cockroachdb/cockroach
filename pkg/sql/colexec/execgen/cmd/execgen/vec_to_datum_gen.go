@@ -107,6 +107,7 @@ var vecToDatumConversionTmpls = map[types.Family]string{
 							colexecerror.InternalError(err)
 						}
 						%[1]s := %[3]s.NewDEnum(e)`,
+	types.INetFamily:                     `%[1]s := %[3]s.NewDIPAddr(tree.DIPAddr{IPAddr: %[2]s})`,
 	typeconv.DatumVecCanonicalTypeFamily: `%[1]s := %[2]s.(tree.Datum)`,
 }
 
@@ -135,7 +136,7 @@ func genVecToDatum(inputFileContents string, wr io.Writer) error {
 		types.BoolFamily, types.IntFamily, types.FloatFamily, types.DecimalFamily,
 		types.DateFamily, types.BytesFamily, types.EncodedKeyFamily, types.JsonFamily,
 		types.UuidFamily, types.TimestampFamily, types.TimestampTZFamily, types.IntervalFamily,
-		types.EnumFamily,
+		types.EnumFamily, types.INetFamily,
 	}
 	for _, typeFamily := range optimizedTypeFamilies {
 		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(execversion.WithLatestVersion(), typeFamily)

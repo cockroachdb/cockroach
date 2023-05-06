@@ -19,6 +19,7 @@ go_library(
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",  # keep
         "//pkg/util/encoding",  # keep
+        "//pkg/util/ipaddr",  # keep
         "//pkg/util/json",  # keep
         "//pkg/util/timeutil/pgdate",  # keep
         "//pkg/util/uuid",  # keep

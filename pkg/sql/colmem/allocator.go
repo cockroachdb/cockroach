@@ -636,7 +636,8 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 			types.IntFamily,
 			types.FloatFamily,
 			types.TimestampTZFamily,
-			types.IntervalFamily:
+			types.IntervalFamily,
+			types.INetFamily:
 			// Types that have a statically known size.
 			acc += GetFixedSizeTypeSize(execversion.WithLatestVersion(), t)
 		default:
@@ -680,6 +681,8 @@ func GetFixedSizeTypeSize(ctx context.Context, t *types.T) (size int64) {
 		size = memsize.Time
 	case types.IntervalFamily:
 		size = memsize.Duration
+	case types.INetFamily:
+		size = memsize.IPAddr
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t.SQLStringForError()))
 	}
