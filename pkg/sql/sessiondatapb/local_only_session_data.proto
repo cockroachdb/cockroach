@@ -391,6 +391,12 @@ message LocalOnlySessionData {
   // during optimization. The goal of this setting is to flush out cases where
   // panics used for error-propagation are uncaught.
   bool testing_optimizer_inject_panics = 103;
+  // OptimizerUseImprovedComputedColumnFiltersDerivation, when true, causes the
+  // optimizer to derive filters on computed columns in more cases. Previously,
+  // filters could only be derived when the expression defining the computed
+  // column involved a single column and that column was equated with a single
+  // constant value in a WHERE clause filter.
+  bool optimizer_use_improved_computed_column_filters_derivation = 104;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
