@@ -363,6 +363,9 @@ func (c *CustomFuncs) combineComputedColFilters(
 	if len(tabMeta.ComputedCols) == 0 {
 		return nil
 	}
+	if !c.e.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation {
+		return nil
+	}
 	tab := c.e.mem.Metadata().Table(scanPrivate.Table)
 	numFilters := len(requiredFilters) + len(optionalFilters)
 	filters := make(memo.FiltersExpr, 0, numFilters)

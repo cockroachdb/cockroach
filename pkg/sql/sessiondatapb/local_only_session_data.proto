@@ -387,6 +387,12 @@ message LocalOnlySessionData {
   // expression with a column reference, which can produce more efficient query
   // plans.
   bool optimizer_hoist_uncorrelated_equality_subqueries = 102;
+  // OptimizerUseImprovedComputedColumnFiltersDerivation, when true, causes the
+  // optimizer to derive filters on computed columns in more cases. Previously,
+  // filters could only be derived when the expression defining the computed
+  // column involved a single column and that column was equated with a single
+  // constant value in a WHERE clause filter.
+  bool optimizer_use_improved_computed_column_filters_derivation = 104;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
