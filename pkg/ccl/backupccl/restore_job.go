@@ -119,7 +119,8 @@ var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
 func rewriteBackupSpanKey(
 	codec keys.SQLCodec, kr *KeyRewriter, key roachpb.Key,
 ) (roachpb.Key, error) {
-	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...), 0 /*wallTime*/)
+	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...),
+		0 /*wallTimeForImportElision*/)
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
