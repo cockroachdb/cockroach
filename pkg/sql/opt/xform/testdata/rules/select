@@ -2033,7 +2033,7 @@ CREATE TABLE t100206 (
 ----
 
 # This should derive the value of c from a and b.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206 WHERE (a,b) IN ((3,4), (5,6))
 ----
 scan t100206
@@ -2045,9 +2045,29 @@ scan t100206
  ├── key: (1,2)
  └── fd: (1,2)-->(3)
 
+# This should not derive the value of c when improved filter derivation is
+# disabled.
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=false
+SELECT a,b,c FROM t100206 WHERE (a,b) IN ((3,4), (5,6))
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── cardinality: [0 - 2]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3)
+ ├── scan t100206
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── computed column expressions
+ │    │    └── c:3
+ │    │         └── a:1 + b:2
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ └── filters
+      └── (a:1, b:2) IN ((3, 4), (5, 6)) [outer=(1,2), constraints=(/1/2: [/3/4 - /3/4] [/5/6 - /5/6]; /2: [/4 - /4] [/6 - /6]; tight)]
+
 # The presence of a non-single-key constraint should not prevent derivation
 # of filters on computed columns.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t100206 WHERE (a,b) IN ((3,4), (5,6)) AND a > 4
 ----
 select
@@ -2067,7 +2087,7 @@ select
       └── a:1 > 4 [outer=(1), constraints=(/1: [/5 - ]; tight)]
 
 # This should derive the value of c from a and b.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t100206 WHERE (a,b) IN ((3,4), (5,6)) AND d > 4
 ----
 select
@@ -2087,7 +2107,7 @@ select
       └── d:4 > 4 [outer=(4), constraints=(/4: [/5 - ]; tight)]
 
 # Prepared statements should be able to derive constraints.
-assign-placeholders-opt query-args=(1, 2, 3, 4)
+assign-placeholders-opt query-args=(1, 2, 3, 4) set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206 WHERE (a,b) IN (($1,$2), ($3,$4))
 ----
 scan t100206
@@ -2100,7 +2120,7 @@ scan t100206
  └── fd: (1,2)-->(3)
 
 # This should not generate a constrained scan due to the presence of a null.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206 WHERE (a,b) IN ((null,4), (5,6))
 ----
 select
@@ -2128,7 +2148,7 @@ CREATE TABLE t100206n (
 ----
 
 # This should derive the value of c from a and b, including the null in c.
-opt
+opt set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206n@idx1 WHERE (a,b) IN ((3,4), (5,6))
 ----
 project
@@ -2153,7 +2173,7 @@ CREATE TABLE t100206nc (
 ----
 
 # A nested CASE expression should derive the value of c from a and b.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206nc@idx1 WHERE (a,b) IN ((3,4), (5,6))
 ----
 project
@@ -2172,7 +2192,7 @@ project
       └── CASE WHEN a:1 = 5 THEN CASE WHEN b:2 = 6 THEN 1 ELSE d:4 END ELSE b:2 END [as=c:3, outer=(1,2,4)]
 
 # When `c` relies on the value of `d`, we should not derive filters.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206nc@idx1 WHERE (a,b) IN ((5,7), (5,6))
 ----
 project
@@ -2194,7 +2214,7 @@ project
       └── CASE WHEN a:1 = 5 THEN CASE WHEN b:2 = 6 THEN 1 ELSE d:4 END ELSE b:2 END [as=c:3, outer=(1,2,4)]
 
 # When `d` is specified in a separate conjunct, we can't derive filters.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206nc@idx1 WHERE (a,b) IN ((5,7), (5,6)) AND d IN (9,10)
 ----
 project
@@ -2218,7 +2238,7 @@ project
 
 # An IN clause which could derive terms will not work if OR'ed with another
 # term.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT a,b,c FROM t100206nc@idx1 WHERE (a,b) IN ((3,4), (5,6)) OR d IN (9,10)
 ----
 project
@@ -2238,7 +2258,7 @@ project
       └── CASE WHEN a:1 = 5 THEN CASE WHEN b:2 = 6 THEN 1 ELSE d:4 END ELSE b:2 END [as=c:3, outer=(1,2,4)]
 
 # TODO(msirek): Derive predicates on computed columns using ORed predicates.
-opt expect-not=GenerateConstrainedScans
+opt expect-not=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t100206 WHERE (a = 3 AND b = 4) OR (a = 5 AND b = 6)
 ----
 select
@@ -2258,7 +2278,7 @@ select
 # TODO(msirek): Derive predicates on computed columns using ORed predicates.
 # The 'OR c=1' term triggers GenerateConstrainedScans as a disjunction of scans,
 # but we should be able to build a single constrained scan.
-opt expect=(GenerateConstrainedScans,SplitDisjunction)
+opt expect=(GenerateConstrainedScans,SplitDisjunction) set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t100206 WHERE (a,b) IN ((3,4), (5,6)) OR c=1
 ----
 distinct-on
@@ -2299,7 +2319,7 @@ CREATE TABLE t100206b (
 ----
 
 # This should derive the value of c from a and b.
-opt expect=GenerateConstrainedScans
+opt expect=GenerateConstrainedScans set=optimizer_use_improved_computed_column_filters_derivation=true
 SELECT * FROM t100206b WHERE a = 1
 ----
 select
