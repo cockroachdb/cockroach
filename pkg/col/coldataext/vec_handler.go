@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
@@ -53,6 +54,8 @@ func MakeVecHandler(vec coldata.Vec) tree.ValueHandler {
 		v.intervals = vec.Interval()
 	case types.JsonFamily:
 		v.jsons = vec.JSON()
+	case types.INetFamily:
+		v.ipaddrs = vec.INet()
 	case typeconv.DatumVecCanonicalTypeFamily:
 		v.datums = vec.Datum()
 	default:
@@ -73,6 +76,7 @@ type vecHandler struct {
 	timestamps coldata.Times
 	intervals  coldata.Durations
 	jsons      *coldata.JSONs
+	ipaddrs    coldata.IPAddrs
 	datums     coldata.DatumVec
 	row        int
 }
@@ -173,5 +177,11 @@ func (v *vecHandler) JSON(j json.JSON) {
 // TimestampTZ is part of the tree.ValueHandler interface.
 func (v *vecHandler) TimestampTZ(t time.Time) {
 	v.timestamps[v.row] = t
+	v.row++
+}
+
+// INet is part of the tree.ValueHandler interface.
+func (v *vecHandler) INet(i ipaddr.IPAddr) {
+	v.ipaddrs[v.row] = i
 	v.row++
 }

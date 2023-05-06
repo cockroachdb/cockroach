@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/duration",
         "//pkg/util/envutil",
+        "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/mon",

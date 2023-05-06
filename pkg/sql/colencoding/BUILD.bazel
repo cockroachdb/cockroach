@@ -22,6 +22,7 @@ go_library(
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/intsets",
+        "//pkg/util/ipaddr",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
