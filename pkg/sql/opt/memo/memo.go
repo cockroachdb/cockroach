@@ -135,35 +135,36 @@ type Memo struct {
 	// planning. We need to cross-check these before reusing a cached memo.
 	// NOTE: If you add new fields here, be sure to add them to the relevant
 	//       fields in explain_bundle.go.
-	reorderJoinsLimit                      int
-	zigzagJoinEnabled                      bool
-	useForecasts                           bool
-	useHistograms                          bool
-	useMultiColStats                       bool
-	useNotVisibleIndex                     bool
-	localityOptimizedSearch                bool
-	safeUpdates                            bool
-	preferLookupJoinsForFKs                bool
-	saveTablesPrefix                       string
-	dateStyle                              pgdate.DateStyle
-	intervalStyle                          duration.IntervalStyle
-	propagateInputOrdering                 bool
-	disallowFullTableScans                 bool
-	largeFullScanRows                      float64
-	nullOrderedLast                        bool
-	costScansWithDefaultColSize            bool
-	allowUnconstrainedNonCoveringIndexScan bool
-	testingOptimizerRandomSeed             int64
-	testingOptimizerCostPerturbation       float64
-	testingOptimizerDisableRuleProbability float64
-	enforceHomeRegion                      bool
-	variableInequalityLookupJoinEnabled    bool
-	allowOrdinalColumnReferences           bool
-	useImprovedDisjunctionStats            bool
-	useLimitOrderingForStreamingGroupBy    bool
-	useImprovedSplitDisjunctionForJoins    bool
-	alwaysUseHistograms                    bool
-	hoistUncorrelatedEqualitySubqueries    bool
+	reorderJoinsLimit                          int
+	zigzagJoinEnabled                          bool
+	useForecasts                               bool
+	useHistograms                              bool
+	useMultiColStats                           bool
+	useNotVisibleIndex                         bool
+	localityOptimizedSearch                    bool
+	safeUpdates                                bool
+	preferLookupJoinsForFKs                    bool
+	saveTablesPrefix                           string
+	dateStyle                                  pgdate.DateStyle
+	intervalStyle                              duration.IntervalStyle
+	propagateInputOrdering                     bool
+	disallowFullTableScans                     bool
+	largeFullScanRows                          float64
+	nullOrderedLast                            bool
+	costScansWithDefaultColSize                bool
+	allowUnconstrainedNonCoveringIndexScan     bool
+	testingOptimizerRandomSeed                 int64
+	testingOptimizerCostPerturbation           float64
+	testingOptimizerDisableRuleProbability     float64
+	enforceHomeRegion                          bool
+	variableInequalityLookupJoinEnabled        bool
+	allowOrdinalColumnReferences               bool
+	useImprovedDisjunctionStats                bool
+	useLimitOrderingForStreamingGroupBy        bool
+	useImprovedSplitDisjunctionForJoins        bool
+	alwaysUseHistograms                        bool
+	hoistUncorrelatedEqualitySubqueries        bool
+	useImprovedComputedColumnFiltersDerivation bool
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -193,36 +194,37 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*m = Memo{
-		metadata:                               m.metadata,
-		reorderJoinsLimit:                      int(evalCtx.SessionData().ReorderJoinsLimit),
-		zigzagJoinEnabled:                      evalCtx.SessionData().ZigzagJoinEnabled,
-		useForecasts:                           evalCtx.SessionData().OptimizerUseForecasts,
-		useHistograms:                          evalCtx.SessionData().OptimizerUseHistograms,
-		useMultiColStats:                       evalCtx.SessionData().OptimizerUseMultiColStats,
-		useNotVisibleIndex:                     evalCtx.SessionData().OptimizerUseNotVisibleIndexes,
-		localityOptimizedSearch:                evalCtx.SessionData().LocalityOptimizedSearch,
-		safeUpdates:                            evalCtx.SessionData().SafeUpdates,
-		preferLookupJoinsForFKs:                evalCtx.SessionData().PreferLookupJoinsForFKs,
-		saveTablesPrefix:                       evalCtx.SessionData().SaveTablesPrefix,
-		dateStyle:                              evalCtx.SessionData().GetDateStyle(),
-		intervalStyle:                          evalCtx.SessionData().GetIntervalStyle(),
-		propagateInputOrdering:                 evalCtx.SessionData().PropagateInputOrdering,
-		disallowFullTableScans:                 evalCtx.SessionData().DisallowFullTableScans,
-		largeFullScanRows:                      evalCtx.SessionData().LargeFullScanRows,
-		nullOrderedLast:                        evalCtx.SessionData().NullOrderedLast,
-		costScansWithDefaultColSize:            evalCtx.SessionData().CostScansWithDefaultColSize,
-		allowUnconstrainedNonCoveringIndexScan: evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled,
-		testingOptimizerRandomSeed:             evalCtx.SessionData().TestingOptimizerRandomSeed,
-		testingOptimizerCostPerturbation:       evalCtx.SessionData().TestingOptimizerCostPerturbation,
-		testingOptimizerDisableRuleProbability: evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
-		enforceHomeRegion:                      evalCtx.SessionData().EnforceHomeRegion,
-		variableInequalityLookupJoinEnabled:    evalCtx.SessionData().VariableInequalityLookupJoinEnabled,
-		allowOrdinalColumnReferences:           evalCtx.SessionData().AllowOrdinalColumnReferences,
-		useImprovedDisjunctionStats:            evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats,
-		useLimitOrderingForStreamingGroupBy:    evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy,
-		useImprovedSplitDisjunctionForJoins:    evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins,
-		alwaysUseHistograms:                    evalCtx.SessionData().OptimizerAlwaysUseHistograms,
-		hoistUncorrelatedEqualitySubqueries:    evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries,
+		metadata:                                   m.metadata,
+		reorderJoinsLimit:                          int(evalCtx.SessionData().ReorderJoinsLimit),
+		zigzagJoinEnabled:                          evalCtx.SessionData().ZigzagJoinEnabled,
+		useForecasts:                               evalCtx.SessionData().OptimizerUseForecasts,
+		useHistograms:                              evalCtx.SessionData().OptimizerUseHistograms,
+		useMultiColStats:                           evalCtx.SessionData().OptimizerUseMultiColStats,
+		useNotVisibleIndex:                         evalCtx.SessionData().OptimizerUseNotVisibleIndexes,
+		localityOptimizedSearch:                    evalCtx.SessionData().LocalityOptimizedSearch,
+		safeUpdates:                                evalCtx.SessionData().SafeUpdates,
+		preferLookupJoinsForFKs:                    evalCtx.SessionData().PreferLookupJoinsForFKs,
+		saveTablesPrefix:                           evalCtx.SessionData().SaveTablesPrefix,
+		dateStyle:                                  evalCtx.SessionData().GetDateStyle(),
+		intervalStyle:                              evalCtx.SessionData().GetIntervalStyle(),
+		propagateInputOrdering:                     evalCtx.SessionData().PropagateInputOrdering,
+		disallowFullTableScans:                     evalCtx.SessionData().DisallowFullTableScans,
+		largeFullScanRows:                          evalCtx.SessionData().LargeFullScanRows,
+		nullOrderedLast:                            evalCtx.SessionData().NullOrderedLast,
+		costScansWithDefaultColSize:                evalCtx.SessionData().CostScansWithDefaultColSize,
+		allowUnconstrainedNonCoveringIndexScan:     evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled,
+		testingOptimizerRandomSeed:                 evalCtx.SessionData().TestingOptimizerRandomSeed,
+		testingOptimizerCostPerturbation:           evalCtx.SessionData().TestingOptimizerCostPerturbation,
+		testingOptimizerDisableRuleProbability:     evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
+		enforceHomeRegion:                          evalCtx.SessionData().EnforceHomeRegion,
+		variableInequalityLookupJoinEnabled:        evalCtx.SessionData().VariableInequalityLookupJoinEnabled,
+		allowOrdinalColumnReferences:               evalCtx.SessionData().AllowOrdinalColumnReferences,
+		useImprovedDisjunctionStats:                evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats,
+		useLimitOrderingForStreamingGroupBy:        evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy,
+		useImprovedSplitDisjunctionForJoins:        evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins,
+		alwaysUseHistograms:                        evalCtx.SessionData().OptimizerAlwaysUseHistograms,
+		hoistUncorrelatedEqualitySubqueries:        evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries,
+		useImprovedComputedColumnFiltersDerivation: evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
@@ -365,7 +367,8 @@ func (m *Memo) IsStale(
 		m.useLimitOrderingForStreamingGroupBy != evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy ||
 		m.useImprovedSplitDisjunctionForJoins != evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins ||
 		m.alwaysUseHistograms != evalCtx.SessionData().OptimizerAlwaysUseHistograms ||
-		m.hoistUncorrelatedEqualitySubqueries != evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries {
+		m.hoistUncorrelatedEqualitySubqueries != evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries ||
+		m.useImprovedComputedColumnFiltersDerivation != evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation {
 		return true, nil
 	}
 
