@@ -44,7 +44,10 @@ go_test(
         "tenant_migration_test.go",
         "tenant_vars_test.go",
     ],
-    args = ["-test.timeout=3595s"],
+    args = select({
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=3595s"],
+    }),
     data = glob(["testdata/**"]),
     embed = [":serverccl"],
     tags = ["ccl_test"],

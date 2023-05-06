@@ -1171,7 +1171,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/public-bazel-artifacts/go/20230214-214430/go1.19.4.linux-arm64.tar.gz": "6bb5752483c0d145b91199e5cc1352960d926850e75864dea16282337b0d92fe",
     "https://storage.googleapis.com/public-bazel-artifacts/go/20230214-214430/go1.19.4.windows-amd64.tar.gz": "0f37edf2a6663db33c8f67ee36e21a7eb391fbf35d494299f6a81a59e294f4a0",
     "https://storage.googleapis.com/public-bazel-artifacts/go/20230427-165819/go1.19.8fips.linux-amd64.tar.gz": "8170fd871cb61dc771ec1f309451b31a73d5aca3410dfa9d952672ae2be4ac9e",
-    "https://storage.googleapis.com/public-bazel-artifacts/gomod/github.com/bazelbuild/buildtools/v0.0.0-20200718160251-b1667ff58f71/buildtools-v0.0.0-20200718160251-b1667ff58f71.tar.gz": "a9ef5103739dfb5ed2a5b47ab1654842a89695812e4af09e57d7015a5caf97e0",
+    "https://storage.googleapis.com/public-bazel-artifacts/gomod/github.com/bazelbuild/buildtools/v6.1.2-0-gb182fc4/bazelbuild-buildtools-v6.1.2-0-gb182fc4.tar.gz": "d71a889e3bc50cc8b9d42c859e15a74f7c8d10b6786f8dd82f08f2bf24e5bdc6",
     "https://storage.googleapis.com/public-bazel-artifacts/java/railroad/rr-1.63-java8.zip": "d2791cd7a44ea5be862f33f5a9b3d40aaad9858455828ebade7007ad7113fb41",
     "https://storage.googleapis.com/public-bazel-artifacts/js/node/v16.13.0/node-v16.13.0-darwin-arm64.tar.gz": "46d83fc0bd971db5050ef1b15afc44a6665dee40bd6c1cbaec23e1b40fa49e6d",
     "https://storage.googleapis.com/public-bazel-artifacts/js/node/v16.13.0/node-v16.13.0-darwin-x64.tar.gz": "37e09a8cf2352f340d1204c6154058d81362fef4ec488b0197b2ce36b3f0367a",
