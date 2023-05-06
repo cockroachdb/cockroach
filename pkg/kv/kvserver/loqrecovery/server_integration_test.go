@@ -568,7 +568,8 @@ func TestRetrieveApplyStatus(t *testing.T) {
 
 	// Use scratch range to ensure we have a range that loses quorum.
 	sk := tc.ScratchRange(t)
-	require.NoError(t, tc.WaitForFullReplication(), "failed to wait for full replication")
+	require.NoError(t, tc.WaitFor5NodeReplication(),
+		"failed to wait for full replication of 5 node cluster")
 	tc.ToggleReplicateQueues(false)
 	d := tc.LookupRangeOrFatal(t, sk)
 
