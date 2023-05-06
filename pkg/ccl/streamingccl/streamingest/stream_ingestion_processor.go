@@ -656,7 +656,7 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 }
 
 func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, bool, error) {
-	return sip.rekeyer.RewriteKey(key, 0 /*wallTime*/)
+	return sip.rekeyer.RewriteKey(key, 0 /*wallTimeForImportElision*/)
 }
 
 func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error {

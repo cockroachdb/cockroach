@@ -471,19 +471,16 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 		key.Key, ok, err = kr.RewriteKey(key.Key, key.Timestamp.WallTime)
 
-		if errors.Is(err, ErrImportingKeyError) {
-			// The keyRewriter returns ErrImportingKeyError iff the key is part of an
-			// in-progress import. Keys from in-progress imports never get restored,
-			// since the key's table gets restored to its pre-import state. Therefore,
-			// elide ingesting this key.
-			continue
-		}
 		if err != nil {
 			return summary, err
 		}
 		if !ok {
 			// If the key rewriter didn't match this key, it's not data for the
 			// table(s) we're interested in.
+			//
+			// As an example, keys from in-progress imports never get restored,
+			// since the key's table gets restored to its pre-import state. Therefore,
+			// we elide ingesting this key.
 			if verbose {
 				log.Infof(ctx, "skipping %s %s", key.Key, value.PrettyPrint())
 			}
