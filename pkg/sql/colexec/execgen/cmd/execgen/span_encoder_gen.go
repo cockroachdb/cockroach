@@ -148,6 +148,15 @@ func (info spanEncoderTmplInfo) AssignSpanEncoding(appendTo, valToEncode string)
 				colexecerror.ExpectedError(err)
 			}
     `, appendTo, valToEncode, dir)
+	case types.INetFamily:
+		funcName := "BytesAscending"
+		if !info.Asc {
+			funcName = "BytesDescending"
+		}
+		return fmt.Sprintf(`
+			_data := %[3]s.ToBuffer(nil /* appendTo */)
+			%[1]s = encoding.Encode%[2]s(%[1]s, _data)
+    `, appendTo, funcName, valToEncode)
 	case typeconv.DatumVecCanonicalTypeFamily:
 		dir := "encoding.Ascending"
 		if !info.Asc {

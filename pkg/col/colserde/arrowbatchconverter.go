@@ -146,12 +146,13 @@ func (c *ArrowBatchConverter) BatchToArrow(
 		)
 
 		if f := typeconv.TypeFamilyToCanonicalTypeFamily(ctx, typ.Family()); f == types.IntFamily ||
-			f == types.FloatFamily || f == types.BoolFamily {
+			f == types.FloatFamily || f == types.BoolFamily || f == types.INetFamily {
 			// For ints and floats we have a fast path where we cast the
 			// underlying slice directly to the arrow format. Bools are handled
 			// in a special manner by casting to []byte since []byte and []bool
 			// have exactly the same structure (only a single bit of each byte
 			// is addressable).
+			// TODO(XXX): comment.
 			//
 			// dataHeader is the reflect.SliceHeader of the coldata.Vec's
 			// underlying data slice that we are casting to bytes.
@@ -191,6 +192,11 @@ func (c *ArrowBatchConverter) BatchToArrow(
 				//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
 				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
 				datumSize = memsize.Float64
+			case types.INetFamily:
+				ipaddrs := vec.INet()[:n]
+				//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+				dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ipaddrs))
+				datumSize = memsize.IPAddr
 			}
 			// Update values to point to the underlying slices while keeping the
 			// offsetBytes unset.
@@ -536,6 +542,22 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 				vec.Nulls().SetNullBitmap(floatArr.NullBitmapBytes(), batchLength)
 				float64s := coldata.Float64s(floatArr.Float64Values())
 				col = float64s[:len(float64s):len(float64s)]
+			case types.INetFamily:
+				buffers := d.Buffers()
+				// Nulls are always stored in the first buffer whereas the
+				// second one is the byte representation of the IPAddr vector,
+				// so we need to unsafely cast from []byte to []ipaddr.IPAddr.
+				nullsBitmap, bytes := buffers[0].Bytes(), buffers[1].Bytes()
+				vec.Nulls().SetNullBitmap(nullsBitmap, batchLength)
+				//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+				bytesHeader := (*reflect.SliceHeader)(unsafe.Pointer(&bytes))
+				var ipaddrs coldata.IPAddrs
+				//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+				ipaddrsHeader := (*reflect.SliceHeader)(unsafe.Pointer(&ipaddrs))
+				ipaddrsHeader.Data = bytesHeader.Data
+				ipaddrsHeader.Len = batchLength
+				ipaddrsHeader.Cap = batchLength
+				col = ipaddrs[:batchLength:batchLength]
 			default:
 				panic(
 					fmt.Sprintf("unsupported type for conversion to column batch %s", d.DataType().Name()),

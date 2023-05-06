@@ -87,6 +87,13 @@ func MarshalLegacy(colType *types.T, vec *coldata.Vec, row int) (roachpb.Value, 
 			r.SetBytes(data)
 			return r, nil
 		}
+	case types.INetFamily:
+		if vec.Type().Family() == types.INetFamily {
+			i := vec.INet().Get(row)
+			data := i.ToBuffer(nil /* appendTo */)
+			r.SetBytes(data)
+			return r, nil
+		}
 	default:
 		return valueside.MarshalLegacy(colType, vec.Datum().Get(row).(tree.Datum))
 	}

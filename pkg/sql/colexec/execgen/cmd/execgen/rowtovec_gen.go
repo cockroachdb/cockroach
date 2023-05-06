@@ -95,6 +95,7 @@ var rowToVecConversionTmpls = map[familyWidthPair]string{
 	{types.TimestampTZFamily, anyWidth}:              `%[1]s.(*tree.DTimestampTZ).Time`,
 	{types.IntervalFamily, anyWidth}:                 `%[1]s.(*tree.DInterval).Duration`,
 	{types.EnumFamily, anyWidth}:                     `%[1]s.(*tree.DEnum).PhysicalRep`,
+	{types.INetFamily, anyWidth}:                     `%[1]s.(*tree.DIPAddr).IPAddr`,
 	{typeconv.DatumVecCanonicalTypeFamily, anyWidth}: `%[1]s`,
 }
 

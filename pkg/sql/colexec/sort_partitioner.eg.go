@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -96,6 +97,12 @@ func newPartitioner(ctx context.Context, t *types.T, nullsAreDistinct bool) part
 		case -1:
 		default:
 			return partitionerJSON{nullsAreDistinct: nullsAreDistinct}
+		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return partitionerINet{nullsAreDistinct: nullsAreDistinct}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -2390,6 +2397,207 @@ func (p partitionerJSON) partition(colVec *coldata.Vec, outputCol []bool, n int)
 							colexecerror.ExpectedError(err)
 						}
 
+						unique = cmpResult != 0
+					}
+
+					//gcassert:bce
+					outputCol[outputIdx] = outputCol[outputIdx] || unique
+					{
+						__retval_0 = v
+					}
+				}
+				lastVal = __retval_0
+			}
+		}
+	}
+}
+
+// partitionerINet partitions an arbitrary-length colVec by running a distinct
+// operation over it. It writes the same format to outputCol that sorted
+// distinct does: true for every row that differs from the previous row in the
+// input column.
+type partitionerINet struct {
+	nullsAreDistinct bool
+}
+
+func (p partitionerINet) partitionWithOrder(
+	colVec *coldata.Vec, order []int, outputCol []bool, n int,
+) {
+	var lastVal ipaddr.IPAddr
+	var lastValNull bool
+	var nulls *coldata.Nulls
+	if colVec.MaybeHasNulls() {
+		nulls = colVec.Nulls()
+	}
+
+	col := colVec.INet()
+	// Eliminate bounds checks.
+	_ = outputCol[n-1]
+	_ = order[n-1]
+	outputCol[0] = true
+	if nulls != nil {
+		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
+			checkIdx := order[outputIdx]
+			{
+				var (
+					__retval_lastVal     ipaddr.IPAddr
+					__retval_lastValNull bool
+				)
+				{
+					var nullsAreDistinct bool = p.nullsAreDistinct
+					null := nulls.NullAt(checkIdx)
+					if null {
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
+							outputCol[outputIdx] = true
+						}
+					} else {
+						v := col.Get(checkIdx)
+						if lastValNull {
+							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
+							outputCol[outputIdx] = true
+						} else {
+							// Neither value is null, so we must compare.
+							var unique bool
+
+							{
+								var cmpResult int
+								cmpResult = v.Compare(&lastVal)
+								unique = cmpResult != 0
+							}
+
+							//gcassert:bce
+							outputCol[outputIdx] = outputCol[outputIdx] || unique
+						}
+						lastVal = v
+					}
+					{
+						__retval_lastVal = lastVal
+						__retval_lastValNull = null
+					}
+				}
+				lastVal, lastValNull = __retval_lastVal, __retval_lastValNull
+			}
+		}
+	} else {
+		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			//gcassert:bce
+			checkIdx := order[outputIdx]
+			{
+				var __retval_0 ipaddr.IPAddr
+				{
+					v := col.Get(checkIdx)
+					var unique bool
+
+					{
+						var cmpResult int
+						cmpResult = v.Compare(&lastVal)
+						unique = cmpResult != 0
+					}
+
+					//gcassert:bce
+					outputCol[outputIdx] = outputCol[outputIdx] || unique
+					{
+						__retval_0 = v
+					}
+				}
+				lastVal = __retval_0
+			}
+		}
+	}
+}
+
+func (p partitionerINet) partition(colVec *coldata.Vec, outputCol []bool, n int) {
+	var (
+		lastVal     ipaddr.IPAddr
+		lastValNull bool
+		nulls       *coldata.Nulls
+	)
+	if colVec.MaybeHasNulls() {
+		nulls = colVec.Nulls()
+	}
+
+	col := colVec.INet()
+	_ = col.Get(n - 1)
+	_ = outputCol[n-1]
+	outputCol[0] = true
+	if nulls != nil {
+		for idx := 0; idx < n; idx++ {
+			{
+				var (
+					__retval_lastVal     ipaddr.IPAddr
+					__retval_lastValNull bool
+				)
+				{
+					var (
+						checkIdx         int  = idx
+						outputIdx        int  = idx
+						nullsAreDistinct bool = p.nullsAreDistinct
+					)
+					null := nulls.NullAt(checkIdx)
+					if null {
+						if !lastValNull || nullsAreDistinct {
+							// The current value is null, and either the previous one is not
+							// (meaning they are definitely distinct) or we treat nulls as
+							// distinct values.
+							_ = true
+							//gcassert:bce
+							outputCol[outputIdx] = true
+						}
+					} else {
+						//gcassert:bce
+						v := col.Get(checkIdx)
+						if lastValNull {
+							// The previous value was null while the current is not.
+							_ = true
+							//gcassert:bce
+							outputCol[outputIdx] = true
+						} else {
+							// Neither value is null, so we must compare.
+							var unique bool
+
+							{
+								var cmpResult int
+								cmpResult = v.Compare(&lastVal)
+								unique = cmpResult != 0
+							}
+
+							//gcassert:bce
+							outputCol[outputIdx] = outputCol[outputIdx] || unique
+						}
+						lastVal = v
+					}
+					{
+						__retval_lastVal = lastVal
+						__retval_lastValNull = null
+					}
+				}
+				lastVal, lastValNull = __retval_lastVal, __retval_lastValNull
+			}
+		}
+	} else {
+		for idx := 0; idx < n; idx++ {
+			{
+				var __retval_0 ipaddr.IPAddr
+				{
+					var (
+						checkIdx  int = idx
+						outputIdx int = idx
+					)
+					//gcassert:bce
+					v := col.Get(checkIdx)
+					var unique bool
+
+					{
+						var cmpResult int
+						cmpResult = v.Compare(&lastVal)
 						unique = cmpResult != 0
 					}
 

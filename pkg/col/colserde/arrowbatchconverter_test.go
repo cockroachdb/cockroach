@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -164,6 +165,7 @@ func runConversionBenchmarks(
 		{t: types.Int, numBytes: 8 * int64(coldata.BatchSize())},
 		{t: types.Timestamp, numBytes: 3 * 8 * int64(coldata.BatchSize())},
 		{t: types.Interval, numBytes: 3 * 8 * int64(coldata.BatchSize())},
+		{t: types.INet, numBytes: memsize.IPAddr * int64(coldata.BatchSize())},
 	} {
 		typ := tc.t
 		args := coldatatestutils.RandomVecArgs{Rand: rng, BytesFixedLength: tc.bytesFixedLength}

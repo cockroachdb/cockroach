@@ -115,6 +115,13 @@ func NewLastValueOperator(
 			windower := &lastValueJSONWindow{lastValueBase: base}
 			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
+	case types.INetFamily:
+		switch argType.Width() {
+		case -1:
+		default:
+			windower := &lastValueINetWindow{lastValueBase: base}
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argType.Width() {
 		case -1:
@@ -506,6 +513,44 @@ func (w *lastValueJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 		}
 		col := vec.JSON()
 		outputCol.Copy(col, i, idx)
+	}
+}
+
+type lastValueINetWindow struct {
+	lastValueBase
+}
+
+var _ bufferedWindower = &lastValueINetWindow{}
+
+// processBatch implements the bufferedWindower interface.
+func (w *lastValueINetWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) {
+	if startIdx >= endIdx {
+		// No processing needs to be done for this portion of the current partition.
+		return
+	}
+	outputVec := batch.ColVec(w.outputColIdx)
+	outputCol := outputVec.INet()
+	outputNulls := outputVec.Nulls()
+	_, _ = outputCol.Get(startIdx), outputCol.Get(endIdx-1)
+
+	for i := startIdx; i < endIdx; i++ {
+		w.framer.next(w.Ctx)
+		requestedIdx := w.framer.frameLastIdx()
+		if requestedIdx == -1 {
+			// The requested row does not exist.
+			outputNulls.SetNull(i)
+			continue
+		}
+
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, w.bufferArgIdx, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+			outputNulls.SetNull(i)
+			continue
+		}
+		col := vec.INet()
+		val := col.Get(idx)
+		//gcassert:bce
+		outputCol.Set(i, val)
 	}
 }
 

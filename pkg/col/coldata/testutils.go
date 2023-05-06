@@ -127,6 +127,18 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 					}
 				}
 			}
+		} else if canonicalTypeFamily == types.INetFamily {
+			expectedINet := expectedVec.INet().Window(0, expected.Length())
+			resultINet := actualVec.INet().Window(0, actual.Length())
+			require.Equal(t, expectedINet.Len(), resultINet.Len())
+			for i := 0; i < expectedINet.Len(); i++ {
+				if !expectedNulls.NullAt(i) {
+					result := resultINet.Get(i)
+					if expectedINet.Get(i).Compare(&result) != 0 {
+						t.Fatalf("INet mismatch at index %d:\nexpected:\n%s\nactual:\n%s", i, expectedINet, resultINet)
+					}
+				}
+			}
 		} else if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
 			expectedDatum := expectedVec.Datum().Window(0 /* start */, expected.Length())
 			resultDatum := actualVec.Datum().Window(0 /* start */, actual.Length())

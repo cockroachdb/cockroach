@@ -218,6 +218,11 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			data[i] = bytes
 		}
 		builder.(*array.BinaryBuilder).AppendValues(data, valid)
+	case types.INetFamily:
+		panic(
+			"INetFamily type is unsupported because it has custom serialization " +
+				"logic that we can't easily replicate with array builders",
+		)
 	case typeconv.DatumVecCanonicalTypeFamily:
 		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
 		data := make([][]byte, n)
@@ -279,6 +284,11 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 
 	for i := range typs {
 		typs[i] = randgen.RandType(rng)
+		// Skip INetFamily because it has custom serialization logic that we
+		// can't easily replicate with array builders.
+		for typs[i].Family() == types.INetFamily {
+			typs[i] = randgen.RandType(rng)
+		}
 		data[i] = *randomDataFromType(rng, typs[i], dataLen, nullProbability)
 	}
 

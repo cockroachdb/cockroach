@@ -255,6 +255,7 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/duration",
+        "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/log",

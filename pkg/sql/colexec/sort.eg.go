@@ -90,6 +90,12 @@ func newSingleSorterWithNulls(
 			default:
 				return &sortJSONAscWithNullsOp{}
 			}
+		case types.INetFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortINetAscWithNullsOp{}
+			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch t.Width() {
 			case -1:
@@ -150,6 +156,12 @@ func newSingleSorterWithNulls(
 			case -1:
 			default:
 				return &sortJSONDescWithNullsOp{}
+			}
+		case types.INetFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortINetDescWithNullsOp{}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch t.Width() {
@@ -222,6 +234,12 @@ func newSingleSorterWithoutNulls(
 			default:
 				return &sortJSONAscOp{}
 			}
+		case types.INetFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortINetAscOp{}
+			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch t.Width() {
 			case -1:
@@ -282,6 +300,12 @@ func newSingleSorterWithoutNulls(
 			case -1:
 			default:
 				return &sortJSONDescOp{}
+			}
+		case types.INetFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return &sortINetDescOp{}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch t.Width() {
@@ -1153,6 +1177,83 @@ func (s *sortJSONAscWithNullsOp) Swap(i, j int) {
 }
 
 func (s *sortJSONAscWithNullsOp) Len() int {
+	return len(s.order)
+}
+
+type sortINetAscWithNullsOp struct {
+	nulls         *coldata.Nulls
+	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.IPAddrs
+	order         []int
+}
+
+func (s *sortINetAscWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
+) {
+	s.sortCol = col.INet()
+	s.nulls = col.Nulls()
+	s.order = order
+	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortINetAscWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+}
+
+func (s *sortINetAscWithNullsOp) sort() {
+	n := s.sortCol.Len()
+	s.pdqsort(0, n, bits.Len(uint(n)))
+}
+
+func (s *sortINetAscWithNullsOp) sortPartitions(partitions []int) {
+	order := s.order
+	for i, partitionStart := range partitions {
+		var partitionEnd int
+		if i == len(partitions)-1 {
+			partitionEnd = len(order)
+		} else {
+			partitionEnd = partitions[i+1]
+		}
+		s.order = order[partitionStart:partitionEnd]
+		n := partitionEnd - partitionStart
+		s.pdqsort(0, n, bits.Len(uint(n)))
+	}
+}
+
+func (s *sortINetAscWithNullsOp) Less(i, j int) bool {
+	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
+	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
+	// If ascending, nulls always sort first, so we encode that logic here.
+	if n1 && n2 {
+		return false
+	} else if n1 {
+		return true
+	} else if n2 {
+		return false
+	}
+
+	var lt bool
+	// We always indirect via the order vector.
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
+
+	{
+		var cmpResult int
+		cmpResult = arg1.Compare(&arg2)
+		lt = cmpResult < 0
+	}
+
+	return lt
+}
+
+func (s *sortINetAscWithNullsOp) Swap(i, j int) {
+	// We don't physically swap the column - we merely edit the order vector.
+	s.order[i], s.order[j] = s.order[j], s.order[i]
+}
+
+func (s *sortINetAscWithNullsOp) Len() int {
 	return len(s.order)
 }
 
@@ -2095,6 +2196,83 @@ func (s *sortJSONDescWithNullsOp) Len() int {
 	return len(s.order)
 }
 
+type sortINetDescWithNullsOp struct {
+	nulls         *coldata.Nulls
+	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.IPAddrs
+	order         []int
+}
+
+func (s *sortINetDescWithNullsOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
+) {
+	s.sortCol = col.INet()
+	s.nulls = col.Nulls()
+	s.order = order
+	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortINetDescWithNullsOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+}
+
+func (s *sortINetDescWithNullsOp) sort() {
+	n := s.sortCol.Len()
+	s.pdqsort(0, n, bits.Len(uint(n)))
+}
+
+func (s *sortINetDescWithNullsOp) sortPartitions(partitions []int) {
+	order := s.order
+	for i, partitionStart := range partitions {
+		var partitionEnd int
+		if i == len(partitions)-1 {
+			partitionEnd = len(order)
+		} else {
+			partitionEnd = partitions[i+1]
+		}
+		s.order = order[partitionStart:partitionEnd]
+		n := partitionEnd - partitionStart
+		s.pdqsort(0, n, bits.Len(uint(n)))
+	}
+}
+
+func (s *sortINetDescWithNullsOp) Less(i, j int) bool {
+	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
+	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
+	// If descending, nulls always sort last, so we encode that logic here.
+	if n1 && n2 {
+		return false
+	} else if n1 {
+		return false
+	} else if n2 {
+		return true
+	}
+
+	var lt bool
+	// We always indirect via the order vector.
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
+
+	{
+		var cmpResult int
+		cmpResult = arg1.Compare(&arg2)
+		lt = cmpResult > 0
+	}
+
+	return lt
+}
+
+func (s *sortINetDescWithNullsOp) Swap(i, j int) {
+	// We don't physically swap the column - we merely edit the order vector.
+	s.order[i], s.order[j] = s.order[j], s.order[i]
+}
+
+func (s *sortINetDescWithNullsOp) Len() int {
+	return len(s.order)
+}
+
 type sortDatumDescWithNullsOp struct {
 	nulls         *coldata.Nulls
 	cancelChecker colexecutils.CancelChecker
@@ -2937,6 +3115,73 @@ func (s *sortJSONAscOp) Len() int {
 	return len(s.order)
 }
 
+type sortINetAscOp struct {
+	nulls         *coldata.Nulls
+	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.IPAddrs
+	order         []int
+}
+
+func (s *sortINetAscOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
+) {
+	s.sortCol = col.INet()
+	s.nulls = col.Nulls()
+	s.order = order
+	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortINetAscOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+}
+
+func (s *sortINetAscOp) sort() {
+	n := s.sortCol.Len()
+	s.pdqsort(0, n, bits.Len(uint(n)))
+}
+
+func (s *sortINetAscOp) sortPartitions(partitions []int) {
+	order := s.order
+	for i, partitionStart := range partitions {
+		var partitionEnd int
+		if i == len(partitions)-1 {
+			partitionEnd = len(order)
+		} else {
+			partitionEnd = partitions[i+1]
+		}
+		s.order = order[partitionStart:partitionEnd]
+		n := partitionEnd - partitionStart
+		s.pdqsort(0, n, bits.Len(uint(n)))
+	}
+}
+
+func (s *sortINetAscOp) Less(i, j int) bool {
+
+	var lt bool
+	// We always indirect via the order vector.
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
+
+	{
+		var cmpResult int
+		cmpResult = arg1.Compare(&arg2)
+		lt = cmpResult < 0
+	}
+
+	return lt
+}
+
+func (s *sortINetAscOp) Swap(i, j int) {
+	// We don't physically swap the column - we merely edit the order vector.
+	s.order[i], s.order[j] = s.order[j], s.order[i]
+}
+
+func (s *sortINetAscOp) Len() int {
+	return len(s.order)
+}
+
 type sortDatumAscOp struct {
 	nulls         *coldata.Nulls
 	cancelChecker colexecutils.CancelChecker
@@ -3766,6 +4011,73 @@ func (s *sortJSONDescOp) Swap(i, j int) {
 }
 
 func (s *sortJSONDescOp) Len() int {
+	return len(s.order)
+}
+
+type sortINetDescOp struct {
+	nulls         *coldata.Nulls
+	cancelChecker colexecutils.CancelChecker
+	sortCol       coldata.IPAddrs
+	order         []int
+}
+
+func (s *sortINetDescOp) init(
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
+) {
+	s.sortCol = col.INet()
+	s.nulls = col.Nulls()
+	s.order = order
+	s.cancelChecker.Init(ctx)
+}
+
+func (s *sortINetDescOp) reset() {
+	s.sortCol = nil
+	s.nulls = nil
+	s.order = nil
+}
+
+func (s *sortINetDescOp) sort() {
+	n := s.sortCol.Len()
+	s.pdqsort(0, n, bits.Len(uint(n)))
+}
+
+func (s *sortINetDescOp) sortPartitions(partitions []int) {
+	order := s.order
+	for i, partitionStart := range partitions {
+		var partitionEnd int
+		if i == len(partitions)-1 {
+			partitionEnd = len(order)
+		} else {
+			partitionEnd = partitions[i+1]
+		}
+		s.order = order[partitionStart:partitionEnd]
+		n := partitionEnd - partitionStart
+		s.pdqsort(0, n, bits.Len(uint(n)))
+	}
+}
+
+func (s *sortINetDescOp) Less(i, j int) bool {
+
+	var lt bool
+	// We always indirect via the order vector.
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
+
+	{
+		var cmpResult int
+		cmpResult = arg1.Compare(&arg2)
+		lt = cmpResult > 0
+	}
+
+	return lt
+}
+
+func (s *sortINetDescOp) Swap(i, j int) {
+	// We don't physically swap the column - we merely edit the order vector.
+	s.order[i], s.order[j] = s.order[j], s.order[i]
+}
+
+func (s *sortINetDescOp) Len() int {
 	return len(s.order)
 }
 

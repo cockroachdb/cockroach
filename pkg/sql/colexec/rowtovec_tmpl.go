@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
@@ -37,6 +38,7 @@ var (
 	_ duration.Duration
 	_ encoding.Direction
 	_ json.JSON
+	_ ipaddr.IPAddr
 )
 
 // EncDatumRowToColVecs converts the provided rowenc.EncDatumRow to the columnar

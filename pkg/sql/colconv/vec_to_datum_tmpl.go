@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -39,6 +40,7 @@ var (
 	_ pgdate.Date
 	_ = typeconv.DatumVecCanonicalTypeFamily
 	_ uuid.UUID
+	_ ipaddr.IPAddr
 )
 
 // VecToDatumConverter is a helper struct that converts vectors from batches to

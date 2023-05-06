@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -42,6 +43,7 @@ var (
 	_ json.JSON
 	_ colexecerror.StorageError
 	_ execversion.DistSQLVersion
+	_ ipaddr.IPAddr
 )
 
 // {{/*
@@ -65,7 +67,7 @@ const _ALLOC_CODE = 0
 
 // {{if eq "_AGGKIND" "Ordered"}}
 
-const anyNotNullNumOverloads = 11
+const anyNotNullNumOverloads = 12
 
 // {{end}}
 

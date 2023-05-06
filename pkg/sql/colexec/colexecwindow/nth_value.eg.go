@@ -127,6 +127,14 @@ func NewNthValueOperator(
 			windower.nColIdx = argIdxs[1]
 			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 		}
+	case types.INetFamily:
+		switch argType.Width() {
+		case -1:
+		default:
+			windower := &nthValueINetWindow{nthValueBase: base}
+			windower.nColIdx = argIdxs[1]
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argType.Width() {
 		case -1:
@@ -689,6 +697,61 @@ func (w *nthValueJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 		}
 		col := vec.JSON()
 		outputCol.Copy(col, i, idx)
+	}
+}
+
+type nthValueINetWindow struct {
+	nthValueBase
+	nColIdx int
+}
+
+var _ bufferedWindower = &nthValueINetWindow{}
+
+// processBatch implements the bufferedWindower interface.
+func (w *nthValueINetWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) {
+	if startIdx >= endIdx {
+		// No processing needs to be done for this portion of the current partition.
+		return
+	}
+	outputVec := batch.ColVec(w.outputColIdx)
+	outputCol := outputVec.INet()
+	outputNulls := outputVec.Nulls()
+	_, _ = outputCol.Get(startIdx), outputCol.Get(endIdx-1)
+
+	nVec := batch.ColVec(w.nColIdx)
+	nCol := nVec.Int64()
+	nNulls := nVec.Nulls()
+	_, _ = nCol[startIdx], nCol[endIdx-1]
+
+	for i := startIdx; i < endIdx; i++ {
+		w.framer.next(w.Ctx)
+		if nNulls.MaybeHasNulls() && nNulls.NullAt(i) {
+			// TODO(drewk): this could be pulled out of the loop, but for now keep the
+			// templating simple.
+			outputNulls.SetNull(i)
+			continue
+		}
+		// gcassert:bce
+		nVal := int(nCol[i])
+		if nVal <= 0 {
+			colexecerror.ExpectedError(builtins.ErrInvalidArgumentForNthValue)
+		}
+		requestedIdx := w.framer.frameNthIdx(nVal)
+		if requestedIdx == -1 {
+			// The requested row does not exist.
+			outputNulls.SetNull(i)
+			continue
+		}
+
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, w.bufferArgIdx, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+			outputNulls.SetNull(i)
+			continue
+		}
+		col := vec.INet()
+		val := col.Get(idx)
+		//gcassert:bce
+		outputCol.Set(i, val)
 	}
 }
 

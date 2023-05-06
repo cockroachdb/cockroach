@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -208,6 +209,20 @@ func decodeTableKeyToCol(
 		}
 		vecs.BytesCols[colIdx].Set(rowIdx, key[:keyLen])
 		rkey = key[keyLen:]
+	case types.INetFamily:
+		// No need to perform the deep copy since we don't hold onto the byte
+		// slice.
+		if dir == catenumpb.IndexColumn_ASC {
+			rkey, scratch, err = encoding.DecodeBytesAscending(key, scratch[:0])
+		} else {
+			rkey, scratch, err = encoding.DecodeBytesDescending(key, scratch[:0])
+		}
+		if err != nil {
+			return nil, false, scratch, err
+		}
+		var ipAddr ipaddr.IPAddr
+		_, err = ipAddr.FromBuffer(scratch)
+		vecs.INetCols[colIdx].Set(rowIdx, ipAddr)
 	default:
 		if err = typeconv.AssertDatumBacked(ctx, valType); err != nil {
 			return nil, false, scratch, err
@@ -291,6 +306,15 @@ func UnmarshalColumnValueToCol(
 		var v []byte
 		v, err = value.GetBytes()
 		vecs.JSONCols[colIdx].Bytes.Set(rowIdx, v)
+	case types.INetFamily:
+		var v []byte
+		v, err = value.GetBytes()
+		if err != nil {
+			return err
+		}
+		var ipAddr ipaddr.IPAddr
+		_, err = ipAddr.FromBuffer(v)
+		vecs.INetCols[colIdx].Set(rowIdx, ipAddr)
 	// Types backed by tree.Datums.
 	default:
 		if err = typeconv.AssertDatumBacked(ctx, typ); err != nil {

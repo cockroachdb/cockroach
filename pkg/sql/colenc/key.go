@@ -191,6 +191,21 @@ func encodeKeys[T []byte | roachpb.Key](
 			}
 			kys[r] = b
 		}
+	case types.INetFamily:
+		is := vec.INet()
+		for r := 0; r < count; r++ {
+			b := kys[r]
+			if partialIndexAndNullCheck(kys, r, start, nulls, dir) {
+				continue
+			}
+			i := is.Get(r + start)
+			data := i.ToBuffer(nil /* appendTo */)
+			if dir == encoding.Ascending {
+				kys[r] = encoding.EncodeBytesAscending(b, data)
+			} else {
+				kys[r] = encoding.EncodeBytesDescending(b, data)
+			}
+		}
 	default:
 		if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
 			return err

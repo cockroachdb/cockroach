@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -106,6 +107,10 @@ func DecodeTableValueToCol(
 		var d duration.Duration
 		buf, d, err = encoding.DecodeUntaggedDurationValue(buf)
 		vecs.IntervalCols[colIdx][rowIdx] = d
+	case types.INetFamily:
+		var i ipaddr.IPAddr
+		buf, i, err = encoding.DecodeUntaggedIPAddrValue(buf)
+		vecs.INetCols[colIdx][rowIdx] = i
 	// Types backed by tree.Datums.
 	default:
 		if err = typeconv.AssertDatumBacked(ctx, valTyp); err != nil {

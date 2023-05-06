@@ -90,6 +90,8 @@ func (cf *defaultColumnFactory) MakeColumn(ctx context.Context, t *types.T, leng
 		return make(Durations, length)
 	case types.JsonFamily:
 		return NewJSONs(length)
+	case types.INetFamily:
+		return make(IPAddrs, length)
 	default:
 		panic(fmt.Sprintf("StandardColumnFactory doesn't support %s", t))
 	}
@@ -167,6 +169,12 @@ func (cf *defaultColumnFactory) MakeColumns(
 		for i := range columns {
 			wrapperAlloc[i].elements = alloc[:length:length]
 			columns[i] = &wrapperAlloc[i]
+			alloc = alloc[length:]
+		}
+	case types.INetFamily:
+		alloc := make(IPAddrs, allocLength)
+		for i := range columns {
+			columns[i] = alloc[:length:length]
 			alloc = alloc[length:]
 		}
 	default:
@@ -252,6 +260,11 @@ func (v *Vec) JSON() *JSONs {
 	return v.col.(*JSONs)
 }
 
+// INet returns a vector of IPAddrs.
+func (v *Vec) INet() IPAddrs {
+	return v.col.(IPAddrs)
+}
+
 // Datum returns a vector of Datums.
 func (v *Vec) Datum() DatumVec {
 	return v.col.(DatumVec)
@@ -319,6 +332,8 @@ func (v *Vec) Capacity() int {
 		return cap(v.col.(Durations))
 	case types.JsonFamily:
 		return v.JSON().Len()
+	case types.INetFamily:
+		return cap(v.col.(IPAddrs))
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return v.col.(DatumVec).Cap()
 	default:

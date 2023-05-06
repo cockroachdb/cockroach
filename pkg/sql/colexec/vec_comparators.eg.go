@@ -487,6 +487,43 @@ func (c *JSONVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 	}
 }
 
+type INetVecComparator struct {
+	vecs  []coldata.IPAddrs
+	nulls []*coldata.Nulls
+}
+
+func (c *INetVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int) int {
+	n1 := c.nulls[vecIdx1].MaybeHasNulls() && c.nulls[vecIdx1].NullAt(valIdx1)
+	n2 := c.nulls[vecIdx2].MaybeHasNulls() && c.nulls[vecIdx2].NullAt(valIdx2)
+	if n1 && n2 {
+		return 0
+	} else if n1 {
+		return -1
+	} else if n2 {
+		return 1
+	}
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
+	var cmp int
+	cmp = left.Compare(&right)
+	return cmp
+}
+
+func (c *INetVecComparator) setVec(idx int, vec *coldata.Vec) {
+	c.vecs[idx] = vec.INet()
+	c.nulls[idx] = vec.Nulls()
+}
+
+func (c *INetVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
+	if c.nulls[srcVecIdx].MaybeHasNulls() && c.nulls[srcVecIdx].NullAt(srcIdx) {
+		c.nulls[dstVecIdx].SetNull(dstIdx)
+	} else {
+		c.nulls[dstVecIdx].UnsetNull(dstIdx)
+		v := c.vecs[srcVecIdx].Get(srcIdx)
+		c.vecs[dstVecIdx].Set(dstIdx, v)
+	}
+}
+
 type DatumVecComparator struct {
 	vecs  []coldata.DatumVec
 	nulls []*coldata.Nulls
@@ -607,6 +644,15 @@ func GetVecComparator(ctx context.Context, t *types.T, numVecs int) vecComparato
 		default:
 			return &JSONVecComparator{
 				vecs:  make([]*coldata.JSONs, numVecs),
+				nulls: make([]*coldata.Nulls, numVecs),
+			}
+		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &INetVecComparator{
+				vecs:  make([]coldata.IPAddrs, numVecs),
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		}

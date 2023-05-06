@@ -143,6 +143,15 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) interface{} {
 				return datum.(*tree.DUuid).UUID.GetBytesMut()
 			}
 		}
+	case types.INetFamily:
+		switch ct.Width() {
+		case -1:
+		default:
+			return func(datum tree.Datum) interface{} {
+
+				return datum.(*tree.DIPAddr).IPAddr
+			}
+		}
 	case types.JsonFamily:
 		switch ct.Width() {
 		case -1:

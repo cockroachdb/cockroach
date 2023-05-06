@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -38,6 +39,7 @@ var (
 	_ = coldataext.CompareDatum
 	_ = colexecerror.InternalError
 	_ = memsize.Uint32
+	_ ipaddr.IPAddr
 )
 
 const (
@@ -162,6 +164,12 @@ func newMinRemovableAggregator(
 		case -1:
 		default:
 			return &minJSONAggregator{minMaxRemovableAggBase: base}
+		}
+	case types.INetFamily:
+		switch argTyp.Width() {
+		case -1:
+		default:
+			return &minINetAggregator{minMaxRemovableAggBase: base}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argTyp.Width() {
@@ -1911,6 +1919,162 @@ func (a *minJSONAggregator) Close(ctx context.Context) {
 	*a = minJSONAggregator{}
 }
 
+type minINetAggregator struct {
+	minMaxRemovableAggBase
+	// curAgg holds the running min/max, so we can index into the output column
+	// once per row, instead of on each iteration.
+	// NOTE: if the length of the queue is zero, curAgg is undefined.
+	curAgg ipaddr.IPAddr
+}
+
+// processBatch implements the bufferedWindower interface.
+func (a *minINetAggregator) processBatch(batch coldata.Batch, startIdx, endIdx int) {
+	if endIdx <= startIdx {
+		// There is no processing to be done.
+		return
+	}
+	outVec := batch.ColVec(a.outputColIdx)
+	outNulls := outVec.Nulls()
+	outCol := outVec.INet()
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
+		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
+		for i := startIdx; i < endIdx; i++ {
+			a.framer.next(a.Ctx)
+			toAdd, toRemove := a.framer.slidingWindowIntervals()
+
+			// Process the toRemove intervals first.
+			if !a.queue.isEmpty() {
+				prevBestIdx := a.queue.getFirst()
+				for _, interval := range toRemove {
+					if uint32(interval.start) > a.queue.getFirst() {
+						colexecerror.InternalError(errors.AssertionFailedf(
+							"expected default exclusion clause for min/max sliding window operator"))
+					}
+					a.queue.removeAllBefore(uint32(interval.end))
+				}
+				if !a.queue.isEmpty() {
+					newBestIdx := a.queue.getFirst()
+					if newBestIdx != prevBestIdx {
+						// We need to update curAgg.
+						vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(newBestIdx))
+						col := vec.INet()
+						val := col.Get(idx)
+						a.curAgg = val
+					}
+				}
+			}
+
+			// Now aggregate over the toAdd intervals.
+			if a.queue.isEmpty() && a.omittedIndex != -1 {
+				// We have exhausted all the values that fit in the queue - we need to
+				// re-aggregate over the current window frame starting from the first
+				// omitted index.
+				a.scratchIntervals = getIntervalsGEIdx(
+					a.framer.frameIntervals(), a.scratchIntervals, a.omittedIndex)
+				a.omittedIndex = -1
+				a.aggregateOverIntervals(a.scratchIntervals)
+			} else {
+				a.aggregateOverIntervals(toAdd)
+			}
+
+			// Set the output value for the current row.
+			if a.queue.isEmpty() {
+				outNulls.SetNull(i)
+			} else {
+				// gcassert:bce
+				outCol.Set(i, a.curAgg)
+			}
+		}
+	})
+}
+
+// aggregateOverIntervals accumulates all rows represented by the given
+// intervals into the current aggregate.
+func (a *minINetAggregator) aggregateOverIntervals(intervals []windowInterval) {
+	for _, interval := range intervals {
+		var cmp bool
+		for j := interval.start; j < interval.end; j++ {
+			a.cancelChecker.Check()
+			idxToAdd := uint32(j)
+			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
+			nulls := vec.Nulls()
+			col := vec.INet()
+			if !nulls.MaybeHasNulls() || !nulls.NullAt(idx) {
+				val := col.Get(idx)
+
+				// If this is the first value in the frame, it is the best so far.
+				isBest := a.queue.isEmpty()
+				if !a.queue.isEmpty() {
+					// Compare to the best value seen so far.
+
+					{
+						var cmpResult int
+						cmpResult = val.Compare(&a.curAgg)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						// Reset the queue because the current value replaces all others.
+						isBest = true
+						a.queue.reset()
+					}
+					isBest = cmp
+				}
+				if isBest {
+					// The queue is already empty, so just add to the end of the queue.
+					// If any values were omitted from the queue, they would be dominated
+					// by this one anyway, so reset omittedIndex.
+					a.queue.addLast(idxToAdd)
+					a.curAgg = val
+					a.omittedIndex = -1
+					continue
+				}
+
+				// This is not the best value in the window frame, but we still need to
+				// keep it in the queue. Iterate from the end of the queue, removing any
+				// values that are dominated by the current one. Add the current value
+				// once the last value in the queue is better than the current one.
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy ipaddr.IPAddr
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.INet().Get(cmpIdx)
+
+						{
+							var cmpResult int
+							cmpResult = cmpVal.Compare(&valCopy)
+							cmp = cmpResult < 0
+						}
+
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
+					}
+				}
+				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
+					// The value couldn't fit in the queue. Keep track of the first index
+					// from which the queue could no longer store values.
+					a.omittedIndex = j
+				}
+			}
+		}
+	}
+}
+
+func (a *minINetAggregator) Close(ctx context.Context) {
+	a.queue.close()
+	a.framer.close()
+	a.buffer.Close(ctx)
+	*a = minINetAggregator{}
+}
+
 type minDatumAggregator struct {
 	minMaxRemovableAggBase
 	// curAgg holds the running min/max, so we can index into the output column
@@ -2140,6 +2304,12 @@ func newMaxRemovableAggregator(
 		case -1:
 		default:
 			return &maxJSONAggregator{minMaxRemovableAggBase: base}
+		}
+	case types.INetFamily:
+		switch argTyp.Width() {
+		case -1:
+		default:
+			return &maxINetAggregator{minMaxRemovableAggBase: base}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argTyp.Width() {
@@ -3887,6 +4057,162 @@ func (a *maxJSONAggregator) Close(ctx context.Context) {
 	a.framer.close()
 	a.buffer.Close(ctx)
 	*a = maxJSONAggregator{}
+}
+
+type maxINetAggregator struct {
+	minMaxRemovableAggBase
+	// curAgg holds the running min/max, so we can index into the output column
+	// once per row, instead of on each iteration.
+	// NOTE: if the length of the queue is zero, curAgg is undefined.
+	curAgg ipaddr.IPAddr
+}
+
+// processBatch implements the bufferedWindower interface.
+func (a *maxINetAggregator) processBatch(batch coldata.Batch, startIdx, endIdx int) {
+	if endIdx <= startIdx {
+		// There is no processing to be done.
+		return
+	}
+	outVec := batch.ColVec(a.outputColIdx)
+	outNulls := outVec.Nulls()
+	outCol := outVec.INet()
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
+		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
+		for i := startIdx; i < endIdx; i++ {
+			a.framer.next(a.Ctx)
+			toAdd, toRemove := a.framer.slidingWindowIntervals()
+
+			// Process the toRemove intervals first.
+			if !a.queue.isEmpty() {
+				prevBestIdx := a.queue.getFirst()
+				for _, interval := range toRemove {
+					if uint32(interval.start) > a.queue.getFirst() {
+						colexecerror.InternalError(errors.AssertionFailedf(
+							"expected default exclusion clause for min/max sliding window operator"))
+					}
+					a.queue.removeAllBefore(uint32(interval.end))
+				}
+				if !a.queue.isEmpty() {
+					newBestIdx := a.queue.getFirst()
+					if newBestIdx != prevBestIdx {
+						// We need to update curAgg.
+						vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(newBestIdx))
+						col := vec.INet()
+						val := col.Get(idx)
+						a.curAgg = val
+					}
+				}
+			}
+
+			// Now aggregate over the toAdd intervals.
+			if a.queue.isEmpty() && a.omittedIndex != -1 {
+				// We have exhausted all the values that fit in the queue - we need to
+				// re-aggregate over the current window frame starting from the first
+				// omitted index.
+				a.scratchIntervals = getIntervalsGEIdx(
+					a.framer.frameIntervals(), a.scratchIntervals, a.omittedIndex)
+				a.omittedIndex = -1
+				a.aggregateOverIntervals(a.scratchIntervals)
+			} else {
+				a.aggregateOverIntervals(toAdd)
+			}
+
+			// Set the output value for the current row.
+			if a.queue.isEmpty() {
+				outNulls.SetNull(i)
+			} else {
+				// gcassert:bce
+				outCol.Set(i, a.curAgg)
+			}
+		}
+	})
+}
+
+// aggregateOverIntervals accumulates all rows represented by the given
+// intervals into the current aggregate.
+func (a *maxINetAggregator) aggregateOverIntervals(intervals []windowInterval) {
+	for _, interval := range intervals {
+		var cmp bool
+		for j := interval.start; j < interval.end; j++ {
+			a.cancelChecker.Check()
+			idxToAdd := uint32(j)
+			vec, idx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, j)
+			nulls := vec.Nulls()
+			col := vec.INet()
+			if !nulls.MaybeHasNulls() || !nulls.NullAt(idx) {
+				val := col.Get(idx)
+
+				// If this is the first value in the frame, it is the best so far.
+				isBest := a.queue.isEmpty()
+				if !a.queue.isEmpty() {
+					// Compare to the best value seen so far.
+
+					{
+						var cmpResult int
+						cmpResult = val.Compare(&a.curAgg)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						// Reset the queue because the current value replaces all others.
+						isBest = true
+						a.queue.reset()
+					}
+					isBest = cmp
+				}
+				if isBest {
+					// The queue is already empty, so just add to the end of the queue.
+					// If any values were omitted from the queue, they would be dominated
+					// by this one anyway, so reset omittedIndex.
+					a.queue.addLast(idxToAdd)
+					a.curAgg = val
+					a.omittedIndex = -1
+					continue
+				}
+
+				// This is not the best value in the window frame, but we still need to
+				// keep it in the queue. Iterate from the end of the queue, removing any
+				// values that are dominated by the current one. Add the current value
+				// once the last value in the queue is better than the current one.
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy ipaddr.IPAddr
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.INet().Get(cmpIdx)
+
+						{
+							var cmpResult int
+							cmpResult = cmpVal.Compare(&valCopy)
+							cmp = cmpResult > 0
+						}
+
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
+					}
+				}
+				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
+					// The value couldn't fit in the queue. Keep track of the first index
+					// from which the queue could no longer store values.
+					a.omittedIndex = j
+				}
+			}
+		}
+	}
+}
+
+func (a *maxINetAggregator) Close(ctx context.Context) {
+	a.queue.close()
+	a.framer.close()
+	a.buffer.Close(ctx)
+	*a = maxINetAggregator{}
 }
 
 type maxDatumAggregator struct {

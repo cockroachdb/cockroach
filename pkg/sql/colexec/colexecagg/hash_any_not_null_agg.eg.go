@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -32,6 +33,7 @@ var (
 	_ json.JSON
 	_ colexecerror.StorageError
 	_ execversion.DistSQLVersion
+	_ ipaddr.IPAddr
 )
 
 func newAnyNotNullHashAggAlloc(
@@ -90,6 +92,12 @@ func newAnyNotNullHashAggAlloc(
 		case -1:
 		default:
 			return &anyNotNullJSONHashAggAlloc{aggAllocBase: allocBase}, nil
+		}
+	case types.INetFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &anyNotNullINetHashAggAlloc{aggAllocBase: allocBase}, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -1213,6 +1221,114 @@ func (a *anyNotNullJSONHashAggAlloc) newAggFunc() AggregateFunc {
 	if len(a.aggFuncs) == 0 {
 		a.allocator.AdjustMemoryUsage(anyNotNullJSONHashAggSliceOverhead + sizeOfAnyNotNullJSONHashAgg*a.allocSize)
 		a.aggFuncs = make([]anyNotNullJSONHashAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
+// anyNotNullINetHashAgg implements the ANY_NOT_NULL aggregate, returning the
+// first non-null value in the input column.
+type anyNotNullINetHashAgg struct {
+	unorderedAggregateFuncBase
+	curAgg                      ipaddr.IPAddr
+	foundNonNullForCurrentGroup bool
+}
+
+var _ AggregateFunc = &anyNotNullINetHashAgg{}
+
+func (a *anyNotNullINetHashAgg) Compute(
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+) {
+	if a.foundNonNullForCurrentGroup {
+		// We have already seen non-null for the current group, and since there
+		// is at most a single group when performing hash aggregation, we can
+		// finish computing.
+		return
+	}
+
+	var oldCurAggSize uintptr
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.INet(), vec.Nulls()
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
+		{
+			sel = sel[startIdx:endIdx]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = val
+						a.foundNonNullForCurrentGroup = true
+						// We have already seen non-null for the current group, and since there
+						// is at most a single group when performing hash aggregation, we can
+						// finish computing.
+						return
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					var isNull bool
+					isNull = false
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+						a.curAgg = val
+						a.foundNonNullForCurrentGroup = true
+						// We have already seen non-null for the current group, and since there
+						// is at most a single group when performing hash aggregation, we can
+						// finish computing.
+						return
+					}
+				}
+			}
+		}
+	},
+	)
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsageAfterAllocation(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *anyNotNullINetHashAgg) Flush(outputIdx int) {
+	// If we haven't found any non-nulls for this group so far, the output for
+	// this group should be null.
+	col := a.vec.INet()
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		col.Set(outputIdx, a.curAgg)
+	}
+}
+
+func (a *anyNotNullINetHashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
+}
+
+type anyNotNullINetHashAggAlloc struct {
+	aggAllocBase
+	aggFuncs []anyNotNullINetHashAgg
+}
+
+var _ aggregateFuncAlloc = &anyNotNullINetHashAggAlloc{}
+
+const sizeOfAnyNotNullINetHashAgg = int64(unsafe.Sizeof(anyNotNullINetHashAgg{}))
+const anyNotNullINetHashAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullINetHashAgg{}))
+
+func (a *anyNotNullINetHashAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(anyNotNullINetHashAggSliceOverhead + sizeOfAnyNotNullINetHashAgg*a.allocSize)
+		a.aggFuncs = make([]anyNotNullINetHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator

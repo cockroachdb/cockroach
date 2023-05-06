@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 )
 
 // Bools is a slice of bool.
@@ -35,6 +36,9 @@ type Times []time.Time
 
 // Durations is a slice of duration.Duration.
 type Durations []duration.Duration
+
+// IPAddrs is a slice of ipaddr.IPAddr.
+type IPAddrs []ipaddr.IPAddr
 
 // Get returns the element at index idx of the vector. The element cannot be
 // used anymore once the vector is modified.
@@ -84,6 +88,12 @@ func (c Times) Get(idx int) time.Time { return c[idx] }
 //gcassert:inline
 func (c Durations) Get(idx int) duration.Duration { return c[idx] }
 
+// Get returns the element at index idx of the vector. The element cannot be
+// used anymore once the vector is modified.
+//
+//gcassert:inline
+func (c IPAddrs) Get(idx int) ipaddr.IPAddr { return c[idx] }
+
 // Set sets the element at index idx of the vector to val.
 //
 //gcassert:inline
@@ -126,6 +136,11 @@ func (c Times) Set(idx int, val time.Time) { c[idx] = val }
 //gcassert:inline
 func (c Durations) Set(idx int, val duration.Duration) { c[idx] = val }
 
+// Set sets the element at index idx of the vector to val.
+//
+//gcassert:inline
+func (c IPAddrs) Set(idx int, val ipaddr.IPAddr) { c[idx] = val }
+
 // Len returns the length of the vector.
 //
 //gcassert:inline
@@ -165,6 +180,11 @@ func (c Times) Len() int { return len(c) }
 //
 //gcassert:inline
 func (c Durations) Len() int { return len(c) }
+
+// Len returns the length of the vector.
+//
+//gcassert:inline
+func (c IPAddrs) Len() int { return len(c) }
 
 // CopySlice copies src[srcStartIdx:srcEndIdx] into c starting at position
 // destIdx.
@@ -235,6 +255,14 @@ func (c Durations) CopySlice(src Durations, destIdx, srcStartIdx, srcEndIdx int)
 	copy(c[destIdx:], src[srcStartIdx:srcEndIdx])
 }
 
+// CopySlice copies src[srcStartIdx:srcEndIdx] into c starting at position
+// destIdx.
+//
+//gcassert:inline
+func (c IPAddrs) CopySlice(src IPAddrs, destIdx, srcStartIdx, srcEndIdx int) {
+	copy(c[destIdx:], src[srcStartIdx:srcEndIdx])
+}
+
 // Window returns the window into the vector.
 //
 //gcassert:inline
@@ -274,3 +302,8 @@ func (c Times) Window(start, end int) Times { return c[start:end] }
 //
 //gcassert:inline
 func (c Durations) Window(start, end int) Durations { return c[start:end] }
+
+// Window returns the window into the vector.
+//
+//gcassert:inline
+func (c IPAddrs) Window(start, end int) IPAddrs { return c[start:end] }

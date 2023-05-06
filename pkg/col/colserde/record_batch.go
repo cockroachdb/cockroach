@@ -28,15 +28,13 @@ const (
 
 // numBuffersForType returns how many buffers are used to represent an array of
 // the given type.
-//
-//gcassert:inline
 func numBuffersForType(ctx context.Context, t *types.T) int {
 	// Most types are represented by 3 memory.Buffers (because most types are
 	// serialized into flat bytes representation). One buffer for the null
 	// bitmap, one for the values, and one for the offsets.
 	numBuffers := 3
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(ctx, t.Family()) {
-	case types.BoolFamily, types.FloatFamily, types.IntFamily:
+	case types.BoolFamily, types.FloatFamily, types.IntFamily, types.INetFamily:
 		// This type doesn't have an offsets buffer.
 		numBuffers = 2
 	}

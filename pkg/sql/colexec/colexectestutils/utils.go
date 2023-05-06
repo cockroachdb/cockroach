@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -171,6 +172,18 @@ func (t Tuple) less(
 			if lhsTime.Equal(rhsTime) {
 				continue
 			} else if lhsTime.Before(rhsTime) {
+				return true
+			} else {
+				return false
+			}
+		}
+
+		if lhsVal.Type().Name() == "IPAddr" {
+			lhsIPAddr := lhsVal.Interface().(ipaddr.IPAddr)
+			rhsIPAddr := rhsVal.Interface().(ipaddr.IPAddr)
+			if cmp := lhsIPAddr.Compare(&rhsIPAddr); cmp == 0 {
+				continue
+			} else if cmp < 0 {
 				return true
 			} else {
 				return false

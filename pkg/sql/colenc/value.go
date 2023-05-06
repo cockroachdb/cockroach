@@ -72,6 +72,9 @@ func valuesideEncodeCol(
 			return nil, err
 		}
 		return encoding.EncodeUUIDValue(appendTo, uint32(colID), u), nil
+	case types.INetFamily:
+		i := vec.INet().Get(row)
+		return encoding.EncodeIPAddrValue(appendTo, uint32(colID), i), nil
 	default:
 		if err := typeconv.AssertDatumBacked(ctx, typ); err != nil {
 			return nil, err

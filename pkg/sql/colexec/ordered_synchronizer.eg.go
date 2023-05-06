@@ -238,6 +238,15 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 						outCol := o.outVecs.JSONCols[o.outVecs.ColsMap[i]]
 						outCol.Copy(srcCol, outputIdx, srcRowIdx)
 					}
+				case types.INetFamily:
+					switch o.typs[i].Width() {
+					case -1:
+					default:
+						srcCol := vec.INet()
+						outCol := o.outVecs.INetCols[o.outVecs.ColsMap[i]]
+						v := srcCol.Get(srcRowIdx)
+						outCol.Set(outputIdx, v)
+					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch o.typs[i].Width() {
 					case -1:

@@ -60,6 +60,8 @@ func TypeFamilyToCanonicalTypeFamily(ctx context.Context, family types.Family) t
 		return types.TimestampTZFamily
 	case types.IntervalFamily:
 		return types.IntervalFamily
+	case types.INetFamily:
+		return types.INetFamily
 	default:
 		// TODO(yuzefovich): consider adding native support for
 		// types.UnknownFamily.

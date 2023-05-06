@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 )
 
 // These constants are provided to help estimate memory usage to report to
@@ -52,6 +53,9 @@ const (
 
 	// String is the in-memory size of an empty string in bytes.
 	String = int64(unsafe.Sizeof(""))
+
+	// IPAddr is the in-memory size of an ipaddr.IPAddr in bytes.
+	IPAddr = int64(unsafe.Sizeof(ipaddr.IPAddr{}))
 
 	// BoolSliceOverhead is the in-memory overhead of a []bool in bytes.
 	BoolSliceOverhead = int64(unsafe.Sizeof([]bool{}))

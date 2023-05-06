@@ -108,6 +108,13 @@ func NewLeadOperator(
 			return newBufferedWindowOperator(
 				args, &leadJSONWindow{leadBase: base}, argType, mainMemLimit), nil
 		}
+	case types.INetFamily:
+		switch argType.Width() {
+		case -1:
+		default:
+			return newBufferedWindowOperator(
+				args, &leadINetWindow{leadBase: base}, argType, mainMemLimit), nil
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch argType.Width() {
 		case -1:
@@ -1432,6 +1439,138 @@ func (w *leadJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx int)
 		}
 		col := vec.JSON()
 		leadLagCol.Copy(col, i, idx)
+	}
+}
+
+type leadINetWindow struct {
+	leadBase
+}
+
+var _ bufferedWindower = &leadINetWindow{}
+
+func (w *leadINetWindow) processBatch(batch coldata.Batch, startIdx, endIdx int) {
+	if startIdx >= endIdx {
+		// No processing needs to be done for this portion of the current partition.
+		return
+	}
+	leadLagVec := batch.ColVec(w.outputColIdx)
+	leadLagCol := leadLagVec.INet()
+	leadLagNulls := leadLagVec.Nulls()
+	_ = leadLagCol.Get(startIdx)
+	_ = leadLagCol.Get(endIdx - 1)
+
+	offsetVec := batch.ColVec(w.offsetIdx)
+	offsetCol := offsetVec.Int64()
+	offsetNulls := offsetVec.Nulls()
+	_ = offsetCol[startIdx]
+	_ = offsetCol[endIdx-1]
+
+	defaultVec := batch.ColVec(w.defaultIdx)
+	defaultCol := defaultVec.INet()
+	defaultNulls := defaultVec.Nulls()
+	_ = defaultCol.Get(startIdx)
+	_ = defaultCol.Get(endIdx - 1)
+
+	if offsetNulls.MaybeHasNulls() {
+		if defaultNulls.MaybeHasNulls() {
+			for i := startIdx; i < endIdx; i++ {
+				if offsetNulls.NullAt(i) {
+					// When the offset is null, the output value is also null.
+					leadLagNulls.SetNull(i)
+					w.idx++
+					continue
+				}
+				requestedIdx := w.idx + int(offsetCol[i])
+				w.idx++
+				if requestedIdx < 0 || requestedIdx >= w.partitionSize {
+					// The offset is out of range, so set the output value to the default.
+					if defaultNulls.NullAt(i) {
+						leadLagNulls.SetNull(i)
+						continue
+					}
+					val := defaultCol.Get(i)
+					leadLagCol.Set(i, val)
+					continue
+				}
+				vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+					leadLagNulls.SetNull(i)
+					continue
+				}
+				col := vec.INet()
+				val := col.Get(idx)
+				leadLagCol.Set(i, val)
+			}
+			return
+		}
+		for i := startIdx; i < endIdx; i++ {
+			if offsetNulls.NullAt(i) {
+				// When the offset is null, the output value is also null.
+				leadLagNulls.SetNull(i)
+				w.idx++
+				continue
+			}
+			requestedIdx := w.idx + int(offsetCol[i])
+			w.idx++
+			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
+				// The offset is out of range, so set the output value to the default.
+				val := defaultCol.Get(i)
+				leadLagCol.Set(i, val)
+				continue
+			}
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+				leadLagNulls.SetNull(i)
+				continue
+			}
+			col := vec.INet()
+			val := col.Get(idx)
+			leadLagCol.Set(i, val)
+		}
+		return
+	}
+	if defaultNulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+			requestedIdx := w.idx + int(offsetCol[i])
+			w.idx++
+			if requestedIdx < 0 || requestedIdx >= w.partitionSize {
+				// The offset is out of range, so set the output value to the default.
+				if defaultNulls.NullAt(i) {
+					leadLagNulls.SetNull(i)
+					continue
+				}
+				val := defaultCol.Get(i)
+				leadLagCol.Set(i, val)
+				continue
+			}
+			vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+				leadLagNulls.SetNull(i)
+				continue
+			}
+			col := vec.INet()
+			val := col.Get(idx)
+			leadLagCol.Set(i, val)
+		}
+		return
+	}
+	for i := startIdx; i < endIdx; i++ {
+		requestedIdx := w.idx + int(offsetCol[i])
+		w.idx++
+		if requestedIdx < 0 || requestedIdx >= w.partitionSize {
+			// The offset is out of range, so set the output value to the default.
+			val := defaultCol.Get(i)
+			leadLagCol.Set(i, val)
+			continue
+		}
+		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
+		if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+			leadLagNulls.SetNull(i)
+			continue
+		}
+		col := vec.INet()
+		val := col.Get(idx)
+		leadLagCol.Set(i, val)
 	}
 }
 

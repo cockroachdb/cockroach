@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/sql/sem/tree",
         "//pkg/util/duration",
+        "//pkg/util/ipaddr",
         "@com_github_cockroachdb_apd_v3//:apd",
     ],
 )
