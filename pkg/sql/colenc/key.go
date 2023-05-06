@@ -19,9 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/errors"
 )
 
 // helper routine to simplify wordy code below, return true if value/row is null
@@ -193,11 +191,24 @@ func encodeKeys[T []byte | roachpb.Key](
 			}
 			kys[r] = b
 		}
-	default:
-		if buildutil.CrdbTestBuild {
-			if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) != typeconv.DatumVecCanonicalTypeFamily {
-				return errors.AssertionFailedf("type %v wasn't a datum backed type, maybe new type was added?", typ)
+	case types.INetFamily:
+		is := vec.INet()
+		for r := 0; r < count; r++ {
+			b := kys[r]
+			if partialIndexAndNullCheck(kys, r, start, nulls, dir) {
+				continue
 			}
+			i := is.Get(r + start)
+			data := i.ToBuffer(nil /* appendTo */)
+			if dir == encoding.Ascending {
+				kys[r] = encoding.EncodeBytesAscending(b, data)
+			} else {
+				kys[r] = encoding.EncodeBytesDescending(b, data)
+			}
+		}
+	default:
+		if err := typeconv.AssertDatumBacked(typ); err != nil {
+			return err
 		}
 		for r := 0; r < count; r++ {
 			b := kys[r]

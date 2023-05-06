@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/randgen",
         "//pkg/sql/types",
         "//pkg/util/duration",
+        "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",

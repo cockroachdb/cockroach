@@ -12,6 +12,7 @@ package colenc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -74,7 +75,13 @@ func valuesideEncodeCol(
 			return nil, err
 		}
 		return encoding.EncodeUUIDValue(appendTo, uint32(colID), u), nil
+	case types.INetFamily:
+		i := vec.INet().Get(row)
+		return encoding.EncodeIPAddrValue(appendTo, uint32(colID), i), nil
 	default:
+		if err := typeconv.AssertDatumBacked(typ); err != nil {
+			return nil, err
+		}
 		return valueside.Encode(appendTo, colID, vec.Datum().Get(row).(tree.Datum), nil)
 	}
 }

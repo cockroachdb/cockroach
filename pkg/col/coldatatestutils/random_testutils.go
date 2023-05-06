@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -202,6 +203,11 @@ func RandomVec(args RandomVecArgs) {
 			}
 			j.Set(i, random)
 		}
+	case types.INetFamily:
+		ipaddrs := args.Vec.INet()
+		for i := 0; i < args.N; i++ {
+			ipaddrs.Set(i, ipaddr.RandIPAddr(args.Rand))
+		}
 	default:
 		datums := args.Vec.Datum()
 		for i := 0; i < args.N; i++ {
@@ -232,6 +238,8 @@ func setNull(rng *rand.Rand, vec coldata.Vec, i int) {
 		}
 	case types.IntervalFamily:
 		vec.Interval()[i] = duration.MakeDuration(rng.Int63(), rng.Int63(), rng.Int63())
+	case types.INetFamily:
+		vec.INet().Set(i, ipaddr.RandIPAddr(rng))
 	}
 }
 

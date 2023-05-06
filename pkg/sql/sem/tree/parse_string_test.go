@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,6 +52,8 @@ func vecRow(v coldata.Vec, i int) any {
 		return v.Timestamp()[i]
 	case types.IntervalFamily:
 		return v.Interval().Get(i)
+	case types.INetFamily:
+		return v.INet().Get(i)
 	default:
 		return v.Datum().Get(i)
 	}
@@ -158,6 +161,7 @@ func (a *anyHandler) Duration(d duration.Duration) { a.val = d }
 func (a *anyHandler) JSON(j json.JSON)             { a.val = j }
 func (a *anyHandler) String(s string)              { a.val = s }
 func (a *anyHandler) TimestampTZ(t time.Time)      { a.val = t }
+func (a *anyHandler) INet(i ipaddr.IPAddr)         { a.val = i }
 func (a *anyHandler) Reset()                       {}
 
 type benchCase struct {

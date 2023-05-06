@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
@@ -39,6 +40,7 @@ var (
 	_ duration.Duration
 	_ = coldataext.CompareDatum
 	_ json.JSON
+	_ ipaddr.IPAddr
 )
 
 // selConstOpBase contains all of the fields for binary selections with a
@@ -9306,6 +9308,234 @@ func (p *selEQJSONJSONOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selEQINetINetConstOp struct {
+	selConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p *selEQINetINetConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.INet()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selEQINetINetOp struct {
+	selOpBase
+}
+
+func (p *selEQINetINetOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.INet()
+		col2 := vec2.INet()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult == 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
 						cmp = cmpResult == 0
 					}
 
@@ -18829,6 +19059,234 @@ func (p *selNEJSONJSONOp) Next() coldata.Batch {
 	}
 }
 
+type selNEINetINetConstOp struct {
+	selConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p *selNEINetINetConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.INet()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selNEINetINetOp struct {
+	selOpBase
+}
+
+func (p *selNEINetINetOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.INet()
+		col2 := vec2.INet()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult != 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
 type selNEDatumDatumConstOp struct {
 	selConstOpBase
 	constArg interface{}
@@ -28318,6 +28776,234 @@ func (p *selLTJSONJSONOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selLTINetINetConstOp struct {
+	selConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p *selLTINetINetConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.INet()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selLTINetINetOp struct {
+	selOpBase
+}
+
+func (p *selLTINetINetOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.INet()
+		col2 := vec2.INet()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult < 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
 						cmp = cmpResult < 0
 					}
 
@@ -37841,6 +38527,234 @@ func (p *selLEJSONJSONOp) Next() coldata.Batch {
 	}
 }
 
+type selLEINetINetConstOp struct {
+	selConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p *selLEINetINetConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.INet()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selLEINetINetOp struct {
+	selOpBase
+}
+
+func (p *selLEINetINetOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.INet()
+		col2 := vec2.INet()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult <= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
 type selLEDatumDatumConstOp struct {
 	selConstOpBase
 	constArg interface{}
@@ -47330,6 +48244,234 @@ func (p *selGTJSONJSONOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(err)
 						}
 
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selGTINetINetConstOp struct {
+	selConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p *selGTINetINetConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.INet()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selGTINetINetOp struct {
+	selOpBase
+}
+
+func (p *selGTINetINetOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.INet()
+		col2 := vec2.INet()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult > 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
 						cmp = cmpResult > 0
 					}
 
@@ -56853,6 +57995,234 @@ func (p *selGEJSONJSONOp) Next() coldata.Batch {
 	}
 }
 
+type selGEINetINetConstOp struct {
+	selConstOpBase
+	constArg ipaddr.IPAddr
+}
+
+func (p *selGEINetINetConstOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.INet()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg.Compare(&p.constArg)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type selGEINetINetOp struct {
+	selOpBase
+}
+
+func (p *selGEINetINetOp) Next() coldata.Batch {
+	for {
+		batch := p.Input.Next()
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.INet()
+		col2 := vec2.INet()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+						cmpResult = arg1.Compare(&arg2)
+						cmp = cmpResult >= 0
+					}
+
+					if cmp {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
 type selGEDatumDatumConstOp struct {
 	selConstOpBase
 	constArg interface{}
@@ -57317,6 +58687,19 @@ func GetSelectionConstOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.INetFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selEQINetINetConstOp{selConstOpBase: selConstOpBase, constArg: c.(ipaddr.IPAddr)}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -57532,6 +58915,19 @@ func GetSelectionConstOperator(
 						case -1:
 						default:
 							return &selNEJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
+						}
+					}
+				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.INetFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selNEINetINetConstOp{selConstOpBase: selConstOpBase, constArg: c.(ipaddr.IPAddr)}, nil
 						}
 					}
 				}
@@ -57753,6 +59149,19 @@ func GetSelectionConstOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.INetFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selLTINetINetConstOp{selConstOpBase: selConstOpBase, constArg: c.(ipaddr.IPAddr)}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -57968,6 +59377,19 @@ func GetSelectionConstOperator(
 						case -1:
 						default:
 							return &selLEJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
+						}
+					}
+				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.INetFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selLEINetINetConstOp{selConstOpBase: selConstOpBase, constArg: c.(ipaddr.IPAddr)}, nil
 						}
 					}
 				}
@@ -58189,6 +59611,19 @@ func GetSelectionConstOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.INetFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selGTINetINetConstOp{selConstOpBase: selConstOpBase, constArg: c.(ipaddr.IPAddr)}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -58404,6 +59839,19 @@ func GetSelectionConstOperator(
 						case -1:
 						default:
 							return &selGEJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
+						}
+					}
+				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.INetFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selGEINetINetConstOp{selConstOpBase: selConstOpBase, constArg: c.(ipaddr.IPAddr)}, nil
 						}
 					}
 				}
@@ -58657,6 +60105,19 @@ func GetSelectionOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selEQINetINetOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -58872,6 +60333,19 @@ func GetSelectionOperator(
 						case -1:
 						default:
 							return &selNEJSONJSONOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selNEINetINetOp{selOpBase: selOpBase}, nil
 						}
 					}
 				}
@@ -59093,6 +60567,19 @@ func GetSelectionOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selLTINetINetOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -59308,6 +60795,19 @@ func GetSelectionOperator(
 						case -1:
 						default:
 							return &selLEJSONJSONOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selLEINetINetOp{selOpBase: selOpBase}, nil
 						}
 					}
 				}
@@ -59529,6 +61029,19 @@ func GetSelectionOperator(
 						}
 					}
 				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selGTINetINetOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -59744,6 +61257,19 @@ func GetSelectionOperator(
 						case -1:
 						default:
 							return &selGEJSONJSONOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
+			case types.INetFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.INetFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selGEINetINetOp{selOpBase: selOpBase}, nil
 						}
 					}
 				}

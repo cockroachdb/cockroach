@@ -32,7 +32,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
-        "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/intsets",
         "//pkg/util/json",

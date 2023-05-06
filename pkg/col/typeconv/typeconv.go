@@ -16,8 +16,10 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/errors"
 )
 
 // DatumVecCanonicalTypeFamily is the "canonical" type family of all types that
@@ -56,6 +58,8 @@ func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
 		return types.TimestampTZFamily
 	case types.IntervalFamily:
 		return types.IntervalFamily
+	case types.INetFamily:
+		return types.INetFamily
 	default:
 		// TODO(yuzefovich): consider adding native support for
 		// types.UnknownFamily.
@@ -121,4 +125,14 @@ func init() {
 		}
 		TypesSupportedNatively = append(TypesSupportedNatively, t)
 	}
+}
+
+// AssertDatumBacked returns an error if typ is not datum-backed type.
+func AssertDatumBacked(typ *types.T) error {
+	if buildutil.CrdbTestBuild {
+		if TypeFamilyToCanonicalTypeFamily(typ.Family()) != DatumVecCanonicalTypeFamily {
+			return errors.AssertionFailedf("type %v isn't a datum backed type, maybe new type was added?", typ)
+		}
+	}
+	return nil
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
@@ -32,6 +33,7 @@ var (
 	_ duration.Duration
 	_ encoding.Direction
 	_ json.JSON
+	_ ipaddr.IPAddr
 )
 
 // EncDatumRowToColVecs converts the provided rowenc.EncDatumRow to the columnar
@@ -155,6 +157,14 @@ func EncDatumRowToColVecs(
 
 					v := datum.(*tree.DUuid).UUID.GetBytesMut()
 					vecs.BytesCols[vecs.ColsMap[vecIdx]].Set(rowIdx, v)
+				}
+			case types.INetFamily:
+				switch t.Width() {
+				case -1:
+				default:
+
+					v := datum.(*tree.DIPAddr).IPAddr
+					vecs.INetCols[vecs.ColsMap[vecIdx]].Set(rowIdx, v)
 				}
 			case types.JsonFamily:
 				switch t.Width() {

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -181,6 +182,7 @@ type ValueHandler interface {
 	JSON(j json.JSON)
 	String(s string)
 	TimestampTZ(t time.Time)
+	INet(i ipaddr.IPAddr)
 	Reset()
 }
 
@@ -298,6 +300,12 @@ func ParseAndRequireStringHandler(
 		d, err = MakeDEnumFromLogicalRepresentation(t, s)
 		if err == nil {
 			vh.Bytes(d.PhysicalRep)
+		}
+	case types.INetFamily:
+		var i ipaddr.IPAddr
+		err = ipaddr.ParseINet(s, &i)
+		if err == nil {
+			vh.INet(i)
 		}
 	default:
 		if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) != typeconv.DatumVecCanonicalTypeFamily {

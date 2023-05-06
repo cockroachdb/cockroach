@@ -391,12 +391,17 @@ func schema(fb *flatbuffers.Builder, typs []*types.T) flatbuffers.UOffsetT {
 			arrowserde.BinaryStart(fb)
 			fbTypOffset = arrowserde.BinaryEnd(fb)
 			fbTyp = arrowserde.TypeInterval
+		case types.INetFamily:
+			arrowserde.BinaryStart(fb)
+			fbTypOffset = arrowserde.BinaryEnd(fb)
+			fbTyp = arrowserde.TypeBinary
 		case typeconv.DatumVecCanonicalTypeFamily:
 			// Datums are marshaled into bytes, so we use binary headers.
 			arrowserde.BinaryStart(fb)
 			fbTypOffset = arrowserde.BinaryEnd(fb)
 			fbTyp = arrowserde.TypeUtf8
 		default:
+			// TODO(yuzefovich): enum case is missing here, investigate that.
 			panic(errors.Errorf(`don't know how to map %s`, typ))
 		}
 		arrowserde.FieldStart(fb)

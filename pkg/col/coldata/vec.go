@@ -72,6 +72,8 @@ type Vec interface {
 	Interval() Durations
 	// JSON returns a vector of JSONs.
 	JSON() *JSONs
+	// INet returns an ipaddr.IPAddr slice.
+	INet() IPAddrs
 	// Datum returns a vector of Datums.
 	Datum() DatumVec
 
@@ -183,6 +185,8 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 		return make(Durations, length)
 	case types.JsonFamily:
 		return NewJSONs(length)
+	case types.INetFamily:
+		return make(IPAddrs, length)
 	default:
 		panic(fmt.Sprintf("StandardColumnFactory doesn't support %s", t))
 	}
@@ -258,6 +262,10 @@ func (m *memColumn) JSON() *JSONs {
 	return m.col.(*JSONs)
 }
 
+func (m *memColumn) INet() IPAddrs {
+	return m.col.(IPAddrs)
+}
+
 func (m *memColumn) Datum() DatumVec {
 	return m.col.(DatumVec)
 }
@@ -313,6 +321,8 @@ func (m *memColumn) Capacity() int {
 		return cap(m.col.(Durations))
 	case types.JsonFamily:
 		return m.JSON().Len()
+	case types.INetFamily:
+		return cap(m.col.(IPAddrs))
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return m.col.(DatumVec).Cap()
 	default:

@@ -116,7 +116,7 @@ EXPLAIN (VEC) SELECT _inet & _inet FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projBitandDatumDatumOp
+  └ *colexecproj.projBitandINetINetOp
     └ *colfetcher.ColBatchScan
 
 query T
@@ -124,7 +124,7 @@ EXPLAIN (VEC) SELECT _inet - _int2 FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projMinusDatumInt16Op
+  └ *colexecproj.projMinusINetInt16Op
     └ *colfetcher.ColBatchScan
 
 query T
@@ -164,7 +164,7 @@ EXPLAIN (VEC) SELECT _inet - 1 FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecprojconst.projMinusDatumInt64ConstOp
+  └ *colexecprojconst.projMinusINetInt64ConstOp
     └ *colfetcher.ColBatchScan
 
 query T
@@ -172,7 +172,7 @@ EXPLAIN (VEC) SELECT _int4 + _inet FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projPlusInt32DatumOp
+  └ *colexecproj.projPlusInt32INetOp
     └ *colfetcher.ColBatchScan
 
 query T
@@ -180,7 +180,7 @@ EXPLAIN (VEC) SELECT 2 + _inet FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecprojconst.projPlusDatumInt64ConstOp
+  └ *colexecprojconst.projPlusINetInt64ConstOp
     └ *colfetcher.ColBatchScan
 
 query T
