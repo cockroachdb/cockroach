@@ -1223,9 +1223,6 @@ func (sc *StoreConfig) Tracer() *tracing.Tracer {
 func NewStore(
 	ctx context.Context, cfg StoreConfig, eng storage.Engine, nodeDesc *roachpb.NodeDescriptor,
 ) *Store {
-	// TODO(tschottdorf): find better place to set these defaults.
-	cfg.SetDefaults()
-
 	if !cfg.Valid() {
 		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
