@@ -251,6 +251,9 @@ func newRaftScheduler(
 		if i < numWorkers%numShards { // distribute remainder
 			shardWorkers++
 		}
+		if shardWorkers <= 0 {
+			shardWorkers = 1 // ensure we always have a worker
+		}
 		shard := &raftSchedulerShard{
 			state:      map[roachpb.RangeID]raftScheduleState{},
 			numWorkers: shardWorkers,

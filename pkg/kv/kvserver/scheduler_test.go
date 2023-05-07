@@ -360,7 +360,8 @@ func TestNewSchedulerShards(t *testing.T) {
 		// NB: We balance workers across shards instead of filling up shards. We
 		// assume ranges are evenly distributed across shards, and want ranges to
 		// have about the same number of workers available on average.
-		{0, 0, []int{0}},
+		{-1, -1, []int{1}},
+		{0, 0, []int{1}},
 		{1, -1, []int{1}},
 		{1, 0, []int{1}},
 		{1, 1, []int{1}},
