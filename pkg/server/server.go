@@ -770,7 +770,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
 	}
-	storeCfg.SetDefaults()
+	storeCfg.SetDefaults(len(engines))
 
 	systemTenantNameContainer := roachpb.NewTenantNameContainer(catconstants.SystemTenantName)
 
