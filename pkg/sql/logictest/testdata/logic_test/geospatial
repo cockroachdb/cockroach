@@ -5966,3 +5966,29 @@ query T
 SELECT ST_AsEWKT(ST_MakeEnvelope(30.01,50.01,72.01,52.01))
 ----
 POLYGON ((30.010000000000002 50.009999999999998, 30.010000000000002 52.009999999999998, 72.010000000000005 52.009999999999998, 72.010000000000005 50.009999999999998, 30.010000000000002 50.009999999999998))
+
+subtest st_bdpolyfromtext
+
+query TTT
+SELECT 
+  ST_AsText(ST_BdPolyFromText('MULTILINESTRING((0 0, 10 0, 10 10, 0 10, 0 0),(1 1, 1 2, 2 2, 2 1, 1 1))', 4326)),
+  ST_AsText(ST_BdPolyFromText('MULTILINESTRING((0 0, 1 0, 1 1, 0 1, 0 0))', 4326)),
+  ST_AsEWKT(ST_BdPolyFromText('MULTILINESTRING((0 0, 1 0, 1 1, 0 1, 0 0))', 4326))
+----
+POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1)) POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)) SRID=4326;POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+
+query TT
+SELECT
+  ST_AsEWKT(ST_BdPolyFromText(NULL, 4326)),
+  ST_AsEWKT(ST_BdPolyFromText('MULTILINESTRING((0 0, 10 0, 10 10, 0 10, 0 0),(1 1, 1 2, 2 2, 2 1, 1 1))', NULL))
+----
+NULL NULL
+
+statement error pq: st_bdpolyfromtext\(\): argument must be MULTILINESTRING geometry
+SELECT ST_AsText(ST_BdPolyFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))', 4326))
+
+statement error pq: st_bdpolyfromtext\(\): argument must be MULTILINESTRING geometry
+SELECT ST_AsText(ST_BdPolyFromText('LINESTRING(0 0, 1 0, 1 1, 0 1, 0 0)', 4326))
+
+statement error pq: st_bdpolyfromtext\(\): argument must be MULTILINESTRING geometry
+SELECT ST_AsText(ST_BdPolyFromText('POINT(0 0)', 4326))

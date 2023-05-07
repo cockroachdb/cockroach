@@ -2379,6 +2379,7 @@ var builtinOidsArray = []string{
 	2406: `crdb_internal.fingerprint(span: bytes[], stripped: bool) -> int`,
 	2407: `crdb_internal.tenant_span() -> bytes[]`,
 	2408: `crdb_internal.job_execution_details(job_id: int) -> jsonb`,
+	2409: `st_bdpolyfromtext(str: string, srid: int) -> geometry`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
