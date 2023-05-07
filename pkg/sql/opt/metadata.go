@@ -540,6 +540,11 @@ func (md *Metadata) AllUserDefinedTypes() []*types.T {
 	return md.userDefinedTypesSlice
 }
 
+// AllUserDefinedFunctions returns all user defined functions related in this query.
+func (md *Metadata) AllUserDefinedFunctions() map[cat.StableID]*tree.Overload {
+	return md.udfDeps
+}
+
 // AddUserDefinedFunction adds a user-defined function to the metadata for this
 // query. If the function was resolved by name, the name will also be tracked.
 func (md *Metadata) AddUserDefinedFunction(
