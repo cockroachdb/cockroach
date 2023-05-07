@@ -74,3 +74,27 @@ func MakePolygonWithSRID(g geo.Geometry, srid int) (geo.Geometry, error) {
 	geo.AdjustGeomTSRID(t, geopb.SRID(srid))
 	return geo.MakeGeometryFromGeomT(t)
 }
+
+// Takes a multilinestring input and converts it to a slice of linestrings to call MakePolygon.
+// Returns error if input is not a single multilinestring.
+func MakePolygonFromMultiLineString(g geo.Geometry, srid geopb.SRID) (geo.Geometry, error) {
+	geomT, err := g.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	lsCollection, ok := geomT.(*geom.MultiLineString)
+	if !ok {
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "argument must be MULTILINESTRING geometry")
+	}
+	linestrings := make([]geo.Geometry, lsCollection.NumLineStrings())
+	for i := 0; i < lsCollection.NumLineStrings(); i++ {
+		lineStringT := lsCollection.LineString(i)
+		geo.AdjustGeomTSRID(lineStringT, srid)
+		ls, err := geo.MakeGeometryFromGeomT(lineStringT)
+		if err != nil {
+			return geo.Geometry{}, err
+		}
+		linestrings[i] = ls
+	}
+	return MakePolygon(linestrings[0], linestrings[1:]...)
+}
