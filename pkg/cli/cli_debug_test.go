@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func Example_debug_decode_key_value() {
@@ -66,5 +68,57 @@ func TestDebugKeysHex(t *testing.T) {
 		`0100: invalid encoded mvcc key: 01`
 	if !strings.Contains(out, expOut) {
 		t.Fatalf("%q", out)
+	}
+}
+
+func TestDebugDecodeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	data := []struct {
+		key, result, encoding string
+		userKey               bool
+	}{
+		{
+			key:      "f4891273656174746c6500011270a3d70a3d704400ff8000ff00ff00ff00ff00ff00ffdc000100000000000001e240000000020d",
+			encoding: "hex",
+			result:   "/Table/108/1/\"seattle\"/\"p\\xa3\\xd7\\n=pD\\x00\\x80\\x00\\x00\\x00\\x00\\x00\\x00\\xdc\"/0.000123456,2",
+		},
+		{
+			key:      "9IkSc2VhdHRsZQABEnCj1wo9cEQA/4AA/wD/AP8A/wD/AP/cAAEAAAAAAAAB4kAAAAACDQ==",
+			encoding: "base64",
+			result:   "/Table/108/1/\"seattle\"/\"p\\xa3\\xd7\\n=pD\\x00\\x80\\x00\\x00\\x00\\x00\\x00\\x00\\xdc\"/0.000123456,2",
+		},
+		{
+			key:      "f4891273656174746c6500011270a3d70a3d704400ff8000ff00ff00ff00ff00ff00ffdc0001",
+			encoding: "hex",
+			userKey:  true,
+			result:   "/Table/108/1/\"seattle\"/\"p\\xa3\\xd7\\n=pD\\x00\\x80\\x00\\x00\\x00\\x00\\x00\\x00\\xdc\"",
+		},
+		{
+			key:      "9IkSc2VhdHRsZQABEnCj1wo9cEQA/4AA/wD/AP8A/wD/AP/cAAE=",
+			encoding: "base64",
+			userKey:  true,
+			result:   "/Table/108/1/\"seattle\"/\"p\\xa3\\xd7\\n=pD\\x00\\x80\\x00\\x00\\x00\\x00\\x00\\x00\\xdc\"",
+		},
+		{
+			key:      "jg==",
+			encoding: "base64",
+			result:   "ERROR: invalid encoded mvcc key: 8e",
+		},
+	}
+	for _, d := range data {
+		t.Run(d.key, func(t *testing.T) {
+			out, err := TestCLI{}.RunWithCaptureArgs([]string{
+				"debug",
+				"decode-key",
+				"--encoding",
+				d.encoding,
+				fmt.Sprintf("--user-key=%t", d.userKey),
+				d.key,
+			})
+			require.NoError(t, err, "failed to run cli")
+			require.Contains(t, out, "\n"+d.result+"\n")
+		})
 	}
 }
