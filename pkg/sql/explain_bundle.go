@@ -464,6 +464,13 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	if err := c.PrintCreateEnum(&buf, b.flags.RedactValues); err != nil {
 		fmt.Fprintf(&buf, "-- error getting schema for enums: %v\n", err)
 	}
+	if len(mem.Metadata().AllUserDefinedFunctions()) != 0 {
+		// Get all relevant user-defined functions.
+		blankLine()
+		if err := c.PrintRelevantCreateUdf(&buf, strings.ToLower(b.stmt), b.flags.RedactValues); err != nil {
+			fmt.Fprintf(&buf, "-- error getting schema for udfs: %v\n", err)
+		}
+	}
 	for i := range tables {
 		blankLine()
 		if err := c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues); err != nil {
@@ -813,6 +820,38 @@ func (c *stmtEnvCollector) PrintCreateEnum(w io.Writer, redactValues bool) error
 	}
 	for _, cs := range createStatement {
 		fmt.Fprintf(w, "%s\n", cs)
+	}
+	return nil
+}
+
+func (c *stmtEnvCollector) PrintRelevantCreateUdf(
+	w io.Writer, stmt string, redactValues bool,
+) error {
+	// The select function_name returns a DOidWrapper,
+	// we need to cast it to string for queryRows function to process.
+	// TODO: consider getting the udf sql body statements from the memo metadata.
+	functionNameQuery := "SELECT function_name::STRING as function_name_str FROM [SHOW FUNCTIONS]"
+	udfNames, err := c.queryRows(functionNameQuery)
+	if err != nil {
+		return err
+	}
+	for _, name := range udfNames {
+		if strings.Contains(stmt, name) {
+			createFunctionQuery := fmt.Sprintf(
+				"SELECT create_statement FROM [ SHOW CREATE FUNCTION \"%s\" ]", name,
+			)
+			if redactValues {
+				createFunctionQuery = fmt.Sprintf(
+					"SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM [ SHOW CREATE FUNCTION \"%s\" ]", name,
+				)
+			}
+			createStatement, err := c.query(createFunctionQuery)
+			if err != nil {
+				fmt.Fprintf(w, "-- error getting user defined function %s: %s\n", name, err)
+				continue
+			}
+			fmt.Fprintf(w, "%s\n", createStatement)
+		}
 	}
 	return nil
 }
