@@ -1936,12 +1936,13 @@ ORDER BY pk
 statement error only ISO style is supported
 SELECT to_char_with_style(now()::date, 'postgres')
 
-query TT
+query TTT
 SELECT
   to_char('2020-01-02 01:02:03'::date),
+  to_char('2020-01-02'::date, 'YYYY-MM-DD HH24:MI:SS.FF6'),
   to_char_with_style('2020-01-02 01:02:03'::date, 'DMY')
 ----
-2020-01-02  2020-01-02
+2020-01-02  2020-01-02 00:00:00.000000  2020-01-02
 
 statement ok
 CREATE TABLE time_datestyle_parse(pk SERIAL PRIMARY KEY, s string);

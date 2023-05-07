@@ -2483,6 +2483,22 @@ var regularBuiltins = map[string]builtinDefinition{
 			Info:       "Convert an date to a string assuming the ISO, MDY DateStyle.",
 			Volatility: volatility.Immutable,
 		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"date", types.Date}, {"format", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				d := tree.MustBeDDate(args[0])
+				f := tree.MustBeDString(args[1])
+				t, err := d.ToTime()
+				if err != nil {
+					return nil, err
+				}
+				s, err := tochar.TimeToChar(t, ctx.ToCharFormatCache, string(f))
+				return tree.NewDString(s), err
+			},
+			Info:       "Convert a timestamp with time zone to a string using the given format.",
+			Volatility: volatility.Stable,
+		},
 	),
 
 	"to_char_with_style": makeBuiltin(
