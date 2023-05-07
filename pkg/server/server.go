@@ -767,10 +767,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SnapshotSendLimit:        cfg.SnapshotSendLimit,
 		RangeLogWriter:           rangeLogWriter,
 	}
-
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
 	}
+	storeCfg.SetDefaults()
 
 	systemTenantNameContainer := roachpb.NewTenantNameContainer(catconstants.SystemTenantName)
 
