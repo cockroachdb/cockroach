@@ -439,7 +439,7 @@ func runSchedulerEnqueueRaftTicks(
 	a := log.MakeTestingAmbientContext(stopper.Tracer())
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(a, m, p, numWorkers, storeSchedulerShardSize, 5)
+	s := newRaftScheduler(a, m, p, numWorkers, defaultRaftSchedulerShardSize, 5)
 
 	// raftTickLoop keeps unquiesced ranges in a map, so we do the same.
 	ranges := make(map[roachpb.RangeID]struct{})
