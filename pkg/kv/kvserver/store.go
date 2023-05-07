@@ -113,7 +113,7 @@ const (
 )
 
 // defaultRaftSchedulerConcurrency specifies the default number of Raft
-// scheduler worker goroutines.
+// scheduler worker goroutines. These are evenly distributed across stores.
 //
 // For small machines, we scale the scheduler concurrency by the number of
 // CPUs. 8*NumCPU was determined in 9a68241 (April 2017) as the optimal
@@ -277,7 +277,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 	sc.RaftElectionTimeoutTicks = 3
 	sc.RaftReproposalTimeoutTicks = 5
 	sc.RaftTickInterval = 100 * time.Millisecond
-	sc.SetDefaults()
+	sc.SetDefaults(1 /* numStores */)
 	return sc
 }
 
@@ -1180,7 +1180,7 @@ func (sc *StoreConfig) Valid() bool {
 // SetDefaults initializes unset fields in StoreConfig to values
 // suitable for use on a local network.
 // TODO(tschottdorf): see if this ought to be configurable via flags.
-func (sc *StoreConfig) SetDefaults() {
+func (sc *StoreConfig) SetDefaults(numStores int) {
 	sc.RaftConfig.SetDefaults()
 
 	if sc.CoalescedHeartbeatsInterval == 0 {
@@ -1188,6 +1188,12 @@ func (sc *StoreConfig) SetDefaults() {
 	}
 	if sc.RaftSchedulerConcurrency == 0 {
 		sc.RaftSchedulerConcurrency = defaultRaftSchedulerConcurrency
+		// If we have more than one store, evenly divide the default workers across
+		// stores, since the default value is a function of CPU count and should not
+		// scale with the number of stores.
+		if numStores > 1 && sc.RaftSchedulerConcurrency > 1 {
+			sc.RaftSchedulerConcurrency = (sc.RaftSchedulerConcurrency-1)/numStores + 1 // ceil division
+		}
 	}
 	if sc.RaftSchedulerShardSize == 0 {
 		sc.RaftSchedulerShardSize = defaultRaftSchedulerShardSize
