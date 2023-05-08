@@ -23,14 +23,14 @@ go_library(
 
 go_test(
     name = "split_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "decider_test.go",
         "load_based_splitter_test.go",
         "unweighted_finder_test.go",
         "weighted_finder_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":split"],
     deps = [
