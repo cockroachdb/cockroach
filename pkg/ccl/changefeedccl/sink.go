@@ -782,6 +782,7 @@ func getSinkConfigFromJson(
 
 	retryCfg.MaxRetries = int(cfg.Retry.Max)
 	retryCfg.InitialBackoff = time.Duration(cfg.Retry.Backoff)
+	retryCfg.MaxBackoff = 30 * time.Second
 	return cfg.Flush, retryCfg, nil
 }
 
