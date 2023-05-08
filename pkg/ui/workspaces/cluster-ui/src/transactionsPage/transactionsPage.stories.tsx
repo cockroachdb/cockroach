@@ -25,51 +25,38 @@ import {
 
 import { TransactionsPage } from ".";
 import { RequestError } from "../util";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import StatsSortOptions = cockroach.server.serverpb.StatsSortOptions;
+import { RequestState, SqlStatsResponse, SqlStatsSortOptions } from "../api";
 
 const getEmptyData = () =>
   extend({}, data, { transactions: [], statements: [] });
+
+const defaultLimitAndSortProps = {
+  limit: 100,
+  reqSortSetting: SqlStatsSortOptions.PCT_RUNTIME,
+  onChangeLimit: noop,
+  onChangeReqSort: noop,
+  onApplySearchCriteria: noop,
+};
 
 storiesOf("Transactions Page", module)
   .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
   .addDecorator(storyFn => (
     <div style={{ backgroundColor: "#F5F7FA" }}>{storyFn()}</div>
   ))
-  .add("with data", () => (
-    <TransactionsPage
-      isDataValid={true}
-      {...routeProps}
-      columns={columns}
-      data={data}
-      timeScale={timeScale}
-      filters={filters}
-      nodeRegions={nodeRegions}
-      hasAdminRole={true}
-      onFilterChange={noop}
-      onSortingChange={noop}
-      refreshData={noop}
-      refreshNodes={noop}
-      refreshUserSQLRoles={noop}
-      resetSQLStats={noop}
-      search={""}
-      sortSetting={sortSetting}
-      lastUpdated={lastUpdated}
-      limit={100}
-      reqSortSetting={StatsSortOptions.SERVICE_LAT}
-      isReqInFlight={false}
-      onChangeLimit={noop}
-      onChangeReqSort={noop}
-      onApplySearchCriteria={noop}
-    />
-  ))
-  .add("without data", () => {
+  .add("with data", () => {
+    const resp: RequestState<SqlStatsResponse> = {
+      valid: true,
+      inFlight: false,
+      data,
+      lastUpdated,
+      error: null,
+    };
+
     return (
       <TransactionsPage
         {...routeProps}
-        isDataValid={true}
+        txnsResp={resp}
         columns={columns}
-        data={getEmptyData()}
         timeScale={timeScale}
         filters={filters}
         nodeRegions={nodeRegions}
@@ -82,13 +69,37 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
-        lastUpdated={lastUpdated}
-        limit={100}
-        reqSortSetting={StatsSortOptions.SERVICE_LAT}
-        isReqInFlight={false}
-        onChangeLimit={noop}
-        onChangeReqSort={noop}
-        onApplySearchCriteria={noop}
+        {...defaultLimitAndSortProps}
+      />
+    );
+  })
+  .add("without data", () => {
+    const resp: RequestState<SqlStatsResponse> = {
+      valid: true,
+      inFlight: false,
+      data: getEmptyData(),
+      lastUpdated,
+      error: null,
+    };
+
+    return (
+      <TransactionsPage
+        {...routeProps}
+        columns={columns}
+        txnsResp={resp}
+        timeScale={timeScale}
+        filters={filters}
+        nodeRegions={nodeRegions}
+        hasAdminRole={true}
+        onFilterChange={noop}
+        onSortingChange={noop}
+        refreshData={noop}
+        refreshNodes={noop}
+        refreshUserSQLRoles={noop}
+        resetSQLStats={noop}
+        search={""}
+        sortSetting={sortSetting}
+        {...defaultLimitAndSortProps}
       />
     );
   })
@@ -99,12 +110,19 @@ storiesOf("Transactions Page", module)
     searchParams.set("q", "aaaaaaa");
     history.location.search = searchParams.toString();
 
+    const resp: RequestState<SqlStatsResponse> = {
+      valid: true,
+      inFlight: false,
+      data: getEmptyData(),
+      lastUpdated,
+      error: null,
+    };
+
     return (
       <TransactionsPage
         {...routeProps}
         columns={columns}
-        isDataValid={true}
-        data={getEmptyData()}
+        txnsResp={resp}
         timeScale={timeScale}
         filters={filters}
         history={history}
@@ -118,23 +136,24 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
-        lastUpdated={lastUpdated}
-        limit={100}
-        reqSortSetting={StatsSortOptions.SERVICE_LAT}
-        isReqInFlight={false}
-        onChangeLimit={noop}
-        onChangeReqSort={noop}
-        onApplySearchCriteria={noop}
+        {...defaultLimitAndSortProps}
       />
     );
   })
   .add("with loading indicator", () => {
+    const resp: RequestState<SqlStatsResponse> = {
+      valid: true,
+      inFlight: true,
+      data: undefined,
+      lastUpdated,
+      error: null,
+    };
+
     return (
       <TransactionsPage
         {...routeProps}
         columns={columns}
-        isDataValid={true}
-        data={undefined}
+        txnsResp={resp}
         timeScale={timeScale}
         filters={filters}
         nodeRegions={nodeRegions}
@@ -147,31 +166,29 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
-        lastUpdated={lastUpdated}
-        limit={100}
-        reqSortSetting={StatsSortOptions.SERVICE_LAT}
-        isReqInFlight={false}
-        onChangeLimit={noop}
-        onChangeReqSort={noop}
-        onApplySearchCriteria={noop}
+        {...defaultLimitAndSortProps}
       />
     );
   })
   .add("with error alert", () => {
+    const resp: RequestState<SqlStatsResponse> = {
+      valid: true,
+      inFlight: true,
+      data: undefined,
+      lastUpdated,
+      error: new RequestError(
+        "Forbidden",
+        403,
+        "this operation requires admin privilege",
+      ),
+    };
+
     return (
       <TransactionsPage
         {...routeProps}
         columns={columns}
-        isDataValid={true}
-        data={undefined}
+        txnsResp={resp}
         timeScale={timeScale}
-        error={
-          new RequestError(
-            "Forbidden",
-            403,
-            "this operation requires admin privilege",
-          )
-        }
         filters={filters}
         nodeRegions={nodeRegions}
         hasAdminRole={true}
@@ -183,13 +200,7 @@ storiesOf("Transactions Page", module)
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
-        lastUpdated={lastUpdated}
-        limit={100}
-        reqSortSetting={StatsSortOptions.SERVICE_LAT}
-        isReqInFlight={false}
-        onChangeLimit={noop}
-        onChangeReqSort={noop}
-        onApplySearchCriteria={noop}
+        {...defaultLimitAndSortProps}
       />
     );
   });
