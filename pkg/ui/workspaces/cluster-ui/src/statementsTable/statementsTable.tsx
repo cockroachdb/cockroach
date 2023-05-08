@@ -203,32 +203,23 @@ export function makeStatementsColumns(
       sort: (stmt: AggregateStatistics) => stmt.applicationName,
     },
     {
-      name: "rowsProcessed",
-      title: statisticsTableTitles.rowsProcessed(statType),
-      className: cx("statements-table__col-rows-read"),
-      cell: (stmt: AggregateStatistics) =>
-        `${Count(Number(stmt.stats.rows_read.mean))} Reads / ${Count(
-          Number(stmt.stats.rows_written?.mean),
-        )} Writes`,
-      sort: (stmt: AggregateStatistics) =>
-        FixLong(
-          Number(stmt.stats.rows_read.mean) +
-            Number(stmt.stats.rows_written?.mean),
-        ),
-    },
-    {
-      name: "bytesRead",
-      title: statisticsTableTitles.bytesRead(statType),
-      cell: bytesReadBar,
-      sort: (stmt: AggregateStatistics) =>
-        FixLong(Number(stmt.stats.bytes_read.mean)),
-    },
-    {
       name: "time",
       title: statisticsTableTitles.time(statType),
       className: cx("statements-table__col-latency"),
       cell: latencyBar,
       sort: (stmt: AggregateStatistics) => stmt.stats.service_lat.mean,
+    },
+    {
+      name: "workloadPct",
+      title: statisticsTableTitles.workloadPct(statType),
+      cell: workloadPctBarChart(
+        statements,
+        defaultBarChartOptions,
+        totalWorkload,
+      ),
+      sort: (stmt: AggregateStatistics) =>
+        (stmt.stats.service_lat.mean * longToInt(stmt.stats.count)) /
+        totalWorkload,
     },
     {
       name: "contention",
@@ -288,6 +279,27 @@ export function makeStatementsColumns(
         FixLong(Number(stmt.stats.latency_info?.max)),
     },
     {
+      name: "rowsProcessed",
+      title: statisticsTableTitles.rowsProcessed(statType),
+      className: cx("statements-table__col-rows-read"),
+      cell: (stmt: AggregateStatistics) =>
+        `${Count(Number(stmt.stats.rows_read.mean))} Reads / ${Count(
+          Number(stmt.stats.rows_written?.mean),
+        )} Writes`,
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(
+          Number(stmt.stats.rows_read.mean) +
+            Number(stmt.stats.rows_written?.mean),
+        ),
+    },
+    {
+      name: "bytesRead",
+      title: statisticsTableTitles.bytesRead(statType),
+      cell: bytesReadBar,
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.bytes_read.mean)),
+    },
+    {
       name: "maxMemUsage",
       title: statisticsTableTitles.maxMemUsage(statType),
       cell: maxMemUsageBar,
@@ -308,18 +320,6 @@ export function makeStatementsColumns(
       cell: retryBar,
       sort: (stmt: AggregateStatistics) =>
         longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count),
-    },
-    {
-      name: "workloadPct",
-      title: statisticsTableTitles.workloadPct(statType),
-      cell: workloadPctBarChart(
-        statements,
-        defaultBarChartOptions,
-        totalWorkload,
-      ),
-      sort: (stmt: AggregateStatistics) =>
-        (stmt.stats.service_lat.mean * longToInt(stmt.stats.count)) /
-        totalWorkload,
     },
     makeRegionsColumn(statType, isTenant),
     {
