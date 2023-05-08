@@ -2330,38 +2330,61 @@ var useDialback = settings.RegisterBoolSetting(
 func (rpcCtx *Context) runHeartbeatUntilFailure(
 	ctx context.Context, p *peer, healBreaker func(),
 ) (retErr error) {
+	tBegin := timeutil.Now()
 	conn := p.snap().c
 	defer func(ctx context.Context) {
+		// If ctx is done, Stopper is draining. Unconditionally override the error
+		// to clean up the logging in this case.
 		if ctx.Err() != nil {
 			retErr = errQuiescing
 		}
+
+		// For simplicity we have the convention that this method always returns
+		// with an error. This is easier to reason about since we're the probe,
+		// and - morally speaking - the connection is healthy as long as the
+		// probe is running and happy. We don't want to consider a connection
+		// healthy when the probe is not running but didn't report an error.
+		if retErr == nil {
+			retErr = errors.AssertionFailedf("unexpected connection shutdown")
+		}
+
 		var initialHeartbeatDone bool
 		select {
 		case <-conn.initialHeartbeatDone:
 			initialHeartbeatDone = true
 		default:
-			if retErr != nil {
-				retErr = &netutil.InitialHeartbeatFailedError{WrappedErr: retErr}
+		}
+
+		if !errors.Is(retErr, errQuiescing) {
+			if initialHeartbeatDone {
+				log.Health.Errorf(ctx, "connection dropped (was healthy for %s): %s",
+					timeutil.Since(tBegin).Round(time.Second), retErr,
+				)
+			} else {
+				log.Health.Errorf(ctx, "failed connection attempt (last connected %s ago): %s",
+					timeutil.Since(p.snap().disconnected).Round(time.Second), retErr,
+				)
 			}
 		}
 
-		if retErr != nil {
-			conn.err.Store(retErr)
-			// If the remote peer is down, we'll get fail-fast errors and since we
-			// don't have circuit breakers at the rpcCtx level, we need to avoid a
-			// busy loop of corresponding logging. We ask the EveryN only if we're
-			// looking at an InitialHeartbeatFailedError; if we did manage to
-			// heartbeat at least once we're not in the busy loop case and want to
-			// log unconditionally.
-			if neverHealthy := errors.HasType(
-				retErr, (*netutil.InitialHeartbeatFailedError)(nil),
-			); !neverHealthy && ctx.Err() == nil {
-				log.Health.Errorf(ctx, "closing connection after: %s", retErr)
-			}
+		// Wrap with InitialHeartbeatFailedError if we didn't have a successful
+		// heartbeat. Intentionally doing this after the logging above to avoid
+		// a long-winded error.
+		if initialHeartbeatDone {
+			retErr = &netutil.InitialHeartbeatFailedError{WrappedErr: retErr}
 		}
+
+		// Store the error, terminate the connection (if it's open, as can be the
+		// case if we're failing the heartbeat loop due to, say, a version mismatch
+		// or other non-TPC problem), and when needed unblock the connection's
+		// waiters so that the error can be seen by all.
+		conn.err.Store(retErr)
 		if grpcConn := conn.grpcConn; grpcConn != nil {
 			_ = grpcConn.Close() // nolint:grpcconnclose
 		}
+
+		maybeCleanupPeerOnErr(&rpcCtx.conns, p)
+
 		if initialHeartbeatDone {
 			p.nm.HeartbeatsNominal.Dec(1)
 		} else {
@@ -2523,21 +2546,25 @@ func (rpcCtx *Context) runHeartbeatUntilFailure(
 			cb()
 		}
 
+		var wasUnhealthySince time.Time
 		{
 			p.mu.Lock()
-			disconnected := p.mu.disconnected
+			wasUnhealthySince = p.mu.disconnected
 			p.mu.disconnected = time.Time{}
 			p.mu.Unlock()
-
-			if !disconnected.IsZero() {
-				log.Health.Infof(ctx, "connection is now healthy (after %s)",
-					timeutil.Since(disconnected).Round(time.Second))
-				healBreaker() // heal breaker
-			}
 		}
 
 		if first {
 			// First heartbeat succeeded.
+
+			var buf redact.StringBuilder
+			_, _ = redact.Fprintf(&buf, "connection is now healthy")
+			if !wasUnhealthySince.IsZero() {
+				_, _ = redact.Fprintf(&buf, "(after %s)", timeutil.Since(wasUnhealthySince).Round(time.Second))
+				healBreaker() // heal breaker
+			}
+			log.Health.Infof(ctx, "%s", buf)
+
 			p.nm.HeartbeatsNominal.Inc(1)
 			close(conn.initialHeartbeatDone)
 			// The connection should be `Ready` now since we just used it for a
@@ -2718,4 +2745,39 @@ func (rpcCtx *Context) loadOrCreateConnAttempt(
 	}
 
 	return err
+}
+
+func maybeCleanupPeerOnErr(conns *connMap, p *peer) {
+	myKey := p.snap().c.k
+	conns.mu.Lock()
+	defer conns.mu.Unlock()
+
+	for yourKey, yourP := range conns.mu.m {
+		yourS := yourP.snap()
+		if myKey == yourKey {
+			continue
+		}
+		if myKey.class != yourKey.class || myKey.nodeID != yourKey.nodeID {
+			continue
+		}
+		// Found another peer matching ours except in target address.
+		// We're just becoming unhealthy (maybe again), is the other
+		// one healthy? If so, we should remove ourselves.
+		if yourS.c.Health() != nil {
+			// It's also unhealthy, so jury is out. Defer to a future reconnection
+			// error to make a decision on who can stay.
+			continue
+		}
+
+		// We're superseded. Mark as such and remove from map.
+		p.mu.Lock()
+		p.mu.decommissionedOrSuperseded = true // we're superseded
+		p.mu.Unlock()
+		// This is (at the time of writing) the only deletion from the map.
+		// We are the peer's probe and are exiting now. Another probe or two
+		// might join as some callers may still be holding on to the
+		// Connection and using it, but these probes all short-circuit
+		// thanks to the decommissionOrSuperseded flag we set above.
+		delete(conns.mu.m, myKey)
+	}
 }

@@ -64,8 +64,8 @@ type peerSnap struct {
 	// NB: this field has no bearing on whether connections are returned to
 	// callers.
 	disconnected time.Time
-	// INVARIANT: decommissioned never transitions from true to false.
-	decommissioned bool
+	// INVARIANT: decommissionedOrSuperseded never transitions from true to false.
+	decommissionedOrSuperseded bool
 }
 
 func (p *peer) snap() peerSnap {
@@ -78,7 +78,9 @@ func (p *peer) snap() peerSnap {
 // with provided connKey) is failed. The breaker's probe *is* the heartbeat loop
 // and is thus running at all times. The exception is a decommissioned node, for
 // which the probe simply exits (any future connection attempts to the same peer
-// will trigger the probe but the probe will exit again).
+// will trigger the probe but the probe will exit again), and a superseded peer,
+// i.e. one for which a node restarted with a different IP address and we're the
+// "old", unhealth, peer.
 func (rpcCtx *Context) newPeer(k connKey) *peer {
 	// Initialization here is a bit circular. The peer holds the breaker. The
 	// breaker probe references the peer because it needs to replace the one-shot
@@ -88,8 +90,14 @@ func (rpcCtx *Context) newPeer(k connKey) *peer {
 	// while the breaker is tripped, we want to block in Connect only once we've
 	// seen the first heartbeat succeed).
 	p := &peer{
-		// TODO(during review): need to properly refcount and as we "release" a peer
-		// (remove from the map) we need to release the reference.
+		// NB: we currently don't refcount the node metrics and instead leak them.
+		//
+		// Multiple peers to a given node can temporarily exist at any given point
+		// in time (if the node restarts under a different IP). We assume that
+		// ultimately one of those will become unhealthy and repeatedly fail its
+		// probe. On probe failure, we check the node map for duplicates and if a
+		// healthy duplicate exists, remove ourselves. If we ever add refcounting,
+		// we need to update this mechanism to decrease the refcount.
 		nm: rpcCtx.metrics.loadNodeMetrics(k.nodeID),
 	}
 	var b *circuit.Breaker

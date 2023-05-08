@@ -274,7 +274,7 @@ func TestGrpcDialInternal_ReconnectWithPeerBreaker(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		p, _, _ := clientCtx.conns.getWithBreaker(k)
 		require.NotNil(t, p)
-		if !p.decommissioned {
+		if !p.decommissionedOrSuperseded {
 			return errors.New("expecting peer.mu.decommissioned to be true")
 		}
 		return nil
@@ -301,7 +301,8 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 
 	const serverNodeID = 1
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
-	s := newTestServer(t, serverCtx)
+	s1 := newTestServer(t, serverCtx)
+	s2 := newTestServer(t, serverCtx)
 
 	heartbeat := &ManualHeartbeatService{
 		ready:              make(chan error),
@@ -312,12 +313,16 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 		version:            serverCtx.Settings.Version,
 		nodeID:             serverCtx.NodeID,
 	}
-	RegisterHeartbeatServer(s, heartbeat)
+	close(heartbeat.ready)
+	RegisterHeartbeatServer(s1, heartbeat)
+	RegisterHeartbeatServer(s2, heartbeat)
 
 	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
 	clientCtx.heartbeatInterval = 10 * time.Millisecond
 
-	ln1, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	tmpStopper := stop.NewStopper()
+	defer tmpStopper.Stop(ctx)
+	ln1, err := netutil.ListenAndServeGRPC(tmpStopper, s1, util.TestAddr)
 	require.NoError(t, err)
 
 	k1 := connKey{
@@ -327,7 +332,6 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 	}
 
 	{
-
 		conn := clientCtx.GRPCDialNode(k1.targetAddr, serverNodeID, DefaultClass)
 		_, err := conn.Connect(context.Background())
 		require.NoError(t, err)
@@ -339,7 +343,7 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 	}
 
 	{
-		require.NoError(t, ln1.Close())
+		tmpStopper.Stop(ctx)
 		// Peer stays in map despite becoming unhealthy (due to listener closing).
 		testutils.SucceedsSoon(t, func() error {
 			_, err := clientCtx.GRPCDialNode(k1.targetAddr, serverNodeID, DefaultClass).Connect(ctx)
@@ -353,7 +357,7 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 	}
 
 	// Now connect to n1 but now listening on ln2. This should work.
-	ln2, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	ln2, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s2, util.TestAddr)
 	require.NoError(t, err)
 	k2 := connKey{
 		targetAddr: ln2.Addr().String(),
@@ -369,8 +373,13 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 	// n1 via ln2.
 	_, _, ok := clientCtx.conns.getWithBreaker(k2)
 	require.True(t, ok)
-	_, _, ok = clientCtx.conns.getWithBreaker(k1) // TODO fix code to actually evict superseded conns
-	require.False(t, ok)
+	testutils.SucceedsSoon(t, func() error {
+		_, _, ok = clientCtx.conns.getWithBreaker(k1)
+		if ok {
+			return errors.New("old peer still around")
+		}
+		return nil
+	})
 }
 
 // TestPingInterceptors checks that OnOutgoingPing and OnIncomingPing can inject errors.

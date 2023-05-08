@@ -74,8 +74,8 @@ func runProbe(
 
 		snap := p.snap()
 
-		if snap.decommissioned {
-			// For decommissioned node, don't attempt to maintain
+		if snap.decommissionedOrSuperseded {
+			// For decommissionedOrSuperseded node, don't attempt to maintain
 			// connection or change error, simply remain in the
 			// same state.
 			return
@@ -108,7 +108,7 @@ func runProbe(
 
 		if kvpb.IsDecommissionedStatusErr(err) {
 			p.mu.Lock()
-			p.mu.decommissioned = true
+			p.mu.decommissionedOrSuperseded = true
 			p.mu.Unlock()
 
 			// Leave the torn down connection in place and exit the probe.
