@@ -769,7 +769,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.sqlStatusServer.TxnIDResolution,
 		&contentionMetrics,
 	)
-	contentionRegistry.Start(ctx, cfg.stopper)
 
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.nodeDialer)
 
@@ -1286,6 +1285,7 @@ func (s *SQLServer) preStart(
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, stopper)
+	s.execCfg.ContentionRegistry.Start(ctx, stopper)
 	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
 	}
