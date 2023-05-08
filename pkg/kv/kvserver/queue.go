@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1015,17 +1016,6 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 		})
 }
 
-type benignError struct {
-	cause error
-}
-
-func (be *benignError) Error() string { return be.cause.Error() }
-func (be *benignError) Cause() error  { return be.cause }
-
-func isBenign(err error) bool {
-	return errors.HasType(err, (*benignError)(nil))
-}
-
 // IsPurgatoryError returns true iff the given error is a purgatory error.
 func IsPurgatoryError(err error) (PurgatoryError, bool) {
 	var purgErr PurgatoryError
@@ -1112,7 +1102,7 @@ func (bq *baseQueue) finishProcessingReplica(
 
 	// Handle failures.
 	if err != nil {
-		benign := isBenign(err)
+		benign := benignerror.IsBenign(err)
 
 		// Increment failures metric.
 		//

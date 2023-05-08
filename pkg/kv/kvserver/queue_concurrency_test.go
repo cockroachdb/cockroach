@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -86,7 +87,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 			} else if n == 1 {
 				return false, errors.New("injected regular error")
 			} else if n == 2 {
-				return false, &benignError{errors.New("injected benign error")}
+				return false, benignerror.New(errors.New("injected benign error"))
 			}
 			return false, &testPurgatoryError{}
 		},
