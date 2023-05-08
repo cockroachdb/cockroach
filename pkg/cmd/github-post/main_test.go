@@ -24,12 +24,13 @@ import (
 
 func TestListFailures(t *testing.T) {
 	type issue struct {
-		testName   string
-		title      string
-		message    string
-		expRepro   string
-		mention    []string
-		hasProject bool
+		testName    string
+		title       string
+		message     string
+		expRepro    string
+		mention     []string
+		extraLabels []string
+		hasProject  bool
 	}
 	// Each test case expects a number of issues.
 	testCases := []struct {
@@ -44,11 +45,12 @@ func TestListFailures(t *testing.T) {
 			fileName: "implicit-pkg.json",
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/util/stop",
 			expIssues: []issue{{
-				testName:   "TestStopperWithCancelConcurrent",
-				title:      "util/stop: TestStopperWithCancelConcurrent failed",
-				message:    "this is just a testing issue",
-				mention:    []string{"@cockroachdb/kv"},
-				hasProject: true,
+				testName:    "TestStopperWithCancelConcurrent",
+				title:       "util/stop: TestStopperWithCancelConcurrent failed",
+				message:     "this is just a testing issue",
+				mention:     []string{"@cockroachdb/kv"},
+				extraLabels: []string{"T-kv"},
+				hasProject:  true,
 			}},
 			formatter: defaultFormatter,
 		},
@@ -57,11 +59,12 @@ func TestListFailures(t *testing.T) {
 			fileName: "stress-failure.json",
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
 			expIssues: []issue{{
-				testName:   "TestReplicateQueueRebalance",
-				title:      "kv/kvserver: TestReplicateQueueRebalance failed",
-				message:    "replicate_queue_test.go:88: condition failed to evaluate within 45s: not balanced: [10 1 10 1 8]",
-				mention:    []string{"@cockroachdb/kv"},
-				hasProject: true,
+				testName:    "TestReplicateQueueRebalance",
+				title:       "kv/kvserver: TestReplicateQueueRebalance failed",
+				message:     "replicate_queue_test.go:88: condition failed to evaluate within 45s: not balanced: [10 1 10 1 8]",
+				mention:     []string{"@cockroachdb/kv"},
+				extraLabels: []string{"T-kv"},
+				hasProject:  true,
 			}},
 			formatter: defaultFormatter,
 		},
@@ -70,11 +73,12 @@ func TestListFailures(t *testing.T) {
 			fileName: "stress-fatal.json",
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
 			expIssues: []issue{{
-				testName:   "TestGossipHandlesReplacedNode",
-				title:      "kv/kvserver: TestGossipHandlesReplacedNode failed",
-				message:    "F180711 20:13:15.826193 83 storage/replica.go:1877  [n?,s1,r1/1:/M{in-ax}] on-disk and in-memory state diverged:",
-				mention:    []string{"@cockroachdb/kv"},
-				hasProject: true,
+				testName:    "TestGossipHandlesReplacedNode",
+				title:       "kv/kvserver: TestGossipHandlesReplacedNode failed",
+				message:     "F180711 20:13:15.826193 83 storage/replica.go:1877  [n?,s1,r1/1:/M{in-ax}] on-disk and in-memory state diverged:",
+				mention:     []string{"@cockroachdb/kv"},
+				extraLabels: []string{"T-kv"},
+				hasProject:  true,
 			}},
 			formatter: defaultFormatter,
 		},
@@ -114,11 +118,12 @@ func TestListFailures(t *testing.T) {
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
 			expIssues: []issue{
 				{
-					testName:   "TestTxnCoordSenderPipelining",
-					title:      "kv/kvclient/kvcoord: TestTxnCoordSenderPipelining failed",
-					message:    `injected failure`,
-					mention:    []string{"@cockroachdb/kv"},
-					hasProject: true,
+					testName:    "TestTxnCoordSenderPipelining",
+					title:       "kv/kvclient/kvcoord: TestTxnCoordSenderPipelining failed",
+					message:     `injected failure`,
+					mention:     []string{"@cockroachdb/kv"},
+					extraLabels: []string{"T-kv"},
+					hasProject:  true,
 				},
 				{
 					testName: "TestAbortReadOnlyTransaction",
@@ -130,8 +135,9 @@ TestTxnCoordSenderPipelining - 1.00s
 Slow passing tests:
 TestAnchorKey - 1.01s
 `,
-					mention:    []string{"@cockroachdb/kv"},
-					hasProject: true,
+					mention:     []string{"@cockroachdb/kv"},
+					extraLabels: []string{"T-kv"},
+					hasProject:  true,
 				},
 			},
 			formatter: defaultFormatter,
@@ -244,10 +250,11 @@ TestXXA - 1.00s
 			expPkg:   "internal/metamorphic",
 			expIssues: []issue{
 				{
-					testName: "TestMeta",
-					title:    "internal/metamorphic: TestMeta failed",
-					message:  "panic: induced panic",
-					expRepro: `go test -mod=vendor -tags 'invariants' -exec 'stress -p 1' -timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed 1600209371838097000 -ops "uniform:5000-10000"`,
+					testName:    "TestMeta",
+					title:       "internal/metamorphic: TestMeta failed",
+					message:     "panic: induced panic",
+					extraLabels: []string{"metamorphic-failure"},
+					expRepro:    `go test -mod=vendor -tags 'invariants' -exec 'stress -p 1' -timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed 1600209371838097000 -ops "uniform:5000-10000"`,
 				},
 			},
 			formatter: formatPebbleMetamorphicIssue,
@@ -305,6 +312,7 @@ TestXXA - 1.00s
 				}
 				assert.Equal(t, c.expIssues[curIssue].mention, req.MentionOnCreate)
 				assert.Equal(t, c.expIssues[curIssue].hasProject, req.ProjectColumnID != 0)
+				assert.Equal(t, c.expIssues[curIssue].extraLabels, req.ExtraLabels)
 				// On next invocation, we'll check the next expected issue.
 				curIssue++
 				return nil
