@@ -53,26 +53,46 @@ func MakeSchemaName(ifNotExists bool, schema string, authRole tree.RoleSpec) *tr
 // type's name will be name, and if the type is an enum, the members will
 // be random strings generated from alphabet.
 func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
-	numLabels := rng.Intn(6) + 1
-	labels := make(tree.EnumValueList, numLabels)
-	labelsMap := make(map[string]struct{})
-	i := 0
-	for i < numLabels {
-		s := util.RandString(rng, rng.Intn(6)+1, alphabet)
-		if _, ok := labelsMap[s]; !ok {
-			labels[i] = tree.EnumValue(s)
-			labelsMap[s] = struct{}{}
-			i++
-		}
-	}
 	un, err := tree.NewUnresolvedObjectName(1, [3]string{name}, 0)
 	if err != nil {
 		panic(err)
 	}
-	return &tree.CreateType{
-		TypeName:   un,
-		Variety:    tree.Enum,
-		EnumLabels: labels,
+	switch rng.Intn(2) {
+	case 0:
+		// Create a random user-defined enum type.
+		numLabels := rng.Intn(6) + 1
+		labels := make(tree.EnumValueList, numLabels)
+		labelsMap := make(map[string]struct{})
+		i := 0
+		for i < numLabels {
+			s := util.RandString(rng, rng.Intn(6)+1, alphabet)
+			if _, ok := labelsMap[s]; !ok {
+				labels[i] = tree.EnumValue(s)
+				labelsMap[s] = struct{}{}
+				i++
+			}
+		}
+		return &tree.CreateType{
+			TypeName:   un,
+			Variety:    tree.Enum,
+			EnumLabels: labels,
+		}
+	default:
+		// Create a random user-defined composite type.
+		numFields := rng.Intn(6) + 1
+		fields := make([]tree.CompositeTypeElem, numFields)
+		g := randident.NewNameGenerator(&nameGenCfg, rng, "field_")
+		for i := range fields {
+			fields[i] = tree.CompositeTypeElem{
+				Label: tree.Name(g.GenerateOne(strconv.Itoa(i))),
+				Type:  RandColumnType(rng),
+			}
+		}
+		return &tree.CreateType{
+			TypeName:          un,
+			Variety:           tree.Composite,
+			CompositeTypeList: fields,
+		}
 	}
 }
 
@@ -104,6 +124,8 @@ func RandCreateTables(
 }
 
 // RandCreateTable creates a random CreateTable definition.
+// TODO(michae2): add variant of this that takes seed types, so that we can make
+// tables with UDT columns.
 func RandCreateTable(
 	ctx context.Context, rng *rand.Rand, prefix string, tableIdx int, isMultiRegion bool,
 ) *tree.CreateTable {
