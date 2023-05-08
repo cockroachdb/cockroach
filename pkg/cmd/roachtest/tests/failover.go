@@ -30,65 +30,76 @@ import (
 )
 
 func registerFailover(r registry.Registry) {
-	r.Add(registry.TestSpec{
-		Name:    "failover/partial/lease-liveness",
-		Owner:   registry.OwnerKV,
-		Timeout: 30 * time.Minute,
-		Cluster: r.MakeClusterSpec(6, spec.CPU(4)),
-		Run:     runDisconnect,
-	})
-	for _, failureMode := range []failureMode{
-		failureModeBlackhole,
-		failureModeBlackholeRecv,
-		failureModeBlackholeSend,
-		failureModeCrash,
-		failureModeDiskStall,
-		failureModePause,
-	} {
-		failureMode := failureMode // pin loop variable
-		makeSpec := func(nNodes, nCPU int) spec.ClusterSpec {
-			s := r.MakeClusterSpec(nNodes, spec.CPU(nCPU))
-			if failureMode == failureModeDiskStall {
-				// Use PDs in an attempt to work around flakes encountered when using
-				// SSDs. See #97968.
-				s.PreferLocalSSD = false
+	for _, expirationLeases := range []bool{false, true} {
+		expirationLeases := expirationLeases // pin loop variable
+		var suffix string
+		if expirationLeases {
+			suffix = "/lease=expiration"
+		}
+
+		r.Add(registry.TestSpec{
+			Name:    "failover/partial/lease-liveness" + suffix,
+			Owner:   registry.OwnerKV,
+			Timeout: 30 * time.Minute,
+			Cluster: r.MakeClusterSpec(6, spec.CPU(4)),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runDisconnect(ctx, t, c, expirationLeases)
+			},
+		})
+
+		for _, failureMode := range []failureMode{
+			failureModeBlackhole,
+			failureModeBlackholeRecv,
+			failureModeBlackholeSend,
+			failureModeCrash,
+			failureModeDiskStall,
+			failureModePause,
+		} {
+			failureMode := failureMode // pin loop variable
+			makeSpec := func(nNodes, nCPU int) spec.ClusterSpec {
+				s := r.MakeClusterSpec(nNodes, spec.CPU(nCPU))
+				if failureMode == failureModeDiskStall {
+					// Use PDs in an attempt to work around flakes encountered when using
+					// SSDs. See #97968.
+					s.PreferLocalSSD = false
+				}
+				return s
 			}
-			return s
+			var postValidation registry.PostValidation = 0
+			if failureMode == failureModeDiskStall {
+				postValidation = registry.PostValidationNoDeadNodes
+			}
+			r.Add(registry.TestSpec{
+				Name:                fmt.Sprintf("failover/non-system/%s%s", failureMode, suffix),
+				Owner:               registry.OwnerKV,
+				Timeout:             30 * time.Minute,
+				SkipPostValidations: postValidation,
+				Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runFailoverNonSystem(ctx, t, c, failureMode, expirationLeases)
+				},
+			})
+			r.Add(registry.TestSpec{
+				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
+				Owner:               registry.OwnerKV,
+				Timeout:             30 * time.Minute,
+				SkipPostValidations: postValidation,
+				Cluster:             makeSpec(5 /* nodes */, 4 /* cpus */),
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runFailoverLiveness(ctx, t, c, failureMode, expirationLeases)
+				},
+			})
+			r.Add(registry.TestSpec{
+				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
+				Owner:               registry.OwnerKV,
+				Timeout:             30 * time.Minute,
+				SkipPostValidations: postValidation,
+				Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runFailoverSystemNonLiveness(ctx, t, c, failureMode, expirationLeases)
+				},
+			})
 		}
-		var postValidation registry.PostValidation = 0
-		if failureMode == failureModeDiskStall {
-			postValidation = registry.PostValidationNoDeadNodes
-		}
-		r.Add(registry.TestSpec{
-			Name:                fmt.Sprintf("failover/non-system/%s", failureMode),
-			Owner:               registry.OwnerKV,
-			Timeout:             30 * time.Minute,
-			SkipPostValidations: postValidation,
-			Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runFailoverNonSystem(ctx, t, c, failureMode)
-			},
-		})
-		r.Add(registry.TestSpec{
-			Name:                fmt.Sprintf("failover/liveness/%s", failureMode),
-			Owner:               registry.OwnerKV,
-			Timeout:             30 * time.Minute,
-			SkipPostValidations: postValidation,
-			Cluster:             makeSpec(5 /* nodes */, 4 /* cpus */),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runFailoverLiveness(ctx, t, c, failureMode)
-			},
-		})
-		r.Add(registry.TestSpec{
-			Name:                fmt.Sprintf("failover/system-non-liveness/%s", failureMode),
-			Owner:               registry.OwnerKV,
-			Timeout:             30 * time.Minute,
-			SkipPostValidations: postValidation,
-			Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runFailoverSystemNonLiveness(ctx, t, c, failureMode)
-			},
-		})
 	}
 }
 
@@ -103,7 +114,7 @@ func randSleep(ctx context.Context, rng *rand.Rand, max time.Duration) {
 // 5 nodes fully connected. Break the connection between a pair of nodes 4 and 5
 // while running a workload against nodes 1 through 3. Before each disconnect,
 // move all the leases to nodes 4 and 5 in a different pattern.
-func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster) {
+func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster, expLeases bool) {
 	require.Equal(t, 6, c.Spec().NodeCount)
 
 	rng, _ := randutil.NewTestRand()
@@ -117,13 +128,17 @@ func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster) {
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
 
+	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
+		expLeases)
+	require.NoError(t, err)
+
 	constrainAllConfig(t, ctx, conn, 3, []int{4, 5}, 0)
 	constrainConfig(t, ctx, conn, `RANGE liveness`, 3, []int{3, 5}, 4)
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
 
 	t.Status("creating workload database")
-	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	constrainConfig(t, ctx, conn, `DATABASE kv`, 3, []int{2, 3, 5}, 0)
 
@@ -209,7 +224,7 @@ func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster) {
 // order, with 1 minute between each operation, for 3 cycles totaling 9
 // failures.
 func runFailoverNonSystem(
-	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
+	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode, expLeases bool,
 ) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
@@ -232,6 +247,9 @@ func runFailoverNonSystem(
 	// Configure cluster. This test controls the ranges manually.
 	t.Status("configuring cluster")
 	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
+		expLeases)
 	require.NoError(t, err)
 
 	// Constrain all existing zone configs to n1-n3.
@@ -350,7 +368,7 @@ func runFailoverNonSystem(
 // have currently. Prometheus scraping more often isn't enough, because CRDB
 // itself only samples every 10 seconds.
 func runFailoverLiveness(
-	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
+	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode, expLeases bool,
 ) {
 	require.Equal(t, 5, c.Spec().NodeCount)
 
@@ -373,6 +391,9 @@ func runFailoverLiveness(
 	// Configure cluster. This test controls the ranges manually.
 	t.Status("configuring cluster")
 	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
+		expLeases)
 	require.NoError(t, err)
 
 	// Constrain all existing zone configs to n1-n3.
@@ -490,7 +511,7 @@ func runFailoverLiveness(
 // order, with 1 minute between each operation, for 3 cycles totaling 9
 // failures.
 func runFailoverSystemNonLiveness(
-	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
+	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode, expLeases bool,
 ) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
@@ -513,6 +534,9 @@ func runFailoverSystemNonLiveness(
 	// Configure cluster. This test controls the ranges manually.
 	t.Status("configuring cluster")
 	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
+		expLeases)
 	require.NoError(t, err)
 
 	// Constrain all existing zone configs to n4-n6, except liveness which is
