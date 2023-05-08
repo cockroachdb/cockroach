@@ -351,6 +351,11 @@ type zipContext struct {
 	// attempts to access multiple nodes concurrently by default.
 	concurrency int
 
+	// includeRangeInfo includes information about each individual range in
+	// individual nodes/*/ranges/*.json files. For large clusters, this can
+	// dramatically increase debug zip size/file count.
+	includeRangeInfo bool
+
 	// The log/heap/etc files to include.
 	files fileSelection
 }
@@ -363,6 +368,7 @@ func setZipContextDefaults() {
 	zipCtx.files = fileSelection{}
 	zipCtx.redactLogs = false
 	zipCtx.redact = false
+	zipCtx.includeRangeInfo = false // we omit range info by default to keep lightweight debug zips
 	zipCtx.cpuProfDuration = 5 * time.Second
 	zipCtx.concurrency = 15
 
