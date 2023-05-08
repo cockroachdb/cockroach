@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -155,10 +154,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		return err
 	}
 
-	ttlExpr := colinfo.DefaultTTLExpirationExpr
-	if rowLevelTTL.HasExpirationExpr() {
-		ttlExpr = "(" + rowLevelTTL.ExpirationExpr + ")"
-	}
+	ttlExpr := rowLevelTTL.GetTTLExpr()
 
 	labelMetrics := rowLevelTTL.LabelMetrics
 	group := ctxgroup.WithContext(ctx)

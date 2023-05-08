@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -101,16 +100,16 @@ func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
 		return nil
 	}
 	intervalExpr := desc.GetRowLevelTTL().DurationExpr
-	col, err := desc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName)
+	col, err := desc.FindColumnWithName(catpb.TTLDefaultExpirationColumnName)
 	if err != nil {
-		return errors.Wrapf(err, "expected column %s", colinfo.TTLDefaultExpirationColumnName)
+		return errors.Wrapf(err, "expected column %s", catpb.TTLDefaultExpirationColumnName)
 	}
 	expectedStr := `current_timestamp():::TIMESTAMPTZ + ` + string(intervalExpr)
 	if col.GetDefaultExpr() != expectedStr {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"expected DEFAULT expression of %s to be %s",
-			colinfo.TTLDefaultExpirationColumnName,
+			catpb.TTLDefaultExpirationColumnName,
 			expectedStr,
 		)
 	}
@@ -118,7 +117,7 @@ func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"expected ON UPDATE expression of %s to be %s",
-			colinfo.TTLDefaultExpirationColumnName,
+			catpb.TTLDefaultExpirationColumnName,
 			expectedStr,
 		)
 	}
