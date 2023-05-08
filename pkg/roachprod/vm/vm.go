@@ -312,6 +312,7 @@ type Provider interface {
 	// provider.
 	ProjectActive(project string) bool
 
+	// XXX: Use these?
 	CreateVolume(l *logger.Logger, vco VolumeCreateOpts) (Volume, error)
 	AttachVolumeToVM(l *logger.Logger, volume Volume, vm *VM) (string, error)
 	SnapshotVolume(l *logger.Logger, volume Volume, name, description string, labels map[string]string) (string, error)

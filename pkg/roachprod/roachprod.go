@@ -1560,7 +1560,7 @@ func PrometheusSnapshot(
 // SnapshotVolume snapshots any of the volumes attached to the nodes in a
 // cluster specification.
 func SnapshotVolume(
-	ctx context.Context, l *logger.Logger, clusterName, name, description string,
+	ctx context.Context, l *logger.Logger, clusterName, snapshotName, description string,
 ) error {
 	if err := LoadClusters(); err != nil {
 		return err
@@ -1587,14 +1587,11 @@ func SnapshotVolume(
 				nodeID)
 		}
 		for _, volume := range cVM.NonBootAttachedVolumes {
-			if isWorkloadCollectorVolume(volume) {
+			if true || isWorkloadCollectorVolume(volume) { // XXX: Get rid of this? Why the label check?
 				l.Printf("Creating snapshot for node %d volume %s\n", nodeID, volume.Name)
-				nameSuffix := ""
-				if len(nodes) != 1 {
-					nameSuffix = fmt.Sprintf("-%d", nodeID)
-				}
+				nameSuffix := fmt.Sprintf("-%d", nodeID)
 				err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
-					sID, err := provider.SnapshotVolume(l, volume, name+nameSuffix, description, labels)
+					sID, err := provider.SnapshotVolume(l, volume, snapshotName+nameSuffix, description, labels)
 					if err != nil {
 						return err
 					}

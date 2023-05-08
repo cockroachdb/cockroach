@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -201,14 +202,15 @@ func (jsonVM *jsonVM) toVM(
 			for _, detailedDisk := range disks {
 				if detailedDisk.SelfLink == jsonVMDisk.Source {
 					vol := vm.Volume{
-						ProviderResourceID: detailedDisk.Name,
+						ProviderResourceID: lastComponent(detailedDisk.SelfLink), // XXX: Replaced with name
 						ProviderVolumeType: detailedDisk.Type,
-						Zone:               detailedDisk.Zone,
+						Zone:               lastComponent(detailedDisk.Zone),
 						Name:               detailedDisk.Name,
 						Labels:             detailedDisk.Labels,
 						Size:               parseDiskSize(detailedDisk.SizeGB),
 					}
 					volumes = append(volumes, vol)
+					log.Infof(context.Background(), "appending %v from %v", vol, detailedDisk)
 				}
 			}
 		}
@@ -765,6 +767,7 @@ func (p *Provider) Create(
 	}
 
 	extraMountOpts := ""
+	// XXX: Gcloud argss
 	// Dynamic args.
 	if opts.SSDOpts.UseLocalSSD {
 		// n2-class and c2-class GCP machines cannot be requested with only 1
@@ -860,8 +863,9 @@ func (p *Provider) Create(
 	if err != nil {
 		return err
 	}
+	return nil
 
-	return propagateDiskLabels(l, project, labels, zoneToHostNames, &opts)
+	//return propagateDiskLabels(l, project, labels, zoneToHostNames, &opts)
 }
 
 // N.B. neither boot disk nor additional persistent disks are assigned VM labels by default.
@@ -1146,6 +1150,7 @@ func toDescribeVolumeCommandResponse(
 			// Skip scratch disks.
 			continue
 		}
+		log.Infof(context.Background(), "xxx: appending! %v", d)
 		res = append(res, describeVolumeCommandResponse{
 			Name:     d.DeviceName,
 			SelfLink: d.Source,

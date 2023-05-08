@@ -134,4 +134,6 @@ type Cluster interface {
 
 	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error
 	StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error
+
+	SnapshotVolume(ctx context.Context, snapshotName string) error
 }

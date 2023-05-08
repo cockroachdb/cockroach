@@ -1661,6 +1661,11 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 	return ch
 }
 
+func (c *clusterImpl) SnapshotVolume(ctx context.Context, snapshotName string) error {
+	// XXX: This API is super clunky, making tons of assumptions about naming.
+	return roachprod.SnapshotVolume(ctx, c.l, c.name, snapshotName, fmt.Sprintf("snapshot for %s", c.t.Name()))
+}
+
 // Put a local file to all of the machines in a cluster.
 // Put is DEPRECATED. Use PutE instead.
 func (c *clusterImpl) Put(ctx context.Context, src, dest string, nodes ...option.Option) {

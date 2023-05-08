@@ -442,6 +442,7 @@ func defaultClusterAllocator(
 			enableFIPS:   clustersOpt.enableFIPS,
 		}
 		return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
+		// XXX: Where new clusters get constructed.
 	}
 	return allocateCluster
 }
