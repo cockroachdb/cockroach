@@ -308,6 +308,24 @@ func (d *TestStaticDirectoryServer) CreateTenant(tenantID roachpb.TenantID, clus
 	})
 }
 
+// UpdateTenant updates the tenant with the given tenant ID in the directory
+// server. If the tenant does not exist, this is a no-op.
+func (d *TestStaticDirectoryServer) UpdateTenant(tenantID roachpb.TenantID, obj *tenant.Tenant) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	// Tenant does not exist.
+	if _, ok := d.mu.tenantNames[tenantID]; !ok {
+		return
+	}
+
+	// Update cluster name.
+	d.mu.tenantNames[tenantID] = obj.ClusterName
+
+	// Emit an event that the tenant has been updated.
+	d.notifyTenantUpdateLocked(obj)
+}
+
 // DeleteTenant ensures that the tenant with the given tenant ID has been
 // removed from the directory server. Doing this would return a NotFound error
 // for certain directory server endpoints. This also changes the behavior of
@@ -485,12 +503,20 @@ func (d *TestStaticDirectoryServer) DialerFunc(ctx context.Context, addr string)
 	return listener.DialContext(ctx)
 }
 
-// WatchListenersCount returns the number of active listeners for pod update
+// WatchPodsListenersCount returns the number of active listeners for pod update
 // events.
-func (d *TestStaticDirectoryServer) WatchListenersCount() int {
+func (d *TestStaticDirectoryServer) WatchPodsListenersCount() int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.mu.eventListeners.Len()
+}
+
+// WatchTenantsListenersCount returns the number of active listeners for tenant
+// update events.
+func (d *TestStaticDirectoryServer) WatchTenantsListenersCount() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.mu.tenantEventListeners.Len()
 }
 
 // notifyPodUpdateLocked sends a pod update event to all WatchPods listeners.

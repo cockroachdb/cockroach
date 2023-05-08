@@ -27,21 +27,24 @@ import (
 //
 // See directoryCache for more information.
 type DirectoryCache interface {
-	// LookupTenantPods returns an IP address of one of the given tenant's SQL
-	// processes based on the tenantID and clusterName fields. This should block
-	// until the process associated with the IP is ready.
+	// LookupTenant returns the tenant entry associated to the requested tenant
+	// ID. If the tenant cannot be found, this will return a GRPC NotFound
+	// error.
+	LookupTenant(ctx context.Context, tenantID roachpb.TenantID) (*Tenant, error)
+
+	// LookupTenantPods returns a list of SQL pods in the RUNNING and DRAINING
+	// states for the given tenant. This blocks until there is at least one
+	// running SQL pod.
 	//
 	// If no matching pods are found (e.g. cluster name mismatch, or tenant was
 	// deleted), this will return a GRPC NotFound error.
 	LookupTenantPods(ctx context.Context, tenantID roachpb.TenantID, clusterName string) ([]*Pod, error)
 
-	// TryLookupTenantPods returns the IP addresses for all available SQL
-	// processes for the given tenant. It returns a GRPC NotFound error if the
-	// tenant does not exist.
-	//
-	// Unlike LookupTenantPods which blocks until there is an associated
-	// process, TryLookupTenantPods will just return an empty set if no processes
-	// are available for the tenant.
+	// TryLookupTenantPods returns a list of SQL pods in the RUNNING and
+	// DRAINING states for the given tenant. It returns a GRPC NotFound error
+	// if the tenant does not exist in the cache. Unlike LookupTenantPods which
+	// blocks until there is an associated SQL pod, TryLookupTenantPods will
+	// just return an empty set if no pods are available for the tenant.
 	TryLookupTenantPods(ctx context.Context, tenantID roachpb.TenantID) ([]*Pod, error)
 
 	// ReportFailure is used to indicate to the directory cache that a
@@ -51,9 +54,12 @@ type DirectoryCache interface {
 
 // dirOptions control the behavior of directoryCache.
 type dirOptions struct {
-	deterministic bool
-	refreshDelay  time.Duration
-	podWatcher    chan *Pod
+	deterministic        bool
+	refreshDelay         time.Duration
+	metadataRefreshDelay time.Duration
+	podWatcher           chan *Pod
+	watchTenants         bool
+	tenantWatcher        chan *Tenant
 }
 
 // DirOption defines an option that can be passed to directoryCache in order
@@ -72,6 +78,16 @@ func RefreshDelay(delay time.Duration) func(opts *dirOptions) {
 	}
 }
 
+// MetadataRefreshDelay specifies the minimum amount of time that must elapse
+// between attempts to refresh metadata for a given tenant during tenant lookup.
+//
+// MetadataRefreshDelay defaults to 5s. Use -1 to never throttle.
+func MetadataRefreshDelay(delay time.Duration) func(opts *dirOptions) {
+	return func(opts *dirOptions) {
+		opts.metadataRefreshDelay = delay
+	}
+}
+
 // PodWatcher provides a callback channel to which tenant pod change
 // notifications will be sent by the directory. Notifications will be sent when
 // a tenant pod is created, modified, or destroyed.
@@ -81,6 +97,27 @@ func RefreshDelay(delay time.Duration) func(opts *dirOptions) {
 func PodWatcher(podWatcher chan *Pod) func(opts *dirOptions) {
 	return func(opts *dirOptions) {
 		opts.podWatcher = podWatcher
+	}
+}
+
+// WithWatchTenants indicates that the directory cache will watch tenant
+// metadata changes.
+func WithWatchTenants() func(opts *dirOptions) {
+	return func(opts *dirOptions) {
+		opts.watchTenants = true
+	}
+}
+
+// TenantWatcher provides a callback channel to which tenant metadata change
+// notifications will be sent by the directory. Notifications will be sent when
+// a tenant is created or modified.
+//
+// NOTE: The caller is responsible for handling the notifications by receiving
+// from the channel; if it does not, it may block the background pod watcher
+// goroutine.
+func TenantWatcher(tenantWatcher chan *Tenant) func(opts *dirOptions) {
+	return func(opts *dirOptions) {
+		opts.tenantWatcher = tenantWatcher
 	}
 }
 
@@ -145,13 +182,38 @@ func NewDirectoryCache(
 		// Default to a delay of 100ms between refresh attempts for a given tenant.
 		dir.options.refreshDelay = 100 * time.Millisecond
 	}
+	if dir.options.metadataRefreshDelay == 0 {
+		dir.options.metadataRefreshDelay = 5 * time.Second
+	}
 
 	// Start the pod watcher on a background goroutine.
 	if err := dir.watchPods(ctx, stopper); err != nil {
 		return nil, err
 	}
+	// Start the tenant watcher on a background goroutine, if specified.
+	if dir.options.watchTenants {
+		if err := dir.watchTenants(ctx, stopper); err != nil {
+			return nil, err
+		}
+	}
 
 	return dir, nil
+}
+
+// LookupTenant returns the tenant entry associated to the requested tenant
+// ID. If the tenant cannot be found, this will return a GRPC NotFound error.
+//
+// LookupTenant implements the DirectoryCache interface.
+func (d *directoryCache) LookupTenant(
+	ctx context.Context, tenantID roachpb.TenantID,
+) (*Tenant, error) {
+	// Ensure that a directory entry has been created for this tenant. This will
+	// attempt to initialize the tenant in the cache.
+	entry, err := d.getEntry(ctx, tenantID, true /* allowCreate */)
+	if err != nil {
+		return nil, err
+	}
+	return entry.ToProto(), nil
 }
 
 // LookupTenantPods returns a list of SQL pods in the RUNNING and DRAINING
@@ -183,11 +245,12 @@ func (d *directoryCache) LookupTenantPods(
 
 	// Check if the cluster name matches. This can be skipped if clusterName
 	// is empty, or the ClusterName returned by the directory server is empty.
-	if clusterName != "" && entry.ClusterName != "" && clusterName != entry.ClusterName {
+	tenant := entry.ToProto()
+	if clusterName != "" && tenant.ClusterName != "" && clusterName != tenant.ClusterName {
 		// Return a GRPC NotFound error.
-		log.Errorf(ctx, "cluster name %s doesn't match expected %s", clusterName, entry.ClusterName)
+		log.Errorf(ctx, "cluster name %s doesn't match expected %s", clusterName, tenant.ClusterName)
 		return nil, status.Errorf(codes.NotFound,
-			"cluster name %s doesn't match expected %s", clusterName, entry.ClusterName)
+			"cluster name %s doesn't match expected %s", clusterName, tenant.ClusterName)
 	}
 
 	ctx, cancel := d.stopper.WithCancelOnQuiesce(ctx)
@@ -211,7 +274,7 @@ func (d *directoryCache) LookupTenantPods(
 }
 
 // TryLookupTenantPods returns a list of SQL pods in the RUNNING and DRAINING
-// states for thegiven tenant. It returns a GRPC NotFound error if the tenant
+// states for the given tenant. It returns a GRPC NotFound error if the tenant
 // does not exist (e.g. it has not yet been created) or if it has not yet been
 // fetched into the directory's cache (TryLookupTenantPods will never attempt to
 // fetch it). If no processes are available for the tenant, TryLookupTenantPods
@@ -225,17 +288,14 @@ func (d *directoryCache) LookupTenantPods(
 func (d *directoryCache) TryLookupTenantPods(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) ([]*Pod, error) {
-	// Ensure that a directory entry has been created for this tenant.
 	entry, err := d.getEntry(ctx, tenantID, false /* allowCreate */)
 	if err != nil {
 		return nil, err
 	}
-
 	if entry == nil {
 		return nil, status.Errorf(
 			codes.NotFound, "tenant %d not in directory cache", tenantID.ToUint64())
 	}
-
 	return entry.GetPods(), nil
 }
 
@@ -301,7 +361,11 @@ func (d *directoryCache) getEntry(
 
 		// Create the tenant entry and enter it into the tenants map.
 		log.Infof(ctx, "creating directory entry for tenant %d", tenantID)
-		entry = &tenantEntry{TenantID: tenantID, RefreshDelay: d.options.refreshDelay}
+		entry = &tenantEntry{
+			TenantID:             tenantID,
+			RefreshDelay:         d.options.refreshDelay,
+			MetadataRefreshDelay: d.options.metadataRefreshDelay,
+		}
 		d.mut.tenants[tenantID] = entry
 		return entry
 	}()
@@ -407,7 +471,7 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 
 			// Update the directory entry for the tenant with the latest
 			// information about this pod.
-			d.updateTenantEntry(ctx, resp.Pod)
+			d.updateTenantPodEntry(ctx, resp.Pod)
 
 			// If caller is watching pods, send to its channel now. Only do this
 			// after updating the tenant entry in the directory.
@@ -429,11 +493,11 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 	return err
 }
 
-// updateTenantEntry keeps tenant directory entries up-to-date by handling pod
+// updateTenantPodEntry keeps tenant directory entries up-to-date by handling pod
 // watcher events. When a pod is created, destroyed, or modified, it updates the
 // tenant's entry to reflect that change.
-func (d *directoryCache) updateTenantEntry(ctx context.Context, pod *Pod) {
-	if pod.Addr == "" || pod.TenantID == 0 {
+func (d *directoryCache) updateTenantPodEntry(ctx context.Context, pod *Pod) {
+	if pod == nil || pod.Addr == "" || pod.TenantID == 0 {
 		// Nothing needs to be done if there is no IP address specified.
 		// We also check on TenantID here because roachpb.MustMakeTenantID will
 		// panic with TenantID = 0.
@@ -468,6 +532,101 @@ func (d *directoryCache) updateTenantEntry(ctx context.Context, pod *Pod) {
 		// Pods with UNKNOWN state.
 		log.Infof(ctx, "invalid pod entry with IP address %s for tenant %d", pod.Addr, pod.TenantID)
 	}
+}
+
+// watchTenants establishes a watcher that looks for changes to tenants.
+// Whenever tenants get created or updated, the watcher will get a notification
+// and update the directory to reflect that change.
+//
+// Note that this watcher is used to update the tenants in the directory cache
+// on a best-effort basis.
+func (d *directoryCache) watchTenants(ctx context.Context, stopper *stop.Stopper) error {
+	return stopper.RunAsyncTask(ctx, "watch-tenants-client", func(ctx context.Context) {
+		var client Directory_WatchTenantsClient
+		var err error
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		watchTenantsErr := log.Every(10 * time.Second)
+		recvErr := log.Every(10 * time.Second)
+
+		for ctx.Err() == nil {
+			if client == nil {
+				client, err = d.client.WatchTenants(ctx, &WatchTenantsRequest{})
+				if err != nil {
+					if watchTenantsErr.ShouldLog() {
+						log.Errorf(ctx, "err creating new watch tenant client: %s", err)
+					}
+					sleepContext(ctx, time.Second)
+					continue
+				} else {
+					log.Info(ctx, "established watch on tenants")
+				}
+			}
+
+			// Read the next watcher event.
+			resp, err := client.Recv()
+			if err != nil {
+				if recvErr.ShouldLog() {
+					log.Errorf(ctx, "err receiving stream events: %s", err)
+				}
+				// If stream ends, immediately try to establish a new one.
+				// Otherwise, wait for a second to avoid slamming server.
+				if err != io.EOF {
+					time.Sleep(time.Second)
+				}
+				client = nil
+				continue
+			}
+
+			// Update the directory entry for this tenant.
+			d.updateTenantMetadataEntry(ctx, resp.Tenant)
+
+			// If caller is watching tenants, send to its channel now. Only do
+			// this after updating the tenant in the directory cache.
+			if d.options.tenantWatcher != nil {
+				select {
+				case d.options.tenantWatcher <- resp.Tenant:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	})
+}
+
+// updateTenantMetadataEntry keeps tenant directory entries up-to-date by
+// handling tenant watcher events. When a tenant is updated, it updates the
+// directory cache to reflect that change. We are not interested in created
+// events since we're only caching tenants that have connected through the
+// proxy at least once.
+func (d *directoryCache) updateTenantMetadataEntry(ctx context.Context, tenant *Tenant) {
+	if tenant == nil || tenant.TenantID == 0 {
+		// Check on TenantID because roachpb.MustMakeTenantID will panic with
+		// TenantID = 0.
+		return
+	}
+
+	// Use allowCreate=false here since we're only interested in tenants that
+	// are already in the cache.
+	entry, err := d.getEntry(ctx, roachpb.MustMakeTenantID(tenant.TenantID), false /* allowCreate */)
+	if err != nil {
+		if !grpcutil.IsContextCanceled(err) {
+			// This should only happen in case of a deleted tenant or a transient
+			// error during fetch of tenant metadata (i.e. very rarely).
+			log.Errorf(ctx, "ignoring error getting entry for tenant %d: %v", tenant.TenantID, err)
+		}
+		return
+	}
+
+	// Tenant does not exist in the cache. Do not attempt to update.
+	if entry == nil {
+		return
+	}
+
+	entry.UpdateMetadata(tenant)
+
+	log.Infof(ctx, "updated tenant %d with %v", tenant.TenantID, tenant)
 }
 
 // sleepContext sleeps for the given duration or until the given context is

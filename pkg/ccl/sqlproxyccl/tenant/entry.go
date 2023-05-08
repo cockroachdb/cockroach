@@ -11,7 +11,6 @@ package tenant
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,28 +30,26 @@ type tenantEntry struct {
 	// cluster.
 	TenantID roachpb.TenantID
 
-	// Full name of the tenant's cluster i.e. dim-dog.
-	ClusterName string
-
 	// RefreshDelay is the minimum amount of time that must elapse between
 	// attempts to refresh pods for this tenant after ReportFailure is
 	// called.
 	RefreshDelay time.Duration
 
-	// initialized is set to true once Initialized has been successfully called
-	// (i.e. with no resulting error). Access is synchronized via atomics.
-	initialized sync.Once
+	// MetadataRefreshDelay is the minimum amount of time that must elapse
+	// between attempts to refresh the tenant's metadata whenever Initialize is
+	// called.
+	MetadataRefreshDelay time.Duration
 
-	// initError is set to any error that occurs in Initialized (or nil if no
-	// error occurred).
-	initError error
-
-	// pods synchronizes access to information about the tenant's SQL pods.
 	// These fields can be updated over time, so a lock must be obtained before
 	// accessing them.
-	pods struct {
+	mu struct {
 		syncutil.Mutex
+
+		// pods represents the tenant's SQL pods.
 		pods []*Pod
+
+		// clusterName is the full name of the tenant's cluster i.e. dim-dog.
+		clusterName string
 	}
 
 	// calls synchronizes calls to the Directory service for this tenant (e.g.
@@ -62,36 +59,53 @@ type tenantEntry struct {
 	calls struct {
 		syncutil.Mutex
 
-		// lastRefresh is the last time the list of pods for the tenant have been
-		// fetched from the server. It's used to rate limit refreshes.
-		lastRefresh time.Time
+		// lastPodRefresh is the last time the list of pods for the tenant have
+		// been fetched from the server. It's used to rate limit pod refreshes.
+		lastPodRefresh time.Time
+
+		// lastMetadataRefresh is the last time the tenant's metadata have been
+		// fetched from the server. It's used to rate limit metadata refreshes.
+		lastMetadataRefresh time.Time
+
+		// initError is set to any error that occurs in Initialize (or nil if no
+		// error occurred).
+		initError error
 	}
 }
 
 // Initialize fetches metadata about a tenant, such as its cluster name, and
-// stores that in the entry. After this is called once, all future calls return
-// the same result (and do nothing).
+// stores that in the entry. If the metadata was fetched some time ago, they
+// will be refreshed. The first call to Initialize will always cause a refresh
+// since lastMetadataRefresh's initial value is time.Time{}.
 func (e *tenantEntry) Initialize(ctx context.Context, client DirectoryClient) error {
-	// If Initialize has already been successfully called, nothing to do.
-	e.initialized.Do(func() {
-		tenantResp, err := client.GetTenant(ctx, &GetTenantRequest{TenantID: e.TenantID.ToUint64()})
-		if err != nil {
-			e.initError = err
-			return
-		}
+	e.calls.Lock()
+	defer e.calls.Unlock()
 
-		// TODO(jaylim-crl): Once tenant directories have been updated to return
-		// the Tenant field, the `else` block can be removed. We should also
-		// return an error if the Tenant field is nil then.
-		if tenantResp.Tenant != nil {
-			e.ClusterName = tenantResp.Tenant.ClusterName
-		} else {
-			e.ClusterName = tenantResp.ClusterName
-		}
-	})
+	// If initialized recently, no-op, and return any error that occurred.
+	if !e.canInitializeLocked() {
+		return e.calls.initError
+	}
 
-	// If Initialize has already been called, return any error that occurred.
-	return e.initError
+	log.Infof(ctx, "refreshing tenant %d metadata", e.TenantID)
+
+	tenantResp, err := client.GetTenant(ctx, &GetTenantRequest{TenantID: e.TenantID.ToUint64()})
+	if err != nil {
+		e.calls.initError = err
+		return err
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// TODO(jaylim-crl): Once tenant directories have been updated to return
+	// the Tenant field, the `else` block can be removed. We should also
+	// return an error if the Tenant field is nil then.
+	if tenantResp.Tenant != nil {
+		e.mu.clusterName = tenantResp.Tenant.ClusterName
+	} else {
+		e.mu.clusterName = tenantResp.ClusterName
+	}
+	return nil
 }
 
 // RefreshPods makes a synchronous directory server call to fetch the latest
@@ -104,7 +118,7 @@ func (e *tenantEntry) RefreshPods(ctx context.Context, client DirectoryClient) e
 	defer e.calls.Unlock()
 
 	// If refreshed recently, no-op.
-	if !e.canRefreshLocked() {
+	if !e.canRefreshPodsLocked() {
 		return nil
 	}
 
@@ -117,36 +131,36 @@ func (e *tenantEntry) RefreshPods(ctx context.Context, client DirectoryClient) e
 // AddPod inserts the given pod into the tenant's list of pods. If it is
 // already present, then AddPod updates the pod entry and returns false.
 func (e *tenantEntry) AddPod(pod *Pod) bool {
-	e.pods.Lock()
-	defer e.pods.Unlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
-	for i, existing := range e.pods.pods {
+	for i, existing := range e.mu.pods {
 		if existing.Addr == pod.Addr {
 			// e.pods.pods is copy on write. Whenever modifications are made,
 			// we must make a copy to avoid accidentally mutating the slice
 			// retrieved by GetPods.
-			pods := e.pods.pods
-			e.pods.pods = make([]*Pod, len(pods))
-			copy(e.pods.pods, pods)
-			e.pods.pods[i] = pod
+			pods := e.mu.pods
+			e.mu.pods = make([]*Pod, len(pods))
+			copy(e.mu.pods, pods)
+			e.mu.pods[i] = pod
 			return false
 		}
 	}
 
-	e.pods.pods = append(e.pods.pods, pod)
+	e.mu.pods = append(e.mu.pods, pod)
 	return true
 }
 
 // RemovePodByAddr removes the pod with the given IP address from the tenant's
 // list of pod addresses. If it was not present, RemovePodByAddr returns false.
 func (e *tenantEntry) RemovePodByAddr(addr string) bool {
-	e.pods.Lock()
-	defer e.pods.Unlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
-	for i, existing := range e.pods.pods {
+	for i, existing := range e.mu.pods {
 		if existing.Addr == addr {
-			copy(e.pods.pods[i:], e.pods.pods[i+1:])
-			e.pods.pods = e.pods.pods[:len(e.pods.pods)-1]
+			copy(e.mu.pods[i:], e.mu.pods[i+1:])
+			e.mu.pods = e.mu.pods[:len(e.mu.pods)-1]
 			return true
 		}
 	}
@@ -155,9 +169,9 @@ func (e *tenantEntry) RemovePodByAddr(addr string) bool {
 
 // GetPods gets the current list of pods within scope of lock and returns them.
 func (e *tenantEntry) GetPods() []*Pod {
-	e.pods.Lock()
-	defer e.pods.Unlock()
-	return e.pods.pods
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.mu.pods
 }
 
 // EnsureTenantPod ensures that at least one RUNNING SQL process exists for this
@@ -216,6 +230,34 @@ func (e *tenantEntry) EnsureTenantPod(
 	return pods, nil
 }
 
+// UpdateMetadata updates the current entry with the given state.
+//
+// TODO(jaylim-crl): Add more metadata here (e.g. IP allowlists and private
+// endpoints).
+//
+// TODO(jaylim-crl): The directory server will emit an event each time the
+// tenant gets scaled up / down. We should add a checksum to the Tenant struct
+// so that we don't need to perform an update all the time.
+func (e *tenantEntry) UpdateMetadata(tenant *Tenant) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// In theory, we don't need to update this since the cluster name should not
+	// change.
+	e.mu.clusterName = tenant.ClusterName
+}
+
+// ToProto returns a tenant.Tenant object representing the tenant entry.
+func (e *tenantEntry) ToProto() *Tenant {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return &Tenant{
+		TenantID:    e.TenantID.ToUint64(),
+		ClusterName: e.mu.clusterName,
+	}
+}
+
 // fetchPodsLocked makes a synchronous directory server call to get the latest
 // information about the tenant's available pods, such as their IP addresses.
 //
@@ -235,28 +277,40 @@ func (e *tenantEntry) fetchPodsLocked(
 
 	// Need to lock in case another thread is reading the IP addresses (e.g. in
 	// ChoosePodAddr).
-	e.pods.Lock()
-	defer e.pods.Unlock()
-	e.pods.pods = list.Pods
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.mu.pods = list.Pods
 
-	if len(e.pods.pods) != 0 {
-		log.Infof(ctx, "fetched IP addresses: %v", e.pods.pods)
+	if len(e.mu.pods) != 0 {
+		log.Infof(ctx, "fetched IP addresses: %v", e.mu.pods)
 	}
 
-	return e.pods.pods, nil
+	return e.mu.pods, nil
 }
 
-// canRefreshLocked returns true if it's been at least X milliseconds since the
-// last time the tenant pod information was refreshed. This has the effect of
-// rate limiting RefreshPods calls.
+// canRefreshPodsLocked returns true if it's been at least X milliseconds since
+// the last time the tenant pod information was refreshed. This has the effect
+// of rate limiting RefreshPods calls.
 //
-// NOTE: Caller must lock the "calls" mutex before calling canRefreshLocked.
-func (e *tenantEntry) canRefreshLocked() bool {
+// NOTE: Caller must lock the "calls" mutex before calling canRefreshPodsLocked.
+func (e *tenantEntry) canRefreshPodsLocked() bool {
 	now := timeutil.Now()
-	if now.Sub(e.calls.lastRefresh) < e.RefreshDelay {
+	if now.Sub(e.calls.lastPodRefresh) < e.RefreshDelay {
 		return false
 	}
-	e.calls.lastRefresh = now
+	e.calls.lastPodRefresh = now
+	return true
+}
+
+// canInitializeLocked returns true if it's been at least X milliseconds since
+// the last time the tenant metadata was refreshed. This has the effect of rate
+// limiting Initialize calls.
+func (e *tenantEntry) canInitializeLocked() bool {
+	now := timeutil.Now()
+	if now.Sub(e.calls.lastMetadataRefresh) < e.MetadataRefreshDelay {
+		return false
+	}
+	e.calls.lastMetadataRefresh = now
 	return true
 }
 

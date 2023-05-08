@@ -151,8 +151,10 @@ service Directory {
   // does not exist, GetTenant returns a GRPC NotFound error.
   rpc GetTenant(GetTenantRequest) returns (GetTenantResponse);
   // WatchTenants gets a stream of tenant metadata change notifications.
-  // Notifications are sent when a tenant is created, destroyed, or modified.
-  // When WatchTenants is first called, it returns notifications for all
-  // existing tenants.
+  // Notifications are sent when a tenant is created or modified. When
+  // WatchTenants is first called, it returns notifications for all existing
+  // tenants.
+  //
+  // Note that this does not return a notification for deleted tenants.
   rpc WatchTenants(WatchTenantsRequest) returns (stream WatchTenantsResponse);
 }
