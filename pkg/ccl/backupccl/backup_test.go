@@ -10147,7 +10147,11 @@ func TestBackupRestoreTelemetryForPublicSchema(t *testing.T) {
 	// event.
 	beforeRestore := timeutil.Now()
 	restoreQuery := `RESTORE system.public.* FROM LATEST IN $1 WITH into_db=$2`
-	sqlDB.Exec(t, restoreQuery, loc1, "restore_system")
+
+	// This particular restore should error out due to the fact that we don't
+	// restore some system tables such as the leases table. The expected key
+	// rewriter error is just the first error that we encounter.
+	sqlDB.ExpectErr(t, "no rewrite for span", restoreQuery, loc1, "restore_system")
 
 	expectedRestoreEvent := eventpb.RecoveryEvent{
 		CommonEventDetails: logpb.CommonEventDetails{
