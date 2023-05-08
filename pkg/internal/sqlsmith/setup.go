@@ -167,6 +167,7 @@ func randTablesN(r *rand.Rand, n int, prefix string, isMultiRegion bool) []strin
 const (
 	seedTable = `
 BEGIN; CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning'); COMMIT;
+BEGIN; CREATE TYPE dimensions AS (length INT, width INT, height INT); COMMIT;
 BEGIN;
 CREATE TABLE IF NOT EXISTS seed AS
 	SELECT
@@ -186,7 +187,8 @@ CREATE TABLE IF NOT EXISTS seed AS
 		substring('00000000-0000-0000-0000-' || g::STRING || '00000000000', 1, 36)::UUID AS _uuid,
 		'0.0.0.0'::INET + g AS _inet,
 		g::STRING::JSONB AS _jsonb,
-		enum_range('hello'::greeting)[g] as _enum
+		enum_range('hello'::greeting)[g] as _enum,
+		(g, g, g)::dimensions AS _composite
 	FROM
 		generate_series(1, 5) AS g;
 COMMIT;
