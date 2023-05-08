@@ -66,7 +66,7 @@ func (stmt Statement) StringWithFlags(flags tree.FmtFlags) string {
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner    scanner.PLPGSQLScanner
+	scanner    scanner.PLpgSQLScanner
 	lexer      lexer
 	parserImpl plpgsqlParserImpl
 	tokBuf     [8]plpgsqlSymType

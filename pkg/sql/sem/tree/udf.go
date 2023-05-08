@@ -242,8 +242,8 @@ const (
 	FunctionLangUnknown FunctionLanguage = "unknown"
 	// FunctionLangSQL represents SQL language.
 	FunctionLangSQL FunctionLanguage = "SQL"
-	// FunctionLangPlPgSQL represents the PL/pgSQL procedural language.
-	FunctionLangPlPgSQL FunctionLanguage = "plpgsql"
+	// FunctionLangPLpgSQL represents the PL/pgSQL procedural language.
+	FunctionLangPLpgSQL FunctionLanguage = "plpgsql"
 )
 
 // Format implements the NodeFormatter interface.
@@ -260,7 +260,7 @@ func AsFunctionLanguage(lang string) (FunctionLanguage, error) {
 	case "sql":
 		return FunctionLangSQL, nil
 	case "plpgsql":
-		return FunctionLangPlPgSQL, nil
+		return FunctionLangPLpgSQL, nil
 	}
 	return FunctionLanguage(lang), nil
 }

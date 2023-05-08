@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -84,6 +85,14 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			// Check the language here, before attempting to parse the function body.
 			if _, err := funcdesc.FunctionLangToProto(opt); err != nil {
 				panic(err)
+			}
+
+			if opt == tree.FunctionLangPLpgSQL {
+				if err := utils.ParseAndCollectTelemetryForPLpgSQLFunc(cf); err != nil {
+					// Until plpgsql is fully implemented DealWithPlpgSQlFunc will always
+					// return an error.
+					panic(err)
+				}
 			}
 		}
 	}
