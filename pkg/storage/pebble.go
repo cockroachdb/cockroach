@@ -757,6 +757,7 @@ type Pebble struct {
 	properties   roachpb.StoreProperties
 	settings     *cluster.Settings
 	encryption   *EncryptionEnv
+	fileLock     *pebble.Lock
 	fileRegistry *PebbleFileRegistry
 
 	// Stats updated by pebble.EventListener invocations, and returned in
@@ -939,6 +940,27 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 			filesystemCloser.Close()
 		}
 	}()
+	if !opts.ReadOnly {
+		if err := opts.FS.MkdirAll(cfg.Dir, os.ModePerm); err != nil {
+			return nil, err
+		}
+	}
+
+	// Acquire the database lock in the store directory to ensure that no other
+	// process is simultaneously accessing the same store. We manually acquire
+	// the database lock here (rather than allowing Pebble to acquire the lock)
+	// so that we hold the lock when we initialize encryption-at-rest subsystem.
+	opts.Lock, err = pebble.LockDirectory(cfg.Dir, opts.FS)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		// If we fail to open the database, release the file lock before
+		// returning.
+		if err != nil {
+			err = errors.WithSecondaryError(err, opts.Lock.Close())
+		}
+	}()
 
 	// The context dance here is done so that we have a clean context without
 	// timeouts that has a copy of the log tags.
@@ -1024,6 +1046,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		properties:       storeProps,
 		settings:         cfg.Settings,
 		encryption:       encryptionEnv,
+		fileLock:         opts.Lock,
 		fileRegistry:     fileRegistry,
 		unencryptedFS:    unencryptedFS,
 		logger:           opts.LoggerAndTracer,
@@ -1309,6 +1332,7 @@ func (p *Pebble) Close() {
 	if p.closer != nil {
 		handleErr(p.closer.Close())
 	}
+	handleErr(p.fileLock.Close())
 }
 
 // aggregateIterStats is propagated to all of an engine's iterators, aggregating
