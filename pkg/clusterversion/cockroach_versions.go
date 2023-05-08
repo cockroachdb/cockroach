@@ -534,6 +534,10 @@ const (
 	// indexes are enabled.
 	V23_2_PartiallyVisibleIndexes
 
+	// V23_2_EnableRangeCoalescingForSystemTenant enables range coalescing for
+	// the system tenant.
+	V23_2_EnableRangeCoalescingForSystemTenant
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -926,6 +930,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_PartiallyVisibleIndexes,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 6},
+	},
+	{
+		Key:     V23_2_EnableRangeCoalescingForSystemTenant,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 8},
 	},
 
 	// *************************************************
