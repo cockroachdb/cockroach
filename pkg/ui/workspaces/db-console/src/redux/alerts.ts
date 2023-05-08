@@ -541,13 +541,14 @@ export const clusterPreserveDowngradeOptionOvertimeSelector = createSelector(
     }
     const lastUpdatedTime = moment.unix(longToInt(lastUpdated.seconds));
     const diff = moment.duration(moment().diff(lastUpdatedTime)).asHours();
-    const maximumSetTime = 48;
-    if (diff < maximumSetTime) {
+    if (diff <= 0) {
       return undefined;
     }
     return {
       level: AlertLevel.WARNING,
-      title: `Cluster setting cluster.preserve_downgrade_option has been set for greater than ${maximumSetTime} hours`,
+      title: `Cluster setting cluster.preserve_downgrade_option has been set for ${diff.toFixed(
+        1,
+      )} hours`,
       text: `You can see a list of all nodes and their versions below.
         Once all cluster nodes have been upgraded, and you have validated the stability and performance of
         your workload on the new version, you must reset the cluster.preserve_downgrade_option cluster
