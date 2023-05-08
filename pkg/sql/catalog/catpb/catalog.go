@@ -99,6 +99,14 @@ func (as *AutoStatsSettings) NoAutoStatsSettingsOverrides() bool {
 	return true
 }
 
+// TTLDefaultExpirationColumnName is the column name representing the expiration
+// column for TTL.
+const TTLDefaultExpirationColumnName = "crdb_internal_expiration"
+
+// DefaultTTLExpirationExpr is default TTL expression when
+// ttl_expiration_expression is not specified
+var DefaultTTLExpirationExpr = Expression(TTLDefaultExpirationColumnName)
+
 // HasDurationExpr is a utility method to determine if ttl_expires_after was set
 func (rowLevelTTL *RowLevelTTL) HasDurationExpr() bool {
 	return rowLevelTTL.DurationExpr != ""
@@ -107,4 +115,19 @@ func (rowLevelTTL *RowLevelTTL) HasDurationExpr() bool {
 // HasExpirationExpr is a utility method to determine if ttl_expiration_expression was set
 func (rowLevelTTL *RowLevelTTL) HasExpirationExpr() bool {
 	return rowLevelTTL.ExpirationExpr != ""
+}
+
+// DeletionCronOrDefault returns the DeletionCron or the global default.
+func (m *RowLevelTTL) DeletionCronOrDefault() string {
+	if override := m.DeletionCron; override != "" {
+		return override
+	}
+	return "@hourly"
+}
+
+func (rowLevelTTL *RowLevelTTL) GetTTLExpr() Expression {
+	if rowLevelTTL.HasExpirationExpr() {
+		return rowLevelTTL.ExpirationExpr
+	}
+	return DefaultTTLExpirationExpr
 }

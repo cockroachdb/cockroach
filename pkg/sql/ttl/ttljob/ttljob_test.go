@@ -589,7 +589,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 		numSplits            int
 		forceNonMultiTenant  bool
 		expirationExpression string
-		addRow               func(th *rowLevelTTLTestJobTestHelper, createTableStmt *tree.CreateTable, ts time.Time)
+		addRow               func(th *rowLevelTTLTestJobTestHelper, t *testing.T, createTableStmt *tree.CreateTable, ts time.Time)
 	}
 	// Add some basic one and three column row-level TTL tests.
 	testCases := []testCase{
@@ -711,7 +711,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			numExpiredRows:       1001,
 			numNonExpiredRows:    5,
 			expirationExpression: "expire_at",
-			addRow: func(th *rowLevelTTLTestJobTestHelper, _ *tree.CreateTable, ts time.Time) {
+			addRow: func(th *rowLevelTTLTestJobTestHelper, t *testing.T, _ *tree.CreateTable, ts time.Time) {
 				th.sqlDB.Exec(
 					t,
 					"INSERT INTO tbl (expire_at) VALUES ($1)",
@@ -746,7 +746,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 		)
 	}
 
-	defaultAddRow := func(th *rowLevelTTLTestJobTestHelper, createTableStmt *tree.CreateTable, ts time.Time) {
+	defaultAddRow := func(th *rowLevelTTLTestJobTestHelper, t *testing.T, createTableStmt *tree.CreateTable, ts time.Time) {
 		insertColumns := []string{"crdb_internal_expiration"}
 		placeholders := []string{"$1"}
 		values := []interface{}{ts}
@@ -854,10 +854,10 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			// Add expired and non-expired rows.
 
 			for i := 0; i < tc.numExpiredRows; i++ {
-				addRow(th, createTableStmt, timeutil.Now().Add(-time.Hour))
+				addRow(th, t, createTableStmt, timeutil.Now().Add(-time.Hour))
 			}
 			for i := 0; i < tc.numNonExpiredRows; i++ {
-				addRow(th, createTableStmt, timeutil.Now().Add(time.Hour*24*30))
+				addRow(th, t, createTableStmt, timeutil.Now().Add(time.Hour*24*30))
 			}
 
 			for _, stmt := range tc.postSetup {
