@@ -38,8 +38,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// completeStreamIngestion terminates the stream as of specified time.
-func completeStreamIngestion(
+// applyCutoverTime modifies the consumer job record with a cutover time and
+// unpauses the job if necessary.
+func applyCutoverTime(
 	ctx context.Context,
 	jobRegistry *jobs.Registry,
 	txn isql.Txn,
