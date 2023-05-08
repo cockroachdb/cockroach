@@ -52,8 +52,15 @@ func parse(input string) (*AuditConfig, error) {
 
 func parseAuditSetting(inputLine rulebasedscanner.Line) (setting AuditSetting, err error) {
 	fieldIdx := 0
+	expectedNumFields := 2
 	setting.input = inputLine.Input
 	line := inputLine.Tokens
+
+	if len(line) > expectedNumFields {
+		return setting, errors.WithHint(
+			errors.New("too many fields specified"),
+			"Expected only 2 fields (role, statement type)")
+	}
 
 	// Read the user/role type.
 	if len(line[fieldIdx]) > 1 {

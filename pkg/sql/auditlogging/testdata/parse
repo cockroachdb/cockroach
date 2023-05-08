@@ -8,6 +8,15 @@ error: end-of-line before statement types specification
 
 subtest end
 
+subtest too_many_inputs
+
+line
+test_role DML unexpected
+----
+error: too many fields specified
+
+subtest end
+
 subtest invalid_role_inputs
 
 # Multi-role input
