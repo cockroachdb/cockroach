@@ -13,7 +13,7 @@ import Long from "long";
 
 export type Stmt =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-type Txn =
+export type Txn =
   cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 type ILatencyInfo = cockroach.sql.ILatencyInfo;
 
@@ -27,6 +27,7 @@ const latencyInfo: Required<ILatencyInfo> = {
 
 const baseStmt: Partial<Stmt> = {
   id: Long.fromInt(11871906682067483964),
+  txn_fingerprint_ids: [Long.fromInt(1)],
   key: {
     key_data: {
       query: "SELECT node_id FROM system.statement_statistics",
@@ -193,13 +194,18 @@ const assignObjectPropsIfExists = <T extends { [key: string]: unknown }>(
   overrides: Partial<T>,
 ): T => {
   const copiedObj: T = { ...baseObj };
+
   for (const prop in baseObj) {
     if (overrides[prop] === undefined) {
       continue;
     }
 
     const val = copiedObj[prop];
-    if (typeof val === "object") {
+    if (
+      typeof val === "object" &&
+      !Array.isArray(val) &&
+      overrides[prop] != null
+    ) {
       copiedObj[prop] = assignObjectPropsIfExists(
         val as Record<string, unknown>,
         overrides[prop] as Record<string, unknown>,
