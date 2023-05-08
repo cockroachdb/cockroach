@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -387,7 +389,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
 				// NB: we have to wrap the existing error here as consumers of this code
 				// look at the root cause to sniff out the changed descriptor.
-				err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
+				err = benignerror.New(wrapDescChangedError(err, desc, actualDesc))
 			}
 			return reply, err
 		}
@@ -421,7 +423,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
 			// NB: we have to wrap the existing error here as consumers of this code
 			// look at the root cause to sniff out the changed descriptor.
-			err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
+			err = benignerror.New(wrapDescChangedError(err, desc, actualDesc))
 		}
 		return reply, errors.Wrapf(err, "split at key %s failed", splitKey)
 	}
@@ -497,7 +499,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		if ok, actualDesc := maybeDescriptorChangedError(desc, err); ok {
 			// NB: we have to wrap the existing error here as consumers of this code
 			// look at the root cause to sniff out the changed descriptor.
-			err = &benignError{wrapDescChangedError(err, desc, actualDesc)}
+			err = benignerror.New(wrapDescChangedError(err, desc, actualDesc))
 		}
 		return reply, err
 	}
@@ -2437,7 +2439,7 @@ func execChangeReplicasTxn(
 			// as "secondary payload", in case the error object makes it way
 			// to logs or telemetry during a crash.
 			err = errors.WithSecondaryError(newDescChangedError(referenceDesc, actualDesc), err)
-			err = &benignError{err}
+			err = benignerror.New(err)
 		}
 		return nil, errors.Wrapf(err, "change replicas of r%d failed", referenceDesc.RangeID)
 	}
@@ -2780,7 +2782,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that
 		// haven't woken up yet.
-		retErr = &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
+		retErr = benignerror.New(errors.Wrap(errMarkSnapshotError, "raft status not initialized"))
 		return
 	}
 
@@ -3751,7 +3753,7 @@ func RelocateOne(
 
 	var ops []kvpb.ReplicationChange
 	if shouldAdd && shouldRemove {
-		ops, _, err = replicationChangesForRebalance(
+		ops, _, err = plan.ReplicationChangesForRebalance(
 			ctx, desc, len(existingVoters), additionTarget, removalTarget, args.targetType,
 		)
 		if err != nil {
@@ -3918,7 +3920,9 @@ func (r *Replica) adminScatter(
 	var allowLeaseTransfer bool
 	var err error
 	requeue := true
-	canTransferLease := func(ctx context.Context, repl *Replica) bool { return allowLeaseTransfer }
+	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica) bool {
+		return allowLeaseTransfer
+	}
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
 			break

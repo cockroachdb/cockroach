@@ -540,7 +540,7 @@ func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
 
 		acc.AddReplica(candidateReplica{
 			Replica: repl,
-			usage:   RangeUsageInfoForRepl(repl),
+			usage:   repl.RangeUsageInfo(),
 		})
 	}
 	rr.Update(acc)
