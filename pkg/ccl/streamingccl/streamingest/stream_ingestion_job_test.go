@@ -387,7 +387,7 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	canContinue <- struct{}{}
 	srcTime = c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(replicationJobID))
-	c.Cutover(producerJobID, replicationJobID, srcTime.GoTime())
+	c.Cutover(producerJobID, replicationJobID, srcTime.GoTime(), false)
 	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(replicationJobID))
 }
 

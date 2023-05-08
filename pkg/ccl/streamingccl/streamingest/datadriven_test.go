@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -72,6 +73,17 @@ import (
 // - query-sql as=<source-system | source-tenant | destination-system | destination-tenant>
 // Executes the specified SQL query as the specified tenant, and prints the
 // results.
+//
+//   - job as=<source-system | destination-system > args
+//
+// Takes some action on the replication job. Some arguments:
+//
+//   - wait-for-state=<succeeded|paused|failed|reverting|cancelled>: wait for
+//     the job referenced by the tag to reach the specified state.
+//
+//   - pause: pauses the job.
+//
+//   - resume: resumes the job.
 //
 // - skip issue-num=N
 // Skips the test.
@@ -156,25 +168,20 @@ func TestDataDriven(t *testing.T) {
 				if ok {
 					cutoverTime = varValue
 				}
+				var async bool
+				if d.HasArg("async") {
+					async = true
+				}
 				timestamp, _, err := tree.ParseDTimestamp(nil, cutoverTime, time.Microsecond)
 				require.NoError(t, err)
-				ds.replicationClusters.Cutover(ds.producerJobID, ds.replicationJobID, timestamp.Time)
+				ds.replicationClusters.Cutover(ds.producerJobID, ds.replicationJobID, timestamp.Time, async)
+				return ""
 
 			case "exec-sql":
 				var as string
 				d.ScanArgs(t, "as", &as)
-				switch as {
-				case "source-system":
-					ds.replicationClusters.SrcSysSQL.Exec(t, d.Input)
-				case "source-tenant":
-					ds.replicationClusters.SrcTenantSQL.Exec(t, d.Input)
-				case "destination-system":
-					ds.replicationClusters.DestSysSQL.Exec(t, d.Input)
-				case "destination-tenant":
-					ds.replicationClusters.DestTenantSQL.Exec(t, d.Input)
-				default:
-					t.Fatalf("unsupported value to run SQL query as: %s", as)
-				}
+				ds.execAs(t, as, d.Input)
+				return ""
 
 			case "query-sql":
 				var as string
@@ -224,6 +231,47 @@ func TestDataDriven(t *testing.T) {
 				time.Sleep(time.Duration(ms) * time.Millisecond)
 				return ""
 
+			case "job":
+				var (
+					as     string
+					jobID  int
+					runner *sqlutils.SQLRunner
+				)
+				d.ScanArgs(t, "as", &as)
+				if as == "source-system" {
+					jobID = ds.producerJobID
+					runner = ds.replicationClusters.SrcSysSQL
+				} else if as == "destination-system" {
+					jobID = ds.replicationJobID
+					runner = ds.replicationClusters.DestSysSQL
+				} else {
+					t.Fatalf("job cmd only works on consumer and producer jobs run on system tenant")
+				}
+				if d.HasArg("pause") {
+					ds.execAs(t, as, fmt.Sprintf(`PAUSE JOB %d`, jobID))
+				} else if d.HasArg("resume") {
+					ds.execAs(t, as, fmt.Sprintf(`RESUME JOB %d`, jobID))
+				} else if d.HasArg("wait-for-state") {
+					var state string
+					d.ScanArgs(t, "wait-for-state", &state)
+					jobPBID := jobspb.JobID(jobID)
+					switch state {
+					case "succeeded":
+						jobutils.WaitForJobToSucceed(t, runner, jobPBID)
+					case "cancelled":
+						jobutils.WaitForJobToCancel(t, runner, jobPBID)
+					case "paused":
+						jobutils.WaitForJobToPause(t, runner, jobPBID)
+					case "failed":
+						jobutils.WaitForJobToFail(t, runner, jobPBID)
+					case "reverting":
+						jobutils.WaitForJobReverting(t, runner, jobPBID)
+					default:
+						t.Fatalf("unknown state %s", state)
+					}
+				}
+				return ""
+
 			default:
 				t.Fatalf("unsupported instruction: %s", d.Cmd)
 			}
@@ -263,6 +311,21 @@ func (d *datadrivenTestState) queryAs(t *testing.T, as, query string) string {
 	output, err := sqlutils.RowsToDataDrivenOutput(rows)
 	require.NoError(t, err)
 	return output
+}
+
+func (d *datadrivenTestState) execAs(t *testing.T, as, query string) {
+	switch as {
+	case "source-system":
+		d.replicationClusters.SrcSysSQL.Exec(t, query)
+	case "source-tenant":
+		d.replicationClusters.SrcTenantSQL.Exec(t, query)
+	case "destination-system":
+		d.replicationClusters.DestSysSQL.Exec(t, query)
+	case "destination-tenant":
+		d.replicationClusters.DestTenantSQL.Exec(t, query)
+	default:
+		t.Fatalf("unsupported value to run SQL query as: %s", as)
+	}
 }
 
 func newDatadrivenTestState() datadrivenTestState {
