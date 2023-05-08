@@ -10167,6 +10167,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		return q
 	})
 	test(true, func(q *testQuiescer) *testQuiescer {
+		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, false)
 		q.lease.Epoch = 0
 		q.lease.Expiration = &hlc.Timestamp{
 			WallTime: timeutil.Now().Add(time.Minute).Unix(),

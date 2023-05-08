@@ -216,8 +216,12 @@ func setupLeaseRenewerTest(
 	cycles *int32, /* atomic */
 	_ serverutils.TestClusterInterface,
 ) {
+	st := cluster.MakeTestingClusterSettings()
+	ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
 	cycles = new(int32)
 	var args base.TestClusterArgs
+	args.ServerArgs.Settings = st
 	args.ServerArgs.Knobs.Store = &StoreTestingKnobs{
 		LeaseRenewalOnPostCycle: func() {
 			atomic.AddInt32(cycles, 1)
