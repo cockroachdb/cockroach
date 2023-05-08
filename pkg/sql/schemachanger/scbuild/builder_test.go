@@ -305,13 +305,13 @@ func TestBuildIsMemoryMonitored(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	monitor.Start(ctx, nil, mon.NewStandaloneBudget(1.049e+7 /* 10MiB */))
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(5*1024*1024 /* 5MiB */))
 	memAcc := monitor.MakeBoundAccount()
 	sctestutils.WithBuilderDependenciesFromTestServer(s, func(dependencies scbuild.Dependencies) {
 		stmt, err := parser.ParseOne(`DROP DATABASE defaultdb CASCADE`)
 		require.NoError(t, err)
 		_, err = scbuild.Build(ctx, dependencies, scpb.CurrentState{}, stmt.AST, &memAcc)
-		require.Regexp(t, `test-sc-build-mon: memory budget exceeded: .*`, err.Error())
+		require.ErrorContainsf(t, err, `test-sc-build-mon: memory budget exceeded:`, "got a memory usage of: %d", memAcc.Allocated())
 	})
 
 }

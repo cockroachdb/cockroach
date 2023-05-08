@@ -29,15 +29,6 @@ parent
 BackReferencedIDs:
   - 105
 ElementState:
-- Table:
-    isTemporary: false
-    tableId: 104
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
-    tableId: 104
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -68,22 +59,9 @@ ElementState:
     pgAttributeNum: 4.294967295e+09
     tableId: 104
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
-    tableId: 104
-    temporaryIndexId: 0
-  Status: PUBLIC
-- TableData:
-    databaseId: 100
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 104
   Status: PUBLIC
 - ColumnName:
@@ -99,6 +77,11 @@ ElementState:
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
+    tableId: 104
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
     tableId: 104
   Status: PUBLIC
 - ColumnType:
@@ -182,16 +165,6 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnNotNull:
-    columnId: 1
-    indexIdForValidation: 0
-    tableId: 104
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: parent_pkey
-    tableId: 104
-  Status: PUBLIC
 - IndexColumn:
     columnId: 1
     direction: ASC
@@ -206,6 +179,11 @@ ElementState:
     indexId: 1
     tableId: 104
   Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: parent_pkey
+    tableId: 104
+  Status: PUBLIC
 - Namespace:
     databaseId: 100
     descriptorId: 104
@@ -215,6 +193,32 @@ ElementState:
 - Owner:
     descriptorId: 104
     owner: root
+  Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 104
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 104
+    schemaId: 101
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 104
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 104
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
@@ -228,24 +232,52 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 104
-    schemaId: 101
-  Status: PUBLIC
 
 decompose
 tbl
 ----
 BackReferencedIDs:
 ElementState:
-- Table:
-    isTemporary: false
+- CheckConstraint:
+    columnIds:
+    - 1
+    constraintId: 3
+    expr: id > 0:::INT8
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    referencedColumnIds:
+    - 1
     tableId: 105
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
+- CheckConstraint:
+    columnIds:
+    - 1
+    constraintId: 8
+    expr: '[FUNCTION 100106](id) > 1:::INT8'
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    referencedColumnIds:
+    - 1
     tableId: 105
+    usesFunctionIds:
+    - 106
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
+- CheckConstraintUnvalidated:
+    columnIds:
+    - 1
+    constraintId: 4
+    expr: id < 10:::INT8
+    referencedColumnIds:
+    - 1
+    tableId: 105
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
 - Column:
     columnId: 1
@@ -297,130 +329,15 @@ ElementState:
     pgAttributeNum: 4.294967295e+09
     tableId: 105
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
-    tableId: 105
-    temporaryIndexId: 0
-  Status: PUBLIC
-- SecondaryIndex:
-    constraintId: 0
-    expr: id > 0:::INT8
-    geoConfig: null
-    indexId: 2
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: false
-    referencedColumnIds:
-    - 1
-    sharding: null
-    sourceIndexId: 0
-    tableId: 105
-    temporaryIndexId: 0
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- UniqueWithoutIndexConstraint:
-    columnIds:
-    - 3
-    constraintId: 5
-    indexIdForValidation: 0
-    predicate: null
+- ColumnComment:
+    columnId: 1
+    comment: id is a identifier
+    pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
-- UniqueWithoutIndexConstraintUnvalidated:
-    columnIds:
-    - 3
-    constraintId: 6
-    predicate: null
-    tableId: 105
-  Status: PUBLIC
-- CheckConstraint:
-    columnIds:
-    - 1
-    constraintId: 3
-    expr: id > 0:::INT8
-    fromHashShardedColumn: false
-    indexIdForValidation: 0
-    referencedColumnIds:
-    - 1
-    tableId: 105
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- CheckConstraint:
-    columnIds:
-    - 1
-    constraintId: 8
-    expr: '[FUNCTION 100106](id) > 1:::INT8'
-    fromHashShardedColumn: false
-    indexIdForValidation: 0
-    referencedColumnIds:
-    - 1
-    tableId: 105
-    usesFunctionIds:
-    - 106
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- CheckConstraintUnvalidated:
-    columnIds:
-    - 1
-    constraintId: 4
-    expr: id < 10:::INT8
-    referencedColumnIds:
-    - 1
-    tableId: 105
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- ForeignKeyConstraint:
-    columnIds:
-    - 1
-    compositeKeyMatchMethod: SIMPLE
-    constraintId: 2
-    indexIdForValidation: 0
-    onDeleteAction: NO_ACTION
-    onUpdateAction: NO_ACTION
-    referencedColumnIds:
-    - 1
-    referencedTableId: 104
-    tableId: 105
-  Status: PUBLIC
-- ForeignKeyConstraintUnvalidated:
-    columnIds:
-    - 1
-    compositeKeyMatchMethod: SIMPLE
-    constraintId: 7
-    onDeleteAction: NO_ACTION
-    onUpdateAction: NO_ACTION
-    referencedColumnIds:
-    - 1
-    referencedTableId: 104
-    tableId: 105
-  Status: PUBLIC
-- TableComment:
-    comment: tbl is good table
-    tableId: 105
-  Status: PUBLIC
-- TableZoneConfig:
-    tableId: 105
-  Status: PUBLIC
-- TableData:
-    databaseId: 100
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 105
   Status: PUBLIC
 - ColumnName:
@@ -446,6 +363,16 @@ ElementState:
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
+    tableId: 105
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 105
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 2
+    indexIdForValidation: 0
     tableId: 105
   Status: PUBLIC
 - ColumnType:
@@ -583,35 +510,74 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: id is a identifier
-    pgAttributeNum: 1
+- ConstraintComment:
+    comment: must have a parent
+    constraintId: 2
     tableId: 105
   Status: PUBLIC
-- ColumnNotNull:
-    columnId: 1
+- ConstraintComment:
+    comment: primary key
+    constraintId: 1
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 2
+    name: myfk
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 3
+    name: mycheck1
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 4
+    name: mycheck2
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 5
+    name: myuwi1
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 6
+    name: myuwi2
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 7
+    name: myfk2
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 8
+    name: mycheck3
+    tableId: 105
+  Status: PUBLIC
+- ForeignKeyConstraint:
+    columnIds:
+    - 1
+    compositeKeyMatchMethod: SIMPLE
+    constraintId: 2
     indexIdForValidation: 0
+    onDeleteAction: NO_ACTION
+    onUpdateAction: NO_ACTION
+    referencedColumnIds:
+    - 1
+    referencedTableId: 104
     tableId: 105
   Status: PUBLIC
-- ColumnNotNull:
-    columnId: 2
-    indexIdForValidation: 0
-    tableId: 105
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: tbl_pkey
-    tableId: 105
-  Status: PUBLIC
-- IndexName:
-    indexId: 2
-    name: sec
-    tableId: 105
-  Status: PUBLIC
-- IndexComment:
-    comment: tbl_pkey is a primary key
-    indexId: 1
+- ForeignKeyConstraintUnvalidated:
+    columnIds:
+    - 1
+    compositeKeyMatchMethod: SIMPLE
+    constraintId: 7
+    onDeleteAction: NO_ACTION
+    onUpdateAction: NO_ACTION
+    referencedColumnIds:
+    - 1
+    referencedTableId: 104
     tableId: 105
   Status: PUBLIC
 - IndexColumn:
@@ -674,6 +640,11 @@ ElementState:
     ordinalInKind: 0
     tableId: 105
   Status: PUBLIC
+- IndexComment:
+    comment: tbl_pkey is a primary key
+    indexId: 1
+    tableId: 105
+  Status: PUBLIC
 - IndexData:
     indexId: 1
     tableId: 105
@@ -682,49 +653,14 @@ ElementState:
     indexId: 2
     tableId: 105
   Status: PUBLIC
-- ConstraintWithoutIndexName:
-    constraintId: 2
-    name: myfk
+- IndexName:
+    indexId: 1
+    name: tbl_pkey
     tableId: 105
   Status: PUBLIC
-- ConstraintWithoutIndexName:
-    constraintId: 3
-    name: mycheck1
-    tableId: 105
-  Status: PUBLIC
-- ConstraintWithoutIndexName:
-    constraintId: 4
-    name: mycheck2
-    tableId: 105
-  Status: PUBLIC
-- ConstraintWithoutIndexName:
-    constraintId: 5
-    name: myuwi1
-    tableId: 105
-  Status: PUBLIC
-- ConstraintWithoutIndexName:
-    constraintId: 6
-    name: myuwi2
-    tableId: 105
-  Status: PUBLIC
-- ConstraintWithoutIndexName:
-    constraintId: 7
-    name: myfk2
-    tableId: 105
-  Status: PUBLIC
-- ConstraintWithoutIndexName:
-    constraintId: 8
-    name: mycheck3
-    tableId: 105
-  Status: PUBLIC
-- ConstraintComment:
-    comment: must have a parent
-    constraintId: 2
-    tableId: 105
-  Status: PUBLIC
-- ConstraintComment:
-    comment: primary key
-    constraintId: 1
+- IndexName:
+    indexId: 2
+    name: sec
     tableId: 105
   Status: PUBLIC
 - Namespace:
@@ -736,6 +672,74 @@ ElementState:
 - Owner:
     descriptorId: 105
     owner: root
+  Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 105
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 105
+    schemaId: 101
+  Status: PUBLIC
+- SecondaryIndex:
+    constraintId: 0
+    expr: id > 0:::INT8
+    geoConfig: null
+    indexId: 2
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: false
+    referencedColumnIds:
+    - 1
+    sharding: null
+    sourceIndexId: 0
+    tableId: 105
+    temporaryIndexId: 0
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 105
+  Status: PUBLIC
+- TableComment:
+    comment: tbl is good table
+    tableId: 105
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 105
+  Status: PUBLIC
+- TableZoneConfig:
+    tableId: 105
+  Status: PUBLIC
+- UniqueWithoutIndexConstraint:
+    columnIds:
+    - 3
+    constraintId: 5
+    indexIdForValidation: 0
+    predicate: null
+    tableId: 105
+  Status: PUBLIC
+- UniqueWithoutIndexConstraintUnvalidated:
+    columnIds:
+    - 3
+    constraintId: 6
+    predicate: null
+    tableId: 105
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
@@ -749,10 +753,6 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 105
-    schemaId: 101
-  Status: PUBLIC
 
 setup
 ALTER TABLE parent ADD COLUMN j INT CREATE FAMILY f2;
@@ -764,20 +764,6 @@ parent
 BackReferencedIDs:
   - 105
 ElementState:
-- Table:
-    isTemporary: false
-    tableId: 104
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
-    tableId: 104
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 1
-    name: f2
-    tableId: 104
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -818,22 +804,14 @@ ElementState:
     pgAttributeNum: 4.294967295e+09
     tableId: 104
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 104
-    temporaryIndexId: 0
   Status: PUBLIC
-- TableData:
-    databaseId: 100
+- ColumnFamily:
+    familyId: 1
+    name: f2
     tableId: 104
   Status: PUBLIC
 - ColumnName:
@@ -854,6 +832,11 @@ ElementState:
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
+    tableId: 104
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
     tableId: 104
   Status: PUBLIC
 - ColumnType:
@@ -964,16 +947,6 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnNotNull:
-    columnId: 1
-    indexIdForValidation: 0
-    tableId: 104
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: parent_pkey
-    tableId: 104
-  Status: PUBLIC
 - IndexColumn:
     columnId: 1
     direction: ASC
@@ -998,6 +971,11 @@ ElementState:
     indexId: 1
     tableId: 104
   Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: parent_pkey
+    tableId: 104
+  Status: PUBLIC
 - Namespace:
     databaseId: 100
     descriptorId: 104
@@ -1007,6 +985,32 @@ ElementState:
 - Owner:
     descriptorId: 104
     owner: root
+  Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 104
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 104
+    schemaId: 101
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 104
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 104
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
@@ -1020,10 +1024,6 @@ ElementState:
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
-- SchemaChild:
-    childObjectId: 104
-    schemaId: 101
-  Status: PUBLIC
 
 setup
 CREATE TYPE greeting AS ENUM ('hello');
@@ -1035,15 +1035,6 @@ greeter
 ----
 BackReferencedIDs:
 ElementState:
-- Table:
-    isTemporary: false
-    tableId: 109
-  Status: PUBLIC
-- ColumnFamily:
-    familyId: 0
-    name: primary
-    tableId: 109
-  Status: PUBLIC
 - Column:
     columnId: 1
     generatedAsIdentitySequenceOption: ""
@@ -1084,22 +1075,18 @@ ElementState:
     pgAttributeNum: 4.294967295e+09
     tableId: 109
   Status: PUBLIC
-- PrimaryIndex:
-    constraintId: 1
-    geoConfig: null
-    indexId: 1
-    isConcurrently: false
-    isCreatedExplicitly: false
-    isInverted: false
-    isNotVisible: false
-    isUnique: true
-    sharding: null
-    sourceIndexId: 0
+- ColumnDefaultExpression:
+    columnId: 2
+    expr: unique_rowid()
+    referencedColumnIds: []
     tableId: 109
-    temporaryIndexId: 0
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
-- TableData:
-    databaseId: 100
+- ColumnFamily:
+    familyId: 0
+    name: primary
     tableId: 109
   Status: PUBLIC
 - ColumnName:
@@ -1120,6 +1107,11 @@ ElementState:
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
+    tableId: 109
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 2
+    indexIdForValidation: 0
     tableId: 109
   Status: PUBLIC
 - ColumnType:
@@ -1237,25 +1229,6 @@ ElementState:
       visibleType: 0
       width: 0
   Status: PUBLIC
-- ColumnDefaultExpression:
-    columnId: 2
-    expr: unique_rowid()
-    referencedColumnIds: []
-    tableId: 109
-    usesFunctionIds: []
-    usesSequenceIds: []
-    usesTypeIds: []
-  Status: PUBLIC
-- ColumnNotNull:
-    columnId: 2
-    indexIdForValidation: 0
-    tableId: 109
-  Status: PUBLIC
-- IndexName:
-    indexId: 1
-    name: greeter_pkey
-    tableId: 109
-  Status: PUBLIC
 - IndexColumn:
     columnId: 1
     direction: ASC
@@ -1280,6 +1253,11 @@ ElementState:
     indexId: 1
     tableId: 109
   Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: greeter_pkey
+    tableId: 109
+  Status: PUBLIC
 - Namespace:
     databaseId: 100
     descriptorId: 109
@@ -1289,6 +1267,32 @@ ElementState:
 - Owner:
     descriptorId: 109
     owner: root
+  Status: PUBLIC
+- PrimaryIndex:
+    constraintId: 1
+    geoConfig: null
+    indexId: 1
+    isConcurrently: false
+    isCreatedExplicitly: false
+    isInverted: false
+    isNotVisible: false
+    isUnique: true
+    sharding: null
+    sourceIndexId: 0
+    tableId: 109
+    temporaryIndexId: 0
+  Status: PUBLIC
+- SchemaChild:
+    childObjectId: 109
+    schemaId: 101
+  Status: PUBLIC
+- Table:
+    isTemporary: false
+    tableId: 109
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 109
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 109
@@ -1301,8 +1305,4 @@ ElementState:
     privileges: "2"
     userName: root
     withGrantOption: "2"
-  Status: PUBLIC
-- SchemaChild:
-    childObjectId: 109
-    schemaId: 101
   Status: PUBLIC
