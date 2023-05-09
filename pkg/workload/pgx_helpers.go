@@ -211,7 +211,7 @@ func NewMultiConnPool(
 	}
 
 	if err := m.WarmupConns(ctx, cfg.WarmupConns); err != nil {
-		return nil, err
+		log.Warningf(ctx, "warming up connection pool failed (%v), continuing workload", err)
 	}
 
 	return m, nil
