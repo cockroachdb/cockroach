@@ -107,7 +107,7 @@ func (d *dev) roachprodStress(cmd *cobra.Command, commandLine []string) error {
 	if race {
 		crossArgs = append(crossArgs, "--config=race")
 	}
-	err = d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume)
+	err = d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume, nil)
 	if err != nil {
 		return err
 	}
