@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -189,7 +188,7 @@ func dmsDescribeTasksInput(
 func registerAWSDMS(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "awsdms",
-		Owner:   registry.OwnerSQLSessions, // TODO(otan): add a migrations OWNERS team
+		Owner:   registry.OwnerSQLFoundations, // TODO(otan): add a migrations OWNERS team
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `awsdms`},
 		Run:     runAWSDMS,
