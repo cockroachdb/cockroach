@@ -9277,29 +9277,31 @@ storage_parameter_list:
   }
 
 create_table_as_stmt:
-  CREATE opt_persistence_temp_table TABLE table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data opt_create_table_on_commit
+  CREATE opt_persistence_temp_table TABLE table_name create_as_opt_col_list opt_partition_by_table opt_table_with AS select_stmt opt_create_as_data opt_create_table_on_commit
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: false,
       Defs: $5.tblDefs(),
-      AsSource: $8.slct(),
-      StorageParams: $6.storageParams(),
-      OnCommit: $10.createTableOnCommitSetting(),
+      AsSource: $9.slct(),
+      PartitionByTable: $6.partitionByTable(),
+      StorageParams: $7.storageParams(),
+      OnCommit: $11.createTableOnCommitSetting(),
       Persistence: $2.persistence(),
     }
   }
-| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data opt_create_table_on_commit
+| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_partition_by_table opt_table_with AS select_stmt opt_create_as_data opt_create_table_on_commit
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: true,
       Defs: $8.tblDefs(),
-      AsSource: $11.slct(),
-      StorageParams: $9.storageParams(),
-      OnCommit: $13.createTableOnCommitSetting(),
+      AsSource: $12.slct(),
+      PartitionByTable: $9.partitionByTable(),
+      StorageParams: $10.storageParams(),
+      OnCommit: $14.createTableOnCommitSetting(),
       Persistence: $2.persistence(),
     }
   }

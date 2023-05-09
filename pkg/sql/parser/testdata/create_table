@@ -1838,6 +1838,249 @@ CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) 
 CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
 CREATE TABLE _ (UNIQUE (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
 
+error
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT 1
+----
+at or near "as": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT 1
+                                                                                    ^
+
+parse
+CREATE TABLE a (b) PARTITION BY NOTHING AS SELECT b
+----
+CREATE TABLE a (b) AS SELECT b -- normalized!
+CREATE TABLE a (b) AS SELECT (b) -- fully parenthesized
+CREATE TABLE a (b) AS SELECT b -- literals removed
+CREATE TABLE _ (_) AS SELECT _ -- identifiers removed
+
+parse
+CREATE TABLE a (b) PARTITION ALL BY NOTHING AS SELECT b
+----
+CREATE TABLE a (b) AS SELECT b -- normalized!
+CREATE TABLE a (b) AS SELECT (b) -- fully parenthesized
+CREATE TABLE a (b) AS SELECT b -- literals removed
+CREATE TABLE _ (_) AS SELECT _ -- identifiers removed
+
+parse
+CREATE TABLE a (b) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4))) AS SELECT b
+----
+CREATE TABLE a (b) AS SELECT b -- normalized!
+CREATE TABLE a (b) AS SELECT (b) -- fully parenthesized
+CREATE TABLE a (b) AS SELECT b -- literals removed
+CREATE TABLE _ (_) AS SELECT _ -- identifiers removed
+
+
+parse
+CREATE TABLE a (b) PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4))) AS SELECT b
+----
+CREATE TABLE a (b) AS SELECT b -- normalized!
+CREATE TABLE a (b) AS SELECT (b) -- fully parenthesized
+CREATE TABLE a (b) AS SELECT b -- literals removed
+CREATE TABLE _ (_) AS SELECT _ -- identifiers removed
+
+parse
+CREATE TABLE a (b, c, d) PARTITION BY LIST (b) (
+	PARTITION p1 VALUES IN (1) PARTITION BY LIST (c) (
+		PARTITION p1_1 VALUES IN (3), PARTITION p1_2 VALUES IN (4, 5)
+	), PARTITION p2 VALUES IN (6) PARTITION BY RANGE (c) (
+		PARTITION p2_1 VALUES FROM (7) TO (8) PARTITION BY LIST (d) (
+			PARTITION p2_1_1 VALUES IN (8)
+		)
+	)
+)
+AS
+SELECT b, c, d
+----
+CREATE TABLE a (b, c, d) AS SELECT b, c, d -- normalized!
+CREATE TABLE a (b, c, d) AS SELECT (b), (c), (d) -- fully parenthesized
+CREATE TABLE a (b, c, d) AS SELECT b, c, d -- literals removed
+CREATE TABLE _ (_, _, _) AS SELECT _, _, _ -- identifiers removed
+
+
+parse
+CREATE TABLE a (b) PARTITION BY RANGE (b) (
+   PARTITION p1 VALUES FROM (MINVALUE) TO (1),
+   PARTITION p2 VALUES FROM (2, MAXVALUE) TO (4, 4),
+   PARTITION p3 VALUES FROM (4, 4) TO (MAXVALUE))
+AS
+SELECT 1
+----
+CREATE TABLE a (b) AS SELECT 1 -- normalized!
+CREATE TABLE a (b) AS SELECT (1) -- fully parenthesized
+CREATE TABLE a (b) AS SELECT _ -- literals removed
+CREATE TABLE _ (_) AS SELECT 1 -- identifiers removed
+
+parse
+CREATE TABLE a (b) PARTITION ALL BY RANGE (b) (
+  PARTITION p1 VALUES FROM (MINVALUE) TO (1),
+  PARTITION p2 VALUES FROM (2, MAXVALUE) TO (4, 4),
+  PARTITION p3 VALUES FROM (4, 4) TO (MAXVALUE))
+AS
+SELECT 1
+----
+CREATE TABLE a (b) AS SELECT 1 -- normalized!
+CREATE TABLE a (b) AS SELECT (1) -- fully parenthesized
+CREATE TABLE a (b) AS SELECT _ -- literals removed
+CREATE TABLE _ (_) AS SELECT 1 -- identifiers removed
+
+error
+CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (1))
+AS
+SELECT 1
+----
+at or near "as": syntax error
+DETAIL: source SQL:
+CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (1))
+AS
+^
+
+error
+CREATE TABLE a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT 1
+----
+at or near "as": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT 1
+                                                                             ^
+
+error
+CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT 1
+----
+at or near "as": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT 1
+                                                                                      ^
+
+error
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT a
+----
+at or near "as": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT a
+                                                                              ^
+
+parse
+CREATE TABLE IF NOT EXISTS a (b) PARTITION BY NOTHING AS SELECT b
+----
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT b -- normalized!
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT (b) -- fully parenthesized
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT b -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_) AS SELECT _ -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a (b) PARTITION ALL BY NOTHING AS SELECT b
+----
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT b -- normalized!
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT (b) -- fully parenthesized
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT b -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_) AS SELECT _ -- identifiers removed
+
+error
+CREATE TABLE IF NOT EXISTS a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+CREATE TABLE IF NOT EXISTS a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))
+                                                                                                ^
+HINT: try \h CREATE TABLE
+
+parse
+CREATE TABLE IF NOT EXISTS a (b) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4))) AS SELECT b
+----
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT b -- normalized!
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT (b) -- fully parenthesized
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT b -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_) AS SELECT _ -- identifiers removed
+
+
+parse
+CREATE TABLE IF NOT EXISTS a (b) PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4))) AS SELECT b
+----
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT b -- normalized!
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT (b) -- fully parenthesized
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT b -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_) AS SELECT _ -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a (b, c, d) PARTITION BY LIST (b) (
+	PARTITION p1 VALUES IN (1) PARTITION BY LIST (c) (
+		PARTITION p1_1 VALUES IN (3), PARTITION p1_2 VALUES IN (4, 5)
+	), PARTITION p2 VALUES IN (6) PARTITION BY RANGE (c) (
+		PARTITION p2_1 VALUES FROM (7) TO (8) PARTITION BY LIST (d) (
+			PARTITION p2_1_1 VALUES IN (8)
+		)
+	)
+)
+AS
+SELECT b, c, d
+----
+CREATE TABLE IF NOT EXISTS a (b, c, d) AS SELECT b, c, d -- normalized!
+CREATE TABLE IF NOT EXISTS a (b, c, d) AS SELECT (b), (c), (d) -- fully parenthesized
+CREATE TABLE IF NOT EXISTS a (b, c, d) AS SELECT b, c, d -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_, _, _) AS SELECT _, _, _ -- identifiers removed
+
+
+parse
+CREATE TABLE IF NOT EXISTS a (b) PARTITION BY RANGE (b) (
+   PARTITION p1 VALUES FROM (MINVALUE) TO (1),
+   PARTITION p2 VALUES FROM (2, MAXVALUE) TO (4, 4),
+   PARTITION p3 VALUES FROM (4, 4) TO (MAXVALUE))
+AS
+SELECT 1
+----
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT 1 -- normalized!
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT (1) -- fully parenthesized
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT _ -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_) AS SELECT 1 -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a (b) PARTITION ALL BY RANGE (b) (
+  PARTITION p1 VALUES FROM (MINVALUE) TO (1),
+  PARTITION p2 VALUES FROM (2, MAXVALUE) TO (4, 4),
+  PARTITION p3 VALUES FROM (4, 4) TO (MAXVALUE))
+AS
+SELECT 1
+----
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT 1 -- normalized!
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT (1) -- fully parenthesized
+CREATE TABLE IF NOT EXISTS a (b) AS SELECT _ -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_) AS SELECT 1 -- identifiers removed
+
+error
+CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (1))
+AS
+SELECT 1
+----
+at or near "as": syntax error
+DETAIL: source SQL:
+CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (1))
+AS
+^
+
+error
+CREATE TABLE IF NOT EXISTS a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT 1
+----
+at or near "as": syntax error
+DETAIL: source SQL:
+CREATE TABLE IF NOT EXISTS a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT 1
+                                                                                           ^
+
+error
+CREATE TABLE IF NOT EXISTS a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT 1
+----
+at or near "as": syntax error
+DETAIL: source SQL:
+CREATE TABLE IF NOT EXISTS a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT 1
+                                                                                                    ^
+
+error
+CREATE TABLE IF NOT EXISTS a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT a
+----
+at or near "as": syntax error
+DETAIL: source SQL:
+CREATE TABLE IF NOT EXISTS a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) AS SELECT a
+                                                                                            ^
+
 parse
 CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))
 ----

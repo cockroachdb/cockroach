@@ -1244,10 +1244,10 @@ func (node *UpdateExpr) doc(p *PrettyCfg) pretty.Doc {
 func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	//
-	// CREATE [TEMP | UNLOGGED] TABLE [IF NOT EXISTS] name ( .... ) [AS]
-	//     [SELECT ...] - for CREATE TABLE AS
-	//     [INTERLEAVE ...]
+	// CREATE [TEMP | UNLOGGED] TABLE [IF NOT EXISTS] name ( .... )
 	//     [PARTITION BY ...]
+	//     [AS SELECT ...]
+	//     [INTERLEAVE ...]
 	//
 	title := pretty.Keyword("CREATE")
 	switch node.Persistence {
@@ -1267,11 +1267,6 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 			title = pretty.ConcatSpace(title,
 				p.bracket("(", p.Doc(&node.Defs), ")"))
 		}
-		if node.StorageParams != nil {
-			title = pretty.ConcatSpace(title, pretty.Keyword("WITH"))
-			title = pretty.ConcatSpace(title, p.bracket(`(`, p.Doc(&node.StorageParams), `)`))
-		}
-		title = pretty.ConcatSpace(title, pretty.Keyword("AS"))
 	} else {
 		title = pretty.ConcatSpace(title,
 			p.bracket("(", p.Doc(&node.Defs), ")"),
@@ -1279,13 +1274,10 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	}
 
 	clauses := make([]pretty.Doc, 0, 4)
-	if node.As() {
-		clauses = append(clauses, p.Doc(node.AsSource))
-	}
 	if node.PartitionByTable != nil {
 		clauses = append(clauses, p.Doc(node.PartitionByTable))
 	}
-	if node.StorageParams != nil && !node.As() {
+	if node.StorageParams != nil {
 		clauses = append(
 			clauses,
 			pretty.ConcatSpace(
@@ -1293,6 +1285,11 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 				p.bracket(`(`, p.Doc(&node.StorageParams), `)`),
 			),
 		)
+	}
+	if node.As() {
+		clauses = append(clauses, pretty.Keyword("AS"))
+
+		clauses = append(clauses, p.Doc(node.AsSource))
 	}
 	if node.Locality != nil {
 		clauses = append(clauses, p.Doc(node.Locality))
