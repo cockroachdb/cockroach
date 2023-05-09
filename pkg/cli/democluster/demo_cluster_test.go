@@ -145,6 +145,8 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	// has a very high simulated latency between each node.
 	skip.UnderRace(t)
 
+	skip.WithIssue(t, 102115, "flaky test")
+
 	demoCtx := newDemoCtx()
 	// Set up an empty 9-node cluster with simulated latencies.
 	demoCtx.SimulateLatency = true
