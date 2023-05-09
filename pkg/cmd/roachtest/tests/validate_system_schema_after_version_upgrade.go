@@ -31,7 +31,7 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 	// and assert that the output matches the expected output content.
 	r.Add(registry.TestSpec{
 		Name:    "systemschema/validate-after-version-upgrade",
-		Owner:   registry.OwnerSQLSchema,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if runtime.GOARCH == "arm64" {

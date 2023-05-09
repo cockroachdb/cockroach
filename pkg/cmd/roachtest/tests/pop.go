@@ -100,7 +100,7 @@ func registerPop(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "pop",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `orm`},
 		Run:     runPop,

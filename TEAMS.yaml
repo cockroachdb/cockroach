@@ -19,14 +19,7 @@
 
 cockroachdb/docs:
   triage_column_id: 3971225
-cockroachdb/sql-sessions:
-  aliases:
-    cockroachdb/sql-syntax-prs: other
-    cockroachdb/sqlproxy-prs: other
-    cockroachdb/sql-api-prs: other
-  triage_column_id: 7259065
-  label: T-sql-sessions
-cockroachdb/sql-schema:
+cockroachdb/sql-foundations:
   triage_column_id: 8946818
 cockroachdb/sql-queries:
   aliases:
