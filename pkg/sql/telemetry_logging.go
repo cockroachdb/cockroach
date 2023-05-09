@@ -35,6 +35,13 @@ var TelemetryMaxEventFrequency = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var telemetryInternalQueriesEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.telemetry.query_sampling.internal.enabled",
+	"when set to true, internal queries will be sampled in telemetry logging",
+	false,
+).WithPublic()
+
 // TelemetryLoggingMetrics keeps track of the last time at which an event
 // was logged to the telemetry channel, and the number of skipped queries
 // since the last logged event.
