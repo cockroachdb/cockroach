@@ -58,7 +58,7 @@ go_test(
         "update_checker_test.go",
     ],
     args = ["-test.timeout=295s"],
-    tags = ["no-remote"],
+    tags = ["no-remote-exec"],
     deps = [
         ":diagnostics",
         "//pkg/base",

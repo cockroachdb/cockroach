@@ -43,7 +43,7 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     embed = [":coldata"],
-    tags = ["no-remote"],  # keep
+    tags = ["no-remote-exec"],  # keep
     deps = [
         "//pkg/col/coldatatestutils",
         "//pkg/sql/colconv",
