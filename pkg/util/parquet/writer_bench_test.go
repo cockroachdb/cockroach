@@ -11,56 +11,65 @@
 package parquet
 
 import (
-	"fmt"
 	"math/rand"
 	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 // BenchmarkParquetWriter benchmarks the Writer.AddRow operation.
-// TODO(jayant): add more types to this benchmark.
 func BenchmarkParquetWriter(b *testing.B) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	numCols := 32
+	benchmarkTypes := getBenchmarkTypes()
 
-	// Create a row size of 2KiB.
-	numCols := 16
-	datumSizeBytes := 128
-	sch := newColSchema(numCols)
-	for i := 0; i < numCols; i++ {
-		sch.columnTypes[i] = types.String
-		sch.columnNames[i] = fmt.Sprintf("col%d", i)
+	for i, typ := range benchmarkTypes {
+		bench := func(b *testing.B) {
+			fileName := "BenchmarkParquetWriter.parquet"
+			f, err := os.CreateTemp("", fileName)
+			require.NoError(b, err)
+
+			// Slice a single type out of supportedTypes.
+			sch := makeRandSchema(numCols, benchmarkTypes[i:i+1], rng)
+			datums := makeRandDatums(1, sch, rng)
+
+			schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
+			require.NoError(b, err)
+
+			writer, err := NewWriter(schemaDef, f)
+			require.NoError(b, err)
+
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				err = writer.AddRow(datums[0])
+				require.NoError(b, err)
+			}
+			b.StopTimer()
+
+			err = writer.Close()
+			require.NoError(b, err)
+		}
+
+		b.Run(typ.Name(), bench)
 	}
-	datums := make([]tree.Datum, numCols)
-	for i := 0; i < numCols; i++ {
-		p := make([]byte, datumSizeBytes)
-		_, _ = rng.Read(p)
-		tree.NewDBytes(tree.DBytes(p))
-		datums[i] = tree.NewDString(string(p))
+}
+
+func getBenchmarkTypes() []*types.T {
+	var typs []*types.T
+	for _, typ := range supportedTypes {
+		switch typ.Family() {
+		case types.ArrayFamily:
+			// Pick out one array type to benchmark arrays.
+			if typ.ArrayContents() == types.Int {
+				typs = append(typs, typ)
+			}
+		default:
+			typs = append(typs, typ)
+		}
 	}
-
-	fileName := "BenchmarkParquetWriter.parquet"
-	f, err := os.CreateTemp("", fileName)
-	require.NoError(b, err)
-
-	schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
-	require.NoError(b, err)
-
-	writer, err := NewWriter(schemaDef, f)
-	require.NoError(b, err)
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		err = writer.AddRow(datums)
-		require.NoError(b, err)
-	}
-
-	err = writer.Close()
-	require.NoError(b, err)
+	return typs
 }
