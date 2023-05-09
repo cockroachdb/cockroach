@@ -219,6 +219,7 @@ func (s *deprecatedWebhookSink) getWebhookSinkConfig(
 
 	retryCfg.MaxRetries = int(cfg.Retry.Max)
 	retryCfg.InitialBackoff = time.Duration(cfg.Retry.Backoff)
+	retryCfg.MaxBackoff = 30 * time.Second
 	return cfg.Flush, retryCfg, nil
 }
 
@@ -444,7 +445,8 @@ func (s *deprecatedWebhookSink) splitAndSendBatch(batch []deprecatedMessagePaylo
 	return nil
 }
 
-// flushWorkers sends flush request to each worker and waits for each one to acknowledge.
+// flushWorkers sends flush request to each worker and waits for each one to
+// acknowledge.
 func (s *deprecatedWebhookSink) flushWorkers(done chan struct{}) error {
 	for i := 0; i < len(s.eventsChans); i++ {
 		// Ability to write a nil message to events channel indicates that
@@ -603,7 +605,8 @@ func (s *deprecatedWebhookSink) workerIndex(key []byte) uint32 {
 	return crc32.ChecksumIEEE(key) % uint32(s.parallelism)
 }
 
-// exitWorkersWithError saves the first error message encountered by webhook workers,
+// exitWorkersWithError saves the first error message encountered by webhook
+// workers,
 // and requests all workers to terminate.
 func (s *deprecatedWebhookSink) exitWorkersWithError(err error) {
 	// errChan has buffer size 1, first error will be saved to the buffer and

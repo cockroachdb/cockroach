@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -686,4 +687,29 @@ func TestWebhookSinkShutsDownOnError(t *testing.T) {
 	for i := 1; i <= 4; i++ {
 		webhookSinkTestfn(i)
 	}
+}
+
+// Regression test for https://github.com/cockroachdb/cockroach/issues/102467.
+// Ensure that we do not use the default retry config which is capped at
+// 4000ms.
+func TestWebhookSinkRetryDuration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderShort(t)
+
+	opts := getGenericWebhookSinkOptions(struct {
+		key   string
+		value string
+	}{
+		key:   changefeedbase.OptWebhookSinkConfig,
+		value: `{"Retry":{"Backoff": "2s", "Max": "2"}}`})
+	webhookOpts, err := opts.GetWebhookSinkOptions()
+	require.NoError(t, err)
+
+	_, retryCfg, err := (&deprecatedWebhookSink{}).getWebhookSinkConfig(webhookOpts.JSONConfig)
+	require.NoError(t, err)
+	require.Equal(t, retryCfg.MaxBackoff, 30*time.Second)
+
+	_, retryCfg, err = getSinkConfigFromJson(webhookOpts.JSONConfig, sinkJSONConfig{})
+	require.NoError(t, err)
+	require.Equal(t, retryCfg.MaxBackoff, 30*time.Second)
 }
