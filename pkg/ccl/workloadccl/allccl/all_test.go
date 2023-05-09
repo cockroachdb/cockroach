@@ -265,7 +265,7 @@ func TestDeterministicInitialData(t *testing.T) {
 	// TODO(dan): We're starting to accumulate these various lists, bigInitialData
 	// is another. Consider moving them to be properties on the workload.Meta.
 	fingerprintGoldens := map[string]uint64{
-		`bank`:       0x7b4d519ed8bd07ce,
+		`bank`:       0xb9065bb21c3594a2,
 		`bulkingest`: 0xcf3e4028ac084aea,
 		`indexes`:    0xcbf29ce484222325,
 		`intro`:      0x81c6a8cfd9c3452a,

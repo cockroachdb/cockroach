@@ -154,9 +154,7 @@ func (b *bank) Tables() []workload.Table {
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
 					var payload []byte
 					*a, payload = a.Alloc(b.payloadBytes, 0 /* extraCap */)
-					const initialPrefix = `initial-`
-					copy(payload[:len(initialPrefix)], []byte(initialPrefix))
-					randStringLetters(rng, payload[len(initialPrefix):])
+					randStringLetters(rng, payload)
 
 					rowOffset := rowIdx - rowBegin
 					idCol[rowOffset] = int64(rowIdx)
