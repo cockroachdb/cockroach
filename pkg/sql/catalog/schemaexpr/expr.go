@@ -559,6 +559,14 @@ func ValidateTTLExpirationExpression(
 		)
 	}
 
+	// ttl_expiration_expression used to conservatively require
+	// volatility.Immutable, but now only requires volatility.Stable to support
+	// one of its main use cases: `timestamptz + interval`.
+	// Altering config while the job is running can affect some (instead of all)
+	// SELECT and DELETE statements because the statements in the job are NOT run
+	// inside a single transaction.
+	// Only config changes can affect the results of Stable functions in the TTL
+	// job because session data cannot be modified.
 	if _, _, _, err := DequalifyAndValidateExpr(
 		ctx,
 		tableDesc,
@@ -566,7 +574,7 @@ func ValidateTTLExpirationExpression(
 		types.TimestampTZ,
 		tree.TTLExpirationExpr,
 		semaCtx,
-		volatility.Immutable,
+		volatility.Stable,
 		tableName,
 		version,
 	); err != nil {
