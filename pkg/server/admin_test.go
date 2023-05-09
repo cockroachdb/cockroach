@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -61,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -342,6 +344,11 @@ func TestAdminDebugRedirect(t *testing.T) {
 	}
 }
 
+func generateRandomName() string {
+	rand, _ := randutil.NewTestRand()
+	return "a b%s-c.d" + strconv.Itoa(rand.Int())
+}
+
 func TestAdminAPIStatementDiagnosticsBundle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -394,14 +401,15 @@ func TestAdminAPIDatabases(t *testing.T) {
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 
-	const testdb = "test"
-	query := "CREATE DATABASE " + testdb
+	testDbName := generateRandomName()
+	testDbEscaped := tree.NameString(testDbName)
+	query := "CREATE DATABASE " + testDbEscaped
 	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
 	}
 	// Test needs to revoke CONNECT on the public database to properly exercise
 	// fine-grained permissions logic.
-	if _, err := db.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM public", testdb)); err != nil {
+	if _, err := db.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM public", testDbEscaped)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec("REVOKE CONNECT ON DATABASE defaultdb FROM public"); err != nil {
@@ -420,7 +428,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	query = fmt.Sprintf(
 		"GRANT %s ON DATABASE %s TO %s",
 		strings.Join(privileges, ", "),
-		testdb,
+		testDbEscaped,
 		authenticatedUserNameNoAdmin().SQLIdentifier(),
 	)
 	if _, err := db.Exec(query); err != nil {
@@ -440,8 +448,8 @@ func TestAdminAPIDatabases(t *testing.T) {
 		expectedDBs []string
 		isAdmin     bool
 	}{
-		{[]string{"defaultdb", "postgres", "system", testdb}, true},
-		{[]string{"postgres", testdb}, false},
+		{[]string{"defaultdb", "postgres", "system", testDbName}, true},
+		{[]string{"postgres", testDbName}, false},
 	} {
 		t.Run(fmt.Sprintf("isAdmin:%t", tc.isAdmin), func(t *testing.T) {
 			// Test databases endpoint.
@@ -459,6 +467,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 				t.Fatalf("length of result %d != expected %d", a, e)
 			}
 
+			sort.Strings(tc.expectedDBs)
 			sort.Strings(resp.Databases)
 			for i, e := range tc.expectedDBs {
 				if a := resp.Databases[i]; a != e {
@@ -468,9 +477,11 @@ func TestAdminAPIDatabases(t *testing.T) {
 
 			// Test database details endpoint.
 			var details serverpb.DatabaseDetailsResponse
+			urlEscapeDbName := url.PathEscape(testDbName)
+
 			if err := getAdminJSONProtoWithAdminOption(
 				s,
-				"databases/"+testdb,
+				"databases/"+urlEscapeDbName,
 				&details,
 				tc.isAdmin,
 			); err != nil {
@@ -511,7 +522,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			databaseID, err := ts.admin.queryDatabaseID(ctx, username.RootUserName(), testdb)
+			databaseID, err := ts.admin.queryDatabaseID(ctx, username.RootUserName(), testDbName)
 			if err != nil {
 				t.Fatal(err)
 			}
