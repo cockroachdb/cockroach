@@ -34,13 +34,57 @@ func _() {
 	_ = x[puintptr-23]
 }
 
-const _testAttr_name = "i8pi8i16pi16i32pi32i64pi64ui8pui8ui16pui16ui32pui32ui64pui64ipiuipuistrpstr_uintptrpuintptr"
-
-var _testAttr_index = [...]uint8{0, 2, 5, 8, 12, 15, 19, 22, 26, 29, 33, 37, 42, 46, 51, 55, 60, 61, 63, 65, 68, 71, 75, 83, 91}
-
-func (i testAttr) String() string {
-	if i < 0 || i >= testAttr(len(_testAttr_index)-1) {
+func (_i testAttr) String() string {
+	switch _i {
+	case i8:
+		return "i8"
+	case pi8:
+		return "pi8"
+	case i16:
+		return "i16"
+	case pi16:
+		return "pi16"
+	case i32:
+		return "i32"
+	case pi32:
+		return "pi32"
+	case i64:
+		return "i64"
+	case pi64:
+		return "pi64"
+	case ui8:
+		return "ui8"
+	case pui8:
+		return "pui8"
+	case ui16:
+		return "ui16"
+	case pui16:
+		return "pui16"
+	case ui32:
+		return "ui32"
+	case pui32:
+		return "pui32"
+	case ui64:
+		return "ui64"
+	case pui64:
+		return "pui64"
+	case i:
+		return "i"
+	case pi:
+		return "pi"
+	case ui:
+		return "ui"
+	case pui:
+		return "pui"
+	case str:
+		return "str"
+	case pstr:
+		return "pstr"
+	case _uintptr:
+		return "_uintptr"
+	case puintptr:
+		return "puintptr"
+	default:
 		return "testAttr(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _testAttr_name[_testAttr_index[i]:_testAttr_index[i+1]]
 }

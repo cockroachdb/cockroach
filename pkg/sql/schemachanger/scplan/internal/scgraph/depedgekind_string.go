@@ -14,14 +14,17 @@ func _() {
 	_ = x[PreviousTransactionPrecedence-4]
 }
 
-const _DepEdgeKind_name = "PrecedenceSameStagePrecedencePreviousStagePrecedencePreviousTransactionPrecedence"
-
-var _DepEdgeKind_index = [...]uint8{0, 10, 29, 52, 81}
-
 func (i DepEdgeKind) String() string {
-	i -= 1
-	if i < 0 || i >= DepEdgeKind(len(_DepEdgeKind_index)-1) {
-		return "DepEdgeKind(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	switch i {
+	case Precedence:
+		return "Precedence"
+	case SameStagePrecedence:
+		return "SameStagePrecedence"
+	case PreviousStagePrecedence:
+		return "PreviousStagePrecedence"
+	case PreviousTransactionPrecedence:
+		return "PreviousTransactionPrecedence"
+	default:
+		return "DepEdgeKind(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _DepEdgeKind_name[_DepEdgeKind_index[i]:_DepEdgeKind_index[i+1]]
 }
