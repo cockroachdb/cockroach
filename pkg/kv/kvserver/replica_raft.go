@@ -1374,8 +1374,22 @@ func (r *Replica) refreshProposalsLocked(
 
 		case reasonTicks:
 			if p.proposedAtTicks <= r.mu.ticks-refreshAtDelta {
-				// The command was proposed a while ago and may have been dropped. Try it again.
-				reproposals = append(reproposals, p)
+				// The command was proposed a while ago and may have been dropped. Try
+				// it again. We don't repropose probes to avoid growing the raft log
+				// quadratically in cases where many replicas are unavailable at the
+				// same time. (There will still be linear build-up as probes are
+				// reattempted).
+				if p.command.ReplicatedEvalResult.IsProbe {
+					p.finishApplication(ctx, proposalResult{
+						Err: kvpb.NewError(
+							kvpb.NewAmbiguousResultErrorf(
+								"not reproposing probe",
+							),
+						),
+					})
+				} else {
+					reproposals = append(reproposals, p)
+				}
 			}
 
 		default:
