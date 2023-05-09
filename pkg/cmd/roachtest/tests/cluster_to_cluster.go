@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -338,13 +339,17 @@ type replicationDriver struct {
 	t       test.Test
 	c       cluster.Cluster
 	metrics *c2cMetrics
+	rng     *rand.Rand
 }
 
 func makeReplicationDriver(t test.Test, c cluster.Cluster, rs replicationSpec) replicationDriver {
+	rng, seed := randutil.NewTestRand()
+	t.L().Printf(`Random Seed is %d`, seed)
 	return replicationDriver{
-		t:  t,
-		c:  c,
-		rs: rs,
+		t:   t,
+		c:   c,
+		rs:  rs,
+		rng: rng,
 	}
 }
 
@@ -367,8 +372,8 @@ func (rd *replicationDriver) setupC2C(ctx context.Context, t test.Test, c cluste
 	dstClusterSetting := install.MakeClusterSettings(install.SecureOption(true))
 	c.Start(ctx, t.L(), dstStartOps, dstClusterSetting, dstCluster)
 
-	srcNode := srcCluster.RandNode()
-	destNode := dstCluster.RandNode()
+	srcNode := srcCluster.SeededRandNode(rd.rng)
+	destNode := dstCluster.SeededRandNode(rd.rng)
 
 	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, "")
 	require.NoError(t, err)
@@ -890,7 +895,7 @@ func makeReplResilienceDriver(
 	rd := makeReplicationDriver(t, c, rsp.replicationSpec)
 	return replResilienceDriver{
 		replicationDriver: rd,
-		phase:             c2cPhase(rand.Intn(int(phaseCutover) + 1)),
+		phase:             c2cPhase(rd.rng.Intn(int(phaseCutover) + 1)),
 		rsp:               rsp,
 	}
 }
@@ -945,7 +950,7 @@ func (rrd *replResilienceDriver) getTargetAndWatcherNodes(ctx context.Context) {
 
 	findAnotherNode := func(notThisNode int) int {
 		for {
-			anotherNode := nodes.RandNode()[0]
+			anotherNode := nodes.SeededRandNode(rrd.rng)[0]
 			if notThisNode != anotherNode {
 				return anotherNode
 			}
@@ -995,7 +1000,7 @@ func (rrd *replResilienceDriver) sleepBeforeResiliencyEvent() {
 	// before a resiliency event (e.g. a node shutdown) to ensure the event occurs
 	// once we're fully settled into the target phase (e.g. the stream ingestion
 	// processors have observed the cutover signal).
-	randomSleep := time.Duration(5 + rand.Intn(6))
+	randomSleep := time.Duration(5 + rrd.rng.Intn(6))
 	rrd.t.L().Printf("Take a %d second power nap", randomSleep)
 	time.Sleep(randomSleep * time.Second)
 }
