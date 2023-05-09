@@ -371,7 +371,8 @@ func TestLockTableBasic(t *testing.T) {
 				if s[0] == 'r' {
 					durability = lock.Replicated
 				}
-				if err := lt.AcquireLock(&req.Txn.TxnMeta, roachpb.Key(key), lock.Exclusive, durability); err != nil {
+				acq := roachpb.MakeLockAcquisition(req.Txn, roachpb.Key(key), durability)
+				if err := lt.AcquireLock(&acq); err != nil {
 					return err.Error()
 				}
 				return lt.String()
@@ -1045,7 +1046,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 
 		// acquire locks.
 		for _, k := range item.locksToAcquire {
-			err = e.acquireLock(&item.request.Txn.TxnMeta, k)
+			err = e.acquireLock(item.request.Txn, k)
 			if err != nil {
 				break
 			}
@@ -1142,8 +1143,9 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 	}
 }
 
-func (e *workloadExecutor) acquireLock(txn *enginepb.TxnMeta, k roachpb.Key) error {
-	err := e.lt.AcquireLock(txn, k, lock.Exclusive, lock.Unreplicated)
+func (e *workloadExecutor) acquireLock(txn *roachpb.Transaction, k roachpb.Key) error {
+	acq := roachpb.MakeLockAcquisition(txn, k, lock.Unreplicated)
+	err := e.lt.AcquireLock(&acq)
 	if err != nil {
 		return err
 	}
@@ -1571,7 +1573,8 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		}
 	}
 	for _, k := range item.locksToAcquire {
-		if err = env.lt.AcquireLock(&item.Txn.TxnMeta, k, lock.Exclusive, lock.Unreplicated); err != nil {
+		acq := roachpb.MakeLockAcquisition(item.Txn, k, lock.Unreplicated)
+		if err = env.lt.AcquireLock(&acq); err != nil {
 			doneCh <- err
 			return
 		}
@@ -1752,10 +1755,13 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 			lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockForTesting(nil))
 			lt.enabled = true
 
-			txn := &enginepb.TxnMeta{ID: uuid.MakeV4()}
+			txn := &roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4()},
+			}
 			for i := 0; i < locks; i++ {
 				k := roachpb.Key(fmt.Sprintf("%03d", i))
-				err := lt.AcquireLock(txn, k, lock.Exclusive, lock.Unreplicated)
+				acq := roachpb.MakeLockAcquisition(txn, k, lock.Unreplicated)
+				err := lt.AcquireLock(&acq)
 				if err != nil {
 					b.Fatal(err)
 				}

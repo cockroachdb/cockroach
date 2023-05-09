@@ -88,6 +88,9 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	return g.Wait()
 }
 
+// addEventsToBuffer consumes rangefeed events from `p.eventC`, transforms
+// them to changfeed events and push onto `p.memBuf`.
+// `p.memBuf`.
 func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 	for {
 		select {
