@@ -690,6 +690,95 @@ func TestTelemetryLogging(t *testing.T) {
 	}
 }
 
+// TestTelemetryLoggingInternalEnabled verifies that setting the cluster setting to send
+// internal queries to telemetry works as intended.
+func TestTelemetryLoggingInternalEnabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	defer cleanup()
+
+	st := logtestutils.StubTime{}
+	sts := logtestutils.StubTracingStatus{}
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			EventLog: &EventLogTestingKnobs{
+				// The sampling checks below need to have a deterministic
+				// number of statements run by internal executor.
+				SyncWrites: true,
+			},
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow:       st.TimeNow,
+				getTracingStatus: sts.TracingStatus,
+			},
+		},
+	})
+
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET application_name = 'telemetry-internal-logging-test'`)
+
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 10;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.internal.enabled = true;`)
+
+	// This query should trigger 2 internal TRUNCATE queries.
+	// Since TRUNCATE is not a DML stmt, both should certainly get logged.
+	stubTime := timeutil.FromUnixMicros(int64(1e6))
+	st.SetTime(stubTime)
+	db.Exec(t, `SELECT crdb_internal.reset_sql_stats();`)
+
+	expectedQueries := []string{
+		`TRUNCATE TABLE system.public.statement_statistics`,
+		`TRUNCATE TABLE system.public.transaction_statistics`,
+	}
+
+	log.Flush()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal(errors.Newf("no entries found"))
+	}
+
+	for _, e := range entries {
+		if strings.Contains(e.Message, "SELECT crdb_internal.reset_sql_stats") {
+			t.Errorf("unexpected query log: %s", e.Message)
+		}
+	}
+
+	// Attempt to find all expected logs.
+	for _, expected := range expectedQueries {
+		found := false
+
+		for _, e := range entries {
+			if strings.Contains(e.Message, `"ExecMode":"`+executorTypeInternal.logLabel()) &&
+				strings.Contains(e.Message, expected) {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			t.Errorf("did not find expected query log in log entries: %s", expected)
+		}
+	}
+}
+
 func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := log.ScopeWithoutShowLogs(t)

@@ -278,6 +278,7 @@ sql.stats.response.show_internal.enabled	boolean	false	controls if statistics fo
 sql.stats.system_tables.enabled	boolean	true	when true, enables use of statistics on system tables by the query optimizer
 sql.stats.system_tables_autostats.enabled	boolean	true	when true, enables automatic collection of statistics on system tables
 sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed queries will emit an event on the telemetry logging channel
+sql.telemetry.query_sampling.internal.enabled	boolean	false	when set to true, internal queries will be sampled in telemetry logging
 sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects
 sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up
 sql.trace.log_statement_execute	boolean	false	set to true to enable logging of executed statements
