@@ -587,21 +587,21 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 // EXPIRED status is that it reflects that a new lease with a start timestamp
 // greater than or equal to now can be acquired non-cooperatively.
 //
-// If the lease is not EXPIRED, the request timestamp is taken into account. The
-// expiration timestamp is adjusted for clock offset; if the request timestamp
-// falls into the so-called "stasis period" at the end of the lifetime of the
-// lease, or if the request timestamp is beyond the end of the lifetime of the
-// lease, the status is UNUSABLE. Callers typically want to react to an UNUSABLE
-// lease status by extending the lease, if they are in a position to do so.
+// If the lease is not EXPIRED, the lease's start timestamp is checked against
+// the minProposedTimestamp. This timestamp indicates the oldest timestamp that
+// a lease can have as its start time and still be used by the node. It is set
+// both in cooperative lease transfers and to prevent reuse of leases across
+// node restarts (which would result in latching violations). Leases with start
+// times preceding this timestamp are assigned a status of PROSCRIBED and can
+// not be used. Instead, a new lease should be acquired by callers.
 //
-// For request timestamps falling before the lease's stasis period, the lease's
-// start timestamp is checked against the minProposedTimestamp. This timestamp
-// indicates the oldest timestamp that a lease can have as its start time and
-// still be used by the node. It is set both in cooperative lease transfers and
-// to prevent reuse of leases across node restarts (which would result in
-// latching violations). Leases with start times preceding this timestamp are
-// assigned a status of PROSCRIBED and can not be not be used. Instead, a new
-// lease should be acquired by callers.
+// If the lease is not EXPIRED or PROSCRIBED, the request timestamp is taken
+// into account. The expiration timestamp is adjusted for clock offset; if the
+// request timestamp falls into the so-called "stasis period" at the end of the
+// lifetime of the lease, or if the request timestamp is beyond the end of the
+// lifetime of the lease, the status is UNUSABLE. Callers typically want to
+// react to an UNUSABLE lease status by extending the lease, if they are in a
+// position to do so.
 //
 // Finally, for requests timestamps falling before the stasis period of a lease
 // that is not EXPIRED and also not PROSCRIBED, the status is VALID.
@@ -684,14 +684,19 @@ func (r *Replica) leaseStatus(
 	maxOffset := r.store.Clock().MaxOffset()
 	stasis := expiration.Add(-int64(maxOffset), 0)
 	ownedLocally := lease.OwnedBy(r.store.StoreID())
+	// NB: the order of these checks is important, and goes from stronger to
+	// weaker reasons why the lease may be considered invalid. For example,
+	// EXPIRED or PROSCRIBED must take precedence over UNUSABLE, because some
+	// callers consider UNUSABLE as valid. For an example issue that this ordering
+	// may cause, see https://github.com/cockroachdb/cockroach/issues/100101.
 	if expiration.LessEq(now.ToTimestamp()) {
 		status.State = kvserverpb.LeaseState_EXPIRED
-	} else if stasis.LessEq(reqTS) {
-		status.State = kvserverpb.LeaseState_UNUSABLE
 	} else if ownedLocally && lease.ProposedTS != nil && lease.ProposedTS.Less(minProposedTS) {
 		// If the replica owns the lease, additional verify that the lease's
 		// proposed timestamp is not earlier than the min proposed timestamp.
 		status.State = kvserverpb.LeaseState_PROSCRIBED
+	} else if stasis.LessEq(reqTS) {
+		status.State = kvserverpb.LeaseState_UNUSABLE
 	} else {
 		status.State = kvserverpb.LeaseState_VALID
 	}

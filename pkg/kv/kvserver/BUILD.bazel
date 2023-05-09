@@ -280,6 +280,7 @@ go_test(
         "replica_protected_timestamp_test.go",
         "replica_raft_test.go",
         "replica_raft_truncation_test.go",
+        "replica_range_lease_test.go",
         "replica_rangefeed_test.go",
         "replica_rankings_test.go",
         "replica_sideload_test.go",
