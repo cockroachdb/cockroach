@@ -126,8 +126,6 @@ type Task struct {
 	decoded bool
 	// Were any of the decoded commands locally proposed?
 	anyLocal bool
-	// The maximum number of commands that can be applied in a batch.
-	batchSize int32
 }
 
 // MakeTask creates a new task with the provided state machine and decoder.
@@ -235,12 +233,6 @@ func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context) error {
 	})
 }
 
-// SetMaxBatchSize sets the maximum application batch size. If 0, no limit
-// will be placed on the number of commands that can be applied in a batch.
-func (t *Task) SetMaxBatchSize(size int) {
-	t.batchSize = int32(size)
-}
-
 // ApplyCommittedEntries applies raft entries that have been committed to the
 // raft log but have not yet been applied to the replicated state machine.
 func (t *Task) ApplyCommittedEntries(ctx context.Context) error {
@@ -275,7 +267,7 @@ func (t *Task) applyOneBatch(ctx context.Context, iter CommandIterator) error {
 	defer batch.Close()
 
 	// Consume a batch-worth of commands.
-	pol := trivialPolicy{maxCount: t.batchSize}
+	var pol trivialPolicy
 	batchIter := takeWhileCmdIter(iter, func(cmd Command) bool {
 		return pol.maybeAdd(cmd.IsTrivial())
 	})
@@ -322,9 +314,6 @@ func (p *trivialPolicy) maybeAdd(trivial bool) bool {
 		return true
 	}
 	if p.nonTrivialCount > 0 {
-		return false
-	}
-	if p.maxCount > 0 && p.maxCount == p.trivialCount {
 		return false
 	}
 	p.trivialCount++

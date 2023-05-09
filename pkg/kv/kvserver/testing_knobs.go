@@ -333,10 +333,6 @@ type StoreTestingKnobs struct {
 	// to its client if it failed to transfer the lease to the first voting
 	// replica in the set of relocation targets.
 	DontIgnoreFailureToTransferLease bool
-	// MaxApplicationBatchSize enforces a maximum size on application batches.
-	// This can be useful for testing conditions which require commands to be
-	// applied in separate batches.
-	MaxApplicationBatchSize int
 	// RangeFeedPushTxnsInterval overrides the default value for
 	// rangefeed.Config.PushTxnsInterval.
 	RangeFeedPushTxnsInterval time.Duration

@@ -859,7 +859,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var appTask apply.Task
 	if hasMsg(msgStorageApply) {
 		appTask = apply.MakeTask(sm, dec)
-		appTask.SetMaxBatchSize(r.store.TestingKnobs().MaxApplicationBatchSize)
 		defer appTask.Close()
 		if err := appTask.Decode(ctx, msgStorageApply.Entries); err != nil {
 			return stats, err
