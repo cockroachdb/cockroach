@@ -559,6 +559,9 @@ func ValidateTTLExpirationExpression(
 		)
 	}
 
+	// ttl_expiration_expression used to conservatively require
+	// volatility.Immutable, but now only requires volatility.Stable to support
+	// one of its main use cases: `timestamptz + interval`.
 	if _, _, _, err := DequalifyAndValidateExpr(
 		ctx,
 		tableDesc,
@@ -566,7 +569,7 @@ func ValidateTTLExpirationExpression(
 		types.TimestampTZ,
 		tree.TTLExpirationExpr,
 		semaCtx,
-		volatility.Immutable,
+		volatility.Stable,
 		tableName,
 		version,
 	); err != nil {
