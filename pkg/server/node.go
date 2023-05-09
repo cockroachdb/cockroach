@@ -290,11 +290,11 @@ func allocateNodeID(ctx context.Context, db *kv.DB) (roachpb.NodeID, error) {
 func allocateStoreIDs(
 	ctx context.Context, nodeID roachpb.NodeID, count int64, db *kv.DB,
 ) (roachpb.StoreID, error) {
-	val, err := kv.IncrementValRetryable(ctx, db, keys.StoreIDGenerator, count)
+	val, err := kv.IncrementValRetryable(ctx, db, keys.StoreIDGenerator, count*kvstorage.StoreIDIncrement)
 	if err != nil {
 		return 0, errors.Wrapf(err, "unable to allocate %d store IDs for node %d", count, nodeID)
 	}
-	return roachpb.StoreID(val - count + 1), nil
+	return roachpb.StoreID(val - kvstorage.StoreIDIncrement*(count-1)), nil
 }
 
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
@@ -732,7 +732,7 @@ func (n *Node) initializeAdditionalStores(
 				log.Warningf(ctx, "error doing initial gossiping: %s", err)
 			}
 
-			sIdent.StoreID++
+			sIdent.StoreID += kvstorage.StoreIDIncrement
 		}
 	}
 

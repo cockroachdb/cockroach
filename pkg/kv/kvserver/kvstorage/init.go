@@ -34,8 +34,12 @@ import (
 const FirstNodeID = roachpb.NodeID(1)
 
 // FirstStoreID is the StoreID assigned to the first store on the node with ID
-// FirstNodeID.
-const FirstStoreID = roachpb.StoreID(1)
+// FirstNodeID. We use a different value than FirstNodeID to reduce the chance
+// that folk will accidentally assume that store and node IDs are equivalent.
+const FirstStoreID = roachpb.StoreID(123)
+
+// StoreIDIncrement is the increment between subsequent store IDs.
+const StoreIDIncrement = 3
 
 // InitEngine writes a new store ident to the underlying engine. To
 // ensure that no crufty data already exists in the engine, it scans
