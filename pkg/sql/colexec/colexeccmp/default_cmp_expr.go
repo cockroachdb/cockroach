@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package colexeccmp exposes some comparison definitions for vectorized
+// operations.
 package colexeccmp
 
 import (

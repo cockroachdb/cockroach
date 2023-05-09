@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package config contains basic utilities and data definitions for zone
+// configuration.
 package config
 
 import "github.com/cockroachdb/redact"

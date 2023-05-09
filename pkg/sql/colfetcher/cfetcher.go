@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package colfetcher implements logic for fetching kv's and forming table rows
+// for an arbitrary number of tables.
 package colfetcher
 
 import (

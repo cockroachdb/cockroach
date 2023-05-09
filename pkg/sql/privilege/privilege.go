@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package privilege outlines the basic privilege system for cockroach.
 package privilege
 
 import (
