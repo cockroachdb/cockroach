@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,7 +37,7 @@ func registerDrain(r registry.Registry) {
 	{
 		r.Add(registry.TestSpec{
 			Name:    "drain/early-exit-conn-wait",
-			Owner:   registry.OwnerSQLSessions,
+			Owner:   registry.OwnerSQLFoundations,
 			Cluster: r.MakeClusterSpec(1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runEarlyExitInConnectionWait(ctx, t, c)
@@ -47,7 +46,7 @@ func registerDrain(r registry.Registry) {
 
 		r.Add(registry.TestSpec{
 			Name:    "drain/warn-conn-wait-timeout",
-			Owner:   registry.OwnerSQLSessions,
+			Owner:   registry.OwnerSQLFoundations,
 			Cluster: r.MakeClusterSpec(1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runWarningForConnWait(ctx, t, c)
@@ -56,7 +55,7 @@ func registerDrain(r registry.Registry) {
 
 		r.Add(registry.TestSpec{
 			Name:                "drain/not-at-quorum",
-			Owner:               registry.OwnerSQLSessions,
+			Owner:               registry.OwnerSQLFoundations,
 			Cluster:             r.MakeClusterSpec(3),
 			SkipPostValidations: registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
