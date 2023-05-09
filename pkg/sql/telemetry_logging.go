@@ -53,6 +53,13 @@ var telemetrySamplingPerFingerprintEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+var telemetryInternalQueriesEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.telemetry.query_sampling.internal.enabled",
+	"when set to true, internal queries will be sampled in telemetry logging",
+	false,
+).WithPublic()
+
 type telemetryEvent struct {
 	// The timestamp of the last emitted telemetry event.
 	lastEmittedTime time.Time
