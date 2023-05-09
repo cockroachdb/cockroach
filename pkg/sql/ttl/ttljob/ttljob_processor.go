@@ -22,9 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -141,13 +144,9 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			pkColNames = append(pkColNames, buf.String())
 			buf.Reset()
 		}
-		pkColTypes = make([]*types.T, 0, len(primaryIndexDesc.KeyColumnIDs))
-		for _, id := range primaryIndexDesc.KeyColumnIDs {
-			col, err := desc.FindColumnWithID(id)
-			if err != nil {
-				return err
-			}
-			pkColTypes = append(pkColTypes, col.GetType())
+		pkColTypes, err = GetPKColumnTypes(desc, primaryIndexDesc)
+		if err != nil {
+			return err
 		}
 		pkColDirs = primaryIndexDesc.KeyColumnDirections
 
@@ -181,16 +180,16 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		processorConcurrency = processorSpanCount
 	}
 	err := func() error {
-		spanChan := make(chan QueryBounds, processorConcurrency)
-		defer close(spanChan)
+		boundsChan := make(chan QueryBounds, processorConcurrency)
+		defer close(boundsChan)
 		for i := int64(0); i < processorConcurrency; i++ {
 			group.GoCtx(func(ctx context.Context) error {
-				for spanToProcess := range spanChan {
+				for bounds := range boundsChan {
 					start := timeutil.Now()
-					spanRowCount, err := t.runTTLOnSpan(
+					spanRowCount, err := t.runTTLOnQueryBounds(
 						ctx,
 						metrics,
-						spanToProcess,
+						bounds,
 						pkColNames,
 						pkColDirs,
 						relationName,
@@ -202,7 +201,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 					if err != nil {
 						// Continue until channel is fully read.
 						// Otherwise, the keys input will be blocked.
-						for spanToProcess = range spanChan {
+						for bounds = range boundsChan {
 						}
 						return err
 					}
@@ -213,20 +212,20 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 
 		// Iterate over every span to feed work for the goroutine processors.
 		var alloc tree.DatumAlloc
-		for _, span := range ttlSpec.Spans {
-			startKey := span.Key
-			startPK, err := rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, startKey, &alloc)
-			if err != nil {
-				return errors.Wrapf(err, "decode startKey error key=%x", []byte(startKey))
-			}
-			endKey := span.EndKey
-			endPK, err := rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, endKey, &alloc)
-			if err != nil {
-				return errors.Wrapf(err, "decode endKey error key=%x", []byte(endKey))
-			}
-			spanChan <- QueryBounds{
-				Start: startPK,
-				End:   endPK,
+		for i, span := range ttlSpec.Spans {
+			if bounds, hasRows, err := SpanToQueryBounds(
+				ctx,
+				db,
+				codec,
+				pkColTypes,
+				pkColDirs,
+				span,
+				&alloc,
+			); err != nil {
+				return errors.Wrapf(err, "SpanToQueryBounds error index=%d span=%s", i, span)
+			} else if hasRows {
+				// Only process bounds from spans with rows inside them.
+				boundsChan <- bounds
 			}
 		}
 		return nil
@@ -270,7 +269,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 }
 
 // spanRowCount should be checked even if the function returns an error because it may have partially succeeded
-func (t *ttlProcessor) runTTLOnSpan(
+func (t *ttlProcessor) runTTLOnQueryBounds(
 	ctx context.Context,
 	metrics rowLevelTTLMetrics,
 	bounds QueryBounds,
@@ -437,6 +436,66 @@ func newTTLProcessor(
 		return nil, err
 	}
 	return ttlProcessor, nil
+}
+
+// SpanToQueryBounds converts the span output of the DistSQL planner to
+// QueryBounds to generate SELECT statements.
+func SpanToQueryBounds(
+	ctx context.Context,
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
+	pkColTypes []*types.T,
+	pkColDirs []catpb.IndexColumn_Direction,
+	span roachpb.Span,
+	alloc *tree.DatumAlloc,
+) (bounds QueryBounds, hasRows bool, _ error) {
+	const maxRows = 1
+	partialStartKey := span.Key
+	partialEndKey := span.EndKey
+	startKeyValues, err := kvDB.Scan(ctx, partialStartKey, partialEndKey, maxRows)
+	if err != nil {
+		return bounds, false, errors.Wrapf(err, "scan error startKey=%x endKey=%x", []byte(partialStartKey), []byte(partialEndKey))
+	}
+	// If span has 0 rows then return early - it will not be processed.
+	if len(startKeyValues) == 0 {
+		return bounds, false, nil
+	}
+	endKeyValues, err := kvDB.ReverseScan(ctx, partialStartKey, partialEndKey, maxRows)
+	if err != nil {
+		return bounds, false, errors.Wrapf(err, "reverse scan error startKey=%x endKey=%x", []byte(partialStartKey), []byte(partialEndKey))
+	}
+	// If span has 0 rows then return early - it will not be processed. This is
+	// checked again here because the calls to Scan and ReverseScan are
+	// non-transactional so the row could have been deleted between the calls.
+	if len(endKeyValues) == 0 {
+		return bounds, false, nil
+	}
+	startKey := startKeyValues[0].Key
+	bounds.Start, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, startKey, alloc)
+	if err != nil {
+		return bounds, false, errors.Wrapf(err, "decode startKey error key=%x", []byte(startKey))
+	}
+	endKey := endKeyValues[0].Key
+	bounds.End, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, endKey, alloc)
+	if err != nil {
+		return bounds, false, errors.Wrapf(err, "decode endKey error key=%x", []byte(endKey))
+	}
+	return bounds, true, nil
+}
+
+// GetPKColumnTypes returns tableDesc's primary key column types.
+func GetPKColumnTypes(
+	tableDesc catalog.TableDescriptor, indexDesc *descpb.IndexDescriptor,
+) ([]*types.T, error) {
+	pkColTypes := make([]*types.T, 0, len(indexDesc.KeyColumnIDs))
+	for i, id := range indexDesc.KeyColumnIDs {
+		col, err := tableDesc.FindColumnWithID(id)
+		if err != nil {
+			return nil, errors.Wrapf(err, "column index=%d", i)
+		}
+		pkColTypes = append(pkColTypes, col.GetType())
+	}
+	return pkColTypes, nil
 }
 
 func init() {

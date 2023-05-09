@@ -112,7 +112,7 @@ func BuildSelectQuery(
 		numEndQueryBounds,
 		endPlaceholderOffset,
 		endKeyCompareOps,
-		false, /*inclusive*/
+		true, /*inclusive*/
 	)
 
 	// ORDER BY
