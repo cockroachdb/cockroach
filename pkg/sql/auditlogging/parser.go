@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/rulebasedscanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 	"strings"
 )
@@ -59,7 +58,7 @@ func parseAuditSetting(inputLine rulebasedscanner.Line) (setting AuditSetting, e
 	if len(line) > expectedNumFields {
 		return setting, errors.WithHint(
 			errors.New("too many fields specified"),
-			"Expected only 2 fields (role, statement type)")
+			"Expected only 2 fields (role, statement filter)")
 	}
 
 	// Read the user/role type.
@@ -78,12 +77,17 @@ func parseAuditSetting(inputLine rulebasedscanner.Line) (setting AuditSetting, e
 	if err != nil {
 		return setting, err
 	}
-	// parse statement types
+	// Parse statement filter
 	fieldIdx++
 	if fieldIdx >= len(line) {
-		return setting, errors.New("end-of-line before statement types specification")
+		return setting, errors.New("end-of-line before statement filter specification")
 	}
-	setting.StatementTypes, err = parseStatementTypes(line[fieldIdx])
+	if len(line[fieldIdx]) > 1 {
+		return setting, errors.WithHint(
+			errors.New("multiple values specified for statement filter"),
+			"Specify exactly one statement filter per line.")
+	}
+	setting.IncludeStatements, err = parseStatementFilter(line[fieldIdx][0].Value)
 	return setting, err
 }
 
@@ -107,34 +111,17 @@ func parseRole(role username.SQLUsername) error {
 	return nil
 }
 
-// parseStatementTypes parses the statement type field.
-func parseStatementTypes(stmtTypes []rulebasedscanner.String) (map[tree.StatementType]int, error) {
-	types := make(map[tree.StatementType]int)
-	for idx, stmtType := range stmtTypes {
-		val := strings.ToUpper(stmtType.Value)
-		switch val {
-		case "DDL":
-			types[tree.TypeDDL] = idx
-		case "DML":
-			types[tree.TypeDML] = idx
-		case "DCL":
-			types[tree.TypeDCL] = idx
-		case "ALL":
-			if len(types) > 0 {
-				return types, errors.Newf(`redundant statement types with "ALL"`)
-			}
-			types[tree.TypeDCL] = idx
-			types[tree.TypeDDL] = idx + 1
-			types[tree.TypeDML] = idx + 2
-		case "NONE":
-			if len(types) > 0 {
-				return types, errors.Newf(`redundant statement types with "NONE"`)
-			}
-		default:
-			return types, errors.WithHint(errors.Newf(
-				`unknown statement type: %q (valid types include: "DDL", "DML", "DCL", "ALL", "NONE")`, stmtType.Value,
-			), "Statement types are normalized (i.e. Ddl, ddl are valid inputs for DDL)")
-		}
+// parseStatementFilter parses the statement filter field.
+func parseStatementFilter(stmtFilter string) (bool, error) {
+	val := strings.ToUpper(stmtFilter)
+	switch val {
+	case "ALL":
+		return true, nil
+	case "NONE":
+		return false, nil
+	default:
+		return false, errors.WithHint(errors.Newf(
+			`unknown statement filter: %q (valid filters include: "ALL", "NONE")`, stmtFilter,
+		), "Statement filter value is normalized (i.e. All, all are valid inputs for ALL)")
 	}
-	return types, nil
 }

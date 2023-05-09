@@ -59,16 +59,13 @@ func TestRoleBasedAuditLogging(t *testing.T) {
 func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 	db.Exec(t, `SET CLUSTER SETTING sql.log.user_audit = '
 		all_stmt_types ALL
-		some_stmt_types DDL,DML
 		no_stmt_types NONE
 	'`)
 
 	allStmtTypesRole := "all_stmt_types"
-	someStmtTypeRole := "some_stmt_types"
 	noStmtTypeRole := "no_stmt_types"
 
 	db.Exec(t, fmt.Sprintf("CREATE ROLE IF NOT EXISTS %s", allStmtTypesRole))
-	db.Exec(t, fmt.Sprintf("CREATE ROLE IF NOT EXISTS %s", someStmtTypeRole))
 	db.Exec(t, fmt.Sprintf("CREATE ROLE IF NOT EXISTS %s", noStmtTypeRole))
 
 	// Queries for all statement types
@@ -87,13 +84,6 @@ func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 		expectedNumLogs int
 		includesDCL     bool
 	}{
-		{
-			name:            "test-some-stmt-types",
-			role:            someStmtTypeRole,
-			queries:         testQueries,
-			expectedNumLogs: 2,
-			includesDCL:     false,
-		},
 		{
 			name:            "test-all-stmt-types",
 			role:            allStmtTypesRole,
@@ -176,8 +166,8 @@ func testMultiRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 	db.Exec(t, fmt.Sprintf("GRANT %s, %s to root", roleA, roleB))
 
 	db.Exec(t, `SET CLUSTER SETTING sql.log.user_audit = '
-		roleA DML
-		roleB DDL,DCL
+		roleA ALL
+		roleB ALL
 	'`)
 
 	// Queries for all statement types
@@ -195,9 +185,9 @@ func testMultiRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 	}{
 		name: "test-multi-role-user",
 		expectedRoleToLogs: map[string]int{
-			// Expect single log from DML query.
-			roleA: 1,
-			// Expect no logs from DDL/DCL queries as we match on roleA first.
+			// Expect logs from all queries and 1 for setting the cluster setting.
+			roleA: 4,
+			// Expect no logs from roleB as we match on roleA first.
 			roleB: 0,
 		},
 	}

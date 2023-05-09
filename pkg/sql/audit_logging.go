@@ -63,13 +63,10 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(
 		return
 	}
 
-	stmtType := p.stmt.AST.StatementType()
-	if _, exists := auditSetting.StatementTypes[stmtType]; exists {
+	if auditSetting.IncludeStatements {
 		p.curPlan.auditEventBuilders = append(p.curPlan.auditEventBuilders,
 			&auditevents.RoleBasedAuditEvent{
-				Role:          auditSetting.Role.Normalized(),
-				StatementType: stmtType.String(),
-				DatabaseName:  p.CurrentDatabase(),
+				Role: auditSetting.Role.Normalized(),
 			},
 		)
 	}
