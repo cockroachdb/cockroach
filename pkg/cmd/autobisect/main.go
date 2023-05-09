@@ -11,15 +11,14 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -28,7 +27,7 @@ import (
 )
 
 type optsT struct {
-	now time.Time
+	headDate time.Time
 
 	cmd           string
 	grep          string
@@ -51,9 +50,12 @@ func init() {
 }
 
 var opts = optsT{
-	now: time.Now().UTC(),
 	log: func(format string, args ...interface{}) {
-		log.InfofDepth(context.Background(), 2, format, args...)
+		fmt.Fprintf(os.Stdout, format, args...)
+		if n := len(format); n > 0 && format[n-1] != '\n' {
+			fmt.Fprintln(os.Stdout)
+		}
+		// log.InfofDepth(context.Background(), 1, format, args...)
 	},
 }
 
@@ -103,22 +105,28 @@ func (opts *optsT) exec(arg0 string, args ...string) (_out, _err string, _exitCo
 
 func (opts *optsT) backwards(exclusiveHead plumbing.Hash, mult int) (plumbing.Hash, error) {
 	const stepDuration = 26 * time.Hour // TODO(tbg): make configurable
-	dateLE := opts.now.Add(-1 * time.Duration(mult) * stepDuration)
-	if minDateLE := opts.now.Add(-1 * opts.maxAge); minDateLE.After(dateLE) || dateLE.After(opts.now) {
-		dateLE = minDateLE
+	before := opts.headDate.Add(-1 * time.Duration(mult) * stepDuration)
+	after := opts.headDate.Add(-1 * opts.maxAge)
+	if after.After(before) {
+		return plumbing.ZeroHash, io.EOF
 	}
 	// NB: --reverse and --max-count don't work as you'd think they would. The
 	// combination will return what will be printed last (i.e. newest commit)
 	// rather than oldest. So we don't use either and pick the oldest commit
 	// from the output manually.
 	sOut, _, _, err := opts.exec(`git`, `log`, `--merges`, `--first-parent`,
-		`--after=`+dateLE.Format(time.RFC3339), "--pretty=format:%H",
-		exclusiveHead.String()+"^", "--", opts.filePredicate)
+		 breaking this
+		// TODO: can't use --before because if there's a time period where no commits
+		// landed we'll get random empty results half way through
+		`--after=`+after.Format(time.RFC3339), `--before=`+before.Format(time.RFC3339),
+		"--pretty=format:%H",
+		exclusiveHead.String()+"^",
+		"--", opts.filePredicate)
 	if err != nil {
 		return plumbing.ZeroHash, err
 	}
 	sl := strings.Split(strings.TrimSpace(sOut), "\n")
-	hash := strings.TrimSpace(sl[len(sl)-1])
+	hash := strings.TrimSpace(sl[0])
 	if hash == "" {
 		return plumbing.ZeroHash, io.EOF
 	}
@@ -155,16 +163,24 @@ func firstBad(opts optsT) (*object.Commit, error) {
 		return nil, err
 	}
 
-	// Start at head, walk back in doubling steps.
-	cur := h.Hash()
-	for done, mult, exp := false, 0, 1; !done; exp++ {
-		// First iteration goes back 1, next iteration goes back an additional 3, etc,
-		// so in iteration `exp` we are jumping a width of 2^<exp>.
-		mult += (1 << exp) - (1 << (exp - 1))
+	{
+		sOut, _, _, err := opts.exec(`git`, `log`, `--pretty=%ct`, `--max-count=1`, h.Hash().String())
+		if err != nil {
+			return nil, err
+		}
+		secs, err := strconv.ParseInt(strings.TrimSpace(sOut), 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		opts.headDate = time.Unix(secs, 0)
+	}
 
-		// Update curC by walking its parents until we have covered the width
-		// for the current step.
-		next, err := opts.backwards(cur, mult)
+	// Start at head, walk back in doubling steps.
+	for exp := 1; ; exp++ {
+		mult := (1 << exp) - 1 // 1, 3, 7, 15, ...
+
+		// Basically HEAD^<mult> but measured in commit time.
+		cur, err := opts.backwards(h.Hash(), mult)
 		if errors.Is(err, io.EOF) {
 			// We ended up testing the very first commit passing our predicates
 			// without finding a good commit, so they're all bad - would need to seek
@@ -174,10 +190,15 @@ func firstBad(opts optsT) (*object.Commit, error) {
 		if err != nil {
 			return nil, err
 		}
-		cur = next
-		curC, err := r.CommitObject(cur)
-		opts.log("%s %s: %s", curC.Committer.When, curC.Hash.String(), firstLine(curC.Message))
-		tr, err := opts.test(curC)
+
+		{
+			sOut, _, _, err := opts.exec(`git`, `log`, `--format='%h %s %cd %cr'`, `--max-count=1`, cur.String())
+			if err != nil {
+				return nil, err
+			}
+			opts.log("^-- %s", sOut)
+		}
+		tr, err := opts.test(cur)
 		if err != nil {
 			return nil, err
 		}
@@ -206,10 +227,10 @@ const (
 	testResultBad
 )
 
-func (opts *optsT) test(c *object.Commit) (testResult, error) {
+func (opts *optsT) test(h plumbing.Hash) (testResult, error) {
 	// NB: I tried git-go's Checkout for this, but it's very slow (painfully so
 	// for this, but also slow for everything like git log), don't recommend it.
-	if _, _, _, err := opts.exec(`git`, `checkout`, c.Hash.String()); err != nil {
+	if _, _, _, err := opts.exec(`git`, `checkout`, h.String()); err != nil {
 		return 0, err
 	}
 
