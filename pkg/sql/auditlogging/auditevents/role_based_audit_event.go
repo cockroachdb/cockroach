@@ -20,9 +20,7 @@ import (
 // RoleBasedAuditEvent identifies query executions on roles that have been configured
 // for auditing. See the 'sql.log.user_audit' cluster setting.
 type RoleBasedAuditEvent struct {
-	Role          string
-	StatementType string
-	DatabaseName  string
+	Role string
 }
 
 // BuildAuditEvent implements the auditlogging.AuditEventBuilder interface
@@ -36,7 +34,5 @@ func (f *RoleBasedAuditEvent) BuildAuditEvent(
 		CommonSQLEventDetails: details,
 		CommonSQLExecDetails:  exec,
 		Role:                  f.Role,
-		StatementType:         f.StatementType,
-		DatabaseName:          f.DatabaseName,
 	}
 }

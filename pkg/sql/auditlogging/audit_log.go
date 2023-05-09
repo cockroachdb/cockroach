@@ -119,27 +119,22 @@ func (c AuditConfig) String() string {
 	table.SetTrimWhiteSpaceAtEOL(true)
 	table.SetTablePadding(" ")
 
-	row := []string{"# ROLE", "STATEMENT_TYPE"}
+	row := []string{"# ROLE", "STATEMENT_FILTER"}
 	table.Append(row)
 	for _, setting := range c.settings {
 		row[0] = setting.Role.Normalized()
-		row[1] = strings.Join(writeStatementTypes(setting.StatementTypes), ",")
+		row[1] = writeStatementFilter(setting.IncludeStatements)
 		table.Append(row)
 	}
 	table.Render()
 	return sb.String()
 }
 
-func writeStatementTypes(vals map[tree.StatementType]int) []string {
-	if len(vals) == 0 {
-		return []string{"NONE"}
+func writeStatementFilter(includeStmts bool) string {
+	if includeStmts {
+		return "ALL"
 	}
-	stmtTypes := make([]string, len(vals))
-	// Assign statement types in the order they were input.
-	for stmtType := range vals {
-		stmtTypes[vals[stmtType]] = stmtType.String()
-	}
-	return stmtTypes
+	return "NONE"
 }
 
 // AuditSetting is a single rule in the audit logging configuration.
@@ -148,9 +143,10 @@ type AuditSetting struct {
 	input string
 	// Role is user/role this audit setting applies for.
 	Role username.SQLUsername
-	// StatementTypes is a mapping of statement type to the index/order it was input in the config.
-	// The order is used so we can print the setting's statement types in the same order it was
-	StatementTypes map[tree.StatementType]int
+	// IncludeStatements designates whether we audit all statements for this audit setting.
+	// If false, this audit setting will *exclude* statements for this audit setting from emitting
+	// an audit event.
+	IncludeStatements bool
 }
 
 func (s AuditSetting) String() string {
