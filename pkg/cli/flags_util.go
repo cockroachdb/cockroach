@@ -207,25 +207,10 @@ const (
 	hex
 )
 
-// _keyTypes stores the names of all the possible key types.
-var _keyTypes []string
-
-// keyTypes computes and memoizes the names of all the possible key
-// types, based on the definitions produces by Go's stringer (see
-// keytype_string.go).
-func keyTypes() []string {
-	if _keyTypes == nil {
-		for i := 0; i+1 < len(_keyType_index); i++ {
-			_keyTypes = append(_keyTypes, _keyType_name[_keyType_index[i]:_keyType_index[i+1]])
-		}
-	}
-	return _keyTypes
-}
-
 func parseKeyType(value string) (keyType, error) {
-	for i, typ := range keyTypes() {
+	for typ, i := range _keyTypes {
 		if strings.EqualFold(value, typ) {
-			return keyType(i), nil
+			return i, nil
 		}
 	}
 	return 0, fmt.Errorf("unknown key type '%s'", value)

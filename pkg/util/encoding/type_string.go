@@ -23,6 +23,7 @@ func _() {
 	_ = x[UUID-12]
 	_ = x[Array-13]
 	_ = x[IPAddr-14]
+	_ = x[SentinelType-15]
 	_ = x[JSON-15]
 	_ = x[Tuple-16]
 	_ = x[BitArray-17]
@@ -52,13 +53,93 @@ func _() {
 	_ = x[JSONObjectDesc-41]
 }
 
-const _Type_name = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUIDArrayIPAddrJSONTupleBitArrayBitArrayDescTimeTZGeoGeoDescArrayKeyAscArrayKeyDescBox2DVoidTSQueryTSVectorJSONNullJSONNullDescJSONStringJSONStringDescJSONNumberJSONNumberDescJSONFalseJSONFalseDescJSONTrueJSONTrueDescJSONArrayJSONArrayDescJSONObjectJSONObjectDesc"
-
-var _Type_index = [...]uint16{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72, 77, 83, 87, 92, 100, 112, 118, 121, 128, 139, 151, 156, 160, 167, 175, 183, 195, 205, 219, 229, 243, 252, 265, 273, 285, 294, 307, 317, 331}
-
 func (i Type) String() string {
-	if i < 0 || i >= Type(len(_Type_index)-1) {
+	switch i {
+	case Unknown:
+		return "Unknown"
+	case Null:
+		return "Null"
+	case NotNull:
+		return "NotNull"
+	case Int:
+		return "Int"
+	case Float:
+		return "Float"
+	case Decimal:
+		return "Decimal"
+	case Bytes:
+		return "Bytes"
+	case BytesDesc:
+		return "BytesDesc"
+	case Time:
+		return "Time"
+	case Duration:
+		return "Duration"
+	case True:
+		return "True"
+	case False:
+		return "False"
+	case UUID:
+		return "UUID"
+	case Array:
+		return "Array"
+	case IPAddr:
+		return "IPAddr"
+	case SentinelType:
+		return "SentinelType"
+	case Tuple:
+		return "Tuple"
+	case BitArray:
+		return "BitArray"
+	case BitArrayDesc:
+		return "BitArrayDesc"
+	case TimeTZ:
+		return "TimeTZ"
+	case Geo:
+		return "Geo"
+	case GeoDesc:
+		return "GeoDesc"
+	case ArrayKeyAsc:
+		return "ArrayKeyAsc"
+	case ArrayKeyDesc:
+		return "ArrayKeyDesc"
+	case Box2D:
+		return "Box2D"
+	case Void:
+		return "Void"
+	case TSQuery:
+		return "TSQuery"
+	case TSVector:
+		return "TSVector"
+	case JSONNull:
+		return "JSONNull"
+	case JSONNullDesc:
+		return "JSONNullDesc"
+	case JSONString:
+		return "JSONString"
+	case JSONStringDesc:
+		return "JSONStringDesc"
+	case JSONNumber:
+		return "JSONNumber"
+	case JSONNumberDesc:
+		return "JSONNumberDesc"
+	case JSONFalse:
+		return "JSONFalse"
+	case JSONFalseDesc:
+		return "JSONFalseDesc"
+	case JSONTrue:
+		return "JSONTrue"
+	case JSONTrueDesc:
+		return "JSONTrueDesc"
+	case JSONArray:
+		return "JSONArray"
+	case JSONArrayDesc:
+		return "JSONArrayDesc"
+	case JSONObject:
+		return "JSONObject"
+	case JSONObjectDesc:
+		return "JSONObjectDesc"
+	default:
 		return "Type(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _Type_name[_Type_index[i]:_Type_index[i+1]]
 }

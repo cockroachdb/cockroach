@@ -21,14 +21,56 @@ func _() {
 	_ = x[MaxCapabilityID-10]
 }
 
-const _ID_name = "can_admin_relocate_rangecan_admin_scattercan_admin_splitcan_admin_unsplitcan_use_nodelocal_storagecan_view_node_infocan_check_consistencycan_view_tsdb_metricsexempt_from_rate_limitingspan_config_bounds"
-
-var _ID_index = [...]uint8{0, 24, 41, 56, 73, 98, 116, 137, 158, 183, 201}
-
 func (i ID) String() string {
-	i -= 1
-	if i >= ID(len(_ID_index)-1) {
-		return "ID(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	switch i {
+	case CanAdminRelocateRange:
+		return "can_admin_relocate_range"
+	case CanAdminScatter:
+		return "can_admin_scatter"
+	case CanAdminSplit:
+		return "can_admin_split"
+	case CanAdminUnsplit:
+		return "can_admin_unsplit"
+	case CanUseNodelocalStorage:
+		return "can_use_nodelocal_storage"
+	case CanViewNodeInfo:
+		return "can_view_node_info"
+	case CanCheckConsistency:
+		return "can_check_consistency"
+	case CanViewTSDBMetrics:
+		return "can_view_tsdb_metrics"
+	case ExemptFromRateLimiting:
+		return "exempt_from_rate_limiting"
+	case TenantSpanConfigBounds:
+		return "span_config_bounds"
+	default:
+		return "ID(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _ID_name[_ID_index[i]:_ID_index[i+1]]
+}
+
+var stringToCapabilityIDMap = map[string]ID{
+	"can_admin_relocate_range":  1,
+	"can_admin_scatter":         2,
+	"can_admin_split":           3,
+	"can_admin_unsplit":         4,
+	"can_use_nodelocal_storage": 5,
+	"can_view_node_info":        6,
+	"can_check_consistency":     7,
+	"can_view_tsdb_metrics":     8,
+	"exempt_from_rate_limiting": 9,
+	"span_config_bounds":        10,
+	"MaxCapabilityID":           10,
+}
+
+var IDs = []ID{
+	CanAdminRelocateRange,
+	CanAdminScatter,
+	CanAdminSplit,
+	CanAdminUnsplit,
+	CanCheckConsistency,
+	CanUseNodelocalStorage,
+	CanViewNodeInfo,
+	CanViewTSDBMetrics,
+	ExemptFromRateLimiting,
+	TenantSpanConfigBounds,
 }

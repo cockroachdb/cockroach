@@ -19,14 +19,27 @@ func _() {
 	_ = x[LeasePreferences-9]
 }
 
-const _Field_name = "range_min_bytesrange_max_bytesglobal_readsnum_replicasnum_votersgc.ttlsecondsconstraintsvoter_constraintslease_preferences"
-
-var _Field_index = [...]uint8{0, 15, 30, 42, 54, 64, 77, 88, 105, 122}
-
 func (i Field) String() string {
-	i -= 1
-	if i < 0 || i >= Field(len(_Field_index)-1) {
-		return "Field(" + strconv.FormatInt(int64(i+1), 10) + ")"
+	switch i {
+	case RangeMinBytes:
+		return "range_min_bytes"
+	case RangeMaxBytes:
+		return "range_max_bytes"
+	case GlobalReads:
+		return "global_reads"
+	case NumReplicas:
+		return "num_replicas"
+	case NumVoters:
+		return "num_voters"
+	case GCTTL:
+		return "gc.ttlseconds"
+	case Constraints:
+		return "constraints"
+	case VoterConstraints:
+		return "voter_constraints"
+	case LeasePreferences:
+		return "lease_preferences"
+	default:
+		return "Field(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _Field_name[_Field_index[i]:_Field_index[i+1]]
 }

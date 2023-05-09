@@ -12,17 +12,12 @@ func _() {
 	_ = x[PreparePortal-80]
 }
 
-const (
-	_PrepareType_name_0 = "PreparePortal"
-	_PrepareType_name_1 = "PrepareStatement"
-)
-
 func (i PrepareType) String() string {
-	switch {
-	case i == 80:
-		return _PrepareType_name_0
-	case i == 83:
-		return _PrepareType_name_1
+	switch i {
+	case PrepareStatement:
+		return "PrepareStatement"
+	case PreparePortal:
+		return "PreparePortal"
 	default:
 		return "PrepareType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

@@ -13,13 +13,15 @@ func _() {
 	_ = x[Version21_2-2]
 }
 
-const _PrivilegeDescVersion_name = "InitialVersionOwnerVersionVersion21_2"
-
-var _PrivilegeDescVersion_index = [...]uint8{0, 14, 26, 37}
-
 func (i PrivilegeDescVersion) String() string {
-	if i >= PrivilegeDescVersion(len(_PrivilegeDescVersion_index)-1) {
+	switch i {
+	case InitialVersion:
+		return "InitialVersion"
+	case OwnerVersion:
+		return "OwnerVersion"
+	case Version21_2:
+		return "Version21_2"
+	default:
 		return "PrivilegeDescVersion(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _PrivilegeDescVersion_name[_PrivilegeDescVersion_index[i]:_PrivilegeDescVersion_index[i+1]]
 }

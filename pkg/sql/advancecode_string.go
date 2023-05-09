@@ -15,13 +15,19 @@ func _() {
 	_ = x[rewind-4]
 }
 
-const _advanceCode_name = "advanceUnknownstayInPlaceadvanceOneskipBatchrewind"
-
-var _advanceCode_index = [...]uint8{0, 14, 25, 35, 44, 50}
-
 func (i advanceCode) String() string {
-	if i < 0 || i >= advanceCode(len(_advanceCode_index)-1) {
+	switch i {
+	case advanceUnknown:
+		return "advanceUnknown"
+	case stayInPlace:
+		return "stayInPlace"
+	case advanceOne:
+		return "advanceOne"
+	case skipBatch:
+		return "skipBatch"
+	case rewind:
+		return "rewind"
+	default:
 		return "advanceCode(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _advanceCode_name[_advanceCode_index[i]:_advanceCode_index[i+1]]
 }
