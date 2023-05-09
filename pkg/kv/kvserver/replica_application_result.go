@@ -71,6 +71,7 @@ func isTrivial(r *kvserverpb.ReplicatedEvalResult) bool {
 	allowlist.WriteTimestamp = hlc.Timestamp{}
 	allowlist.DeprecatedDelta = nil
 	allowlist.PrevLeaseProposal = nil
+	allowlist.IsProbe = false // probes are trivial, they always get refused in CheckForcedErr
 	allowlist.State = nil
 	return allowlist.IsZero()
 }
