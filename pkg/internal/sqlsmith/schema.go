@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -153,21 +155,22 @@ func (s *Smither) getRandIndex() (*tree.TableIndexName, *tree.CreateIndex, colRe
 	return s.getRandTableIndex(name, name)
 }
 
-func (s *Smither) getRandUserDefinedTypeLabel() (*tree.EnumValue, *tree.TypeName, bool) {
-	typName, ok := s.getRandUserDefinedType()
-	if !ok {
-		return nil, nil, false
-	}
+func (s *Smither) getRandUserDefinedEnumLabel() (*tree.EnumValue, *tree.TypeName, bool) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	udt := s.types.udts[*typName]
+	if s.types == nil || len(s.types.udtEnums) == 0 {
+		return nil, nil, false
+	}
+	idx := s.rnd.Intn(len(s.types.udtEnums))
+	typName := s.types.udtEnums[idx]
+	udt := s.types.udts[typName]
 	logicalRepresentations := udt.TypeMeta.EnumData.LogicalRepresentations
 	// There are no values in this enum.
 	if len(logicalRepresentations) == 0 {
 		return nil, nil, false
 	}
 	enumVal := tree.EnumValue(logicalRepresentations[s.rnd.Intn(len(logicalRepresentations))])
-	return &enumVal, typName, true
+	return &enumVal, &typName, true
 }
 
 func (s *Smither) getRandUserDefinedType() (*tree.TypeName, bool) {
@@ -177,12 +180,12 @@ func (s *Smither) getRandUserDefinedType() (*tree.TypeName, bool) {
 		return nil, false
 	}
 	idx := s.rnd.Intn(len(s.types.udts))
-	count := 0
-	for typName := range s.types.udts {
-		if count == idx {
-			return &typName, true
-		}
-		count++
+	if idx < len(s.types.udtEnums) {
+		return &s.types.udtEnums[idx], true
+	}
+	idx -= len(s.types.udtEnums)
+	if idx < len(s.types.udtComposites) {
+		return &s.types.udtComposites[idx], true
 	}
 	return nil, false
 }
@@ -190,68 +193,115 @@ func (s *Smither) getRandUserDefinedType() (*tree.TypeName, bool) {
 func (s *Smither) extractTypes() (*typeInfo, error) {
 	rows, err := s.db.Query(`
 SELECT
-	schema_name, descriptor_name, descriptor_id, enum_members
+	schema_name, descriptor_name, descriptor_id, create_statement, enum_members
 FROM
 	crdb_internal.create_type_statements
+ORDER BY
+	schema_name, descriptor_name
 `)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	evalCtx := eval.Context{}
+	var udtEnums, udtComposites []tree.TypeName
 	udtMapping := make(map[tree.TypeName]*types.T)
+	var udts []*types.T
+
+	evalCtx := eval.Context{}
 
 	for rows.Next() {
 		// For each row, collect columns.
-		var scName, name string
+		var scName, name, create string
 		var id int
 		var membersRaw []byte
-		if err := rows.Scan(&scName, &name, &id, &membersRaw); err != nil {
+		if err := rows.Scan(&scName, &name, &id, &create, &membersRaw); err != nil {
 			return nil, err
 		}
-		// If enum members were provided, parse the result into a string array.
-		var members []string
-		if len(membersRaw) != 0 {
-			arr, _, err := tree.ParseDArrayFromString(&evalCtx, string(membersRaw), types.String)
-			if err != nil {
-				return nil, err
-			}
-			for _, d := range arr.Array {
-				members = append(members, string(tree.MustBeDString(d)))
-			}
+
+		// Parse the CREATE TYPE statement to get enough information to build
+		// roughly the same types.T object.
+		stmt, err := parser.ParseOne(create)
+		if err != nil {
+			return nil, err
 		}
-		// Construct type information from the resulting row. Note that the UDT
-		// may have no members (e.g., `CREATE TYPE t AS ENUM ()`).
-		typ := types.MakeEnum(catid.TypeIDToOID(descpb.ID(id)), 0 /* arrayTypeID */)
-		typ.TypeMeta = types.UserDefinedTypeMetadata{
-			Name: &types.UserDefinedTypeName{
-				Schema: scName,
-				Name:   name,
-			},
-			EnumData: &types.EnumMetadata{
-				LogicalRepresentations: members,
-				// The physical representations don't matter in this case, but the
-				// enum related code in tree expects that the length of
-				// PhysicalRepresentations is equal to the length of LogicalRepresentations.
-				PhysicalRepresentations: make([][]byte, len(members)),
-				IsMemberReadOnly:        make([]bool, len(members)),
-			},
+		createStmt, ok := stmt.AST.(*tree.CreateType)
+		if !ok {
+			return nil, errors.AssertionFailedf("not a CREATE TYPE statement: %v", stmt.AST)
 		}
-		key := tree.MakeSchemaQualifiedTypeName(scName, name)
-		udtMapping[key] = typ
+
+		typName := tree.MakeSchemaQualifiedTypeName(scName, name)
+		var typ *types.T
+
+		switch createStmt.Variety {
+		case tree.Enum:
+			// If enum members were provided, parse the result into a string array.
+			var members []string
+			if len(membersRaw) != 0 {
+				arr, _, err := tree.ParseDArrayFromString(&evalCtx, string(membersRaw), types.String)
+				if err != nil {
+					return nil, err
+				}
+				for _, d := range arr.Array {
+					members = append(members, string(tree.MustBeDString(d)))
+				}
+			}
+			// Construct type information from the resulting row. Note that the enum
+			// may have no members (e.g., `CREATE TYPE t AS ENUM ()`).
+			typ = types.MakeEnum(catid.TypeIDToOID(descpb.ID(id)), 0 /* arrayTypeOID */)
+			typ.TypeMeta = types.UserDefinedTypeMetadata{
+				Name: &types.UserDefinedTypeName{
+					Schema: scName,
+					Name:   name,
+				},
+				EnumData: &types.EnumMetadata{
+					LogicalRepresentations: members,
+					// The physical representations don't matter in this case, but the
+					// enum related code in tree expects that the length of
+					// PhysicalRepresentations is equal to the length of LogicalRepresentations.
+					PhysicalRepresentations: make([][]byte, len(members)),
+					IsMemberReadOnly:        make([]bool, len(members)),
+				},
+			}
+			udtEnums = append(udtEnums, typName)
+		case tree.Composite:
+			// Use the AST to build a copy of the composite type.
+			contents := make([]*types.T, len(createStmt.CompositeTypeList))
+			labels := make([]string, len(createStmt.CompositeTypeList))
+			for i, elem := range createStmt.CompositeTypeList {
+				elemType, err := s.typeFromSQLTypeSyntax(elem.Type.SQLString())
+				if err != nil {
+					return nil, err
+				}
+				contents[i] = elemType
+				labels[i] = string(elem.Label)
+			}
+			typ = types.NewCompositeType(
+				catid.TypeIDToOID(descpb.ID(id)), 0 /* arrayTypeOID */, contents, labels,
+			)
+			typ.TypeMeta = types.UserDefinedTypeMetadata{
+				Name: &types.UserDefinedTypeName{
+					Schema: scName,
+					Name:   name,
+				},
+			}
+			udtComposites = append(udtComposites, typName)
+		default:
+			return nil, errors.AssertionFailedf("unsupported user-defined type: %v", createStmt.Variety)
+		}
+		udtMapping[typName] = typ
+		udts = append(udts, typ)
 	}
-	var udts []*types.T
-	for _, t := range udtMapping {
-		udts = append(udts, t)
-	}
-	// Make sure that future appends to udts force a copy.
+
+	// Make sure that appends to udts below force a copy.
 	udts = udts[:len(udts):len(udts)]
 
 	return &typeInfo{
-		udts:        udtMapping,
-		scalarTypes: append(udts, types.Scalar...),
-		seedTypes:   append(udts, randgen.SeedTypes...),
+		udtEnums:      udtEnums,
+		udtComposites: udtComposites,
+		udts:          udtMapping,
+		scalarTypes:   append(udts, types.Scalar...),
+		seedTypes:     append(udts, randgen.SeedTypes...),
 	}, nil
 }
 
