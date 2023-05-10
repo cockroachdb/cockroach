@@ -32,6 +32,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -3467,6 +3468,12 @@ func (s *systemStatusServer) SpanStats(
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
+
+	// If the cluster's active version is less than 23.1 return a mixed version error.
+	if !s.st.Version.IsActive(ctx, clusterversion.V23_1) {
+		return nil, errors.New(MixedVersionErr)
+	}
+
 	// If we receive a request using the old format.
 	if isLegacyRequest(req) {
 		// We want to force 23.1 callers to use the new format (e.g. Spans field).
@@ -3480,6 +3487,7 @@ func (s *systemStatusServer) SpanStats(
 	if len(req.Spans) > int(roachpb.SpanStatsBatchLimit.Get(&s.st.SV)) {
 		return nil, errors.Newf(exceedSpanLimitPlaceholder, len(req.Spans), int(roachpb.SpanStatsBatchLimit.Get(&s.st.SV)))
 	}
+
 	return s.getSpanStatsInternal(ctx, req)
 }
 
