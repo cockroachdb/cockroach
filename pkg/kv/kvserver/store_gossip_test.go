@@ -69,7 +69,7 @@ func TestStoreGossipDeltaTrigger(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			cfg := &StoreConfig{}
-			cfg.SetDefaults()
+			cfg.SetDefaults(1 /* numStores */)
 			sg := NewStoreGossip(nil, nil, cfg.TestingKnobs.GossipTestingKnobs)
 			sg.cachedCapacity.cached = tc.cached
 			sg.cachedCapacity.lastGossiped = tc.lastGossiped

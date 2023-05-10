@@ -113,22 +113,27 @@ const (
 	replicaQueueExtraSize = 10
 )
 
-var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
-	// For small machines, we scale the scheduler concurrency by the number of
-	// CPUs. 8*NumCPU was determined in 9a68241 (April 2017) as the optimal
-	// concurrency level on 8 CPU machines. For larger machines, we've seen
-	// (#56851) that this scaling curve can be too aggressive and lead to too much
-	// contention in the Raft scheduler, so we cap the concurrency level at 96.
-	//
-	// As of November 2020, this default value could be re-tuned.
+// defaultRaftSchedulerConcurrency specifies the default number of Raft
+// scheduler worker goroutines. These are evenly distributed across stores,
+// rounded up such that all stores have the same number of workers (10 workers
+// across 3 stores yields 4 workers per store or 12 in total).
+//
+// For small machines, we scale the scheduler concurrency by the number of
+// CPUs. 8*NumCPU was determined in 9a68241 (April 2017) as the optimal
+// concurrency level on 8 CPU machines. For larger machines, we've seen
+// (#56851) that this scaling curve can be too aggressive and lead to too much
+// contention in the Raft scheduler, so we cap the concurrency level at 96.
+//
+// As of November 2020, this default value could be re-tuned.
+var defaultRaftSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 96))
 
-// storeSchedulerShardSize specifies the maximum number of scheduler worker
-// goroutines per mutex shard. By default, we spin up 8 workers per CPU core,
-// capped at 96, so 16 is equivalent to 2 CPUs per shard, or a maximum of 6
-// shards. This significantly relieves contention at high core counts, while
-// also avoiding starvation by excessive sharding.
-var storeSchedulerShardSize = envutil.EnvOrDefaultInt("COCKROACH_SCHEDULER_SHARD_SIZE", 16)
+// defaultRaftSchedulerShardSize specifies the default maximum number of
+// scheduler worker goroutines per mutex shard. By default, we spin up 8 workers
+// per CPU core, capped at 96, so 16 is equivalent to 2 CPUs per shard, or a
+// maximum of 6 shards. This significantly relieves contention at high core
+// counts, while also avoiding starvation by excessive sharding.
+var defaultRaftSchedulerShardSize = envutil.EnvOrDefaultInt("COCKROACH_SCHEDULER_SHARD_SIZE", 16)
 
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
@@ -275,7 +280,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 	sc.RaftElectionTimeoutTicks = 3
 	sc.RaftReproposalTimeoutTicks = 5
 	sc.RaftTickInterval = 100 * time.Millisecond
-	sc.SetDefaults()
+	sc.SetDefaults(1 /* numStores */)
 	return sc
 }
 
@@ -1067,6 +1072,14 @@ type StoreConfig struct {
 	// Note that node Decommissioning events are always logged.
 	LogRangeAndNodeEvents bool
 
+	// RaftSchedulerConcurrency specifies the number of Raft scheduler workers
+	// for this store. Values < 1 imply 1.
+	RaftSchedulerConcurrency int
+
+	// RaftSchedulerShardSize specifies the maximum number of Raft scheduler
+	// workers per mutex shard. Values < 1 imply 1.
+	RaftSchedulerShardSize int
+
 	// RaftEntryCacheSize is the size in bytes of the Raft log entry cache
 	// shared by all Raft groups managed by the store.
 	RaftEntryCacheSize uint64
@@ -1163,17 +1176,30 @@ func (sc *StoreConfig) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.RaftReproposalTimeoutTicks > 0 &&
+		sc.RaftSchedulerConcurrency > 0 && sc.RaftSchedulerShardSize > 0 &&
 		sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil
 }
 
 // SetDefaults initializes unset fields in StoreConfig to values
 // suitable for use on a local network.
 // TODO(tschottdorf): see if this ought to be configurable via flags.
-func (sc *StoreConfig) SetDefaults() {
+func (sc *StoreConfig) SetDefaults(numStores int) {
 	sc.RaftConfig.SetDefaults()
 
 	if sc.CoalescedHeartbeatsInterval == 0 {
 		sc.CoalescedHeartbeatsInterval = sc.RaftTickInterval / 2
+	}
+	if sc.RaftSchedulerConcurrency == 0 {
+		sc.RaftSchedulerConcurrency = defaultRaftSchedulerConcurrency
+		// If we have more than one store, evenly divide the default workers across
+		// stores, since the default value is a function of CPU count and should not
+		// scale with the number of stores.
+		if numStores > 1 && sc.RaftSchedulerConcurrency > 1 {
+			sc.RaftSchedulerConcurrency = (sc.RaftSchedulerConcurrency-1)/numStores + 1 // ceil division
+		}
+	}
+	if sc.RaftSchedulerShardSize == 0 {
+		sc.RaftSchedulerShardSize = defaultRaftSchedulerShardSize
 	}
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
@@ -1204,9 +1230,6 @@ func (sc *StoreConfig) Tracer() *tracing.Tracer {
 func NewStore(
 	ctx context.Context, cfg StoreConfig, eng storage.Engine, nodeDesc *roachpb.NodeDescriptor,
 ) *Store {
-	// TODO(tschottdorf): find better place to set these defaults.
-	cfg.SetDefaults()
-
 	if !cfg.Valid() {
 		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
@@ -1300,8 +1323,8 @@ func NewStore(
 	s.draining.Store(false)
 	// NB: buffer up to RaftElectionTimeoutTicks in Raft scheduler to avoid
 	// unnecessary elections when ticks are temporarily delayed and piled up.
-	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency,
-		storeSchedulerShardSize, cfg.RaftElectionTimeoutTicks)
+	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s,
+		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftElectionTimeoutTicks)
 
 	s.syncWaiter = logstore.NewSyncWaiterLoop()
 
