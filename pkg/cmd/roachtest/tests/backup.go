@@ -82,6 +82,16 @@ const (
 	rows3GiB   = rows30GiB / 10
 )
 
+var backupTestingBucket string
+
+func init() {
+	backupTestingBucket  = os.Getenv("BACKUP_TESTING_BUCKET")
+	if backupTestingBucket == "" {
+		backupTestingBucket="cockroachdb-backup-testing"
+	}
+}
+
+
 func destinationName(c cluster.Cluster) string {
 	dest := c.Name()
 	if c.IsLocal() {
@@ -403,7 +413,7 @@ func registerBackup(r registry.Registry) {
 				// the average MB/sec per node.
 				tick()
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`?AUTH=implicit'"`)
+				BACKUP bank.bank TO 'gs://`+backupTestingBucket+`/`+dest+`?AUTH=implicit'"`)
 				tick()
 
 				// Upload the perf artifacts to any one of the nodes so that the test
@@ -690,7 +700,7 @@ func registerBackup(r registry.Registry) {
 			}
 			warehouses := 10
 
-			backupDir := "gs://cockroachdb-backup-testing/" + c.Name() + "?AUTH=implicit"
+			backupDir := "gs://" + backupTestingBucket  + "/" + c.Name() + "?AUTH=implicit"
 			// Use inter-node file sharing on 20.1+.
 			if t.BuildVersion().AtLeast(version.MustParse(`v20.1.0-0`)) {
 				backupDir = "nodelocal://1/" + c.Name()
@@ -1309,7 +1319,7 @@ func getGCSBackupPath(dest string) (string, error) {
 
 	// Set AUTH to specified
 	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
-	uri := fmt.Sprintf("gs://cockroachdb-backup-testing/gcs/%s?%s", dest, q.Encode())
+	uri := fmt.Sprintf("gs://" + backupTestingBucket +  "/gcs/%s?%s", dest, q.Encode())
 
 	return uri, nil
 }
@@ -1331,5 +1341,5 @@ func getAWSBackupPath(dest string) (string, error) {
 	}
 	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
 
-	return fmt.Sprintf("s3://cockroachdb-backup-testing/%s?%s", dest, q.Encode()), nil
+	return fmt.Sprintf("s3://" + backupTestingBucket + "/%s?%s", dest, q.Encode()), nil
 }
