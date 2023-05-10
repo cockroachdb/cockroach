@@ -516,67 +516,77 @@ func TestInvalidWriterUsage(t *testing.T) {
 }
 
 func TestVersions(t *testing.T) {
-	schemaDef, err := NewSchema([]string{}, []*types.T{})
-	require.NoError(t, err)
-
 	for version := range allowedVersions {
-		fileName := "TestVersions.parquet"
-		f, err := os.CreateTemp("", fileName)
-		require.NoError(t, err)
-
-		writer, err := NewWriter(schemaDef, f, WithVersion(version))
-		require.NoError(t, err)
-
-		err = writer.Close()
-		require.NoError(t, err)
-
-		f, err = os.Open(f.Name())
-		require.NoError(t, err)
-
-		reader, err := file.NewParquetReader(f)
-		require.NoError(t, err)
-
-		require.Equal(t, reader.MetaData().Version(), writer.cfg.version)
-
-		err = reader.Close()
-		require.NoError(t, err)
+		opt := WithVersion(version)
+		optionsTest(t, opt, func(t *testing.T, reader *file.Reader) {
+			require.Equal(t, reader.MetaData().Version(), allowedVersions[version])
+		})
 	}
 
+	schemaDef, err := NewSchema([]string{}, []*types.T{})
+	require.NoError(t, err)
 	buf := bytes.Buffer{}
 	_, err = NewWriter(schemaDef, &buf, WithVersion("invalid"))
 	require.Error(t, err)
 }
 
 func TestCompressionCodecs(t *testing.T) {
+	for compression := range compressionCodecToParquet {
+		opt := WithCompressionCodec(compression)
+		optionsTest(t, opt, func(t *testing.T, reader *file.Reader) {
+			colChunk, err := reader.MetaData().RowGroup(0).ColumnChunk(0)
+			require.NoError(t, err)
+			require.Equal(t, colChunk.Compression(), compressionCodecToParquet[compression])
+		})
+	}
+}
+
+// TestMetadata tests writing arbitrary kv metadata to parquet files.
+func TestMetadata(t *testing.T) {
+	meta := map[string]string{}
+	meta["testKey1"] = "testValue1"
+	meta["testKey2"] = "testValue2"
+	opt := WithMetadata(meta)
+	optionsTest(t, opt, func(t *testing.T, reader *file.Reader) {
+		val := reader.MetaData().KeyValueMetadata().FindValue("testKey1")
+		require.NotNil(t, reader.MetaData().KeyValueMetadata().FindValue("testKey1"))
+		require.Equal(t, *val, "testValue1")
+
+		val = reader.MetaData().KeyValueMetadata().FindValue("testKey2")
+		require.NotNil(t, reader.MetaData().KeyValueMetadata().FindValue("testKey2"))
+		require.Equal(t, *val, "testValue2")
+	})
+}
+
+// optionsTest can be used to assert the behavior of an Option. It creates a
+// writer using the supplied Option and writes a parquet file with sample data.
+// Then it calls the provided test function with the reader and subsequently
+// closes it.
+func optionsTest(t *testing.T, opt Option, testFn func(t *testing.T, reader *file.Reader)) {
 	schemaDef, err := NewSchema([]string{"a"}, []*types.T{types.Int})
 	require.NoError(t, err)
 
-	for compression := range compressionCodecToParquet {
-		fileName := "TestCompressionCodecs.parquet"
-		f, err := os.CreateTemp("", fileName)
-		require.NoError(t, err)
+	fileName := "OptionsTest.parquet"
+	f, err := os.CreateTemp("", fileName)
+	require.NoError(t, err)
 
-		writer, err := NewWriter(schemaDef, f, WithCompressionCodec(compression))
-		require.NoError(t, err)
+	writer, err := NewWriter(schemaDef, f, opt)
+	require.NoError(t, err)
 
-		err = writer.AddRow([]tree.Datum{tree.NewDInt(0)})
-		require.NoError(t, err)
+	err = writer.AddRow([]tree.Datum{tree.NewDInt(0)})
+	require.NoError(t, err)
 
-		err = writer.Close()
-		require.NoError(t, err)
+	err = writer.Close()
+	require.NoError(t, err)
 
-		f, err = os.Open(f.Name())
-		require.NoError(t, err)
+	f, err = os.Open(f.Name())
+	require.NoError(t, err)
 
-		reader, err := file.NewParquetReader(f)
-		require.NoError(t, err)
+	reader, err := file.NewParquetReader(f)
+	require.NoError(t, err)
 
-		colChunk, err := reader.MetaData().RowGroup(0).ColumnChunk(0)
-		require.NoError(t, err)
+	testFn(t, reader)
 
-		require.Equal(t, colChunk.Compression(), compressionCodecToParquet[compression])
-
-		err = reader.Close()
-		require.NoError(t, err)
-	}
+	err = reader.Close()
+	require.NoError(t, err)
 }
