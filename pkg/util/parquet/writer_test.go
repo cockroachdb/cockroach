@@ -546,3 +546,37 @@ func TestVersions(t *testing.T) {
 	_, err = NewWriter(schemaDef, &buf, WithVersion("invalid"))
 	require.Error(t, err)
 }
+
+func TestCompressionCodecs(t *testing.T) {
+	schemaDef, err := NewSchema([]string{"a"}, []*types.T{types.Int})
+	require.NoError(t, err)
+
+	for compression := range compressionCodecToParquet {
+		fileName := "TestCompressionCodecs.parquet"
+		f, err := os.CreateTemp("", fileName)
+		require.NoError(t, err)
+
+		writer, err := NewWriter(schemaDef, f, WithCompressionCodec(compression))
+		require.NoError(t, err)
+
+		err = writer.AddRow([]tree.Datum{tree.NewDInt(0)})
+		require.NoError(t, err)
+
+		err = writer.Close()
+		require.NoError(t, err)
+
+		f, err = os.Open(f.Name())
+		require.NoError(t, err)
+
+		reader, err := file.NewParquetReader(f)
+		require.NoError(t, err)
+
+		colChunk, err := reader.MetaData().RowGroup(0).ColumnChunk(0)
+		require.NoError(t, err)
+
+		require.Equal(t, colChunk.Compression(), compressionCodecToParquet[compression])
+
+		err = reader.Close()
+		require.NoError(t, err)
+	}
+}

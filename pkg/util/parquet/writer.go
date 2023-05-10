@@ -14,6 +14,7 @@ import (
 	"io"
 
 	"github.com/apache/arrow/go/v11/parquet"
+	"github.com/apache/arrow/go/v11/parquet/compress"
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -22,6 +23,7 @@ import (
 type config struct {
 	maxRowGroupLength int64
 	version           parquet.Version
+	compression       compress.Compression
 }
 
 // An Option is a configurable setting for the Writer.
@@ -57,11 +59,53 @@ func WithVersion(v string) Option {
 	}
 }
 
+// WithCompressionCodec specifies the compression codec to use when writing
+// columns.
+func WithCompressionCodec(compression CompressionCodec) Option {
+	return func(c *config) error {
+		if _, ok := compressionCodecToParquet[compression]; !ok {
+			return errors.AssertionFailedf("invalid compression codec")
+		}
+
+		c.compression = compressionCodecToParquet[compression]
+		return nil
+	}
+}
+
 var allowedVersions = map[string]parquet.Version{
 	"v1.0": parquet.V1_0,
 	"v2.4": parquet.V1_0,
 	"v2.6": parquet.V2_6,
 }
+
+// compressionCodecToParquet is a mapping between CompressionCodec values and
+// compress.Codecs.
+var compressionCodecToParquet = map[CompressionCodec]compress.Compression{
+	CompressionNone:   compress.Codecs.Uncompressed,
+	CompressionGZIP:   compress.Codecs.Gzip,
+	CompressionZSTD:   compress.Codecs.Zstd,
+	CompressionSnappy: compress.Codecs.Snappy,
+	CompressionBrotli: compress.Codecs.Brotli,
+}
+
+// A CompressionCodec is the codec used to compress columns when writing
+// parquet files.
+type CompressionCodec int64
+
+const (
+	// CompressionNone represents no compression.
+	CompressionNone CompressionCodec = iota + 1
+	// CompressionGZIP is the GZIP compression codec.
+	CompressionGZIP
+	// CompressionZSTD is the ZSTD compression codec.
+	CompressionZSTD
+	// CompressionSnappy is the Snappy compression codec.
+	CompressionSnappy
+	// CompressionBrotli is the Brotli compression codec.
+	CompressionBrotli
+	// LZO and LZ4 are unsupported. See comments on compress.Codecs.Lzo
+	// and compress.Codecs.Lz4.
+)
 
 // A Writer writes datums into an io.Writer sink. The Writer should be Close()ed
 // before attempting to read from the output sink so all data is flushed and
@@ -86,6 +130,7 @@ func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, 
 	cfg := config{
 		maxRowGroupLength: parquet.DefaultMaxRowGroupLen,
 		version:           parquet.V2_6,
+		compression:       compress.Codecs.Uncompressed,
 	}
 	for _, opt := range opts {
 		err := opt.apply(&cfg)
@@ -95,7 +140,7 @@ func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, 
 	}
 
 	parquetOpts := []parquet.WriterProperty{parquet.WithCreatedBy("cockroachdb"),
-		parquet.WithVersion(cfg.version)}
+		parquet.WithVersion(cfg.version), parquet.WithCompression(cfg.compression)}
 	props := parquet.NewWriterProperties(parquetOpts...)
 	writer := file.NewParquetWriter(sink, sch.schema.Root(), file.WithWriterProps(props))
 
