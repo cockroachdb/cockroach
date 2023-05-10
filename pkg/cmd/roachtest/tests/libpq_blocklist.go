@@ -53,4 +53,8 @@ var libPQIgnorelist = blocklist{
 	// pq: only text format supported for COPY, however no error is returned
 	// for CRDB.
 	"TestCopyInBinaryError": "63235",
+	// TestContextCancelExec has a race between context cancellation and query
+	// execution.
+	// https://github.com/lib/pq/blob/381d253611d666974d43dfa634d29fe16ea9e293/go18_test.go#L92
+	"TestContextCancelExec": "102674",
 }
