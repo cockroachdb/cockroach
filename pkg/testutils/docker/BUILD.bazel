@@ -27,6 +27,7 @@ go_test(
 
 go_library(
     name = "testutils_docker",
+    testonly = 1,
     srcs = ["empty.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/docker",
     visibility = ["//visibility:public"],
