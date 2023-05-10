@@ -76,6 +76,10 @@ func (b *Builder) buildValuesClause(
 			if err != nil {
 				panic(err)
 			}
+			// UDFs modify their resolved type when built, so build the scalar before
+			// resolving the column types.
+			elems[elemPos] = b.buildScalar(texpr, inScope, nil, nil, nil)
+			elemPos += numCols
 			if typ := texpr.ResolvedType(); typ.Family() != types.UnknownFamily {
 				if colTypes[colIdx].Family() == types.UnknownFamily {
 					colTypes[colIdx] = typ
@@ -91,8 +95,6 @@ func (b *Builder) buildValuesClause(
 					colTypes[colIdx] = colTypes[colIdx].WithoutTypeModifiers()
 				}
 			}
-			elems[elemPos] = b.buildScalar(texpr, inScope, nil, nil, nil)
-			elemPos += numCols
 		}
 
 		// If we still don't have a type for the column, set it to the desired type.
