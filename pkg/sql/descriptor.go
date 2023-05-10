@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -58,6 +59,18 @@ var (
 	errNoFunction        = pgerror.New(pgcode.InvalidName, "no function specified")
 	errNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
 )
+
+// PublicSchemaCreatePrivilegeEnabledName is the name of the
+// cluster setting that determines whether the `CREATE` privilege
+// is given to all users by default.
+const PublicSchemaCreatePrivilegeEnabledName = "sql.auth.public_schema_create_privilege.enabled"
+
+var PublicSchemaCreatePrivilegeEnabled = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	PublicSchemaCreatePrivilegeEnabledName,
+	"allow users to have CREATE privileges on the public schema by default",
+	envutil.EnvOrDefaultBool("`COCKROACH_PUBLIC_SCHEMA_CREATE_PRIVILEGE_ENABLED`", true),
+).WithPublic()
 
 // createDatabase takes Database descriptor and creates it if needed,
 // incrementing the descriptor counter. Returns true if the descriptor
@@ -149,7 +162,7 @@ func (p *planner) createDatabase(
 		ParentID:   id,
 		Name:       tree.PublicSchema,
 		ID:         publicSchemaID,
-		Privileges: catpb.NewPublicSchemaPrivilegeDescriptor(),
+		Privileges: catpb.NewPublicSchemaPrivilegeDescriptor(PublicSchemaCreatePrivilegeEnabled.Get(&p.execCfg.Settings.SV)),
 		Version:    1,
 	}).BuildCreatedMutableSchema()
 

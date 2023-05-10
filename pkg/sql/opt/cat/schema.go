@@ -12,7 +12,7 @@ package cat
 
 import (
 	"context"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
@@ -21,6 +21,9 @@ import (
 // are "public" and "crdb_internal".
 type Schema interface {
 	Object
+
+	// Database returns the parent database descriptor
+	Database() catalog.DatabaseDescriptor
 
 	// Name returns the fully normalized, fully qualified, and fully resolved
 	// name of the schema (<db-name>.<schema-name>). The ExplicitCatalog

@@ -143,6 +143,10 @@ func (os *optSchema) Name() *cat.SchemaName {
 	return &os.name
 }
 
+func (os *optSchema) Database() catalog.DatabaseDescriptor {
+	return os.database
+}
+
 // GetDataSourceNames is part of the cat.Schema interface.
 func (os *optSchema) GetDataSourceNames(
 	ctx context.Context,

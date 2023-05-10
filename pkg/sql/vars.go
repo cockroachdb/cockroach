@@ -381,7 +381,6 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(defaultIntSize.Get(sv), 10)
 		},
 	},
-
 	// See https://www.postgresql.org/docs/10/runtime-config-client.html.
 	// Supported only for pg compatibility - CockroachDB has no notion of
 	// tablespaces.

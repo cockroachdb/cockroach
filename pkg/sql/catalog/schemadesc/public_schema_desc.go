@@ -55,7 +55,7 @@ var _ syntheticBase = publicBase{}
 func (publicBase) kindName() string                 { return "public" }
 func (publicBase) kind() catalog.ResolvedSchemaKind { return catalog.SchemaPublic }
 func (publicBase) GetPrivileges() *catpb.PrivilegeDescriptor {
-	return catpb.NewPublicSchemaPrivilegeDescriptor()
+	return catpb.NewPublicSchemaPrivilegeDescriptor(true /*includeCreatePriv*/)
 }
 
 // publicDesc is a singleton returned by GetPublicSchema.
