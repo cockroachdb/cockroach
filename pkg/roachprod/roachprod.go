@@ -972,7 +972,7 @@ func urlGenerator(
 		url := fmt.Sprintf("%s://%s:%d%s", scheme, host, uConfig.port, uConfig.path)
 		urls = append(urls, url)
 		if uConfig.openInBrowser {
-			cmd := exec.Command("python", "-m", "webbrowser", url)
+			cmd := browserCmd(url)
 
 			if err := cmd.Run(); err != nil {
 				return nil, err
@@ -980,6 +980,22 @@ func urlGenerator(
 		}
 	}
 	return urls, nil
+}
+
+func browserCmd(url string) *exec.Cmd {
+	var cmd string
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = "/usr/bin/open"
+	case "windows":
+		cmd = "cmd"
+		args = []string{"/c", "start"}
+	default:
+		cmd = "xdg-open"
+	}
+	args = append(args, url)
+	return exec.Command(cmd, args...)
 }
 
 // AdminURL generates admin UI URLs for the nodes in a cluster.
