@@ -15,6 +15,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -22,13 +24,15 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/google/shlex"
 	"github.com/spf13/cobra"
 )
 
 type optsT struct {
-	headDate time.Time
+	startBad     plumbing.Hash
+	startBadDate time.Time
 
+	artifacts     string
 	cmd           string
 	grep          string
 	grepNot       string
@@ -37,12 +41,14 @@ type optsT struct {
 	maxAge        time.Duration
 	cont          bool
 	log           func(string, ...interface{})
+
+	reGrep, reGrepNot *regexp.Regexp // TODO grepNot remove or impl
 }
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&opts.cmd, "cmd", "", "Command to run for each commit")
-	rootCmd.PersistentFlags().StringVar(&opts.grep, "grep", ".", "Consider result only if it matches regexp (skip commit otherwise)")
-	rootCmd.PersistentFlags().StringVar(&opts.grepNot, "grep-not", "", "Consider result only if it does not match regexp (skip commit otherwise)")
+	rootCmd.PersistentFlags().StringVar(&opts.grep, "grep", ".", "Consider failure only if it matches regexp (skip commit otherwise)")
+	rootCmd.PersistentFlags().StringVar(&opts.grepNot, "grep-not", "", "Consider failure only if it does not match regexp (skip commit otherwise)")
 	rootCmd.PersistentFlags().StringVar(&opts.cherryPick, "cherry-pick", "", "Commit to (temporarily) cherry-pick onto each commit being tested")
 	rootCmd.PersistentFlags().StringVar(&opts.filePredicate, "only", ".", "Only consider commits that changed the provided pattern (all others will be skipped); use like `git log -- <pat>`")
 	rootCmd.PersistentFlags().DurationVar(&opts.maxAge, "max-age", 31*24*time.Hour, "Oldest commit to consider (autobisect will fail if oldest commit is bad)")
@@ -51,18 +57,23 @@ func init() {
 
 var opts = optsT{
 	log: func(format string, args ...interface{}) {
-		fmt.Fprintf(os.Stdout, format, args...)
+		_, _ = fmt.Fprintf(os.Stdout, format, args...)
 		if n := len(format); n > 0 && format[n-1] != '\n' {
-			fmt.Fprintln(os.Stdout)
+			_, _ = fmt.Fprintln(os.Stdout)
 		}
 		// log.InfofDepth(context.Background(), 1, format, args...)
 	},
+	artifacts: filepath.Join("artifacts/autobisect"),
 }
 
 func (opts *optsT) validate() error {
 	if opts.grep == "" {
 		return errors.Errorf("please provide --grep to guard against runaway bisect, " +
 			"if you really want to accept anything, use `.`")
+	}
+	opts.reGrep = regexp.MustCompile(opts.grep)
+	if opts.grepNot != "" {
+		opts.reGrepNot = regexp.MustCompile(opts.grep)
 	}
 	return nil
 }
@@ -80,15 +91,14 @@ var rootCmd = &cobra.Command{
 `,
 }
 
-func (opts *optsT) exec(arg0 string, args ...string) (_out, _err string, _exitCode int, _ error) {
-	var errBuf strings.Builder
-	var outBuf strings.Builder
+func (opts *optsT) execInto(
+	stdout, stderr io.Writer, arg0 string, args ...string,
+) (_exitCode int, _ error) {
 	// TODO(tbg) escape shell args.
 	args = append([]string{arg0}, args...)
-	opts.log("%q", args)
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stderr = &errBuf
-	cmd.Stdout = &outBuf
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	err := cmd.Run()
 
 	var exitCode int
@@ -97,16 +107,22 @@ func (opts *optsT) exec(arg0 string, args ...string) (_out, _err string, _exitCo
 		if ee := (*exec.ExitError)(nil); errors.As(err, &ee) {
 			exitCode = ee.ExitCode()
 		}
-		opts.log("%q: %v\n%s", args, err, errBuf.String())
 	}
 
-	return outBuf.String(), errBuf.String(), exitCode, err
+	return exitCode, err
+}
+
+func (opts *optsT) exec(arg0 string, args ...string) (_out, _err string, _exitCode int, _ error) {
+	var outBuf strings.Builder
+	var errBuf strings.Builder
+	code, err := opts.execInto(&outBuf, &errBuf, arg0, args...)
+	return outBuf.String(), errBuf.String(), code, err
 }
 
 func (opts *optsT) backwards(exclusiveHead plumbing.Hash, mult int) (plumbing.Hash, error) {
 	const stepDuration = 26 * time.Hour // TODO(tbg): make configurable
-	before := opts.headDate.Add(-1 * time.Duration(mult) * stepDuration)
-	after := opts.headDate.Add(-1 * opts.maxAge)
+	before := opts.startBadDate.Add(-1 * time.Duration(mult) * stepDuration)
+	after := opts.startBadDate.Add(-1 * opts.maxAge)
 	if after.After(before) {
 		return plumbing.ZeroHash, io.EOF
 	}
@@ -115,9 +131,6 @@ func (opts *optsT) backwards(exclusiveHead plumbing.Hash, mult int) (plumbing.Ha
 	// rather than oldest. So we don't use either and pick the oldest commit
 	// from the output manually.
 	sOut, _, _, err := opts.exec(`git`, `log`, `--merges`, `--first-parent`,
-		 breaking this
-		// TODO: can't use --before because if there's a time period where no commits
-		// landed we'll get random empty results half way through
 		`--after=`+after.Format(time.RFC3339), `--before=`+before.Format(time.RFC3339),
 		"--pretty=format:%H",
 		exclusiveHead.String()+"^",
@@ -134,7 +147,40 @@ func (opts *optsT) backwards(exclusiveHead plumbing.Hash, mult int) (plumbing.Ha
 }
 
 func runBisect(opts optsT) error {
-	c, err := firstBad(opts)
+	if err := opts.validate(); err != nil {
+		return err
+	}
+	r, err := git.PlainOpen(".")
+	if err != nil {
+		return err
+	}
+	startBad, err := r.Head()
+	if err != nil {
+		return err
+	}
+	opts.startBad = startBad.Hash()
+
+	{
+		sOut, _, _, err := opts.exec(`git`, `log`, `--pretty=%ct`, `--max-count=1`, startBad.Hash().String())
+		if err != nil {
+			return err
+		}
+		secs, err := strconv.ParseInt(strings.TrimSpace(sOut), 10, 64)
+		if err != nil {
+			return err
+		}
+		opts.startBadDate = time.Unix(secs, 0)
+	}
+
+	tr, err := opts.test(opts.startBad)
+	if err != nil {
+		return err
+	}
+	if tr != testResultBad {
+		return errors.Errorf("starting commit %s is %s", opts.startBad, tr)
+	}
+
+	c, err := findGood(opts)
 	if err != nil {
 		return err
 	}
@@ -142,71 +188,32 @@ func runBisect(opts optsT) error {
 	return nil
 }
 
-func firstLine(msg string) string {
-	idx := strings.Index(msg, "\n")
-	if idx < 0 {
-		return msg
-	}
-	return msg[:idx]
-}
-
-func firstBad(opts optsT) (*object.Commit, error) {
-	if err := opts.validate(); err != nil {
-		return nil, err
-	}
-	r, err := git.PlainOpen(".")
-	if err != nil {
-		return nil, err
-	}
-	h, err := r.Head()
-	if err != nil {
-		return nil, err
-	}
-
-	{
-		sOut, _, _, err := opts.exec(`git`, `log`, `--pretty=%ct`, `--max-count=1`, h.Hash().String())
-		if err != nil {
-			return nil, err
-		}
-		secs, err := strconv.ParseInt(strings.TrimSpace(sOut), 10, 64)
-		if err != nil {
-			return nil, err
-		}
-		opts.headDate = time.Unix(secs, 0)
-	}
-
-	// Start at head, walk back in doubling steps.
+func findGood(opts optsT) (plumbing.Hash, error) {
+	// Start at known bad commit, walk back in doubling steps.
 	for exp := 1; ; exp++ {
 		mult := (1 << exp) - 1 // 1, 3, 7, 15, ...
 
 		// Basically HEAD^<mult> but measured in commit time.
-		cur, err := opts.backwards(h.Hash(), mult)
+		cur, err := opts.backwards(opts.startBad, mult)
 		if errors.Is(err, io.EOF) {
 			// We ended up testing the very first commit passing our predicates
 			// without finding a good commit, so they're all bad - would need to seek
 			// back further, which we're not configured to do.
-			return nil, errors.Errorf("no good commit found")
+			return plumbing.ZeroHash, errors.Errorf("no good commit found")
 		}
 		if err != nil {
-			return nil, err
+			return plumbing.ZeroHash, err
 		}
 
-		{
-			sOut, _, _, err := opts.exec(`git`, `log`, `--format='%h %s %cd %cr'`, `--max-count=1`, cur.String())
-			if err != nil {
-				return nil, err
-			}
-			opts.log("^-- %s", sOut)
-		}
-		tr, err := opts.test(cur)
+		tr, err := opts.testAndReport(cur)
 		if err != nil {
-			return nil, err
+			return plumbing.ZeroHash, err
 		}
 		opts.log("^-- %s", tr)
-		_ = tr
+		if tr == testResultGood {
+			return cur, nil
+		}
 	}
-
-	return nil, errors.Errorf("all commits tested are bad")
 }
 
 type testResult byte
@@ -227,6 +234,24 @@ const (
 	testResultBad
 )
 
+func (opts *optsT) report(h plumbing.Hash, tr testResult) error {
+	if _, _, _, err := opts.exec(`git`, `bisect`, tr.String(), h.String()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (opts *optsT) testAndReport(h plumbing.Hash) (testResult, error) {
+	tr, err := opts.test(h)
+	if err != nil {
+		return 0, err
+	}
+	if err := opts.report(h, tr); err != nil {
+		return 0, err
+	}
+	return tr, nil
+}
+
 func (opts *optsT) test(h plumbing.Hash) (testResult, error) {
 	// NB: I tried git-go's Checkout for this, but it's very slow (painfully so
 	// for this, but also slow for everything like git log), don't recommend it.
@@ -234,14 +259,32 @@ func (opts *optsT) test(h plumbing.Hash) (testResult, error) {
 		return 0, err
 	}
 
-	sout, serr, code, err := opts.exec("echo", strings.Split(opts.cmd, " ")...) // TODO https://pkg.go.dev/github.com/google/shlex
+	args, err := shlex.Split(opts.cmd)
 	if err != nil {
 		return 0, err
 	}
-	_ = sout
-	_ = serr
-	_ = code
-	return testResultSkip, err // TODO
+	path := filepath.Join(os.ExpandEnv(opts.artifacts), h.String())
+	f, err := os.Create(path)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if f != nil {
+			_ = f.Close()
+		}
+	}()
+	_, err = opts.execInto(f, f, args[0], args[1:]...)
+	if err == nil {
+		return testResultGood, nil
+	}
+	if err := f.Close(); err != nil {
+		return 0, err
+	}
+	b, err := os.ReadFile(path)
+	if opts.reGrep.Match(b) {
+		return testResultBad, nil
+	}
+	return testResultSkip, nil
 }
 
 func main() {
