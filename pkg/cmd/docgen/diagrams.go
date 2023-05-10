@@ -1000,7 +1000,7 @@ var specs = []stmtSpec{
 		name:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"explain_option_name": "( 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' | 'VEC' )",
+			"explain_option_name": "( 'VERBOSE' | 'TYPES' | 'OPT' | 'ENV' | 'MEMO' | 'REDACT' | 'DISTSQL' | 'VEC' )",
 		},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'ANALYZE'"),
@@ -1012,7 +1012,7 @@ var specs = []stmtSpec{
 		stmt:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"explain_option_name": "( 'PLAN' | 'DISTSQL' | 'DEBUG' )",
+			"explain_option_name": "( 'PLAN' | 'VERBOSE' | 'TYPES' | 'DEBUG' | 'REDACT' | 'DISTSQL')",
 		},
 		unlink: []string{"'DISTSQL'"},
 	},
