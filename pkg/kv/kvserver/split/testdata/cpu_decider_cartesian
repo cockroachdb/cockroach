@@ -1,0 +1,131 @@
+# In this test we run many different start key, span length and weight
+# distributions. We set the duration to be 100 seconds, with 20k requests (
+# mixing 2 10k request configs) there should be 200 requests/second with
+# varying weights. The threshold is set low enough that most runs should exceed
+# the threshold at every second.
+decider duration=100 retention=200 objective=cpu threshold=1000
+----
+
+eval seed=42 iterations=20 cartesian=true mix=perm mix_count=2
+----
+description                                            no_key(%)  avg_diff(%)  max_diff(%)  avg_optimal_diff(%)  max_optimal_diff(%)
+mixed_requests(2)                                      0.00       3.71         13.23        0.01                 0.02
+w=uni(10000)/k=uni(1000000)/s=uni(1000)/s(%)=20/10000                                                            
+w=zip(100)/k=uni(10000)/s=uni(1000)/s(%)=20/10000                                                                
+mixed_requests(2)                                      0.00       7.97         20.82        0.02                 0.05
+w=uni(100)/k=zip(1000000)/s=uni(1000)/s(%)=20/10000                                                              
+w=zip(10000)/k=zip(10000)/s=zip(1000)/s(%)=20/10000                                                              
+mixed_requests(2)                                      0.00       5.52         12.77        0.02                 0.08
+w=zip(10000)/k=uni(1000000)/s=uni(1000)/s(%)=20/10000                                                            
+w=uni(100)/k=uni(1000000)/s=zip(1000)/s(%)=20/10000                                                              
+mixed_requests(2)                                      0.00       4.74         10.57        0.01                 0.01
+w=uni(10000)/k=uni(10000)/s=uni(1000)/s(%)=20/10000                                                              
+w=uni(100)/k=uni(10000)/s=uni(1)/s(%)=0/10000                                                                    
+mixed_requests(2)                                      0.00       5.98         19.81        0.01                 0.04
+w=zip(100)/k=zip(10000)/s=zip(1000)/s(%)=95/10000                                                                
+w=zip(10000)/k=uni(1000000)/s=zip(1000)/s(%)=95/10000                                                            
+mixed_requests(2)                                      0.00       4.97         15.74        0.01                 0.02
+w=uni(10000)/k=uni(10000)/s=zip(1000)/s(%)=20/10000                                                              
+w=zip(100)/k=zip(1000000)/s=zip(1000)/s(%)=95/10000                                                              
+mixed_requests(2)                                      0.00       5.06         21.37        0.01                 0.01
+w=uni(10000)/k=uni(10000)/s=uni(1)/s(%)=0/10000                                                                  
+w=zip(10000)/k=zip(1000000)/s=zip(1000)/s(%)=95/10000                                                            
+mixed_requests(2)                                      0.00       3.69         19.97        0.03                 0.08
+w=uni(100)/k=zip(10000)/s=zip(1000)/s(%)=20/10000                                                                
+w=zip(10000)/k=zip(10000)/s=uni(1000)/s(%)=20/10000                                                              
+mixed_requests(2)                                      0.00       6.36         15.63        0.01                 0.02
+w=zip(100)/k=uni(10000)/s=uni(1)/s(%)=0/10000                                                                    
+w=zip(100)/k=uni(10000)/s=zip(1000)/s(%)=95/10000                                                                
+mixed_requests(2)                                      0.00       4.11         16.75        0.00                 0.01
+w=zip(100)/k=zip(1000000)/s=zip(1000)/s(%)=20/10000                                                              
+w=uni(100)/k=zip(10000)/s=zip(1000)/s(%)=95/10000                                                                
+mixed_requests(2)                                      0.00       4.80         17.67        0.00                 0.01
+w=uni(100)/k=zip(1000000)/s=zip(1000)/s(%)=20/10000                                                              
+w=uni(10000)/k=zip(10000)/s=uni(1000)/s(%)=95/10000                                                              
+mixed_requests(2)                                      0.00       5.33         28.11        0.01                 0.03
+w=zip(10000)/k=uni(1000000)/s=uni(1)/s(%)=0/10000                                                                
+w=zip(10000)/k=uni(10000)/s=uni(1000)/s(%)=20/10000                                                              
+mixed_requests(2)                                      0.00       4.89         14.73        0.00                 0.01
+w=uni(10000)/k=zip(10000)/s=zip(1000)/s(%)=95/10000                                                              
+w=uni(100)/k=uni(10000)/s=uni(1000)/s(%)=20/10000                                                                
+mixed_requests(2)                                      0.00       5.32         12.46        0.00                 0.01
+w=uni(10000)/k=zip(1000000)/s=uni(1000)/s(%)=95/10000                                                            
+w=zip(10000)/k=zip(10000)/s=uni(1)/s(%)=0/10000                                                                  
+mixed_requests(2)                                      0.00       5.02         14.09        0.01                 0.04
+w=zip(100)/k=zip(10000)/s=uni(1)/s(%)=0/10000                                                                    
+w=zip(10000)/k=zip(10000)/s=uni(1000)/s(%)=95/10000                                                              
+mixed_requests(2)                                      0.00       6.14         18.16        0.00                 0.01
+w=zip(100)/k=zip(1000000)/s=uni(1)/s(%)=0/10000                                                                  
+w=uni(100)/k=uni(1000000)/s=uni(1)/s(%)=0/10000                                                                  
+mixed_requests(2)                                      0.00       3.92         14.73        0.00                 0.01
+w=zip(10000)/k=zip(1000000)/s=uni(1)/s(%)=0/10000                                                                
+w=uni(10000)/k=uni(10000)/s=zip(1000)/s(%)=95/10000                                                              
+mixed_requests(2)                                      0.00       5.83         22.03        0.01                 0.02
+w=uni(10000)/k=zip(10000)/s=zip(1000)/s(%)=20/10000                                                              
+w=zip(100)/k=zip(1000000)/s=uni(1000)/s(%)=95/10000                                                              
+mixed_requests(2)                                      0.00       4.60         13.13        0.01                 0.01
+w=zip(100)/k=uni(10000)/s=uni(1000)/s(%)=95/10000                                                                
+w=uni(100)/k=zip(10000)/s=uni(1)/s(%)=0/10000                                                                    
+mixed_requests(2)                                      0.00       5.71         22.33        0.01                 0.06
+w=zip(10000)/k=uni(10000)/s=uni(1000)/s(%)=95/10000                                                              
+w=uni(100)/k=uni(10000)/s=zip(1000)/s(%)=95/10000                                                                
+mixed_requests(2)                                      0.00       5.13         16.86        0.01                 0.02
+w=uni(10000)/k=zip(10000)/s=uni(1000)/s(%)=20/10000                                                              
+w=uni(100)/k=zip(1000000)/s=uni(1)/s(%)=0/10000                                                                  
+mixed_requests(2)                                      0.00       3.50         8.96         0.00                 0.01
+w=uni(100)/k=zip(10000)/s=uni(1000)/s(%)=95/10000                                                                
+w=uni(10000)/k=zip(1000000)/s=uni(1000)/s(%)=20/10000                                                            
+mixed_requests(2)                                      0.00       4.48         14.54        0.02                 0.07
+w=zip(10000)/k=uni(1000000)/s=zip(1000)/s(%)=20/10000                                                            
+w=uni(100)/k=uni(10000)/s=zip(1000)/s(%)=20/10000                                                                
+mixed_requests(2)                                      0.00       6.88         22.68        0.02                 0.07
+w=zip(10000)/k=uni(10000)/s=uni(1)/s(%)=0/10000                                                                  
+w=zip(100)/k=zip(1000000)/s=uni(1000)/s(%)=20/10000                                                              
+mixed_requests(2)                                      0.00       4.80         24.10        0.00                 0.00
+w=uni(100)/k=uni(1000000)/s=zip(1000)/s(%)=95/10000                                                              
+w=zip(100)/k=uni(1000000)/s=uni(1000)/s(%)=20/10000                                                              
+mixed_requests(2)                                      0.00       6.29         24.99        0.00                 0.02
+w=uni(10000)/k=zip(10000)/s=uni(1)/s(%)=0/10000                                                                  
+w=zip(10000)/k=uni(1000000)/s=uni(1000)/s(%)=95/10000                                                            
+mixed_requests(2)                                      0.00       6.39         13.28        0.02                 0.07
+w=zip(100)/k=uni(1000000)/s=zip(1000)/s(%)=95/10000                                                              
+w=zip(10000)/k=uni(10000)/s=zip(1000)/s(%)=20/10000                                                              
+mixed_requests(2)                                      0.00       4.08         11.02        0.03                 0.08
+w=zip(10000)/k=zip(1000000)/s=uni(1000)/s(%)=20/10000                                                            
+w=zip(100)/k=uni(1000000)/s=uni(1)/s(%)=0/10000                                                                  
+mixed_requests(2)                                      0.00       4.84         13.76        0.00                 0.01
+w=uni(10000)/k=uni(1000000)/s=zip(1000)/s(%)=20/10000                                                            
+w=uni(10000)/k=zip(1000000)/s=zip(1000)/s(%)=20/10000                                                            
+mixed_requests(2)                                      0.00       4.08         8.81         0.01                 0.02
+w=uni(10000)/k=uni(1000000)/s=uni(1)/s(%)=0/10000                                                                
+w=zip(100)/k=uni(1000000)/s=uni(1000)/s(%)=95/10000                                                              
+mixed_requests(2)                                      0.00       4.89         12.20        0.00                 0.01
+w=uni(100)/k=zip(1000000)/s=uni(1000)/s(%)=95/10000                                                              
+w=uni(100)/k=uni(1000000)/s=uni(1000)/s(%)=20/10000                                                              
+mixed_requests(2)                                      0.00       5.03         16.77        0.00                 0.00
+w=uni(10000)/k=uni(1000000)/s=uni(1000)/s(%)=95/10000                                                            
+w=uni(10000)/k=zip(1000000)/s=zip(1000)/s(%)=95/10000                                                            
+mixed_requests(2)                                      0.00       5.07         15.26        0.02                 0.06
+w=uni(100)/k=zip(1000000)/s=zip(1000)/s(%)=95/10000                                                              
+w=zip(10000)/k=zip(1000000)/s=zip(1000)/s(%)=20/10000                                                            
+mixed_requests(2)                                      0.00       5.41         17.41        0.01                 0.04
+w=uni(100)/k=zip(10000)/s=uni(1000)/s(%)=20/10000                                                                
+w=zip(10000)/k=uni(10000)/s=zip(1000)/s(%)=95/10000                                                              
+mixed_requests(2)                                      0.00       4.22         12.22        0.01                 0.02
+w=zip(100)/k=zip(10000)/s=uni(1000)/s(%)=20/10000                                                                
+w=zip(100)/k=zip(10000)/s=zip(1000)/s(%)=20/10000                                                                
+mixed_requests(2)                                      0.00       3.26         13.03        0.00                 0.01
+w=uni(10000)/k=uni(1000000)/s=zip(1000)/s(%)=95/10000                                                            
+w=zip(10000)/k=zip(10000)/s=zip(1000)/s(%)=95/10000                                                              
+mixed_requests(2)                                      0.00       4.11         14.78        0.00                 0.01
+w=zip(100)/k=zip(10000)/s=uni(1000)/s(%)=95/10000                                                                
+w=zip(100)/k=uni(1000000)/s=zip(1000)/s(%)=20/10000                                                              
+mixed_requests(2)                                      0.00       6.28         17.10        0.01                 0.01
+w=uni(10000)/k=zip(1000000)/s=uni(1)/s(%)=0/10000                                                                
+w=uni(100)/k=uni(10000)/s=uni(1000)/s(%)=95/10000                                                                
+mixed_requests(2)                                      0.00       5.17         13.51        0.01                 0.03
+w=zip(10000)/k=zip(1000000)/s=uni(1000)/s(%)=95/10000                                                            
+w=zip(100)/k=uni(10000)/s=zip(1000)/s(%)=20/10000                                                                
+mixed_requests(2)                                      0.00       4.23         20.33        0.00                 0.01
+w=uni(10000)/k=uni(10000)/s=uni(1000)/s(%)=95/10000                                                              
+w=uni(100)/k=uni(1000000)/s=uni(1000)/s(%)=95/10000                                                              
