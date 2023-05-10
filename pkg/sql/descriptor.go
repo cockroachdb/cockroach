@@ -59,6 +59,17 @@ var (
 	errNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
 )
 
+// PublicSchemaCreatePrivilegeEnabled is the cluster setting that determines
+// whether the CREATE privilege is given to the `public` role on the `public`
+// schema at the time the schema is created.
+var PublicSchemaCreatePrivilegeEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.auth.public_schema_create_privilege.enabled",
+	"determines whether to grant all users the CREATE privileges on the public "+
+		"schema when it is created",
+	true,
+).WithPublic()
+
 // createDatabase takes Database descriptor and creates it if needed,
 // incrementing the descriptor counter. Returns true if the descriptor
 // is actually created, false if it already existed, or an error if one was
@@ -145,11 +156,12 @@ func (p *planner) createDatabase(
 		dbdesc.MaybeWithDatabaseRegionConfig(regionConfig),
 		dbdesc.WithPublicSchemaID(publicSchemaID),
 	)
+	includeCreatePriv := PublicSchemaCreatePrivilegeEnabled.Get(&p.execCfg.Settings.SV)
 	publicSchema := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   id,
 		Name:       tree.PublicSchema,
 		ID:         publicSchemaID,
-		Privileges: catpb.NewPublicSchemaPrivilegeDescriptor(),
+		Privileges: catpb.NewPublicSchemaPrivilegeDescriptor(includeCreatePriv),
 		Version:    1,
 	}).BuildCreatedMutableSchema()
 
