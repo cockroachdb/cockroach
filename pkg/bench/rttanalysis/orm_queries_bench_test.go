@@ -126,6 +126,30 @@ WHERE c.relkind IN ('f', 'm', 'p', 'r', 'v')
 		},
 
 		{
+			Name: "django comment introspection with comments",
+			Setup: `CREATE TABLE t1(a int primary key, b int);
+CREATE TABLE t2(a int primary key, b int);
+CREATE TABLE t3(a int primary key, b int);
+COMMENT ON TABLE t1 is 't1';
+COMMENT ON TABLE t2 is 't2';
+COMMENT ON TABLE t3 is 't1';
+`,
+			Stmt: `SELECT
+                c.relname,
+                CASE
+                    WHEN c.relispartition THEN 'p'
+                    WHEN c.relkind IN ('m', 'v') THEN 'v'
+                    ELSE 't'
+                END,
+                obj_description(c.oid, 'pg_class')
+            FROM pg_catalog.pg_class c
+            LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.relkind IN ('f', 'm', 'p', 'r', 'v')
+                AND n.nspname NOT IN ('pg_catalog', 'pg_toast')
+                AND pg_catalog.pg_table_is_visible(c.oid);`,
+		},
+
+		{
 			Name: "activerecord type introspection query",
 			Stmt: `SELECT
   t.oid, t.typname, t.typelem, t.typdelim, t.typinput, r.rngsubtype, t.typtype, t.typbasetype
@@ -202,6 +226,27 @@ WHERE
 			Name:  "pg_attribute",
 			Setup: `CREATE TABLE t1(a int primary key, b int);`,
 			Stmt:  `SELECT * FROM pg_attribute`,
+		},
+
+		{
+			Name:  "introspection description join",
+			Setup: `CREATE TABLE t1(a int primary key, b int);`,
+			Stmt: `SELECT
+  n.nspname, relname, d.description
+FROM
+  pg_description AS d
+  INNER JOIN pg_class AS c ON d.objoid = c.oid
+  INNER JOIN pg_namespace AS n ON n.oid = c.relnamespace
+WHERE
+  d.objsubid = 0
+  AND n.nspname
+    NOT IN (
+        'gp_toolkit':::STRING:::NAME,
+        'information_schema':::STRING:::NAME,
+        'pgagent':::STRING:::NAME,
+        'bench':::STRING:::NAME
+      )
+  AND n.nspname NOT LIKE 'pg_%';`,
 		},
 
 		{
