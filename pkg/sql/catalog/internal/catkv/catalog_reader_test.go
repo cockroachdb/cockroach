@@ -120,6 +120,12 @@ func TestDataDriven(t *testing.T) {
 				}
 				return h.doCatalogQuery(ctx, q)
 
+			case "scan_all_comments":
+				q := func(ctx context.Context, txn *kv.Txn, cr catkv.CatalogReader) (nstree.Catalog, error) {
+					return cr.ScanAllComments(ctx, txn)
+				}
+				return h.doCatalogQuery(ctx, q)
+
 			case "scan_namespace_for_databases":
 				q := func(ctx context.Context, txn *kv.Txn, cr catkv.CatalogReader) (nstree.Catalog, error) {
 					return cr.ScanNamespaceForDatabases(ctx, txn)

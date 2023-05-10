@@ -1579,20 +1579,20 @@ func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
 		p.Txn(),
 		sessiondata.NodeUserSessionDataOverride,
 		`SELECT
-	object_id,
-	sub_id,
-	comment,
-	CASE type
-	WHEN 'DatabaseCommentType' THEN 0
-	WHEN 'TableCommentType' THEN 1
-	WHEN 'ColumnCommentType' THEN 2
-	WHEN 'IndexCommentType' THEN 3
-	WHEN 'SchemaCommentType' THEN 4
-	WHEN 'ConstraintCommentType' THEN 5
-	END
-		AS type
-FROM
-	"".crdb_internal.kv_catalog_comments;`)
+		object_id,
+		sub_id,
+		comment,
+		CASE type
+		WHEN 'DatabaseCommentType' THEN 0
+		WHEN 'TableCommentType' THEN 1
+		WHEN 'ColumnCommentType' THEN 2
+		WHEN 'IndexCommentType' THEN 3
+		WHEN 'SchemaCommentType' THEN 4
+		WHEN 'ConstraintCommentType' THEN 5
+		END
+			AS type
+	FROM
+		"".crdb_internal.kv_catalog_comments;`)
 }
 
 var pgCatalogDescriptionTable = virtualSchemaTable{
@@ -1682,7 +1682,6 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				}
 			}
 		}
-
 		return nil
 	},
 }

@@ -720,6 +720,23 @@ func (tc *Collection) GetAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, 
 	return ret.Catalog, nil
 }
 
+// GetAllComments gets all comments for all descriptors. This method never
+// returns the underlying catalog, since it will be incomplete and only
+// contain comments.
+func (tc *Collection) GetAllComments(
+	ctx context.Context, txn *kv.Txn,
+) (nstree.CommentCatalog, error) {
+	kvComments, err := tc.cr.ScanAllComments(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+	comments, err := tc.aggregateAllLayers(ctx, txn, kvComments)
+	if err != nil {
+		return nil, err
+	}
+	return comments, nil
+}
+
 // GetAllFromStorageUnvalidated delegates to an uncached catkv.CatalogReader's
 // ScanAll method. Nothing is cached, validated or hydrated. This is to be used
 // sparingly and only in situations which warrant it, where an unmediated view
