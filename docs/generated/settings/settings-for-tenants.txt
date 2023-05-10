@@ -98,6 +98,7 @@ sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in 
 sql.contention.event_store.capacity	byte size	64 MiB	the in-memory storage capacity per-node of contention event store	tenant-rw
 sql.contention.event_store.duration_threshold	duration	0s	minimum contention duration to cause the contention events to be collected into crdb_internal.transaction_contention_events	tenant-rw
 sql.contention.txn_id_cache.max_size	byte size	64 MiB	the maximum byte size TxnID cache will use (set to 0 to disable)	tenant-rw
+sql.copy.retry.max_size	byte size	128 MiB	set to non-zero to enable automatic copy retry	tenant-rw
 sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references across databases is allowed	tenant-rw
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed	tenant-rw
 sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed	tenant-rw
