@@ -40,6 +40,7 @@ type cachedCatalogReader struct {
 	// has* indicates previously completed lookups. When set, we
 	// know the corresponding catalog data is in the cache.
 	hasScanAll                   bool
+	hasScanAllComments           bool
 	hasScanNamespaceForDatabases bool
 
 	// memAcc is the actual account of an injected, upstream monitor
@@ -149,6 +150,31 @@ func (c *cachedCatalogReader) Reset(ctx context.Context) {
 	}
 }
 
+// ScanAllComments is part of the CatalogReader interface.
+func (c *cachedCatalogReader) ScanAllComments(
+	ctx context.Context, txn *kv.Txn,
+) (nstree.Catalog, error) {
+	if c.hasScanAllComments {
+		return c.cache.Catalog, nil
+	}
+	// Scan all catalog comments.
+	read, err := c.cr.ScanAllComments(ctx, txn)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	// We don't wipe out anything we already read when
+	// updating the cache. So add the comments in and then
+	// add back any descriptors + comments we read earlier.
+	mergedCatalog := nstree.MutableCatalog{}
+	mergedCatalog.AddAll(read)
+	mergedCatalog.AddAll(c.cache.Catalog)
+	if err := c.ensure(ctx, mergedCatalog.Catalog); err != nil {
+		return nstree.Catalog{}, err
+	}
+	c.hasScanAllComments = true
+	return read, nil
+}
+
 // ScanAll is part of the CatalogReader interface.
 func (c *cachedCatalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
 	if c.hasScanAll {
@@ -173,6 +199,7 @@ func (c *cachedCatalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.
 	}
 	c.hasScanAll = true
 	c.hasScanNamespaceForDatabases = true
+	c.hasScanAllComments = true
 	for id, s := range c.byIDState {
 		s.hasScanNamespaceForDatabaseEntries = true
 		s.hasScanNamespaceForDatabaseSchemas = true
