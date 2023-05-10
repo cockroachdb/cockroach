@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -64,6 +65,21 @@ const CopyBatchRowSizeVectorDefault = 32 << 10
 
 // When this many rows are in the copy buffer, they are inserted.
 var CopyBatchRowSize = util.ConstantWithMetamorphicTestRange("copy-batch-size", CopyBatchRowSizeDefault, 1, 50_000)
+
+// copyRetryBufferSize can be used to enable the transparent retry of atomic
+// copies that fail due to retriable errors. If an atomic copy under implicit
+// transaction control encounters a retriable error and the amount of the copy
+// data is less than copyRetryBufferSize, we will start a new txn and replay
+// the COPY from the beginning. If a retriable error occurs before reading all
+// the COPY data we will read and buffer it all before retrying to ensure it
+// is less than this limit.
+var copyRetryBufferSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"sql.copy.retry.max_size",
+	"set to non-zero to enable automatic atomic copy retry when the COPY data size is less than max_size"+
+		", non-atomic copies are not affected",
+	128<<20, //128MiB
+).WithPublic()
 
 // SetCopyFromBatchSize exports overriding copy batch size for test code.
 func SetCopyFromBatchSize(i int) int {
@@ -263,6 +279,8 @@ type copyMachine struct {
 	valueHandlers []tree.ValueHandler
 	ph            pgdate.ParseHelper
 
+	scratch [128]byte
+
 	// For testing we want to be able to override this on the instance level.
 	copyBatchRowSize int
 	maxRowMem        int64
@@ -302,10 +320,18 @@ func newCopyMachine(
 	// We need a planner to do the initial planning, in addition
 	// to those used for the main execution of the COPY afterwards.
 	txnOpt.initPlanner(ctx, c.p)
-	cleanup := c.p.preparePlannerForCopy(ctx, &c.txnOpt, false /* finalBatch */, c.implicitTxn)
-	defer func() {
-		retErr = cleanup(ctx, retErr)
-	}()
+	if c.p.SessionData().CopyFromRetriesEnabled && c.implicitTxn {
+		// If we are doing retries we may leave the outer txn in the
+		// conn_executor in an aborted state which will cause errors
+		// when it tries to commit, so have newCopyMachine commit that
+		// one and start the copy with a new one.
+		cleanup := p.preparePlannerForCopy(ctx, &c.txnOpt, false /*final*/, c.implicitTxn)
+		defer func() {
+			retErr = cleanup(ctx, retErr)
+		}()
+	} else {
+		txnOpt.resetPlanner(ctx, p, txnOpt.txn, txnOpt.txnTimestamp, txnOpt.stmtTimestamp)
+	}
 	c.parsingEvalCtx = c.p.EvalContext()
 	flags := tree.ObjectLookupFlags{
 		Required:             true,
@@ -517,6 +543,8 @@ func (c *copyMachine) Close(ctx context.Context) {
 	c.copyMon.Stop(ctx)
 }
 
+type readFunc func(ctx context.Context) error
+
 // run consumes all the copy-in data from the network connection and inserts it
 // in the database.
 func (c *copyMachine) run(ctx context.Context) (err error) {
@@ -526,6 +554,14 @@ func (c *copyMachine) run(ctx context.Context) (err error) {
 	defer func() {
 		// Discard any bytes we haven't read yet.
 		err = errors.CombineErrors(err, cr.Drain())
+		// There's a fair number of error paths that can occur outside the
+		// control of preparePlannerForCopy and now that we can instill a new
+		// txn here due to retries make sure to clean up if we fail.
+		if err != nil && c.txnOpt.txn != nil && c.implicitTxn {
+			if rollbackErr := c.txnOpt.txn.Rollback(ctx); rollbackErr != nil {
+				log.Eventf(ctx, "rollback failed: %s", rollbackErr)
+			}
+		}
 	}()
 	format := pgwirebase.FormatText
 	if c.format == tree.CopyFormatBinary {
@@ -536,30 +572,27 @@ func (c *copyMachine) run(ctx context.Context) (err error) {
 		return err
 	}
 
-	var readFn func(ctx context.Context) error
-	switch c.format {
-	case tree.CopyFormatText:
-		c.textDelim = []byte{c.delimiter}
-		readFn = c.readTextData
-		c.buf = bufio.NewReader(cr)
-	case tree.CopyFormatBinary:
-		readFn = c.readBinaryData
-		c.buf = nil
-		c.reader = cr
-	case tree.CopyFormatCSV:
-		readFn = c.readCSVData
-		c.csvReader = csv.NewReader(cr)
-		c.buf = c.csvReader.GetBuffer()
-		c.csvReader.Comma = rune(c.delimiter)
-		c.csvReader.ReuseRecord = true
-		c.csvReader.FieldsPerRecord = len(c.resultColumns) + len(c.expectedHiddenColumnIdxs)
-		c.csvReader.DontSkipEmptyLines = true
-		if c.csvEscape != 0 {
-			c.csvReader.Escape = c.csvEscape
-		}
-	default:
-		panic("unknown copy format")
+	var r io.Reader = cr
+	var bw *copy.BufferingWriter
+	atomicRetryEnabled := false
+	if c.implicitTxn &&
+		c.p.SessionData().CopyFromAtomicEnabled &&
+		c.p.SessionData().CopyFromRetriesEnabled &&
+		copyRetryBufferSize.Get(c.p.execCfg.SV()) > 0 {
+		atomicRetryEnabled = true
+		// Memory accounting is simple, it just grows and grows and when run returns account is closed.
+		replayAcc := c.copyMon.MakeBoundAccount()
+		defer func() {
+			replayAcc.Close(ctx)
+		}()
+		bw = &copy.BufferingWriter{Limit: copyRetryBufferSize.Get(c.p.execCfg.SV()), Grow: func(i int) error {
+			return replayAcc.Grow(ctx, int64(i))
+		}}
+		// Tee everything read from copy.Reader to the buffer.
+		r = io.TeeReader(r, bw)
 	}
+
+	readFn := c.initReader(r)
 	final := false
 	for !final {
 		if err := readFn(ctx); err != nil {
@@ -592,12 +625,96 @@ func (c *copyMachine) run(ctx context.Context) (err error) {
 				log.VEventf(ctx, 2, "copy batch of %d rows flushing due to memory usage %d > %d", len, c.rowsMemAcc.Used(), c.maxRowMem)
 			}
 			if err := c.processRows(ctx, final); err != nil {
+				// Handle atomic retry where we replay the entire COPY.
+				if errIsRetriable(err) {
+					if atomicRetryEnabled {
+						if err2 := c.resetForReplay(ctx, r, bw); err2 != nil {
+							return errors.CombineErrors(err, err2)
+						} else {
+							// We can only replay once.
+							atomicRetryEnabled = false
+							// If we hit an error on final batch we start over so reset this.
+							final = false
+							txnOpt := &c.txnOpt
+							if rollbackErr := txnOpt.txn.Rollback(ctx); rollbackErr != nil {
+								log.Eventf(ctx, "rollback failed: %s", rollbackErr)
+							}
+							// Start a new transaction.
+							// TODO(cucaroach): I feel like we should be delegating to conn_executor for this.
+							nodeID, _ := c.p.execCfg.NodeInfo.NodeID.OptionalNodeID()
+							txnOpt.txn = kv.NewTxnWithSteppingEnabled(ctx, c.p.execCfg.DB, nodeID, c.p.SessionData().DefaultTxnQualityOfService)
+							txnOpt.txn.SetDebugName("copy replay txn")
+							txnOpt.txnTimestamp = c.p.execCfg.Clock.PhysicalTime()
+							txnOpt.stmtTimestamp = txnOpt.txnTimestamp
+							txnOpt.resetPlanner(ctx, c.p, txnOpt.txn, txnOpt.txnTimestamp, txnOpt.stmtTimestamp)
+							continue
+						}
+					} else if bw != nil {
+						// If bw was initialized we know we retried and failed
+						// again, report a nice error.
+						return errors.CombineErrors(errors.New("copy was retried and failed again, trying disabling copy_from_atomic_enabled"), err)
+					}
+				}
 				return err
 			}
 		}
 	}
 
 	return nil
+}
+
+func (c *copyMachine) resetForReplay(
+	ctx context.Context, r io.Reader, bw *copy.BufferingWriter,
+) error {
+	// Drain r so all data gets buffered.
+	scratch := c.scratch[:]
+	for {
+		_, err := io.ReadFull(r, scratch)
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			break
+		} else if err != nil {
+			return err
+		}
+	}
+	// If we exceeded the limit the buffering writer turns itself off and is
+	// zero'd, no big deal that we still read all that data, we have to do
+	// it anyways to drain the protocol buffer and keep on trucking.
+	if bw.Cap() == 0 {
+		return errors.New("copy retry aborted, sql.copy.retry.max_size exceeded")
+	}
+	c.initReader(bw.GetReader())
+	return c.resetRows(ctx)
+}
+
+func (c *copyMachine) initReader(r io.Reader) readFunc {
+	c.insertedRows = 0
+	var rf readFunc
+	switch c.format {
+	case tree.CopyFormatText:
+		c.textDelim = []byte{c.delimiter}
+		rf = c.readTextData
+		c.buf = bufio.NewReader(r)
+	case tree.CopyFormatBinary:
+		rf = c.readBinaryData
+		c.buf = nil
+		c.reader = r
+		c.binaryState = binaryStateNeedSignature
+	case tree.CopyFormatCSV:
+		rf = c.readCSVData
+		c.csvReader = csv.NewReader(r)
+		c.buf = c.csvReader.GetBuffer()
+		c.csvReader.Comma = rune(c.delimiter)
+		c.csvReader.ReuseRecord = true
+		c.csvReader.FieldsPerRecord = len(c.resultColumns) + len(c.expectedHiddenColumnIdxs)
+		c.csvReader.DontSkipEmptyLines = true
+		if c.csvEscape != 0 {
+			c.csvReader.Escape = c.csvEscape
+		}
+	default:
+		panic("unknown copy format")
+	}
+
+	return rf
 }
 
 const (
@@ -819,29 +936,25 @@ func (c *copyMachine) readBinarySignature() ([]byte, error) {
 // Depending on how the requesting COPY machine was configured, a new
 // transaction might be created.
 //
-// It returns a cleanup function that needs to be called when we're done with
-// the planner (before preparePlannerForCopy is called again). If
-// CopyFromAtomicEnabled is false, the cleanup function commits the txn (if it
-// hasn't already been committed) or rolls it back depending on whether it is
-// passed an error. If an error is passed in to the cleanup function, the same
-// error is returned.
+// It returns a cleanup function that needs to be called when we're done with the
+// planner (before preparePlannerForCopy is called again). The cleanup
+// function commits the txn (if it hasn't already been committed) or rolls it
+// back depending on whether it is passed an error. If an error is passed in
+// to the cleanup function, the same error is returned.
 func (p *planner) preparePlannerForCopy(
-	ctx context.Context, txnOpt *copyTxnOpt, finalBatch bool, implicitTxn bool,
+	ctx context.Context, txnOpt *copyTxnOpt, finalBatch bool, newTxn bool,
 ) func(context.Context, error) error {
-	autoCommit := implicitTxn
 	txnOpt.resetPlanner(ctx, p, txnOpt.txn, txnOpt.txnTimestamp, txnOpt.stmtTimestamp)
-	if implicitTxn {
+	if newTxn {
+		autoCommit := true
 		if p.SessionData().CopyFromAtomicEnabled {
 			// If the COPY should be atomic, only the final batch can commit.
 			autoCommit = finalBatch
 		}
-	}
-	p.autoCommit = autoCommit && !p.execCfg.TestingKnobs.DisableAutoCommitDuringExec
-
-	return func(ctx context.Context, prevErr error) (err error) {
-		// Ensure that we commit the transaction if atomic copy is off. If it's on,
-		// the conn executor will commit the transaction.
-		if implicitTxn && !p.SessionData().CopyFromAtomicEnabled {
+		p.autoCommit = autoCommit && !p.execCfg.TestingKnobs.DisableAutoCommitDuringExec
+		return func(ctx context.Context, prevErr error) (err error) {
+			// Ensure that we commit the transaction if atomic copy is off. If it's on,
+			// the conn executor will commit the transaction.
 			if prevErr == nil {
 				// Ensure that the txn is committed if the copyMachine is in charge of
 				// committing its transactions and the execution didn't already commit it
@@ -859,20 +972,25 @@ func (p *planner) preparePlannerForCopy(
 				log.Eventf(ctx, "rollback failed: %s", rollbackErr)
 			}
 
-			// Start the implicit txn for the next batch.
-			nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID()
-			txnOpt.txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, p.SessionData().DefaultTxnQualityOfService)
-			txnOpt.txnTimestamp = p.execCfg.Clock.PhysicalTime()
-			txnOpt.stmtTimestamp = txnOpt.txnTimestamp
+			// Start the implicit txn for the next batch unless its the last one
+			// or there was error (need a new txn in case we retry).
+			if !finalBatch || prevErr != nil {
+				nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID()
+				txnOpt.txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, p.SessionData().DefaultTxnQualityOfService)
+				txnOpt.txn.SetDebugName("copy txn")
+				txnOpt.txnTimestamp = p.execCfg.Clock.PhysicalTime()
+				txnOpt.stmtTimestamp = txnOpt.txnTimestamp
+			}
+			return prevErr
 		}
-		return prevErr
+	} else {
+		p.autoCommit = false
+		return func(ctx context.Context, prevErr error) (err error) { return prevErr }
 	}
 }
 
 // insertRows inserts rows, retrying if necessary.
-func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
-	var err error
-
+func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) (err error) {
 	rOpts := base.DefaultRetryOptions()
 	rOpts.MaxRetries = 5
 	r := retry.StartWithCtx(ctx, rOpts)
@@ -880,8 +998,7 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 		if err = c.insertRowsInternal(ctx, finalBatch); err == nil {
 			return nil
 		} else {
-			// It is currently only safe to retry if we are not in atomic copy mode &
-			// we are in an implicit transaction.
+			// It is currently only safe to retry if we are in an implicit transaction.
 			// NOTE: we cannot re-use the connExecutor retry scheme here as COPY
 			// consumes directly from the read buffer, and the data would no longer
 			// be available during the retry.
@@ -903,7 +1020,8 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 
 // insertRowsInternal transforms the buffered rows into an insertNode and executes it.
 func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (retErr error) {
-	cleanup := c.p.preparePlannerForCopy(ctx, &c.txnOpt, finalBatch, c.implicitTxn)
+	newTxn := c.implicitTxn && (!c.p.SessionData().CopyFromAtomicEnabled || finalBatch)
+	cleanup := c.p.preparePlannerForCopy(ctx, &c.txnOpt, finalBatch, newTxn)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
@@ -974,6 +1092,10 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 	}
 	c.insertedRows += numRows
 	// We're done reset for next batch.
+	return c.resetRows(ctx)
+}
+
+func (c *copyMachine) resetRows(ctx context.Context) error {
 	if c.vectorized {
 		var realloc bool
 		if err := colexecerror.CatchVectorizedRuntimeError(func() {
