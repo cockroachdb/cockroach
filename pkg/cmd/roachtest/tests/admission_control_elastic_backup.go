@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+        "os"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
@@ -92,9 +93,13 @@ func registerElasticControlForBackups(r registry.Registry) {
 					m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 					m.Go(func(ctx context.Context) error {
 						t.Status(fmt.Sprintf("during: creating full backup schedule to run every 20m (<%s)", time.Minute))
-						_, err := db.ExecContext(ctx,
+                                                gcsBackupTestingBucket := os.Getenv("BACKUP_TESTING_BUCKET")
+                                                if gcsBackupTestingBucket == "" {
+                                                        gcsBackupTestingBucket="cockroach-bucket-testing-private"
+                                                }
+                                                _, err := db.ExecContext(ctx,
 							`CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '*/20 * * * *' FULL BACKUP ALWAYS WITH SCHEDULE OPTIONS ignore_existing_backups;`,
-							"gs://cockroachdb-backup-testing/"+c.Name()+"?AUTH=implicit",
+							"gs://" + gcsBackupTestingBucket + "/"+c.Name()+"?AUTH=implicit",
 						)
 						return err
 					})
