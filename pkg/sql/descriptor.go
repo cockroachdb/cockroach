@@ -149,7 +149,7 @@ func (p *planner) createDatabase(
 		ParentID:   id,
 		Name:       tree.PublicSchema,
 		ID:         publicSchemaID,
-		Privileges: catpb.NewPublicSchemaPrivilegeDescriptor(),
+		Privileges: catpb.NewPublicSchemaPrivilegeDescriptor(p.SessionData().RemoveDefaultCreateOnPublic),
 		Version:    1,
 	}).BuildCreatedMutableSchema()
 

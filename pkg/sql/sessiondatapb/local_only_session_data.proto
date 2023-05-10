@@ -387,6 +387,9 @@ message LocalOnlySessionData {
   // expression with a column reference, which can produce more efficient query
   // plans.
   bool optimizer_hoist_uncorrelated_equality_subqueries = 102;
+  // DefaultCreateOnPublic controls whether non-superuser are able to create
+  // tables in the public schema they dont own.
+  bool remove_default_create_on_public = 103;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

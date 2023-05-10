@@ -504,8 +504,18 @@ func (b *Builder) resolveSchemaForCreate(
 		}
 		panic(err)
 	}
-
+	//When looking at the public schema, check if the user owns the database that
+	//the table is created in.
 	if err := b.catalog.CheckPrivilege(b.ctx, sch, privilege.CREATE); err != nil {
+		// When creating tables on databases in the public schema, check if the user
+		// is owner of database.
+		if sch.Name().Schema() == "public" {
+			dbOwner := sch.Database().GetPrivileges().Owner()
+			currUser := b.evalCtx.SessionData().User()
+			if dbOwner == currUser {
+				return sch, resName
+			}
+		}
 		panic(err)
 	}
 

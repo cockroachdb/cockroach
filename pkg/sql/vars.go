@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -381,7 +382,23 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(defaultIntSize.Get(sv), 10)
 		},
 	},
-
+	// Controls whether all user are granted the `CREATE` privilege on databases in
+	// the public schema by default.
+	`remove_default_create_on_public`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`remove_default_create_on_public`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`remove_default_create_on_public`, s)
+			if err != nil {
+				return err
+			}
+			m.SetRemoveDefaultCreateOnPublic(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().RemoveDefaultCreateOnPublic), nil
+		},
+		GlobalDefault: displayPgBool(envutil.EnvOrDefaultBool("COCKROACH_NO_DEF_CREATE_ON_PUBLIC", false)),
+	},
 	// See https://www.postgresql.org/docs/10/runtime-config-client.html.
 	// Supported only for pg compatibility - CockroachDB has no notion of
 	// tablespaces.

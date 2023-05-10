@@ -3064,6 +3064,10 @@ func (m *sessionDataMutator) SetDefaultIntSize(size int32) {
 	}
 }
 
+func (m *sessionDataMutator) SetRemoveDefaultCreateOnPublic(val bool) {
+	m.data.RemoveDefaultCreateOnPublic = val
+}
+
 func (m *sessionDataMutator) SetDefaultTransactionPriority(val tree.UserPriority) {
 	m.data.DefaultTxnPriority = int64(val)
 }

@@ -111,7 +111,7 @@ func getIngestingPrivilegesForTableOrSchema(
 		switch privilegeType {
 		case privilege.Schema:
 			if desc.GetName() == tree.PublicSchema {
-				updatedPrivileges = catpb.NewPublicSchemaPrivilegeDescriptor()
+				updatedPrivileges = catpb.NewPublicSchemaPrivilegeDescriptor(false /*noCreatePrivOnPublic*/)
 			} else {
 				updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
 			}

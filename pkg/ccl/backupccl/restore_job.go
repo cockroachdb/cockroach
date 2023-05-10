@@ -1452,7 +1452,7 @@ func remapPublicSchemas(
 		db.AddSchemaToDatabase(tree.PublicSchema, descpb.DatabaseDescriptor_SchemaInfo{ID: id})
 		// Every database must be initialized with the public schema.
 		// Create the SchemaDescriptor.
-		publicSchemaPrivileges := catpb.NewPublicSchemaPrivilegeDescriptor()
+		publicSchemaPrivileges := catpb.NewPublicSchemaPrivilegeDescriptor(p.SessionData().RemoveDefaultCreateOnPublic)
 		publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 			ParentID:   db.GetID(),
 			Name:       tree.PublicSchema,
