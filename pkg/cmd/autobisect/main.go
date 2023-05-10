@@ -180,6 +180,10 @@ func runBisect(opts optsT) error {
 		return errors.Errorf("starting commit %s is %s", opts.startBad, tr)
 	}
 
+	if err := opts.report(opts.startBad, testResultBad); err != nil {
+		return err
+	}
+
 	c, err := findGood(opts)
 	if err != nil {
 		return err
