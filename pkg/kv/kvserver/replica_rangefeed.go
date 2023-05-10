@@ -70,7 +70,7 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 		"closed-timestamp updates to some rangefeeds; "+
 		"set to 0 to use kv.rangefeed.closed_timestamp_refresh_interval"+
 		"capped at kv.rangefeed.closed_timestamp_refresh_interval",
-	0,
+	1*time.Millisecond,
 	settings.NonNegativeDuration,
 )
 
