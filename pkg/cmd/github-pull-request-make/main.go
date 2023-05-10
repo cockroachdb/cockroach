@@ -35,7 +35,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
-	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
