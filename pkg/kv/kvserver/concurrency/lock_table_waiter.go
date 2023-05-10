@@ -12,6 +12,7 @@ package concurrency
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -160,7 +161,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 		case <-newStateC:
 			timerC = nil
 			state := guard.CurState()
-			log.Eventf(ctx, "lock wait-queue event: %s", state)
+			log.VEventf(ctx, 3, "lock wait-queue event: %s", state)
 			tracer.notify(ctx, state)
 			switch state.kind {
 			case waitFor, waitForDistinguished:
@@ -231,7 +232,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// If the request doesn't want to perform a delayed push for any
 				// reason, continue waiting without a timer.
 				if !(livenessPush || deadlockPush || timeoutPush || priorityPush) {
-					log.Eventf(ctx, "not pushing")
+					log.VEventf(ctx, 3, "not pushing")
 					continue
 				}
 
@@ -262,7 +263,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 					delay = 0
 				}
 
-				log.Eventf(ctx, "pushing after %s for: "+
+				log.VEventf(ctx, 3, "pushing after %s for: "+
 					"liveness detection = %t, deadlock detection = %t, "+
 					"timeout enforcement = %t, priority enforcement = %t",
 					delay, livenessPush, deadlockPush, timeoutPush, priorityPush)
@@ -652,6 +653,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// after the reader's read timestamp surpasses its global uncertainty limit.
 		resolve.ClockWhilePending = beforePushObs
 	}
+	logResolveIntent(ctx, resolve)
 	opts := intentresolver.ResolveOptions{Poison: true}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
 }
@@ -838,6 +840,10 @@ func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 ) *Error {
 	if len(deferredResolution) == 0 {
 		return nil
+	}
+	log.VEventf(ctx, 2, "resolving a batch of %d intent(s)", len(deferredResolution))
+	for _, intent := range deferredResolution {
+		logResolveIntent(ctx, intent)
 	}
 	// See pushLockTxn for an explanation of these options.
 	opts := intentresolver.ResolveOptions{Poison: true}
@@ -1248,6 +1254,18 @@ func canPushWithPriority(req Request, s waitingState) bool {
 	}
 	pushee = s.txn.Priority
 	return txnwait.CanPushWithPriority(pusher, pushee)
+}
+
+func logResolveIntent(ctx context.Context, intent roachpb.LockUpdate) {
+	if !log.ExpensiveLogEnabled(ctx, 2) {
+		return
+	}
+	var obsStr string
+	if obs := intent.ClockWhilePending; obs != (roachpb.ObservedTimestamp{}) {
+		obsStr = fmt.Sprintf(" and clock observation {%d %v}", obs.NodeID, obs.Timestamp)
+	}
+	log.VEventf(ctx, 2, "resolving intent %s for txn %s with %s status%s",
+		intent.Key, intent.Txn.ID.Short(), intent.Status, obsStr)
 }
 
 func minDuration(a, b time.Duration) time.Duration {
