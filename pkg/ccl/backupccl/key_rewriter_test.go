@@ -161,9 +161,11 @@ func TestKeyRewriter(t *testing.T) {
 		key := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec,
 			systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
 
-		// If the passed in walltime is at or above the ImportStartWalltime, an error should return
-		_, _, err = newKr.RewriteKey(key, 2)
-		require.Error(t, err, ErrImportingKeyError.Error())
+		// If the passed in walltime is at or above the ImportStartWalltime,
+		// rewriting should not have occurred.
+		_, ok, err := newKr.RewriteKey(key, 2)
+		require.NoError(t, err)
+		require.False(t, ok)
 
 		// Else, the key should get encoded normally.
 		newKey, ok, err := newKr.RewriteKey(key, 1)
