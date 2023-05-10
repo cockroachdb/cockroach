@@ -3,7 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "allocator2",
-    srcs = ["constraint.go"],
+    srcs = [
+        "constraint.go",
+        "memo_helper.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocator2",
     visibility = ["//visibility:public"],
     deps = [
@@ -14,9 +17,13 @@ go_library(
 
 go_test(
     name = "allocator2_test",
-    srcs = ["constraint_test.go"],
+    srcs = [
+        "constraint_test.go",
+        "memo_helper_test.go",
+    ],
     args = ["-test.timeout=295s"],
     embed = [":allocator2"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
 
 get_x_data(name = "get_x_data")
