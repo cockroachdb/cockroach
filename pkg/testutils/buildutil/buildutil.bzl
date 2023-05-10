@@ -141,6 +141,7 @@ def disallowed_imports_test(
     script = src.strip(":") + "_disallowed_imports_script"
     _deps_rule(
         name = script,
+        testonly = 1,
         src = src,
         allowlist = allowlist,
         disallowed_list = disallowed_list,
