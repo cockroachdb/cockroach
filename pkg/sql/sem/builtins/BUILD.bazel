@@ -214,6 +214,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//:pq",
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//assert",
