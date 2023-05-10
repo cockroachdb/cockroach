@@ -58,7 +58,10 @@ go_test(
 
 go_library(
     name = "copy",
-    srcs = ["reader.go"],
+    srcs = [
+        "buffer.go",
+        "reader.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/copy",
     visibility = ["//visibility:public"],
     deps = [
