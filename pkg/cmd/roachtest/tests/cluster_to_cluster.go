@@ -231,31 +231,33 @@ type replicateKV struct {
 	// This field is merely used to debug the c2c framework for finite workloads.
 	debugRunDurationMinutes int
 
-	// initDuration, if nonzero, will pre-populate the src cluster
-	initDurationMinutes int
+	// the number of rows inserted into the cluster before c2c begins
+	initRows int
+
+	// max size of raw data written during each insertion
+	maxBlockBytes int
 }
 
 func (kv replicateKV) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
-	if kv.initDurationMinutes == 0 {
-		return ""
-	}
-	return fmt.Sprintf(`./workload run kv --tolerate-errors --init --duration %dm --read-percent 0 {pgurl%s:%s}`,
-		kv.initDurationMinutes,
-		nodes,
-		tenantName)
+	cmd := roachtestutil.NewCommand(`./workload init kv`)
+	cmd.MaybeFlag(kv.initRows > 0, "insert-count", kv.initRows)
+	cmd.MaybeFlag(kv.initRows > 0, "max-block-bytes", kv.maxBlockBytes)
+	cmd.Flag("splits", 100)
+	cmd.Option("scatter")
+	cmd.Arg(fmt.Sprintf("{pgurl%s:%s}", nodes, tenantName))
+	return cmd.String()
 }
 
 func (kv replicateKV) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
-	debugDuration := ""
-	if kv.debugRunDurationMinutes != 0 {
-		debugDuration = fmt.Sprintf("--duration %dm", kv.debugRunDurationMinutes)
-	}
-	// added --tolerate-errors flags to prevent test from flaking due to a transaction retry error
-	return fmt.Sprintf(`./workload run kv --tolerate-errors --init %s --read-percent %d {pgurl%s:%s}`,
-		debugDuration,
-		kv.readPercent,
-		nodes,
-		tenantName)
+	cmd := roachtestutil.NewCommand(`./workload run kv`)
+
+	// tolerate-errors prevents test from flaking due to a transaction retry error
+	cmd.Option("tolerate-errors")
+	cmd.Flag("max-block-bytes", kv.maxBlockBytes)
+	cmd.Flag("read-percent", kv.readPercent)
+	cmd.MaybeFlag(kv.debugRunDurationMinutes > 0, "duration", kv.debugRunDurationMinutes)
+	cmd.Arg(fmt.Sprintf("{pgurl%s:%s}", nodes, tenantName))
+	return cmd.String()
 }
 
 func (kv replicateKV) runDriver(
@@ -731,7 +733,7 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		dstNodes: 1,
 		// The timeout field ensures the c2c roachtest driver behaves properly.
 		timeout:            10 * time.Minute,
-		workload:           replicateKV{readPercent: 0, debugRunDurationMinutes: 1},
+		workload:           replicateKV{readPercent: 0, debugRunDurationMinutes: 1, maxBlockBytes: 1},
 		additionalDuration: 0 * time.Minute,
 		cutover:            30 * time.Second,
 	}
@@ -778,19 +780,20 @@ func registerClusterToCluster(r registry.Registry) {
 			dstNodes:           3,
 			cpus:               8,
 			pdSize:             100,
-			workload:           replicateKV{readPercent: 0},
+			workload:           replicateKV{readPercent: 0, maxBlockBytes: 1024},
 			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
 			cutover:            5 * time.Minute,
 			tags:               registry.Tags("aws"),
 		},
 		{
-			name:               "c2c/UnitTest",
-			srcNodes:           1,
-			dstNodes:           1,
-			cpus:               4,
-			pdSize:             10,
-			workload:           replicateKV{readPercent: 0, debugRunDurationMinutes: 1},
+			name:     "c2c/UnitTest",
+			srcNodes: 1,
+			dstNodes: 1,
+			cpus:     4,
+			pdSize:   10,
+			workload: replicateKV{readPercent: 0, debugRunDurationMinutes: 1,
+				maxBlockBytes: 1024},
 			timeout:            5 * time.Minute,
 			additionalDuration: 0 * time.Minute,
 			cutover:            30 * time.Second,
@@ -1031,7 +1034,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			srcNodes:           4,
 			dstNodes:           4,
 			cpus:               8,
-			workload:           replicateKV{readPercent: 0, initDurationMinutes: 2},
+			workload:           replicateKV{readPercent: 0, initRows: 1000000, maxBlockBytes: 1024},
 			timeout:            20 * time.Minute,
 			additionalDuration: 6 * time.Minute,
 			cutover:            3 * time.Minute,
