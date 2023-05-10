@@ -370,3 +370,26 @@ SELECT f_amb(1, NULL);
 # and return NULL NULL.
 statement error pq: ambiguous call: f_amb\(int, unknown\), candidates are
 SELECT * FROM f_amb(1, NULL) as foo(a int, b int);
+
+subtest repro_102718
+
+statement ok
+CREATE OR REPLACE FUNCTION f_102718()
+	RETURNS RECORD
+	IMMUTABLE
+	LANGUAGE SQL
+	AS $$
+SELECT ('a',)
+$$;
+
+query TT
+SELECT
+	*
+FROM
+	(VALUES (f_102718())) AS t1 (a),
+	(VALUES ('foo'), ('bar')) AS t2 (b)
+ORDER BY
+	t1.a DESC NULLS FIRST;
+----
+(a) foo
+(a) bar
