@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // SpanAccess records the intended mode of access in a SpanSet.
@@ -46,6 +47,11 @@ func (a SpanAccess) String() string {
 	}
 }
 
+// SafeFormat implements the redact.SafeFormatter interface.
+func (a SpanAccess) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.SafeString(redact.SafeString(a.String()))
+}
+
 // SpanScope divides access types into local and global keys.
 type SpanScope int
 
@@ -66,6 +72,11 @@ func (a SpanScope) String() string {
 	default:
 		panic("unreachable")
 	}
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (a SpanScope) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.SafeString(redact.SafeString(a.String()))
 }
 
 // Span is used to represent a keyspan accessed by a request at a given
