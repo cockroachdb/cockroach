@@ -1074,10 +1074,10 @@ func createImportingDescriptors(
 			}
 			descsCol := txn.Descriptors()
 			// Write the new descriptors which are set in the OFFLINE state.
+			includePublicSchemaCreatePriv := sql.PublicSchemaCreatePrivilegeEnabled.Get(&p.ExecCfg().Settings.SV)
 			if err := ingesting.WriteDescriptors(
-				ctx, p.ExecCfg().Codec, txn.KV(), p.User(), descsCol,
-				databases, writtenSchemas, tables, writtenTypes, writtenFunctions,
-				details.DescriptorCoverage, nil /* extra */, restoreTempSystemDB,
+				ctx, txn.KV(), p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes, writtenFunctions,
+				details.DescriptorCoverage, nil /* extra */, restoreTempSystemDB, includePublicSchemaCreatePriv,
 			); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
 			}
@@ -1461,10 +1461,12 @@ func remapPublicSchemas(
 			return err
 		}
 
+		includeCreatePriv := sql.PublicSchemaCreatePrivilegeEnabled.Get(p.ExecCfg().SV())
+
 		db.AddSchemaToDatabase(tree.PublicSchema, descpb.DatabaseDescriptor_SchemaInfo{ID: id})
 		// Every database must be initialized with the public schema.
 		// Create the SchemaDescriptor.
-		publicSchemaPrivileges := catpb.NewPublicSchemaPrivilegeDescriptor()
+		publicSchemaPrivileges := catpb.NewPublicSchemaPrivilegeDescriptor(includeCreatePriv)
 		publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 			ParentID:   db.GetID(),
 			Name:       tree.PublicSchema,
