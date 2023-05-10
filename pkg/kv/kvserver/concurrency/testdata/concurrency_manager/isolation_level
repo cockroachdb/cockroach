@@ -42,19 +42,19 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=kSSINormal1
 ----
-[-] acquire lock: txn 00000001 @ kSSINormal1
+[-] acquire lock: txn 00000001 @ ‹kSSINormal1›
 
 on-lock-acquired req=req1 key=kSSINormal2
 ----
-[-] acquire lock: txn 00000001 @ kSSINormal2
+[-] acquire lock: txn 00000001 @ ‹kSSINormal2›
 
 on-lock-acquired req=req1 key=kSSINormal3
 ----
-[-] acquire lock: txn 00000001 @ kSSINormal3
+[-] acquire lock: txn 00000001 @ ‹kSSINormal3›
 
 on-lock-acquired req=req1 key=kSSINormal4
 ----
-[-] acquire lock: txn 00000001 @ kSSINormal4
+[-] acquire lock: txn 00000001 @ ‹kSSINormal4›
 
 finish req=req1
 ----
@@ -76,19 +76,19 @@ sequence req=req2
 
 on-lock-acquired req=req2 key=kSSIHigh1
 ----
-[-] acquire lock: txn 00000002 @ kSSIHigh1
+[-] acquire lock: txn 00000002 @ ‹kSSIHigh1›
 
 on-lock-acquired req=req2 key=kSSIHigh2
 ----
-[-] acquire lock: txn 00000002 @ kSSIHigh2
+[-] acquire lock: txn 00000002 @ ‹kSSIHigh2›
 
 on-lock-acquired req=req2 key=kSSIHigh3
 ----
-[-] acquire lock: txn 00000002 @ kSSIHigh3
+[-] acquire lock: txn 00000002 @ ‹kSSIHigh3›
 
 on-lock-acquired req=req2 key=kSSIHigh4
 ----
-[-] acquire lock: txn 00000002 @ kSSIHigh4
+[-] acquire lock: txn 00000002 @ ‹kSSIHigh4›
 
 finish req=req2
 ----
@@ -110,19 +110,19 @@ sequence req=req3
 
 on-lock-acquired req=req3 key=kRCNormal1
 ----
-[-] acquire lock: txn 00000003 @ kRCNormal1
+[-] acquire lock: txn 00000003 @ ‹kRCNormal1›
 
 on-lock-acquired req=req3 key=kRCNormal2
 ----
-[-] acquire lock: txn 00000003 @ kRCNormal2
+[-] acquire lock: txn 00000003 @ ‹kRCNormal2›
 
 on-lock-acquired req=req3 key=kRCNormal3
 ----
-[-] acquire lock: txn 00000003 @ kRCNormal3
+[-] acquire lock: txn 00000003 @ ‹kRCNormal3›
 
 on-lock-acquired req=req3 key=kRCNormal4
 ----
-[-] acquire lock: txn 00000003 @ kRCNormal4
+[-] acquire lock: txn 00000003 @ ‹kRCNormal4›
 
 finish req=req3
 ----
@@ -144,19 +144,19 @@ sequence req=req4
 
 on-lock-acquired req=req4 key=kRCHigh1
 ----
-[-] acquire lock: txn 00000004 @ kRCHigh1
+[-] acquire lock: txn 00000004 @ ‹kRCHigh1›
 
 on-lock-acquired req=req4 key=kRCHigh2
 ----
-[-] acquire lock: txn 00000004 @ kRCHigh2
+[-] acquire lock: txn 00000004 @ ‹kRCHigh2›
 
 on-lock-acquired req=req4 key=kRCHigh3
 ----
-[-] acquire lock: txn 00000004 @ kRCHigh3
+[-] acquire lock: txn 00000004 @ ‹kRCHigh3›
 
 on-lock-acquired req=req4 key=kRCHigh4
 ----
-[-] acquire lock: txn 00000004 @ kRCHigh4
+[-] acquire lock: txn 00000004 @ ‹kRCHigh4›
 
 finish req=req4
 ----
@@ -216,7 +216,7 @@ sequence req=req5
 [5] sequence req5: acquiring latches
 [5] sequence req5: scanning lock table for conflicting locks
 [5] sequence req5: waiting in lock wait-queues
-[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "kSSINormal1" (queuedWriters: 0, queuedReaders: 1)
+[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal1"› (queuedWriters: 0, queuedReaders: 1)
 [5] sequence req5: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req5: pushing timestamp of txn 00000001 above 10.000000000,1
 [5] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -236,9 +236,9 @@ new-request name=req6 txn=txnSSIHighPusher ts=11,1
 
 sequence req=req6
 ----
-[5] sequence req5: resolving intent "kSSINormal1" for txn 00000001 with PENDING status and clock observation {1 123.000000000,1}
+[5] sequence req5: resolving intent ‹"kSSINormal1"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,1}
 [5] sequence req5: lock wait-queue event: done waiting
-[5] sequence req5: conflicted with 00000001-0000-0000-0000-000000000000 on "kSSINormal1" for 0.000s
+[5] sequence req5: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"kSSINormal1"› for 0.000s
 [5] sequence req5: acquiring latches
 [5] sequence req5: scanning lock table for conflicting locks
 [5] sequence req5: sequencing complete, returned guard
@@ -246,13 +246,13 @@ sequence req=req6
 [6] sequence req6: acquiring latches
 [6] sequence req6: scanning lock table for conflicting locks
 [6] sequence req6: waiting in lock wait-queues
-[6] sequence req6: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "kSSINormal2" (queuedWriters: 0, queuedReaders: 1)
+[6] sequence req6: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal2"› (queuedWriters: 0, queuedReaders: 1)
 [6] sequence req6: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [6] sequence req6: pushing timestamp of txn 00000001 above 11.000000000,1
 [6] sequence req6: pusher pushed pushee to 11.000000000,2
-[6] sequence req6: resolving intent "kSSINormal2" for txn 00000001 with PENDING status and clock observation {1 123.000000000,3}
+[6] sequence req6: resolving intent ‹"kSSINormal2"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,3}
 [6] sequence req6: lock wait-queue event: done waiting
-[6] sequence req6: conflicted with 00000001-0000-0000-0000-000000000000 on "kSSINormal2" for 0.000s
+[6] sequence req6: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"kSSINormal2"› for 0.000s
 [6] sequence req6: acquiring latches
 [6] sequence req6: scanning lock table for conflicting locks
 [6] sequence req6: sequencing complete, returned guard
@@ -283,13 +283,13 @@ sequence req=req7
 [7] sequence req7: acquiring latches
 [7] sequence req7: scanning lock table for conflicting locks
 [7] sequence req7: waiting in lock wait-queues
-[7] sequence req7: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "kSSINormal3" (queuedWriters: 0, queuedReaders: 1)
+[7] sequence req7: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal3"› (queuedWriters: 0, queuedReaders: 1)
 [7] sequence req7: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [7] sequence req7: pushing timestamp of txn 00000001 above 12.000000000,1
 [7] sequence req7: pusher pushed pushee to 12.000000000,2
-[7] sequence req7: resolving intent "kSSINormal3" for txn 00000001 with PENDING status and clock observation {1 123.000000000,5}
+[7] sequence req7: resolving intent ‹"kSSINormal3"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,5}
 [7] sequence req7: lock wait-queue event: done waiting
-[7] sequence req7: conflicted with 00000001-0000-0000-0000-000000000000 on "kSSINormal3" for 0.000s
+[7] sequence req7: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"kSSINormal3"› for 0.000s
 [7] sequence req7: acquiring latches
 [7] sequence req7: scanning lock table for conflicting locks
 [7] sequence req7: sequencing complete, returned guard
@@ -316,13 +316,13 @@ sequence req=req8
 [8] sequence req8: acquiring latches
 [8] sequence req8: scanning lock table for conflicting locks
 [8] sequence req8: waiting in lock wait-queues
-[8] sequence req8: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "kSSINormal4" (queuedWriters: 0, queuedReaders: 1)
+[8] sequence req8: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal4"› (queuedWriters: 0, queuedReaders: 1)
 [8] sequence req8: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [8] sequence req8: pushing timestamp of txn 00000001 above 13.000000000,1
 [8] sequence req8: pusher pushed pushee to 13.000000000,2
-[8] sequence req8: resolving intent "kSSINormal4" for txn 00000001 with PENDING status and clock observation {1 123.000000000,7}
+[8] sequence req8: resolving intent ‹"kSSINormal4"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,7}
 [8] sequence req8: lock wait-queue event: done waiting
-[8] sequence req8: conflicted with 00000001-0000-0000-0000-000000000000 on "kSSINormal4" for 0.000s
+[8] sequence req8: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"kSSINormal4"› for 0.000s
 [8] sequence req8: acquiring latches
 [8] sequence req8: scanning lock table for conflicting locks
 [8] sequence req8: sequencing complete, returned guard
@@ -385,7 +385,7 @@ sequence req=req9
 [9] sequence req9: acquiring latches
 [9] sequence req9: scanning lock table for conflicting locks
 [9] sequence req9: waiting in lock wait-queues
-[9] sequence req9: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "kSSIHigh1" (queuedWriters: 0, queuedReaders: 1)
+[9] sequence req9: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh1"› (queuedWriters: 0, queuedReaders: 1)
 [9] sequence req9: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [9] sequence req9: pushing timestamp of txn 00000002 above 10.000000000,1
 [9] sequence req9: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -408,7 +408,7 @@ sequence req=req10
 [10] sequence req10: acquiring latches
 [10] sequence req10: scanning lock table for conflicting locks
 [10] sequence req10: waiting in lock wait-queues
-[10] sequence req10: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "kSSIHigh2" (queuedWriters: 0, queuedReaders: 1)
+[10] sequence req10: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh2"› (queuedWriters: 0, queuedReaders: 1)
 [10] sequence req10: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [10] sequence req10: pushing timestamp of txn 00000002 above 11.000000000,1
 [10] sequence req10: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -431,7 +431,7 @@ sequence req=req11
 [11] sequence req11: acquiring latches
 [11] sequence req11: scanning lock table for conflicting locks
 [11] sequence req11: waiting in lock wait-queues
-[11] sequence req11: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "kSSIHigh3" (queuedWriters: 0, queuedReaders: 1)
+[11] sequence req11: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh3"› (queuedWriters: 0, queuedReaders: 1)
 [11] sequence req11: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [11] sequence req11: pushing timestamp of txn 00000002 above 12.000000000,1
 [11] sequence req11: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -451,21 +451,21 @@ new-request name=req12 txn=txnRCHighPusher ts=13,1
 
 sequence req=req12
 ----
-[9] sequence req9: resolving intent "kSSIHigh1" for txn 00000002 with PENDING status and clock observation {1 123.000000000,9}
+[9] sequence req9: resolving intent ‹"kSSIHigh1"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,9}
 [9] sequence req9: lock wait-queue event: done waiting
-[9] sequence req9: conflicted with 00000002-0000-0000-0000-000000000000 on "kSSIHigh1" for 0.000s
+[9] sequence req9: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"kSSIHigh1"› for 0.000s
 [9] sequence req9: acquiring latches
 [9] sequence req9: scanning lock table for conflicting locks
 [9] sequence req9: sequencing complete, returned guard
-[10] sequence req10: resolving intent "kSSIHigh2" for txn 00000002 with PENDING status and clock observation {1 123.000000000,11}
+[10] sequence req10: resolving intent ‹"kSSIHigh2"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,11}
 [10] sequence req10: lock wait-queue event: done waiting
-[10] sequence req10: conflicted with 00000002-0000-0000-0000-000000000000 on "kSSIHigh2" for 0.000s
+[10] sequence req10: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"kSSIHigh2"› for 0.000s
 [10] sequence req10: acquiring latches
 [10] sequence req10: scanning lock table for conflicting locks
 [10] sequence req10: sequencing complete, returned guard
-[11] sequence req11: resolving intent "kSSIHigh3" for txn 00000002 with PENDING status and clock observation {1 123.000000000,13}
+[11] sequence req11: resolving intent ‹"kSSIHigh3"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,13}
 [11] sequence req11: lock wait-queue event: done waiting
-[11] sequence req11: conflicted with 00000002-0000-0000-0000-000000000000 on "kSSIHigh3" for 0.000s
+[11] sequence req11: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"kSSIHigh3"› for 0.000s
 [11] sequence req11: acquiring latches
 [11] sequence req11: scanning lock table for conflicting locks
 [11] sequence req11: sequencing complete, returned guard
@@ -473,13 +473,13 @@ sequence req=req12
 [12] sequence req12: acquiring latches
 [12] sequence req12: scanning lock table for conflicting locks
 [12] sequence req12: waiting in lock wait-queues
-[12] sequence req12: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "kSSIHigh4" (queuedWriters: 0, queuedReaders: 1)
+[12] sequence req12: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh4"› (queuedWriters: 0, queuedReaders: 1)
 [12] sequence req12: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [12] sequence req12: pushing timestamp of txn 00000002 above 13.000000000,1
 [12] sequence req12: pusher pushed pushee to 13.000000000,2
-[12] sequence req12: resolving intent "kSSIHigh4" for txn 00000002 with PENDING status and clock observation {1 123.000000000,15}
+[12] sequence req12: resolving intent ‹"kSSIHigh4"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,15}
 [12] sequence req12: lock wait-queue event: done waiting
-[12] sequence req12: conflicted with 00000002-0000-0000-0000-000000000000 on "kSSIHigh4" for 0.000s
+[12] sequence req12: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"kSSIHigh4"› for 0.000s
 [12] sequence req12: acquiring latches
 [12] sequence req12: scanning lock table for conflicting locks
 [12] sequence req12: sequencing complete, returned guard
@@ -553,13 +553,13 @@ sequence req=req13
 [13] sequence req13: acquiring latches
 [13] sequence req13: scanning lock table for conflicting locks
 [13] sequence req13: waiting in lock wait-queues
-[13] sequence req13: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "kRCNormal1" (queuedWriters: 0, queuedReaders: 1)
+[13] sequence req13: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal1"› (queuedWriters: 0, queuedReaders: 1)
 [13] sequence req13: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [13] sequence req13: pushing timestamp of txn 00000003 above 10.000000000,1
 [13] sequence req13: pusher pushed pushee to 10.000000000,2
-[13] sequence req13: resolving intent "kRCNormal1" for txn 00000003 with PENDING status and clock observation {1 123.000000000,17}
+[13] sequence req13: resolving intent ‹"kRCNormal1"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,17}
 [13] sequence req13: lock wait-queue event: done waiting
-[13] sequence req13: conflicted with 00000003-0000-0000-0000-000000000000 on "kRCNormal1" for 0.000s
+[13] sequence req13: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"kRCNormal1"› for 0.000s
 [13] sequence req13: acquiring latches
 [13] sequence req13: scanning lock table for conflicting locks
 [13] sequence req13: sequencing complete, returned guard
@@ -585,13 +585,13 @@ sequence req=req14
 [14] sequence req14: acquiring latches
 [14] sequence req14: scanning lock table for conflicting locks
 [14] sequence req14: waiting in lock wait-queues
-[14] sequence req14: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "kRCNormal2" (queuedWriters: 0, queuedReaders: 1)
+[14] sequence req14: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal2"› (queuedWriters: 0, queuedReaders: 1)
 [14] sequence req14: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [14] sequence req14: pushing timestamp of txn 00000003 above 11.000000000,1
 [14] sequence req14: pusher pushed pushee to 11.000000000,2
-[14] sequence req14: resolving intent "kRCNormal2" for txn 00000003 with PENDING status and clock observation {1 123.000000000,19}
+[14] sequence req14: resolving intent ‹"kRCNormal2"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,19}
 [14] sequence req14: lock wait-queue event: done waiting
-[14] sequence req14: conflicted with 00000003-0000-0000-0000-000000000000 on "kRCNormal2" for 0.000s
+[14] sequence req14: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"kRCNormal2"› for 0.000s
 [14] sequence req14: acquiring latches
 [14] sequence req14: scanning lock table for conflicting locks
 [14] sequence req14: sequencing complete, returned guard
@@ -617,13 +617,13 @@ sequence req=req15
 [15] sequence req15: acquiring latches
 [15] sequence req15: scanning lock table for conflicting locks
 [15] sequence req15: waiting in lock wait-queues
-[15] sequence req15: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "kRCNormal3" (queuedWriters: 0, queuedReaders: 1)
+[15] sequence req15: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal3"› (queuedWriters: 0, queuedReaders: 1)
 [15] sequence req15: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [15] sequence req15: pushing timestamp of txn 00000003 above 12.000000000,1
 [15] sequence req15: pusher pushed pushee to 12.000000000,2
-[15] sequence req15: resolving intent "kRCNormal3" for txn 00000003 with PENDING status and clock observation {1 123.000000000,21}
+[15] sequence req15: resolving intent ‹"kRCNormal3"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,21}
 [15] sequence req15: lock wait-queue event: done waiting
-[15] sequence req15: conflicted with 00000003-0000-0000-0000-000000000000 on "kRCNormal3" for 0.000s
+[15] sequence req15: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"kRCNormal3"› for 0.000s
 [15] sequence req15: acquiring latches
 [15] sequence req15: scanning lock table for conflicting locks
 [15] sequence req15: sequencing complete, returned guard
@@ -649,13 +649,13 @@ sequence req=req16
 [16] sequence req16: acquiring latches
 [16] sequence req16: scanning lock table for conflicting locks
 [16] sequence req16: waiting in lock wait-queues
-[16] sequence req16: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "kRCNormal4" (queuedWriters: 0, queuedReaders: 1)
+[16] sequence req16: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal4"› (queuedWriters: 0, queuedReaders: 1)
 [16] sequence req16: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [16] sequence req16: pushing timestamp of txn 00000003 above 13.000000000,1
 [16] sequence req16: pusher pushed pushee to 13.000000000,2
-[16] sequence req16: resolving intent "kRCNormal4" for txn 00000003 with PENDING status and clock observation {1 123.000000000,23}
+[16] sequence req16: resolving intent ‹"kRCNormal4"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,23}
 [16] sequence req16: lock wait-queue event: done waiting
-[16] sequence req16: conflicted with 00000003-0000-0000-0000-000000000000 on "kRCNormal4" for 0.000s
+[16] sequence req16: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"kRCNormal4"› for 0.000s
 [16] sequence req16: acquiring latches
 [16] sequence req16: scanning lock table for conflicting locks
 [16] sequence req16: sequencing complete, returned guard
@@ -717,13 +717,13 @@ sequence req=req17
 [17] sequence req17: acquiring latches
 [17] sequence req17: scanning lock table for conflicting locks
 [17] sequence req17: waiting in lock wait-queues
-[17] sequence req17: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key "kRCHigh1" (queuedWriters: 0, queuedReaders: 1)
+[17] sequence req17: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh1"› (queuedWriters: 0, queuedReaders: 1)
 [17] sequence req17: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [17] sequence req17: pushing timestamp of txn 00000004 above 10.000000000,1
 [17] sequence req17: pusher pushed pushee to 10.000000000,2
-[17] sequence req17: resolving intent "kRCHigh1" for txn 00000004 with PENDING status and clock observation {1 123.000000000,25}
+[17] sequence req17: resolving intent ‹"kRCHigh1"› for txn 00000004 with PENDING status and clock observation {1 123.000000000,25}
 [17] sequence req17: lock wait-queue event: done waiting
-[17] sequence req17: conflicted with 00000004-0000-0000-0000-000000000000 on "kRCHigh1" for 0.000s
+[17] sequence req17: conflicted with ‹00000004-0000-0000-0000-000000000000› on ‹"kRCHigh1"› for 0.000s
 [17] sequence req17: acquiring latches
 [17] sequence req17: scanning lock table for conflicting locks
 [17] sequence req17: sequencing complete, returned guard
@@ -749,13 +749,13 @@ sequence req=req18
 [18] sequence req18: acquiring latches
 [18] sequence req18: scanning lock table for conflicting locks
 [18] sequence req18: waiting in lock wait-queues
-[18] sequence req18: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key "kRCHigh2" (queuedWriters: 0, queuedReaders: 1)
+[18] sequence req18: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh2"› (queuedWriters: 0, queuedReaders: 1)
 [18] sequence req18: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [18] sequence req18: pushing timestamp of txn 00000004 above 11.000000000,1
 [18] sequence req18: pusher pushed pushee to 11.000000000,2
-[18] sequence req18: resolving intent "kRCHigh2" for txn 00000004 with PENDING status and clock observation {1 123.000000000,27}
+[18] sequence req18: resolving intent ‹"kRCHigh2"› for txn 00000004 with PENDING status and clock observation {1 123.000000000,27}
 [18] sequence req18: lock wait-queue event: done waiting
-[18] sequence req18: conflicted with 00000004-0000-0000-0000-000000000000 on "kRCHigh2" for 0.000s
+[18] sequence req18: conflicted with ‹00000004-0000-0000-0000-000000000000› on ‹"kRCHigh2"› for 0.000s
 [18] sequence req18: acquiring latches
 [18] sequence req18: scanning lock table for conflicting locks
 [18] sequence req18: sequencing complete, returned guard
@@ -781,13 +781,13 @@ sequence req=req19
 [19] sequence req19: acquiring latches
 [19] sequence req19: scanning lock table for conflicting locks
 [19] sequence req19: waiting in lock wait-queues
-[19] sequence req19: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key "kRCHigh3" (queuedWriters: 0, queuedReaders: 1)
+[19] sequence req19: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh3"› (queuedWriters: 0, queuedReaders: 1)
 [19] sequence req19: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [19] sequence req19: pushing timestamp of txn 00000004 above 12.000000000,1
 [19] sequence req19: pusher pushed pushee to 12.000000000,2
-[19] sequence req19: resolving intent "kRCHigh3" for txn 00000004 with PENDING status and clock observation {1 123.000000000,29}
+[19] sequence req19: resolving intent ‹"kRCHigh3"› for txn 00000004 with PENDING status and clock observation {1 123.000000000,29}
 [19] sequence req19: lock wait-queue event: done waiting
-[19] sequence req19: conflicted with 00000004-0000-0000-0000-000000000000 on "kRCHigh3" for 0.000s
+[19] sequence req19: conflicted with ‹00000004-0000-0000-0000-000000000000› on ‹"kRCHigh3"› for 0.000s
 [19] sequence req19: acquiring latches
 [19] sequence req19: scanning lock table for conflicting locks
 [19] sequence req19: sequencing complete, returned guard
@@ -813,13 +813,13 @@ sequence req=req20
 [20] sequence req20: acquiring latches
 [20] sequence req20: scanning lock table for conflicting locks
 [20] sequence req20: waiting in lock wait-queues
-[20] sequence req20: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key "kRCHigh4" (queuedWriters: 0, queuedReaders: 1)
+[20] sequence req20: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh4"› (queuedWriters: 0, queuedReaders: 1)
 [20] sequence req20: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
 [20] sequence req20: pushing timestamp of txn 00000004 above 13.000000000,1
 [20] sequence req20: pusher pushed pushee to 13.000000000,2
-[20] sequence req20: resolving intent "kRCHigh4" for txn 00000004 with PENDING status and clock observation {1 123.000000000,31}
+[20] sequence req20: resolving intent ‹"kRCHigh4"› for txn 00000004 with PENDING status and clock observation {1 123.000000000,31}
 [20] sequence req20: lock wait-queue event: done waiting
-[20] sequence req20: conflicted with 00000004-0000-0000-0000-000000000000 on "kRCHigh4" for 0.000s
+[20] sequence req20: conflicted with ‹00000004-0000-0000-0000-000000000000› on ‹"kRCHigh4"› for 0.000s
 [20] sequence req20: acquiring latches
 [20] sequence req20: scanning lock table for conflicting locks
 [20] sequence req20: sequencing complete, returned guard

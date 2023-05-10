@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/maruel/panicparse/v2/stack"
 	"github.com/petermattis/goid"
 )
@@ -422,7 +423,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				txnAcquire.Sequence = seqNum
 
 				mon.runSync("acquire lock", func(ctx context.Context) {
-					log.Eventf(ctx, "txn %s @ %s", txn.ID.Short(), key)
+					log.Eventf(ctx, "txn %s @ %s", txn.Short(), key)
 					acq := roachpb.MakeLockAcquisition(txnAcquire, roachpb.Key(key), dur)
 					m.OnLockAcquired(ctx, &acq)
 				})
@@ -472,7 +473,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				txnUpdate.WriteTimestamp.Forward(ts)
 
 				mon.runSync("update lock", func(ctx context.Context) {
-					log.Eventf(ctx, "%s txn %s @ %s", verb, txn.ID.Short(), key)
+					log.Eventf(ctx, "%s txn %s @ %s", verb, txn.Short(), key)
 					span := roachpb.Span{Key: roachpb.Key(key)}
 					up := roachpb.MakeLockUpdate(txnUpdate, span)
 					m.OnLockUpdated(ctx, &up)
@@ -494,7 +495,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 
 				mon.runSync("update txn", func(ctx context.Context) {
-					log.Eventf(ctx, "%s %s", verb, txnName)
+					log.Eventf(ctx, "%s %s", verb, redact.Safe(txnName))
 					if err := c.updateTxnRecord(txn.ID, status, ts); err != nil {
 						d.Fatalf(t, err.Error())
 					}
@@ -934,7 +935,7 @@ func (c *cluster) detectDeadlocks() {
 						}
 						chainBuf.WriteString(id.Short())
 					}
-					log.Eventf(origPush.ctx, "dependency cycle detected %s", chainBuf.String())
+					log.Eventf(origPush.ctx, "dependency cycle detected %s", redact.Safe(chainBuf.String()))
 				}
 				break
 			}
@@ -1056,8 +1057,10 @@ type monitoredGoroutine struct {
 }
 
 func newMonitor() *monitor {
+	tr := tracing.NewTracer()
+	tr.SetRedactable(true)
 	return &monitor{
-		tr: tracing.NewTracer(),
+		tr: tr,
 		gs: make(map[*monitoredGoroutine]struct{}),
 	}
 }
@@ -1124,7 +1127,7 @@ func (m *monitor) collectRecordings() string {
 					continue
 				}
 				logs = append(logs, logRecord{
-					g: g, value: log.Msg().StripMarkers(),
+					g: g, value: string(log.Msg()),
 				})
 				g.prevEvents++
 			}
@@ -1244,7 +1247,7 @@ func (m *monitor) waitForAsyncGoroutinesToStall(t *testing.T) {
 		}
 		stalledCall := firstNonStdlib(stat.Stack.Calls)
 		log.Eventf(g.ctx, "blocked on %s in %s.%s",
-			stat.State, stalledCall.Func.DirName, stalledCall.Func.Name)
+			redact.Safe(stat.State), redact.Safe(stalledCall.Func.DirName), redact.Safe(stalledCall.Func.Name))
 	}
 }
 

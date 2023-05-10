@@ -102,30 +102,35 @@ type waitingState struct {
 
 // String implements the fmt.Stringer interface.
 func (s waitingState) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s waitingState) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch s.kind {
 	case waitFor, waitForDistinguished:
-		distinguished := ""
+		distinguished := redact.SafeString("")
 		if s.kind == waitForDistinguished {
 			distinguished = " (distinguished)"
 		}
-		target := "holding lock"
+		target := redact.SafeString("holding lock")
 		if !s.held {
 			target = "running request"
 		}
-		return fmt.Sprintf("wait for%s txn %s %s @ key %s (queuedWriters: %d, queuedReaders: %d)",
-			distinguished, s.txn.ID.Short(), target, s.key, s.queuedWriters, s.queuedReaders)
+		w.Printf("wait for%s txn %s %s @ key %s (queuedWriters: %d, queuedReaders: %d)",
+			distinguished, s.txn.Short(), target, s.key, s.queuedWriters, s.queuedReaders)
 	case waitSelf:
-		return fmt.Sprintf("wait self @ key %s", s.key)
+		w.Printf("wait self @ key %s", s.key)
 	case waitElsewhere:
 		if !s.held {
-			return "wait elsewhere by proceeding to evaluation"
+			w.SafeString("wait elsewhere by proceeding to evaluation")
 		}
-		return fmt.Sprintf("wait elsewhere for txn %s @ key %s", s.txn.ID.Short(), s.key)
+		w.Printf("wait elsewhere for txn %s @ key %s", s.txn.Short(), s.key)
 	case waitQueueMaxLengthExceeded:
-		return fmt.Sprintf("wait-queue maximum length exceeded @ key %s with length %d",
+		w.Printf("wait-queue maximum length exceeded @ key %s with length %d",
 			s.key, s.queuedWriters)
 	case doneWaiting:
-		return "done waiting"
+		w.SafeString("done waiting")
 	default:
 		panic("unhandled waitingState.kind")
 	}

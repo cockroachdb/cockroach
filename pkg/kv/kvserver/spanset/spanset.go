@@ -46,6 +46,9 @@ func (a SpanAccess) String() string {
 	}
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (SpanAccess) SafeValue() {}
+
 // SpanScope divides access types into local and global keys.
 type SpanScope int
 
@@ -67,6 +70,9 @@ func (a SpanScope) String() string {
 		panic("unreachable")
 	}
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (SpanScope) SafeValue() {}
 
 // Span is used to represent a keyspan accessed by a request at a given
 // timestamp. A zero timestamp indicates it's a non-MVCC access.

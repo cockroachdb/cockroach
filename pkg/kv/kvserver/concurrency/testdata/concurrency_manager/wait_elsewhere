@@ -34,7 +34,7 @@ sequence req=reqFirstLock
 
 on-lock-acquired req=reqFirstLock key=k dur=r
 ----
-[-] acquire lock: txn 00000001 @ k
+[-] acquire lock: txn 00000001 @ ‹k›
 
 finish req=reqFirstLock
 ----
@@ -52,7 +52,7 @@ sequence req=reqWaiter
 handle-write-intent-error req=reqWaiter lease-seq=1
  intent txn=txnWriter key=k
 ----
-[3] handle write intent error reqWaiter: handled conflicting intents on "k", released latches
+[3] handle write intent error reqWaiter: handled conflicting intents on ‹"k"›, released latches
 
 sequence req=reqWaiter
 ----
@@ -60,7 +60,7 @@ sequence req=reqWaiter
 [4] sequence reqWaiter: acquiring latches
 [4] sequence reqWaiter: scanning lock table for conflicting locks
 [4] sequence reqWaiter: waiting in lock wait-queues
-[4] sequence reqWaiter: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence reqWaiter: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedWriters: 1, queuedReaders: 0)
 [4] sequence reqWaiter: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence reqWaiter: pushing txn 00000001 to abort
 [4] sequence reqWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -83,7 +83,7 @@ sequence req=reqSecondLock
 
 on-lock-acquired req=reqSecondLock key=k2 dur=u
 ----
-[-] acquire lock: txn 00000001 @ k2
+[-] acquire lock: txn 00000001 @ ‹k2›
 
 finish req=reqSecondLock
 ----
@@ -99,11 +99,11 @@ debug-advance-clock ts=123
 on-txn-updated txn=txnWriter status=aborted
 ----
 [-] update txn: aborting txnWriter
-[4] sequence reqWaiter: resolving intent "k" for txn 00000001 with ABORTED status
-[4] sequence reqWaiter: lock wait-queue event: wait elsewhere for txn 00000001 @ key "k"
+[4] sequence reqWaiter: resolving intent ‹"k"› for txn 00000001 with ABORTED status
+[4] sequence reqWaiter: lock wait-queue event: wait elsewhere for txn 00000001 @ key ‹"k"›
 [4] sequence reqWaiter: pushing txn 00000001 to abort
-[4] sequence reqWaiter: resolving intent "k" for txn 00000001 with ABORTED status
-[4] sequence reqWaiter: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 123.000s
+[4] sequence reqWaiter: resolving intent ‹"k"› for txn 00000001 with ABORTED status
+[4] sequence reqWaiter: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 123.000s
 [4] sequence reqWaiter: acquiring latches
 [4] sequence reqWaiter: scanning lock table for conflicting locks
 [4] sequence reqWaiter: sequencing complete, returned guard
@@ -156,15 +156,15 @@ sequence req=reqThreeKeyWriter
 
 on-lock-acquired req=reqThreeKeyWriter key=k1 dur=r
 ----
-[-] acquire lock: txn 00000003 @ k1
+[-] acquire lock: txn 00000003 @ ‹k1›
 
 on-lock-acquired req=reqThreeKeyWriter key=k2 dur=r
 ----
-[-] acquire lock: txn 00000003 @ k2
+[-] acquire lock: txn 00000003 @ ‹k2›
 
 on-lock-acquired req=reqThreeKeyWriter key=k3 dur=r
 ----
-[-] acquire lock: txn 00000003 @ k3
+[-] acquire lock: txn 00000003 @ ‹k3›
 
 finish req=reqThreeKeyWriter
 ----
@@ -194,7 +194,7 @@ handle-write-intent-error req=reqTwoKeyWaiter lease-seq=1
  intent txn=txnThreeKeyWriter key=k1
  intent txn=txnThreeKeyWriter key=k2
 ----
-[9] handle write intent error reqTwoKeyWaiter: handled conflicting intents on "k1", "k2", released latches
+[9] handle write intent error reqTwoKeyWaiter: handled conflicting intents on ‹"k1"›, ‹"k2"›, released latches
 
 sequence req=reqTwoKeyWaiter
 ----
@@ -202,7 +202,7 @@ sequence req=reqTwoKeyWaiter
 [10] sequence reqTwoKeyWaiter: acquiring latches
 [10] sequence reqTwoKeyWaiter: scanning lock table for conflicting locks
 [10] sequence reqTwoKeyWaiter: waiting in lock wait-queues
-[10] sequence reqTwoKeyWaiter: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "k1" (queuedWriters: 0, queuedReaders: 1)
+[10] sequence reqTwoKeyWaiter: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"k1"› (queuedWriters: 0, queuedReaders: 1)
 [10] sequence reqTwoKeyWaiter: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [10] sequence reqTwoKeyWaiter: pushing timestamp of txn 00000003 above 20.000000000,1
 [10] sequence reqTwoKeyWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -225,7 +225,7 @@ handle-write-intent-error req=reqThreeKeyWaiter lease-seq=1
  intent txn=txnThreeKeyWriter key=k2
  intent txn=txnThreeKeyWriter key=k3
 ----
-[11] handle write intent error reqThreeKeyWaiter: handled conflicting intents on "k1", "k2", "k3", released latches
+[11] handle write intent error reqThreeKeyWaiter: handled conflicting intents on ‹"k1"›, ‹"k2"›, ‹"k3"›, released latches
 
 sequence req=reqThreeKeyWaiter
 ----
@@ -233,7 +233,7 @@ sequence req=reqThreeKeyWaiter
 [12] sequence reqThreeKeyWaiter: acquiring latches
 [12] sequence reqThreeKeyWaiter: scanning lock table for conflicting locks
 [12] sequence reqThreeKeyWaiter: waiting in lock wait-queues
-[12] sequence reqThreeKeyWaiter: lock wait-queue event: wait for txn 00000003 holding lock @ key "k1" (queuedWriters: 0, queuedReaders: 2)
+[12] sequence reqThreeKeyWaiter: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"k1"› (queuedWriters: 0, queuedReaders: 2)
 [12] sequence reqThreeKeyWaiter: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [12] sequence reqThreeKeyWaiter: pushing timestamp of txn 00000003 above 20.000000000,1
 [12] sequence reqThreeKeyWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -256,15 +256,15 @@ num=1
 on-txn-updated txn=txnThreeKeyWriter status=pending ts=20,2
 ----
 [-] update txn: increasing timestamp of txnThreeKeyWriter
-[10] sequence reqTwoKeyWaiter: resolving intent "k1" for txn 00000003 with PENDING status and clock observation {1 246.000000000,2}
+[10] sequence reqTwoKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status and clock observation {1 246.000000000,2}
 [10] sequence reqTwoKeyWaiter: lock wait-queue event: done waiting
-[10] sequence reqTwoKeyWaiter: conflicted with 00000003-0000-0000-0000-000000000000 on "k1" for 0.000s
+[10] sequence reqTwoKeyWaiter: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k1"› for 0.000s
 [10] sequence reqTwoKeyWaiter: acquiring latches
 [10] sequence reqTwoKeyWaiter: scanning lock table for conflicting locks
 [10] sequence reqTwoKeyWaiter: sequencing complete, returned guard
-[12] sequence reqThreeKeyWaiter: resolving intent "k1" for txn 00000003 with PENDING status and clock observation {1 246.000000000,4}
+[12] sequence reqThreeKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status and clock observation {1 246.000000000,4}
 [12] sequence reqThreeKeyWaiter: lock wait-queue event: done waiting
-[12] sequence reqThreeKeyWaiter: conflicted with 00000003-0000-0000-0000-000000000000 on "k1" for 0.000s
+[12] sequence reqThreeKeyWaiter: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k1"› for 0.000s
 [12] sequence reqThreeKeyWaiter: acquiring latches
 [12] sequence reqThreeKeyWaiter: scanning lock table for conflicting locks
 [12] sequence reqThreeKeyWaiter: sequencing complete, returned guard
