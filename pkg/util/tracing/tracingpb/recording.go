@@ -16,7 +16,6 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -140,20 +139,25 @@ type logRecord struct {
 // TODO(andrei): this should be unified with
 // SessionTracing.generateSessionTraceVTable().
 func (r Recording) String() string {
+	return redact.Sprint(r).StripMarkers()
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r Recording) SafeFormat(w redact.SafePrinter, _ rune) {
 	if len(r) == 0 {
-		return "<empty recording>"
+		w.SafeString("<empty recording>")
 	}
 
-	var buf strings.Builder
 	start := r[0].StartTime
 	writeLogs := func(logs []traceLogData) {
 		for _, entry := range logs {
-			fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
+			w.Printf("% 10.3fms % 10.3fms",
 				1000*entry.Timestamp.Sub(start).Seconds(),
-				1000*entry.timeSincePrev.Seconds(),
-				strings.Repeat("    ", entry.depth+1))
-			fmt.Fprint(&buf, entry.Msg.StripMarkers())
-			buf.WriteByte('\n')
+				1000*entry.timeSincePrev.Seconds())
+			for i := 0; i < entry.depth+1; i++ {
+				w.SafeString("    ")
+			}
+			w.Printf("%s\n", entry.Msg)
 		}
 	}
 
@@ -167,13 +171,12 @@ func (r Recording) String() string {
 	orphans := r.OrphanSpans()
 	if len(orphans) > 0 {
 		// This shouldn't happen.
-		buf.WriteString("orphan spans (trace is missing spans):\n")
+		w.SafeString("orphan spans (trace is missing spans):\n")
 		for _, o := range orphans {
 			logs := r.visitSpan(o, 0 /* depth */)
 			writeLogs(logs)
 		}
 	}
-	return buf.String()
 }
 
 // OrphanSpans returns the spans with parents missing from the recording.
