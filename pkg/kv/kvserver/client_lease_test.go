@@ -1345,9 +1345,19 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 	var blockRangeID int32
 
 	maybeBlockLeaseRequest := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-		if ba.IsSingleRequestLeaseRequest() && int32(ba.RangeID) == atomic.LoadInt32(&blockRangeID) {
+		// NB: this test was seen hanging with a lease request with a non-cancelable
+		// context. So we only block lease requests that have a cancelable context
+		// here. Not all callers use context cancellation, in particular there are a
+		// few for requestLeaseLocked such as [1].
+		//
+		// [1]: https://github.com/cockroachdb/cockroach/blob/2eebdb3cbf3799264c59604590ba66a7edf8c3b3/pkg/kv/kvserver/replica_range_lease.go#L1444
+		if ba.IsSingleRequestLeaseRequest() && int32(ba.RangeID) == atomic.LoadInt32(&blockRangeID) && ctx.Done() != nil {
 			t.Logf("blocked lease request for r%d", ba.RangeID)
-			<-ctx.Done()
+			select {
+			case <-ctx.Done():
+			case <-time.After(10 * time.Second):
+				t.Errorf("ctx did not cancel within 10s in blocked lease req")
+			}
 			return kvpb.NewError(ctx.Err())
 		}
 		return nil
