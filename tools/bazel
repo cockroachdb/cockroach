@@ -54,6 +54,11 @@ if [[ -n "${ALWAYS_RUN_GAZELLE}" ]]; then
     esac
 fi
 
+# If some invoking tool picked an output base for us, respect it.
+if [[ ! -z "${BAZEL_OUTPUT_BASE}" ]]; then
+  exec $BAZEL_REAL --output_base="${BAZEL_OUTPUT_BASE}" "$@"
+fi
+
 BASES="/private/var/tmp/_bazel_${USER}/bases/"
 
 # If we're not on macOS/haven't enabled multi-bases, just run bazel normally.
