@@ -3459,6 +3459,7 @@ test_suite(
     tags = [
         "-broken_in_bazel",
         "-integration",
+        "-no-remote-exec",
     ],
     tests = ALL_TESTS,
 )

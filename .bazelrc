@@ -64,7 +64,26 @@ test:cinolint --test_env=GO_TEST_WRAP_TESTV=1
 # Dump all output for failed tests to the build log.
 test:cinolint --test_output=errors
 # Put all tmp artifacts in /artifacts/tmp.
-build:cinolint --test_tmpdir=/artifacts/tmp
+#build:cinolint --test_tmpdir=/artifacts/tmp
+
+build:engflow --define=EXECUTOR=remote
+build:engflow --disk_cache= --remote_download_minimal
+build:engflow --experimental_inmemory_dotd_files
+build:engflow --experimental_inmemory_jdeps_files
+build:engflow --incompatible_strict_action_env=true
+build:engflow --remote_timeout=600
+build:engflow --nolegacy_important_outputs
+build:engflow --grpc_keepalive_time=30s
+build:engflow --experimental_remote_cache_compression=true
+build:engflow --host_platform=//build/toolchains:cross_linux
+build:engflow --platforms=//build/toolchains:cross_linux
+build:engflow --extra_execution_platforms=//build/toolchains:cross_linux
+build:engflow --remote_cache=grpcs://tanzanite.cluster.engflow.com
+build:engflow --remote_executor=grpcs://tanzanite.cluster.engflow.com
+build:engflow --bes_backend=grpcs://tanzanite.cluster.engflow.com
+build:engflow --bes_results_url=https://tanzanite.cluster.engflow.com/invocation/
+build:engflow --tls_client_certificate=/home/agent/engflow/engflow.crt
+build:engflow --tls_client_key=/home/agent/engflow/engflow.key
 
 build:cross --stamp
 
