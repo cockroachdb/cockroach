@@ -8,7 +8,6 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/build/bazel",
-        "//pkg/testutils/buildutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
