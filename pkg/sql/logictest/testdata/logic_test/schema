@@ -1324,3 +1324,33 @@ DROP DATABASE testdb1 CASCADE;
 DROP DATABASE testdb2 CASCADE;
 
 subtest end
+
+subtest public_schema_create_privilege
+
+statement ok
+CREATE DATABASE should_have_create
+
+statement ok
+USE should_have_create
+
+query TTTT
+SELECT database_name, schema_name, grantee, privilege_type FROM [SHOW GRANTS ON SCHEMA public] WHERE grantee = 'public'
+----
+should_have_create  public  public  CREATE
+should_have_create  public  public  USAGE
+
+statement ok
+SET CLUSTER SETTING sql.auth.public_schema_create_privilege.enabled = false
+
+statement ok
+CREATE DATABASE should_not_have_create
+
+statement ok
+USE should_not_have_create
+
+query TTTT
+SELECT database_name, schema_name, grantee, privilege_type FROM [SHOW GRANTS ON SCHEMA public] WHERE grantee = 'public'
+----
+should_not_have_create  public  public  USAGE
+
+subtest end

@@ -89,6 +89,7 @@ server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	
 server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged	tenant-rw
 server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid	tenant-rw
 sql.auth.change_own_password.enabled	boolean	false	controls whether a user is allowed to change their own password, even if they have no other privileges	tenant-rw
+sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	tenant-rw
 sql.auth.resolve_membership_single_scan.enabled	boolean	true	determines whether to populate the role membership cache with a single scan	tenant-rw
 sql.closed_session_cache.capacity	integer	1000	the maximum number of sessions in the cache	tenant-rw
 sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in seconds	tenant-rw
