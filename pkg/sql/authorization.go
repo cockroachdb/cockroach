@@ -836,6 +836,15 @@ func (p *planner) canCreateOnSchema(
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"cannot CREATE on schema %s", scDesc.GetName())
 	case catalog.SchemaUserDefined:
+		//It is possible to reach this point while reaching the public schema so
+		////double check
+		//if scDesc.GetName() == "public" {
+		//	dbDesc, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Database(ctx, dbID)
+		//	if err != nil {
+		//		return err
+		//	}
+		//	return p.CheckPrivilegeForUser(ctx, dbDesc, privilege.CREATE, user)
+		//}
 		return p.CheckPrivilegeForUser(ctx, scDesc, privilege.CREATE, user)
 	default:
 		panic(errors.AssertionFailedf("unknown schema kind %d", kind))

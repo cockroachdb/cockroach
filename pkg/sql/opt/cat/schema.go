@@ -12,7 +12,6 @@ package cat
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
