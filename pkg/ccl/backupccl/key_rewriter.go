@@ -221,7 +221,9 @@ func MakeKeyRewriterPrefixIgnoringInterleaved(tableID descpb.ID, indexID descpb.
 // an error when it encounters a key from an in-progress import. Currently, this
 // is only relevant for RESTORE. See the checkAndRewriteTableKey function for
 // more details.
-func (kr *KeyRewriter) RewriteKey(key []byte, wallTime int64) ([]byte, bool, error) {
+func (kr *KeyRewriter) RewriteKey(
+	key []byte, walltimeForImportElision int64,
+) ([]byte, bool, error) {
 	// If we are reading a system tenant backup and this is a tenant key then it
 	// is part of a backup *of* that tenant, so we only restore it if we have a
 	// tenant rekey for it, i.e. we're restoring that tenant.
@@ -254,8 +256,8 @@ func (kr *KeyRewriter) RewriteKey(key []byte, wallTime int64) ([]byte, bool, err
 		return nil, false, err
 	}
 
-	rekeyed, ok, err := kr.checkAndRewriteTableKey(noTenantPrefix, wallTime)
-	if err != nil {
+	rekeyed, ok, err := kr.checkAndRewriteTableKey(noTenantPrefix, walltimeForImportElision)
+	if err != nil || !ok {
 		return nil, false, err
 	}
 
@@ -276,20 +278,20 @@ func (kr *KeyRewriter) RewriteKey(key []byte, wallTime int64) ([]byte, bool, err
 	return rekeyed, ok, err
 }
 
-// ErrImportingKeyError indicates the current key is apart of an in-progress import
-var ErrImportingKeyError = errors.New("skipping rewrite of an importing key")
-
 // checkAndRewriteTableKey rewrites the table IDs in the key. It assumes that
 // any tenant ID has been stripped from the key so it operates with the system
 // codec. It is the responsibility of the caller to either remap, or re-prepend
-// any required tenant prefix.
+// any required tenant prefix. The function returns the rewritten key (if possible),
+// a boolean indicating if the key was rewritten, and an error, if any.
 //
 // The caller may also pass the key's walltime (part of the MVCC key's
 // timestamp), which the function uses to detect and filter out keys from
 // in-progress imports. If the caller passes a zero valued walltime, no
 // filtering occurs. Filtering is necessary during restore because the restoring
 // cluster should not contain keys from an in-progress import.
-func (kr *KeyRewriter) checkAndRewriteTableKey(key []byte, wallTime int64) ([]byte, bool, error) {
+func (kr *KeyRewriter) checkAndRewriteTableKey(
+	key []byte, walltimeForImportElision int64,
+) ([]byte, bool, error) {
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
@@ -298,7 +300,7 @@ func (kr *KeyRewriter) checkAndRewriteTableKey(key []byte, wallTime int64) ([]by
 	// Skip keys from ephemeral cluster status tables so that the restored cluster
 	// does not observe stale leases/liveness until it expires.
 	if tableID == keys.SQLInstancesTableID || tableID == keys.SqllivenessID || tableID == keys.LeaseTableID {
-		return key, false, nil
+		return nil, false, nil
 	}
 
 	desc := kr.descs[descpb.ID(tableID)]
@@ -311,8 +313,8 @@ func (kr *KeyRewriter) checkAndRewriteTableKey(key []byte, wallTime int64) ([]by
 	// GetInProgressImportStartTime), then this function returns an error if this
 	// key is a part of the import -- i.e. the key's walltime is greater than the
 	// import start time. It is up to the caller to handle this error properly.
-	if importTime := desc.GetInProgressImportStartTime(); wallTime > 0 && importTime > 0 && wallTime >= importTime {
-		return nil, false, ErrImportingKeyError
+	if importTime := desc.GetInProgressImportStartTime(); walltimeForImportElision > 0 && importTime > 0 && walltimeForImportElision >= importTime {
+		return nil, false, nil
 	}
 
 	// Rewrite the first table ID.
