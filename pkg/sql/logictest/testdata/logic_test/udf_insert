@@ -1,9 +1,8 @@
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b INT DEFAULT 0);
 
-# TODO: UDFs should always return results.
-statement ok
-CREATE FUNCTION f_should_err() RETURNS RECORD AS
+statement error pq: return type mismatch in function declared to return record\nDETAIL: Function's final statement must be SELECT or INSERT/UPDATE/DELETE RETURNING.
+CREATE FUNCTION f_err() RETURNS RECORD AS
 $$
   INSERT INTO t VALUES (1,2);
 $$ LANGUAGE SQL;
