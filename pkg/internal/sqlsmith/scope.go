@@ -10,11 +10,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// colRef refers to a named result column. If it is from a table, def is
-// populated.
+// colRef refers to a named result column.
 type colRef struct {
 	typ  *types.T
 	item *tree.ColumnItem
+	// TODO(michae2): Add ColumnAccessExpr as an alternative form of column
+	// reference (for accessing individual fields of composite types).
 }
 
 func (c *colRef) typedExpr() tree.TypedExpr {
