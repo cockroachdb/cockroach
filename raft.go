@@ -16,14 +16,14 @@ package raft
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"math"
-	"math/rand"
+	"math/big"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"go.etcd.io/raft/v3/confchange"
 	"go.etcd.io/raft/v3/quorum"
@@ -89,20 +89,17 @@ var ErrProposalDropped = errors.New("raft proposal dropped")
 // synchronization among multiple raft groups. Only the methods needed
 // by the code are exposed (e.g. Intn).
 type lockedRand struct {
-	mu   sync.Mutex
-	rand *rand.Rand
+	mu sync.Mutex
 }
 
 func (r *lockedRand) Intn(n int) int {
 	r.mu.Lock()
-	v := r.rand.Intn(n)
+	v, _ := rand.Int(rand.Reader, big.NewInt(int64(n)))
 	r.mu.Unlock()
-	return v
+	return int(v.Int64())
 }
 
-var globalRand = &lockedRand{
-	rand: rand.New(rand.NewSource(time.Now().UnixNano())),
-}
+var globalRand = &lockedRand{}
 
 // CampaignType represents the type of campaigning
 // the reason we use the type of string instead of uint64
