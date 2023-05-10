@@ -2060,6 +2060,12 @@ func (t *T) SQLString() string {
 		return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
 	case TupleFamily:
 		if t.UserDefined() {
+			// If for some reason we do not have the TypeMeta hydrated, returning a
+			// less informative string is better than a panic. (See preceding
+			// EnumFamily case.)
+			if t.TypeMeta.Name == nil {
+				return fmt.Sprintf("@%d", t.Oid())
+			}
 			// Do not include the catalog name. We do not allow a table to reference
 			// a type in another database, so it will always be for the current database.
 			// Removing the catalog name makes the output more portable for other
