@@ -2102,6 +2102,13 @@ func TestLogic_udf_update(
 	runLogicTest(t, "udf_update")
 }
 
+func TestLogic_udf_upsert(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_upsert")
+}
+
 func TestLogic_udf_volatility_check(
 	t *testing.T,
 ) {
