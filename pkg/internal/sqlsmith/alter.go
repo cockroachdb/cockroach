@@ -579,7 +579,7 @@ func makeAlterDatabasePlacement(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterTypeDropValue(s *Smither) (tree.Statement, bool) {
-	enumVal, udtName, ok := s.getRandUserDefinedTypeLabel()
+	enumVal, udtName, ok := s.getRandUserDefinedEnumLabel()
 	if !ok {
 		return nil, false
 	}
@@ -592,7 +592,7 @@ func makeAlterTypeDropValue(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterTypeAddValue(s *Smither) (tree.Statement, bool) {
-	_, udtName, ok := s.getRandUserDefinedTypeLabel()
+	_, udtName, ok := s.getRandUserDefinedEnumLabel()
 	if !ok {
 		return nil, false
 	}
@@ -606,7 +606,7 @@ func makeAlterTypeAddValue(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterTypeRenameValue(s *Smither) (tree.Statement, bool) {
-	enumVal, udtName, ok := s.getRandUserDefinedTypeLabel()
+	enumVal, udtName, ok := s.getRandUserDefinedEnumLabel()
 	if !ok {
 		return nil, false
 	}
@@ -620,7 +620,7 @@ func makeAlterTypeRenameValue(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterTypeRenameType(s *Smither) (tree.Statement, bool) {
-	_, udtName, ok := s.getRandUserDefinedTypeLabel()
+	_, udtName, ok := s.getRandUserDefinedType()
 	if !ok {
 		return nil, false
 	}
