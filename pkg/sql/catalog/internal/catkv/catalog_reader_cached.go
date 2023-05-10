@@ -40,6 +40,7 @@ type cachedCatalogReader struct {
 	// has* indicates previously completed lookups. When set, we
 	// know the corresponding catalog data is in the cache.
 	hasScanAll                   bool
+	hasScanAllComments           bool
 	hasScanNamespaceForDatabases bool
 
 	// memAcc is the actual account of an injected, upstream monitor
@@ -147,6 +148,26 @@ func (c *cachedCatalogReader) Reset(ctx context.Context) {
 		systemDatabaseCache: old.systemDatabaseCache,
 		version:             old.version,
 	}
+}
+
+// ScanAllComments is part of the CatalogReader interface.
+func (c *cachedCatalogReader) ScanAllComments(
+	ctx context.Context, txn *kv.Txn,
+) (nstree.Catalog, error) {
+	if c.hasScanAll || c.hasScanAllComments {
+		return c.cache.Catalog, nil
+	}
+	// Scan all catalog tables.
+	read, err := c.cr.ScanAllComments(ctx, txn)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	/*if err := c.ensure(ctx, read); err != nil {
+		return nstree.Catalog{}, err
+	}
+	c.hasScanAllComments = true
+	*/
+	return read, nil
 }
 
 // ScanAll is part of the CatalogReader interface.
