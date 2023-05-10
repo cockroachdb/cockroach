@@ -148,7 +148,7 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":rowexec"],
-    tags = ["no-remote"],
+    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/gossip",
