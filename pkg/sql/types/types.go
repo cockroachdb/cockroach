@@ -1988,6 +1988,18 @@ func (t *T) SQLString() string {
 			return fmt.Sprintf("@%d", t.Oid())
 		}
 		return t.TypeMeta.Name.FQName()
+	case TupleFamily:
+		if t.UserDefined() {
+			// If we have a user-defined composite type, use its fully-qualified
+			// name. If for some reason we do not have the TypeMeta hydrated,
+			// returning a less informative string is better than a panic. (See
+			// preceding EnumFamily case.)
+			if t.TypeMeta.Name == nil {
+				return fmt.Sprintf("@%d", t.Oid())
+			}
+			return t.TypeMeta.Name.FQName()
+		}
+		return "RECORD"
 	}
 	return strings.ToUpper(t.Name())
 }
