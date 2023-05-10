@@ -703,7 +703,7 @@ func (o *Optimizer) enforceProps(
 }
 
 // optimizeEnforcer optimizes and costs the enforcer. getEnforcer is used to
-// reset the enforcer after recusing in optimizeGroup, since the current group
+// reset the enforcer after recursing in optimizeGroup, since the current group
 // and its children may use the same SortExpr to avoid allocations.
 func (o *Optimizer) optimizeEnforcer(
 	state *groupState,
