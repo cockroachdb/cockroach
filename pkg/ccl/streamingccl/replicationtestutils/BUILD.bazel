@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "replicationtestutils",
+    testonly = 1,
     srcs = [
         "encoding.go",
         "replication_helpers.go",
