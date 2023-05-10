@@ -45,6 +45,7 @@ func GetIngestingDescriptorPrivileges(
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	wroteSchemas map[descpb.ID]catalog.SchemaDescriptor,
 	descCoverage tree.DescriptorCoverage,
+	includePublicSchemaCreatePriv bool,
 ) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
 	switch desc := desc.(type) {
 	case catalog.TableDescriptor:
@@ -58,6 +59,7 @@ func GetIngestingDescriptorPrivileges(
 			wroteSchemas,
 			descCoverage,
 			privilege.Table,
+			includePublicSchemaCreatePriv,
 		)
 	case catalog.SchemaDescriptor:
 		return getIngestingPrivilegesForTableOrSchema(
@@ -70,6 +72,7 @@ func GetIngestingDescriptorPrivileges(
 			wroteSchemas,
 			descCoverage,
 			privilege.Schema,
+			includePublicSchemaCreatePriv,
 		)
 	case catalog.TypeDescriptor:
 		// If the ingestion is not a cluster restore we cannot know that the users
@@ -103,6 +106,7 @@ func getIngestingPrivilegesForTableOrSchema(
 	wroteSchemas map[descpb.ID]catalog.SchemaDescriptor,
 	descCoverage tree.DescriptorCoverage,
 	privilegeType privilege.ObjectType,
+	includePublicSchemaCreatePriv bool,
 ) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
 	if _, ok := wroteDBs[desc.GetParentID()]; ok {
 		// If we're creating a new database in this ingestion, the tables and
@@ -111,7 +115,7 @@ func getIngestingPrivilegesForTableOrSchema(
 		switch privilegeType {
 		case privilege.Schema:
 			if desc.GetName() == tree.PublicSchema {
-				updatedPrivileges = catpb.NewPublicSchemaPrivilegeDescriptor()
+				updatedPrivileges = catpb.NewPublicSchemaPrivilegeDescriptor(includePublicSchemaCreatePriv)
 			} else {
 				updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
 			}

@@ -13,7 +13,6 @@ package ingesting
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -46,7 +45,6 @@ import (
 // inherited privileges during a cluster restore.
 func WriteDescriptors(
 	ctx context.Context,
-	codec keys.SQLCodec,
 	txn *kv.Txn,
 	user username.SQLUsername,
 	descsCol *descs.Collection,
@@ -58,6 +56,7 @@ func WriteDescriptors(
 	descCoverage tree.DescriptorCoverage,
 	extra []roachpb.KeyValue,
 	inheritParentName string,
+	includePublicSchemaCreatePriv bool,
 ) (err error) {
 	ctx, span := tracing.ChildSpan(ctx, "WriteDescriptors")
 	defer span.Finish()
@@ -80,7 +79,7 @@ func WriteDescriptors(
 	for i := range databases {
 		desc := databases[i]
 		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, desc, user,
-			wroteDBs, wroteSchemas, descCoverage)
+			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv)
 		if err != nil {
 			return err
 		}
@@ -119,7 +118,7 @@ func WriteDescriptors(
 	for i := range schemas {
 		sc := schemas[i]
 		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, sc, user,
-			wroteDBs, wroteSchemas, descCoverage)
+			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv)
 		if err != nil {
 			return err
 		}
@@ -147,7 +146,7 @@ func WriteDescriptors(
 	for i := range tables {
 		table := tables[i]
 		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, table, user,
-			wroteDBs, wroteSchemas, descCoverage)
+			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv)
 		if err != nil {
 			return err
 		}
@@ -181,7 +180,7 @@ func WriteDescriptors(
 	for i := range types {
 		typ := types[i]
 		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, typ, user,
-			wroteDBs, wroteSchemas, descCoverage)
+			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv)
 		if err != nil {
 			return err
 		}
@@ -205,7 +204,7 @@ func WriteDescriptors(
 
 	for _, fn := range functions {
 		updatedPrivileges, err := GetIngestingDescriptorPrivileges(
-			ctx, txn, descsCol, fn, user, wroteDBs, wroteSchemas, descCoverage,
+			ctx, txn, descsCol, fn, user, wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv,
 		)
 		if err != nil {
 			return err
