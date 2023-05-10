@@ -293,9 +293,6 @@ func (opts *optsT) findGood(bad plumbing.Hash) (plumbing.Hash, error) {
 		if err != nil {
 			return plumbing.ZeroHash, err
 		}
-		if err := opts.report(tr); err != nil {
-			return plumbing.ZeroHash, err
-		}
 		if tr == testResultGood {
 			return cur, nil
 		}
