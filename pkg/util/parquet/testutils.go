@@ -17,18 +17,19 @@ import (
 
 	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/apache/arrow/go/v11/parquet/file"
+	"github.com/apache/arrow/go/v11/parquet/metadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/assert"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
 // ReadFileAndVerifyDatums reads the parquetFile and first asserts its metadata
 // matches the metadata from the writer. Then, it reads the file and asserts
-// that it's data matches writtenDatums.
+// that its data matches writtenDatums.
 func ReadFileAndVerifyDatums(
 	t *testing.T,
 	parquetFile string,
@@ -37,34 +38,74 @@ func ReadFileAndVerifyDatums(
 	writer *Writer,
 	writtenDatums [][]tree.Datum,
 ) {
-	f, err := os.Open(parquetFile)
-	require.NoError(t, err)
 
-	reader, err := file.NewParquetReader(f)
+	meta, readDatums, err := ReadFile(parquetFile)
 	require.NoError(t, err)
-
-	assert.Equal(t, reader.NumRows(), int64(numRows))
-	assert.Equal(t, reader.MetaData().Schema.NumColumns(), numCols)
+	require.Equal(t, int64(numRows), meta.GetNumRows())
+	require.Equal(t, numCols, meta.Schema.NumColumns())
 
 	numRowGroups := int(math.Ceil(float64(numRows) / float64(writer.cfg.maxRowGroupLength)))
-	assert.EqualValues(t, numRowGroups, reader.NumRowGroups())
+	require.EqualValues(t, numRowGroups, len(meta.GetRowGroups()))
 
-	readDatums := make([][]tree.Datum, numRows)
 	for i := 0; i < numRows; i++ {
-		readDatums[i] = make([]tree.Datum, numCols)
+		for j := 0; j < numCols; j++ {
+			validateDatum(t, writtenDatums[i][j], readDatums[i][j])
+		}
+	}
+}
+
+// ReadFile reads a parquet file and returns metadata and datums read from the file.
+func ReadFile(parquetFile string) (meta *metadata.FileMetaData, datums [][]tree.Datum, err error) {
+	f, err := os.Open(parquetFile)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	reader, err := file.NewParquetReader(f)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var readDatums [][]tree.Datum
+
+	typFamiliesMeta := reader.MetaData().KeyValueMetadata().FindValue(typeFamilyMetaKey)
+	if typFamiliesMeta == nil {
+		return nil, nil,
+			errors.AssertionFailedf("could not parse type family metadata from parquet file")
+	}
+	typFamilies, err := deserializeIntArray(*typFamiliesMeta)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	typOidsMeta := reader.MetaData().KeyValueMetadata().FindValue(typeOidMetaKey)
+	if typOidsMeta == nil {
+		return nil, nil,
+			errors.AssertionFailedf("could not parse type oid metadata from parquet file")
+	}
+	typOids, err := deserializeIntArray(*typOidsMeta)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	startingRowIdx := 0
 	for rg := 0; rg < reader.NumRowGroups(); rg++ {
 		rgr := reader.RowGroup(rg)
 		rowsInRowGroup := rgr.NumRows()
+		for i := int64(0); i < rowsInRowGroup; i++ {
+			readDatums = append(readDatums, make([]tree.Datum, rgr.NumColumns()))
+		}
 
-		for colIdx := 0; colIdx < numCols; colIdx++ {
+		for colIdx := 0; colIdx < rgr.NumColumns(); colIdx++ {
 			col, err := rgr.Column(colIdx)
-			require.NoError(t, err)
+			if err != nil {
+				return nil, nil, err
+			}
 
-			dec := writer.sch.cols[colIdx].decoder
-			typ := writer.sch.cols[colIdx].typ
+			dec, typ, err := decoderFromFamilyAndType(oid.Oid(typOids[colIdx]), types.Family(typFamilies[colIdx]))
+			if err != nil {
+				return nil, nil, err
+			}
 
 			// Based on how we define schemas, we can detect an array by seeing if the
 			// primitive col reader has a max repetition level of 1. See comments above
@@ -74,52 +115,84 @@ func ReadFileAndVerifyDatums(
 			switch col.Type() {
 			case parquet.Types.Boolean:
 				colDatums, read, err := readBatch(col, make([]bool, 1), dec, typ, isArray)
-				require.NoError(t, err)
-				require.Equal(t, rowsInRowGroup, read)
+				if err != nil {
+					return nil, nil, err
+				}
+				if read != rowsInRowGroup {
+					return nil, nil,
+						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
+				}
 				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.Int32:
 				colDatums, read, err := readBatch(col, make([]int32, 1), dec, typ, isArray)
-				require.NoError(t, err)
-				require.Equal(t, rowsInRowGroup, read)
+				if err != nil {
+					return nil, nil, err
+				}
+				if read != rowsInRowGroup {
+					return nil, nil,
+						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
+				}
 				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.Int64:
 				colDatums, read, err := readBatch(col, make([]int64, 1), dec, typ, isArray)
-				require.NoError(t, err)
-				require.Equal(t, rowsInRowGroup, read)
+				if err != nil {
+					return nil, nil, err
+				}
+				if read != rowsInRowGroup {
+					return nil, nil,
+						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
+				}
 				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.Int96:
 				panic("unimplemented")
 			case parquet.Types.Float:
 				arrs, read, err := readBatch(col, make([]float32, 1), dec, typ, isArray)
-				require.NoError(t, err)
-				require.Equal(t, rowsInRowGroup, read)
+				if err != nil {
+					return nil, nil, err
+				}
+				if read != rowsInRowGroup {
+					return nil, nil,
+						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
+				}
 				decodeValuesIntoDatumsHelper(arrs, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.Double:
 				arrs, read, err := readBatch(col, make([]float64, 1), dec, typ, isArray)
-				require.NoError(t, err)
-				require.Equal(t, rowsInRowGroup, read)
+				if err != nil {
+					return nil, nil, err
+				}
+				if read != rowsInRowGroup {
+					return nil, nil,
+						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
+				}
 				decodeValuesIntoDatumsHelper(arrs, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.ByteArray:
 				colDatums, read, err := readBatch(col, make([]parquet.ByteArray, 1), dec, typ, isArray)
-				require.NoError(t, err)
-				require.Equal(t, rowsInRowGroup, read)
+				if err != nil {
+					return nil, nil, err
+				}
+				if read != rowsInRowGroup {
+					return nil, nil,
+						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
+				}
 				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
 			case parquet.Types.FixedLenByteArray:
 				colDatums, read, err := readBatch(col, make([]parquet.FixedLenByteArray, 1), dec, typ, isArray)
-				require.NoError(t, err)
-				require.Equal(t, rowsInRowGroup, read)
+				if err != nil {
+					return nil, nil, err
+				}
+				if read != rowsInRowGroup {
+					return nil, nil,
+						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
+				}
 				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
 			}
 		}
 		startingRowIdx += int(rowsInRowGroup)
 	}
-	require.NoError(t, reader.Close())
-
-	for i := 0; i < numRows; i++ {
-		for j := 0; j < numCols; j++ {
-			validateDatum(t, writtenDatums[i][j], readDatums[i][j])
-		}
+	if err := reader.Close(); err != nil {
+		return nil, nil, err
 	}
+	return reader.MetaData(), readDatums, nil
 }
 
 type batchReader[T parquetDatatypes] interface {

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -236,31 +237,74 @@ func (collatedStringDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
 	return &tree.DCollatedString{Contents: string(v)}, nil
 }
 
-// Defeat the linter's unused lint errors.
-func init() {
-	var _, _ = boolDecoder{}.decode(false)
-	var _, _ = stringDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = int32Decoder{}.decode(0)
-	var _, _ = int64Decoder{}.decode(0)
-	var _, _ = decimalDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = timestampDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = timestampTZDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = uUIDDecoder{}.decode(parquet.FixedLenByteArray{})
-	var _, _ = iNetDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = jsonDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = bitDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = bytesDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = enumDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = dateDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = box2DDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = box2DDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = geographyDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = geometryDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = intervalDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = timeDecoder{}.decode(0)
-	var _, _ = timeTZDecoder{}.decode(parquet.ByteArray{})
-	var _, _ = float64Decoder{}.decode(0.0)
-	var _, _ = float32Decoder{}.decode(0.0)
-	var _, _ = oidDecoder{}.decode(0)
-	var _, _ = collatedStringDecoder{}.decode(parquet.ByteArray{})
+// decoderFromFamilyAndType returns the decoder to use based on the type oid and
+// family. Note the logical similarity to makeColumn in schema.go. This is
+// intentional as each decoder returned by this function corresponds to a
+// particular colWriter determined by makeColumn.
+// TODO: Since this function shares the same switch with makeColumn, we can
+func decoderFromFamilyAndType(typOid oid.Oid, family types.Family) (decoder, *types.T, error) {
+	typ, ok := types.OidToType[typOid]
+	if !ok {
+		// JSON is not in the map.
+		// For more info, see note in types.OidToType about oid.T_json.
+		if typOid == oid.T_json {
+			typ = types.Json
+		} else {
+			return nil, nil, errors.AssertionFailedf("could not determine type from oid %d", typOid)
+		}
+	}
+	switch family {
+	case types.BoolFamily:
+		return boolDecoder{}, typ, nil
+	case types.StringFamily:
+		return stringDecoder{}, typ, nil
+	case types.IntFamily:
+		if typ.Oid() == oid.T_int8 {
+			return int64Decoder{}, typ, nil
+		}
+		return int32Decoder{}, typ, nil
+	case types.DecimalFamily:
+		return decimalDecoder{}, typ, nil
+	case types.TimestampFamily:
+		return timestampDecoder{}, typ, nil
+	case types.TimestampTZFamily:
+		return timestampTZDecoder{}, typ, nil
+	case types.UuidFamily:
+		return uUIDDecoder{}, typ, nil
+	case types.INetFamily:
+		return iNetDecoder{}, typ, nil
+	case types.JsonFamily:
+		return jsonDecoder{}, typ, nil
+	case types.BitFamily:
+		return bitDecoder{}, typ, nil
+	case types.BytesFamily:
+		return bytesDecoder{}, typ, nil
+	case types.EnumFamily:
+		return enumDecoder{}, typ, nil
+	case types.DateFamily:
+		return dateDecoder{}, typ, nil
+	case types.Box2DFamily:
+		return box2DDecoder{}, typ, nil
+	case types.GeographyFamily:
+		return geographyDecoder{}, typ, nil
+	case types.GeometryFamily:
+		return geometryDecoder{}, typ, nil
+	case types.IntervalFamily:
+		return intervalDecoder{}, typ, nil
+	case types.TimeFamily:
+		return timeDecoder{}, typ, nil
+	case types.TimeTZFamily:
+		return timeTZDecoder{}, typ, nil
+	case types.FloatFamily:
+		if typ.Oid() == oid.T_float4 {
+			return float32Decoder{}, typ, nil
+		}
+		return float64Decoder{}, typ, nil
+	case types.OidFamily:
+		return oidDecoder{}, typ, nil
+	case types.CollatedStringFamily:
+		return collatedStringDecoder{}, typ, nil
+	default:
+		return nil, nil, errors.AssertionFailedf("could not find decoder for type oid %d and family %d", typOid, family)
+	}
 }
