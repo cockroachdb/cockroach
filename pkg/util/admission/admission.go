@@ -178,7 +178,7 @@ type granter interface {
 	// is a possibility that that raced with cancellation.
 	//
 	// Do not use this for doing store IO-related token adjustments when work is
-	// done -- that should be done via granterWithStoreWriteDone.storeWriteDone.
+	// done -- that should be done via granterWithStoreReplicatedWorkAdmitted.storeWriteDone.
 	//
 	// REQUIRES: count > 0. count == 1 for slots.
 	returnGrant(count int64)
@@ -195,7 +195,7 @@ type granter interface {
 	//   work turned out to be an underestimate.
 	//
 	// Do not use this for doing store IO-related token adjustments when work is
-	// done -- that should be done via granterWithStoreWriteDone.storeWriteDone.
+	// done -- that should be done via granterWithStoreReplicatedWorkAdmitted.storeWriteDone.
 	//
 	// REQUIRES: count > 0. count == 1 for slots.
 	tookWithoutPermission(count int64)
@@ -274,23 +274,33 @@ type granterWithIOTokens interface {
 	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used
 	// since the last such call.
 	getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64
-	// setAdmittedDoneModelsLocked supplies the models to use when
-	// storeWriteDone is called, to adjust token consumption. Note that these
-	// models are not used for token adjustment at admission time -- that is
-	// handled by StoreWorkQueue and is not in scope of this granter. This
-	// asymmetry is due to the need to use all the functionality of WorkQueue at
-	// admission time. See the long explanatory comment at the beginning of
-	// store_token_estimation.go, regarding token estimation.
-	setAdmittedDoneModels(l0WriteLM tokensLinearModel, l0IngestLM tokensLinearModel,
-		ingestLM tokensLinearModel)
+	// setLinearModels supplies the models to use when storeWriteDone or
+	// storeReplicatedWorkAdmittedLocked is called, to adjust token consumption.
+	// Note that these models are not used for token adjustment at admission
+	// time -- that is handled by StoreWorkQueue and is not in scope of this
+	// granter. This asymmetry is due to the need to use all the functionality
+	// of WorkQueue at admission time. See the long explanatory comment at the
+	// beginning of store_token_estimation.go, regarding token estimation.
+	setLinearModels(l0WriteLM, l0IngestLM, ingestLM tokensLinearModel)
 }
 
-// granterWithStoreWriteDone is used to abstract kvStoreTokenGranter for
-// testing. The interface is used by StoreWorkQueue to pass on sizing
-// information provided when the work was completed.
-type granterWithStoreWriteDone interface {
+// granterWithStoreReplicatedWorkAdmitted is used to abstract
+// kvStoreTokenGranter for testing. The interface is used by StoreWorkQueue to
+// pass on sizing information provided when the work is either done (for legacy,
+// above-raft IO admission) or admitted (for below-raft, asynchronous admission
+// control.
+type granterWithStoreReplicatedWorkAdmitted interface {
 	granter
+	// storeWriteDone is used by legacy, above-raft IO admission control to
+	// inform granters of when the write was actually done, post-admission. At
+	// admit-time we did not have sizing info for these writes, so by
+	// intercepting these writes at admit time we're able to make any
+	// outstanding token adjustments in the granter.
 	storeWriteDone(originalTokens int64, doneInfo StoreWorkDoneInfo) (additionalTokens int64)
+	// storeReplicatedWorkAdmittedLocked is used by below-raft admission control
+	// to inform granters of work being admitted in order for them to make any
+	// outstanding token adjustments. It's invoked with the coord.mu held.
+	storeReplicatedWorkAdmittedLocked(originalTokens int64, admittedInfo storeReplicatedWorkAdmittedInfo) (additionalTokens int64)
 }
 
 // cpuOverloadIndicator is meant to be an instantaneous indicator of cpu

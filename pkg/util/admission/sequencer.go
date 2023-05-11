@@ -8,15 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvflowsequencer
+package admission
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-)
-
-// Sequencer issues monotonic sequencing timestamps derived from observed
+// sequencer issues monotonic sequencing timestamps derived from observed
 // CreateTimes. This is a purpose-built data structure for replication admission
 // control where we want to assign each AC-queued work below-raft a "sequence
 // number" for FIFO ordering within a <tenant,priority>. We ensure timestamps
@@ -27,9 +21,29 @@ import (
 //
 // It's not safe for concurrent access.
 //
+// ----
+//
+// Aside: Why not do this CreateTime-generation above raft? This is because these
+// sequence numbers are encoded as part of the raft proposal[3], and at
+// encode-time, we don't actually know what log position the proposal is going
+// to end up in. It's hard to explicitly guarantee that a proposal with
+// log-position P1 will get encoded before another with log position P2, where
+// P1 < P2.
+//
+// If we tried to "approximate" CreateTimes at proposal-encode-time,
+// approximating log position order, it could result in over-admission. This is
+// because of how we return flow tokens -- up to some log index[4], and how use
+// these sequence numbers in below-raft WorkQueues. If P2 ends up with a lower
+// sequence number/CreateTime, it would get admitted first, and when returning
+// flow tokens by log position, in specifying up-to-P2, we'll early return P1's
+// flow tokens despite it not being admitted. So we'd over-admit at the sender.
+// This is all within a <tenant,priority> pair.
+//
 // [1]: See I12 from kvflowcontrol/doc.go.
-// [2]: See kvflowhandle.Handle.
-type Sequencer struct {
+// [2]: See kvadmission.AdmitRaftEntry.
+// [3]: In kvflowcontrolpb.RaftAdmissionMeta.
+// [4]: See kvflowcontrolpb.AdmittedRaftLogEntries.
+type sequencer struct {
 	// maxCreateTime ratchets to the highest observed CreateTime. If sequencing
 	// work with lower CreateTimes, we continue generating monotonic sequence
 	// numbers by incrementing it for every such sequencing attempt. Provided
@@ -38,18 +52,12 @@ type Sequencer struct {
 	maxCreateTime int64
 }
 
-// New returns a new Sequencer.
-func New() *Sequencer {
-	return &Sequencer{}
-}
-
-// Sequence returns a monotonically increasing timestamps derived from the
+// sequence returns a monotonically increasing timestamps derived from the
 // provided CreateTime.
-func (s *Sequencer) Sequence(ct time.Time) time.Time {
-	createTime := ct.UnixNano()
+func (s *sequencer) sequence(createTime int64) int64 {
 	if createTime <= s.maxCreateTime {
 		createTime = s.maxCreateTime + 1
 	}
 	s.maxCreateTime = createTime
-	return timeutil.FromUnixNanos(createTime)
+	return createTime
 }

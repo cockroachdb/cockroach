@@ -31,11 +31,6 @@ func TestDispatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	reverseWorkPriorityDict := make(map[string]admissionpb.WorkPriority)
-	for k, v := range admissionpb.WorkPriorityDict {
-		reverseWorkPriorityDict[v] = k
-	}
-
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		var dispatch *Dispatch
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -82,7 +77,7 @@ func TestDispatch(t *testing.T) {
 
 						case strings.HasPrefix(parts[i], "pri="):
 							// Parse pri=<string>.
-							pri, found := reverseWorkPriorityDict[arg]
+							pri, found := admissionpb.TestingReverseWorkPriorityDict[arg]
 							require.True(t, found)
 							entries.AdmissionPriority = int32(pri)
 

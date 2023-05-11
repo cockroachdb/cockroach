@@ -338,6 +338,8 @@ func createInMemoryTenant(
 	sysSQL.Exec(t, "CREATE TENANT $1", tenantName)
 	sysSQL.Exec(t, "ALTER TENANT $1 START SERVICE SHARED", tenantName)
 	sysSQL.Exec(t, `ALTER TENANT $1 GRANT CAPABILITY can_view_node_info=true, can_admin_split=true,can_view_tsdb_metrics=true`, tenantName)
+	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled=true`, tenantName)
+	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled=true`, tenantName)
 
 	removeTenantRateLimiters(t, sysSQL, tenantName)
 

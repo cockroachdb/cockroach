@@ -257,7 +257,10 @@ go_test(
     size = "enormous",
     srcs = ["generated_test.go"],{{ if .SqliteLogicTest }}
     args = ["-test.timeout=7195s"],{{ else }}
-    args = ["-test.timeout=3595s"],{{ end }}
+    args = select({
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=3595s"],
+    }),{{ end }}
     data = [
         "//c-deps:libgeos",  # keep{{ if .SqliteLogicTest }}
         "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep{{ end }}{{ if .CockroachGoTestserverTest }}

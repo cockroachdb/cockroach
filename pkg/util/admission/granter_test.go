@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
@@ -97,7 +98,7 @@ func TestGranterBasic(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
-			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry)
+			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &NoopOnLogEntryAdmitted{})
 			defer coords.Close()
 			coord = coords.Regular
 			return flushAndReset()
@@ -109,8 +110,9 @@ func TestGranterBasic(t *testing.T) {
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
-					ambientCtx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
+					ambientCtx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
 					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
+					_ OnLogEntryAdmitted, _ *syncutil.Mutex,
 				) storeRequester {
 					makeTestRequester := func(wc admissionpb.WorkClass) *testRequester {
 						req := &testRequester{
@@ -148,7 +150,7 @@ func TestGranterBasic(t *testing.T) {
 			kvStoreGranter := coord.granters[KVWork].(*kvStoreTokenGranter)
 			// Use the same model for all 3 kinds of models.
 			tlm := tokensLinearModel{multiplier: 0.5, constant: 50}
-			kvStoreGranter.setAdmittedDoneModels(tlm, tlm, tlm)
+			kvStoreGranter.setLinearModels(tlm, tlm, tlm)
 			return flushAndReset()
 
 		case "set-has-waiting-requests":
@@ -232,7 +234,7 @@ func TestGranterBasic(t *testing.T) {
 			var origTokens, writeBytes int
 			d.ScanArgs(t, "orig-tokens", &origTokens)
 			d.ScanArgs(t, "write-bytes", &writeBytes)
-			requesters[scanWorkKind(t, d)].granter.(granterWithStoreWriteDone).storeWriteDone(
+			requesters[scanWorkKind(t, d)].granter.(granterWithStoreReplicatedWorkAdmitted).storeWriteDone(
 				int64(origTokens), StoreWorkDoneInfo{WriteBytes: int64(writeBytes)})
 			coord.testingTryGrant()
 			return flushAndReset()
@@ -274,8 +276,8 @@ func TestStoreCoordinators(t *testing.T) {
 	opts := Options{
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
-			ctx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
-			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, _ *TestingKnobs) storeRequester {
+			ctx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
+			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, _ *TestingKnobs, _ OnLogEntryAdmitted, _ *syncutil.Mutex) storeRequester {
 			reqReg := makeRequesterFunc(ctx, KVWork, granters[admissionpb.RegularWorkClass], settings, metrics, opts)
 			reqElastic := makeRequesterFunc(ctx, KVWork, granters[admissionpb.ElasticWorkClass], settings, metrics, opts)
 			str := &storeTestRequester{}
@@ -286,7 +288,7 @@ func TestStoreCoordinators(t *testing.T) {
 			return str
 		},
 	}
-	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry)
+	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &NoopOnLogEntryAdmitted{})
 	// There is only 1 KVWork requester at this point in initialization, for the
 	// Regular GrantCoordinator.
 	require.Equal(t, 1, len(requesters))

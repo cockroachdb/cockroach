@@ -483,7 +483,7 @@ package kvflowcontrol
 //          still queued after ~100ms, will trigger epoch-LIFO everywhere.
 // [^11]: See the implementation for kvflowcontrol.Dispatch.
 // [^12]: See UpToRaftLogPosition in AdmittedRaftLogEntries.
-// [^13]: See kvflowsequencer.Sequencer and its use in kvflowhandle.Handle.
+// [^13]: See admission.sequencer and its use in admission.StoreWorkQueue.
 // [^14]: See the high_create_time_low_position_different_range test case for
 //        TestReplicatedWriteAdmission.
 //

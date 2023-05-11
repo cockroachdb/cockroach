@@ -1,7 +1,8 @@
-# Walk through the basics of how the per-handle sequencer works. The
-# log-position= parameter is not actually used in the implementation, but in
-# typical usage we'd be sequencing work in log position order, and it's
-# instructive to understand how sequencing timestamps are generated.
+# Walk through the basics of how the below-raft replicated work sequencer
+# works. The log-position= parameter is not actually used in the
+# implementation, but in typical usage we'd be sequencing work in log position
+# order, and it's instructive to understand how sequencing timestamps are
+# generated.
 #
 # -----------------------------------------------------------------------------
 # 1. Observe how the sequence numbers change with changing log positions (and
