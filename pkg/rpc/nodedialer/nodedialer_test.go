@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	circuitbreaker "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -77,51 +78,35 @@ func TestDialNoBreaker(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		return nd.ConnHealth(staticNodeID, rpc.DefaultClass)
 	})
-	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
-	assert.True(t, breaker.Ready())
+
+	require.NoError(t, rpcCtx.ConnHealth(ln.Addr().String(), staticNodeID, rpc.DefaultClass))
 
 	// Test that DialNoBreaker is successful normally.
-	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
-	assert.Nil(t, err, "failed to dial")
-	assert.True(t, breaker.Ready())
-	assert.Equal(t, breaker.Failures(), int64(0))
-
-	// Now trip the breaker and check that DialNoBreaker will go ahead
-	// and dial anyway, and on top of that open the breaker again (since
-	// the dial will succeed).
-	breaker.Trip()
-	require.True(t, breaker.Tripped())
+	conn := rpcCtx.GRPCDialNode(ln.Addr().String(), staticNodeID, rpc.DefaultClass)
+	require.NoError(t, conn.Signal().Err())
 	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
 	require.NoError(t, err)
-	require.False(t, breaker.Tripped())
+	// Ditto regular dial.
+	_, err = nd.Dial(ctx, staticNodeID, rpc.DefaultClass)
+	require.NoError(t, err)
 
-	// Test that resolver errors also trip the breaker, just like
-	// they would for regular Dial.
-	boom := fmt.Errorf("boom")
-	nd = New(rpcCtx, func(roachpb.NodeID) (net.Addr, error) {
-		return nil, boom
-	})
-	breaker = nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
-	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
-	assert.Equal(t, errors.Cause(err), boom)
-	assert.Equal(t, breaker.Failures(), int64(1))
+	injErr := errors.New("injected error")
 
-	// Test that connection errors are reported to the breaker even
-	// with DialNoBreaker.
-	// To do this, we have to trick grpc into never successfully dialing
-	// the server, because if it succeeds once then it doesn't try again
-	// to perform a connection. To trick grpc in this way, we have to
-	// set up a server without the heartbeat service running. Without
-	// getting a heartbeat, the nodedialer will throw an error thinking
-	// that it wasn't able to successfully make a connection.
-	_, ln, _ = newTestServer(t, clock, stopper, false /* useHeartbeat */)
-	nd = New(rpcCtx, newSingleNodeResolver(staticNodeID, ln.Addr()))
-	breaker = nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
-	assert.True(t, breaker.Ready())
-	assert.Equal(t, breaker.Failures(), int64(0))
+	// Mock-trip the breaker. (This leaves the connection intact).
+	{
+		b, ok := rpcCtx.GetBreakerForAddr(staticNodeID, rpc.DefaultClass, ln.Addr())
+		require.True(t, ok)
+		undo := circuitbreaker.TestingSetTripped(b, injErr)
+		defer undo()
+	}
+	// Regular Dial should be refused, but DialNoBreaker will
+	// still work.
+
+	_, err = nd.Dial(ctx, staticNodeID, rpc.DefaultClass)
+	require.True(t, errors.Is(err, injErr), "%+v", err)
+
 	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
-	assert.NotNil(t, err, "expected dial error")
-	assert.Equal(t, breaker.Failures(), int64(1))
+	require.NoError(t, err)
 }
 
 func TestConnHealth(t *testing.T) {
