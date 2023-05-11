@@ -19,7 +19,8 @@ ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 
 query T
 EXPLAIN (DISTSQL, JSON) SELECT 1
 ----
-{"sql":"EXPLAIN (DISTSQL, JSON) SELECT 1","nodeNames":["1"],"processors":[{"nodeIdx":0,"inputs":[],"core":{"title":"local values 0/0","details":[]},"outputs":[],"stage":1},{"nodeIdx":0,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[],"stage":0}],"edges":[{"sourceProc":0,"sourceOutput":0,"destProc":1,"destInput":0}]}
+{"sql":"EXPLAIN (DISTSQL, JSON) SELECT 1","nodeNames":["1"],"processors":[{"nodeIdx":0,"inputs":[],"core":{"title":"local values 0/0","details":[]},"outputs":[],"stage":1,"processorID":0},{"nodeIdx":0,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[],"stage":0,"processorID":-1}],"edges":[{"sourceProc":0,"sourceOutput":0,"destProc":1,"destInput":0,"streamID":0}],"flow_id":"d623e8f6-618f-440f-9641-92a8a2356439","flags":{"ShowInputTypes":false,"MakeDeterministic":false}}
+
 
 # Full table scan - distribute.
 query T

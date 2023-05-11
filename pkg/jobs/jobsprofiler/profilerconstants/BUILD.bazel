@@ -6,6 +6,10 @@ go_library(
     srcs = ["constants.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 get_x_data(name = "get_x_data")
