@@ -38,6 +38,8 @@ func TestParquetRows(t *testing.T) {
 	// Rangefeed reader can time out under stress.
 	skip.UnderStress(t)
 
+	// Since we do not use cdctest infra in this test, we need to manually
+	// enable parquet metadata.
 	defer TestingSetIncludeParquetMetadata()()
 
 	ctx := context.Background()
@@ -112,7 +114,8 @@ func TestParquetRows(t *testing.T) {
 				require.NoError(t, err)
 
 				if writer == nil {
-					writer, err = newParquetWriterFromRow(updatedRow, f, parquet.WithMaxRowGroupLength(maxRowGroupSize))
+					writer, err = newParquetWriterFromRow(updatedRow, f, parquet.WithMaxRowGroupLength(maxRowGroupSize),
+						parquet.WithCompressionCodec(parquet.CompressionGZIP))
 					if err != nil {
 						t.Fatalf(err.Error())
 					}
