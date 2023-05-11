@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -191,6 +192,283 @@ func (b *Builder) ignorableNECheck(
 	}
 }
 
+// ignorablePKNEConstCheck checks that any predicate expressions are only of the
+// form: PK_col1 <> const1 OR PK_col2 <> const2 OR ... This condition is
+// generated for single-row inserts to make sure in the non-fast path flow, that
+// insert rows don't match themselves in the join. This is because the
+// uniqueness check happens after the insertion in the non-fast path flow. In
+// the fast path flow the uniqueness check happens before the insert, so this
+// identical row check is only there to prevent a false positive duplicate
+// unique value errors and doesn't need to be examined for fast path processing.
+// The constants in the predicates are compared with the matching constant
+// in the insert tuple for raw equality to verify that the constant was derived
+// from the insert row.
+func (b *Builder) ignorablePKNEConstCheck(
+	expr opt.ScalarExpr, insertTuple *memo.TupleExpr, tableID opt.TableID,
+) (ok bool) {
+	switch t := expr.(type) {
+	case *memo.OrExpr:
+		return b.ignorablePKNEConstCheck(t.Left, insertTuple, tableID) && b.ignorablePKNEConstCheck(t.Right, insertTuple, tableID)
+	case *memo.NeExpr:
+		if t.Left.Op() != opt.VariableOp || t.Right.Op() != opt.ConstOp {
+			return false
+		}
+		constFromPredicate := t.Right.(*memo.ConstExpr)
+
+		// Verify the left column is a primary key column (index ordinal 0).
+		leftVariable := t.Left.(*memo.VariableExpr)
+		ord, _, ok := b.findKeyColOrd(leftVariable.Col, tableID, 0 /* primary index */)
+		if !ok {
+			return false
+		}
+		if ord >= len(insertTuple.Elems) {
+			return false
+		}
+		constExprFromInsertRow, ok := insertTuple.Elems[ord].(*memo.ConstExpr)
+		if !ok {
+			return false
+		}
+		if constExprFromInsertRow != constFromPredicate {
+			return false
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+// handleSingleRowInsert examines a duplicate check involving cross join of the
+// insert row with a scan or select from the base table in fulfillment of the
+// unique constraint built for UniqueChecksItem `c`, and builds the
+// corresponding `out` parameter of type InsertFastPathFKUniqCheck which is used
+// to drive insert fast path unique constraint checks in the execution engine.
+// `check` is the tree of operations from `c` with distribute and projection
+// operations skipped over. For locality-optimized search cases, multiple
+// partial keys may be built in out.DatumsFromConstraint.
+func (b *Builder) handleSingleRowInsert(
+	ins *memo.InsertExpr,
+	check memo.RelExpr,
+	out *exec.InsertFastPathFKUniqCheck,
+	c *memo.UniqueChecksItem,
+) (ok bool) {
+	md := b.mem.Metadata()
+	tab := md.Table(ins.Table)
+
+	insertValues, insertInputIsValues := ins.Input.(*memo.ValuesExpr)
+	if !insertInputIsValues {
+		return false
+	}
+	if len(insertValues.Rows) != 1 {
+		return false
+	}
+	insertTuple, valueRowIsTuple := insertValues.Rows[0].(*memo.TupleExpr)
+	if !valueRowIsTuple {
+		return false
+	}
+
+	var inputExpr, rightExpr memo.RelExpr
+	var onClause memo.FiltersExpr
+
+	innerJoin, isInnerJoin := check.(*memo.InnerJoinExpr)
+	if isInnerJoin {
+		inputExpr = innerJoin.Left
+		rightExpr = innerJoin.Right
+		onClause = innerJoin.On
+	} else {
+		// Not an inner join.
+		semiJoin, isSemiJoin := check.(*memo.SemiJoinExpr)
+		if !isSemiJoin {
+			return false
+		}
+		inputExpr = semiJoin.Left
+		rightExpr = semiJoin.Right
+		onClause = semiJoin.On
+	}
+	// We're expecting a cross product of the row(s) to insert joined with the
+	// rows to check for uniqueness.
+	if len(onClause) > 0 {
+		return false
+	}
+	// Skip over the select (check if it's ignorable below).
+	var sel *memo.SelectExpr
+	var isSelect bool
+	if sel, isSelect = inputExpr.(*memo.SelectExpr); isSelect {
+		inputExpr = sel.Input
+	}
+	_, isValues := inputExpr.(*memo.ValuesExpr)
+	if !isValues {
+		return false
+	}
+	selectFilterIsOK := func(selectExpr *memo.SelectExpr, scanExpr *memo.ScanExpr) bool {
+		if len(selectExpr.Filters) != 1 {
+			return false
+		}
+		// Allow a select if it has an ignorable filter condition.
+		if !b.ignorablePKNEConstCheck(selectExpr.Filters[0].Condition, insertTuple, scanExpr.Table) {
+			return false
+		}
+		return true
+	}
+	if isSelect {
+		if scan, isScan := inputExpr.(*memo.ScanExpr); isScan {
+			if !selectFilterIsOK(sel, scan) {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+
+	if indexJoinExpr, isIndexJoin := rightExpr.(*memo.IndexJoinExpr); isIndexJoin {
+		rightExpr = indexJoinExpr.Input
+	}
+	// A locality-optimized search may be wrapped in a LIMIT expression.
+	if limitExpr, isLimit := rightExpr.(*memo.LimitExpr); isLimit {
+		rightExpr = limitExpr.Input
+	}
+	var selectExpr *memo.SelectExpr
+	// Save the select expression for later analysis.
+	if selectExpr, ok = rightExpr.(*memo.SelectExpr); ok {
+		rightExpr = selectExpr.Input
+	}
+	var scanExpr *memo.ScanExpr
+
+	if localityOptimizedSearch, isLOS := rightExpr.(*memo.LocalityOptimizedSearchExpr); isLOS {
+		// Locality-optimized search can be expanded into multiple KV requests per
+		// input row.
+		var localScan, remoteScan *memo.ScanExpr
+		if localScan, ok = localityOptimizedSearch.Local.(*memo.ScanExpr); !ok {
+			return false
+		}
+		if localScan.Constraint == nil {
+			return false
+		}
+		if remoteScan, ok = localityOptimizedSearch.Remote.(*memo.ScanExpr); !ok {
+			return false
+		}
+		if remoteScan.Constraint == nil {
+			return false
+		}
+		if selectExpr != nil {
+			// Get the table ID of the original scan, which has PK information.
+			if scanExpr, ok = localityOptimizedSearch.FirstExpr().(*memo.ScanExpr); !ok {
+				return false
+			}
+			// Allow a select if it has an ignorable filter condition.
+			if !selectFilterIsOK(selectExpr, scanExpr) {
+				return false
+			}
+		}
+		out.ReferencedTable = md.Table(localScan.Table)
+		out.ReferencedIndex = out.ReferencedTable.Index(localScan.Index)
+
+		// Set up InsertCols with the index key columns.
+		numKeyCols := localScan.Constraint.Spans.Get(0).StartKey().Length()
+		out.InsertCols = make([]exec.TableColumnOrdinal, numKeyCols)
+		for j := 0; j < numKeyCols; j++ {
+			ord := out.ReferencedIndex.Column(j).Ordinal()
+			out.InsertCols[j] = exec.TableColumnOrdinal(ord)
+		}
+		// populateDatumsFromConstraint builds the partial key in
+		// DatumsFromConstraint from a set of spans.
+		populateDatumsFromConstraint := func(spans constraint.Spans, idxOffset int) bool {
+			// Build the partial key for the spans.
+			for j := 0; j < spans.Count(); j++ {
+				// Find the index into DatumsFromConstraint to use.
+				rowNum := j + idxOffset
+				// The number of KV requests will match the number of spans.
+				// DatumsFromConstraint is indexed by table column ordinal, so build
+				// a slice which is large enough for any column.
+				out.DatumsFromConstraint[rowNum] = make(tree.Datums, tab.ColumnCount())
+				span := spans.Get(j)
+				// Verify the there is a single key...
+				if span.Prefix(localScan.Memo().EvalContext()) != span.StartKey().Length() {
+					return false
+				}
+				// ... and that the span has the same number of columns as the index key.
+				if span.StartKey().Length() != numKeyCols {
+					return false
+				}
+				for k := 0; k < span.StartKey().Length(); k++ {
+					// Get the key column's table column ordinal.
+					ord := out.InsertCols[k]
+					// Populate DatumsFromConstraint with that key column value.
+					out.DatumsFromConstraint[rowNum][ord] = span.StartKey().Value(k)
+				}
+			}
+			return true
+		}
+
+		// The number of KV requests will match the number of spans.
+		out.DatumsFromConstraint = make([]tree.Datums,
+			localScan.Constraint.Spans.Count()+remoteScan.Constraint.Spans.Count())
+
+		// Build the partial key for the local span(s).
+		if !populateDatumsFromConstraint(localScan.Constraint.Spans, 0) {
+			return false
+		}
+		// Build the partial key for the remote spans.
+		if !populateDatumsFromConstraint(remoteScan.Constraint.Spans, localScan.Constraint.Spans.Count()) {
+			return false
+		}
+
+		out.MkErr = func(values tree.Datums) error {
+			return mkFastPathUniqueCheckErr(md, c, values, out.ReferencedIndex)
+		}
+	} else {
+		// Regular scan will use one KV request per input row.
+		if scanExpr, ok = rightExpr.(*memo.ScanExpr); !ok {
+			return false
+		}
+		if scanExpr.Constraint == nil {
+			return false
+		}
+		if selectExpr != nil {
+			// Allow a select if it has an ignorable filter condition.
+			if !selectFilterIsOK(selectExpr, scanExpr) {
+				return false
+			}
+		}
+		out.ReferencedTable = md.Table(scanExpr.Table)
+		out.ReferencedIndex = out.ReferencedTable.Index(scanExpr.Index)
+
+		// Set up InsertCols with the index key columns.
+		numKeyCols := scanExpr.Constraint.Spans.Get(0).StartKey().Length()
+		out.InsertCols = make([]exec.TableColumnOrdinal, numKeyCols)
+		for j := 0; j < numKeyCols; j++ {
+			ord := out.ReferencedIndex.Column(j).Ordinal()
+			out.InsertCols[j] = exec.TableColumnOrdinal(ord)
+		}
+		// The number of KV requests will match the number of spans.
+		out.DatumsFromConstraint = make([]tree.Datums, scanExpr.Constraint.Spans.Count())
+		for j := 0; j < scanExpr.Constraint.Spans.Count(); j++ {
+			// DatumsFromConstraint is indexed by table column ordinal, so build
+			// a slice which is large enough for any column.
+			out.DatumsFromConstraint[j] = make(tree.Datums, tab.ColumnCount())
+			span := scanExpr.Constraint.Spans.Get(j)
+			// Verify the there is a single key...
+			if span.Prefix(scanExpr.Memo().EvalContext()) != span.StartKey().Length() {
+				return false
+			}
+			// ... and that the span has the same number of columns as the index key.
+			if span.StartKey().Length() != numKeyCols {
+				return false
+			}
+			for k := 0; k < span.StartKey().Length(); k++ {
+				// Get the key column's table column ordinal.
+				ord := out.InsertCols[k]
+				// Populate DatumsFromConstraint with that key column value.
+				out.DatumsFromConstraint[j][ord] = span.StartKey().Value(k)
+			}
+		}
+		out.MkErr = func(values tree.Datums) error {
+			return mkFastPathUniqueCheckErr(md, c, values, out.ReferencedIndex)
+		}
+	}
+	// We must build at least one DatumsFromConstraint entry to claim success.
+	return len(out.DatumsFromConstraint) != 0
+}
+
 // tryBuildFastPathInsert attempts to construct an insert using the fast path,
 // checking all required conditions. See exec.Factory.ConstructInsertFastPath.
 func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok bool, _ error) {
@@ -258,6 +536,9 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		var skipProjectExpr *memo.ProjectExpr
 		for skipProjectExpr, ok = check.(*memo.ProjectExpr); ok; skipProjectExpr, ok = check.(*memo.ProjectExpr) {
 			check = skipProjectExpr.Input
+		}
+		if b.handleSingleRowInsert(ins, check, out, c) {
+			continue
 		}
 		lookupJoin, isLookupJoin := check.(*memo.LookupJoinExpr)
 		if !isLookupJoin {
