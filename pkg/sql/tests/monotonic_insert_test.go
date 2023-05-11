@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 type mtRow struct {
@@ -184,7 +185,12 @@ RETURNING val, sts, node, tb`,
 			l("commit")
 			return nil
 		}); err != nil {
-			t.Errorf("%T: %v", err, err)
+			// Ignore MaxRetriesExceeeded, it can happen under this contended workload.
+			if !errors.HasType(err, (*crdb.MaxRetriesExceededError)(nil)) {
+				t.Errorf("%T: %v", err, err)
+			} else {
+				t.Logf("ignoring %T: %v", err, err)
+			}
 		}
 	}
 
