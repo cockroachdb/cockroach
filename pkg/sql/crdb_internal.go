@@ -5406,7 +5406,8 @@ CREATE TABLE crdb_internal.kv_catalog_comments (
   type        STRING NOT NULL,
   object_id   INT NOT NULL,
   sub_id      INT NOT NULL,
-  comment     STRING NOT NULL
+  comment     STRING NOT NULL,
+  INDEX(object_id)
 )`,
 	populate: func(
 		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
@@ -5448,6 +5449,39 @@ CREATE TABLE crdb_internal.kv_catalog_comments (
 			}
 		}
 		return nil
+	},
+	indexes: []virtualIndex{
+		{
+			incomplete: false,
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				all, err := p.Descriptors().GetAllComments(ctx, p.Txn())
+				if err != nil {
+					return false, err
+				}
+				// Delegate privilege check to system table.
+				{
+					sysTable, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Table(ctx, systemschema.CommentsTable.GetID())
+					if err != nil {
+						return false, err
+					}
+					if ok, err := p.HasPrivilege(ctx, sysTable, privilege.SELECT, p.User()); err != nil {
+						return false, err
+					} else if !ok {
+						return false, nil
+					}
+				}
+				id := tree.MustBeDInt(unwrappedConstraint)
+				// Get all comments based on this ID.
+				return true, all.ForEachCommentOnDescriptor(descpb.ID(id), func(key catalogkeys.CommentKey, cmt string) error {
+					dct := tree.NewDString(key.CommentType.String())
+					return addRow(
+						dct,
+						tree.NewDInt(tree.DInt(int64(key.ObjectID))),
+						tree.NewDInt(tree.DInt(int64(key.SubID))),
+						tree.NewDString(cmt))
+				})
+			},
+		},
 	},
 }
 

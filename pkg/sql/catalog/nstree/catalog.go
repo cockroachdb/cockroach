@@ -35,6 +35,8 @@ type Catalog struct {
 // immutable catalogs that are incomeplete and only contain comment information.
 type CommentCatalog interface {
 	ForEachComment(fn func(key catalogkeys.CommentKey, cmt string) error) error
+	ForEachCommentOnDescriptor(
+		id descpb.ID, fn func(key catalogkeys.CommentKey, cmt string) error) error
 	LookupComment(key catalogkeys.CommentKey) (_ string, found bool)
 }
 
