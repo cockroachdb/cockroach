@@ -32,21 +32,41 @@ const (
 // backupSubdirRE identifies the portion of a larger path that refers to the full backup subdirectory.
 var backupSubdirRE = regexp.MustCompile(`(.*)/([0-9]{4}/[0-9]{2}/[0-9]{2}-[0-9]{6}.[0-9]{2}/?)$`)
 
-// CollectionAndSubdir breaks up a path into those components, if applicable.
-// "Specific" commands, like BACKUP INTO and RESTORE FROM, don't need this.
-// "Vague" commands, like SHOW BACKUP and debug backup, sometimes do.
-func CollectionAndSubdir(path string, subdir string) (string, string) {
+// CollectionsAndSubdir breaks up the given paths into those
+// components, if applicable. An error returned if the matched
+// subdirectory is different between paths.
+//
+// "Specific" commands, like BACKUP INTO and RESTORE FROM, don't need
+// this.  "Vague" commands, like SHOW BACKUP and debug backup,
+// sometimes do.
+func CollectionsAndSubdir(paths []string, subdir string) ([]string, string, error) {
 	if subdir != "" {
-		return path, subdir
+		return paths, subdir, nil
 	}
 
 	// Split out the backup name from the base directory so we can search the
 	// default "incrementals" subdirectory.
-	matchResult := backupSubdirRE.FindStringSubmatch(path)
-	if matchResult == nil {
-		return path, subdir
+	//
+	// NOTE(ssd): I am unaware of a way to get to this point
+	// without an explicit subdir but with multiple paths.
+	output := make([]string, len(paths))
+	var matchedSubdirectory string
+	for i, p := range paths {
+		matchResult := backupSubdirRE.FindStringSubmatch(p)
+		if matchResult == nil {
+			return paths, matchedSubdirectory, nil
+		}
+		output[i] = matchResult[1]
+		if matchedSubdirectory == "" {
+			matchedSubdirectory = matchResult[2]
+		}
+		if matchedSubdirectory != matchResult[2] {
+			return paths, matchedSubdirectory, errors.Newf("provided backup locations appear to reference different full backups: %s and %s",
+				matchedSubdirectory,
+				matchResult[2])
+		}
 	}
-	return matchResult[1], matchResult[2]
+	return output, matchedSubdirectory, nil
 }
 
 // FindPriorBackups finds "appended" incremental backups by searching
