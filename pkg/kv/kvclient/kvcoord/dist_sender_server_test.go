@@ -3742,7 +3742,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 
 			origValA := roachpb.MakeValueFromString("initA")
 			require.NoError(t, db.Put(ctx, keyA, &origValA))
-			origValB := roachpb.MakeValueFromString("initA")
+			origValB := roachpb.MakeValueFromString("initB")
 			require.NoError(t, db.Put(ctx, keyB, &origValB))
 
 			txn := db.NewTxn(ctx, "test txn")
@@ -3762,18 +3762,22 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			_, err := txn.Get(ctx, keyA1)
 			require.NoError(t, err)
 
-			// After the txn started, do a conflicting read. This will cause one of
-			// the txn's upcoming CPuts to return a WriteTooOldError on the first
-			// attempt, causing in turn to refresh and a retry. Note that, being
-			// CPuts, the pushed writes don't defer the error by returning the
+			// After the txn started, do a conflicting (identity) write. This will
+			// cause one of the txn's upcoming CPuts to return a WriteTooOldError on
+			// the first attempt, causing in turn to refresh and a retry. Note that,
+			// being CPuts, the pushed writes don't defer the error by returning the
 			// WriteTooOld flag instead of a WriteTooOldError.
-			var readKey roachpb.Key
+			var writeKey roachpb.Key
 			if tc.sidePushedOnFirstAttempt == left {
-				readKey = keyA
+				writeKey = keyA
 			} else {
-				readKey = keyB
+				writeKey = keyB
 			}
-			_, err = db.Get(ctx, readKey)
+			writeKeyVal, err := db.Get(ctx, writeKey)
+			require.NoError(t, err)
+			writeVal, err := writeKeyVal.Value.GetBytes()
+			require.NoError(t, err)
+			err = db.Put(ctx, writeKey, writeVal)
 			require.NoError(t, err)
 
 			b := txn.NewBatch()
