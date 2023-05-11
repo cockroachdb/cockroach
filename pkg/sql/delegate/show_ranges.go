@@ -323,8 +323,6 @@ AND s.end_key > r.start_key`)
 	//                            ...
 	//
 
-	buf.WriteString(",\nnamed_ranges AS (")
-
 	mode := n.Options.Mode
 	if n.Source == tree.ShowRangesIndex {
 		// The index view needs to see table_id/index_id propagate. We
@@ -339,6 +337,7 @@ AND s.end_key > r.start_key`)
 	if n.Source == tree.ShowRangesCluster && mode != tree.UniqueRanges {
 		dbNameCol = ", database_name"
 	}
+	buf.WriteString(",\nnamed_ranges AS (")
 
 	switch mode {
 	case tree.UniqueRanges:
@@ -369,14 +368,48 @@ AND s.end_key > r.start_key`)
               ON r.table_id = t.table_id`, dbName.String(), dbNameCol)
 	}
 	buf.WriteString("\n),\n") // end of named_ranges CTE.
-	buf.WriteString("intermediate AS (SELECT r.*")
-	// If details were requested, also include the extra
-	// columns from crdb_internal.ranges.
-	if n.Options.Details {
-		fmt.Fprintf(&buf, ",\n  %s", colinfo.RangesExtraRenders)
-	}
-	buf.WriteString("\nFROM named_ranges r)\n")
 
+	// Include all_span_stats if DETAILS is a requested option.
+	if n.Options.Details {
+
+		// When the row identifier is a range ID, we must find span stats
+		// that match the range start and end keys.
+		// Otherwise, we are free to use the "per_range_(end|start)_key" identifier.
+		var start string
+		var end string
+		if mode == tree.UniqueRanges {
+			start = "start_key"
+			end = "end_key"
+		} else {
+			start = "per_range_start_key"
+			end = "per_range_end_key"
+		}
+
+		fmt.Fprintf(&buf, "all_span_stats AS (\n"+
+			"	SELECT\n"+
+			"		start_key as span_start_key,\n"+
+			"		end_key as span_end_key,\n"+
+			"		stats\n"+
+			"	FROM crdb_internal.tenant_span_stats(\n"+
+			"		ARRAY(SELECT (%s, %s) FROM named_ranges)\n"+
+			"	)\n"+
+			"),", start, end)
+
+		buf.WriteString("\nintermediate AS (SELECT r.*")
+
+		// If details were requested, also include the extra
+		// columns from crdb_internal.ranges.
+		fmt.Fprintf(&buf, ",\n  %s", colinfo.RangesExtraRenders)
+
+		fmt.Fprintf(&buf, ",	sps.stats AS span_stats\n"+
+			"FROM named_ranges r\n"+
+			"INNER JOIN all_span_stats sps\n"+
+			"ON r.%s = sps.span_start_key\n"+
+			"AND r.%s = sps.span_end_key\n"+
+			")\n", start, end)
+	} else {
+		buf.WriteString("\nintermediate AS (SELECT r.* FROM named_ranges r)\n")
+	}
 	// Time to assemble the final projection.
 
 	//
@@ -658,6 +691,7 @@ AND s.end_key > r.start_key`)
 			}
 			fmt.Fprintf(&buf, ",\n  %s", tree.NameString(colinfo.Ranges[i].Name))
 		}
+		buf.WriteString(",\n  span_stats")
 	}
 
 	// Complete this CTE. and add an order if needed.

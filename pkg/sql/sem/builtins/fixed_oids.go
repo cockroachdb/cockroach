@@ -2382,6 +2382,7 @@ var builtinOidsArray = []string{
 	2409: `st_bdpolyfromtext(str: string, srid: int) -> geometry`,
 	2410: `crdb_internal.pretty_value(raw_value: bytes) -> string`,
 	2411: `to_char(date: date, format: string) -> string`,
+	2412: `crdb_internal.tenant_span_stats(spans: tuple[]) -> tuple{bytes AS start_key, bytes AS end_key, jsonb AS stats}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
