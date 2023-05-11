@@ -392,6 +392,22 @@ func isColumnFilter(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 	return isColumn
 }
 
+func orFilter(
+	f1, f2 func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(status scpb.Status, target scpb.TargetStatus, e scpb.Element) bool {
+		return f1(status, target, e) || f2(status, target, e)
+	}
+}
+
+func notFilter(
+	f func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(status scpb.Status, target scpb.TargetStatus, e scpb.Element) bool {
+		return !f(status, target, e)
+	}
+}
+
 func publicTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
 	return target == scpb.ToPublic
 }
@@ -400,18 +416,16 @@ func absentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element)
 	return target == scpb.ToAbsent
 }
 
-func notAbsentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
-	return target != scpb.ToAbsent
-}
-
-func statusAbsentOrBackfillOnlyFilter(
-	status scpb.Status, _ scpb.TargetStatus, _ scpb.Element,
-) bool {
-	return status == scpb.Status_ABSENT || status == scpb.Status_BACKFILL_ONLY
-}
-
-func statusPublicFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+func publicStatusFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
 	return status == scpb.Status_PUBLIC
+}
+
+func absentStatusFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return status == scpb.Status_ABSENT
+}
+
+func backfillOnlyStatusFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return status == scpb.Status_BACKFILL_ONLY
 }
 
 func hasIndexIDAttrFilter(
@@ -470,8 +484,8 @@ func getPrimaryIndexes(
 	allTargets := b.QueryByID(tableID)
 	_, _, freshlyAdded = scpb.FindPrimaryIndex(allTargets.
 		Filter(publicTargetFilter).
-		Filter(statusAbsentOrBackfillOnlyFilter))
-	_, _, existing = scpb.FindPrimaryIndex(allTargets.Filter(statusPublicFilter))
+		Filter(orFilter(absentStatusFilter, backfillOnlyStatusFilter)))
+	_, _, existing = scpb.FindPrimaryIndex(allTargets.Filter(publicStatusFilter))
 	if existing == nil {
 		// TODO(postamar): can this even be possible?
 		panic(pgerror.Newf(pgcode.NoPrimaryKey, "missing active primary key"))
@@ -578,7 +592,7 @@ func (s indexSpec) clone() (c indexSpec) {
 
 // makeIndexSpec constructs an indexSpec based on an existing index element.
 func makeIndexSpec(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (s indexSpec) {
-	tableElts := b.QueryByID(tableID).Filter(notAbsentTargetFilter)
+	tableElts := b.QueryByID(tableID).Filter(notFilter(absentTargetFilter))
 	idxElts := tableElts.Filter(hasIndexIDAttrFilter(indexID))
 	var constraintID catid.ConstraintID
 	var n int
@@ -718,7 +732,7 @@ func makeSwapIndexSpec(
 	var inID, tempID catid.IndexID
 	var inConstraintID catid.ConstraintID
 	{
-		_, _, tbl := scpb.FindTable(b.QueryByID(tableID).Filter(notAbsentTargetFilter))
+		_, _, tbl := scpb.FindTable(b.QueryByID(tableID).Filter(notFilter(absentTargetFilter)))
 		inID = b.NextTableIndexID(tbl)
 		inConstraintID = b.NextTableConstraintID(tbl.TableID)
 		tempID = inID + 1
