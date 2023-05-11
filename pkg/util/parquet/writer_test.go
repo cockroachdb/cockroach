@@ -121,7 +121,7 @@ func TestRandomDatums(t *testing.T) {
 	schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
 	require.NoError(t, err)
 
-	writer, err := NewWriter(schemaDef, f, WithMaxRowGroupLength(maxRowGroupSize))
+	writer, err := NewWriterWithReaderMeta(schemaDef, f, WithMaxRowGroupLength(maxRowGroupSize))
 	require.NoError(t, err)
 
 	for _, row := range datums {
@@ -135,6 +135,8 @@ func TestRandomDatums(t *testing.T) {
 	ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, writer, datums)
 }
 
+// TestBasicDatums tests roundtripability for all supported scalar data types
+// and one simple array type.
 func TestBasicDatums(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -468,7 +470,7 @@ func TestBasicDatums(t *testing.T) {
 			schemaDef, err := NewSchema(tc.sch.columnNames, tc.sch.columnTypes)
 			require.NoError(t, err)
 
-			writer, err := NewWriter(schemaDef, f, WithMaxRowGroupLength(maxRowGroupSize))
+			writer, err := NewWriterWithReaderMeta(schemaDef, f, WithMaxRowGroupLength(maxRowGroupSize))
 			require.NoError(t, err)
 
 			for _, row := range datums {
