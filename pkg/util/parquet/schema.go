@@ -71,6 +71,9 @@ func NewSchema(columnNames []string, columnTypes []*types.T) (*SchemaDefinition,
 	fields := make([]schema.Node, 0)
 
 	for i := 0; i < len(columnNames); i++ {
+		if columnTypes[i] == nil {
+			return nil, errors.AssertionFailedf("column %s missing type information", columnNames[i])
+		}
 		parquetCol, err := makeColumn(columnNames[i], columnTypes[i], defaultRepetitions)
 		if err != nil {
 			return nil, err

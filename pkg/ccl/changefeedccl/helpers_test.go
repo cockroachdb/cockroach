@@ -936,7 +936,6 @@ func makeFeedFactoryWithOptions(
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*cloudFeedFactory).configureUserDB(userDB)
 		return f, func() {
-			TestingSetIncludeParquetMetadata()()
 			cleanup()
 		}
 	case "enterprise":
@@ -1087,6 +1086,10 @@ func cdcTestNamedWithSystem(
 		defer cleanupServer()
 		defer cleanupSink()
 		defer cleanupCloudStorage()
+
+		// Even if the parquet format is not being used, enable metadata
+		// in all tests for simplicity.
+		defer TestingSetIncludeParquetMetadata()()
 		testFn(t, testServer, feedFactory)
 	})
 }
@@ -1278,7 +1281,9 @@ func waitForJobStatus(
 }
 
 // TestingSetIncludeParquetMetadata adds the option to turn on adding metadata
-// to the parquet file which is used in testing.
+// to the parquet file which is used in testing. This flag is required for
+// (a) being able to read raw data from parquet files into crdb datums; and
+// (b) constructing the changefeed JSON output used in cdctest infra.
 func TestingSetIncludeParquetMetadata() func() {
 	includeParquetTestMetadata = true
 	return func() {

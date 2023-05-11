@@ -423,10 +423,23 @@ var NoLongerExperimental = map[string]string{
 	DeprecatedSinkSchemeCloudStorageS3:        SinkSchemeCloudStorageS3,
 }
 
+// OptionsSet is a test of changefeed option strings.
+type OptionsSet map[string]struct{}
+
 // InitialScanOnlyUnsupportedOptions is options that are not supported with the
 // initial scan only option
-var InitialScanOnlyUnsupportedOptions = makeStringSet(OptEndTime, OptResolvedTimestamps, OptDiff,
+var InitialScanOnlyUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptResolvedTimestamps, OptDiff,
 	OptMVCCTimestamps, OptUpdatedTimestamps)
+
+// ParquetFormatUnsupportedOptions is options that are not supported with the
+// parquet format.
+//
+// OptKeyInValue is disallowed because parquet files have no concept of key
+// columns, so there is no reason to emit duplicate key datums.
+//
+// TODO(#103129): add support for some of these
+var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptResolvedTimestamps, OptDiff,
+	OptMVCCTimestamps, OptUpdatedTimestamps, OptKeyInValue)
 
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
 // users to alter.
@@ -434,7 +447,7 @@ var InitialScanOnlyUnsupportedOptions = makeStringSet(OptEndTime, OptResolvedTim
 // and the end_time option. However, there are instances in which it should be
 // allowed to alter either of these options. We need to support the alteration
 // of these fields.
-var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan,
+var AlterChangefeedUnsupportedOptions OptionsSet = makeStringSet(OptCursor, OptInitialScan,
 	OptNoInitialScan, OptInitialScanOnly, OptEndTime)
 
 // AlterChangefeedOptionExpectValues is used to parse alter changefeed options
@@ -1039,16 +1052,21 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 	if err != nil {
 		return err
 	}
-	validateInitialScanUnsupportedOptions := func(errMsg string) error {
-		for o := range InitialScanOnlyUnsupportedOptions {
+
+	// validateUnsupportedOptions returns an error if any of the supplied are
+	// in the statement options. The error string should be the string
+	// representation of the option (ex. "key_in_value", or "initial_scan='only'").
+	validateUnsupportedOptions := func(unsupportedOptions OptionsSet, errorStr string) error {
+		for o := range unsupportedOptions {
 			if _, ok := s.m[o]; ok {
-				return errors.Newf(`cannot specify both %s='only' and %s`, OptInitialScan, o)
+				return errors.Newf(`cannot specify both %s and %s`, errorStr, o)
 			}
 		}
 		return nil
 	}
 	if scanType == OnlyInitialScan {
-		if err := validateInitialScanUnsupportedOptions(fmt.Sprintf("%s='only'", OptInitialScan)); err != nil {
+		if err := validateUnsupportedOptions(InitialScanOnlyUnsupportedOptions,
+			fmt.Sprintf("%s='only'", OptInitialScan)); err != nil {
 			return err
 		}
 	} else {
@@ -1058,17 +1076,8 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 	}
 	// Right now parquet does not support any of these options
 	if s.m[OptFormat] == string(OptFormatParquet) {
-		if isPredicateChangefeed {
-			// Diff option is allowed when using predicate changefeeds with parquet format.
-			for o := range InitialScanOnlyUnsupportedOptions {
-				if _, ok := s.m[o]; ok && o != OptDiff {
-					return errors.Newf(`cannot specify both format='%s' and %s`, OptFormatParquet, o)
-				}
-			}
-		} else {
-			if err := validateInitialScanUnsupportedOptions(string(OptFormatParquet)); err != nil {
-				return err
-			}
+		if err := validateUnsupportedOptions(ParquetFormatUnsupportedOptions, fmt.Sprintf("format=%s", OptFormatParquet)); err != nil {
+			return err
 		}
 	}
 	for o := range s.m {
