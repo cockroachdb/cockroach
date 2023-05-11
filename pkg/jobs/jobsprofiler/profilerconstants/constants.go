@@ -10,7 +10,14 @@
 
 package profilerconstants
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
+)
 
 const DSPDiagramInfoKeyPrefix = "~dsp-diag-url-"
 
@@ -30,4 +37,27 @@ func MakeNodeProcessorProgressInfoKey(
 ) (string, error) {
 	// The info key is of the form: <prefix>-<flowID>,<instanceID>,<processorID>.
 	return fmt.Sprintf("%s%s,%s,%d", NodeProcessorProgressInfoKeyPrefix, flowID, instanceID, processorID), nil
+}
+
+// GetNodeProcessorProgressInfoKeyParts deconstructs the passed in info key and
+// returns the referenced flowID, instanceID and processorID.
+func GetNodeProcessorProgressInfoKeyParts(infoKey string) (uuid.UUID, int, int, error) {
+	parts := strings.Split(strings.TrimPrefix(infoKey, NodeProcessorProgressInfoKeyPrefix), ",")
+	if len(parts) != 3 {
+		return uuid.Nil, 0, 0, errors.AssertionFailedf("expected 3 parts in info key but found %d: %v", len(parts), parts)
+	}
+	flowID, err := uuid.FromString(parts[0])
+	if err != nil {
+		return uuid.Nil, 0, 0, err
+	}
+	instanceID, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return uuid.Nil, 0, 0, err
+	}
+	processorID, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return uuid.Nil, 0, 0, err
+	}
+
+	return flowID, instanceID, processorID, nil
 }
