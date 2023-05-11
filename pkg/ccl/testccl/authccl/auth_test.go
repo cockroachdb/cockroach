@@ -227,6 +227,11 @@ func jwtRunTest(t *testing.T, insecure bool) {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting jwks: %d", len(a.Vals))
 							}
 							jwtauthccl.JWTAuthJWKS.Override(context.Background(), sv, a.Vals[0])
+						case "claim":
+							if len(a.Vals) != 1 {
+								t.Fatalf("wrong number of argumenets to jwt_cluster_setting claim: %d", len(a.Vals))
+							}
+							jwtauthccl.JWTAuthClaim.Override(context.Background(), sv, a.Vals[0])
 						case "ident_map":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting ident_map: %d", len(a.Vals))
