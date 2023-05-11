@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -1171,6 +1172,46 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 	}
 }
 
+var updateCmd = &cobra.Command{
+	Use:   "update",
+	Short: "check TeamCity for a new roachprod binary and update if available",
+	Long: "Will attempt to download the latest master branch roachprod binary from teamcity" +
+		" and swap the current roachprod with it. The current roachprod binary will be backed up" +
+		" and can be restored via `roachprod update --revert`.",
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		currentBinary, err := os.Executable()
+		if err != nil {
+			return err
+		}
+
+		if revertUpdate {
+			if upgrade.PromptYesNo("Revert to previous version? Note: this will replace the" +
+				" current roachprod binary with a previous roachprod.bak binary") {
+				if err := upgrade.SwapBinary(currentBinary, currentBinary+".bak"); err != nil {
+					return err
+				}
+				fmt.Println("roachprod successfully reverted, run `roachprod -v` to confirm.")
+			}
+			return nil
+		}
+
+		newBinary, err := upgrade.DownloadLatestRoadprod()
+		if err != nil {
+			return err
+		}
+
+		if upgrade.PromptYesNo("Download successful. Continue with update? Note: this will " +
+			"overwrite any existing roachprod.bak binary") {
+			if err := upgrade.SwapBinary(currentBinary, newBinary); err != nil {
+				return errors.WithDetail(err, "unable to update binary")
+			}
+
+			fmt.Println("roachprod successfully updated, run `roachprod -v` to confirm.")
+		}
+		return nil
+	}),
+}
+
 func main() {
 	_ = roachprod.InitProviders()
 	providerOptsContainer = vm.CreateProviderOptionsContainer()
@@ -1187,7 +1228,6 @@ func main() {
 		syncCmd,
 		gcCmd,
 		setupSSHCmd,
-
 		statusCmd,
 		monitorCmd,
 		startCmd,
@@ -1220,6 +1260,7 @@ func main() {
 		grafanaURLCmd,
 		rootStorageCmd,
 		fixLongRunningAWSHostnamesCmd,
+		updateCmd,
 	)
 	setBashCompletionFunction()
 
