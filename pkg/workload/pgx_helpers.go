@@ -214,7 +214,7 @@ func NewMultiConnPool(
 	}
 
 	if err := m.WarmupConns(ctx, cfg.WarmupConns); err != nil {
-		return nil, err
+		log.Warningf(ctx, "warming up connection pool failed (%v), continuing workload", err)
 	}
 
 	return m, nil
@@ -252,17 +252,14 @@ func (m *MultiConnPool) Method() pgx.QueryExecMode {
 	return m.method
 }
 
-// WarmupConns warms up numConns connections across all pools contained within
-// MultiConnPool.  The max number of connections are warmed up if numConns is
-// set to 0.
-func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
-	if numConns < 0 {
+// WarmupConns warms up totalNumConns connections distributed across all pools
+// contained within MultiConnPool.  The max number of connections are warmed up
+// if totalNumConns is set to 0.  If totalNumConns is less than 0, no
+// pre-warming of connections is performed.
+func (m *MultiConnPool) WarmupConns(ctx context.Context, totalNumConns int) error {
+	if totalNumConns < 0 {
 		return nil
 	}
-
-	// NOTE(seanc@): see context cancellation note below.
-	warmupCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	// "Warm up" the pools so we don't have to establish connections later (which
 	// would affect the observed latencies of the first requests, especially when
@@ -279,32 +276,57 @@ func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
 	// (128).
 	g.SetLimit(100)
 
-	var warmupConnsPerPool []int
-	if numConns == 0 {
-		warmupConnsPerPool = make([]int, len(m.Pools))
-		for i, p := range m.Pools {
-			warmupConnsPerPool[i] = int(p.Config().MaxConns)
-		}
-	} else {
-		warmupConnsPerPool = distribute(numConns, len(m.Pools))
-		for i, p := range m.Pools {
-			poolMaxConns := int(p.Config().MaxConns)
-			if warmupConnsPerPool[i] > poolMaxConns {
-				warmupConnsPerPool[i] = poolMaxConns
-			}
-		}
+	type warmupPool struct {
+		maxConns int
+		pool     *pgxpool.Pool
 	}
 
+	warmupPools := make([]warmupPool, len(m.Pools))
 	var numWarmupConns int
-	for _, n := range warmupConnsPerPool {
-		numWarmupConns += n
-	}
-	warmupConns := make(chan *pgxpool.Conn, numWarmupConns)
+	numConnsPerPool := distribute(totalNumConns, len(m.Pools))
 	for i, p := range m.Pools {
+		poolMaxConns := int(p.Config().MaxConns)
+
+		// Tune max conns for the pool
+		switch {
+		case totalNumConns == 0 && poolMaxConns > 0:
+			warmupPools[i].maxConns = poolMaxConns
+		case totalNumConns == 0:
+			warmupPools[i].maxConns = 1 // always at least one connection
+		default:
+			warmupPools[i].maxConns = numConnsPerPool[i]
+		}
+
+		// Clamp max conns per pool
+		if warmupPools[i].maxConns > poolMaxConns {
+			warmupPools[i].maxConns = poolMaxConns
+		}
+
+		warmupPools[i].pool = p
+		numWarmupConns += warmupPools[i].maxConns
+	}
+
+	// NOTE(seanc@): see context cancellation note below.
+	// TODO(seanc@): Change WithTimeout() back to WithCancel()
+	const maxWarmupTime = 5 * time.Minute // NOTE(seanc@): 5min == AWS NLB TCP idle time
+	const minWarmupTime = 15 * time.Second
+	const maxTimePerConn = 200 * time.Millisecond
+	warmupTime := minWarmupTime
+	if int(warmupTime) < numWarmupConns*int(maxTimePerConn) {
+		warmupTime = time.Duration(numWarmupConns * int(maxTimePerConn))
+	}
+	if warmupTime > maxWarmupTime {
+		warmupTime = maxWarmupTime
+	}
+	ctx, cancel := context.WithTimeout(ctx, warmupTime)
+	defer cancel()
+
+	warmupConns := make(chan *pgxpool.Conn, numWarmupConns)
+	for _, p := range warmupPools {
 		p := p
-		for k := 0; k < warmupConnsPerPool[i]; k++ {
+		for i := 0; i < p.maxConns; i++ {
 			g.Go(func() error {
-				conn, err := p.Acquire(warmupCtx)
+				conn, err := p.pool.Acquire(ctx)
 				if err != nil {
 					return err
 				}
@@ -317,23 +339,16 @@ func (m *MultiConnPool) WarmupConns(ctx context.Context, numConns int) error {
 	estConns := make([]*pgxpool.Conn, 0, numWarmupConns)
 	defer func() {
 		for _, conn := range estConns {
-			// NOTE(seanc@): Release() connections before canceling the warmupCtx to
-			// prevent partially established connections from being Acquire()'ed.
 			conn.Release()
 		}
 	}()
 
-WARMUP:
 	for i := 0; i < numWarmupConns; i++ {
 		select {
 		case conn := <-warmupConns:
 			estConns = append(estConns, conn)
-		case <-warmupCtx.Done():
-			if err := warmupCtx.Err(); err != nil {
-				return err
-			}
-
-			break WARMUP
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 

@@ -41,6 +41,7 @@ go_library(
         "//pkg/util/sysutil",
         "@com_github_charmbracelet_bubbles//cursor",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
         "@com_github_knz_bubbline//:bubbline",
         "@com_github_knz_bubbline//computil",
         "@com_github_knz_bubbline//editline",
