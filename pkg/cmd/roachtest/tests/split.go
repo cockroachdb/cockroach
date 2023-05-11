@@ -282,19 +282,22 @@ func registerLoadSplits(r registry.Registry) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
 				cpuThreshold: 100 * time.Millisecond, // 1/10th of a CPU per second.
-				// We expect 1-4 splits. There doesn't have the same requirement for
-				// containment as QPS, instead we want the CPU to be distributed over
-				// the ranges. i.e. Splitting a range based on QPS when there are only
-				// scans amplifies the orignal QPS, effectively doubling it. Whereas
-				// for CPU, the resulting lhs and rhs post split should still add up to
-				// approx the original range's CPU - when ignoring fixed overhead.
+				// We expect between 1-5 splits over 10 minutes, however we can get
+				// unlucky with split selection due to randomness and end up splitting
+				// more times if the initial load based splits are suboptimal. There
+				// isn't the same requirement for containment as QPS, instead we want
+				// the CPU to be distributed over the ranges. i.e. splitting a range
+				// based on QPS when there are only scans amplifies the orignal QPS,
+				// effectively doubling it. Whereas for CPU, the resulting lhs and rhs
+				// post split should still add up to approx the original range's CPU -
+				// when ignoring fixed overhead.
 				minimumRanges: 2,
-				maximumRanges: 5,
+				maximumRanges: 15,
 				load: kvSplitLoad{
 					concurrency:  64, // 64 concurrent workers
 					readPercent:  0,  // 0% reads
 					spanPercent:  95, // 95% spanning queries
-					waitDuration: 60 * time.Second,
+					waitDuration: 10 * time.Minute,
 				}})
 		},
 	})
@@ -458,7 +461,8 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 			expectedInitialRangeCount = 1
 		}
 		if rc, _ := params.load.rangeCount(db); rc != expectedInitialRangeCount {
-			return errors.Errorf("table split over multiple ranges (%d)", rc)
+			return errors.Errorf("%d initial ranges, expected %d initial ranges",
+				rc, expectedInitialRangeCount)
 		}
 
 		t.Status("enable load based splitting")
@@ -466,15 +470,25 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 			return err
 		}
 
+		t.Status("running workload and waiting for splits")
 		if err := params.load.run(ctx, t, c); err != nil {
 			return err
 		}
-		t.Status("waiting for splits")
+		t.Status("workload finished, checking splits")
 		if rc, err := params.load.rangeCount(db); err != nil {
 			t.Fatal(err)
 		} else if rc < params.minimumRanges || rc > params.maximumRanges {
-			return errors.Errorf("kv.kv has %d ranges, expected between %d and %d splits",
-				rc, params.minimumRanges, params.maximumRanges)
+			// We start with expectedInitialRangeCount ranges in the workload table,
+			// asserted on above. The number of splits is ranges - initial.
+			return errors.Errorf("%d splits, expected between %d and %d splits (ranges %d initial %d)",
+				rc-expectedInitialRangeCount,
+				params.minimumRanges-expectedInitialRangeCount,
+				params.maximumRanges-expectedInitialRangeCount,
+				rc,
+				expectedInitialRangeCount,
+			)
+		} else {
+			t.L().Printf("%d splits occurred", rc-expectedInitialRangeCount)
 		}
 		return nil
 	})
