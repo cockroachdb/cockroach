@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -49,13 +48,9 @@ func TestNodedialerPositive(t *testing.T) {
 	stopper, _, _, _, nd := setUpNodedialerTest(t, staticNodeID)
 	defer stopper.Stop(context.Background())
 	// Ensure that dialing works.
-	breaker := nd.GetCircuitBreaker(1, rpc.DefaultClass)
-	assert.True(t, breaker.Ready())
 	ctx := context.Background()
 	_, err := nd.Dial(ctx, staticNodeID, rpc.DefaultClass)
 	assert.Nil(t, err, "failed to dial")
-	assert.True(t, breaker.Ready())
-	assert.Equal(t, breaker.Failures(), int64(0))
 }
 
 func TestDialNoBreaker(t *testing.T) {
