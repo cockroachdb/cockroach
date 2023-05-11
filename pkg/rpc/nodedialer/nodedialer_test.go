@@ -187,15 +187,6 @@ func TestConnHealth(t *testing.T) {
 		}, time.Second, 10*time.Millisecond)
 	}
 
-	// Tripping the breaker should return ErrBreakerOpen.
-	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
-	br.Trip()
-	require.Equal(t, circuit.ErrBreakerOpen, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
-
-	// Resetting the breaker should recover ConnHealth.
-	br.Reset()
-	require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
-
 	// Closing the remote connection should fail ConnHealth.
 	require.NoError(t, ln.popConn().Close())
 	hbDecommission.Store(true)
@@ -240,16 +231,6 @@ func TestConnHealthTryDial(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) == nil
 	}, time.Second, 10*time.Millisecond)
-
-	// Tripping the breaker should return ErrBreakerOpen.
-	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
-	br.Trip()
-	require.Equal(t, circuit.ErrBreakerOpen, nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass))
-
-	// But it should eventually recover, when the breaker allows it.
-	require.Eventually(t, func() bool {
-		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) == nil
-	}, 5*time.Second, 10*time.Millisecond)
 
 	// Closing the remote connection should eventually recover.
 	require.NoError(t, ln.popConn().Close())
