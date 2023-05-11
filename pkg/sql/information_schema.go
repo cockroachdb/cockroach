@@ -407,7 +407,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 	schema: vtable.InformationSchemaColumns,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// Get the collations for all comments of current database.
-		comments, err := getComments(ctx, p)
+		comments, err := getComments(ctx, p, descpb.InvalidID /* all comments */)
 		if err != nil {
 			return err
 		}
