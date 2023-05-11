@@ -175,3 +175,82 @@ func TestDeprecatedShowRangesWithClusterSettingChange(t *testing.T) {
 	db.Exec(t, `TABLE crdb_internal.ranges_no_leases`)
 	db.Exec(t, `TABLE crdb_internal.ranges`)
 }
+
+func TestShowRangesWithDetails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB.Exec(t, "CREATE DATABASE test")
+	sqlDB.Exec(t, "USE test")
+	sqlDB.Exec(t, `
+		CREATE TABLE users (
+		    id INTEGER PRIMARY KEY,
+		    name STRING
+		)
+	`)
+
+	res := sqlDB.Query(t, `
+		SELECT span_stats->'range_count'
+		FROM [SHOW RANGES FROM DATABASE test WITH DETAILS]
+		`,
+	)
+
+	var rangeCount int
+	res.Next()
+	err := res.Scan(&rangeCount)
+	require.NoError(t, err)
+
+	// Assert that the table `test` only occupies a single range.
+	require.Equal(t, 1, rangeCount)
+
+	// This invocation of SHOW RANGES should have only returned a single row.
+	require.Equal(t, false, res.NextResultSet())
+
+	// Now, let's add some users, and query the table's val_bytes.
+	sqlDB.Exec(t, "INSERT INTO users (id, name) VALUES (1, 'ab'), (2, 'cd')")
+
+	valBytesPreSplitRes := sqlDB.QueryRow(t,
+		`SELECT span_stats->'total_stats'->'val_bytes'
+				FROM [SHOW RANGES FROM DATABASE test WITH DETAILS]
+				`,
+	)
+
+	var valBytesPreSplit int
+	valBytesPreSplitRes.Scan(&valBytesPreSplit)
+
+	// Split the table at the second row, so it occupies a second range.
+	sqlDB.Exec(t, `ALTER TABLE users SPLIT AT VALUES (2)`)
+	afterSplit := sqlDB.Query(t, `
+		SELECT
+		    span_stats->'range_count',
+			span_stats->'total_stats'->'val_bytes'
+		FROM [SHOW RANGES FROM TABLE users WITH DETAILS]
+	`)
+
+	// After the split, assert that the range_count for each row is still 1.
+	// The table might exist across multiple ranges,
+	// but the span for which we've provided SpanStats is bound by the start
+	// and end keys of the range.
+
+	var valBytesR1 int
+	var valBytesR2 int
+
+	afterSplit.Next()
+	err = afterSplit.Scan(&rangeCount, &valBytesR1)
+	require.NoError(t, err)
+	require.Equal(t, 1, rangeCount)
+
+	afterSplit.Next()
+	err = afterSplit.Scan(&rangeCount, &valBytesR2)
+	require.NoError(t, err)
+	require.Equal(t, 1, rangeCount, &valBytesR2)
+
+	// Assert that the sum of val_bytes for each range equals the
+	// val_bytes for the whole table.
+	require.Equal(t, valBytesPreSplit, valBytesR1+valBytesR2)
+}

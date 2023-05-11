@@ -613,9 +613,9 @@ func (s *adminServer) getMiscDatabaseDetails(
 	if err != nil {
 		return nil, err
 	}
-	resp.DescriptorID = int64(databaseID)
 
 	id, zone, zoneExists, err := s.queryZonePath(ctx, userName, []descpb.ID{databaseID})
+	resp.DescriptorID = int64(databaseID)
 	if err != nil {
 		return nil, err
 	}
