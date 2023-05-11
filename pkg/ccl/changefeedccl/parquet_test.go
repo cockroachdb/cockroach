@@ -38,6 +38,8 @@ func TestParquetRows(t *testing.T) {
 	// Rangefeed reader can time out under stress.
 	skip.UnderStress(t)
 
+	defer TestingSetIncludeParquetMetadata()()
+
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// TODO(#98816): cdctest.GetHydratedTableDescriptor does not work with tenant dbs.
@@ -110,7 +112,7 @@ func TestParquetRows(t *testing.T) {
 				require.NoError(t, err)
 
 				if writer == nil {
-					writer, err = newParquetWriterFromRow(updatedRow, f, maxRowGroupSize)
+					writer, err = newParquetWriterFromRow(updatedRow, f, parquet.WithMaxRowGroupLength(maxRowGroupSize))
 					if err != nil {
 						t.Fatalf(err.Error())
 					}

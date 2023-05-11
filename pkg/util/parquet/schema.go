@@ -42,7 +42,6 @@ const defaultTypeLength = -1
 type column struct {
 	node      schema.Node
 	colWriter colWriter
-	decoder   decoder
 	typ       *types.T
 }
 
@@ -99,7 +98,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 	case types.BoolFamily:
 		result.node = schema.NewBooleanNode(colName, repetitions, defaultSchemaFieldID)
 		result.colWriter = scalarWriter(writeBool)
-		result.decoder = boolDecoder{}
 		result.typ = types.Bool
 		return result, nil
 	case types.StringFamily:
@@ -111,7 +109,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeString)
-		result.decoder = stringDecoder{}
 		return result, nil
 	case types.IntFamily:
 		// Note: integer datums are always signed: https://www.cockroachlabs.com/docs/stable/int.html
@@ -124,13 +121,11 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 				return result, err
 			}
 			result.colWriter = scalarWriter(writeInt64)
-			result.decoder = int64Decoder{}
 			return result, nil
 		}
 
 		result.node = schema.NewInt32Node(colName, repetitions, defaultSchemaFieldID)
 		result.colWriter = scalarWriter(writeInt32)
-		result.decoder = int32Decoder{}
 		return result, nil
 	case types.DecimalFamily:
 		// According to PostgresSQL docs, scale or precision of 0 implies max
@@ -155,7 +150,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeDecimal)
-		result.decoder = decimalDecoder{}
 		return result, nil
 	case types.UuidFamily:
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
@@ -165,7 +159,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeUUID)
-		result.decoder = uUIDDecoder{}
 		return result, nil
 	case types.TimestampFamily:
 		// We do not use schema.TimestampLogicalType because the library will enforce
@@ -177,7 +170,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeTimestamp)
-		result.decoder = timestampDecoder{}
 		return result, nil
 	case types.TimestampTZFamily:
 		// We do not use schema.TimestampLogicalType because the library will enforce
@@ -189,7 +181,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeTimestampTZ)
-		result.decoder = timestampTZDecoder{}
 		return result, nil
 	case types.INetFamily:
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
@@ -199,7 +190,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeINet)
-		result.decoder = iNetDecoder{}
 		return result, nil
 	case types.JsonFamily:
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
@@ -209,7 +199,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeJSON)
-		result.decoder = jsonDecoder{}
 		return result, nil
 	case types.BitFamily:
 		result.node, err = schema.NewPrimitiveNode(colName,
@@ -219,7 +208,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeBit)
-		result.decoder = bitDecoder{}
 		return result, nil
 	case types.BytesFamily:
 		result.node, err = schema.NewPrimitiveNode(colName,
@@ -229,7 +217,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeBytes)
-		result.decoder = bytesDecoder{}
 		return result, nil
 	case types.EnumFamily:
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
@@ -239,7 +226,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeEnum)
-		result.decoder = enumDecoder{}
 		return result, nil
 	case types.DateFamily:
 		// We do not use schema.DateLogicalType because the library will enforce
@@ -251,7 +237,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeDate)
-		result.decoder = dateDecoder{}
 		return result, nil
 	case types.Box2DFamily:
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
@@ -261,7 +246,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeBox2D)
-		result.decoder = box2DDecoder{}
 		return result, nil
 	case types.GeographyFamily:
 		result.node, err = schema.NewPrimitiveNode(colName,
@@ -271,7 +255,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeGeography)
-		result.decoder = geographyDecoder{}
 		return result, nil
 	case types.GeometryFamily:
 		result.node, err = schema.NewPrimitiveNode(colName,
@@ -281,7 +264,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeGeometry)
-		result.decoder = geometryDecoder{}
 		return result, nil
 	case types.IntervalFamily:
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
@@ -291,7 +273,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeInterval)
-		result.decoder = intervalDecoder{}
 		return result, nil
 	case types.TimeFamily:
 		// CRDB stores time datums in microseconds, adjusted to UTC.
@@ -303,7 +284,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeTime)
-		result.decoder = timeDecoder{}
 		return result, nil
 	case types.TimeTZFamily:
 		// We cannot use the schema.NewTimeLogicalType because it does not support
@@ -315,7 +295,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeTimeTZ)
-		result.decoder = timeTZDecoder{}
 		return result, nil
 	case types.FloatFamily:
 		if typ.Oid() == oid.T_float4 {
@@ -326,7 +305,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 				return result, err
 			}
 			result.colWriter = scalarWriter(writeFloat32)
-			result.decoder = float32Decoder{}
 			return result, nil
 		}
 		result.node, err = schema.NewPrimitiveNode(colName,
@@ -336,12 +314,10 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeFloat64)
-		result.decoder = float64Decoder{}
 		return result, nil
 	case types.OidFamily:
 		result.node = schema.NewInt32Node(colName, repetitions, defaultSchemaFieldID)
 		result.colWriter = scalarWriter(writeOid)
-		result.decoder = oidDecoder{}
 		return result, nil
 	case types.CollatedStringFamily:
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
@@ -351,7 +327,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, err
 		}
 		result.colWriter = scalarWriter(writeCollatedString)
-		result.decoder = collatedStringDecoder{}
 		return result, nil
 	case types.ArrayFamily:
 		// Arrays for type T are represented by the following:
@@ -383,7 +358,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 		if err != nil {
 			return result, err
 		}
-		result.decoder = elementCol.decoder
 		scalarColWriter, ok := elementCol.colWriter.(scalarWriter)
 		if !ok {
 			return result, errors.AssertionFailedf("expected scalar column writer")
