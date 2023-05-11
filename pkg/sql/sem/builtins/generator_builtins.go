@@ -605,6 +605,16 @@ The last argument is a JSONB object containing the following optional fields:
 			"Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for the provided table id.",
 			volatility.Stable,
 		),
+		// Span overload
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "spans", Typ: types.AnyTupleArray},
+			},
+			spanStatsGeneratorType,
+			makeSpanStatsGenerator,
+			"foo bar",
+			volatility.Stable,
+		),
 	),
 }
 
@@ -3110,5 +3120,81 @@ func makeTableSpanStatsGenerator(
 	}
 
 	spanBatchLimit := roachpb.SpanStatsBatchLimit.Get(&evalCtx.Settings.SV)
-	return newTableSpanStatsIterator(evalCtx, dbId, tableId, int(spanBatchLimit)), nil
+	return newTableSpanStatsIterator(evalCtx, dbId, tableId,
+		int(spanBatchLimit)), nil
+}
+
+var spanStatsGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Bytes, types.Bytes, types.Json},
+	[]string{"start_key", "end_key", "stats"},
+)
+
+type spanStatsValueGenerator struct {
+	spans     roachpb.Spans // spans are provided as an argument.
+	res       *roachpb.SpanStatsResponse
+	currStats *roachpb.SpanStats
+	currSpan  roachpb.Span
+	idx       int
+	p         eval.Planner
+}
+
+func (s *spanStatsValueGenerator) ResolvedType() *types.T {
+	return spanStatsGeneratorType
+}
+
+func (s *spanStatsValueGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	res, err := s.p.SpanStats(ctx, s.spans)
+	s.res = res
+	return err
+}
+
+func (s *spanStatsValueGenerator) Next(ctx context.Context) (bool, error) {
+	// We must stop iterating after emitting values for all spans.
+	if s.idx == len(s.spans) {
+		return false, nil
+	}
+	sp := s.spans[s.idx]
+	s.currStats = s.res.SpanToStats[sp.String()]
+	s.currSpan = sp
+	s.idx++
+	return true, nil
+}
+
+func (s *spanStatsValueGenerator) Values() (tree.Datums, error) {
+	jsonStr, err := gojson.Marshal(s.currStats)
+	if err != nil {
+		return nil, err
+	}
+	jsonDatum, err := tree.ParseDJSON(string(jsonStr))
+	if err != nil {
+		return nil, err
+	}
+	return []tree.Datum{
+		tree.NewDBytes(tree.DBytes(s.currSpan.Key)),
+		tree.NewDBytes(tree.DBytes(s.currSpan.EndKey)),
+		jsonDatum,
+	}, nil
+}
+
+func (s *spanStatsValueGenerator) Close(ctx context.Context) {}
+
+func makeSpanStatsGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	argSpans := tree.MustBeDArray(args[0])
+	spans := make([]roachpb.Span, 0, argSpans.Len())
+	for _, span := range argSpans.Array {
+		s := tree.MustBeDTuple(span)
+		if s.D[0] == tree.DNull || s.D[1] == tree.DNull {
+			continue
+		}
+		startKey := roachpb.Key(tree.MustBeDBytes(s.D[0]))
+		endKey := roachpb.Key(tree.MustBeDBytes(s.D[1]))
+		spans = append(spans, roachpb.Span{
+			Key:    startKey,
+			EndKey: endKey,
+		})
+	}
+
+	return &spanStatsValueGenerator{p: evalCtx.Planner, spans: spans}, nil
 }
