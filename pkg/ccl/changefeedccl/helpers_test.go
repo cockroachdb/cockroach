@@ -924,9 +924,7 @@ func makeFeedFactoryWithOptions(
 			t.Fatalf("expected externalIODir option to be set")
 		}
 		f := makeCloudFeedFactory(srvOrCluster, db, options.externalIODir)
-		return f, func() {
-			TestingSetIncludeParquetMetadata()()
-		}
+		return f, func() {}
 	case "enterprise":
 		sink, cleanup := pgURLForUser(username.RootUser)
 		f := makeTableFeedFactory(srvOrCluster, db, sink)
@@ -981,12 +979,20 @@ func cdcTestNamedWithSystem(
 		testLabel = fmt.Sprintf("%s/%s", sinkType, name)
 	}
 	t.Run(testLabel, func(t *testing.T) {
+		// Even if the parquet format is not being used, enable metadata
+		// in all tests for simplicity.
 		testServer, cleanupServer := makeServerWithOptions(t, options)
+		knobs := testServer.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		knobs.EnableParquetMetadata = true
+
 		feedFactory, cleanupSink := makeFeedFactoryWithOptions(t, sinkType, testServer.Server, testServer.DB, options)
 		feedFactory = maybeUseExternalConnection(feedFactory, testServer.DB, sinkType, options, t)
 		defer cleanupServer()
 		defer cleanupSink()
 		defer cleanupCloudStorage()
+
 		testFn(t, testServer, feedFactory)
 	})
 }
@@ -1175,15 +1181,6 @@ func waitForJobStatus(
 		}
 		return nil
 	})
-}
-
-// TestingSetIncludeParquetMetadata adds the option to turn on adding metadata
-// to the parquet file which is used in testing.
-func TestingSetIncludeParquetMetadata() func() {
-	includeParquetTestMetadata = true
-	return func() {
-		includeParquetTestMetadata = false
-	}
 }
 
 // ChangefeedJobPermissionsTestSetup creates entities and users with various permissions

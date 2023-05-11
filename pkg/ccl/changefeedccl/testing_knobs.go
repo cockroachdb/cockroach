@@ -57,6 +57,10 @@ type TestingKnobs struct {
 	// knobs as current statement time will only be available once the create changefeed statement
 	// starts executing.
 	OverrideCursor func(currentTime *hlc.Timestamp) string
+
+	// EnableParquetMetadata configures the parquet format writer to write
+	// metadata which is required for testing.
+	EnableParquetMetadata bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
