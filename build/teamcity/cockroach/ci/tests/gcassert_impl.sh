@@ -4,6 +4,9 @@ set -xeuo pipefail
 
 bazel build @com_github_jordanlewis_gcassert//cmd/gcassert:gcassert --config=ci
 bazel run //pkg/gen:code
+WORKSPACE=$(bazel info workspace --color=no)
+BAZEL_BIN=$(bazel info bazel-bin --color=no)
+bazel run //pkg/cmd/generate-cgo:generate-cgo -- --workspace $WORKSPACE --bazel-bin $BAZEL_BIN
 GODIR=$(dirname $(bazel run @go_sdk//:bin/go --run_under=realpath))
 echo "##teamcity[testStarted name='GcAssert' captureStandardOutput='true']"
 exit_status=0
@@ -12,4 +15,5 @@ if [ "$exit_status" -ne 0 ]; then
     echo "##teamcity[testFailed name='GcAssert']"
 fi
 echo "##teamcity[testFinished name='GcAssert']"
+cp /tmp/gcassert* $PWD/artifacts
 
