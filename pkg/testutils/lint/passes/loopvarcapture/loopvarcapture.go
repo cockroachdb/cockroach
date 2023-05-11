@@ -405,9 +405,8 @@ func (v *Visitor) visitLoopClosure(closure *ast.FuncLit) {
 // whether that call is being made to one of the functions in the
 // GoRoutineFunctions slice.
 func (v *Visitor) isGoRoutineFunction(call *ast.CallExpr) bool {
-	callee := typeutil.StaticCallee(v.pass.TypesInfo, call)
-	// call to a builtin
-	if callee == nil {
+	callee, ok := typeutil.Callee(v.pass.TypesInfo, call).(*types.Func)
+	if !ok {
 		return false
 	}
 	pkg := callee.Pkg()
