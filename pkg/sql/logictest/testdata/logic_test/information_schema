@@ -5339,6 +5339,7 @@ synchronous_commit                                    on
 system_identity                                       root
 testing_optimizer_cost_perturbation                   0
 testing_optimizer_disable_rule_probability            0
+testing_optimizer_inject_panics                       off
 testing_optimizer_random_seed                         0
 testing_vectorize_inject_panics                       off
 timezone                                              UTC

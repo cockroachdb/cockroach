@@ -387,6 +387,10 @@ message LocalOnlySessionData {
   // expression with a column reference, which can produce more efficient query
   // plans.
   bool optimizer_hoist_uncorrelated_equality_subqueries = 102;
+  // TestingOptimizerInjectPanics indicates whether random panics are injected
+  // during optimization. The goal of this setting is to flush out cases where
+  // panics used for error-propagation are uncaught.
+  bool testing_optimizer_inject_panics = 103;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
