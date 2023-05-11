@@ -122,6 +122,7 @@ go_test(
     srcs = [
         "batch_test.go",
         "condensable_span_set_test.go",
+        "dist_sender_ambiguous_test.go",
         "dist_sender_rangefeed_canceler_test.go",
         "dist_sender_rangefeed_mock_test.go",
         "dist_sender_rangefeed_test.go",
@@ -185,6 +186,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -203,6 +205,7 @@ go_test(
         "//pkg/util/caller",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
+        "//pkg/util/encoding",
         "//pkg/util/errorutil",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
