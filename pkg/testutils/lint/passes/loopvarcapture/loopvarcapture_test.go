@@ -24,6 +24,7 @@ var extraGoRoutineFunctions = []loopvarcapture.Function{
 	{Pkg: "example.org/concurrency", Type: "Group", Name: "Go"}, // test non-pointer receiver
 	{Pkg: "example.org/concurrency", Name: "Go"},                // test a package-level function
 	{Pkg: "example.org/concurrency", Name: "GoWithError"},       // test a function with a return value
+	{Pkg: "p", Type: "Monitor", Name: "Go"},                     // test an interface method
 }
 
 func init() {
@@ -35,17 +36,16 @@ func init() {
 func TestAnalyzer(t *testing.T) {
 	skip.UnderStress(t)
 
-	// The test fails unless RunDespiteErrors is set to true.
-	// This is not fully understood, something to do with missing metadata
-	// for the "C" pseudo-package.
-	// See comments on #84867 and https://github.com/golang/go/issues/36547.
 	testAnalyzer := *loopvarcapture.Analyzer
-	testAnalyzer.RunDespiteErrors = true
 	originalGoRoutineFunctions := loopvarcapture.GoRoutineFunctions
 	loopvarcapture.GoRoutineFunctions = append(originalGoRoutineFunctions, extraGoRoutineFunctions...)
 	defer func() { loopvarcapture.GoRoutineFunctions = originalGoRoutineFunctions }()
 
 	testdata := datapathutils.TestDataPath(t)
 	analysistest.TestData = func() string { return testdata }
-	analysistest.Run(t, testdata, &testAnalyzer, "p")
+	results := analysistest.Run(t, testdata, &testAnalyzer, "p")
+	// Perform a sanity check--we expect analysis results.
+	if len(results) == 0 {
+		t.Fatal("analysis results are empty")
+	}
 }
