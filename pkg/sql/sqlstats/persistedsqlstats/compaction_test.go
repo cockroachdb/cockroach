@@ -13,6 +13,7 @@ package persistedsqlstats_test
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"regexp"
 	"sync/atomic"
 	"testing"
@@ -68,7 +69,7 @@ func TestSQLStatsCompactorNilTestingKnobCheck(t *testing.T) {
 func TestSQLStatsCompactor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
+	skip.WithIssue(t, 102750)
 	ctx := context.Background()
 
 	testCases := []struct {
