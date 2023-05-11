@@ -1,0 +1,59 @@
+parse
+DECLARE
+BEGIN
+  EXECUTE 'any command';
+END
+----
+DECLARE
+BEGIN
+EXECUTE a dynamic command
+<NOT DONE YET>END
+<NOT DONE YET>
+
+parse
+DECLARE
+BEGIN
+  EXECUTE 'any command' INTO x1;
+END
+----
+DECLARE
+BEGIN
+EXECUTE a dynamic command WITH INTO
+<NOT DONE YET>END
+<NOT DONE YET>
+
+parse
+DECLARE
+BEGIN
+  EXECUTE 'any command' INTO STRICT x1;
+END
+----
+DECLARE
+BEGIN
+EXECUTE a dynamic command WITH INTO STRICT
+<NOT DONE YET>END
+<NOT DONE YET>
+
+parse
+DECLARE
+BEGIN
+  EXECUTE 'any command' INTO x1 USING x2;
+END
+----
+DECLARE
+BEGIN
+EXECUTE a dynamic command WITH INTO WITH USING
+<NOT DONE YET>END
+<NOT DONE YET>
+
+parse
+DECLARE
+BEGIN
+  EXECUTE 'any command' INTO x1, x2 USING y1, y2;
+END
+----
+DECLARE
+BEGIN
+EXECUTE a dynamic command WITH INTO WITH USING
+<NOT DONE YET>END
+<NOT DONE YET>
