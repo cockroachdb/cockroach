@@ -12,7 +12,10 @@ package profilerconstants
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -38,4 +41,27 @@ func MakeNodeProcessorProgressInfoKey(parts ...any) (string, error) {
 	}
 	// The info key is of the form: <prefix>-<flowID>,<instanceID>,<processorID>.
 	return fmt.Sprintf("%s%s,%s,%d", NodeProcessorProgressInfoKeyPrefix, parts[0], parts[1], parts[2]), nil
+}
+
+// GetNodeProcessorProgressInfoKeyParts deconstructs the passed in info key and
+// returns the referenced flowID, instanceID and processorID.
+func GetNodeProcessorProgressInfoKeyParts(infoKey string) ([]any, error) {
+	parts := strings.Split(strings.TrimPrefix(infoKey, NodeProcessorProgressInfoKeyPrefix), ",")
+	if len(parts) != 3 {
+		return nil, errors.AssertionFailedf("expected 3 parts in info key but found %d: %v", len(parts), parts)
+	}
+	flowID, err := uuid.FromString(parts[0])
+	if err != nil {
+		return nil, err
+	}
+	instanceID, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return nil, err
+	}
+	processorID, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return nil, err
+	}
+
+	return []any{flowID, instanceID, processorID}, nil
 }
