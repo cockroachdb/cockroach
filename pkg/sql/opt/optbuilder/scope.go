@@ -216,7 +216,7 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	}
 }
 
-// appendOrdinaryColumnsFromTable adds all non-mutation and non-system columns from the
+// appendOrdinaryColumnshandleSingleRowInsertFromTable adds all non-mutation and non-system columns from the
 // given table metadata to this scope.
 func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tree.TableName) {
 	tab := tabMeta.Table
