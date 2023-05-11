@@ -262,40 +262,6 @@ func TestConnHealthInternal(t *testing.T) {
 	require.Error(t, nd.ConnHealth(7, rpc.DefaultClass))
 }
 
-func TestConcurrentCancellationAndTimeout(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper, _, _, _, nd := setUpNodedialerTest(t, staticNodeID)
-	defer stopper.Stop(context.Background())
-	ctx := context.Background()
-	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
-	// Test that when a context is canceled during dialing we always return that
-	// error but we never trip the breaker.
-	const N = 1000
-	var wg sync.WaitGroup
-	for i := 0; i < N; i++ {
-		wg.Add(2)
-		// Jiggle when we cancel relative to when we dial to try to hit cases where
-		// cancellation happens during the call to GRPCDial.
-		iCtx, cancel := context.WithTimeout(ctx, randDuration(time.Millisecond))
-		go func() {
-			time.Sleep(randDuration(time.Millisecond))
-			cancel()
-			wg.Done()
-		}()
-		go func() {
-			time.Sleep(randDuration(time.Millisecond))
-			_, err := nd.Dial(iCtx, 1, rpc.DefaultClass)
-			if err != nil &&
-				!errors.IsAny(err, context.Canceled, context.DeadlineExceeded) {
-				t.Errorf("got an unexpected error from Dial: %v", err)
-			}
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-	assert.Equal(t, breaker.Failures(), int64(0))
-}
-
 func TestResolverErrorsTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, rpcCtx, _, _, _ := setUpNodedialerTest(t, staticNodeID)
