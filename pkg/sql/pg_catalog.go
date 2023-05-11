@@ -1116,18 +1116,27 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 				populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
 					addRow func(...tree.Datum) error) (bool, error) {
 					var id descpb.ID
+					var oid oid.Oid
 					switch t := unwrappedConstraint.(type) {
 					case *tree.DOid:
 						id = descpb.ID(t.Oid)
+						oid = t.Oid
 					case *tree.DInt:
 						id = descpb.ID(*t)
 					default:
 						return false, errors.AssertionFailedf("unexpected type %T for table id column in virtual table %s",
 							unwrappedConstraint, schemaDef)
 					}
-					table, err := p.LookupTableByID(ctx, id)
+					desc, err := p.byIDGetterBuilder().WithoutNonPublic().Get().Desc(ctx, id)
 					if err != nil {
-						if sqlerrors.IsUndefinedRelationError(err) {
+						if errors.Is(err, catalog.ErrDescriptorNotFound) ||
+							catalog.HasInactiveDescriptorError(err) {
+							// We are colliding with a builtin function, we can concretly,
+							// say there should be no rows. Since the only other OIDs we
+							// support are indexes.
+							if oid != 0 && !catid.IsOIDUserDefined(oid) {
+								return true, nil
+							}
 							// No table found, so no rows. In this case, we'll fall back to the
 							// full table scan if the index isn't complete - see the
 							// indexContainsNonTableDescriptorIDs parameter.
@@ -1135,6 +1144,12 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 							return false, nil
 						}
 						return false, err
+					}
+					// If the descriptor is not a table, then we have a complete result
+					// from this virtual index.
+					table, ok := desc.(catalog.TableDescriptor)
+					if !ok {
+						return true, nil
 					}
 					// Don't include tables that aren't in the current database unless
 					// they're virtual, dropped tables, or ones that the user can't see.
@@ -1144,7 +1159,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					if (!table.IsVirtualTable() && table.GetParentID() != db.GetID()) ||
 						table.Dropped() || !canSeeDescriptor {
-						return false, nil
+						return true, nil
 					}
 					h := makeOidHasher()
 					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
@@ -1572,13 +1587,14 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 // getComments returns all comments in the database. A comment is represented
 // as a datum row, containing object id, sub id (column id in the case of
 // columns), comment text, and comment type (keys.FooCommentType).
-func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
-	return p.InternalSQLTxn().QueryBufferedEx(
-		ctx,
-		"select-comments",
-		p.Txn(),
-		sessiondata.NodeUserSessionDataOverride,
-		`SELECT
+func getComments(ctx context.Context, p *planner, descriptorID descpb.ID) ([]tree.Datums, error) {
+	if descriptorID == descpb.InvalidID {
+		return p.InternalSQLTxn().QueryBufferedEx(
+			ctx,
+			"select-comments",
+			p.Txn(),
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT
 		object_id,
 		sub_id,
 		comment,
@@ -1593,6 +1609,141 @@ func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
 			AS type
 	FROM
 		"".crdb_internal.kv_catalog_comments;`)
+	} else {
+		return p.InternalSQLTxn().QueryBufferedEx(
+			ctx,
+			"select-comments-with-id",
+			p.Txn(),
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT
+		object_id,
+		sub_id,
+		comment,
+		CASE type
+		WHEN 'DatabaseCommentType' THEN 0
+		WHEN 'TableCommentType' THEN 1
+		WHEN 'ColumnCommentType' THEN 2
+		WHEN 'IndexCommentType' THEN 3
+		WHEN 'SchemaCommentType' THEN 4
+		WHEN 'ConstraintCommentType' THEN 5
+		END
+			AS type
+	FROM
+		"".crdb_internal.kv_catalog_comments
+  WHERE object_id=$1;`,
+			descriptorID)
+	}
+}
+
+// getPgCatalogDescriptionByID fetches comments for a given descriptor ID when
+// if specified as a non-zero value. Otherwise, a full scan is conducted of
+// the comments table. The populated flag indicates if a successful point look
+// is performed (otherwise, the value is not resolvable and a full table scan
+// will be required).
+func getPgCatalogDescriptionByID(
+	ctx context.Context,
+	p *planner,
+	dbContext catalog.DatabaseDescriptor,
+	addRow func(...tree.Datum) error,
+	id oid.Oid,
+) (populated bool, err error) {
+
+	// This is less efficient than it has to be - if we see performance problems
+	// here, we can push the filter into the query that getComments runs,
+	// instead of filtering client-side below.
+	comments, err := getComments(ctx, p, descpb.ID(id))
+	if err != nil {
+		return false, err
+	}
+	for _, comment := range comments {
+		populated = true
+		objID := comment[0]
+		objSubID := comment[1]
+		description := comment[2]
+		commentType := catalogkeys.CommentType(tree.MustBeDInt(comment[3]))
+
+		classOid := oidZero
+
+		switch commentType {
+		case catalogkeys.DatabaseCommentType:
+			// Database comments are exported in pg_shdescription.
+			continue
+		case catalogkeys.SchemaCommentType:
+			// TODO: The type conversion to oid.Oid is safe since we use desc IDs
+			// for this, but it's not ideal. The backing column for objId should be
+			// changed to use the OID type.
+			objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
+			classOid = tree.NewDOid(catconstants.PgCatalogNamespaceTableID)
+		case catalogkeys.ColumnCommentType, catalogkeys.TableCommentType:
+			// TODO: The type conversion to oid.Oid is safe since we use desc IDs
+			// for this, but it's not ideal. The backing column for objId should be
+			// changed to use the OID type.
+			objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
+			classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
+		case catalogkeys.ConstraintCommentType:
+			tableDesc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(tree.MustBeDInt(objID)))
+			if err != nil {
+				return false, err
+			}
+			schema, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
+			if err != nil {
+				return false, err
+			}
+			c, err := catalog.MustFindConstraintByID(tableDesc, descpb.ConstraintID(tree.MustBeDInt(objSubID)))
+			if err != nil {
+				return false, err
+			}
+			objID = getOIDFromConstraint(c, dbContext.GetID(), schema.GetID(), tableDesc)
+			objSubID = tree.DZero
+			classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
+		case catalogkeys.IndexCommentType:
+			objID = makeOidHasher().IndexOid(
+				descpb.ID(tree.MustBeDInt(objID)),
+				descpb.IndexID(tree.MustBeDInt(objSubID)))
+			objSubID = tree.DZero
+			classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
+		}
+		if err := addRow(
+			objID,
+			classOid,
+			objSubID,
+			description); err != nil {
+			return false, err
+		}
+	}
+
+	if id != 0 && populated {
+		return populated, nil
+	}
+
+	// Populate rows based on builtins as well.
+	fmtOverLoad := func(builtin tree.Overload) error {
+		return addRow(
+			tree.NewDOid(builtin.Oid),
+			tree.NewDOid(catconstants.PgCatalogProcTableID),
+			tree.DZero,
+			tree.NewDString(builtin.Info),
+		)
+	}
+
+	// For direct lookups match with builtins, if this fails
+	// we will do a full scan.
+	if id != 0 {
+		builtin, matched := tree.OidToQualifiedBuiltinOverload[id]
+		if !matched {
+			return matched, err
+		}
+		return true, fmtOverLoad(*builtin.Overload)
+	}
+	for _, name := range builtins.AllBuiltinNames() {
+		_, overloads := builtinsregistry.GetBuiltinProperties(name)
+		for _, builtin := range overloads {
+			if err := fmtOverLoad(builtin); err != nil {
+				return false, err
+			}
+		}
+	}
+	return true, nil
 }
 
 var pgCatalogDescriptionTable = virtualSchemaTable{
@@ -1604,85 +1755,17 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 		p *planner,
 		dbContext catalog.DatabaseDescriptor,
 		addRow func(...tree.Datum) error) error {
-
-		// This is less efficient than it has to be - if we see performance problems
-		// here, we can push the filter into the query that getComments runs,
-		// instead of filtering client-side below.
-		comments, err := getComments(ctx, p)
-		if err != nil {
-			return err
-		}
-		for _, comment := range comments {
-			objID := comment[0]
-			objSubID := comment[1]
-			description := comment[2]
-			commentType := catalogkeys.CommentType(tree.MustBeDInt(comment[3]))
-
-			classOid := oidZero
-
-			switch commentType {
-			case catalogkeys.DatabaseCommentType:
-				// Database comments are exported in pg_shdescription.
-				continue
-			case catalogkeys.SchemaCommentType:
-				// TODO: The type conversion to oid.Oid is safe since we use desc IDs
-				// for this, but it's not ideal. The backing column for objId should be
-				// changed to use the OID type.
-				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
-				classOid = tree.NewDOid(catconstants.PgCatalogNamespaceTableID)
-			case catalogkeys.ColumnCommentType, catalogkeys.TableCommentType:
-				// TODO: The type conversion to oid.Oid is safe since we use desc IDs
-				// for this, but it's not ideal. The backing column for objId should be
-				// changed to use the OID type.
-				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
-				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
-			case catalogkeys.ConstraintCommentType:
-				tableDesc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(tree.MustBeDInt(objID)))
-				if err != nil {
-					return err
-				}
-				schema, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
-				if err != nil {
-					return err
-				}
-				c, err := catalog.MustFindConstraintByID(tableDesc, descpb.ConstraintID(tree.MustBeDInt(objSubID)))
-				if err != nil {
-					return err
-				}
-				objID = getOIDFromConstraint(c, dbContext.GetID(), schema.GetID(), tableDesc)
-				objSubID = tree.DZero
-				classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
-			case catalogkeys.IndexCommentType:
-				objID = makeOidHasher().IndexOid(
-					descpb.ID(tree.MustBeDInt(objID)),
-					descpb.IndexID(tree.MustBeDInt(objSubID)))
-				objSubID = tree.DZero
-				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
-			}
-			if err := addRow(
-				objID,
-				classOid,
-				objSubID,
-				description); err != nil {
-				return err
-			}
-		}
-
-		// Also add all built-in comments.
-		for _, name := range builtins.AllBuiltinNames() {
-			_, overloads := builtinsregistry.GetBuiltinProperties(name)
-			for _, builtin := range overloads {
-				if err := addRow(
-					tree.NewDOid(builtin.Oid),
-					tree.NewDOid(catconstants.PgCatalogProcTableID),
-					tree.DZero,
-					tree.NewDString(builtin.Info),
-				); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
+		_, err := getPgCatalogDescriptionByID(ctx, p, dbContext, addRow, 0)
+		return err
+	},
+	indexes: []virtualIndex{
+		{
+			incomplete: true,
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				oid := tree.MustBeDOid(unwrappedConstraint)
+				return getPgCatalogDescriptionByID(ctx, p, dbContext, addRow, oid.Oid)
+			},
+		},
 	},
 }
 
@@ -1739,7 +1822,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html`,
 	schema: vtable.PGCatalogSharedDescription,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// See comment above - could make this more efficient if necessary.
-		comments, err := getComments(ctx, p)
+		comments, err := getComments(ctx, p, descpb.InvalidID /* all comments */)
 		if err != nil {
 			return err
 		}
