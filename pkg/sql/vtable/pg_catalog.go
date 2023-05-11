@@ -313,7 +313,8 @@ CREATE TABLE pg_catalog.pg_description (
 	objoid OID,
 	classoid OID,
 	objsubid INT4,
-	description STRING
+	description STRING,
+	INDEX(objoid)
 )`
 
 // PGCatalogSharedDescription describes the schema of the

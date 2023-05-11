@@ -222,10 +222,11 @@ var none = struct{}{}
 var mappedPopulateFunctions = map[string]string{
 	// Currently pg_type cannot be found automatically by this code because it is
 	// not the populate function. Same for pg_proc.
-	"addPGTypeRow":           "PGCatalogType",
-	"addPgProcUDFRow":        "PGCatalogProc",
-	"addPgProcBuiltinRow":    "PgCatalogProc",
-	"addRowForTimezoneNames": "PgCatalogTimezoneNames",
+	"addPGTypeRow":                  "PGCatalogType",
+	"addPgProcUDFRow":               "PGCatalogProc",
+	"addPgProcBuiltinRow":           "PgCatalogProc",
+	"addRowForTimezoneNames":        "PgCatalogTimezoneNames",
+	"populatePgCatalogFromComments": "PGCatalogDescription",
 }
 
 // schemaCodeFixer have specific configurations to fix the files with virtual
