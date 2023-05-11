@@ -506,7 +506,7 @@ func isIndexUniqueAndCanServeFK(
 func hasColsUniquenessConstraintOtherThan(
 	b BuildCtx, tableID descpb.ID, columnIDs []descpb.ColumnID, otherThan descpb.ConstraintID,
 ) (ret bool) {
-	b.QueryByID(tableID).Filter(publicTargetFilter).Filter(statusPublicFilter).
+	b.QueryByID(tableID).Filter(publicTargetFilter).Filter(publicStatusFilter).
 		ForEachElementStatus(func(
 			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 		) {
