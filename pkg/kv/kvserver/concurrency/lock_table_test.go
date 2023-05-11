@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -195,7 +196,9 @@ func TestLockTableBasic(t *testing.T) {
 			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
-				ltImpl := newLockTable(int64(maxLocks), roachpb.RangeID(3), clock)
+				ltImpl := newLockTable(
+					int64(maxLocks), roachpb.RangeID(3), clock, cluster.MakeTestingClusterSettings(),
+				)
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
 				ltImpl.minLocks = 0
@@ -749,7 +752,9 @@ func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) 
 }
 
 func TestLockTableMaxLocks(t *testing.T) {
-	lt := newLockTable(5, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
+	lt := newLockTable(
+		5, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */), cluster.MakeTestingClusterSettings(),
+	)
 	lt.minLocks = 0
 	lt.enabled = true
 	var keys []roachpb.Key
@@ -876,7 +881,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 // TestLockTableMaxLocksWithMultipleNotRemovableRefs tests the notRemovable
 // ref counting.
 func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
-	lt := newLockTable(2, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
+	lt := newLockTable(
+		2, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */), cluster.MakeTestingClusterSettings(),
+	)
 	lt.minLocks = 0
 	lt.enabled = true
 	var keys []roachpb.Key
@@ -1112,7 +1119,9 @@ type workloadExecutor struct {
 
 func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecutor {
 	const maxLocks = 100000
-	lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
+	lt := newLockTable(
+		maxLocks, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */), cluster.MakeTestingClusterSettings(),
+	)
 	lt.enabled = true
 	return &workloadExecutor{
 		lm:           spanlatch.Manager{},
@@ -1675,7 +1684,12 @@ func BenchmarkLockTable(b *testing.B) {
 						var numRequestsWaited uint64
 						var numScanCalls uint64
 						const maxLocks = 100000
-						lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
+						lt := newLockTable(
+							maxLocks,
+							roachpb.RangeID(3),
+							hlc.NewClockWithSystemTimeSource(0 /* maxOffset */),
+							cluster.MakeTestingClusterSettings(),
+						)
 						lt.enabled = true
 						env := benchEnv{
 							lm:                &spanlatch.Manager{},
@@ -1715,7 +1729,12 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 	for _, locks := range []int{0, 1 << 0, 1 << 4, 1 << 8, 1 << 12} {
 		b.Run(fmt.Sprintf("locks=%d", locks), func(b *testing.B) {
 			const maxLocks = 100000
-			lt := newLockTable(maxLocks, roachpb.RangeID(3), hlc.NewClockWithSystemTimeSource(0 /* maxOffset */))
+			lt := newLockTable(
+				maxLocks,
+				roachpb.RangeID(3),
+				hlc.NewClockWithSystemTimeSource(0 /* maxOffset */),
+				cluster.MakeTestingClusterSettings(),
+			)
 			lt.enabled = true
 
 			txn := &enginepb.TxnMeta{ID: uuid.MakeV4()}

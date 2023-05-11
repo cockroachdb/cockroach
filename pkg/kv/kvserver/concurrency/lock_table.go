@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -259,14 +260,20 @@ type lockTableImpl struct {
 
 	// clock is used to track the lock hold and lock wait start times.
 	clock *hlc.Clock
+
+	// settings provides a handle to cluster settings.
+	settings *cluster.Settings
 }
 
 var _ lockTable = &lockTableImpl{}
 
-func newLockTable(maxLocks int64, rangeID roachpb.RangeID, clock *hlc.Clock) *lockTableImpl {
+func newLockTable(
+	maxLocks int64, rangeID roachpb.RangeID, clock *hlc.Clock, settings *cluster.Settings,
+) *lockTableImpl {
 	lt := &lockTableImpl{
-		rID:   rangeID,
-		clock: clock,
+		rID:      rangeID,
+		clock:    clock,
+		settings: settings,
 	}
 	lt.setMaxLocks(maxLocks)
 	return lt
