@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"io"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,7 +26,7 @@ type parquetWriter struct {
 // newParquetWriterFromRow constructs a new parquet writer which outputs to
 // the given sink. This function interprets the schema from the supplied row.
 func newParquetWriterFromRow(
-	row cdcevent.Row, sink io.Writer, maxRowGroupSize int64,
+	row cdcevent.Row, sink io.Writer, opts ...parquet.Option,
 ) (*parquetWriter, error) {
 	columnNames := make([]string, len(row.ResultColumns())+1)
 	columnTypes := make([]*types.T, len(row.ResultColumns())+1)
@@ -43,12 +44,31 @@ func newParquetWriterFromRow(
 	columnNames[idx] = parquetCrdbEventTypeColName
 	columnTypes[idx] = types.String
 
+	keyCols := make([]string, 0)
+	if err := row.ForEachKeyColumn().Col(func(col cdcevent.ResultColumn) error {
+		keyCols = append(keyCols, col.Name)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	opts = append(opts, parquet.WithMetadata(map[string]string{"keyCols": strings.Join(keyCols, ",")}))
+
+	allCols := make([]string, 0)
+	if err := row.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
+		allCols = append(allCols, col.Name)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	allCols = append(allCols, parquetCrdbEventTypeColName)
+	opts = append(opts, parquet.WithMetadata(map[string]string{"allCols": strings.Join(allCols, ",")}))
+
 	schemaDef, err := parquet.NewSchema(columnNames, columnTypes)
 	if err != nil {
 		return nil, err
 	}
 
-	writer, err := parquet.NewWriter(schemaDef, sink, parquet.WithMaxRowGroupLength(maxRowGroupSize))
+	writer, err := parquet.NewWriter(schemaDef, sink, opts...)
 	if err != nil {
 		return nil, err
 	}

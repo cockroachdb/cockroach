@@ -16,7 +16,6 @@ import (
 	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"math/rand"
 	"net/url"
@@ -46,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -57,11 +57,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	goparquet "github.com/fraugster/parquet-go"
 	"github.com/jackc/pgx/v4"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -1228,72 +1228,75 @@ func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []b
 	return key, value, nil
 }
 
-func (c *cloudFeed) decodeParquetValueAsJSON(value interface{}) (interface{}, error) {
-	switch vv := value.(type) {
-	case []byte:
-		// Currently, for encoding from CRDB data type to Parquet data type, for
-		// any complex structure (that is, other than ints and floats), it is
-		// always a byte array which is the string representation of that datum
-		// (except for arrays, see below). Therefore, if the parquet reader
-		// decodes a column value as a Go native byte array, then we can be sure
-		// that it is the equivalent string representation of the CRDB datum.
-		// Hence, we can use this value to construct the final JSON object which
-		// will be used by assertPayload to compare actual and expected JSON
-		// objects.
-
-		// Ideally there should be no need to convert byte array to string but
-		// JSON encoder will encode byte arrays as base 64 encoded strings.
-		// Hence, we need to convert to string to tell Marshal to decode it as a
-		// string. For every other Go native type, we can use the type as is and
-		// json.Marhsal will work correctly.
-		return string(vv), nil
-	case map[string]interface{}:
-		// This is CRDB ARRAY data type (only data type for which we use parquet
-		// LIST logical type. For all other CRDB types, it's either a byte array
-		// or a primitive parquet type). See importer.NewParquetColumn for
-		// details on how CRDB Array is encoded to parquet. (read it before
-		// reading the rest of the comments). Ideally, the parquet reader should
-		// decode the encoded CRDB array datum as a go native list type. But we
-		// use a low level API provided by the vendor which decodes parquet's
-		// LIST logical data type
-		// (https://github.com/apache/parquet-format/blob/master/LogicalTypes.md)
-		// into this weird map structure in Go (It actually makes a lot of sense
-		// why this is done if you understand the parquet LIST logical data
-		// type). A higher level API would convert this map data structure into
-		// go native list type which is what the code below does. This would
-		// probably need to be changed if the parquet vendor is changed.
-
-		// TODO(ganeshb): Make sure that the library is indeed decoding parquet lists
-		// into this weird map format and it is not because of the way we encode
-		vtemp := make([]interface{}, 0)
-		if castedValue, ok := vv["list"].([]map[string]interface{}); ok {
-			for _, ele := range castedValue {
-				if elementVal, ok := ele["element"]; ok {
-					if byteTypeElement, ok := elementVal.([]byte); ok {
-						vtemp = append(vtemp, string(byteTypeElement))
-					} else {
-						// Primitive types
-						vtemp = append(vtemp, ele["element"])
-					}
-				} else {
-					return nil, errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
-				}
-			}
-		} else {
-			return nil, errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
-		}
-		return vtemp, nil
-	default:
-		// int's, float's and other primitive types
-		if floatVal, ok := vv.(float64); ok {
-			// gojson cannot encode NaN values
-			// https://github.com/golang/go/issues/25721
-			if math.IsNaN(floatVal) {
-				return "NaN", nil
-			}
-		}
-		return vv, nil
+func (c *cloudFeed) decodeParquetValueAsJSON(datum tree.Datum) (interface{}, error) {
+	if datum == tree.DNull {
+		return nil, nil
 	}
+
+	switch datum.ResolvedType().Family() {
+	//case map[string]interface{}:
+	//	// This is CRDB ARRAY data type (only data type for which we use parquet
+	//	// LIST logical type. For all other CRDB types, it's either a byte array
+	//	// or a primitive parquet type). See importer.NewParquetColumn for
+	//	// details on how CRDB Array is encoded to parquet. (read it before
+	//	// reading the rest of the comments). Ideally, the parquet reader should
+	//	// decode the encoded CRDB array datum as a go native list type. But we
+	//	// use a low level API provided by the vendor which decodes parquet's
+	//	// LIST logical data type
+	//	// (https://github.com/apache/parquet-format/blob/master/LogicalTypes.md)
+	//	// into this weird map structure in Go (It actually makes a lot of sense
+	//	// why this is done if you understand the parquet LIST logical data
+	//	// type). A higher level API would convert this map data structure into
+	//	// go native list type which is what the code below does. This would
+	//	// probably need to be changed if the parquet vendor is changed.
+	//
+	//	// TODO(ganeshb): Make sure that the library is indeed decoding parquet lists
+	//	// into this weird map format and it is not because of the way we encode
+	//	vtemp := make([]interface{}, 0)
+	//	if castedValue, ok := vv["list"].([]map[string]interface{}); ok {
+	//		for _, ele := range castedValue {
+	//			if elementVal, ok := ele["element"]; ok {
+	//				if byteTypeElement, ok := elementVal.([]byte); ok {
+	//					vtemp = append(vtemp, string(byteTypeElement))
+	//				} else {
+	//					// Primitive types
+	//					vtemp = append(vtemp, ele["element"])
+	//				}
+	//			} else {
+	//				return nil, errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
+	//			}
+	//		}
+	//	} else {
+	//		return nil, errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
+	//	}
+	//	return vtemp, nil
+	case types.ArrayFamily:
+		resultArray := map[string]tree.Datums{}
+		arr := *(datum.(*tree.DArray))
+		for i := 0; i < len(arr.Array); i++ {
+			newDatum, err := c.decodeParquetValueAsJSON(arr.Array[i])
+			if err != nil {
+				return nil, err
+			}
+			if newDatum == nil {
+				arr.Array[i] = nil
+			} else if d, ok := newDatum.(tree.Datum); ok {
+				arr.Array[i] = d
+			} else {
+				return nil, errors.AssertionFailedf("unexpected element in array")
+			}
+		}
+		resultArray["array"] = arr.Array
+		return resultArray, nil
+	case types.FloatFamily:
+		// gojson cannot encode NaN values
+		// https://github.com/golang/go/issues/25721
+		fl := *(datum.(*tree.DFloat))
+		if math.IsNaN(float64(fl)) {
+			return tree.NewDString("NaN"), nil
+		}
+	}
+	return datum, nil
 }
 
 // appendParquetTestFeedMessages function reads the parquet file and converts each row to its JSON
@@ -1301,50 +1304,37 @@ func (c *cloudFeed) decodeParquetValueAsJSON(value interface{}) (interface{}, er
 func (c *cloudFeed) appendParquetTestFeedMessages(
 	path string, topic string, envelopeType changefeedbase.EnvelopeType,
 ) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	fr, err := goparquet.NewFileReader(f)
+	meta, datums, err := parquet.ReadFile(path)
 	if err != nil {
 		return err
 	}
 
-	primaryKeyColumnsString, ok := fr.MetaData()["primaryKeyNames"]
-	if !ok {
-		return errors.Errorf("Did not find primary key column names in metadata of parquet file during testing")
+	primaryKeyColumnsString := meta.KeyValueMetadata().FindValue("keyCols")
+	if primaryKeyColumnsString == nil {
+		return errors.Errorf("could not find primary key column names in parquet metadata")
 	}
 
-	columnsNamesString, ok := fr.MetaData()["columnNames"]
-	if !ok {
-		return errors.Errorf("Did not find column names in metadata of parquet file during testing")
+	columnsNamesString := meta.KeyValueMetadata().FindValue("allCols")
+	if columnsNamesString == nil {
+		return errors.Errorf("could not find column names in parquet metadata")
 	}
-	columns := strings.Split(columnsNamesString, ",")
-	primaryKeys := strings.Split(primaryKeyColumnsString, ",")
+
+	primaryKeys := strings.Split(*primaryKeyColumnsString, ",")
+	columns := strings.Split(*columnsNamesString, ",")
 
 	columnNameSet := make(map[string]struct{})
 	primaryKeyColumnSet := make(map[string]struct{})
 
-	for _, key := range primaryKeys[:len(primaryKeys)-1] {
+	for _, key := range primaryKeys {
 		primaryKeyColumnSet[key] = struct{}{}
 	}
 
+	// Drop parquetCrdbEventTypeColName.
 	for _, key := range columns[:len(columns)-1] {
 		columnNameSet[key] = struct{}{}
 	}
 
-	for {
-		row, err := fr.NextRow()
-		if err == io.EOF {
-			break
-		}
-
-		if err != nil {
-			return err
-		}
-
+	for _, row := range datums {
 		// Holds column to its value mapping for a row and the entire thing will be
 		// JSON encoded later.
 		value := make(map[string]interface{})
@@ -1353,27 +1343,39 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 		key := make(map[string]interface{}, 0)
 		isDeleted := false
 
-		for k, v := range row {
+		// Remove parquetCrdbEventTypeColName from the column names list. Values for this
+		// column will still be present in datum rows.
+		rowCopy := make([]string, len(columns)-1)
+		copy(rowCopy, columns[:len(columns)-1])
+		vb, err := json.NewFixedKeysObjectBuilder(rowCopy)
+		if err != nil {
+			return err
+		}
+		for colIdx, v := range row {
+			k := columns[colIdx]
 			if k == parquetCrdbEventTypeColName {
-				if string(v.([]byte)) == parquetEventDelete.DString().String() {
+				if v.(*tree.DString).String() == parquetEventDelete.DString().String() {
 					isDeleted = true
 				}
 				continue
 			}
 
 			if _, ok := columnNameSet[k]; ok {
-				value[k], err = c.decodeParquetValueAsJSON(v)
+				j, err := tree.AsJSON(v, sessiondatapb.DataConversionConfig{}, time.UTC)
 				if err != nil {
+					return err
+				}
+				if err := vb.Set(k, j); err != nil {
 					return err
 				}
 			}
 
 			if _, ok := primaryKeyColumnSet[k]; ok {
-				decodedKeyVal, err := c.decodeParquetValueAsJSON(v)
+				key[k], err = c.decodeParquetValueAsJSON(v)
 				if err != nil {
 					return err
 				}
-				key[k] = decodedKeyVal
+
 			}
 		}
 
@@ -1389,27 +1391,42 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 			}
 		}
 
-		valueWithAfter := make(map[string]interface{})
+		var valueWithAfter *json.FixedKeysObjectBuilder
 
 		if envelopeType == changefeedbase.OptEnvelopeBare {
-			valueWithAfter = value
+			valueWithAfter = vb
 		} else {
+			valueWithAfter, err = json.NewFixedKeysObjectBuilder([]string{"after"})
+			if err != nil {
+				return err
+			}
 			if isDeleted {
-				valueWithAfter["after"] = nil
+				nullJSON, err := tree.AsJSON(tree.DNull, sessiondatapb.DataConversionConfig{}, time.UTC)
+				if err != nil {
+					return err
+				}
+				if err = valueWithAfter.Set("after", nullJSON); err != nil {
+					return err
+				}
 			} else {
-				valueWithAfter["after"] = value
+				vbJson, err := vb.Build()
+				if err != nil {
+					return err
+				}
+				if err = valueWithAfter.Set("after", vbJson); err != nil {
+					return err
+				}
 			}
 		}
 
-		orderedKey := make([]interface{}, 0)
-		for _, k := range primaryKeys[:len(primaryKeys)-1] {
-			orderedKey = append(orderedKey, key[k])
-		}
-
-		// Sorts the keys
-		jsonValue, err := reformatJSON(valueWithAfter)
+		vbAfterFinal, err := valueWithAfter.Build()
 		if err != nil {
 			return err
+		}
+
+		orderedKey := make([]interface{}, 0)
+		for _, k := range primaryKeys {
+			orderedKey = append(orderedKey, key[k])
 		}
 
 		jsonKey, err := reformatJSON(orderedKey)
@@ -1417,9 +1434,12 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 			return err
 		}
 
+		buf := bytes.Buffer{}
+		vbAfterFinal.Format(&buf)
+
 		m := &cdctest.TestFeedMessage{
 			Topic: topic,
-			Value: jsonValue,
+			Value: buf.Bytes(),
 			Key:   jsonKey,
 		}
 

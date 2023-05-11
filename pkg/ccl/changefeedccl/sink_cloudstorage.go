@@ -72,7 +72,7 @@ type cloudStorageSinkFile struct {
 	buf          bytes.Buffer
 	alloc        kvevent.Alloc
 	oldestMVCC   hlc.Timestamp
-	parquetCodec *parquetFileWriter
+	parquetCodec *parquetWriter
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -280,8 +280,9 @@ func (f *cloudStorageSinkFile) Write(p []byte) (int, error) {
 // job (call it P). Now, we're back to the case where k = 2 with jobs P and Q. Thus, by
 // induction we have the required proof.
 type cloudStorageSink struct {
-	srcID             base.SQLInstanceID
-	sinkID            int64
+	srcID  base.SQLInstanceID
+	sinkID int64
+	// targetMaxFileSize is the max target file size in bytes.
 	targetMaxFileSize int64
 	settings          *cluster.Settings
 	partitionFormat   string
@@ -688,11 +689,13 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	}
 	s.asyncFlushActive = asyncFlushEnabled
 
+	// If using parquet, we need to finish off writing the entire file.
+	// Closing the parquet codec will append some metadata to the file.
 	if file.parquetCodec != nil {
-		if err := file.parquetCodec.parquetWriter.Close(); err != nil {
+		if err := file.parquetCodec.close(); err != nil {
 			return err
 		}
-		file.rawSize = len(file.buf.Bytes())
+		file.rawSize = file.buf.Len()
 	}
 	// We use this monotonically increasing fileID to ensure correct ordering
 	// among files emitted at the same timestamp during the same job session.

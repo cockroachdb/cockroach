@@ -230,6 +230,7 @@ func readBatch[T parquetDatatypes](
 					continue
 				}
 				arrDatum := tree.NewDArray(typ)
+				arrDatum.Array = tree.Datums{}
 				result = append(result, arrDatum)
 				// Replevel 0, Deflevel 1 represents an array which is empty.
 				if defLevels[0] == 1 {

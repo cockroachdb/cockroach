@@ -110,7 +110,7 @@ func TestParquetRows(t *testing.T) {
 				require.NoError(t, err)
 
 				if writer == nil {
-					writer, err = newParquetWriterFromRow(updatedRow, f, maxRowGroupSize)
+					writer, err = newParquetWriterFromRow(updatedRow, f, parquet.WithMaxRowGroupLength(maxRowGroupSize))
 					if err != nil {
 						t.Fatalf(err.Error())
 					}
