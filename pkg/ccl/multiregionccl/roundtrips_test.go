@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -34,6 +35,7 @@ import (
 func TestEnsureLocalReadsOnGlobalTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t, "https://github.com/cockroachdb/cockroach/issues/102798#issuecomment-1543852311")
 
 	// ensureOnlyLocalReads looks at a trace to ensure that reads were served
 	// locally. It returns true if the read was served as a follower read.
@@ -142,7 +144,7 @@ func TestEnsureLocalReadsOnGlobalTables(t *testing.T) {
 
 		// Expect every non-leaseholder to serve a (local) follower read. The
 		// leaseholder on the other hand won't serve a follower read.
-		require.Equal(t, !isLeaseHolder, followerRead)
+		require.Equal(t, !isLeaseHolder, followerRead, "%v", rec)
 	}
 
 	close(stopWritesCh)
