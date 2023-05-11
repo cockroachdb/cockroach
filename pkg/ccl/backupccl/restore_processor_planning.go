@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,6 +48,13 @@ var replanRestoreFrequency = settings.RegisterDurationSetting(
 	"frequency at which RESTORE checks to see if restarting would change its updates its physical execution plan",
 	time.Minute*2,
 	settings.PositiveDuration,
+)
+
+var memoryMonitorSSTs = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"bulkio.restore.memory_monitor_ssts",
+	"if true, restore will limit number of simultaneously open SSTs based on available memory",
+	util.ConstantWithMetamorphicTestBool("restore-memory-monitor-ssts", true),
 )
 
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It
@@ -102,6 +110,7 @@ func distRestore(
 		fileEncryption = &kvpb.FileEncryptionOptions{Key: encryption.Key}
 	}
 
+	memMonSSTs := memoryMonitorSSTs.Get(execCtx.ExecCfg().SV())
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 
 		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
@@ -112,13 +121,14 @@ func distRestore(
 		p := planCtx.NewPhysicalPlan()
 
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
-			JobID:        int64(jobID),
-			RestoreTime:  restoreTime,
-			Encryption:   fileEncryption,
-			TableRekeys:  dataToRestore.getRekeys(),
-			TenantRekeys: dataToRestore.getTenantRekeys(),
-			PKIDs:        dataToRestore.getPKIDs(),
-			ValidateOnly: dataToRestore.isValidateOnly(),
+			JobID:             int64(jobID),
+			RestoreTime:       restoreTime,
+			Encryption:        fileEncryption,
+			TableRekeys:       dataToRestore.getRekeys(),
+			TenantRekeys:      dataToRestore.getTenantRekeys(),
+			PKIDs:             dataToRestore.getPKIDs(),
+			ValidateOnly:      dataToRestore.isValidateOnly(),
+			MemoryMonitorSSTs: memMonSSTs,
 		}
 
 		// Plan SplitAndScatter in a round-robin fashion.
