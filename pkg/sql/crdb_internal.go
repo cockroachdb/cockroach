@@ -5415,18 +5415,6 @@ CREATE TABLE crdb_internal.kv_catalog_comments (
 		if err != nil {
 			return err
 		}
-		// Delegate privilege check to system table.
-		{
-			sysTable, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Table(ctx, systemschema.CommentsTable.GetID())
-			if err != nil {
-				return err
-			}
-			if ok, err := p.HasPrivilege(ctx, sysTable, privilege.SELECT, p.User()); err != nil {
-				return err
-			} else if !ok {
-				return nil
-			}
-		}
 		// Loop over all comment entries.
 		// NB if ever anyone were to extend this table to carry column
 		// comments, make sure to update pg_catalog.col_description to
