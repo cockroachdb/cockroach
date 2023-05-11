@@ -1030,8 +1030,7 @@ func populateTableConstraints(
 			conbin,         // conbin
 			consrc,         // consrc
 			condef,         // condef
-			// These columns were automatically created by pg_catalog_test's missing column generator.
-			tree.DNull, // conparentid
+			oidZero,        // conparentid
 		); err != nil {
 			return err
 		}

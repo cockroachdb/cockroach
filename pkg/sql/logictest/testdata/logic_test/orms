@@ -379,3 +379,59 @@ query T
 SELECT relname FROM pg_class WHERE oid = $oid
 ----
 regression_66576
+
+# Regression test for #103135 - ensure that the Postgrest query to find
+# FK relationships works.
+
+statement ok
+CREATE TABLE dst (a int primary key, b int)
+
+statement ok
+create table src (c int primary key, d int references dst(a))
+
+query TTTTBTTB
+WITH
+pks_uniques_cols AS (
+  SELECT
+    connamespace,
+    conrelid,
+    jsonb_agg(column_info.cols) as cols
+  FROM pg_constraint
+  JOIN lateral (
+    SELECT array_agg(cols.attname order by cols.attnum) as cols
+    FROM ( select unnest(conkey) as col) _
+    JOIN pg_attribute cols on cols.attrelid = conrelid and cols.attnum = col
+  ) column_info ON TRUE
+  WHERE
+    contype IN ('p', 'u') and
+    connamespace::regnamespace::text <> 'pg_catalog'
+  GROUP BY connamespace, conrelid
+)
+SELECT
+  ns1.nspname AS table_schema,
+  tab.relname AS table_name,
+  ns2.nspname AS foreign_table_schema,
+  other.relname AS foreign_table_name,
+  (ns1.nspname, tab.relname) = (ns2.nspname, other.relname) AS is_self,
+  traint.conname  AS constraint_name,
+  column_info.cols_and_fcols,
+  (column_info.cols IN (SELECT * FROM jsonb_array_elements(pks_uqs.cols))) AS one_to_one
+FROM pg_constraint traint
+JOIN LATERAL (
+  SELECT
+    array_agg(row(cols.attname, refs.attname) order by ord) AS cols_and_fcols,
+    jsonb_agg(cols.attname order by ord) AS cols
+  FROM unnest(traint.conkey, traint.confkey) WITH ORDINALITY AS _(col, ref, ord)
+  JOIN pg_attribute cols ON cols.attrelid = traint.conrelid AND cols.attnum = col
+  JOIN pg_attribute refs ON refs.attrelid = traint.confrelid AND refs.attnum = ref
+) AS column_info ON TRUE
+JOIN pg_namespace ns1 ON ns1.oid = traint.connamespace
+JOIN pg_class tab ON tab.oid = traint.conrelid
+JOIN pg_class other ON other.oid = traint.confrelid
+JOIN pg_namespace ns2 ON ns2.oid = other.relnamespace
+LEFT JOIN pks_uniques_cols pks_uqs ON pks_uqs.connamespace = traint.connamespace AND pks_uqs.conrelid = traint.conrelid
+WHERE traint.contype = 'f'
+and traint.conparentid = 0 ORDER BY traint.conrelid, traint.conname
+----
+public  b    public  a    false  b_a_id_fkey  {"(a_id,id)"}  false
+public  src  public  dst  false  src_d_fkey   {"(d,a)"}      false
