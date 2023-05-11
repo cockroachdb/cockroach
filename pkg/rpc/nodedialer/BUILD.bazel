@@ -35,6 +35,7 @@ go_test(
         "//pkg/rpc",
         "//pkg/settings/cluster",
         "//pkg/testutils",
+        "//pkg/util/circuit",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
