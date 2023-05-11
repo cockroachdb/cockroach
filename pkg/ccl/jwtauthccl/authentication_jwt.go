@@ -10,6 +10,7 @@ package jwtauthccl
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -64,6 +65,7 @@ type jwtAuthenticatorConf struct {
 	enabled  bool
 	issuers  []string
 	jwks     jwk.Set
+	claim    string
 }
 
 // reloadConfig locks mutex and then refreshes the values in conf from the cluster settings.
@@ -82,6 +84,7 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 		enabled:  JWTAuthEnabled.Get(&st.SV),
 		issuers:  mustParseValueOrArray(JWTAuthIssuers.Get(&st.SV)),
 		jwks:     mustParseJWKS(JWTAuthJWKS.Get(&st.SV)),
+		claim:    JWTAuthClaim.Get(&st.SV),
 	}
 
 	if !authenticator.mu.conf.enabled && conf.enabled {
@@ -147,23 +150,63 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 			"token issued by %s", parsedToken.Issuer())
 	}
 
-	users, err := authenticator.mapUsername(parsedToken.Subject(), parsedToken.Issuer(), identMap)
-	if err != nil || len(users) == 0 {
-		return errors.WithDetailf(
-			errors.Newf("JWT authentication: invalid subject"),
-			"the subject %s for the issuer %s is invalid", parsedToken.Subject(), parsedToken.Issuer())
+	// Extract all requested principals from the token. By default, we take it from the subject unless they specify
+	// an alternate claim to pull from.
+	var tokenPrincipals []string
+	if authenticator.mu.conf.claim == "" || authenticator.mu.conf.claim == "sub" {
+		tokenPrincipals = []string{parsedToken.Subject()}
+	} else {
+		claimValue, ok := parsedToken.Get(authenticator.mu.conf.claim)
+		if !ok {
+			return errors.WithDetailf(
+				errors.Newf("JWT authentication: missing claim"),
+				"token does not contain a claim for %s", authenticator.mu.conf.claim)
+		}
+		switch castClaimValue := claimValue.(type) {
+		case string:
+			// Accept a single string value.
+			tokenPrincipals = []string{castClaimValue}
+		case []interface{}:
+			// Iterate over the slice and add all string values to the tokenPrincipals.
+			for _, maybePrincipal := range castClaimValue {
+				tokenPrincipals = append(tokenPrincipals, fmt.Sprint(maybePrincipal))
+			}
+		case []string:
+			// This case never seems to happen but is included in case an implementation detail changes in the library.
+			tokenPrincipals = castClaimValue
+		default:
+			tokenPrincipals = []string{fmt.Sprint(castClaimValue)}
+		}
 	}
-	subjectMatch := false
-	for _, subject := range users {
-		if subject.Normalized() == user.Normalized() {
-			subjectMatch = true
+
+	// Take the principals from the token and send each of them through the identity map to generate the
+	// list of usernames that this token is valid authentication for.
+	var acceptedUsernames []username.SQLUsername
+	for _, tokenPrincipal := range tokenPrincipals {
+		mappedUsernames, err := authenticator.mapUsername(tokenPrincipal, parsedToken.Issuer(), identMap)
+		if err != nil {
+			return errors.WithDetailf(
+				errors.Newf("JWT authentication: invalid claim value"),
+				"the value %s for the issuer %s is invalid", tokenPrincipal, parsedToken.Issuer())
+		}
+		acceptedUsernames = append(acceptedUsernames, mappedUsernames...)
+	}
+	if len(acceptedUsernames) == 0 {
+		return errors.WithDetailf(
+			errors.Newf("JWT authentication: invalid principal"),
+			"the value %s for the issuer %s is invalid", tokenPrincipals, parsedToken.Issuer())
+	}
+	principalMatch := false
+	for _, username := range acceptedUsernames {
+		if username.Normalized() == user.Normalized() {
+			principalMatch = true
 			break
 		}
 	}
-	if !subjectMatch {
+	if !principalMatch {
 		return errors.WithDetailf(
-			errors.Newf("JWT authentication: invalid subject"),
-			"token issued for %s and login was for %s", parsedToken.Subject(), user.Normalized())
+			errors.Newf("JWT authentication: invalid principal"),
+			"token issued for %s and login was for %s", tokenPrincipals, user.Normalized())
 	}
 	if user.IsRootUser() || user.IsReserved() {
 		return errors.WithDetailf(
@@ -214,6 +257,9 @@ var ConfigureJWTAuth = func(
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	JWTAuthJWKS.SetOnChange(&st.SV, func(ctx context.Context) {
+		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
+	})
+	JWTAuthClaim.SetOnChange(&st.SV, func(ctx context.Context) {
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	return &authenticator

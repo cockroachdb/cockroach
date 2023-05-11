@@ -101,8 +101,8 @@ jwt_cluster_setting issuers=issuer2
 # see authentication_jwt_test.go for examples of how to generate these tokens.
 connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
 ----
-ERROR: JWT authentication: invalid subject (SQLSTATE 28000)
-DETAIL: token issued for test2 and login was for jwt_user
+ERROR: JWT authentication: invalid principal (SQLSTATE 28000)
+DETAIL: token issued for [test2] and login was for jwt_user
 
 jwt_cluster_setting issuers=["issuer1","issuer2"]
 ----
@@ -110,8 +110,8 @@ jwt_cluster_setting issuers=["issuer1","issuer2"]
 # see authentication_jwt_test.go for examples of how to generate these tokens.
 connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
 ----
-ERROR: JWT authentication: invalid subject (SQLSTATE 28000)
-DETAIL: token issued for test2 and login was for jwt_user
+ERROR: JWT authentication: invalid principal (SQLSTATE 28000)
+DETAIL: token issued for [test2] and login was for jwt_user
 
 subtest end
 
@@ -144,8 +144,8 @@ subtest ident_map_subject_match
 # try to login with the test user even though the subject of the token is for test2
 connect user=test options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
 ----
-ERROR: JWT authentication: invalid subject (SQLSTATE 28000)
-DETAIL: token issued for test2 and login was for test
+ERROR: JWT authentication: invalid principal (SQLSTATE 28000)
+DETAIL: token issued for [test2] and login was for test
 
 # map the user test2 to test when issued by issuer2
 jwt_cluster_setting ident_map=issuer2,test2,test
@@ -154,6 +154,56 @@ jwt_cluster_setting ident_map=issuer2,test2,test
 # see authentication_jwt_test.go for examples of how to generate these tokens.
 # login with the test user even though the subject of the token is for test2 because of the mapping
 connect user=test options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
+----
+ok defaultdb
+
+subtest end
+
+
+subtest single_custom_claim_login
+
+jwt_cluster_setting jwks={"alg":"RS256","e":"AQAB","kid":"test_kid1","kty":"RSA","n":"7SIVb_TfkxvwoopYqCBGJyWVUXuMMfP6fdrxtb0WreAICher0VGD9xAF2ZddMNQuVycqHZVkxplN_2-nq8F17POgU4RKJ5V5HLCGhABx0HjRRpLn-akSDTuTUcD3P4cE8XbLjCVCbZTjVncWWpt-UeRV2XHU-17ih5LSZDInzSGlWpp6BUTXiSZ_H7-HjO5cO5Q7j6P1iInETrdAMXWeYbnHXMXNLKyN4uKIymingOohekwYlOCvkA4V2e-u6-FPP5W-51GDroDtWNIVtpSakk1SzWdBjClvdZ3V0nfhw58pvROz8OpnJTVgb9IkZiwRUSbplnCS92gm1wWKz0O-Mw"}
+----
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+# try to login with token with usernames in custom claim without claim field set.
+connect user=test options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3Rfa2lkMSIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsidGVzdF9jbHVzdGVyIl0sImV4cCI6MTk5OTE3ODQwOSwiZ3JvdXBzIjoidGVzdCIsImlzcyI6Imlzc3VlcjEiLCJzdWIiOiJpbnZhbGlkX3VzZXIifQ.gfqWUshoNkEe2QDxpZBbLCcTbeogtd7vfUd9XLakhcBiqFjPyf3iP-yzCE3nAR90OWQFdtKVp-O19ymJOKOOe2yAcMBFHdwQSKJ5FHgX3M3IMZHcXNIkU0qTp698mJpGD_w_e8RBLN19OwKsAdUY3oj1oIkljBlsrTkhHIFQX1KG9NYqQQG2Py5eJiDtz9aBpqb2hRSBIcyLSWp7VxQ9sPNXOvIWAynDwRJxCIuF69FfbsR9yHdjPQfoc-6wRktllJ7q1ZZfp129OZZxcQWsbl2v1xPOQPkrT_O4ziElanDF_uReoUxBne3AzlEMIPybSkUaQZXrhhqmH3Hl9PswYw
+----
+ERROR: JWT authentication: invalid principal (SQLSTATE 28000)
+DETAIL: token issued for [invalid_user] and login was for test
+
+# use the groups claim instead of the subject claim
+jwt_cluster_setting claim=groups
+----
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+# login with the test_user1 since it is the value of the groups claim in the token
+connect user=test options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3Rfa2lkMSIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsidGVzdF9jbHVzdGVyIl0sImV4cCI6MTk5OTE3ODQwOSwiZ3JvdXBzIjoidGVzdCIsImlzcyI6Imlzc3VlcjEiLCJzdWIiOiJpbnZhbGlkX3VzZXIifQ.gfqWUshoNkEe2QDxpZBbLCcTbeogtd7vfUd9XLakhcBiqFjPyf3iP-yzCE3nAR90OWQFdtKVp-O19ymJOKOOe2yAcMBFHdwQSKJ5FHgX3M3IMZHcXNIkU0qTp698mJpGD_w_e8RBLN19OwKsAdUY3oj1oIkljBlsrTkhHIFQX1KG9NYqQQG2Py5eJiDtz9aBpqb2hRSBIcyLSWp7VxQ9sPNXOvIWAynDwRJxCIuF69FfbsR9yHdjPQfoc-6wRktllJ7q1ZZfp129OZZxcQWsbl2v1xPOQPkrT_O4ziElanDF_uReoUxBne3AzlEMIPybSkUaQZXrhhqmH3Hl9PswYw
+----
+ok defaultdb
+
+subtest end
+
+subtest multiple_custom_claim_login
+
+# clear the claim value
+jwt_cluster_setting claim=sub
+----
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+# try to login with token with usernames in custom claim without claim field set.
+connect user=test2 options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3Rfa2lkMSIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsidGVzdF9jbHVzdGVyIl0sImV4cCI6MTk5OTE3ODQwOSwiZ3JvdXBzIjpbInRlc3QiLCJ0ZXN0MiJdLCJpc3MiOiJpc3N1ZXIxIiwic3ViIjoiaW52YWxpZF91c2VyIn0.5B2ihElB50zACjjqy0ATxrSxlECmMj-0KvPp0NwoBBvURG16bOnYYksSeN5Izl_-YaP9ZoKOywxgA-sRtw4fX4du6Oo0tDSk3GzkZI6_IQoOxt8eq8To43Y74VSg2P3ts98yyNYXG0n3fTv2qtPjs6ly9p2iSnZBor6Yhy-YIjheT93Ehhl5s2sUL0gTOlpzGnb4N9MDgjphKQinu81DK-w200nOweYF_8ft8aeNiJqqDq1sZuUnCI1KcryuUoqQu5mWh0pO74XYCYHPTLAXwQ2BtKpfj_RJQqPcLW7hy1YcVdWTsL0PPrs6gJ_YKuo99eb0dBl1g-5Kdd5xRIm72g
+----
+ERROR: JWT authentication: invalid principal (SQLSTATE 28000)
+DETAIL: token issued for [invalid_user] and login was for test2
+
+# use the groups claim instead of the subject claim
+jwt_cluster_setting claim=groups
+----
+
+# see authentication_jwt_test.go for examples of how to generate these tokens.
+# login with the test_user2 since it is one of the values of the groups claim in the token
+connect user=test2 options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3Rfa2lkMSIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsidGVzdF9jbHVzdGVyIl0sImV4cCI6MTk5OTE3ODQwOSwiZ3JvdXBzIjpbInRlc3QiLCJ0ZXN0MiJdLCJpc3MiOiJpc3N1ZXIxIiwic3ViIjoiaW52YWxpZF91c2VyIn0.5B2ihElB50zACjjqy0ATxrSxlECmMj-0KvPp0NwoBBvURG16bOnYYksSeN5Izl_-YaP9ZoKOywxgA-sRtw4fX4du6Oo0tDSk3GzkZI6_IQoOxt8eq8To43Y74VSg2P3ts98yyNYXG0n3fTv2qtPjs6ly9p2iSnZBor6Yhy-YIjheT93Ehhl5s2sUL0gTOlpzGnb4N9MDgjphKQinu81DK-w200nOweYF_8ft8aeNiJqqDq1sZuUnCI1KcryuUoqQu5mWh0pO74XYCYHPTLAXwQ2BtKpfj_RJQqPcLW7hy1YcVdWTsL0PPrs6gJ_YKuo99eb0dBl1g-5Kdd5xRIm72g
 ----
 ok defaultdb
 
