@@ -281,11 +281,11 @@ func (sr *schemaResolver) GetQualifiedFunctionNameByID(
 func (sr *schemaResolver) getQualifiedFunctionName(
 	ctx context.Context, fnDesc catalog.FunctionDescriptor,
 ) (*tree.FunctionName, error) {
-	dbDesc, err := sr.descCollection.ByID(sr.txn).Get().Database(ctx, fnDesc.GetParentID())
+	dbDesc, err := sr.descCollection.ByIDWithLeased(sr.txn).Get().Database(ctx, fnDesc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
-	scDesc, err := sr.descCollection.ByID(sr.txn).Get().Schema(ctx, fnDesc.GetParentSchemaID())
+	scDesc, err := sr.descCollection.ByIDWithLeased(sr.txn).Get().Schema(ctx, fnDesc.GetParentSchemaID())
 	if err != nil {
 		return nil, err
 	}
