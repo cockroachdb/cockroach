@@ -74,6 +74,10 @@ type TestingKnobs struct {
 
 	// OnDrain returns the channel to select on to detect node drain
 	OnDrain func() <-chan struct{}
+
+	// EnableParquetMetadata configures the parquet format writer to write
+	// metadata which is required for testing.
+	EnableParquetMetadata bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
