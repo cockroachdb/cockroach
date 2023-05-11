@@ -1863,6 +1863,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 			// roachpb.PUSH_ABORT efficiently blocks until the transaction completes.
 			b := &kv.Batch{}
 			b.Header.Timestamp = r.Clock().Now()
+			log.Shoutf(ctx, 1, "push for wait-for-merge")
 			b.AddRawRequest(&roachpb.PushTxnRequest{
 				RequestHeader: roachpb.RequestHeader{Key: intent.Txn.Key},
 				PusherTxn: roachpb.Transaction{

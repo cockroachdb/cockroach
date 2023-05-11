@@ -118,6 +118,7 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		},
 	}
 
+	log.Shoutf(ctx, 1, "push for range feed")
 	pushedTxnMap, pErr := tp.ir.MaybePushTransactions(
 		ctx, pushTxnMap, h, roachpb.PUSH_TIMESTAMP, false, /* skipIfInFlight */
 	)
