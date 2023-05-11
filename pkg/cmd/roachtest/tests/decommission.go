@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -249,8 +250,11 @@ func runDecommission(
 
 	for i := 1; i <= nodes; i++ {
 		startOpts := option.DefaultStartOpts()
-		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--attrs=node%d", i))
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+			fmt.Sprintf("--attrs=node%d", i),
+		)
+
+		c.Start(ctx, t.L(), withDecommissionVMod(startOpts), install.MakeClusterSettings(), c.Node(i))
 	}
 	c.Run(ctx, c.Node(pinnedNode), `./workload init kv --drop`)
 
@@ -321,9 +325,15 @@ func runDecommission(
 			run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE = 'constraints: {"-node%d"}'`, node))
 
 			targetNodeList := option.NodeListOption{nodeID}
-			// TODO(sarkesian): Ensure updated span configs have been applied, so that
-			// checks can be reenabled.
-			if _, err := h.decommission(ctx, targetNodeList, pinnedNode, "--wait=all", "--checks=skip"); err != nil {
+
+			// The dataset is fairly small, we expect a single node decommission to
+			// complete within 1-5 minutes - use a 4x timeout to avoid flakes.
+			if err := contextutil.RunWithTimeout(ctx, "decommission", 20*time.Minute, func(ctx context.Context) error {
+				// TODO(sarkesian): Ensure updated span configs have been applied, so that
+				// checks can be reenabled.
+				_, err := h.decommission(ctx, targetNodeList, pinnedNode, "--wait=all", "--checks=skip")
+				return err
+			}); err != nil {
 				return err
 			}
 
@@ -355,7 +365,8 @@ func runDecommission(
 				fmt.Sprintf("--attrs=node%d", node),
 			}
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, extraArgs...)
-			if err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(node)); err != nil {
+			if err := c.StartE(ctx, t.L(), withDecommissionVMod(startOpts),
+				install.MakeClusterSettings(), c.Node(node)); err != nil {
 				return err
 			}
 		}
@@ -379,7 +390,8 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
+
+	c.Start(ctx, t.L(), withDecommissionVMod(option.DefaultStartOpts()), settings)
 
 	h := newDecommTestHelper(t, c)
 
@@ -732,7 +744,8 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 				targetNodeA, targetNodeB, runNode)
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Nodes(targetNodeA, targetNodeB))
 			// The node is in a decomissioned state, so don't attempt to run scheduled backups.
-			c.Start(ctx, t.L(), option.DefaultStartSingleNodeOpts(), settings, c.Nodes(targetNodeA, targetNodeB))
+			c.Start(ctx, t.L(), withDecommissionVMod(option.DefaultStartSingleNodeOpts()),
+				settings, c.Nodes(targetNodeA, targetNodeB))
 
 			if _, err := h.recommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode); err == nil {
 				t.Fatalf("expected recommission to fail")
@@ -875,9 +888,10 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			startOpts := option.DefaultStartSingleNodeOpts()
 			startOpts.RoachprodOpts.ExtraArgs = append(
 				startOpts.RoachprodOpts.ExtraArgs,
-				[]string{"--join", joinAddr}...,
+				"--join",
+				joinAddr,
 			)
-			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(targetNode))
+			c.Start(ctx, t.L(), withDecommissionVMod(startOpts), install.MakeClusterSettings(), c.Node(targetNode))
 		}
 
 		if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
@@ -1462,4 +1476,17 @@ func execCLI(
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
 	t.L().Printf("%s\n", result.Stdout)
 	return result.Stdout, err
+}
+
+// Increase the logging verbosity for decommission tests to make life easier
+// debugging failures.
+const decommissionVModuleStartOpts = `--vmodule=store_rebalancer=5,allocator=5,
+  allocator_scorer=5,replicate_queue=5,replicate=5,split_queue=5`
+
+func withDecommissionVMod(startOpts option.StartOpts) option.StartOpts {
+	startOpts.RoachprodOpts.ExtraArgs = append(
+		startOpts.RoachprodOpts.ExtraArgs,
+		decommissionVModuleStartOpts,
+	)
+	return startOpts
 }
