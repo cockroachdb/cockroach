@@ -1178,8 +1178,7 @@ func waitForJobStatus(
 }
 
 // TestingSetIncludeParquetMetadata adds the option to turn on adding metadata
-// (primary key column names) to the parquet file which is used to convert parquet
-// data to JSON format
+// to the parquet file which is used in testing.
 func TestingSetIncludeParquetMetadata() func() {
 	includeParquetTestMetadata = true
 	return func() {

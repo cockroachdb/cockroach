@@ -25,7 +25,7 @@ type parquetWriter struct {
 // newParquetWriterFromRow constructs a new parquet writer which outputs to
 // the given sink. This function interprets the schema from the supplied row.
 func newParquetWriterFromRow(
-	row cdcevent.Row, sink io.Writer, maxRowGroupSize int64,
+	row cdcevent.Row, sink io.Writer, opts ...parquet.Option,
 ) (*parquetWriter, error) {
 	columnNames := make([]string, len(row.ResultColumns())+1)
 	columnTypes := make([]*types.T, len(row.ResultColumns())+1)
@@ -48,7 +48,12 @@ func newParquetWriterFromRow(
 		return nil, err
 	}
 
-	writer, err := parquet.NewWriter(schemaDef, sink, parquet.WithMaxRowGroupLength(maxRowGroupSize))
+	writerConstructor := parquet.NewWriter
+	if includeParquetTestMetadata {
+		writerConstructor = parquet.NewWriterWithReaderMeta
+	}
+
+	writer, err := writerConstructor(schemaDef, sink, opts...)
 	if err != nil {
 		return nil, err
 	}
