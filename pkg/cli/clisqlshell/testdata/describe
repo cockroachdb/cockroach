@@ -303,6 +303,7 @@ pg_catalog,pg_db_role_setting,table,admin,NULL
 pg_catalog,pg_default_acl,table,admin,NULL
 pg_catalog,pg_depend,table,admin,NULL
 pg_catalog,pg_description,table,admin,NULL
+pg_catalog,pg_description_objoid_idx,index,admin,NULL
 pg_catalog,pg_enum,table,admin,NULL
 pg_catalog,pg_event_trigger,table,admin,NULL
 pg_catalog,pg_extension,table,admin,NULL
@@ -563,6 +564,7 @@ pg_catalog,pg_depend,table,admin,NULL,permanent,prefix,"dependency relationships
 https://www.postgresql.org/docs/9.5/catalog-pg-depend.html"
 pg_catalog,pg_description,table,admin,NULL,permanent,prefix,"object comments
 https://www.postgresql.org/docs/9.5/catalog-pg-description.html"
+pg_catalog,pg_description_objoid_idx,index,admin,NULL,permanent,prefix,
 pg_catalog,pg_enum,table,admin,NULL,permanent,prefix,"enum types and labels (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-enum.html"
 pg_catalog,pg_event_trigger,table,admin,NULL,permanent,prefix,"event triggers (empty - feature does not exist)
