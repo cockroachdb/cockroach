@@ -145,9 +145,10 @@ type splitParams struct {
 func registerLoadSplits(r registry.Registry) {
 	// Use the 4th node as the workload runner.
 	const numNodes = 4
+	const numRoachNodes = 3
 
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/uniform/nodes=%d", numNodes),
+		Name:    fmt.Sprintf("splits/load/uniform/nodes=%d", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -192,7 +193,7 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/uniform/nodes=%d/obj=cpu", numNodes),
+		Name:    fmt.Sprintf("splits/load/uniform/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -211,7 +212,7 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/sequential/nodes=%d", numNodes),
+		Name:    fmt.Sprintf("splits/load/sequential/nodes=%d", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -232,7 +233,7 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/sequential/nodes=%d/obj=cpu", numNodes),
+		Name:    fmt.Sprintf("splits/load/sequential/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -256,7 +257,7 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/spanning/nodes=%d", numNodes),
+		Name:    fmt.Sprintf("splits/load/spanning/nodes=%d", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -274,7 +275,7 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/spanning/nodes=%d/obj=cpu", numNodes),
+		Name:    fmt.Sprintf("splits/load/spanning/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -298,7 +299,7 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/ycsb/a/nodes=%d/obj=cpu", numNodes),
+		Name:    fmt.Sprintf("splits/load/ycsb/a/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -320,7 +321,7 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/ycsb/b/nodes=%d/obj=cpu", numNodes),
+		Name:    fmt.Sprintf("splits/load/ycsb/b/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -341,7 +342,7 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/ycsb/d/nodes=%d/obj=cpu", numNodes),
+		Name:    fmt.Sprintf("splits/load/ycsb/d/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -363,7 +364,7 @@ func registerLoadSplits(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("splits/load/ycsb/e/nodes=%d/obj=cpu", numNodes),
+		Name:    fmt.Sprintf("splits/load/ycsb/e/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
