@@ -7668,7 +7668,6 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes too long under race")
-	defer TestingSetIncludeParquetMetadata()()
 
 	setupSQL := []string{
 		`CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`,
