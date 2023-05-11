@@ -13,7 +13,6 @@ package nodedialer
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -257,94 +256,6 @@ func TestConnHealthInternal(t *testing.T) {
 	require.Error(t, nd.ConnHealth(7, rpc.DefaultClass))
 }
 
-func TestResolverErrorsTrip(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper, rpcCtx, _, _, _ := setUpNodedialerTest(t, staticNodeID)
-	defer stopper.Stop(context.Background())
-	boom := fmt.Errorf("boom")
-	nd := New(rpcCtx, func(id roachpb.NodeID) (net.Addr, error) {
-		return nil, boom
-	})
-	_, err := nd.Dial(context.Background(), staticNodeID, rpc.DefaultClass)
-	assert.Equal(t, errors.Cause(err), boom)
-	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
-	assert.False(t, breaker.Ready())
-}
-
-func TestDisconnectsTrip(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper, _, ln, hb, nd := setUpNodedialerTest(t, staticNodeID)
-	defer stopper.Stop(context.Background())
-	ctx := context.Background()
-	breaker := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
-
-	// Now close the underlying connection from the server side and set the
-	// heartbeat service to return errors. This will eventually lead to the client
-	// connection being removed and Dial attempts to return an error.
-	// While this is going on there will be many clients attempting to
-	// connect. These connecting clients will send interesting errors they observe
-	// on the errChan. Once an error from Dial is observed the test re-enables the
-	// heartbeat service. The test will confirm that the only errors they record
-	// in to the breaker are interesting ones as determined by shouldTrip.
-	hb.setErr(fmt.Errorf("boom"))
-	underlyingNetConn := ln.popConn()
-	require.NoError(t, underlyingNetConn.Close())
-	const N = 1000
-	breakerEventChan := make(chan circuit.ListenerEvent, N)
-	breaker.AddListener(breakerEventChan)
-	errChan := make(chan error, N)
-	shouldTrip := func(err error) bool {
-		return err != nil &&
-			!errors.IsAny(err, context.DeadlineExceeded, context.Canceled, circuit.ErrBreakerOpen)
-	}
-	var wg sync.WaitGroup
-	for i := 0; i < N; i++ {
-		wg.Add(2)
-		iCtx, cancel := context.WithTimeout(ctx, randDuration(time.Millisecond))
-		go func() {
-			time.Sleep(randDuration(time.Millisecond))
-			cancel()
-			wg.Done()
-		}()
-		go func() {
-			time.Sleep(randDuration(time.Millisecond))
-			_, err := nd.Dial(iCtx, 1, rpc.DefaultClass)
-			if shouldTrip(err) {
-				errChan <- err
-			}
-			wg.Done()
-		}()
-	}
-	go func() { wg.Wait(); close(errChan) }()
-	var errorsSeen int
-	for range errChan {
-		if errorsSeen == 0 {
-			hb.setErr(nil)
-		}
-		errorsSeen++
-	}
-	breaker.RemoveListener(breakerEventChan)
-	close(breakerEventChan)
-	var failsSeen int
-	for ev := range breakerEventChan {
-		if ev.Event == circuit.BreakerFail {
-			failsSeen++
-		}
-	}
-	// Ensure that all of the interesting errors were seen by the breaker.
-	require.Equal(t, errorsSeen, failsSeen)
-
-	// Ensure that the connection eventually becomes healthy if we fix the
-	// heartbeat and keep dialing.
-	hb.setErr(nil)
-	testutils.SucceedsSoon(t, func() error {
-		if _, err := nd.Dial(ctx, staticNodeID, rpc.DefaultClass); err != nil {
-			return err
-		}
-		return nd.ConnHealth(staticNodeID, rpc.DefaultClass)
-	})
-}
-
 func setUpNodedialerTest(
 	t *testing.T, nodeID roachpb.NodeID,
 ) (
@@ -368,11 +279,6 @@ func setUpNodedialerTest(
 		return nd.ConnHealth(nodeID, rpc.DefaultClass)
 	})
 	return stopper, rpcCtx, ln, hb, nd
-}
-
-// randDuration returns a uniform random duration between 0 and max.
-func randDuration(max time.Duration) time.Duration {
-	return time.Duration(rand.Intn(int(max)))
 }
 
 func newTestServer(
