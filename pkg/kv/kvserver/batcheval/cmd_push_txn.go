@@ -118,6 +118,10 @@ func PushTxn(
 	h := cArgs.Header
 	reply := resp.(*kvpb.PushTxnResponse)
 
+	if args.PusherTxn.Name == "txn1" || args.PusherTxn.Name == "txn2" {
+		log.Shoutf(ctx, 1, "%s attempted %s -> %s on %s", args.PusherTxn.Name, args.PushType, args.PushTo, args.Key)
+	}
+
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
 	}
@@ -265,12 +269,12 @@ func PushTxn(
 		pusherWins = true
 	}
 
-	if log.V(1) && reason != "" {
+	if log.V(1) /*&& reason != ""*/ {
 		s := "pushed"
 		if !pusherWins {
 			s = "failed to push"
 		}
-		log.Infof(ctx, "%s %s (push type=%s) %s: %s (pushee last active: %s)",
+		log.Shoutf(ctx, 1, "%s %s (push type=%s) %s: %s (pushee last active: %s)",
 			args.PusherTxn.Short(), redact.Safe(s),
 			redact.Safe(pushType),
 			args.PusheeTxn.Short(),

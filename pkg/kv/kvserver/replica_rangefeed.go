@@ -120,6 +120,7 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		},
 	}
 
+	log.Shoutf(ctx, 1, "push for range feed")
 	pushedTxnMap, pErr := tp.ir.MaybePushTransactions(
 		ctx, pushTxnMap, h, kvpb.PUSH_TIMESTAMP, false, /* skipIfInFlight */
 	)

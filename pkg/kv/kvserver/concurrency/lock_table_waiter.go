@@ -159,7 +159,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 		case <-newStateC:
 			timerC = nil
 			state := guard.CurState()
-			log.Eventf(ctx, "lock wait-queue event: %s", state)
+			log.VEventf(ctx, 2, "lock wait-queue event: %s", state)
 			tracer.notify(ctx, state)
 			switch state.kind {
 			case waitFor, waitForDistinguished:
@@ -408,6 +408,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// still active. If the conflict is a reservation holder, raise an
 				// error immediately, we know the reservation holder is active.
 				if timerWaitingState.held {
+					//log.Shoutf(ctx, 1, "pushNoWait")
 					return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState)
 				}
 				return newWriteIntentErr(req, timerWaitingState, reasonLockTimeout)
@@ -422,10 +423,12 @@ func (w *lockTableWaiterImpl) WaitOn(
 					err = pushNoWait(ctx)
 				} else {
 					// Deadline not yet exceeded.
+					//log.Shoutf(ctx, 1, "pushWait deadline not yet exceeded")
 					err = doWithTimeoutAndFallback(ctx, untilDeadline, pushWait, pushNoWait)
 				}
 			} else {
 				// No deadline.
+				//log.Shoutf(ctx, 1, "pushWait no deadline")
 				err = pushWait(ctx)
 			}
 			if err != nil {
@@ -518,6 +521,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		log.Fatalf(ctx, "unexpected WaitPolicy: %v", req.WaitPolicy)
 	}
 
+	//log.Shoutf(ctx, 1, "pushing lockholder %s %s", pushType, ws.txn)
 	pusheeTxn, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
 	if err != nil {
 		// If pushing with an Error WaitPolicy and the push fails, then the lock
@@ -701,6 +705,7 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 	pushType := kvpb.PUSH_ABORT
 	log.VEventf(ctx, 3, "pushing txn %s to detect request deadlock", ws.txn.ID.Short())
 
+	//log.Shoutf(ctx, 1, "deadlock push")
 	_, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
 	if err != nil {
 		return err

@@ -258,6 +258,12 @@ func (ba *BatchRequest) IsSinglePushTxnRequest() bool {
 	return ba.isSingleRequestWithMethod(PushTxn)
 }
 
+// IsSingleRecoverTxnRequest returns true iff the batch contains a single request,
+// and that request is a RecoverTxnRequest.
+func (ba *BatchRequest) IsSingleRecoverTxnRequest() bool {
+	return ba.isSingleRequestWithMethod(RecoverTxn)
+}
+
 // IsSingleHeartbeatTxnRequest returns true iff the batch contains a single
 // request, and that request is a HeartbeatTxn.
 func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {

@@ -86,6 +86,7 @@ func NewManager(ac log.AmbientContext, clock *hlc.Clock, db *kv.DB, stopper *sto
 func (m *manager) ResolveIndeterminateCommit(
 	ctx context.Context, ice *kvpb.IndeterminateCommitError,
 ) (*roachpb.Transaction, error) {
+	log.Shoutf(ctx, 1, "recovering indeterminate commit: %s", ice)
 	txn := &ice.StagingTxn
 	if txn.Status != roachpb.STAGING {
 		return nil, errors.Errorf("IndeterminateCommitError with non-STAGING transaction: %v", txn)
