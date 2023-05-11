@@ -363,7 +363,7 @@ func fallBackIfConcurrentSchemaChange(b BuildCtx, t alterPrimaryKeySpec, tableID
 // fallBackIfPartitionedIndexExists panics with an unimplemented error
 // if there exists partitioned indexes on the table.
 func fallBackIfPartitionedIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
-	tableElts := b.QueryByID(tableID).Filter(notAbsentTargetFilter)
+	tableElts := b.QueryByID(tableID).Filter(notFilter(absentTargetFilter))
 	scpb.ForEachIndexPartitioning(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, _ *scpb.IndexPartitioning) {
 		panic(scerrors.NotImplementedErrorf(t.n,
 			"ALTER PRIMARY KEY on a table with index partitioning is not yet supported"))
@@ -373,7 +373,7 @@ func fallBackIfPartitionedIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID
 // fallBackIfShardedIndexExists panics with an unimplemented
 // error if there exists sharded indexes on the table.
 func fallBackIfShardedIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
-	tableElts := b.QueryByID(tableID).Filter(notAbsentTargetFilter)
+	tableElts := b.QueryByID(tableID).Filter(notFilter(absentTargetFilter))
 	var hasSecondary bool
 	scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
 		hasSecondary = true
