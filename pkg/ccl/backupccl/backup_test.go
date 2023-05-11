@@ -8460,7 +8460,7 @@ func TestRestoringAcrossVersions(t *testing.T) {
 
 		// Verify we reject it.
 		sqlDB.ExpectErr(t,
-			fmt.Sprintf("backup from version %s is older than the minimum restoreable version", minSupportedVersion.String()),
+			fmt.Sprintf("backup from version %s is older than the minimum restorable version", minSupportedVersion.String()),
 			`RESTORE DATABASE r1 FROM 'nodelocal://1/cross_version'`)
 	})
 
@@ -8479,7 +8479,7 @@ func TestRestoringAcrossVersions(t *testing.T) {
 		setManifestClusterVersion(roachpb.Version{})
 
 		// Verify we reject it.
-		sqlDB.ExpectErr(t, "the backup is from a version older than our minimum restoreable version",
+		sqlDB.ExpectErr(t, "the backup is from a version older than our minimum restorable version",
 			`RESTORE DATABASE r1 FROM 'nodelocal://1/cross_version'`)
 	})
 }
