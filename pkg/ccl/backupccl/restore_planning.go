@@ -1448,6 +1448,15 @@ func checkClusterRegions(
 	return nil
 }
 
+
+// serverlessMRPreviewVersion is the alpha CRDB version that was deployed to
+// the Serverless MR clusters.
+var serverlessMRPreviewVersion = roachpb.Version {
+	Major: 1000022,
+	Minor: 2,
+	Internal: 16,
+}
+
 // checkBackupManifestVersionCompatability performs various checks to ensure
 // that the manifests we are about to restore are from backups taken on a
 // version compatible with our current version.
@@ -1462,6 +1471,12 @@ func checkBackupManifestVersionCompatability(
 	minimumRestoreableVersion := p.ExecCfg().Settings.Version.BinaryMinSupportedVersion()
 	for i := range mainBackupManifests {
 		v := mainBackupManifests[i].ClusterVersion
+
+		// Allow restores from the serverless 23.1 preview cluster onto 23.1
+		if unsafeRestoreIncompatibleVersion && serverlessMRPreviewVersion.Equal(v) {
+			continue
+		}
+
 		// This is the "cluster" version that does not change between patch releases
 		// but rather just tracks migrations run. If the backup is more migrated
 		// than this cluster, then this cluster isn't ready to restore this backup.
