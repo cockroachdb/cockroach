@@ -419,13 +419,16 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			}
 		}
 
-		collection, computedSubdir := backupdest.CollectionAndSubdir(dest[0], subdir)
+		collections, computedSubdir, err := backupdest.CollectionsAndSubdir(dest, subdir)
+		if err != nil {
+			return err
+		}
 		fullyResolvedIncrementalsDirectory, err := backupdest.ResolveIncrementalsBackupLocation(
 			ctx,
 			p.User(),
 			p.ExecCfg(),
 			explicitIncPaths,
-			[]string{collection},
+			collections,
 			computedSubdir,
 		)
 		if err != nil {

@@ -1,0 +1,40 @@
+# These tests validate the SHOW BACKUP command for multi-region databases.
+
+new-server name=s1 allow-implicit-access localities=us-east-1,us-west-1,eu-central-1 disable-tenant
+----
+
+exec-sql
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1";
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+exec-sql
+CREATE DATABASE foo;
+CREATE TABLE foo.t (x INT);
+INSERT INTO foo.t VALUES (1), (2), (3);
+----
+
+# Now create a locality aware backup and ensure that the SHOW command correctly shows the
+# backup.
+exec-sql
+BACKUP DATABASE d INTO ('nodelocal://1/database_backup_locality_aware_default?COCKROACH_LOCALITY=default', 'nodelocal://1/database_backup_locality_aware_west?COCKROACH_LOCALITY=region=us-west-1', 'nodelocal://1/database_backup_locality_aware_central?COCKROACH_LOCALITY=region=eu-central-1');
+----
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN ('nodelocal://1/database_backup_locality_aware_default?COCKROACH_LOCALITY=default', 'nodelocal://1/database_backup_locality_aware_west?COCKROACH_LOCALITY=region=us-west-1', 'nodelocal://1/database_backup_locality_aware_central?COCKROACH_LOCALITY=region=eu-central-1');
+----
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP LATEST IN ('nodelocal://1/database_backup_locality_aware_default?COCKROACH_LOCALITY=default', 'nodelocal://1/database_backup_locality_aware_west?COCKROACH_LOCALITY=region=us-west-1', 'nodelocal://1/database_backup_locality_aware_central?COCKROACH_LOCALITY=region=eu-central-1')];
+----
+d database full
+crdb_internal_region type full
+public schema full
+_crdb_internal_region type full
+t table full
+d database incremental
+crdb_internal_region type incremental
+public schema incremental
+_crdb_internal_region type incremental
+t table incremental
