@@ -251,7 +251,7 @@
 /pkg/kv/kvserver/logstore/              @cockroachdb/repl-prs
 /pkg/kv/kvserver/loqrecovery/           @cockroachdb/repl-prs
 /pkg/kv/kvserver/multiqueue/            @cockroachdb/kv-prs
-/pkg/kv/kvserver/protectedts/           @cockroachdb/repl-prs
+/pkg/kv/kvserver/protectedts/           @cockroachdb/kv-prs
 /pkg/kv/kvserver/rangefeed/             @cockroachdb/repl-prs
 /pkg/kv/kvserver/rangelog/              @cockroachdb/kv-prs
 /pkg/kv/kvserver/rditer/                @cockroachdb/repl-prs
