@@ -232,6 +232,14 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 	}
 
 	if pErr == nil && br.Txn.WriteTooOld {
+		// If the transaction is no longer pending, terminate the WriteTooOld flag
+		// without hitting the logic below. It's not clear that this can happen in
+		// practice, but it's better to be safe.
+		if br.Txn.Status != roachpb.PENDING {
+			br.Txn = br.Txn.Clone()
+			br.Txn.WriteTooOld = false
+			return br, nil
+		}
 		// If we got a response with the WriteTooOld flag set, then we pretend that
 		// we got a WriteTooOldError, which will cause us to attempt to refresh and
 		// propagate the error if we failed. When it can, the server prefers to
