@@ -3026,6 +3026,8 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
+	serverutils.SetClusterSetting(t, tc, "server.shutdown.jobs_wait", 0)
+
 	scratchKey := tc.ScratchRange(t)
 	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
 	require.Len(t, scratchRange.InternalReplicas, 1)

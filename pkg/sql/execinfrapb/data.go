@@ -203,6 +203,8 @@ type ProducerMetadata struct {
 	BulkProcessorProgress *RemoteProducerMetadata_BulkProcessorProgress
 	// Metrics contains information about goodput of the node.
 	Metrics *RemoteProducerMetadata_Metrics
+	// Changefeed contains information about changefeed.
+	Changefeed *ChangefeedMeta
 }
 
 var (
@@ -271,6 +273,8 @@ func RemoteProducerMetaToLocalMeta(
 		meta.Err = v.Error.ErrorDetail(ctx)
 	case *RemoteProducerMetadata_Metrics_:
 		meta.Metrics = v.Metrics
+	case *RemoteProducerMetadata_Changefeed:
+		meta.Changefeed = v.Changefeed
 	default:
 		return *meta, false
 	}
@@ -318,6 +322,10 @@ func LocalMetaToRemoteProducerMeta(
 	} else if meta.Err != nil {
 		rpm.Value = &RemoteProducerMetadata_Error{
 			Error: NewError(ctx, meta.Err),
+		}
+	} else if meta.Changefeed != nil {
+		rpm.Value = &RemoteProducerMetadata_Changefeed{
+			Changefeed: meta.Changefeed,
 		}
 	} else if buildutil.CrdbTestBuild {
 		panic("unhandled field in local meta or all fields are nil")

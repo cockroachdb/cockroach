@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -212,10 +213,6 @@ func changefeedPlanHook(
 		}
 
 		if details.SinkURI == `` {
-			p.ExtendedEvalContext().ChangefeedState = &coreChangefeedProgress{
-				progress: progress,
-			}
-
 			// If this is a sinkless changefeed, then we should not hold on to the
 			// descriptor leases accessed to plan the changefeed. If changes happen
 			// to descriptors, they will be addressed during the execution.
@@ -228,25 +225,7 @@ func changefeedPlanHook(
 			telemetry.Count(`changefeed.create.core`)
 			logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
 
-			var err error
-			for r := getRetry(ctx); r.Next(); {
-				if err = distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh); err == nil {
-					return nil
-				}
-
-				if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
-					if knobs != nil && knobs.HandleDistChangefeedError != nil {
-						err = knobs.HandleDistChangefeedError(err)
-					}
-				}
-
-				if err = changefeedbase.AsTerminalError(ctx, p.ExecCfg().LeaseManager, err); err != nil {
-					break
-				}
-
-				// All other errors retry.
-				progress = p.ExtendedEvalContext().ChangefeedState.(*coreChangefeedProgress).progress
-			}
+			err := coreChangefeed(ctx, p, details, progress, resultsCh)
 			// TODO(yevgeniy): This seems wrong -- core changefeeds always terminate
 			// with an error.  Perhaps rename this telemetry to indicate number of
 			// completed feeds.
@@ -349,6 +328,41 @@ func changefeedPlanHook(
 		return err
 	}
 	return rowFnLogErrors, header, nil, avoidBuffering, nil
+}
+
+func coreChangefeed(
+	ctx context.Context,
+	p sql.PlanHookState,
+	details jobspb.ChangefeedDetails,
+	progress jobspb.Progress,
+	resultsCh chan<- tree.Datums,
+) error {
+	localState := &cachedState{progress: progress}
+	p.ExtendedEvalContext().ChangefeedState = localState
+	knobs, _ := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+
+	for r := getRetry(ctx); r.Next(); {
+		if knobs != nil && knobs.BeforeDistChangefeed != nil {
+			knobs.BeforeDistChangefeed()
+		}
+
+		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, localState, resultsCh)
+		if err == nil {
+			return nil
+		}
+
+		if knobs != nil && knobs.HandleDistChangefeedError != nil {
+			err = knobs.HandleDistChangefeedError(err)
+		}
+
+		if err = changefeedbase.AsTerminalError(ctx, p.ExecCfg().LeaseManager, err); err != nil {
+			return err
+		}
+
+		// All other errors retry; but we'll use an up-to-date progress
+		// information which is saved in the localState.
+	}
+	return ctx.Err() // retry loop exits when context cancels.
 }
 
 func createChangefeedJobRecord(
@@ -1170,7 +1184,7 @@ func (b *changefeedResumer) resumeWithRetries(
 	jobExec sql.JobExecContext,
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
-	progress jobspb.Progress,
+	initialProgress jobspb.Progress,
 	execCfg *sql.ExecutorConfig,
 ) error {
 	// If execution needs to be and is relocated, the resulting error should be
@@ -1192,40 +1206,53 @@ func (b *changefeedResumer) resumeWithRetries(
 	// or for many other reasons.
 	var lastRunStatusUpdate time.Time
 
-	for r := getRetry(ctx); r.Next(); {
-		err := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
+	// Setup local state information.
+	// This information is used by dist flow process to communicate back
+	// the up-to-date checkpoint and node health information in case
+	// changefeed encounters transient error.
+	localState := &cachedState{progress: initialProgress}
+	jobExec.ExtendedEvalContext().ChangefeedState = localState
+	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
-		if err == nil {
+	for r := getRetry(ctx); r.Next(); {
+		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
+
+		if flowErr == nil {
 			// startedCh is normally used to signal back to the creator of the job that
 			// the job has started; however, in this case nothing will ever receive
 			// on the channel, causing the changefeed flow to block. Replace it with
 			// a dummy channel.
 			startedCh := make(chan tree.Datums, 1)
-			err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh)
-			if err == nil {
+			if knobs != nil && knobs.BeforeDistChangefeed != nil {
+				knobs.BeforeDistChangefeed()
+			}
+
+			flowErr = distChangefeedFlow(ctx, jobExec, jobID, details, localState, startedCh)
+			if flowErr == nil {
 				return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
 			}
 
-			if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
-				if knobs != nil && knobs.HandleDistChangefeedError != nil {
-					err = knobs.HandleDistChangefeedError(err)
-				}
+			if knobs != nil && knobs.HandleDistChangefeedError != nil {
+				flowErr = knobs.HandleDistChangefeedError(flowErr)
 			}
 		}
 
 		// Terminate changefeed if needed.
-		if err := changefeedbase.AsTerminalError(ctx, jobExec.ExecCfg().LeaseManager, err); err != nil {
+		if err := changefeedbase.AsTerminalError(ctx, jobExec.ExecCfg().LeaseManager, flowErr); err != nil {
 			log.Infof(ctx, "CHANGEFEED %d shutting down (cause: %v)", jobID, err)
 			// Best effort -- update job status to make it clear why changefeed shut down.
 			// This won't always work if this node is being shutdown/drained.
-			b.setJobRunningStatus(ctx, time.Time{}, "shutdown due to %s", err)
+			if ctx.Err() == nil {
+				b.setJobRunningStatus(ctx, time.Time{}, "shutdown due to %s", err)
+			}
 			return err
 		}
 
 		// All other errors retry.
-		log.Warningf(ctx, `WARNING: CHANGEFEED job %d encountered retryable error: %v (attempt %d)`,
-			jobID, err, 1+r.CurrentAttempt())
-		lastRunStatusUpdate = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "retryable error: %s", err)
+		log.Warningf(ctx, `Changefeed job %d encountered transient error: %v (attempt %d)`,
+			jobID, flowErr, 1+r.CurrentAttempt())
+		lastRunStatusUpdate = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "transient error: %s", flowErr)
+
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			sli, err := metrics.getSLIMetrics(details.Opts[changefeedbase.OptMetricsScope])
 			if err != nil {
@@ -1233,25 +1260,109 @@ func (b *changefeedResumer) resumeWithRetries(
 			}
 			sli.ErrorRetries.Inc(1)
 		}
-		// Re-load the job in order to update our progress object, which may have
-		// been updated by the changeFrontier processor since the flow started.
-		reloadedJob, reloadErr := execCfg.JobRegistry.LoadClaimedJob(ctx, jobID)
-		if reloadErr != nil {
-			switch {
-			case ctx.Err() != nil:
-				return ctx.Err()
-			case jobs.HasJobNotFoundError(reloadErr):
-				return reloadErr
+
+		if err := reconcileJobStateWithLocalState(ctx, jobID, localState, execCfg); err != nil {
+			// Any errors during reconciliation are retry-able.
+			// When retry-able error propagates to jobs registry, it will clear out
+			// claim information, and will restart this job somewhere else (though,
+			// it's possible that the job gets restarted on this node).
+			return jobs.MarkAsRetryJobError(err)
+		}
+
+		if errors.Is(flowErr, changefeedbase.ErrNodeDraining) {
+			select {
+			case <-execCfg.JobRegistry.OnDrain():
+				// If this node is draining, there is no point in retrying.
+				return jobs.MarkAsRetryJobError(changefeedbase.ErrNodeDraining)
+			default:
+				// We know that some node (other than this one) is draining.
+				// When we retry, the planner ought to take into account
+				// this information.  However, there is a bit of a race here
+				// between draining node propagating information to this node,
+				// and this node restarting changefeed before this happens.
+				// We could come up with a mechanism to provide additional
+				// information to dist sql planner.  Or... we could just wait a bit.
+				log.Warningf(ctx, "Changefeed %d delaying restart due to %d node(s) (%v) draining",
+					jobID, len(localState.drainingNodes), localState.drainingNodes)
+				r.Next() // default config: ~5 sec delay, plus 10 sec on the retry loop.
 			}
-			log.Warningf(ctx, `CHANGEFEED job %d could not reload job progress; `+
-				`continuing from last known high-water of %s: %v`,
-				jobID, progress.GetHighWater(), reloadErr)
-		} else {
-			progress = reloadedJob.Progress()
-			details = reloadedJob.Details().(jobspb.ChangefeedDetails)
 		}
 	}
+
 	return errors.Wrap(ctx.Err(), `ran out of retries`)
+}
+
+// reconcileJobStateWithLocalState ensures that the job progress information
+// is consistent with the state present in the local state.
+func reconcileJobStateWithLocalState(
+	ctx context.Context, jobID jobspb.JobID, localState *cachedState, execCfg *sql.ExecutorConfig,
+) error {
+	// Re-load the job in order to update our progress object, which may have
+	// been updated by the changeFrontier processor since the flow started.
+	reloadedJob, reloadErr := execCfg.JobRegistry.LoadClaimedJob(ctx, jobID)
+	if reloadErr != nil {
+		log.Warningf(ctx, `CHANGEFEED job %d could not reload job progress (%s); `+
+			`job should be retried later`, jobID, reloadErr)
+		return reloadErr
+	}
+
+	localState.progress = reloadedJob.Progress()
+
+	// localState contains an up-to-date checkpoint information transmitted by
+	// aggregator when flow was terminated. To be safe, we don't blindly trust
+	// local state; instead, this checkpoint is applied to the reloaded job
+	// progress, and the resulting progress record persisted back to the jobs
+	// table.
+	var highWater hlc.Timestamp
+	if hw := localState.progress.GetHighWater(); hw != nil {
+		highWater = *hw
+	}
+
+	// Build frontier based on tracked spans.
+	sf, err := span.MakeFrontierAt(highWater, localState.trackedSpans...)
+	if err != nil {
+		return err
+	}
+	// Advance frontier based on the information received from the aggregators.
+	for _, s := range localState.aggregatorFrontier {
+		_, err := sf.Forward(s.Span, s.Timestamp)
+		if err != nil {
+			return err
+		}
+	}
+
+	maxBytes := changefeedbase.FrontierCheckpointMaxBytes.Get(&execCfg.Settings.SV)
+	checkpointSpans, checkpointTS := getCheckpointSpans(sf.Frontier(), func(forEachSpan span.Operation) {
+		for _, fs := range localState.aggregatorFrontier {
+			forEachSpan(fs.Span, fs.Timestamp)
+		}
+	}, maxBytes)
+
+	// Update checkpoint.
+	updateHW := highWater.Less(sf.Frontier())
+	updateSpanCheckpoint := len(checkpointSpans) > 0
+
+	if updateHW || updateSpanCheckpoint {
+		if updateHW {
+			localState.SetHighwater(sf.Frontier())
+		}
+		localState.SetCheckpoint(checkpointSpans, checkpointTS)
+		if log.V(1) {
+			log.Infof(ctx, "Applying checkpoint to job record:  hw=%v, cf=%v",
+				localState.progress.GetHighWater(), localState.progress.GetChangefeed())
+		}
+		return reloadedJob.NoTxn().Update(ctx,
+			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				if err := md.CheckRunningOrReverting(); err != nil {
+					return err
+				}
+				ju.UpdateProgress(&localState.progress)
+				return nil
+			},
+		)
+	}
+
+	return nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
