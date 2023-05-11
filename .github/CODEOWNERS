@@ -417,6 +417,7 @@
 /pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/spatial
 /pkg/cmd/generate-bazel-extra/ @cockroachdb/dev-inf
 /pkg/cmd/generate-staticcheck/ @cockroachdb/dev-inf
+/pkg/cmd/generate-cgo/       @cockroachdb/dev-inf
 /pkg/cmd/geoviz/             @cockroachdb/spatial
 /pkg/cmd/github-post/        @cockroachdb/test-eng
 /pkg/cmd/github-pull-request-make/ @cockroachdb/dev-inf
