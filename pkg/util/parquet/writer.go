@@ -11,7 +11,10 @@
 package parquet
 
 import (
+	"fmt"
 	"io"
+	"strconv"
+	"strings"
 
 	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/apache/arrow/go/v11/parquet/compress"
@@ -89,6 +92,49 @@ func WithMetadata(m map[string]string) Option {
 	}
 }
 
+const typeOidMetaKey = `crdbTypeOIDs`
+const typeFamilyMetaKey = `crdbTypeFamilies`
+
+// MakeSchemaMetadata constructs the default crdb metadata struct which is
+// written to all parquet files. This metadata is useful for roundtrip tests
+// where we construct crdb datums from the raw data in parquet files.
+func MakeSchemaMetadata(sch *SchemaDefinition) (metadata.KeyValueMetadata, error) {
+	meta := metadata.KeyValueMetadata{}
+	typOids := make([]uint32, 0, len(sch.cols))
+	typFamilies := make([]int32, 0, len(sch.cols))
+	for _, col := range sch.cols {
+		typOids = append(typOids, uint32(col.typ.Oid()))
+		typFamilies = append(typFamilies, int32(col.typ.Family()))
+	}
+	if err := meta.Append(typeOidMetaKey, serializeIntArray(typOids)); err != nil {
+		return nil, err
+	}
+	if err := meta.Append(typeFamilyMetaKey, serializeIntArray(typFamilies)); err != nil {
+		return nil, err
+	}
+	return meta, nil
+}
+
+// serializeIntArray serializes an int array to a string "23 2 32 43 32".
+func serializeIntArray[I int32 | uint32](ints []I) string {
+	return strings.Trim(fmt.Sprint(ints), "[]")
+}
+
+// deserializeIntArray deserializes an integer sting in the format "23 2 32 43
+// 32" to an array of ints.
+func deserializeIntArray(s string) ([]uint32, error) {
+	vals := strings.Split(s, " ")
+	result := make([]uint32, 0, len(vals))
+	for _, val := range vals {
+		intVal, err := strconv.Atoi(val)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, uint32(intVal))
+	}
+	return result, nil
+}
+
 var allowedVersions = map[string]parquet.Version{
 	"v1.0": parquet.V1_0,
 	"v2.4": parquet.V1_0,
@@ -145,11 +191,15 @@ type Writer struct {
 // TODO(#99028): maxRowGroupSize should be a configuration Option, along with
 // compression schemes, allocator, batch size, page size etc
 func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, error) {
+	schMeta, err := MakeSchemaMetadata(sch)
+	if err != nil {
+		return nil, err
+	}
 	cfg := config{
 		maxRowGroupLength: parquet.DefaultMaxRowGroupLen,
 		version:           parquet.V2_6,
 		compression:       compress.Codecs.Uncompressed,
-		metadata:          metadata.KeyValueMetadata{},
+		metadata:          schMeta,
 	}
 	for _, opt := range opts {
 		err := opt.apply(&cfg)

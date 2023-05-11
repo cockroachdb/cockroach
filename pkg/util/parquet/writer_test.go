@@ -135,6 +135,8 @@ func TestRandomDatums(t *testing.T) {
 	ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, writer, datums)
 }
 
+// TestBasicDatums tests roundtripability for all supported scalar data types
+// and one simple array type.
 func TestBasicDatums(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
