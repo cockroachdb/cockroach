@@ -2060,6 +2060,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		expClientRestart               bool   // client-side txn restart
 		expServerRefresh               bool   // server-side refresh
 		expOnePhaseCommit              bool   // 1PC commits
+		expParallelCommitAutoRetry     bool   // parallel commit auto-retries
 		expFailure                     string // regexp pattern to match on error, if not empty
 	}
 	type testCase struct {
@@ -3045,6 +3046,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				expServerRefresh:               true,
 				expClientRefreshSuccess:        false,
 				expClientAutoRetryAfterRefresh: false,
+				expParallelCommitAutoRetry:     false,
 			},
 		},
 		{
@@ -3062,10 +3064,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// The Put to "c" will succeed with a forwarded timestamp. However, the
 			// txn has already staged on the other range at an earlier timestamp. As a
 			// result, it does not qualify for the implicit commit condition and
-			// requires a client-side refresh.
+			// requires a client-side refresh and parallel commit auto-retry.
 			allIsoLevels: &expect{
 				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: true,
+				expClientAutoRetryAfterRefresh: false,
+				expParallelCommitAutoRetry:     true,
 			},
 		},
 		{
@@ -3149,6 +3152,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				expServerRefresh:               true,
 				expClientRefreshSuccess:        false,
 				expClientAutoRetryAfterRefresh: false,
+				expParallelCommitAutoRetry:     false,
 			},
 		},
 		{
@@ -3165,11 +3169,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// The Put to "c" will succeed after a server-side refresh. However, the
 			// txn has already staged on the other range at the pre-refresh timestamp.
 			// As a result, it does not qualify for the implicit commit condition and
-			// requires a client-side refresh.
+			// requires a parallel commit auto-retry.
 			allIsoLevels: &expect{
 				expServerRefresh:               true,
-				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: true,
+				expClientRefreshSuccess:        false,
+				expClientAutoRetryAfterRefresh: false,
+				expParallelCommitAutoRetry:     true,
 			},
 		},
 		{
@@ -3184,12 +3189,13 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			priorReads: true,
-			// The Put to "a" will fail, failing the parallel commit and forcing a
-			// client-side refresh.
+			// The Put to "a" will fail, failing the parallel commit with an error and
+			// forcing a client-side refresh and auto-retry of the full batch.
 			allIsoLevels: &expect{
 				expServerRefresh:               false,
 				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
+				expParallelCommitAutoRetry:     false,
 			},
 		},
 		{
@@ -3205,11 +3211,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			priorReads: true,
 			// The Put to "c" will fail, failing the parallel commit and forcing a
-			// client-side refresh.
+			// client-side refresh and parallel commit auto-retry.
 			allIsoLevels: &expect{
 				expServerRefresh:               false,
 				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: true,
+				expClientAutoRetryAfterRefresh: false,
+				expParallelCommitAutoRetry:     true,
 			},
 		},
 		{
@@ -3387,11 +3394,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// The cput to "c" will succeed after a server-side refresh. However, the
 			// txn has already staged on the other range at the pre-refresh timestamp.
 			// As a result, it does not qualify for the implicit commit condition and
-			// requires a client-side refresh.
+			// requires a parallel commit auto-retry.
 			allIsoLevels: &expect{
 				expServerRefresh:               true,
-				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: true,
+				expClientRefreshSuccess:        false,
+				expClientAutoRetryAfterRefresh: false,
+				expParallelCommitAutoRetry:     true,
 			},
 		},
 		{
@@ -3435,11 +3443,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// The cput to "c" will succeed after a server-side refresh. However, the
 			// txn has already staged on the other range at the pre-refresh timestamp.
 			// As a result, it does not qualify for the implicit commit condition and
-			// requires a client-side refresh.
+			// requires a parallel commit auto-retry.
 			allIsoLevels: &expect{
 				expServerRefresh:               true,
-				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: true,
+				expClientRefreshSuccess:        false,
+				expClientAutoRetryAfterRefresh: false,
+				expParallelCommitAutoRetry:     true,
 			},
 		},
 		{
@@ -3615,6 +3624,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		require.Equal(t, exp.expServerRefresh, metrics.ServerRefreshSuccess.Count() != 0, "TxnMetrics.ServerRefreshSuccess")
 		require.Equal(t, exp.expClientRestart, metrics.Restarts.TotalSum() != 0, "TxnMetrics.Restarts")
 		require.Equal(t, exp.expOnePhaseCommit, metrics.Commits1PC.Count() != 0, "TxnMetrics.Commits1PC")
+		require.Equal(t, exp.expParallelCommitAutoRetry, metrics.ParallelCommitAutoRetries.Count() != 0, "TxnMetrics.ParallelCommitAutoRetries")
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
