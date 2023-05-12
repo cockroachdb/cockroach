@@ -110,17 +110,31 @@ eexpect foo@
 eexpect "/system>"
 end_test
 
+start_test "Check that the client-side connect cmd can change users with automatic client cert detection"
+send "\\c - root - - autocerts\r"
+eexpect "using new connection URL"
+eexpect root@
+eexpect "/system>"
+end_test
+
+start_test "Check that the auto-cert feature properly fails if certs were not found"
+send "\\c - unknownuser - - autocerts\r"
+eexpect "unable to find TLS client cert and key"
+eexpect root@
+eexpect "/system>"
+end_test
+
 start_test "Check that the client-side connect cmd can detect syntax errors"
 send "\\c - - - - abc\r"
 eexpect "unknown syntax"
-eexpect foo@
+eexpect root@
 eexpect "/system>"
 end_test
 
 start_test "Check that the client-side connect cmd recognizes invalid URLs"
 send "\\c postgres://root@localhost:26257/defaultdb?sslmode=invalid&sslcert=$certs_dir%2Fclient.root.crt&sslkey=$certs_dir%2Fclient.root.key&sslrootcert=$certs_dir%2Fca.crt\r"
 eexpect "unrecognized sslmode parameter"
-eexpect foo@
+eexpect root@
 eexpect "/system>"
 end_test
 

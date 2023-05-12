@@ -53,6 +53,10 @@ type Context struct {
 	// CockroachDB's own CLI package has a more advanced URL
 	// parser that is used instead.
 	ParseURL URLParser
+
+	// CertsDir is an extra directory to look for client certs in,
+	// when the \c command is used.
+	CertsDir string
 }
 
 // internalContext represents the internal configuration state of the
