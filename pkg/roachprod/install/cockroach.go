@@ -684,26 +684,32 @@ func (c *SyncedCluster) generateClusterSettingCmd(l *logger.Logger, node Node) s
 			c.Name)
 	}
 
-	var clusterSettingCmd string
+	clusterSettings := map[string]string{
+		"cluster.organization": "Cockroach Labs - Production Testing",
+		"enterprise.license":   config.CockroachDevLicense,
+	}
+	for name, value := range c.ClusterSettings.ClusterSettings {
+		clusterSettings[name] = value
+	}
+	var clusterSettingsString string
+	for name, value := range clusterSettings {
+		clusterSettingsString += fmt.Sprintf("SET CLUSTER SETTING %s = '%s';\n", name, value)
+	}
+
+	var clusterSettingsCmd string
 	if c.IsLocal() {
-		clusterSettingCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+		clusterSettingsCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 
 	binary := cockroachNodeBinary(c, node)
 	path := fmt.Sprintf("%s/%s", c.NodeDir(node, 1 /* storeIndex */), "settings-initialized")
 	url := c.NodeURL("localhost", c.NodePort(node), "" /* tenantName */)
 
-	// We ignore failures to set remote_debugging.mode, which was
-	// removed in v21.2.
-	clusterSettingCmd += fmt.Sprintf(`
+	clusterSettingsCmd += fmt.Sprintf(`
 		if ! test -e %s ; then
-			COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e "SET CLUSTER SETTING server.remote_debugging.mode = 'any'" || true;
-			COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e "
-				SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';
-				SET CLUSTER SETTING enterprise.license = '%s';" \
-			&& touch %s
-		fi`, path, startSQLTimeout, binary, url, startSQLTimeout, binary, url, config.CockroachDevLicense, path)
-	return clusterSettingCmd
+			COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e "%s" && touch %s
+		fi`, path, startSQLTimeout, binary, url, clusterSettingsString, path)
+	return clusterSettingsCmd
 }
 
 func (c *SyncedCluster) generateInitCmd(node Node) string {
