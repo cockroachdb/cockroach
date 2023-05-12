@@ -178,6 +178,10 @@ type T interface {
 //	        event:remote child 1
 //	`)
 func checkRecording(t T, rec tracingpb.Recording, expected string) {
+	checkRecordingWithRedact(t, rec, expected, false)
+}
+
+func checkRecordingWithRedact(t T, rec tracingpb.Recording, expected string, redactValues bool) {
 	normalize := func(rec string) string {
 		// normalize the string form of a recording for ease of comparison.
 		//
@@ -235,8 +239,12 @@ func checkRecording(t T, rec tracingpb.Recording, expected string) {
 		sortChildrenMetadataByName(rec[i].ChildrenMetadata)
 	}
 
+	actual := redact.Sprint(rec)
+	if redactValues {
+		actual = actual.Redact()
+	}
 	exp := normalize(expected)
-	got := normalize(string(redact.Sprint(rec)))
+	got := normalize(string(actual))
 	if got != exp {
 		diff := difflib.UnifiedDiff{
 			A:        difflib.SplitLines(exp),
