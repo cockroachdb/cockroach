@@ -108,15 +108,15 @@ func TestRecordingString(t *testing.T) {
 		`))
 
 	checkRecording(t, rec, `
-		=== operation:root _verbose:1
+		=== operation:root _verbose:‹1›
 		[remote child]
 		[local child]
 		event:‹root 1›
-			=== operation:remote child _verbose:1
+			=== operation:remote child _verbose:‹1›
 			event:‹remote child 1›
 		event:‹root 2›
 		event:‹root 3›
-			=== operation:local child _verbose:1
+			=== operation:local child _verbose:‹1›
 			event:‹local child 1›
 		event:‹root 4›
 		event:‹root 5›`)
@@ -187,9 +187,9 @@ func TestRecordingInRecording(t *testing.T) {
 		`))
 
 	checkRecording(t, childRec, `
-		=== operation:child _verbose:1
+		=== operation:child _verbose:‹1›
 		[grandchild]
-			=== operation:grandchild _verbose:1`)
+			=== operation:grandchild _verbose:‹1›`)
 }
 
 // Verify that GetRecording propagates the structured events even when the
@@ -215,9 +215,9 @@ func TestImportRemoteRecording(t *testing.T) {
 				// Note: all the events are marked unsafe because the tracer
 				// was not configured to be redactable.
 				checkRecording(t, sp.FinishAndGetRecording(tracingpb.RecordingVerbose), `
-				=== operation:root _verbose:1
+				=== operation:root _verbose:‹1›
 				[child]
-					=== operation:child _verbose:1
+					=== operation:child _verbose:‹1›
 					event:‹&Int32Value{Value:4,XXX_unrecognized:[],}›
 					event:‹foo›
 					event:‹safe unsafe›
@@ -1334,9 +1334,9 @@ func TestOpenChildIncludedRecording(t *testing.T) {
 	child := tr.StartSpan("child", WithParent(parent))
 	rec := parent.FinishAndGetRecording(tracingpb.RecordingVerbose)
 	checkRecording(t, rec, `
-		=== operation:parent _verbose:1
+		=== operation:parent _verbose:‹1›
 		[child]
-			=== operation:child _unfinished:1 _verbose:1`)
+			=== operation:child _unfinished:‹1› _verbose:‹1›`)
 	child.Finish()
 }
 
@@ -1584,8 +1584,8 @@ func TestWithEventListenersAndVerboseParent(t *testing.T) {
 	defer child.Finish()
 	child.Record("foo")
 	checkRecording(t, parent.GetConfiguredRecording(), `
-     === operation:parent _unfinished:1 _verbose:1
+     === operation:parent _unfinished:‹1› _verbose:‹1›
      [child]
-         === operation:child _unfinished:1 _verbose:1
+         === operation:child _unfinished:‹1› _verbose:‹1›
          event:‹foo›`)
 }

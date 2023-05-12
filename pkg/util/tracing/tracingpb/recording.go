@@ -269,10 +269,7 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 			prefix = fmt.Sprintf("%s-", tg.Name)
 		}
 		for _, tag := range tg.Tags {
-			sb.SafeRune(' ')
-			sb.SafeString(redact.SafeString(fmt.Sprintf("%s%s", prefix, tag.Key)))
-			sb.SafeRune(':')
-			_, _ = sb.WriteString(tag.Value)
+			sb.Printf(" %s%s:%s", redact.SafeString(prefix), redact.SafeString(tag.Key), tag.Value)
 		}
 	}
 
