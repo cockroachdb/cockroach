@@ -573,15 +573,16 @@ func propagateDiskLabels(
 	argsPrefix = append(argsPrefix, "--project", project)
 
 	for zone, zoneHosts := range zoneToHostNames {
-		argsPrefix = append(argsPrefix, "--zone", zone)
+		zoneArg := []string{"--zone", zone}
 
 		for _, host := range zoneHosts {
-			host := host
+			hostName := host
 
 			g.Go(func() error {
-				args := append([]string(nil), argsPrefix...)
+				bootDiskArgs := append([]string(nil), argsPrefix...)
+				bootDiskArgs = append(bootDiskArgs, zoneArg...)
 				// N.B. boot disk has the same name as the host.
-				bootDiskArgs := append(args, host)
+				bootDiskArgs = append(bootDiskArgs, hostName)
 				cmd := exec.Command("gcloud", bootDiskArgs...)
 
 				output, err := cmd.CombinedOutput()
@@ -593,9 +594,10 @@ func propagateDiskLabels(
 
 			if !opts.SSDOpts.UseLocalSSD {
 				g.Go(func() error {
-					args := append([]string(nil), argsPrefix...)
+					persistentDiskArgs := append([]string(nil), argsPrefix...)
+					persistentDiskArgs = append(persistentDiskArgs, zoneArg...)
 					// N.B. additional persistent disks are suffixed with the offset, starting at 1.
-					persistentDiskArgs := append(args, fmt.Sprintf("%s-1", host))
+					persistentDiskArgs = append(persistentDiskArgs, fmt.Sprintf("%s-1", hostName))
 					cmd := exec.Command("gcloud", persistentDiskArgs...)
 
 					output, err := cmd.CombinedOutput()
