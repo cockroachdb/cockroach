@@ -160,7 +160,7 @@ func CheckRecordedSpans(rec tracingpb.Recording, expected string) error {
 	return nil
 }
 
-// CheckRecording checks whether a recording looks like the expected
+// checkRecording checks whether a recording looks like the expected
 // one. The expected string is allowed to elide timing information, and the
 // outer-most indentation level is adjusted for when comparing.
 //
@@ -173,7 +173,7 @@ func CheckRecordedSpans(rec tracingpb.Recording, expected string) error {
 //	`); err != nil {
 //	    t.Fatal(err)
 //	}
-func CheckRecording(rec tracingpb.Recording, expected string) error {
+func checkRecording(rec tracingpb.Recording, expected string) error {
 	normalize := func(rec string) string {
 		// normalize the string form of a recording for ease of comparison.
 		//

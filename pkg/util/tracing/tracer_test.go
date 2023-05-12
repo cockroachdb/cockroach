@@ -97,7 +97,7 @@ func TestTracerRecording(t *testing.T) {
 	require.Empty(t, rec[0].StructuredRecords)
 
 	s1.RecordStructured(&types.Int32Value{Value: 5})
-	if err := CheckRecording(s1.GetRecording(tracingpb.RecordingStructured), `
+	if err := checkRecording(s1.GetRecording(tracingpb.RecordingStructured), `
 		=== operation:a
 		structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":5}
 	`); err != nil {
