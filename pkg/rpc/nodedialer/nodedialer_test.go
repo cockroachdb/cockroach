@@ -245,7 +245,7 @@ func TestConnHealthInternal(t *testing.T) {
 
 	// We don't have a breaker for it. This is a proxy for "we have no
 	// internal dialing for it".
-	_, ok := nd.GetCircuitBreakerNew(staticNodeID, rpc.DefaultClass)
+	_, ok := nd.GetCircuitBreaker(staticNodeID, rpc.DefaultClass)
 	require.False(t, ok)
 
 	// Other nodes still fail though.

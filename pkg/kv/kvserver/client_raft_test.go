@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -2613,9 +2614,11 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	// Shut down a raft transport via the circuit breaker, and wait for two
 	// election timeouts to trigger an election if reportUnreachable broke
 	// heartbeat transmission to the other store.
-	cb := tc.Servers[followerIdx].RaftTransport().GetCircuitBreaker(
+	b, ok := tc.Servers[followerIdx].RaftTransport().GetCircuitBreaker(
 		tc.Target(followerIdx).NodeID, rpc.DefaultClass)
-	cb.Break()
+	require.True(t, ok)
+	undo := circuit.TestingSetTripped(b, errors.New("boom"))
+	defer undo()
 
 	// Send a command to ensure Raft is aware of lost follower so that it won't
 	// quiesce (which would prevent heartbeats).
@@ -2698,10 +2701,12 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 		// Pseudo-partition partitionedMaybeLeaseholderIdx away from everyone else. We do this by tripping
 		// the circuit breaker on all other nodes.
 		t.Logf("partitioning")
+		var undos []func()
 		for i := range tc.Servers {
 			if i != partitionedMaybeLeaseholderIdx {
-				cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpc.DefaultClass)
-				cb.Break()
+				b, ok := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpc.DefaultClass)
+				require.True(t, ok)
+				undos = append(undos, circuit.TestingSetTripped(b, errors.New("boom")))
 			}
 		}
 
@@ -2709,11 +2714,8 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 		heartbeatInterval := tc.GetFirstStoreFromServer(t, partitionedMaybeLeaseholderIdx).GetStoreConfig().CoalescedHeartbeatsInterval
 		time.Sleep(heartbeatInterval)
 		t.Logf("resolving partition")
-		for i := range tc.Servers {
-			if i != partitionedMaybeLeaseholderIdx {
-				cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpc.DefaultClass)
-				cb.Reset()
-			}
+		for _, undo := range undos {
+			undo()
 		}
 
 		t.Logf("waiting for replicaGC of removed leader replica")
