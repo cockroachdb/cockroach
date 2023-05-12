@@ -344,6 +344,7 @@ func registerKVContention(r registry.Registry) {
 		Name:    fmt.Sprintf("kv/contention/nodes=%d", nodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(nodes + 1),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
@@ -413,6 +414,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 		Name:                "kv/quiescence/nodes=3",
 		Owner:               registry.OwnerKV,
 		Cluster:             r.MakeClusterSpec(4),
+		Leases:              registry.MetamorphicLeases,
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
@@ -488,6 +490,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 		Name:    "kv/gracefuldraining/nodes=3",
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(4),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
@@ -715,6 +718,7 @@ func registerKVSplits(r registry.Registry) {
 			Owner:   registry.OwnerKV,
 			Timeout: item.timeout,
 			Cluster: r.MakeClusterSpec(4),
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				nodes := c.Spec().NodeCount - 1
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
@@ -782,6 +786,7 @@ func registerKVScalability(r registry.Registry) {
 				Name:    fmt.Sprintf("kv%d/scale/nodes=6", p),
 				Owner:   registry.OwnerKV,
 				Cluster: r.MakeClusterSpec(7, spec.CPU(8)),
+				Leases:  registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runScalability(ctx, t, c, p)
 				},
@@ -917,6 +922,7 @@ func registerKVRangeLookups(r registry.Registry) {
 			Name:    fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRangeLookups(ctx, t, c, item.workers, item.workloadType, item.maximumRangeLookupsPerSec)
 			},
@@ -958,6 +964,7 @@ func registerKVRestartImpact(r registry.Registry) {
 		Tags:    registry.Tags(`weekly`),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(13, spec.CPU(8)),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
 			workloadNode := c.Spec().NodeCount

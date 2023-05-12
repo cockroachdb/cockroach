@@ -136,6 +136,7 @@ func registerGORM(r registry.Registry) {
 		Name:    "gorm",
 		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
+		Leases:  registry.MetamorphicLeases,
 		Tags:    registry.Tags(`default`, `orm`),
 		Run:     runGORM,
 	})
