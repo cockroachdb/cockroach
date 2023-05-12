@@ -1019,7 +1019,7 @@ func (p *Provider) runInstance(
 		return *fl
 	}
 
-	imageID := withFlagOverride(az.region.AMI, &providerOpts.ImageAMI)
+	imageID := withFlagOverride(az.region.AMI_X86_64, &providerOpts.ImageAMI)
 	if opts.EnableFIPS {
 		imageID = withFlagOverride(az.region.AMI_FIPS, &providerOpts.ImageAMI)
 	}
