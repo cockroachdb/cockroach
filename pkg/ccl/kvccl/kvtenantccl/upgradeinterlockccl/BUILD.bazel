@@ -5,17 +5,20 @@ go_test(
     name = "upgradeinterlockccl_test",
     size = "enormous",
     srcs = [
+        "generated_test.go",
+        "local_test_util_test.go",
         "main_test.go",
-        "tenant_upgrade_test.go",
     ],
     args = select({
         "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
         "//conditions:default": ["-test.timeout=3595s"],
     }),
+    shard_count = 10,
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
+        "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/sharedtestutil",
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/roachpb",
