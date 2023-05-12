@@ -62,6 +62,7 @@ var (
 	createVMOpts          = vm.DefaultCreateOpts()
 	startOpts             = roachprod.DefaultStartOpts()
 	stageOS               string
+	stageArch             string
 	stageDir              string
 	logsDir               string
 	logsFilter            string
@@ -106,6 +107,8 @@ func initFlags() {
 			vm.AllProviderNames()))
 	createCmd.Flags().BoolVar(&createVMOpts.GeoDistributed,
 		"geo", false, "Create geo-distributed cluster")
+	createCmd.Flags().BoolVar(&createVMOpts.EnableFIPS,
+		"fips", false, "Enable FIPS mode (uses custom AMI)")
 	// N.B. We set "usage=roachprod" as the default, custom label for billing tracking.
 	createCmd.Flags().StringToStringVar(&createVMOpts.CustomLabels,
 		"label", map[string]string{"usage": "roachprod"},
@@ -217,9 +220,12 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	putCmd.Flags().BoolVar(&useTreeDist, "treedist", useTreeDist, "use treedist copy algorithm")
 
 	stageCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
-	stageCmd.Flags().StringVar(&stageDir, "dir", "", "destination for staged binaries")
+	stageCmd.Flags().StringVar(&stageArch, "arch", "", "architecture override for staged binaries [amd64, arm64]")
 
+	stageCmd.Flags().StringVar(&stageDir, "dir", "", "destination for staged binaries")
+	// N.B. stageURLCmd just prints the URL that stageCmd would use.
 	stageURLCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
+	stageURLCmd.Flags().StringVar(&stageArch, "arch", "", "architecture override for staged binaries [amd64, arm64]")
 
 	logsCmd.Flags().StringVar(&logsFilter,
 		"filter", "", "re to filter log messages")
