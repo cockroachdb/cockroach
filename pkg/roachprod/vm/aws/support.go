@@ -147,6 +147,10 @@ echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 
 sysctl --system  # reload sysctl settings
 
+{{ if .EnableFIPS }}
+sudo ua enable fips --assume-yes
+{{ end }}
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
@@ -156,13 +160,14 @@ sudo touch /mnt/data1/.roachprod-initialized
 //
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
-func writeStartupScript(extraMountOpts string, useMultiple bool) (string, error) {
+func writeStartupScript(extraMountOpts string, useMultiple bool, enableFips bool) (string, error) {
 	type tmplParams struct {
 		ExtraMountOpts   string
 		UseMultipleDisks bool
+		EnableFIPS       bool
 	}
 
-	args := tmplParams{ExtraMountOpts: extraMountOpts, UseMultipleDisks: useMultiple}
+	args := tmplParams{ExtraMountOpts: extraMountOpts, UseMultipleDisks: useMultiple, EnableFIPS: enableFips}
 
 	tmpfile, err := os.CreateTemp("", "aws-startup-script")
 	if err != nil {
