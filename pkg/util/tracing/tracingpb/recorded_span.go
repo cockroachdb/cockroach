@@ -199,7 +199,7 @@ func (m OperationMetadata) SafeFormat(s redact.SafePrinter, _ rune) {
 	if m.ContainsUnfinished {
 		s.Printf(", unfinished")
 	}
-	s.Print("}")
+	s.SafeRune('}')
 }
 
 func (c CapturedStack) String() string {
