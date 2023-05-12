@@ -158,6 +158,7 @@ var AutomaticJobTypes = [...]Type{
 	TypeAutoConfigEnvRunner,
 	TypeAutoConfigTask,
 	TypeKeyVisualizer,
+	TypeMigration,
 	TypeAutoUpdateSQLActivity,
 }
 
