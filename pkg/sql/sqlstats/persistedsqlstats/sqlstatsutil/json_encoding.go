@@ -51,7 +51,7 @@ func ExplainTreePlanNodeToJSON(node *roachpb.ExplainTreePlanNode) json.JSON {
 //	  "title": "system.statement_statistics.metadata",
 //	  "type": "object",
 //	  "properties": {
-//	    "stmtTyp":              { "type": "string" },
+//	    "stmtType":             { "type": "string" },
 //	    "query":                { "type": "string" },
 //	    "db":                   { "type": "string" },
 //	    "distsql":              { "type": "boolean" },
