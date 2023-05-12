@@ -169,6 +169,13 @@ func (mq *mergeQueue) shouldQueue(
 // indicate that the error should send the range to purgatory.
 type rangeMergePurgatoryError struct{ error }
 
+var _ errors.SafeFormatter = decommissionPurgatoryError{}
+
+func (e rangeMergePurgatoryError) SafeFormatError(p errors.Printer) (next error) {
+	p.Print(e.error)
+	return nil
+}
+
 func (rangeMergePurgatoryError) PurgatoryErrorMarker() {}
 
 var _ PurgatoryError = rangeMergePurgatoryError{}
