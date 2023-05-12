@@ -97,45 +97,75 @@ type normalizedSpanConfig struct {
 	//   for an example where we need to do the latter.
 
 	// constraints applies to all replicas.
-	constraints []roachpb.ConstraintsConjunction
+	constraints []internedConstraintsConjunction
 	// voterConstraints applies to voter replicas.
-	voterConstraints []roachpb.ConstraintsConjunction
+	voterConstraints []internedConstraintsConjunction
 	// Best-effort. Conjunctions are in order of preference, and it is ok if
-	// none is satisfied.
-	leasePreferences []roachpb.LeasePreference
+	// none are satisfied.
+	leasePreferences []internedLeasePreference
+
+	// For pretty-printing.
+	interner *stringInterner
+}
+
+type internedConstraint struct {
+	// type captures the kind of constraint this is: required or prohibited.
+	typ roachpb.Constraint_Type
+	// key captures the locality tag key we're constraining against.
+	key stringCode
+	// value is the locality tag value we're constraining against.
+	value stringCode
+}
+
+type internedConstraintsConjunction struct {
+	numReplicas int32
+	constraints []internedConstraint
+}
+
+type internedLeasePreference struct {
+	constraints []internedConstraint
 }
 
 // makeNormalizedSpanConfig is called infrequently, when there is a new
 // SpanConfig for which we don't have a normalized value. The rest of the
 // allocator code works with normalizedSpanConfig. Due to the infrequent
 // nature of this, we don't attempt to reduce memory allocations.
-func makeNormalizedSpanConfig(conf *roachpb.SpanConfig) (*normalizedSpanConfig, error) {
-	var normalizedConstraints, normalizedVoterConstraints []roachpb.ConstraintsConjunction
+func makeNormalizedSpanConfig(
+	conf *roachpb.SpanConfig, interner *stringInterner,
+) (*normalizedSpanConfig, error) {
+	var normalizedConstraints, normalizedVoterConstraints []internedConstraintsConjunction
 	var err error
 	if conf.Constraints != nil {
-		normalizedConstraints, err = normalizeConstraints(conf.Constraints, conf.NumReplicas)
+		normalizedConstraints, err = normalizeConstraints(conf.Constraints, conf.NumReplicas, interner)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if conf.VoterConstraints != nil {
-		normalizedVoterConstraints, err = normalizeConstraints(conf.VoterConstraints, conf.NumVoters)
+		normalizedVoterConstraints, err = normalizeConstraints(
+			conf.VoterConstraints, conf.NumVoters, interner)
 		if err != nil {
 			return nil, err
 		}
+	}
+	var lps []internedLeasePreference
+	for i := range conf.LeasePreferences {
+		lps = append(lps, internedLeasePreference{
+			constraints: interner.internConstraints(conf.LeasePreferences[i].Constraints)})
 	}
 	return &normalizedSpanConfig{
 		numVoters:        conf.NumVoters,
 		numReplicas:      conf.NumReplicas,
 		constraints:      normalizedConstraints,
 		voterConstraints: normalizedVoterConstraints,
-		leasePreferences: conf.LeasePreferences,
+		leasePreferences: lps,
+		interner:         interner,
 	}, nil
 }
 
 func normalizeConstraints(
-	constraints []roachpb.ConstraintsConjunction, numReplicas int32,
-) ([]roachpb.ConstraintsConjunction, error) {
+	constraints []roachpb.ConstraintsConjunction, numReplicas int32, interner *stringInterner,
+) ([]internedConstraintsConjunction, error) {
 	var nc []roachpb.ConstraintsConjunction
 	haveZero := false
 	sumReplicas := int32(0)
@@ -159,19 +189,26 @@ func normalizeConstraints(
 	}
 	if haveZero {
 		nc[0].NumReplicas = numReplicas
-		return nc, nil
-	}
-	for i := range constraints {
-		nc = append(nc, constraints[i])
-	}
-	if sumReplicas < numReplicas {
-		cc := roachpb.ConstraintsConjunction{
-			NumReplicas: numReplicas - sumReplicas,
-			Constraints: nil,
+	} else {
+		for i := range constraints {
+			nc = append(nc, constraints[i])
 		}
-		nc = append(nc, cc)
+		if sumReplicas < numReplicas {
+			cc := roachpb.ConstraintsConjunction{
+				NumReplicas: numReplicas - sumReplicas,
+				Constraints: nil,
+			}
+			nc = append(nc, cc)
+		}
 	}
-	return nc, nil
+	var rv []internedConstraintsConjunction
+	for i := range nc {
+		rv = append(rv, internedConstraintsConjunction{
+			numReplicas: nc[i].NumReplicas,
+			constraints: interner.internConstraints(nc[i].Constraints),
+		})
+	}
+	return rv, nil
 }
 
 type replicaKindIndex int32
@@ -191,7 +228,7 @@ const (
 type analyzedConstraints struct {
 	// If len(constraints) == 0, there are no constraints, and the satisfiedBy*
 	// slices are also empty.
-	constraints []roachpb.ConstraintsConjunction
+	constraints []internedConstraintsConjunction
 
 	// Overlapping conjunctions: There is nothing preventing overlapping
 	// ConstraintsConjunctions such that the same store can satisfy multiple,
@@ -305,7 +342,7 @@ func (rac *rangeAnalyzedConstraints) stateForInit() *analyzeConstraintsBuf {
 }
 
 type storeMatchesConstraintInterface interface {
-	storeMatches(storeID roachpb.StoreID, constraintConj []roachpb.Constraint) bool
+	storeMatches(storeID roachpb.StoreID, constraintConj []internedConstraint) bool
 }
 
 func (rac *rangeAnalyzedConstraints) finishInit(
@@ -326,7 +363,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 				rac.buf.replicaConstraintIndices[kind] =
 					extend2DSlice(rac.buf.replicaConstraintIndices[kind])
 				for j, c := range ac.constraints {
-					if len(c.Constraints) == 0 || constraintMatcher.storeMatches(store.StoreID, c.Constraints) {
+					if len(c.constraints) == 0 || constraintMatcher.storeMatches(store.StoreID, c.constraints) {
 						rac.buf.replicaConstraintIndices[kind][i] =
 							append(rac.buf.replicaConstraintIndices[kind][i], int32(j))
 					}
@@ -352,7 +389,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 		for j := range ac.constraints {
 			doneFunc := func() bool {
 				return len(ac.satisfiedByReplica[voterIndex][j])+
-					len(ac.satisfiedByReplica[nonVoterIndex][j]) >= int(ac.constraints[j].NumReplicas)
+					len(ac.satisfiedByReplica[nonVoterIndex][j]) >= int(ac.constraints[j].numReplicas)
 			}
 			done := doneFunc()
 			if done {
@@ -447,7 +484,51 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 }
 
 // Disjunction of conjunctions.
-type constraintsDisj []roachpb.ConstraintsConjunction
+type constraintsDisj []internedConstraintsConjunction
+
+// FNV-1a hash algorithm.
+func (cd constraintsDisj) hash() uint64 {
+	h := uint64(offset64)
+	for i := range cd {
+		h ^= uint64(cd[i].numReplicas)
+		h *= prime64
+		for _, c := range cd[i].constraints {
+			h ^= uint64(c.typ)
+			h *= prime64
+			h ^= uint64(c.key)
+			h *= prime64
+			h ^= uint64(c.value)
+			h *= prime64
+		}
+		h *= prime64
+	}
+	return h
+}
+
+func (cd constraintsDisj) isEqual(b mapKey) bool {
+	other := b.(constraintsDisj)
+	if len(cd) != len(other) {
+		return false
+	}
+	for i := range cd {
+		if cd[i].numReplicas != other[i].numReplicas {
+			return false
+		}
+		c1 := cd[i].constraints
+		c2 := other[i].constraints
+		if len(c1) != len(c2) {
+			return false
+		}
+		for j := range c1 {
+			if c1[j] != c2[j] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+var _ mapKey = constraintsDisj{}
 
 // Usage for a range that may need attention:
 //
@@ -513,7 +594,7 @@ func (rac *rangeAnalyzedConstraints) candidatesToConvertFromNonVoterToVoter() []
 	if rac.voterConstraints.isEmpty() && !rac.constraints.isEmpty() {
 		// There are some constraints, and no voter constraints.
 		for i, c := range rac.constraints.constraints {
-			if int(c.NumReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i]) {
+			if int(c.numReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i]) {
 				// Unsatisfied when solely looking at voter replica. It is acceptable
 				// to add another voter here.
 				cands =
@@ -527,7 +608,7 @@ func (rac *rangeAnalyzedConstraints) candidatesToConvertFromNonVoterToVoter() []
 	if !rac.voterConstraints.isEmpty() {
 		// There are some voter constraints that need satisfaction.
 		for i, c := range rac.voterConstraints.constraints {
-			if int(c.NumReplicas) > len(rac.voterConstraints.satisfiedByReplica[voterIndex][i]) {
+			if int(c.numReplicas) > len(rac.voterConstraints.satisfiedByReplica[voterIndex][i]) {
 				// Unsatisfied.
 				cands = append(
 					cands, rac.voterConstraints.satisfiedByReplica[nonVoterIndex][i]...)
@@ -551,7 +632,7 @@ func (rac *rangeAnalyzedConstraints) constraintsForAddingVoter() (constraintsDis
 		// There are some constraints that must not be satisfied since don't have
 		// enough voters and could not find a non-voter to convert.
 		for i, c := range rac.constraints.constraints {
-			if int(c.NumReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i])+
+			if int(c.numReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i])+
 				len(rac.constraints.satisfiedByReplica[nonVoterIndex][i]) {
 				constrDisj = append(constrDisj, c)
 			}
@@ -564,7 +645,7 @@ func (rac *rangeAnalyzedConstraints) constraintsForAddingVoter() (constraintsDis
 	if !rac.voterConstraints.isEmpty() {
 		// There are some constraints that are not satisfied.
 		for i, c := range rac.voterConstraints.constraints {
-			if int(c.NumReplicas) > len(rac.voterConstraints.satisfiedByReplica[voterIndex][i]) {
+			if int(c.numReplicas) > len(rac.voterConstraints.satisfiedByReplica[voterIndex][i]) {
 				// Unsatisfied.
 				constrDisj = append(constrDisj, c)
 			}
@@ -605,7 +686,7 @@ func (rac *rangeAnalyzedConstraints) candidatesToConvertFromVoterToNonVoter() []
 		// There are some constraints that need satisfaction.
 		constraintSetNeeded = true
 		for i, c := range rac.constraints.constraints {
-			if int(c.NumReplicas) > len(rac.constraints.satisfiedByReplica[nonVoterIndex][i]) {
+			if int(c.numReplicas) > len(rac.constraints.satisfiedByReplica[nonVoterIndex][i]) {
 				// Unsatisfied when solely looking at non-voter replica. It is acceptable
 				// to add another non-voter here.
 				if len(rac.constraints.satisfiedByReplica[voterIndex][i]) > 0 {
@@ -631,7 +712,7 @@ func (rac *rangeAnalyzedConstraints) candidatesToConvertFromVoterToNonVoter() []
 			// Once we get rid of the voters that satisfy no constraint, there will
 			// be still be extra voters. So consider over satisfied constraints.
 			for i, c := range rac.voterConstraints.constraints {
-				if int(c.NumReplicas) < len(rac.voterConstraints.satisfiedByReplica[voterIndex][i]) {
+				if int(c.numReplicas) < len(rac.voterConstraints.satisfiedByReplica[voterIndex][i]) {
 					// Oversatisfied.
 					voterConstraintSet = append(
 						voterConstraintSet, rac.voterConstraints.satisfiedByReplica[voterIndex][i]...)
@@ -666,7 +747,7 @@ func (rac *rangeAnalyzedConstraints) constraintsForAddingNonVoter() (constraints
 		// There are some constraints that are not satisfied since don't have
 		// enough non-voters and could not find a voter to convert.
 		for i, c := range rac.constraints.constraints {
-			if int(c.NumReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i])+
+			if int(c.numReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i])+
 				len(rac.constraints.satisfiedByReplica[nonVoterIndex][i]) {
 				constrDisj = append(constrDisj, c)
 			}
@@ -713,7 +794,7 @@ func (rac *rangeAnalyzedConstraints) candidatesForRoleSwapForConstraints() [numR
 	}
 	var swapCands [numReplicaKinds][]roachpb.StoreID
 	for i, c := range rac.voterConstraints.constraints {
-		neededReplicas := int(c.NumReplicas)
+		neededReplicas := int(c.numReplicas)
 		actualVoterReplicas := len(rac.voterConstraints.satisfiedByReplica[voterIndex][i])
 		if neededReplicas < actualVoterReplicas {
 			// Oversatisfied.
@@ -743,7 +824,7 @@ func (rac *rangeAnalyzedConstraints) candidatesToRemove() []roachpb.StoreID {
 	if len(rac.replicas[nonVoterIndex]) > int(rac.numNeededReplicas[nonVoterIndex]) {
 		if !rac.constraints.isEmpty() {
 			for i, c := range rac.constraints.constraints {
-				if int(c.NumReplicas) < len(rac.constraints.satisfiedByReplica[voterIndex][i])+
+				if int(c.numReplicas) < len(rac.constraints.satisfiedByReplica[voterIndex][i])+
 					len(rac.constraints.satisfiedByReplica[nonVoterIndex][i]) {
 					// Oversatisfied. Can remove a non-voter.
 					cands = append(cands, rac.constraints.satisfiedByReplica[nonVoterIndex][i]...)
@@ -767,7 +848,7 @@ func (rac *rangeAnalyzedConstraints) candidatesToRemove() []roachpb.StoreID {
 	if len(rac.replicas[voterIndex]) > int(rac.numNeededReplicas[voterIndex]) {
 		if !rac.voterConstraints.isEmpty() {
 			for i, c := range rac.voterConstraints.constraints {
-				if int(c.NumReplicas) < len(rac.voterConstraints.satisfiedByReplica[voterIndex][i]) {
+				if int(c.numReplicas) < len(rac.voterConstraints.satisfiedByReplica[voterIndex][i]) {
 					// Oversatisfied. Can remove a voter.
 					cands = append(
 						cands, rac.voterConstraints.satisfiedByReplica[voterIndex][i]...)
@@ -779,7 +860,7 @@ func (rac *rangeAnalyzedConstraints) candidatesToRemove() []roachpb.StoreID {
 		}
 		if !rac.constraints.isEmpty() {
 			for i, c := range rac.constraints.constraints {
-				if int(c.NumReplicas) < len(rac.constraints.satisfiedByReplica[voterIndex][i])+
+				if int(c.numReplicas) < len(rac.constraints.satisfiedByReplica[voterIndex][i])+
 					len(rac.constraints.satisfiedByReplica[nonVoterIndex][i]) {
 					// Oversatisfied. Can remove a voter.
 					cands = append(cands, rac.constraints.satisfiedByReplica[voterIndex][i]...)
@@ -816,7 +897,7 @@ func (rac *rangeAnalyzedConstraints) candidatesVoterConstraintsUnsatisfied() (
 		// Only need to remove a voter if some conjunction is oversatisfied purely
 		// due to voters. If there is a non-voter there too, move it first.
 		for i, c := range rac.constraints.constraints {
-			neededReplicas := int(c.NumReplicas)
+			neededReplicas := int(c.numReplicas)
 			actualVoterReplicas := len(rac.constraints.satisfiedByReplica[voterIndex][i])
 			actualNonVoterReplicas := len(rac.constraints.satisfiedByReplica[nonVoterIndex][i])
 			if neededReplicas > actualVoterReplicas+actualNonVoterReplicas {
@@ -830,7 +911,7 @@ func (rac *rangeAnalyzedConstraints) candidatesVoterConstraintsUnsatisfied() (
 			toRemoveVoters, rac.constraints.satisfiedNoConstraintReplica[voterIndex]...)
 	} else if !rac.voterConstraints.isEmpty() {
 		for i, c := range rac.voterConstraints.constraints {
-			neededReplicas := int(c.NumReplicas)
+			neededReplicas := int(c.numReplicas)
 			actualVoterReplicas := len(rac.voterConstraints.satisfiedByReplica[voterIndex][i])
 			if neededReplicas > actualVoterReplicas {
 				toAdd = append(toAdd, c)
@@ -921,31 +1002,75 @@ func (acb *analyzeConstraintsBuf) tryAddingStore(
 	}
 }
 
+// stringInterner maps locality tiers and constraint strings to unique ints
+// (code), so that we don't need to do expensive string equality comparisons.
+// There is no removal from this map. It is very unlikely that new localities
+// or constraints will be created fast enough for removal to be needed to
+// lower memory consumption or to prevent overflow. The empty string is
+// assigned code 0.
+type stringInterner struct {
+	stringToCode map[string]stringCode
+	codeToString []string
+}
+
+type stringCode uint32
+
+const emptyStringCode stringCode = 0
+
+func newStringInterner() *stringInterner {
+	si := &stringInterner{stringToCode: map[string]stringCode{}}
+	si.stringToCode[""] = emptyStringCode
+	si.codeToString = append(si.codeToString, "")
+	return si
+}
+
+func (si *stringInterner) toCode(s string) stringCode {
+	code, ok := si.stringToCode[s]
+	if !ok {
+		n := len(si.stringToCode)
+		if n == math.MaxUint32 {
+			panic("overflowed stringInterner")
+		}
+		code = stringCode(n)
+		si.stringToCode[s] = code
+		si.codeToString = append(si.codeToString, s)
+	}
+	return code
+}
+
+func (si *stringInterner) toString(code stringCode) string {
+	return si.codeToString[code]
+}
+
+func (si *stringInterner) internConstraints(constraints []roachpb.Constraint) []internedConstraint {
+	var rv []internedConstraint
+	for i := range constraints {
+		rv = append(rv, internedConstraint{
+			typ:   constraints[i].Type,
+			key:   si.toCode(constraints[i].Key),
+			value: si.toCode(constraints[i].Value),
+		})
+	}
+	return rv
+}
+
 // localityTierInterner maps Tier.Value strings to unique ints, so that we
 // don't need to do expensive string equality comparisons.
 type localityTierInterner struct {
-	// There is no removal from this map. It is very unlikely that new
-	// localities will be created fast enough for removal to be needed to lower
-	// memory consumption or to prevent overflow.
-	stringToInt map[string]localityTierValue
+	si *stringInterner
 }
 
+func newLocalityTierInterner(interner *stringInterner) *localityTierInterner {
+	return &localityTierInterner{si: interner}
+}
+
+// intern is called occasionally, when we have a new store, or the locality of
+// a store changes.
 func (lti *localityTierInterner) intern(locality roachpb.Locality) localityTiers {
-	if lti.stringToInt == nil {
-		lti.stringToInt = map[string]localityTierValue{}
-	}
 	var lt localityTiers
 	var buf strings.Builder
 	for i := range locality.Tiers {
-		code, ok := lti.stringToInt[locality.Tiers[i].Value]
-		if !ok {
-			n := len(lti.stringToInt)
-			if n == math.MaxUint32 {
-				panic("overflowed localities")
-			}
-			code = localityTierValue(n)
-			lti.stringToInt[locality.Tiers[i].Value] = code
-		}
+		code := lti.si.toCode(locality.Tiers[i].Value)
 		lt.tiers = append(lt.tiers, code)
 		fmt.Fprintf(&buf, "%d:", code)
 	}
@@ -953,10 +1078,8 @@ func (lti *localityTierInterner) intern(locality roachpb.Locality) localityTiers
 	return lt
 }
 
-type localityTierValue uint32
-
 type localityTiers struct {
-	tiers []localityTierValue
+	tiers []stringCode
 	// str is useful as a map key for caching computations.
 	str string
 }
@@ -1153,6 +1276,10 @@ var _ = localityTierInterner{}
 var _ = localityTiers{}
 var _ = storeIDPostingList{}
 var _ = storeIDIncreasing{}
+
+var _ = constraintsDisj{}.hash
+var _ = constraintsDisj{}.isEqual
+var _ = (&stringInterner{}).toString
 
 func init() {
 	var ac analyzedConstraints
