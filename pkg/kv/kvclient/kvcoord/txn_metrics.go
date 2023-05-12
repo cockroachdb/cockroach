@@ -19,11 +19,12 @@ import (
 
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
-	Aborts          *metric.Counter
-	Commits         *metric.Counter
-	Commits1PC      *metric.Counter // Commits which finished in a single phase
-	ParallelCommits *metric.Counter // Commits which entered the STAGING state
-	CommitWaits     *metric.Counter // Commits that waited for linearizability
+	Aborts                    *metric.Counter
+	Commits                   *metric.Counter
+	Commits1PC                *metric.Counter // Commits which finished in a single phase
+	ParallelCommits           *metric.Counter // Commits which entered the STAGING state
+	ParallelCommitAutoRetries *metric.Counter // Commits which were retried after entering the STAGING state
+	CommitWaits               *metric.Counter // Commits that waited for linearizability
 
 	ClientRefreshSuccess                *metric.Counter
 	ClientRefreshFail                   *metric.Counter
@@ -80,6 +81,12 @@ var (
 		Name:        "txn.parallelcommits",
 		Help:        "Number of KV transaction parallel commit attempts",
 		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaParallelCommitAutoRetries = metric.Metadata{
+		Name:        "txn.parallelcommits.auto_retries",
+		Help:        "Number of commit tries after successful failed parallel commit attempts",
+		Measurement: "Retries",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaCommitWaitCount = metric.Metadata{
@@ -275,6 +282,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Commits:                             metric.NewCounter(metaCommitsRates),
 		Commits1PC:                          metric.NewCounter(metaCommits1PCRates),
 		ParallelCommits:                     metric.NewCounter(metaParallelCommitsRates),
+		ParallelCommitAutoRetries:           metric.NewCounter(metaParallelCommitAutoRetries),
 		CommitWaits:                         metric.NewCounter(metaCommitWaitCount),
 		ClientRefreshSuccess:                metric.NewCounter(metaClientRefreshSuccess),
 		ClientRefreshFail:                   metric.NewCounter(metaClientRefreshFail),
