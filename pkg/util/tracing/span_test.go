@@ -107,7 +107,7 @@ func TestRecordingString(t *testing.T) {
 				event: local child 1
 		`))
 
-	require.NoError(t, CheckRecording(rec, `
+	require.NoError(t, checkRecording(rec, `
 		=== operation:root _verbose:1
 		[remote child]
 		[local child]
@@ -187,7 +187,7 @@ func TestRecordingInRecording(t *testing.T) {
 					tags: _verbose=1
 		`))
 
-	require.NoError(t, CheckRecording(childRec, `
+	require.NoError(t, checkRecording(childRec, `
 		=== operation:child _verbose:1
 		[grandchild]
 			=== operation:grandchild _verbose:1
@@ -213,7 +213,7 @@ func TestImportRemoteRecording(t *testing.T) {
 			sp.ImportRemoteRecording(ch.FinishAndGetRecording(tracingpb.RecordingVerbose))
 
 			if verbose {
-				require.NoError(t, CheckRecording(sp.FinishAndGetRecording(tracingpb.RecordingVerbose), `
+				require.NoError(t, checkRecording(sp.FinishAndGetRecording(tracingpb.RecordingVerbose), `
 				=== operation:root _verbose:1
 				[child]
 					=== operation:child _verbose:1
@@ -222,7 +222,7 @@ func TestImportRemoteRecording(t *testing.T) {
 					structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
 	`))
 			} else {
-				require.NoError(t, CheckRecording(sp.FinishAndGetRecording(tracingpb.RecordingStructured), `
+				require.NoError(t, checkRecording(sp.FinishAndGetRecording(tracingpb.RecordingStructured), `
 				=== operation:root
 				[child]
 				structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
@@ -267,7 +267,7 @@ func TestSpanRecordStructured(t *testing.T) {
 	require.NoError(t, CheckRecordedSpans(rec, `
 		span: root
 		`))
-	require.NoError(t, CheckRecording(rec, `
+	require.NoError(t, checkRecording(rec, `
 		=== operation:root
         structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
 	`))
@@ -1334,7 +1334,7 @@ func TestOpenChildIncludedRecording(t *testing.T) {
 	parent := tr.StartSpan("parent", WithRecording(tracingpb.RecordingVerbose))
 	child := tr.StartSpan("child", WithParent(parent))
 	rec := parent.FinishAndGetRecording(tracingpb.RecordingVerbose)
-	require.NoError(t, CheckRecording(rec, `
+	require.NoError(t, checkRecording(rec, `
 		=== operation:parent _verbose:1
 		[child]
 			=== operation:child _unfinished:1 _verbose:1
@@ -1576,7 +1576,7 @@ func TestWithEventListenersAndVerboseParent(t *testing.T) {
 	_, child := EnsureChildSpan(context.Background(), tr, "child", WithParent(parent), WithEventListeners())
 	defer child.Finish()
 	child.Record("foo")
-	require.NoError(t, CheckRecording(parent.GetConfiguredRecording(), `
+	require.NoError(t, checkRecording(parent.GetConfiguredRecording(), `
      === operation:parent _unfinished:1 _verbose:1
      [child]
          === operation:child _unfinished:1 _verbose:1
