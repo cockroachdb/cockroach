@@ -92,7 +92,7 @@ type stmtStatsMetadata appstatspb.CollectedStatementStatistics
 
 func (s *stmtStatsMetadata) jsonFields() jsonFields {
 	return jsonFields{
-		{"stmtTyp", (*jsonString)(&s.Stats.SQLType)},
+		{"stmtType", (*jsonString)(&s.Stats.SQLType)},
 		{"query", (*jsonString)(&s.Key.Query)},
 		{"querySummary", (*jsonString)(&s.Key.QuerySummary)},
 		{"db", (*jsonString)(&s.Key.Database)},

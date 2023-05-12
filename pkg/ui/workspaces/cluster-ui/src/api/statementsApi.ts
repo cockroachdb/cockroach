@@ -143,7 +143,7 @@ export type StatementMetadata = {
   implicitTxn: boolean;
   query: string;
   querySummary: string;
-  stmtTyp: string;
+  stmtType: string;
   vec: boolean;
 };
 
@@ -240,7 +240,7 @@ export function convertStatementRawFormatToAggregatedStatistics(
       rows_written: s.statistics.statistics.rowsWritten,
       run_lat: s.statistics.statistics.runLat,
       service_lat: s.statistics.statistics.svcLat,
-      sql_type: s.metadata.stmtTyp,
+      sql_type: s.metadata.stmtType,
     },
   };
 }
