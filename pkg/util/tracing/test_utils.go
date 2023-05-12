@@ -183,8 +183,8 @@ func checkRecording(t T, rec tracingpb.Recording, expected string) {
 		//
 		// 1. Strip out any leading new lines.
 		rec = strings.TrimLeft(rec, "\n")
-		// 2. Strip out trailing space.
-		rec = strings.TrimRight(rec, "\n\t ")
+		// 2. Strip out trailing newlines.
+		rec = strings.TrimRight(rec, "\n")
 		// 3. Strip out all timing information from the recordings.
 		//
 		// 	 Before |  "0.007ms      0.007ms    event:root 1"
