@@ -139,6 +139,7 @@ go_library(
         "//pkg/server/profiler",
         "//pkg/server/serverpb",
         "//pkg/server/serverrules",
+        "//pkg/server/serversettings",
         "//pkg/server/settingswatcher",
         "//pkg/server/status",
         "//pkg/server/status/statuspb",
