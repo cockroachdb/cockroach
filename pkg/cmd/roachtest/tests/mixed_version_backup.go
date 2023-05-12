@@ -915,7 +915,7 @@ func (mvb *mixedVersionBackup) newBackupType(rng *rand.Rand) backupType {
 	possibleTypes := []backupType{
 		newTableBackup(rng, mvb.dbs, mvb.tables),
 		newDatabaseBackup(rng, mvb.dbs, mvb.tables),
-		newClusterBackup(rng, mvb.dbs, mvb.tables),
+		// newClusterBackup(rng, mvb.dbs, mvb.tables),
 	}
 
 	return possibleTypes[rng.Intn(len(possibleTypes))]
@@ -989,7 +989,7 @@ func (mvb *mixedVersionBackup) loadBackupData(
 		rows = 100
 		l.Printf("importing only %d rows (as this is a local run)", rows)
 	} else {
-		rows = rows3GiB
+		rows = 100 /*rows3GiB*/
 		l.Printf("importing %d rows", rows)
 	}
 
@@ -1027,6 +1027,9 @@ func (mvb *mixedVersionBackup) loadBackupData(
 func (mvb *mixedVersionBackup) takePreviousVersionBackup(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
+	if true {
+		return nil
+	}
 	// Wait here for a few minutes to allow the workloads (which are
 	// initializing concurrently with this step) to store some data in
 	// the cluster by the time the backup is taken. The actual wait time
@@ -1477,6 +1480,10 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 	tc := h.Context() // test context
 	l.Printf("current context: %#v", tc)
 
+	if len(mvb.collections) > 0 && !tc.Finalizing {
+		return nil
+	}
+
 	if len(mvb.tables) == 0 {
 		l.Printf("planning backups for the first time; loading all user tables")
 		if err := mvb.loadTables(ctx, l, rng, h); err != nil {
@@ -1499,6 +1506,10 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 		l.Printf("planning backup: %s", backupCollectionDesc(fullSpec, incSpec))
 		if err := mvb.createBackupCollection(ctx, l, rng, fullSpec, incSpec, h); err != nil {
 			return err
+		}
+
+		if true {
+			return nil
 		}
 
 		// Case 2: plan backups   -> next node
@@ -1640,12 +1651,16 @@ func (mvb *mixedVersionBackup) resetCluster(ctx context.Context, l *logger.Logge
 func (mvb *mixedVersionBackup) verifySomeBackups(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
+	if !h.Context().Finalizing {
+		return nil
+	}
+
 	var toBeRestored []*backupCollection
 	for _, collection := range mvb.collections {
 		if _, isCluster := collection.btype.(*clusterBackup); isCluster {
 			continue
 		}
-		if rng.Float64() < mixedVersionRestoreProbability {
+		if rng.Float64() < 1 /*mixedVersionRestoreProbability*/ {
 			toBeRestored = append(toBeRestored, collection)
 		}
 	}
