@@ -54,7 +54,8 @@ The above commands will create a "local" 3 node cluster, start a cockroach
 cluster on these nodes, run a sql command on the 2nd node, stop, wipe and
 destroy the cluster.
 `,
-	Version: "details:\n" + build.GetInfo().Long(),
+	Version:          "details:\n" + build.GetInfo().Long(),
+	PersistentPreRun: validateAndConfigure,
 }
 
 // Provide `cobra.Command` functions with a standard return code handler.
@@ -698,7 +699,8 @@ Currently available application options are:
 		if len(args) == 2 {
 			versionArg = args[1]
 		}
-		urls, err := roachprod.StageURL(roachprodLibraryLogger, args[0], versionArg, stageOS)
+		urls, err := roachprod.StageURL(roachprodLibraryLogger, args[0], versionArg, stageOS, stageArch)
+
 		if err != nil {
 			return err
 		}
@@ -737,7 +739,7 @@ Some examples of usage:
 		if len(args) == 3 {
 			versionArg = args[2]
 		}
-		return roachprod.Stage(context.Background(), roachprodLibraryLogger, args[0], stageOS, stageDir, args[1], versionArg)
+		return roachprod.Stage(context.Background(), roachprodLibraryLogger, args[0], stageOS, stageArch, stageDir, args[1], versionArg)
 	}),
 }
 
@@ -933,6 +935,35 @@ var grafanaURLCmd = &cobra.Command{
 		fmt.Println(url)
 		return nil
 	}),
+}
+
+// Before executing any command, validate and canonicalize args.
+func validateAndConfigure(cmd *cobra.Command, args []string) {
+	// Skip validation for commands that are self-sufficient.
+	switch cmd.Name() {
+	case "help", "version", "list":
+		return
+	}
+
+	printErrAndExit := func(err error) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", err)
+			os.Exit(1)
+		}
+	}
+
+	// Validate architecture flag, if set.
+	if archOpt := cmd.Flags().Lookup("arch"); archOpt != nil && archOpt.Changed {
+		arch := strings.ToLower(archOpt.Value.String())
+
+		if arch != "amd64" && arch != "arm64" && arch != "fips" {
+			printErrAndExit(fmt.Errorf("unsupported architecture %q", arch))
+		}
+		if arch != archOpt.Value.String() {
+			// Set the canonical value.
+			_ = cmd.Flags().Set("arch", arch)
+		}
+	}
 }
 
 func main() {
