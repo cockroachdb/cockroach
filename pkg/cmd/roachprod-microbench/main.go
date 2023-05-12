@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/google"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -46,6 +47,7 @@ var (
 	flagCopy            = flags.Bool("copy", true, "copy and extract test binaries and libraries to the target cluster")
 	flagLenient         = flags.Bool("lenient", true, "tolerate errors in the benchmark results")
 	flagAffinity        = flags.Bool("affinity", true, "run benchmarks with iterations and binaries having affinity to the same node")
+	flagQuiet           = flags.Bool("quiet", false, "suppress progress output")
 	flagIterations      = flags.Int("iterations", 1, "number of iterations to run each benchmark")
 	workingDir          string
 	testArgs            []string
@@ -118,6 +120,7 @@ func setupVars() error {
 		}
 	}
 
+	config.Quiet = *flagQuiet
 	timestamp = timeutil.Now()
 	initLogger(filepath.Join(workingDir, fmt.Sprintf("roachprod-microbench-%s.log", timestamp.Format(timeFormat))))
 	l.Printf("roachprod-microbench %s", strings.Join(os.Args, " "))
@@ -130,7 +133,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-
 	var packages []string
 	if *flagCluster != "" {
 		binaries := []string{*flagBinaries}
