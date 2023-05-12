@@ -779,6 +779,7 @@ func init() {
 			statementBundleRecreateCmd,
 			debugListFilesCmd,
 			debugJobTraceFromClusterCmd,
+			debugZipCmd,
 		},
 		demoCmd.Commands()...)
 	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
