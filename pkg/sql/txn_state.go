@@ -262,7 +262,13 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 	}
 
 	if ts.recordingThreshold > 0 {
-		logTraceAboveThreshold(ts.Ctx, sp.GetRecording(sp.RecordingType()), "SQL txn", ts.recordingThreshold, timeutil.Since(ts.recordingStart))
+		if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {
+			logTraceAboveThreshold(ts.Ctx,
+				sp.GetRecording(sp.RecordingType()),
+				"SQL txn", "",
+				ts.recordingThreshold,
+				elapsed)
+		}
 	}
 
 	sp.Finish()

@@ -973,10 +973,12 @@ func (ex *connExecutor) execStmtInOpenState(
 			rec := stmtThresholdSpan.FinishAndGetRecording(tracingpb.RecordingVerbose)
 			// NB: This recording does not include the commit for implicit
 			// transactions if the statement didn't auto-commit.
+			redactableStmt := p.FormatAstAsRedactableString(p.stmt.AST,
+				p.extendedEvalCtx.Context.Annotations)
 			logTraceAboveThreshold(
 				ctx,
 				rec,
-				fmt.Sprintf("SQL stmt %s", stmt.AST.String()),
+				"SQL statement", redactableStmt,
 				stmtTraceThreshold,
 				stmtDur,
 			)
@@ -2931,22 +2933,16 @@ func (ex *connExecutor) recordTransactionFinish(
 // given threshold. It is used when txn or stmt threshold tracing is enabled.
 // This function assumes that sp is non-nil and threshold tracing was enabled.
 func logTraceAboveThreshold(
-	ctx context.Context, r tracingpb.Recording, opName string, threshold, elapsed time.Duration,
+	ctx context.Context,
+	r tracingpb.Recording,
+	opName redact.RedactableString,
+	detail redact.RedactableString,
+	threshold, elapsed time.Duration,
 ) {
-	if elapsed < threshold {
-		return
-	}
 	if r == nil {
 		log.Warning(ctx, "missing trace when threshold tracing was enabled")
-		return
 	}
-	dump := r.String()
-	if len(dump) == 0 {
-		return
-	}
-	// Note that log lines larger than 65k are truncated in the debug zip (see
-	// #50166).
-	log.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s", opName, elapsed, threshold, dump)
+	log.SqlExec.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s\n%s", opName, elapsed, threshold, detail, r)
 }
 
 func (ex *connExecutor) execWithProfiling(
