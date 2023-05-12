@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	saramaMetrics "github.com/rcrowley/go-metrics"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
@@ -85,6 +87,11 @@ func init() {
 	ctx = logtags.AddTag(ctx, "kafka-producer", nil)
 	sarama.Logger = &kafkaLogAdapter{ctx: ctx}
 
+	// go-metrics has a global singleton goroutine for sampling rates, which
+	// gets started lazily and can't be stopped. Trigger it here so it doesn't
+	// look like a leaked goroutine in tests.
+	saramaMetrics.NewMeter().Stop()
+
 	// Sarama should not be rejecting messages based on some arbitrary limits.
 	// This sink already manages its resource usage.  Sarama should attempt to deliver
 	// messages, no matter their size.  Of course, the downstream kafka may reject
@@ -133,6 +140,17 @@ type kafkaSink struct {
 		inflight int64
 		flushErr error
 		flushCh  chan struct{}
+	}
+
+	// Enforces throttling from the broker by passing along backpressure to the
+	// changefeed.
+	throttler struct {
+		syncutil.RWMutex
+		throttleUntil    time.Time
+		sampler          saramaMetrics.Meter
+		rateLimiter      *cdcutils.Throttler
+		previousByteRate float64
+		fudgeMultiplier  float64
 	}
 
 	disableInternalRetry bool
@@ -300,6 +318,7 @@ func (s *kafkaSink) newSyncProducer(client kafkaClient) (sarama.SyncProducer, er
 	} else {
 		producer, err = sarama.NewSyncProducerFromClient(client.(sarama.Client))
 	}
+	addOnThrottleCallback(s, client.Config())
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.CannotConnectNow,
 			`connecting to kafka: %s`, s.bootstrapAddrs)
@@ -319,6 +338,7 @@ func (s *kafkaSink) Close() error {
 		// down or beginning to retry regardless
 		_ = s.producer.Close()
 	}
+
 	// s.client is only nil in tests.
 	if s.client != nil {
 		return s.client.Close()
@@ -457,6 +477,9 @@ func (s *kafkaSink) startInflightMessage(ctx context.Context) error {
 }
 
 func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
+	if err := s.maybeThrottle(ctx, msg); err != nil {
+		return err
+	}
 	if err := s.startInflightMessage(ctx); err != nil {
 		return err
 	}
@@ -467,6 +490,104 @@ func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage
 	case s.producer.Input() <- msg:
 	}
 
+	return nil
+}
+
+func (s *kafkaSink) throttleForMs(t int64) {
+	s.throttler.Lock()
+
+	// All new EmitRow() calls will block for the next t milliseconds.
+	throttleUntil := time.Now().Add(time.Millisecond * time.Duration(t))
+	if throttleUntil.After(s.throttler.throttleUntil) {
+		s.throttler.throttleUntil = throttleUntil
+		if log.V(1) {
+			log.Infof(s.ctx, "No more Kafka messages until %s", throttleUntil.String())
+		}
+	}
+
+	// (re-)calculate the byte rate we should limit ourselves to in order
+	// to keep the changefeed as a whole within quota. We only know our
+	// own byte rate at the point where we were throttled, but if every
+	// processor uses that as its estimate for the overall byte rate,
+	// we'll average out to the correct rate in aggregate.
+	// Kafka throttling messages give the amount of time we need to send
+	// no messages in order to get back under its per-second quota,
+	// so in addition to adhering to that, we want our future byte rate to be
+	// equal to the bytes we sent over the past second divided by the time
+	// we should have spent sending them, one second plus the throttle time.
+	recentBytesPerSecond := s.throttler.sampler.Rate1()
+	// There's a potential race condition where we get the throttling message
+	// before we've recorded metrics. Make an effort to block until we see the
+	// relevant metrics show up.
+	ctxWithDeadline, cancel := context.WithDeadline(s.ctx, time.Now().Add(time.Minute))
+	for recentBytesPerSecond == 0 {
+		select {
+		case <-ctxWithDeadline.Done():
+			log.Warning(s.ctx, "Recieved throttling message from Kafka but could not determine recent bytes per second")
+			recentBytesPerSecond = math.Inf(1)
+		default:
+			recentBytesPerSecond = s.throttler.sampler.Rate1()
+		}
+	}
+	cancel()
+
+	targetByteRate := (recentBytesPerSecond / float64(t+1000)) * 1000
+
+	if s.throttler.rateLimiter == nil {
+		metrics := cdcutils.MakeMetrics(time.Minute)
+		s.throttler.rateLimiter = cdcutils.NewThrottler(
+			"kafka-broker-throttling",
+			changefeedbase.SinkThrottleConfig{ByteRate: targetByteRate},
+			&metrics,
+		)
+	} else {
+		if s.throttler.previousByteRate == 0 || s.throttler.previousByteRate > targetByteRate {
+			s.throttler.rateLimiter.UpdateBytePerSecondRate(targetByteRate)
+			s.throttler.previousByteRate = targetByteRate
+			if log.V(1) {
+				log.Infof(s.ctx, "This changefeed emitter is now targeting a byte rate of %f/sec", targetByteRate)
+			}
+		} else {
+			// According to our metrics, we honored the previous throttling request but still got
+			// throttled again. Increase the fudge factor as it's empirically too low.
+			if s.throttler.fudgeMultiplier == 0 {
+				s.throttler.fudgeMultiplier = 1
+			}
+			s.throttler.fudgeMultiplier += 0.01
+			if log.V(1) {
+				log.Infof(s.ctx, "Throttled multiple times at byte rate %v, so increasing byte rate multiplier to %v",
+					s.throttler.previousByteRate, s.throttler.fudgeMultiplier)
+			}
+
+		}
+	}
+	s.throttler.Unlock()
+}
+
+func (s *kafkaSink) maybeThrottle(ctx context.Context, msg *sarama.ProducerMessage) error {
+	s.throttler.RLock()
+	throttleFor := time.Until(s.throttler.throttleUntil)
+	s.throttler.RUnlock()
+	if throttleFor > 0 {
+		log.Warningf(ctx, "throttling due to broker response for %v", throttleFor)
+		select {
+		case <-ctx.Done():
+		case <-time.After(throttleFor):
+		}
+	}
+	s.throttler.RLock()
+	defer s.throttler.RUnlock()
+	if s.throttler.rateLimiter != nil {
+		sz := msg.Key.Length() + msg.Value.Length()
+		if s.throttler.fudgeMultiplier > 0 {
+			sz = int(float64(sz) * s.throttler.fudgeMultiplier)
+		}
+		if log.V(2) {
+			log.Infof(ctx, "Kafka throttler may need to wait for rateLimiter quota...")
+			defer log.Infof(ctx, "Kafka throttler done waiting for quota")
+		}
+		return s.throttler.rateLimiter.AcquireMessageQuota(ctx, sz)
+	}
 	return nil
 }
 
@@ -635,6 +756,7 @@ func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryE
 
 		log.Infof(s.ctx, "kafka sink retrying %d messages with reduced flush config: (%+v)", len(msgs), newConfig.Producer.Flush)
 		activeConfig = newConfig
+		addOnThrottleCallback(s, newConfig)
 
 		newClient, err := s.newClient(newConfig)
 		if err != nil {
@@ -1033,6 +1155,7 @@ func buildKafkaConfig(
 	if err := saramaCfg.Apply(config); err != nil {
 		return nil, errors.Wrap(err, "failed to apply kafka client configuration")
 	}
+
 	return config, nil
 }
 
@@ -1074,12 +1197,67 @@ func makeKafkaSink(
 		disableInternalRetry: !internalRetryEnabled,
 	}
 
+	addOnThrottleCallback(sink, config)
+	sampler, ok := config.MetricRegistry.GetOrRegister(string(saramaMetricOutgoingBytes), saramaMetrics.NewMeter).(saramaMetrics.Meter)
+	if !ok {
+		return nil, errors.AssertionFailedf("Expected outgoing-byte-rate to be a Meter but found %T", sampler)
+	}
+	sink.throttler.sampler = sampler
+
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
 		return nil, errors.Errorf(
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
 	return sink, nil
+}
+
+type metricSpy struct {
+	saramaMetrics.Histogram
+	hook func(int64)
+}
+
+func (m *metricSpy) Update(stat int64) {
+	m.hook(stat)
+	m.Histogram.Update(stat)
+}
+
+type metricSpyInjector struct {
+	saramaMetrics.Registry
+	hook    func(int64)
+	pattern saramaMetricName
+}
+
+func (m *metricSpyInjector) GetOrRegister(name string, i interface{}) interface{} {
+	reg := m.Registry.GetOrRegister(name, i)
+	if strings.Contains(name, string(m.pattern)) {
+		hist, ok := reg.(saramaMetrics.Histogram)
+		if !ok {
+			hist = saramaMetrics.NilHistogram{}
+		}
+		return &metricSpy{Histogram: hist, hook: m.hook}
+	}
+	return reg
+}
+
+type saramaMetricName string
+
+const saramaMetricThrottleMS saramaMetricName = "throttle-time-in-ms"
+const saramaMetricOutgoingBytes saramaMetricName = "outgoing-byte-rate"
+
+// It's difficult to get the asyncProducer to tell us about internal events, so this
+// fairly terrible hack injects a spy into the metric update function for one we care
+// about.  metricName must be a magic string from registerMetrics in
+// https://github.com/Shopify/sarama/blob/main/broker.go#L165
+func addMetricSpy(metricName saramaMetricName, config *sarama.Config, onUpdate func(int64)) {
+	config.MetricRegistry = &metricSpyInjector{Registry: config.MetricRegistry, hook: onUpdate, pattern: metricName}
+}
+
+func addOnThrottleCallback(s *kafkaSink, config *sarama.Config) {
+	addMetricSpy(saramaMetricThrottleMS, config, func(t int64) {
+		log.Warningf(s.ctx, "Honoring broker request to pause for %d ms", t)
+		s.throttleForMs(t)
+	})
 }
 
 type kafkaStats struct {
