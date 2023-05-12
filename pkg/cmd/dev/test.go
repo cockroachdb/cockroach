@@ -66,17 +66,17 @@ pkg/kv/kvserver:kvserver_test) instead.`,
     dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/...
         Test multiple packages recursively
 
-    dev test --race --stress ...
-        Run a test under race and stress
+    dev test --stress --timeout=1m --test-args='-test.timeout 5s'
+        Stress for 1m until a test runs longer than 5s
+
+    dev test --race --count 250 ...
+        Run a test under race, 250 times in parallel
 
     dev test pkg/spanconfig/... --test-args '-test.trace=trace.out'
         Pass arguments to go test (see 'go help testflag'; prefix args with '-test.{arg}')
 
-    dev test pkg/spanconfig --stress --stress-args '-maxruns 1000 -p 4'
-        Pass arguments to github.com/cockroachdb/stress
-
-    dev test --stress --timeout=1m --test-args='-test.timeout 5s'
-        Stress for 1m until a test runs longer than 5s
+    dev test pkg/spanconfig --stress --stress-args '-maxruns 1000 -p 4' --timeout=10m
+        Pass arguments to github.com/cockroachdb/stress, run for 10 min
 
     dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
 `,
@@ -212,7 +212,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--config=race")
 	} else if stress {
 		disableTestSharding = true
-	}
+        }
 	if deadlock {
 		goTags = append(goTags, "deadlock")
 	}
@@ -338,7 +338,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_arg", "-show-logs")
 	}
 	if count != 1 {
-		args = append(args, "--test_arg", fmt.Sprintf("-test.count=%d", count))
+		args = append(args, fmt.Sprintf("--runs_per_test=%d", count))
 	}
 	if vModule != "" {
 		args = append(args, "--test_arg", fmt.Sprintf("-vmodule=%s", vModule))
