@@ -288,3 +288,89 @@ statement error pgcode 22023 invalid salt encoding
 SELECT crypt('password', '$2a$06$#kv6DxN3PpZo4YboQRrIVO')
 
 subtest end
+
+subtest armor
+
+query T
+SELECT armor(NULL)
+----
+NULL
+
+query T
+SELECT regexp_replace(armor(''), '\n\n', e'\n<blank line>\n', 'g')
+----
+-----BEGIN PGP MESSAGE-----
+<blank line>
+=twTO
+-----END PGP MESSAGE-----
+
+query T
+SELECT regexp_replace(armor('abc'), '\n\n', e'\n<blank line>\n', 'g')
+----
+-----BEGIN PGP MESSAGE-----
+<blank line>
+YWJj
+=uhx7
+-----END PGP MESSAGE-----
+
+query T
+SELECT regexp_replace(armor('🛡️'), '\n\n', e'\n<blank line>\n', 'g')
+----
+-----BEGIN PGP MESSAGE-----
+<blank line>
+8J+boe+4jw==
+=BTgl
+-----END PGP MESSAGE-----
+
+query T
+SELECT dearmor(NULL)
+----
+NULL
+
+query error corrupt ASCII-armor
+SELECT dearmor('')
+
+query T
+SELECT convert_from(dearmor(armor('abc')), 'UTF8')
+----
+abc
+
+query T
+SELECT convert_from(
+  dearmor(
+    regexp_replace(
+'-----BEGIN PGP MESSAGE-----
+<blank line>
+YWJj
+=uhx7
+-----END PGP MESSAGE-----',
+      '\n<blank line>\n' ,
+      e'\n\n',
+      'g'
+    )
+  ),
+  'UTF8'
+)
+----
+abc
+
+query T
+SELECT convert_from(
+  dearmor(
+    regexp_replace(
+'-----BEGIN PGP MESSAGE-----
+<blank line>
+8J+boe+4jw==
+=BTgl
+-----END PGP MESSAGE-----',
+      '\n<blank line>\n' ,
+      e'\n\n',
+      'g'
+    )
+  ),
+  'UTF8'
+)
+----
+🛡️
+
+subtest end
