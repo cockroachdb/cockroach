@@ -845,7 +845,7 @@ function FilterBadge(props: FilterBadgeProps): React.ReactElement {
       {value}
       <Cancel
         className={badge.closeArea}
-        onClick={() => removeFilter(filters, name, onRemoveFilter)}
+        onClick={() => removeFilter({ ...filters }, name, onRemoveFilter)}
       />
     </div>
   );
