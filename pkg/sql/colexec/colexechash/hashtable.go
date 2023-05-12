@@ -123,7 +123,7 @@ type hashTableProbeBuffer struct {
 
 	///////////////////////////////////////////////////////////////
 	// Slices below are allocated dynamically but are limited by //
-	// coldata.BatchSize() in size.                              //
+	// HashTable.maxProbingBatchLength in size.                  //
 	///////////////////////////////////////////////////////////////
 
 	// ToCheck stores the indices of tuples from the probing batch for which we
@@ -218,7 +218,8 @@ type hashTableProbeBuffer struct {
 // find possible matches for each tuple. For more details see the comments on
 // hashAggregator.onlineAgg and DistinctBuild.
 type HashTable struct {
-	allocator *colmem.Allocator
+	allocator             *colmem.Allocator
+	maxProbingBatchLength int
 
 	// unlimitedSlicesNumUint64AccountedFor stores the number of uint64 from
 	// the unlimited slices that we have already accounted for.
@@ -285,6 +286,8 @@ var _ colexecop.Resetter = &HashTable{}
 // - allocator must be the allocator that is owned by the hash table and not
 // shared with any other components.
 //
+// - maxProbingBatchLength indicates the maximum size of the probing batch.
+//
 // - loadFactor determines the average number of tuples per bucket which, if
 // exceeded, will trigger resizing the hash table. This number can have a
 // noticeable effect on the performance, so every user of the hash table should
@@ -309,6 +312,7 @@ var _ colexecop.Resetter = &HashTable{}
 func NewHashTable(
 	ctx context.Context,
 	allocator *colmem.Allocator,
+	maxProbingBatchLength int,
 	loadFactor float64,
 	initialNumHashBuckets uint64,
 	sourceTypes []*types.T,
@@ -350,7 +354,8 @@ func NewHashTable(
 		colexecerror.InternalError(errors.AssertionFailedf("unknown HashTableBuildMode %d", buildMode))
 	}
 	ht := &HashTable{
-		allocator: allocator,
+		allocator:             allocator,
+		maxProbingBatchLength: maxProbingBatchLength,
 		BuildScratch: hashChains{
 			First: make([]keyID, initialNumHashBuckets),
 		},
@@ -396,8 +401,8 @@ func (ht *HashTable) shouldResize(numTuples int) bool {
 }
 
 // probeBufferInternalMaxMemUsed returns the maximum memory used by the slices
-// of hashTableProbeBuffer that are limited by coldata.BatchSize() in size.
-func probeBufferInternalMaxMemUsed() int64 {
+// of hashTableProbeBuffer that are limited by maxProbingBatchLength in size.
+func probeBufferInternalMaxMemUsed(maxProbingBatchLength int) int64 {
 	// probeBufferInternalMaxMemUsed accounts for:
 	// - five uint64 slices:
 	//   - hashTableProbeBuffer.hashChains.Next
@@ -408,17 +413,19 @@ func probeBufferInternalMaxMemUsed() int64 {
 	// - two bool slices:
 	//   - hashTableProbeBuffer.differs
 	//   - hashTableProbeBuffer.distinct.
-	return memsize.Uint64*int64(5*coldata.BatchSize()) + memsize.Bool*int64(2*coldata.BatchSize())
+	return memsize.Uint64*int64(5*maxProbingBatchLength) + memsize.Bool*int64(2*maxProbingBatchLength)
 }
 
 // accountForLimitedSlices checks whether we have already accounted for the
-// memory used by the slices that are limited by coldata.BatchSize() in size
+// memory used by the slices that are limited by maxProbingBatchLength in size
 // and adjusts the allocator accordingly if we haven't.
-func (p *hashTableProbeBuffer) accountForLimitedSlices(allocator *colmem.Allocator) {
+func (p *hashTableProbeBuffer) accountForLimitedSlices(
+	allocator *colmem.Allocator, maxProbingBatchLength int,
+) {
 	if p.limitedSlicesAreAccountedFor {
 		return
 	}
-	allocator.AdjustMemoryUsage(probeBufferInternalMaxMemUsed())
+	allocator.AdjustMemoryUsage(probeBufferInternalMaxMemUsed(maxProbingBatchLength))
 	p.limitedSlicesAreAccountedFor = true
 }
 
@@ -436,7 +443,7 @@ func (ht *HashTable) buildFromBufferedTuples() {
 	}
 	// Account for memory used by the internal auxiliary slices that are limited
 	// in size.
-	ht.ProbeScratch.accountForLimitedSlices(ht.allocator)
+	ht.ProbeScratch.accountForLimitedSlices(ht.allocator, ht.maxProbingBatchLength)
 	// Figure out the minimum capacities of the unlimited slices before actually
 	// allocating then.
 	needCapacity := int64(ht.numBuckets) + int64(ht.Vals.Length()+1) // ht.BuildScratch.First + ht.BuildScratch.Next
