@@ -997,6 +997,10 @@ type Store struct {
 	// tenantRateLimiters manages tenantrate.Limiters
 	tenantRateLimiters *tenantrate.LimiterFactory
 
+	// eagerLeaseAcquisitionLimiter limits the number of concurrent eager lease
+	// acquisitions made during Raft ticks.
+	eagerLeaseAcquisitionLimiter *quotapool.IntPool
+
 	computeInitialMetrics              sync.Once
 	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 	spanConfigUpdateQueueRateLimiter   *quotapool.RateLimiter
@@ -1091,6 +1095,11 @@ type StoreConfig struct {
 	IntentResolverTaskLimit int
 
 	TestingKnobs StoreTestingKnobs
+
+	// EagerLeaseAcquisitionLimiter is used to limit the number of concurrent
+	// eager lease extensions. Normally shared between all stores on a node.
+	// Can be nil, which disables the limit.
+	EagerLeaseAcquisitionLimiter *quotapool.IntPool
 
 	// SnapshotApplyLimit specifies the maximum number of empty
 	// snapshots and the maximum number of non-empty snapshots that are permitted
@@ -1377,6 +1386,7 @@ func NewStore(
 	s.limiters.ConcurrentExportRequests = limit.MakeConcurrentRequestLimiter(
 		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
+	s.eagerLeaseAcquisitionLimiter = cfg.EagerLeaseAcquisitionLimiter
 
 	// The snapshot storage is usually empty at this point since it is cleared
 	// after each snapshot application, except when the node crashed right before
@@ -1993,6 +2003,19 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.metrics.addMVCCStats(ctx, rep.tenantMetricsRef, rep.GetMVCCStats())
 		} else {
 			return errors.AssertionFailedf("no tenantID for initialized replica %s", rep)
+		}
+
+		// For replicas that use expiration-based leases, eagerly initialize the
+		// Raft group and unquiesce it. We don't quiesce ranges with expiration
+		// leases, and we want to eagerly acquire leases for them, which happens
+		// during Raft ticks. We rely on Raft pre-vote to avoid disturbing
+		// established Raft leaders.
+		//
+		// NB: cluster settings haven't propagated yet, so we have to check the last
+		// known lease instead of relying on shouldUseExpirationLeaseRLocked(). We
+		// also check Sequence > 0 to omit ranges that haven't seen a lease yet.
+		if l, _ := rep.GetLease(); l.Type() == roachpb.LeaseExpiration && l.Sequence > 0 {
+			rep.maybeInitializeRaftGroup(ctx)
 		}
 	}
 

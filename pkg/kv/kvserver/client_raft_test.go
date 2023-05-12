@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -1278,14 +1280,24 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	log.Infof(ctx, "test: sending request")
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	getRequest := getArgs(key)
-	_, pErr := kv.SendWrapped(timeoutCtx, partitionedStoreSender, getRequest)
-	require.NotNil(t, pErr, "unexpected success")
-	nlhe := pErr.GetDetail().(*kvpb.NotLeaseHolderError)
-	require.NotNil(t, nlhe, "expected NotLeaseholderError, got: %s", pErr)
-	require.False(t, nlhe.Lease.Empty())
-	require.NotNil(t, nlhe.Lease.Replica, "expected NotLeaseholderError with a known leaseholder, got: %s", pErr)
-	require.Equal(t, leaderReplicaID, nlhe.Lease.Replica.ReplicaID)
+	for {
+		getRequest := getArgs(key)
+		_, pErr := kv.SendWrapped(timeoutCtx, partitionedStoreSender, getRequest)
+		require.Error(t, pErr.GoError(), "unexpected success")
+		nlhe := &kvpb.NotLeaseHolderError{}
+		require.ErrorAs(t, pErr.GetDetail(), &nlhe)
+		// Someone else (e.g. the Raft scheduler) may have attempted to acquire the
+		// lease in the meanwhile, bumping the node's epoch and causing an
+		// ErrEpochIncremented, so we ignore these and try again.
+		if strings.Contains(nlhe.Error(), liveness.ErrEpochIncremented.Error()) { // no cause chain
+			t.Logf("got %s, retrying", nlhe)
+			continue
+		}
+		require.False(t, nlhe.Lease.Empty(), "expected NotLeaseholderError with a lease, got: %s", pErr)
+		require.NotNil(t, nlhe.Lease.Replica, "expected NotLeaseholderError with a known leaseholder, got: %s", pErr)
+		require.Equal(t, leaderReplicaID, nlhe.Lease.Replica.ReplicaID)
+		break
+	}
 }
 
 // TestRequestsOnFollowerWithNonLiveLeaseholder tests the availability of a
@@ -3820,70 +3832,6 @@ func TestReplicaTooOldGC(t *testing.T) {
 		}
 		return errors.Errorf("found %s, waiting for it to be GC'd", replica)
 	})
-}
-
-func TestReplicaLazyLoad(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
-
-	stickyServerArgs := base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{
-			{
-				InMemory:               true,
-				StickyInMemoryEngineID: "1",
-			},
-		},
-		RaftConfig: base.RaftConfig{
-			RaftTickInterval: 50 * time.Millisecond, // safe because there is only a single node
-		},
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				StickyEngineRegistry: stickyEngineRegistry,
-			},
-			Store: &kvserver.StoreTestingKnobs{
-				DisableScanner: true,
-			},
-		},
-	}
-
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs:      stickyServerArgs,
-		})
-	defer tc.Stopper().Stop(ctx)
-
-	// Split so we can rely on RHS range being quiescent after a restart.
-	// We use UserTableDataMin to avoid having the range activated to
-	// gossip system table data.
-	splitKey := bootstrap.TestingUserTableDataMin()
-	tc.SplitRangeOrFatal(t, splitKey)
-
-	tc.StopServer(0)
-	tc.AddAndStartServer(t, stickyServerArgs)
-
-	// Wait for a bunch of raft ticks.
-	ticks := tc.GetFirstStoreFromServer(t, 1).Metrics().RaftTicks.Count
-	for targetTicks := ticks() + 3; ticks() < targetTicks; {
-		time.Sleep(time.Millisecond)
-	}
-
-	splitKeyAddr, err := keys.Addr(splitKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	replica := tc.GetFirstStoreFromServer(t, 1).LookupReplica(splitKeyAddr)
-	if replica == nil {
-		t.Fatalf("lookup replica at key %q returned nil", splitKey)
-	}
-	if replica.RaftStatus() != nil {
-		t.Fatalf("expected replica Raft group to be uninitialized")
-	}
 }
 
 func TestReplicateReAddAfterDown(t *testing.T) {

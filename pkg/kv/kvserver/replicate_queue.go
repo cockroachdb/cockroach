@@ -927,9 +927,9 @@ func (rq *replicateQueue) preProcessCheck(ctx context.Context, repl *Replica) er
 	// it is necessary to simulate the prior change having succeeded to then plan
 	// this lease transfer.
 	//
-	// TODO(erikgrinaker): We shouldn't overload the replicate queue to also be
-	// responsible for lease maintenance, but it'll do for now. See:
-	// https://github.com/cockroachdb/cockroach/issues/98433
+	// TODO(erikgrinaker): This is also done more eagerly during Raft ticks, but
+	// that doesn't work for quiesced epoch-based ranges, so we have a fallback
+	// here that usually runs within 10 minutes.
 	leaseStatus, pErr := repl.redirectOnOrAcquireLease(ctx)
 	if pErr != nil {
 		return pErr.GoError()
