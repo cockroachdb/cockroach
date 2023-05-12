@@ -494,6 +494,7 @@ func registerTPCC(r registry.Registry) {
 		Tags:              []string{`default`, `release_qualification`},
 		Cluster:           headroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
@@ -519,6 +520,7 @@ func registerTPCC(r registry.Registry) {
 		Tags:              []string{`default`},
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCMixedHeadroom(ctx, t, c, cloud, 1)
 		},
@@ -530,6 +532,7 @@ func registerTPCC(r registry.Registry) {
 		Tags:              []string{`default`},
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCMixedHeadroom(ctx, t, c, cloud, 2)
 		},
@@ -539,6 +542,7 @@ func registerTPCC(r registry.Registry) {
 		Owner:             registry.OwnerTestEng,
 		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   1,
@@ -557,6 +561,7 @@ func registerTPCC(r registry.Registry) {
 		// slowly ramp up the load.
 		Timeout:           4*24*time.Hour + 10*time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			warehouses := 1000
 			runTPCC(ctx, t, c, tpccOptions{
@@ -675,6 +680,7 @@ func registerTPCC(r registry.Registry) {
 				// Add an extra node which serves as the workload nodes.
 				Cluster:           r.MakeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
 				EncryptionSupport: registry.EncryptionMetamorphic,
+				Leases:            registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					t.Status(tc.desc)
 					duration := 90 * time.Minute
@@ -766,6 +772,7 @@ func registerTPCC(r registry.Registry) {
 		Owner:             registry.OwnerTestEng,
 		Cluster:           r.MakeClusterSpec(4),
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
@@ -795,6 +802,7 @@ func registerTPCC(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
 		Timeout:           6 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			skip.WithIssue(t, 53886)
 			runTPCC(ctx, t, c, tpccOptions{

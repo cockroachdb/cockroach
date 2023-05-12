@@ -32,6 +32,7 @@ func registerSlowDrain(r registry.Registry) {
 		Name:    fmt.Sprintf("slow-drain/duration=%s", duration),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSlowDrain(ctx, t, c, duration)
 		},

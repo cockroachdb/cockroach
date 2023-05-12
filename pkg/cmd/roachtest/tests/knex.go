@@ -130,6 +130,7 @@ func registerKnex(r registry.Registry) {
 		Name:       "knex",
 		Owner:      registry.OwnerSQLFoundations,
 		Cluster:    r.MakeClusterSpec(1),
+		Leases:     registry.MetamorphicLeases,
 		NativeLibs: registry.LibGEOS,
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

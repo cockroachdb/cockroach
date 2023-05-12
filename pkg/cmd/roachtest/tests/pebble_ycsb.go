@@ -69,6 +69,7 @@ func registerPebbleYCSB(r registry.Registry) {
 		Owner:   registry.OwnerStorage,
 		Timeout: 12 * time.Hour,
 		Cluster: r.MakeClusterSpec(5, spec.CPU(16)),
+		Leases:  registry.MetamorphicLeases,
 		Tags:    []string{"pebble_nightly_ycsb_race"},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPebbleYCSB(ctx, t, c, 64, pebble, 30, []string{"A"}, false /* artifacts */)

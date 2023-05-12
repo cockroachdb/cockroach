@@ -31,6 +31,7 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:              "multitenant-upgrade",
 		Cluster:           r.MakeClusterSpec(2),
+		Leases:            registry.MetamorphicLeases,
 		Owner:             registry.OwnerMultiTenant,
 		NonReleaseBlocker: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

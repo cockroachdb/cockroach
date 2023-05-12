@@ -41,6 +41,7 @@ func registerElasticControlForBackups(r registry.Registry) {
 		Owner:   registry.OwnerAdmissionControl,
 		Tags:    []string{`weekly`},
 		Cluster: r.MakeClusterSpec(4, spec.CPU(8)),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)

@@ -296,6 +296,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			Name:            fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			Owner:           registry.OwnerSQLQueries,
 			Cluster:         clusterSpec,
+			Leases:          registry.MetamorphicLeases,
 			NativeLibs:      registry.LibGEOS,
 			Timeout:         time.Minute * 20,
 			RequiresLicense: true,

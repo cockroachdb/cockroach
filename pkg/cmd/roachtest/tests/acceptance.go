@@ -27,6 +27,7 @@ func registerAcceptance(r registry.Registry) {
 		numNodes          int
 		timeout           time.Duration
 		encryptionSupport registry.EncryptionSupport
+		defaultLeases     bool
 	}{
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
@@ -63,9 +64,10 @@ func registerAcceptance(r registry.Registry) {
 		},
 		registry.OwnerTestEng: {
 			{
-				name:    "version-upgrade",
-				fn:      runVersionUpgrade,
-				timeout: 30 * time.Minute,
+				name:          "version-upgrade",
+				fn:            runVersionUpgrade,
+				timeout:       30 * time.Minute,
+				defaultLeases: true,
 			},
 		},
 		registry.OwnerDisasterRecovery: {
@@ -106,6 +108,9 @@ func registerAcceptance(r registry.Registry) {
 				spec.Timeout = tc.timeout
 			}
 			spec.EncryptionSupport = tc.encryptionSupport
+			if !tc.defaultLeases {
+				spec.Leases = registry.MetamorphicLeases
+			}
 			spec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tc.fn(ctx, t, c)
 			}

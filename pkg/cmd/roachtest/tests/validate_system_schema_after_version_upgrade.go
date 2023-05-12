@@ -35,6 +35,7 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 		Name:    "systemschema/validate-after-version-upgrade",
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
