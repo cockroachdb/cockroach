@@ -321,7 +321,9 @@ func (c *cliState) addHistory(line string) {
 }
 
 func (c *cliState) invalidSyntax(nextState cliStateEnum) cliStateEnum {
-	return c.invalidSyntaxf(nextState, `%s. Try \? for help.`, c.lastInputLine)
+	return c.cliError(nextState,
+		errors.WithHint(errors.Newf("invalid syntax: %s", c.lastInputLine),
+			`Try \? for help.`))
 }
 
 // inCopy implements the sqlShell interface (to support the editor).
@@ -333,26 +335,23 @@ func (c *cliState) resetCopy() {
 	c.copyFromState = nil
 }
 
-func (c *cliState) invalidSyntaxf(
-	nextState cliStateEnum, format string, args ...interface{},
-) cliStateEnum {
-	fmt.Fprint(c.iCtx.stderr, "invalid syntax: ")
-	fmt.Fprintf(c.iCtx.stderr, format, args...)
-	fmt.Fprintln(c.iCtx.stderr)
-	c.exitErr = errInvalidSyntax
-	return nextState
+func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliStateEnum {
+	return c.cliError(nextState, errors.Newf("cannot change option during multi-line editing: %s", opt))
 }
 
-func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliStateEnum {
-	c.exitErr = errors.Newf("cannot change option during multi-line editing: %s\n", opt)
-	fmt.Fprintln(c.iCtx.stderr, c.exitErr)
+func (c *cliState) cliError(nextState cliStateEnum, err error) cliStateEnum {
+	c.exitErr = err
+	if !c.singleStatement {
+		clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+	}
+	if c.iCtx.errExit {
+		return cliStop
+	}
 	return nextState
 }
 
 func (c *cliState) internalServerError(nextState cliStateEnum, err error) cliStateEnum {
-	fmt.Fprintf(c.iCtx.stderr, "internal server error: %v\n", err)
-	c.exitErr = err
-	return nextState
+	return c.cliError(nextState, errors.Wrap(err, "internal server error"))
 }
 
 var options = map[string]struct {
@@ -409,7 +408,7 @@ var options = map[string]struct {
 		display: func(c *cliState) string { return strconv.Itoa(c.sqlExecCtx.TableBorderMode) },
 	},
 	`display_format`: {
-		description:               "the output format for tabular data (table, csv, tsv, html, ndjson, sql, records, raw)",
+		description:               fmt.Sprintf("the output format for tabular data (%s)", clisqlexec.TableFormatHelp),
 		isBoolean:                 false,
 		validDuringMultilineEntry: true,
 		set: func(c *cliState, val string) error {
@@ -644,9 +643,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	}
 
 	if err != nil {
-		fmt.Fprintf(c.iCtx.stderr, "\\set %s: %v\n", sargs, err)
-		c.exitErr = err
-		return errState
+		return c.cliError(errState, errors.Wrapf(err, "\\set %s", sargs))
 	}
 
 	return nextState
@@ -665,9 +662,7 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 		return c.invalidOptionChange(errState, args[0])
 	}
 	if err := opt.reset(c); err != nil {
-		fmt.Fprintf(c.iCtx.stderr, "\\unset %s: %v\n", args[0], err)
-		c.exitErr = err
-		return errState
+		return c.cliError(errState, errors.Wrapf(err, "\\unset %s", args[0]))
 	}
 	return nextState
 }
@@ -681,7 +676,7 @@ func isEndOfStatement(lastTok int) bool {
 func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
 	// A demo cluster signifies the presence of `cockroach demo`.
 	if c.sqlCtx.DemoCluster == nil {
-		return c.invalidSyntaxf(errState, `\demo can only be run with cockroach demo`)
+		return c.cliError(errState, errors.New(`\demo can only be run with cockroach demo`))
 	}
 
 	// The \demo command has one of three patterns:
@@ -764,10 +759,8 @@ func (c *cliState) handleDemoNodeCommands(
 ) cliStateEnum {
 	nodeID, err := strconv.ParseInt(cmd[1], 10, 32)
 	if err != nil {
-		return c.invalidSyntaxf(
-			errState,
-			"%s",
-			errors.Wrapf(err, "%q is not a valid node ID", cmd[1]),
+		return c.cliError(errState,
+			errors.Wrapf(err, "invalid syntax: %q is not a valid node ID", cmd[1]),
 		)
 	}
 
@@ -809,10 +802,9 @@ func (c *cliState) handleHelp(cmd []string, nextState, errState cliStateEnum) cl
 	if helpText != "" {
 		fmt.Fprintln(c.iCtx.stdout, helpText)
 	} else {
-		fmt.Fprintf(c.iCtx.stderr,
-			"no help available for %q.\nTry \\h with no argument to see available help.\n", command)
-		c.exitErr = errors.New("no help available")
-		return errState
+		return c.cliError(errState, errors.WithHint(
+			errors.Newf("no help available for %q", command),
+			`Try \h with no argument to see available help.`))
 	}
 	return nextState
 }
@@ -824,10 +816,9 @@ func (c *cliState) handleFunctionHelp(cmd []string, nextState, errState cliState
 	if helpText != "" {
 		fmt.Fprintln(c.iCtx.stdout, helpText)
 	} else {
-		fmt.Fprintf(c.iCtx.stderr,
-			"no help available for %q.\nTry \\hf with no argument to see available help.\n", funcName)
-		c.exitErr = errors.New("no help available")
-		return errState
+		return c.cliError(errState, errors.WithHint(
+			errors.Newf("no help available for %q", funcName),
+			`Try \hf with no argument to see available help.`))
 	}
 	return nextState
 }
@@ -863,9 +854,7 @@ func (c *cliState) runSyscmd(line string, nextState, errState cliStateEnum) cliS
 
 	cmdOut, err := c.execSyscmd(command)
 	if err != nil {
-		fmt.Fprintf(c.iCtx.stderr, "command failed: %s\n", err)
-		c.exitErr = err
-		return errState
+		return c.cliError(errState, errors.Wrap(err, "command failed"))
 	}
 
 	fmt.Fprint(c.iCtx.stdout, cmdOut)
@@ -883,9 +872,7 @@ func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cli
 
 	cmdOut, err := c.execSyscmd(command)
 	if err != nil {
-		fmt.Fprintf(c.iCtx.stderr, "command failed: %s\n", err)
-		c.exitErr = err
-		return errState
+		return c.cliError(errState, errors.Wrap(err, "command failed"))
 	}
 
 	c.lastInputLine = cmdOut
@@ -1168,14 +1155,11 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 				c.partialStmtsLen = 0
 				c.useContinuePrompt = false
 			}()
-			c.exitErr = errors.CombineErrors(
+			if err := errors.CombineErrors(
 				pgerror.Newf(pgcode.QueryCanceled, "COPY canceled by user"),
 				c.copyFromState.Cancel(),
-			)
-			if c.exitErr != nil {
-				if !c.singleStatement {
-					clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-				}
+			); err != nil {
+				_ = c.cliError(cliRefreshPrompt, err)
 			}
 			return cliRefreshPrompt
 		}
@@ -1222,9 +1206,7 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 
 	default:
 		// Other errors terminate the shell.
-		fmt.Fprintf(c.iCtx.stderr, "input error: %s\n", err)
-		c.exitErr = err
-		return cliStop
+		return c.cliError(cliStop, errors.Wrap(err, "input error"))
 	}
 
 	c.lastInputLine = l
@@ -1292,13 +1274,9 @@ func (c *cliState) setupChangefeedOutput() (undo func(), err error) {
 }
 
 func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum) cliStateEnum {
-	var title, sql string
-	var qargs []interface{}
-	var foreach func([]string) []describeStage
-	title, sql, qargs, foreach, c.exitErr = pgInspect(cmd)
-	if c.exitErr != nil {
-		clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-		return errState
+	title, sql, qargs, foreach, err := pgInspect(cmd)
+	if err != nil {
+		return c.cliError(errState, err)
 	}
 
 	if title != "" {
@@ -1313,7 +1291,7 @@ func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum
 		// There's N stages, each produced by the foreach function
 		// applied on the result of the original SQL. Used mainly by \d.
 		var rows [][]string
-		c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
+		if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
 			q := clisqlclient.MakeQuery(fmt.Sprintf(sql, qargs...))
 			var err error
 			_, rows, err = c.sqlExecCtx.RunQuery(
@@ -1321,12 +1299,8 @@ func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum
 				true, /* showMoreChars */
 			)
 			return err
-		})
-		if c.exitErr != nil {
-			if !c.singleStatement {
-				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-			}
-			return errState
+		}); err != nil {
+			return c.cliError(errState, err)
 		}
 
 		for _, row := range rows {
@@ -1339,7 +1313,7 @@ func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum
 		if st.title != "" {
 			fmt.Fprintln(c.iCtx.queryOutput, st.title)
 		}
-		c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
+		if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
 			q := clisqlclient.MakeQuery(fmt.Sprintf(st.sql, st.qargs...))
 			return c.sqlExecCtx.RunQueryAndFormatResults(
 				ctx,
@@ -1349,12 +1323,8 @@ func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum
 				c.iCtx.stderr,
 				q,
 			)
-		})
-		if c.exitErr != nil {
-			if !c.singleStatement {
-				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-			}
-			return errState
+		}); err != nil {
+			return c.cliError(errState, err)
 		}
 	}
 	return loopState
@@ -1491,17 +1461,11 @@ ORDER BY 1`
 		return c.handleFunctionHelp(cmd[1:], loopState, errState)
 
 	case `\copy`:
-		c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
+		if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
 			// Strip out the starting \ in \copy.
 			return c.beginCopyFrom(ctx, line[1:])
-		})
-		if c.exitErr != nil {
-			if !c.singleStatement {
-				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-			}
-			if c.iCtx.errExit {
-				return cliStop
-			}
+		}); err != nil {
+			return c.cliError(cliStartLine, err)
 		}
 		return cliStartLine
 
@@ -1563,9 +1527,7 @@ func (c *cliState) handlePassword(
 
 	passwordHashMethod, err := c.getPasswordHashMethod()
 	if err != nil {
-		fmt.Fprintf(c.iCtx.stderr, "retrieving hash method from server: %v\n", err)
-		c.exitErr = err
-		return errState
+		return c.cliError(errState, errors.Wrap(err, "retrieving hash method from server"))
 	}
 
 	var escapedUserName string
@@ -1582,22 +1544,16 @@ func (c *cliState) handlePassword(
 	// to stop the entry. This needs to be cleaned up.
 	password1, err := pprompt.PromptForPassword("" /* prompt */)
 	if err != nil {
-		fmt.Fprintf(c.iCtx.stderr, "reading password: %v\n", err)
-		c.exitErr = err
-		return errState
+		return c.cliError(errState, errors.Wrap(err, "reading password"))
 	}
 
 	password2, err := pprompt.PromptForPassword("Enter it again: ")
 	if err != nil {
-		fmt.Fprintf(c.iCtx.stderr, "reading password: %v\n", err)
-		c.exitErr = err
-		return errState
+		return c.cliError(errState, errors.Wrap(err, "reading password"))
 	}
 
 	if password1 != password2 {
-		c.exitErr = errors.New("passwords didn't match")
-		fmt.Fprintln(c.iCtx.stderr, c.exitErr)
-		return errState
+		return c.cliError(errState, errors.New("passwords didn't match"))
 	}
 
 	var hashedPassword []byte
@@ -1610,9 +1566,7 @@ func (c *cliState) handlePassword(
 	)
 
 	if err != nil {
-		fmt.Fprintf(c.iCtx.stderr, "hashing password: %v\n", err)
-		c.exitErr = err
-		return errState
+		return c.cliError(errState, errors.Wrap(err, "hashing password"))
 	}
 
 	c.concatLines = fmt.Sprintf(
@@ -1631,9 +1585,7 @@ func (c *cliState) handleConnect(
 	cmd []string, loopState, errState cliStateEnum,
 ) (resState cliStateEnum) {
 	if err := c.handleConnectInternal(cmd, false /*omitConnString*/); err != nil {
-		clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
-		c.exitErr = err
-		return errState
+		return c.cliError(errState, err)
 	}
 	return loopState
 }
@@ -1808,9 +1760,7 @@ func (c *cliState) runInclude(
 	}
 
 	if c.levels >= maxRecursionLevels {
-		c.exitErr = errors.Newf(`\i: too many recursion levels (max %d)`, maxRecursionLevels)
-		fmt.Fprintf(c.iCtx.stderr, "%v\n", c.exitErr)
-		return errState
+		return c.cliError(errState, errors.Newf(`\i: too many recursion levels (max %d)`, maxRecursionLevels))
 	}
 
 	if len(c.partialLines) > 0 {
@@ -1833,9 +1783,7 @@ func (c *cliState) runInclude(
 	// Close the file at the end.
 	defer func() {
 		if err := f.Close(); err != nil {
-			fmt.Fprintf(c.iCtx.stderr, "error: closing %s: %v\n", filename, err)
-			c.exitErr = errors.CombineErrors(c.exitErr, err)
-			resState = errState
+			resState = c.cliError(errState, errors.Wrapf(err, "closing %s", filename))
 		}
 	}()
 
@@ -2011,10 +1959,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 			fmt.Fprintln(c.iCtx.stdout, helpText)
 		}
 
-		_ = c.invalidSyntaxf(
-			cliStart, "statement ignored: %v",
-			clierror.NewFormattedError(err, false /*showSeverity*/, false /*verbose*/),
-		)
+		_ = c.cliError(cliStart, errors.Wrap(err, "statement ignored"))
 
 		// Stop here if exiterr is set.
 		if c.iCtx.errExit {
@@ -2047,19 +1992,16 @@ var copyToRe = regexp.MustCompile(`(?i)COPY.*TO\s+STDOUT`)
 // concatLines.
 func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	if err := c.iCtx.maybeWrapStatement(context.Background(), c.concatLines, c); err != nil {
-		c.exitErr = err
-		if !c.singleStatement {
-			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-		}
-		if c.iCtx.errExit {
-			return cliStop
-		}
-		return nextState
+		return c.cliError(nextState, err)
 	}
 	if c.iCtx.afterRun != nil {
 		defer c.iCtx.afterRun()
 		c.iCtx.afterRun = nil
 	}
+
+	// Clear the error state - the new statement will define a new error
+	// status.
+	c.exitErr = nil
 
 	// Once we send something to the server, the txn status may change arbitrarily.
 	// Clear the known state so that further entries do not assume anything.
@@ -2069,22 +2011,15 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	if c.iCtx.autoTrace != "" {
 		// Clear the trace by disabling tracing, then restart tracing
 		// with the specified options.
-		c.exitErr = c.conn.Exec(
+		if err := c.conn.Exec(
 			context.Background(),
-			"SET tracing = off; SET tracing = "+c.iCtx.autoTrace)
-		if c.exitErr != nil {
-			if !c.singleStatement {
-				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-			}
-			if c.iCtx.errExit {
-				return cliStop
-			}
-			return nextState
+			"SET tracing = off; SET tracing = "+c.iCtx.autoTrace); err != nil {
+			return c.cliError(nextState, err)
 		}
 	}
 
 	// Now run the statement/query.
-	c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
+	if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
 		if scanner.FirstLexicalToken(c.concatLines) == lexbase.COPY {
 			// Ideally this is parsed using the parser, but we've avoided doing so
 			// for clisqlshell to be small.
@@ -2115,11 +2050,10 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			c.iCtx.stderr,
 			q,
 		)
-	})
-	if c.exitErr != nil {
-		if !c.singleStatement {
-			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-		}
+	}); err != nil {
+		// Display the error and set c.exitErr, but do not stop the shell
+		// immediately. We still want to display the trace below.
+		_ = c.cliError(nextState, err)
 	}
 
 	// If we are tracing, stop tracing and display the trace. We do
@@ -2668,9 +2602,7 @@ func (c *cliState) runOpen(cmd []string, contState, errState cliStateEnum) (resS
 		outputFile = cmd[0]
 	}
 	if err := c.openOutputFile(outputFile); err != nil {
-		c.exitErr = err
-		fmt.Fprintf(c.iCtx.stderr, "%v\n", c.exitErr)
-		return errState
+		return c.cliError(errState, err)
 	}
 	return contState
 }
