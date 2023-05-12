@@ -282,12 +282,6 @@ func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionCl
 // dialing to that node through this NodeDialer.
 func (n *Dialer) GetCircuitBreaker(
 	nodeID roachpb.NodeID, class rpc.ConnectionClass,
-) *circuit.Breaker {
-	return n.getBreaker(nodeID, class).Breaker
-}
-
-func (n *Dialer) GetCircuitBreakerNew(
-	nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (*circuit2.Breaker, bool) {
 	addr, err := n.resolver(nodeID)
 	if err != nil {
