@@ -1963,7 +1963,7 @@ func TestLeaseConcurrent(t *testing.T) {
 			if err := stopper.RunAsyncTask(ctx, "test", func(ctx context.Context) {
 				tc.repl.mu.Lock()
 				status := tc.repl.leaseStatusAtRLocked(ctx, now)
-				llHandle := tc.repl.requestLeaseLocked(ctx, status)
+				llHandle := tc.repl.requestLeaseLocked(ctx, status, nil)
 				tc.repl.mu.Unlock()
 				wg.Done()
 				pErr := <-llHandle.C()
@@ -2061,7 +2061,7 @@ func TestLeaseCallerCancelled(t *testing.T) {
 		wg.Add(1)
 		tc.repl.mu.Lock()
 		status := tc.repl.leaseStatusAtRLocked(ctx, now)
-		llHandles = append(llHandles, tc.repl.requestLeaseLocked(ctx, status))
+		llHandles = append(llHandles, tc.repl.requestLeaseLocked(ctx, status, nil))
 		tc.repl.mu.Unlock()
 	}
 	for _, llHandle := range llHandles {
@@ -2080,6 +2080,52 @@ func TestLeaseCallerCancelled(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for lease request")
 	}
+}
+
+// TestRequestLeaseLimit tests that lease requests respect the limiter
+func TestRequestLeaseLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	var tc testContext
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+
+	requestLease := func(ctx context.Context, limiter *quotapool.IntPool) error {
+		now := tc.Clock().NowAsClockTimestamp()
+		tc.repl.mu.Lock()
+		status := tc.repl.leaseStatusAtRLocked(ctx, now)
+		llHandle := tc.repl.requestLeaseLocked(ctx, status, limiter)
+		tc.repl.mu.Unlock()
+		pErr := <-llHandle.C()
+		return pErr.GoError()
+	}
+
+	// A 0 limit should immediately error.
+	limiter := quotapool.NewIntPool("test", 0)
+	err := requestLease(ctx, limiter)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, stop.ErrThrottled), "%v", err)
+
+	// A limit of 1 should work. Wait for the quota to get released.
+	limiter.UpdateCapacity(1)
+	err = requestLease(ctx, limiter)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return limiter.ApproximateQuota() > 0
+	}, 3*time.Second, 100*time.Millisecond)
+
+	// Acquire the slot, and watch the lease request error again.
+	_, err = limiter.TryAcquire(ctx, 1)
+	require.NoError(t, err)
+	err = requestLease(ctx, limiter)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, stop.ErrThrottled), "%v", err)
 }
 
 // TestReplicaUpdateTSCache verifies that reads and ranged writes update the
@@ -9906,13 +9952,14 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 type testQuiescer struct {
 	st              *cluster.Settings
+	storeID         roachpb.StoreID
 	desc            roachpb.RangeDescriptor
 	numProposals    int
 	pendingQuota    bool
 	status          *raftSparseStatus
 	lastIndex       kvpb.RaftIndex
 	raftReady       bool
-	lease           roachpb.Lease
+	leaseStatus     kvserverpb.LeaseStatus
 	mergeInProgress bool
 	isDestroyed     bool
 
@@ -9923,6 +9970,10 @@ type testQuiescer struct {
 
 func (q *testQuiescer) ClusterSettings() *cluster.Settings {
 	return q.st
+}
+
+func (q *testQuiescer) StoreID() roachpb.StoreID {
+	return q.storeID
 }
 
 func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
@@ -9957,14 +10008,6 @@ func (q *testQuiescer) hasPendingProposalQuotaRLocked() bool {
 	return q.pendingQuota
 }
 
-func (q *testQuiescer) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool {
-	return q.lease.Replica.ReplicaID == 1
-}
-
-func (q *testQuiescer) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
-	return q.lease, q.lease
-}
-
 func (q *testQuiescer) mergeInProgressRLocked() bool {
 	return q.mergeInProgress
 }
@@ -9988,7 +10031,8 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 			// true. The transform function is intended to perform one mutation to
 			// this quiescer so that shouldReplicaQuiesce will return false.
 			q := &testQuiescer{
-				st: cluster.MakeTestingClusterSettings(),
+				st:      cluster.MakeTestingClusterSettings(),
+				storeID: 1,
 				desc: roachpb.RangeDescriptor{
 					InternalReplicas: []roachpb.ReplicaDescriptor{
 						{NodeID: 1, ReplicaID: 1},
@@ -10016,13 +10060,16 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				},
 				lastIndex: logIndex,
 				raftReady: false,
-				lease: roachpb.Lease{
-					Sequence: 1,
-					Epoch:    1,
-					Replica: roachpb.ReplicaDescriptor{
-						NodeID:    1,
-						StoreID:   1,
-						ReplicaID: 1,
+				leaseStatus: kvserverpb.LeaseStatus{
+					State: kvserverpb.LeaseState_VALID,
+					Lease: roachpb.Lease{
+						Sequence: 1,
+						Epoch:    1,
+						Replica: roachpb.ReplicaDescriptor{
+							NodeID:    1,
+							StoreID:   1,
+							ReplicaID: 1,
+						},
 					},
 				},
 				livenessMap: livenesspb.IsLiveMap{
@@ -10032,7 +10079,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				},
 			}
 			q = transform(q)
-			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, hlc.ClockTimestamp{}, q.livenessMap, q.paused)
+			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, q.leaseStatus, q.livenessMap, q.paused)
 			require.Equal(t, expected, ok)
 			if ok {
 				// Any non-live replicas should be in the laggingReplicaSet.
@@ -10106,7 +10153,23 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
-		q.lease.Replica.ReplicaID = 9
+		q.storeID = 9
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_ERROR
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_UNUSABLE
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_EXPIRED
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_PROSCRIBED
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
@@ -10168,16 +10231,16 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	// of kv.expiration_leases_only.enabled.
 	test(false, func(q *testQuiescer) *testQuiescer {
 		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, true)
-		q.lease.Epoch = 0
-		q.lease.Expiration = &hlc.Timestamp{
+		q.leaseStatus.Lease.Epoch = 0
+		q.leaseStatus.Lease.Expiration = &hlc.Timestamp{
 			WallTime: timeutil.Now().Add(time.Minute).Unix(),
 		}
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
 		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, false)
-		q.lease.Epoch = 0
-		q.lease.Expiration = &hlc.Timestamp{
+		q.leaseStatus.Lease.Epoch = 0
+		q.leaseStatus.Lease.Expiration = &hlc.Timestamp{
 			WallTime: timeutil.Now().Add(time.Minute).Unix(),
 		}
 		return q
@@ -13882,7 +13945,7 @@ func TestRangeInfoReturned(t *testing.T) {
 
 		tc.repl.mu.Lock()
 		st := tc.repl.leaseStatusAtRLocked(ctx, tc.Clock().NowAsClockTimestamp())
-		ll := tc.repl.requestLeaseLocked(ctx, st)
+		ll := tc.repl.requestLeaseLocked(ctx, st, nil /* limiter */)
 		tc.repl.mu.Unlock()
 		select {
 		case pErr := <-ll.C():

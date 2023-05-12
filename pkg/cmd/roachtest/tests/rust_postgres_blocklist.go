@@ -11,9 +11,9 @@
 package tests
 
 var rustPostgresBlocklist = blocklist{
-	"binary_copy.read_basic":                "No COPY TO support - https://github.com/cockroachdb/cockroach/issues/85571",
+	"binary_copy.read_basic":                "No binary COPY TO support - https://github.com/cockroachdb/cockroach/issues/97180",
 	"binary_copy.read_big_rows":             "default int size (int4 vs int8) mismatch",
-	"binary_copy.read_many_rows":            "No COPY TO support - https://github.com/cockroachdb/cockroach/issues/85571",
+	"binary_copy.read_many_rows":            "No binary COPY TO support - https://github.com/cockroachdb/cockroach/issues/97180",
 	"binary_copy.write_basic":               "COPY FROM not supported in extended protocol",
 	"binary_copy.write_big_rows":            "COPY FROM not supported in extended protocol",
 	"binary_copy.write_many_rows":           "COPY FROM not supported in extended protocol",
@@ -42,7 +42,6 @@ var rustPostgresBlocklist = blocklist{
 	"test.binary_copy_out":                  "No COPY TO support - https://github.com/cockroachdb/cockroach/issues/85571",
 	"test.copy_in":                          "COPY FROM not supported in extended protocol",
 	"test.copy_in_abort":                    "COPY FROM not supported in extended protocol",
-	"test.copy_out":                         "No COPY TO support - https://github.com/cockroachdb/cockroach/issues/85571",
 	"test.nested_transactions":              "default int size (int4 vs int8) mismatch",
 	"test.notice_callback":                  "unsupported feature - https://github.com/cockroachdb/cockroach/issues/17511",
 	"test.notifications_blocking_iter":      "unsupported feature - https://github.com/cockroachdb/cockroach/issues/41522",

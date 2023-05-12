@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -367,6 +366,7 @@ func (r *Replica) leasePostApplyLocked(
 		r.gossipFirstRangeLocked(ctx)
 	}
 
+	st := r.leaseStatusAtRLocked(ctx, now)
 	if leaseChangingHands && newLease.Type() == roachpb.LeaseExpiration &&
 		r.ownsValidLeaseRLocked(ctx, now) && !r.shouldUseExpirationLeaseRLocked() {
 		// We've received and applied an expiration lease for a range that shouldn't
@@ -380,15 +380,14 @@ func (r *Replica) leasePostApplyLocked(
 		if r.store.TestingKnobs().LeaseUpgradeInterceptor != nil {
 			r.store.TestingKnobs().LeaseUpgradeInterceptor(newLease)
 		}
-		st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{})
 		// Ignore the returned handle as we won't block on it.
-		_ = r.requestLeaseLocked(ctx, st)
+		_ = r.requestLeaseLocked(ctx, st, nil /* limiter */)
 	}
 
 	// If we're the current raft leader, may want to transfer the leadership to
 	// the new leaseholder. Note that this condition is also checked periodically
 	// when ticking the replica.
-	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, now)
+	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, st)
 
 	// Notify the store that a lease change occurred and it may need to
 	// gossip the updated store descriptor (with updated capacity).

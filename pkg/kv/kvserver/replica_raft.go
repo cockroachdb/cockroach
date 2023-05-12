@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1208,24 +1209,28 @@ func (r *Replica) tick(
 
 	r.updatePausedFollowersLocked(ctx, ioThresholdMap)
 
-	now := r.store.Clock().NowAsClockTimestamp()
-	if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, now, livenessMap) {
+	leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
+	if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, leaseStatus, livenessMap) {
 		return false, nil
 	}
 
-	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, now)
+	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, leaseStatus)
 
-	// Eagerly extend expiration leases. We can do this here because we don't
-	// allow ranges with expiration leases to quiesce. We check the lease type and
-	// owner first, since leaseStatusAtRLocked() is moderately expensive.
-	//
-	// TODO(erikgrinaker): the replicate queue is responsible for acquiring leases
-	// for ranges that don't have one, and for switching the lease type when e.g.
-	// kv.expiration_leases_only.enabled changes. We should do this here when we
-	// remove quiescence.
+	// Eagerly acquire or extend leases. This only works for unquiesced ranges. We
+	// never quiesce expiration leases, but for epoch leases we fall back to the
+	// replicate queue which will do this within 10 minutes.
 	if !r.store.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
-		if l := r.mu.state.Lease; l.Type() == roachpb.LeaseExpiration && l.OwnedBy(r.StoreID()) {
-			r.maybeExtendLeaseAsyncLocked(ctx, r.leaseStatusAtRLocked(ctx, now))
+		if shouldRequest, isExtension := r.shouldRequestLeaseRLocked(leaseStatus); shouldRequest {
+			if _, requestPending := r.mu.pendingLeaseRequest.RequestPending(); !requestPending {
+				var limiter *quotapool.IntPool
+				if !isExtension { // don't limit lease extensions
+					limiter = r.store.eagerLeaseAcquisitionLimiter
+				}
+				// Check quota first to avoid wasted work.
+				if limiter == nil || limiter.ApproximateQuota() > 0 {
+					_ = r.requestLeaseLocked(ctx, leaseStatus, limiter)
+				}
+			}
 		}
 	}
 
