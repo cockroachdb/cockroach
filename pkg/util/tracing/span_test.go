@@ -221,12 +221,12 @@ func TestImportRemoteRecording(t *testing.T) {
 					event:‹&Int32Value{Value:4,XXX_unrecognized:[],}›
 					event:‹foo›
 					event:‹safe unsafe›
-					structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}`)
+					structured:‹{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}›`)
 			} else {
 				checkRecording(t, sp.FinishAndGetRecording(tracingpb.RecordingStructured), `
 				=== operation:root
 				[child]
-				structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}`)
+				structured:‹{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}›`)
 			}
 		})
 	}
@@ -269,7 +269,7 @@ func TestSpanRecordStructured(t *testing.T) {
 		`))
 	checkRecording(t, rec, `
 		=== operation:root
-structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}`)
+structured:‹{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}›`)
 }
 
 // TestSpanRecordStructuredLimit tests recording behavior when the size of
