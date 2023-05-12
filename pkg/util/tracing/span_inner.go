@@ -257,7 +257,10 @@ func (s *spanInner) RecordStructured(item Structured) {
 	}
 	s.crdb.recordStructured(item)
 	if s.hasVerboseSink() {
-		s.Record(item.String())
+		// Do not call .String() on the item, so that non-redactable bits
+		// in its representation are properly preserved by Recordf() in
+		// verbose recordings.
+		s.Recordf("%v", item)
 	}
 }
 
@@ -275,10 +278,16 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 	} else {
 		// `fmt.Sprintf` when called on a logEntry will use the faster
 		// `logEntry.String` method instead of `logEntry.SafeFormat`.
-		// The additional use of `redact.Sprintf("%s",...)` is necessary
+		// The additional use of `redact.Sprint(...)` is necessary
 		// to wrap the result in redaction markers.
-		str = redact.Sprintf("%s", fmt.Sprintf(format, args...))
+		str = redact.Sprint(fmt.Sprintf(format, args...))
 	}
+	s.recordRedactable(format, args, str)
+}
+
+func (s *spanInner) recordRedactable(
+	format string, args []interface{}, str redact.RedactableString,
+) {
 	if s.otelSpan != nil {
 		// TODO(obs-inf): depending on the situation it may be more appropriate to
 		// redact the string here.

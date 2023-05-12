@@ -247,6 +247,24 @@ func TestImportRemoteRecordingMaintainsRightByteSize(t *testing.T) {
 	rootTrace.check(t)
 }
 
+func TestSpanRecordStructuredRedactable(t *testing.T) {
+	tr := NewTracer()
+	tr.SetRedactable(true)
+	sp := tr.StartSpan("root", WithRecording(tracingpb.RecordingVerbose))
+	defer sp.Finish()
+
+	payload := &tracingpb.OperationMetadata{Count: 123}
+	sp.RecordStructured(payload)
+	rec := sp.GetRecording(tracingpb.RecordingStructured)
+
+	// The following check fails if RecordStructured incorrectly
+	// serializes the event to a string.
+	checkRecordingWithRedact(t, rec, `
+		=== operation:root
+event:{count: 123, duration 0µs}
+structured:‹×›`, true)
+}
+
 func TestSpanRecordStructured(t *testing.T) {
 	tr := NewTracer()
 	sp := tr.StartSpan("root", WithRecording(tracingpb.RecordingStructured))
