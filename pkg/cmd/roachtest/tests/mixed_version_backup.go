@@ -1690,6 +1690,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		Timeout:           7 * time.Hour,
 		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           r.MakeClusterSpec(5),
+		Leases:            registry.MetamorphicLeases,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		RequiresLicense:   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

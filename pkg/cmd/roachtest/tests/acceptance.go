@@ -86,6 +86,7 @@ func registerAcceptance(r registry.Registry) {
 		Name:    "acceptance",
 		Timeout: 10 * time.Minute,
 		Tags:    registry.Tags("default", "quick"),
+		Leases:  registry.MetamorphicLeases,
 	}
 
 	for owner, tests := range testCases {

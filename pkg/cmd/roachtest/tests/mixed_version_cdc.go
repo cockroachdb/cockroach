@@ -69,6 +69,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Name:            "cdc/mixed-versions",
 		Owner:           registry.OwnerTestEng,
 		Cluster:         r.MakeClusterSpec(5, spec.Zones(zones)),
+		Leases:          registry.MetamorphicLeases,
 		Timeout:         timeout,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

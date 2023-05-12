@@ -68,6 +68,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 			// the encryption-at-rest implementation that could indefinitely
 			// stall the process during a disk stall.
 			EncryptionSupport: registry.EncryptionMetamorphic,
+			Leases:            registry.MetamorphicLeases,
 		})
 	}
 }

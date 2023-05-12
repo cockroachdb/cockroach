@@ -256,6 +256,7 @@ func registerAutoUpgrade(r registry.Registry) {
 		Name:    `autoupgrade`,
 		Owner:   registry.OwnerTestEng,
 		Cluster: r.MakeClusterSpec(5),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")

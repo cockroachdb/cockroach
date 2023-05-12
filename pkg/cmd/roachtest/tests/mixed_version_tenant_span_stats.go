@@ -36,6 +36,7 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 		Owner:             registry.OwnerClusterObs,
 		Cluster:           r.MakeClusterSpec(4),
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Timeout:           30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			v, err := version.Parse("v23.2.0")

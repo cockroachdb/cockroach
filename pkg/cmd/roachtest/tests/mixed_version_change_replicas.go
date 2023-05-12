@@ -33,6 +33,7 @@ func registerChangeReplicasMixedVersion(r registry.Registry) {
 		Name:    "change-replicas/mixed-version",
 		Owner:   registry.OwnerReplication,
 		Cluster: r.MakeClusterSpec(4),
+		Leases:  registry.MetamorphicLeases,
 		Run:     runChangeReplicasMixedVersion,
 		Timeout: 20 * time.Minute,
 	})

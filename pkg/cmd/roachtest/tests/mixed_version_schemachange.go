@@ -31,6 +31,7 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 		// order to prevent bugs during upgrades.
 		Cluster:    r.MakeClusterSpec(4),
 		NativeLibs: registry.LibGEOS,
+		Leases:     registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")

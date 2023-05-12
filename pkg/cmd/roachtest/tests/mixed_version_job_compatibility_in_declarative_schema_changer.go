@@ -132,6 +132,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 		Name:    "declarative_schema_changer/job-compatibility-mixed-version-V222-V231",
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(4),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
