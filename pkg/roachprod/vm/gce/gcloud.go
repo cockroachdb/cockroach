@@ -502,18 +502,23 @@ func (p *Provider) Create(
 	time = strings.ToLower(strings.ReplaceAll(time, ":", "_"))
 	m[vm.TagCreated] = time
 
-	var sb strings.Builder
+	var labelPairs []string
+	addLabel := func(key, value string) {
+		labelPairs = append(labelPairs, fmt.Sprintf("%s=%s", key, value))
+	}
+
 	for key, value := range opts.CustomLabels {
-		_, ok := m[key]
+		_, ok := m[strings.ToLower(key)]
 		if ok {
 			return fmt.Errorf("duplicate label name defined: %s", key)
 		}
-		fmt.Fprintf(&sb, "%s=%s,", key, value)
+		addLabel(key, value)
 	}
 	for key, value := range m {
-		fmt.Fprintf(&sb, "%s=%s,", key, value)
+		addLabel(key, value)
 	}
-	labels := sb.String()
+	labels := strings.Join(labelPairs, ",")
+
 	args = append(args, "--labels", labels)
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
 	args = append(args, "--project", project)
@@ -563,18 +568,18 @@ func propagateDiskLabels(
 	var g errgroup.Group
 
 	l.Printf("Propagating labels across all disks")
+	argsPrefix := []string{"compute", "disks", "update"}
+	argsPrefix = append(argsPrefix, "--update-labels", labels)
+	argsPrefix = append(argsPrefix, "--project", project)
 
 	for zone, zoneHosts := range zoneToHostNames {
-		zoneArg := []string{"--zone", zone}
+		argsPrefix = append(argsPrefix, "--zone", zone)
 
 		for _, host := range zoneHosts {
-			args := []string{"compute", "disks", "update"}
-			args = append(args, "--update-labels", labels[:len(labels)-1])
-			args = append(args, "--project", project)
-			args = append(args, zoneArg...)
 			host := host
 
 			g.Go(func() error {
+				args := append([]string(nil), argsPrefix...)
 				// N.B. boot disk has the same name as the host.
 				bootDiskArgs := append(args, host)
 				cmd := exec.Command("gcloud", bootDiskArgs...)
@@ -588,6 +593,7 @@ func propagateDiskLabels(
 
 			if !opts.SSDOpts.UseLocalSSD {
 				g.Go(func() error {
+					args := append([]string(nil), argsPrefix...)
 					// N.B. additional persistent disks are suffixed with the offset, starting at 1.
 					persistentDiskArgs := append(args, fmt.Sprintf("%s-1", host))
 					cmd := exec.Command("gcloud", persistentDiskArgs...)
