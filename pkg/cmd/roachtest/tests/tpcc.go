@@ -894,6 +894,35 @@ func registerTPCC(r registry.Registry) {
 
 		Tags: registry.Tags(`weekly`),
 	})
+
+	// Expiration lease benchmarks. These are duplicates of variants above.
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes: 3,
+		CPUs:  4,
+
+		LoadWarehouses:   1000,
+		EstimatedMax:     gceOrAws(cloud, 750, 900),
+		ExpirationLeases: true,
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes: 3,
+		CPUs:  16,
+
+		LoadWarehouses:   gceOrAws(cloud, 3500, 3900),
+		EstimatedMax:     gceOrAws(cloud, 2900, 3500),
+		ExpirationLeases: true,
+		Tags:             registry.Tags(`aws`),
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes: 12,
+		CPUs:  16,
+
+		LoadWarehouses:   gceOrAws(cloud, 11500, 11500),
+		EstimatedMax:     gceOrAws(cloud, 10000, 10000),
+		ExpirationLeases: true,
+
+		Tags: registry.Tags(`weekly`),
+	})
 }
 
 func gceOrAws(cloud string, gce, aws int) int {
@@ -984,6 +1013,8 @@ type tpccBenchSpec struct {
 	// EncryptionEnabled determines if the benchmark uses encrypted stores (i.e.
 	// Encryption-At-Rest / EAR).
 	EncryptionEnabled bool
+	// ExpirationLeases enables use of expiration-based leases.
+	ExpirationLeases bool
 }
 
 // partitions returns the number of partitions specified to the load generator.
@@ -1061,6 +1092,12 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		nameParts = append(nameParts, "enc=true")
 	}
 
+	leases := registry.DefaultLeases
+	if b.ExpirationLeases {
+		leases = registry.ExpirationLeases
+		nameParts = append(nameParts, "lease=expiration")
+	}
+
 	name := strings.Join(nameParts, "/")
 
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
@@ -1073,6 +1110,7 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		Timeout:           7 * time.Hour,
 		Tags:              b.Tags,
 		EncryptionSupport: encryptionSupport,
+		Leases:            leases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
