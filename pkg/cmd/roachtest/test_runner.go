@@ -694,7 +694,8 @@ func (r *testRunner) runWorker(
 				// test".
 				c.status("running test")
 
-				switch t.Spec().(*registry.TestSpec).EncryptionSupport {
+				testSpec := t.Spec().(*registry.TestSpec)
+				switch testSpec.EncryptionSupport {
 				case registry.EncryptionAlwaysEnabled:
 					c.encAtRest = true
 				case registry.EncryptionAlwaysDisabled:
@@ -704,6 +705,24 @@ func (r *testRunner) runWorker(
 					// be enabled according to the probability passed to
 					// --metamorphic-encryption-probability
 					c.encAtRest = prng.Float64() < encryptionProbability
+				}
+
+				// Set initial cluster settings for this test.
+				c.clusterSettings = map[string]string{}
+
+				switch testSpec.Leases {
+				case registry.DefaultLeases:
+				case registry.EpochLeases:
+					c.clusterSettings["kv.expiration_leases_only.enabled"] = "false"
+				case registry.ExpirationLeases:
+					c.clusterSettings["kv.expiration_leases_only.enabled"] = "true"
+				case registry.MetamorphicLeases:
+					enabled := prng.Float64() < 0.5
+					c.status(fmt.Sprintf("metamorphically setting kv.expiration_leases_only.enabled = %t",
+						enabled))
+					c.clusterSettings["kv.expiration_leases_only.enabled"] = fmt.Sprintf("%t", enabled)
+				default:
+					t.Fatalf("unknown lease type %s", testSpec.Leases)
 				}
 
 				wStatus.SetCluster(c)
