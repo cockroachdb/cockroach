@@ -137,7 +137,7 @@ func (zc *debugZipContext) forAllNodes(
 
 type nodeLivenesses = map[roachpb.NodeID]livenesspb.NodeLivenessStatus
 
-func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
+func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	if err := zipCtx.files.validate(); err != nil {
 		return err
 	}
@@ -241,8 +241,13 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 			cliCtx.IsInteractive = false
 			sqlExecCtx.TerminalOutput = false
 			sqlExecCtx.ShowTimes = false
-			// Use a streaming format to avoid accumulating all rows in RAM.
-			sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
+
+			if !cmd.Flags().Changed(cliflags.TableDisplayFormat.Name) {
+				// Use a streaming format to avoid accumulating all rows in RAM.
+				sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayJSON
+			}
+
+			zr.sqlOutputFilenameExtension = computeSQLOutputFilenameExtension(sqlExecCtx.TableDisplayFormat)
 
 			sqlConn, err := makeTenantSQLClient("cockroach zip", useSystemDb, tenant.TenantName)
 			// The zip output is sent directly into a text file, so the results should
@@ -382,7 +387,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	const maxRetries = 5
 	suffix := ""
 	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
-		name := baseName + suffix + ".txt"
+		name := baseName + suffix + "." + zc.clusterPrinter.sqlOutputFilenameExtension
 		s.progress("writing output: %s", name)
 		sqlErr := func() error {
 			zc.z.Lock()
@@ -432,4 +437,14 @@ func (zc *debugZipContext) dumpTableDataForZip(
 
 func sanitizeFilename(f string) string {
 	return strings.TrimPrefix(f, `"".`)
+}
+
+func computeSQLOutputFilenameExtension(tfmt clisqlexec.TableDisplayFormat) string {
+	switch tfmt {
+	case clisqlexec.TableDisplayTSV:
+		// Backward-compatibility with previous versions.
+		return "txt"
+	default:
+		return tfmt.String()
+	}
 }
