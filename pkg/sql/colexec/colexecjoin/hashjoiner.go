@@ -541,75 +541,57 @@ func (hj *hashJoiner) exec() coldata.Batch {
 		hj.ht.ComputeBuckets(hj.probeState.buckets, hj.ht.Keys, batchSize, sel)
 
 		// Then, we initialize ToCheckID with the initial hash buckets and
-		// ToCheck with all applicable indices.
-		hj.ht.ProbeScratch.SetupLimitedSlices(batchSize, hj.ht.BuildMode)
+		// ToCheck with all applicable indices. Notably, only probing tuples
+		// that have hash matches are included into ToCheck whereas ToCheckID is
+		// correctly set for all tuples.
+		hj.ht.ProbeScratch.SetupLimitedSlices(batchSize)
 		// Early bounds checks.
 		toCheckIDs := hj.ht.ProbeScratch.ToCheckID
 		_ = toCheckIDs[batchSize-1]
 		var nToCheck uint64
-		switch hj.spec.JoinType {
-		case descpb.LeftAntiJoin, descpb.RightAntiJoin, descpb.ExceptAllJoin:
-			// The setup of probing for LEFT/RIGHT ANTI and EXCEPT ALL joins
-			// needs a special treatment in order to reuse the same "check"
-			// functions below.
-			for i, bucket := range hj.probeState.buckets[:batchSize] {
-				f := hj.ht.BuildScratch.First[bucket]
-				//gcassert:bce
-				toCheckIDs[i] = f
-				if hj.ht.BuildScratch.First[bucket] != 0 {
-					// Non-zero "first" key indicates that there is a match of hashes
-					// and we need to include the current tuple to check whether it is
-					// an actual match.
-					hj.ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
+		for i, bucket := range hj.probeState.buckets[:batchSize] {
+			f := hj.ht.BuildScratch.First[bucket]
+			//gcassert:bce
+			toCheckIDs[i] = f
+			if f != 0 {
+				// Non-zero "first" key indicates that there is a match of
+				// hashes, and we need to include the current tuple to check
+				// whether it is an actual match.
+				hj.ht.ProbeScratch.ToCheck[nToCheck] = uint64(i)
+				nToCheck++
+			}
+		}
+
+		hj.prepareForCollecting(batchSize)
+		checker, collector := hj.ht.Check, hj.collect
+		if hj.spec.rightDistinct {
+			checker, collector = hj.ht.DistinctCheck, hj.distinctCollect
+		}
+
+		// Now we find equality matches for all probing tuples.
+		for nToCheck > 0 {
+			// Continue searching for the build table matching keys while the
+			// ToCheck array is non-empty.
+			nToCheck = checker(nToCheck, sel)
+			toCheckSlice := hj.ht.ProbeScratch.ToCheck[:nToCheck]
+			nToCheck = 0
+			for _, toCheck := range toCheckSlice {
+				nextID := hj.ht.BuildScratch.Next[hj.ht.ProbeScratch.ToCheckID[toCheck]]
+				toCheckIDs[toCheck] = nextID
+				if nextID != 0 {
+					hj.ht.ProbeScratch.ToCheck[nToCheck] = toCheck
 					nToCheck++
 				}
 			}
-		default:
-			for i, bucket := range hj.probeState.buckets[:batchSize] {
-				f := hj.ht.BuildScratch.First[bucket]
-				//gcassert:bce
-				toCheckIDs[i] = f
-			}
-			copy(hj.ht.ProbeScratch.ToCheck, colexechash.HashTableInitialToCheck[:batchSize])
-			nToCheck = uint64(batchSize)
 		}
 
-		// Now we collect all matches that we can emit in the probing phase
+		// We're processing a new batch, so we'll reset the index to start
+		// collecting from.
+		hj.probeState.prevBatchResumeIdx = 0
+
+		// Finally, we collect all matches that we can emit in the probing phase
 		// in a single batch.
-		hj.prepareForCollecting(batchSize)
-		var nResults int
-		if hj.spec.rightDistinct {
-			for nToCheck > 0 {
-				// Continue searching along the hash table next chains for the corresponding
-				// buckets. If the key is found or end of next chain is reached, the key is
-				// removed from the ToCheck array.
-				nToCheck = hj.ht.DistinctCheck(nToCheck, sel)
-				// TODO(yuzefovich): check whether we can omit the 'toCheck'
-				// tuple if the new ToCheckID is 0.
-				for _, toCheck := range hj.ht.ProbeScratch.ToCheck[:nToCheck] {
-					hj.ht.ProbeScratch.ToCheckID[toCheck] = hj.ht.BuildScratch.Next[hj.ht.ProbeScratch.ToCheckID[toCheck]]
-				}
-			}
-
-			nResults = hj.distinctCollect(batch, batchSize, sel)
-		} else {
-			for nToCheck > 0 {
-				// Continue searching for the build table matching keys while the ToCheck
-				// array is non-empty.
-				nToCheck = hj.ht.Check(hj.ht.Keys, nToCheck, sel)
-				// TODO(yuzefovich): check whether we can omit the 'toCheck'
-				// tuple if the new ToCheckID is 0.
-				for _, toCheck := range hj.ht.ProbeScratch.ToCheck[:nToCheck] {
-					hj.ht.ProbeScratch.ToCheckID[toCheck] = hj.ht.BuildScratch.Next[hj.ht.ProbeScratch.ToCheckID[toCheck]]
-				}
-			}
-
-			// We're processing a new batch, so we'll reset the index to start
-			// collecting from.
-			hj.probeState.prevBatchResumeIdx = 0
-			nResults = hj.collect(batch, batchSize, sel)
-		}
-
+		nResults := collector(batch, batchSize, sel)
 		if nResults > 0 {
 			hj.congregate(nResults, batch)
 			break
