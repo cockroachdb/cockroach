@@ -1887,6 +1887,7 @@ func (c *clusterImpl) StartE(
 		install.EnvOption(settings.Env),
 		install.NumRacksOption(settings.NumRacks),
 		install.BinaryOption(settings.Binary),
+		install.ClusterSettingsOption(settings.ClusterSettings),
 	}
 
 	if err := roachprod.Start(ctx, l, c.MakeNodes(opts...), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {

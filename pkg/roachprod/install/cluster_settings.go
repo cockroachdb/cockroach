@@ -23,11 +23,23 @@ type ClusterSettings struct {
 	NumRacks      int
 	// DebugDir is used to stash debug information.
 	DebugDir string
+	// ClusterSettings are, eh, actual cluster settings, i.e.
+	// SET CLUSTER SETTING foo = 'bar'. The name clash is unfortunate.
+	ClusterSettings map[string]string
 }
 
 // ClusterSettingOption is the interface satisfied by options to MakeClusterSettings.
 type ClusterSettingOption interface {
 	apply(settings *ClusterSettings)
+}
+
+// ClusterSettingsOption adds cluster settings via SET CLUSTER SETTING.
+type ClusterSettingsOption map[string]string
+
+func (o ClusterSettingsOption) apply(settings *ClusterSettings) {
+	for name, value := range o {
+		settings.ClusterSettings[name] = value
+	}
 }
 
 // TagOption is used to pass a process tag.
@@ -95,13 +107,14 @@ func (o DebugDirOption) apply(settings *ClusterSettings) {
 // MakeClusterSettings makes a ClusterSettings.
 func MakeClusterSettings(opts ...ClusterSettingOption) ClusterSettings {
 	clusterSettings := ClusterSettings{
-		Binary:        config.Binary,
-		Tag:           "",
-		PGUrlCertsDir: "./certs",
-		Secure:        false,
-		UseTreeDist:   true,
-		Env:           config.DefaultEnvVars(),
-		NumRacks:      0,
+		Binary:          config.Binary,
+		Tag:             "",
+		PGUrlCertsDir:   "./certs",
+		Secure:          false,
+		UseTreeDist:     true,
+		Env:             config.DefaultEnvVars(),
+		NumRacks:        0,
+		ClusterSettings: map[string]string{},
 	}
 	// Override default values using the passed options (if any).
 	for _, opt := range opts {
