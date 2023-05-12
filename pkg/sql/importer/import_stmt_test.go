@@ -3018,7 +3018,7 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 		t.Fatal("timed out on aboutToRunDSP")
 	}
 	{
-		b, ok := tc.Server(0).NodeDialer().(*nodedialer.Dialer).GetCircuitBreakerNew(roachpb.NodeID(3), rpc.DefaultClass)
+		b, ok := tc.Server(0).NodeDialer().(*nodedialer.Dialer).GetCircuitBreaker(roachpb.NodeID(3), rpc.DefaultClass)
 		require.True(t, ok)
 		undo := circuit.TestingSetTripped(b, errors.New("boom"))
 		defer undo()

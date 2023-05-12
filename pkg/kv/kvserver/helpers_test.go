@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
@@ -39,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	circuit2 "github.com/cockroachdb/cockroach/pkg/util/circuit"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -236,7 +235,7 @@ func (r *Replica) Store() *Store {
 	return r.store
 }
 
-func (r *Replica) Breaker() *circuit2.Breaker {
+func (r *Replica) Breaker() *circuit.Breaker {
 	return r.breaker.wrapped
 }
 
@@ -497,7 +496,7 @@ func (r *Replica) TripBreaker() {
 // connection attempts to the specified node.
 func (t *RaftTransport) GetCircuitBreaker(
 	nodeID roachpb.NodeID, class rpc.ConnectionClass,
-) *circuit.Breaker {
+) (*circuit.Breaker, bool) {
 	return t.dialer.GetCircuitBreaker(nodeID, class)
 }
 

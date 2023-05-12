@@ -517,7 +517,7 @@ func (t *RaftTransport) SendAsync(
 		panic("snapshots must be sent using SendSnapshot")
 	}
 
-	if !t.dialer.GetCircuitBreaker(toNodeID, class).Ready() {
+	if b, ok := t.dialer.GetCircuitBreaker(toNodeID, class); ok && b.Signal().Err() != nil {
 		return false
 	}
 
