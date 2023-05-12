@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -244,13 +243,10 @@ func TestConnHealthInternal(t *testing.T) {
 	require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
 	require.NoError(t, nd.ConnHealth(staticNodeID, rpc.SystemClass))
 
-	// However, it does respect the breaker.
-	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
-	br.Trip()
-	require.Equal(t, circuit.ErrBreakerOpen, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
-
-	br.Reset()
-	require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+	// We don't have a breaker for it. This is a proxy for "we have no
+	// internal dialing for it".
+	_, ok := nd.GetCircuitBreakerNew(staticNodeID, rpc.DefaultClass)
+	require.False(t, ok)
 
 	// Other nodes still fail though.
 	require.Error(t, nd.ConnHealth(7, rpc.DefaultClass))
