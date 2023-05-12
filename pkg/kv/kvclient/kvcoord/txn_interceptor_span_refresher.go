@@ -317,16 +317,8 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	ba.UpdateTxn(refreshToTxn)
 	sr.metrics.ClientRefreshAutoRetries.Inc(1)
 
-	// To prevent starvation of batches that are trying to commit, split off the
-	// EndTxn request into its own batch on auto-retries. This avoids starvation
-	// in two ways. First, it helps ensure that we lay down intents if any of
-	// the other requests in the batch are writes. Second, it ensures that if
-	// any writes are getting pushed due to contention with reads or due to the
-	// closed timestamp, they will still succeed and allow the batch to make
-	// forward progress. Without this, each retry attempt may get pushed because
-	// of writes in the batch and then rejected wholesale when the EndTxn tries
-	// to evaluate the pushed batch. When split, the writes will be pushed but
-	// succeed, the transaction will be refreshed, and the EndTxn will succeed.
+	// To prevent starvation of batches and to ensure the correctness of parallel
+	// commits, split off the EndTxn request into its own batch on auto-retries.
 	args, hasET := ba.GetArg(kvpb.EndTxn)
 	if len(ba.Requests) > 1 && hasET && !args.(*kvpb.EndTxnRequest).Require1PC {
 		log.Eventf(ctx, "sending EndTxn separately from rest of batch on retry")
@@ -347,6 +339,34 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 // requests up to but not including the EndTxn request and a suffix containing
 // only the EndTxn request. It then issues the two partial batches in order,
 // stitching their results back together at the end.
+//
+// This is done for two reasons:
+//
+// First, we split off the EndTxn request into its own batch on auto-retries to
+// prevent starvation of batches that are trying to commit. This avoids
+// starvation by ensuring that if any other requests in the batch are writes
+// that are getting pushed due to contention with reads or due to the closed
+// timestamp, they will still succeed and allow the batch to make forward
+// progress. Without this, each retry attempt may get pushed because of writes
+// in the batch and then rejected wholesale when the EndTxn tries to evaluate
+// the pushed batch. When split, the writes will be pushed but succeed, the
+// transaction will be refreshed, and the EndTxn will succeed.
+//
+// Second, splitting off the EndTxn and disabling parallel commits on retries is
+// also necessary for correctness, since the previous attempt might have
+// partially succeeded (i.e. the batch might have been split into sub-batches
+// and some of them might have evaluated successfully). In such cases, there
+// might be intents lying around from the first attempt. If we performed another
+// parallel commit, and the batch gets split again, and the STAGING txn record
+// were written before we evaluate some other sub-batches, we could enter the
+// "implicitly committed" state before all the sub-batches are evaluated. This
+// would be problematic: there is a race between evaluating those requests and
+// other pushers coming along and transitioning the txn to explicitly committed
+// (and cleaning up all the intents), and the evaluations of the outstanding
+// sub-batches. If the randos win, then the re-evaluations will fail because we
+// don't have idempotency of evaluations across a txn commit (for example, the
+// re-evaluations might notice that their transaction is already committed and
+// get confused). This behavior is tested in TestTxnCoordSenderRetriesAcrossEndTxn.
 func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -368,6 +388,16 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	baSuffix := ba.ShallowCopy()
 	baSuffix.Requests = ba.Requests[etIdx:]
 	baSuffix.UpdateTxn(brPrefix.Txn)
+	// If necessary, update the EndTxn request to move the in-flight writes
+	// currently attached to the EndTxn request to the LockSpans and clear the
+	// in-flight write set; the writes already succeeded and will not be in-flight
+	// concurrently with the EndTxn request.
+	if et := baSuffix.Requests[0].GetEndTxn(); et.IsParallelCommit() {
+		et = et.ShallowCopy().(*kvpb.EndTxnRequest)
+		et.LockSpans, _ = mergeIntoSpans(et.LockSpans, et.InFlightWrites)
+		et.InFlightWrites = nil
+		baSuffix.Requests[0].Value.(*kvpb.RequestUnion_EndTxn).EndTxn = et
+	}
 	brSuffix, pErr := sr.SendLocked(ctx, baSuffix)
 	if pErr != nil {
 		return nil, pErr
