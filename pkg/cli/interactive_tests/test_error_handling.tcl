@@ -12,8 +12,9 @@ start_test "Check that by default, an error prevents subsequent statements from 
 send "(echo 'select foo;'; echo 'select 1;') | $argv sql\r"
 eexpect "ERROR: column \"foo\" does not exist"
 eexpect ":/# "
-send "echo \$?\r"
-eexpect "1\r\n:/# "
+send "echo ::\$?::\r"
+eexpect "::1::"
+eexpect ":/# "
 end_test
 
 start_test "Check that a user can request to continue upon failures."
@@ -21,8 +22,9 @@ send "(echo '\\unset errexit'; echo 'select foo;'; echo 'select 1;') | $argv sql
 eexpect "ERROR: column \"foo\" does not exist"
 eexpect "1 row"
 eexpect ":/# "
-send "echo \$?\r"
-eexpect "0\r\n:/# "
+send "echo ::\$?::\r"
+eexpect "::0::"
+eexpect "/# "
 
 send "$argv sql --no-line-editor\r"
 eexpect "root@"
@@ -40,16 +42,18 @@ eexpect "root@"
 send "select foo;\r"
 eexpect "ERROR: column \"foo\" does not exist"
 eexpect ":/# "
-send "echo \$?\r"
-eexpect "1\r\n:/# "
+send "echo ::\$?::\r"
+eexpect "::1::"
+eexpect ":/# "
 end_test
 
 start_test "Check that unknown sub-commands report a non-zero exit status."
 send "$argv node wowowo\r"
 eexpect "ERROR: unknown sub-command"
 eexpect ":/# "
-send "echo \$?\r"
-eexpect "1\r\n:/# "
+send "echo ::\$?::\r"
+eexpect "::1::"
+eexpect "/# "
 end_test
 
 send "exit 0\r"

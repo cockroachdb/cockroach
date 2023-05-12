@@ -57,65 +57,68 @@ thenshort`,
 		c.RunWithArgs([]string{"sql", "--format=" + i.String(), "-e", "select * from t.u"})
 	}
 
-	// Output
+	// Output:
 	// sql -e create database t; create table t.u ("f""oo" int, "f'oo" int, "f\oo" int, "short
 	// very very long
 	// not much" int, "very very long
 	// thenshort" int, "κόσμε" int, "a|b" int, ܈85 int)
+	// CREATE DATABASE
 	// CREATE TABLE
 	// sql -e insert into t.u values (0, 0, 0, 0, 0, 0, 0, 0)
 	// INSERT 0 1
 	// sql -e show columns from t.u
-	// column_name	data_type	is_nullable	column_default	generation_expression	indices
-	// "f""oo"	INT	true	NULL		{}
-	// f'oo	INT	true	NULL		{}
-	// f\oo	INT	true	NULL		{}
+	// column_name	data_type	is_nullable	column_default	generation_expression	indices	is_hidden
+	// "f""oo"	INT8	t	NULL		{u_pkey}	f
+	// f'oo	INT8	t	NULL		{u_pkey}	f
+	// f\oo	INT8	t	NULL		{u_pkey}	f
 	// "short
 	// very very long
-	// not much"	INT	true	NULL		{}
+	// not much"	INT8	t	NULL		{u_pkey}	f
 	// "very very long
-	// thenshort"	INT	true	NULL		{}
-	// κόσμε	INT	true	NULL		{}
-	// a|b	INT	true	NULL		{}
-	// ܈85	INT	true	NULL		{}
+	// thenshort"	INT8	t	NULL		{u_pkey}	f
+	// κόσμε	INT8	t	NULL		{u_pkey}	f
+	// a|b	INT8	t	NULL		{u_pkey}	f
+	// ܈85	INT8	t	NULL		{u_pkey}	f
+	// rowid	INT8	f	unique_rowid()		{u_pkey}	t
 	// sql -e select * from t.u
 	// "f""oo"	f'oo	f\oo	"short
 	// very very long
 	// not much"	"very very long
-	// thenshort"	κόσμε	a|b	܈85
+	// thenshort"	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0	0	0
 	// sql --format=table -e show columns from t.u
-	//    column_name   | data_type | is_nullable | column_default | generation_expression | indices
-	// +----------------+-----------+-------------+----------------+-----------------------+---------+
-	//   f"oo           | INT       |    true     | NULL           |                       | {}
-	//   f'oo           | INT       |    true     | NULL           |                       | {}
-	//   f\oo           | INT       |    true     | NULL           |                       | {}
-	//   short          | INT       |    true     | NULL           |                       | {}
-	//   very very long |           |             |                |                       |
-	//   not much       |           |             |                |                       |
-	//   very very long | INT       |    true     | NULL           |                       | {}
-	//   thenshort      |           |             |                |                       |
-	//   κόσμε          | INT       |    true     | NULL           |                       | {}
-	//   a|b            | INT       |    true     | NULL           |                       | {}
-	//   ܈85            | INT       |    true     | NULL           |                       | {}
-	// (8 rows)
+	//    column_name   | data_type | is_nullable | column_default | generation_expression | indices  | is_hidden
+	// -----------------+-----------+-------------+----------------+-----------------------+----------+------------
+	//   f"oo           | INT8      |      t      | NULL           |                       | {u_pkey} |     f
+	//   f'oo           | INT8      |      t      | NULL           |                       | {u_pkey} |     f
+	//   f\oo           | INT8      |      t      | NULL           |                       | {u_pkey} |     f
+	//   short          | INT8      |      t      | NULL           |                       | {u_pkey} |     f
+	//   very very long |           |             |                |                       |          |
+	//   not much       |           |             |                |                       |          |
+	//   very very long | INT8      |      t      | NULL           |                       | {u_pkey} |     f
+	//   thenshort      |           |             |                |                       |          |
+	//   κόσμε          | INT8      |      t      | NULL           |                       | {u_pkey} |     f
+	//   a|b            | INT8      |      t      | NULL           |                       | {u_pkey} |     f
+	//   ܈85            | INT8      |      t      | NULL           |                       | {u_pkey} |     f
+	//   rowid          | INT8      |      f      | unique_rowid() |                       | {u_pkey} |     t
+	// (9 rows)
 	// sql --format=tsv -e select * from t.u
 	// "f""oo"	f'oo	f\oo	"short
 	// very very long
 	// not much"	"very very long
-	// thenshort"	κόσμε	a|b	܈85
+	// thenshort"	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0	0	0
 	// sql --format=csv -e select * from t.u
 	// "f""oo",f'oo,f\oo,"short
 	// very very long
 	// not much","very very long
-	// thenshort",κόσμε,a|b,܈85
+	// thenshort",κόσμε,a|b,܈85
 	// 0,0,0,0,0,0,0,0
 	// sql --format=table -e select * from t.u
-	//   f"oo | f'oo | f\oo |     short      | very very long | κόσμε | a|b | ܈85
+	//   f"oo | f'oo | f\oo |     short      | very very long | κόσμε | a|b | ܈85
 	//        |      |      | very very long |   thenshort    |       |     |
 	//        |      |      |    not much    |                |       |     |
-	// +------+------+------+----------------+----------------+-------+-----+-----+
+	// -------+------+------+----------------+----------------+-------+-----+------
 	//      0 |    0 |    0 |              0 |              0 |     0 |   0 |   0
 	// (1 row)
 	// sql --format=records -e select * from t.u
@@ -128,9 +131,15 @@ thenshort`,
 	// not much       |
 	// very very long+| 0
 	// thenshort      |
-	// κόσμε          | 0
+	// κόσμε          | 0
 	// a|b            | 0
 	// ܈85            | 0
+	// sql --format=ndjson -e select * from t.u
+	// {"a|b":"0","f\"oo":"0","f'oo":"0","f\\oo":"0","short\nvery very long\nnot much":"0","very very long\nthenshort":"0","κόσμε":"0","܈85":"0"}
+	// sql --format=json -e select * from t.u
+	// [
+	//   {"a|b":"0","f\"oo":"0","f'oo":"0","f\\oo":"0","short\nvery very long\nnot much":"0","very very long\nthenshort":"0","κόσμε":"0","܈85":"0"}
+	// ]
 	// sql --format=sql -e select * from t.u
 	// CREATE TABLE results (
 	//   "f""oo" STRING,
@@ -141,7 +150,7 @@ thenshort`,
 	// not much" STRING,
 	//   "very very long
 	// thenshort" STRING,
-	//   "κόσμε" STRING,
+	//   κόσμε STRING,
 	//   "a|b" STRING,
 	//   ܈85 STRING
 	// );
@@ -150,11 +159,18 @@ thenshort`,
 	// -- 1 row
 	// sql --format=html -e select * from t.u
 	// <table>
-	// <thead><tr><th>row</th><th>f&#34;oo</th><th>f&#39;oo</th><th>f\oo</th><th>short<br/>very very long<br/>not much</th><th>very very long<br/>thenshort</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></thead>
+	// <thead><tr><th>row</th><th>f&#34;oo</th><th>f&#39;oo</th><th>f\oo</th><th>short<br/>very very long<br/>not much</th><th>very very long<br/>thenshort</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></thead>
 	// <tbody>
 	// <tr><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
 	// </tbody>
 	// <tfoot><tr><td colspan=9>1 row</td></tr></tfoot></table>
+	// sql --format=rawhtml -e select * from t.u
+	// <table>
+	// <thead><tr><th>f"oo</th><th>f'oo</th><th>f\oo</th><th>short<br/>very very long<br/>not much</th><th>very very long<br/>thenshort</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></thead>
+	// <tbody>
+	// <tr><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+	// </tbody>
+	// </table>
 	// sql --format=raw -e select * from t.u
 	// # 8 columns
 	// # row 1
@@ -208,6 +224,10 @@ func Example_sql_empty_table() {
 	// (0 rows)
 	// sql --format=records -e select * from t.norows
 	// sql --format=ndjson -e select * from t.norows
+	//
+	// sql --format=json -e select * from t.norows
+	// [
+	// ]
 	// sql --format=sql -e select * from t.norows
 	// CREATE TABLE results (
 	//   x STRING
@@ -246,6 +266,12 @@ func Example_sql_empty_table() {
 	// {}
 	// {}
 	// {}
+	// sql --format=json -e select * from t.nocols
+	// [
+	//   {},
+	//   {},
+	//   {}
+	// ]
 	// sql --format=sql -e select * from t.nocols
 	// CREATE TABLE results (
 	// );
@@ -288,6 +314,10 @@ func Example_sql_empty_table() {
 	// sql --format=records -e select * from t.nocolsnorows
 	// (0 rows)
 	// sql --format=ndjson -e select * from t.nocolsnorows
+	//
+	// sql --format=json -e select * from t.nocolsnorows
+	// [
+	// ]
 	// sql --format=sql -e select * from t.nocolsnorows
 	// CREATE TABLE results (
 	// );
@@ -614,6 +644,18 @@ func Example_sql_table() {
 	// {"d":"non-printable UTF8 string","s":"\\x01"}
 	// {"d":"UTF8 string with RTL char","s":"܈85"}
 	// {"d":"tabs","s":"a\tb\tc\n12\t123123213\t12313"}
+	// sql --format=json -e select * from t.t
+	// [
+	//   {"d":"printable ASCII","s":"foo"},
+	//   {"d":"printable ASCII with quotes","s":"\"foo"},
+	//   {"d":"printable ASCII with backslash","s":"\\foo"},
+	//   {"d":"non-printable ASCII","s":"foo\nbar"},
+	//   {"d":"printable UTF8","s":"κόσμε"},
+	//   {"d":"printable UTF8 using escapes","s":"ñ"},
+	//   {"d":"non-printable UTF8 string","s":"\\x01"},
+	//   {"d":"UTF8 string with RTL char","s":"܈85"},
+	//   {"d":"tabs","s":"a\tb\tc\n12\t123123213\t12313"}
+	// ]
 	// sql --format=sql -e select * from t.t
 	// CREATE TABLE results (
 	//   s STRING,
