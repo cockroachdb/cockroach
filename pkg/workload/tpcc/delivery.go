@@ -17,11 +17,11 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgx"
+	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/exp/rand"
 )
 
@@ -72,7 +72,7 @@ func createDelivery(
 		WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`,
 	)
 
-	if err := del.sr.Init(ctx, "delivery", mcp, config.connFlags); err != nil {
+	if err := del.sr.Init(ctx, "delivery", mcp); err != nil {
 		return nil, err
 	}
 
