@@ -285,7 +285,7 @@ func TestChangefeedTotalOrdering(t *testing.T) {
 		assertPayloadsTotalOrdering(t, foo, expectedMessages)
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("webhook"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestChangefeedBasicQuery(t *testing.T) {
