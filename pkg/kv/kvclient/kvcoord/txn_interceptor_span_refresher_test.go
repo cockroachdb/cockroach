@@ -709,6 +709,9 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 	scanArgs := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}}
 	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
 	etArgs := kvpb.EndTxnRequest{Commit: true}
+	putArgs.Sequence = 1
+	etArgs.Sequence = 2
+	etArgs.InFlightWrites = []roachpb.SequencedWrite{{Key: keyB, Sequence: 1}}
 
 	// Run the test with two slightly different configurations. When priorReads
 	// is true, issue a {Put, EndTxn} batch after having previously accumulated
@@ -728,6 +731,7 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 				require.False(t, ba.CanForwardReadTimestamp)
 				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+				require.True(t, ba.Requests[1].GetEndTxn().IsParallelCommit())
 
 				pushedTxn := ba.Txn.Clone()
 				pushedTxn.WriteTimestamp = pushedTs1
@@ -776,6 +780,7 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 				require.False(t, ba.CanForwardReadTimestamp)
 				require.Equal(t, pushedTs2, ba.Txn.ReadTimestamp)
 				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+				require.False(t, ba.Requests[0].GetEndTxn().IsParallelCommit())
 
 				br := ba.CreateReply()
 				br.Txn = ba.Txn.Clone()
@@ -795,6 +800,7 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 				require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
 				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
 				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+				require.True(t, ba.Requests[2].GetEndTxn().IsParallelCommit())
 
 				pushedTxn := ba.Txn.Clone()
 				pushedTxn.WriteTimestamp = pushedTs1
@@ -834,6 +840,7 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 				require.False(t, ba.CanForwardReadTimestamp)
 				require.Equal(t, pushedTs2, ba.Txn.ReadTimestamp)
 				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+				require.False(t, ba.Requests[0].GetEndTxn().IsParallelCommit())
 
 				br := ba.CreateReply()
 				br.Txn = ba.Txn.Clone()
