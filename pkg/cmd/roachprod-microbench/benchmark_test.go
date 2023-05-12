@@ -25,8 +25,8 @@ func TestExtractBenchmarkResultsDataDriven(t *testing.T) {
 		if d.Cmd != "benchmark" {
 			d.Fatalf(t, "unknown command %s", d.Cmd)
 		}
-		result, fail := extractBenchmarkResults(d.Input)
-		output := fmt.Sprintf("%v %v", fail, result)
+		result := extractBenchmarkResults(d.Input)
+		output := fmt.Sprintf("%v", result)
 		return output
 	})
 }
