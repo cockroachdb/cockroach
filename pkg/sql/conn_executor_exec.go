@@ -968,17 +968,19 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	if stmtThresholdSpan != nil {
 		stmtDur := timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
-		needRecording := stmtTraceThreshold < stmtDur
-		if needRecording {
+		if needRecording := stmtDur >= stmtTraceThreshold; needRecording {
 			rec := stmtThresholdSpan.FinishAndGetRecording(tracingpb.RecordingVerbose)
 			// NB: This recording does not include the commit for implicit
 			// transactions if the statement didn't auto-commit.
+			redactableStmt := p.FormatAstAsRedactableString(p.stmt.AST,
+				p.extendedEvalCtx.Context.Annotations)
 			logTraceAboveThreshold(
 				ctx,
-				rec,
-				fmt.Sprintf("SQL stmt %s", stmt.AST.String()),
-				stmtTraceThreshold,
-				stmtDur,
+				rec,                /* recording */
+				"SQL statement",    /* opName */
+				redactableStmt,     /* detail */
+				stmtTraceThreshold, /* threshold */
+				stmtDur,            /* elapsed */
 			)
 		} else {
 			stmtThresholdSpan.Finish()
@@ -2938,26 +2940,20 @@ func (ex *connExecutor) recordTransactionFinish(
 	)
 }
 
-// logTraceAboveThreshold logs a span's recording if the duration is above a
-// given threshold. It is used when txn or stmt threshold tracing is enabled.
+// logTraceAboveThreshold logs a span's recording. It is used when txn or stmt threshold tracing is enabled.
 // This function assumes that sp is non-nil and threshold tracing was enabled.
+// The caller is responsible for only calling the function when elapsed >= threshold.
 func logTraceAboveThreshold(
-	ctx context.Context, r tracingpb.Recording, opName string, threshold, elapsed time.Duration,
+	ctx context.Context,
+	r tracingpb.Recording,
+	opName redact.RedactableString,
+	detail redact.RedactableString,
+	threshold, elapsed time.Duration,
 ) {
-	if elapsed < threshold {
-		return
-	}
 	if r == nil {
 		log.Warning(ctx, "missing trace when threshold tracing was enabled")
-		return
 	}
-	dump := r.String()
-	if len(dump) == 0 {
-		return
-	}
-	// Note that log lines larger than 65k are truncated in the debug zip (see
-	// #50166).
-	log.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s", opName, elapsed, threshold, dump)
+	log.SqlExec.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s\n%s", opName, elapsed, threshold, detail, r)
 }
 
 func (ex *connExecutor) execWithProfiling(
