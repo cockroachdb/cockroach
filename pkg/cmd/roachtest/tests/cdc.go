@@ -215,6 +215,10 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		kafka.install(ct.ctx)
 		kafka.start(ct.ctx, "kafka")
 
+		if args.kafkaQuota > 0 {
+			kafka.setProducerQuota(ct.ctx, args.kafkaQuota)
+		}
+
 		if args.kafkaChaos {
 			ct.mon.Go(func(ctx context.Context) error {
 				period, downTime := 2*time.Minute, 20*time.Second
@@ -361,6 +365,7 @@ type feedArgs struct {
 	targets         []string
 	opts            map[string]string
 	kafkaChaos      bool
+	kafkaQuota      int
 	assumeRole      string
 	tolerateErrors  bool
 	sinkURIOverride string
@@ -1024,6 +1029,29 @@ func registerCDC(r registry.Registry) {
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
 				steadyLatency:      time.Minute,
+			})
+			ct.waitForWorkload()
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:            "cdc/kafka-quota",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType:   kafkaSink,
+				targets:    allTpccTargets,
+				kafkaQuota: 262144,
+			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      5 * time.Minute,
 			})
 			ct.waitForWorkload()
 		},
@@ -2001,6 +2029,16 @@ func (k kafkaManager) start(ctx context.Context, service string, envVars ...stri
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
 	k.c.Run(ctx, k.nodes, k.makeCommand("confluent", "local destroy || true"))
 	k.restart(ctx, service, envVars...)
+}
+
+func (k kafkaManager) setProducerQuota(ctx context.Context, bytesPerSecond int) {
+	k.t.Status("setting producer quota to %d bytes per second for all users", bytesPerSecond)
+	k.c.Run(ctx, k.nodes, filepath.Join(k.binDir(), "kafka-configs"),
+		"--zookeeper", "localhost:2181",
+		"--alter",
+		"--add-config", fmt.Sprintf("producer_byte_rate=%d", bytesPerSecond),
+		"--entity-type", "users",
+		"--entity-name", "default")
 }
 
 var kafkaServices = map[string][]string{

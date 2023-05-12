@@ -146,9 +146,11 @@ type kafkaSink struct {
 	// changefeed.
 	throttler struct {
 		syncutil.RWMutex
-		throttleUntil time.Time
-		sampler       saramaMetrics.Meter
-		rateLimiter   *cdcutils.Throttler
+		throttleUntil    time.Time
+		sampler          saramaMetrics.Meter
+		rateLimiter      *cdcutils.Throttler
+		previousByteRate float64
+		fudgeMultiplier  float64
 	}
 
 	disableInternalRetry bool
@@ -336,9 +338,7 @@ func (s *kafkaSink) Close() error {
 		// down or beginning to retry regardless
 		_ = s.producer.Close()
 	}
-	if s.throttler.sampler != nil {
-		s.throttler.sampler.Stop()
-	}
+
 	// s.client is only nil in tests.
 	if s.client != nil {
 		return s.client.Close()
@@ -500,7 +500,9 @@ func (s *kafkaSink) throttleForMs(t int64) {
 	throttleUntil := time.Now().Add(time.Millisecond * time.Duration(t))
 	if throttleUntil.After(s.throttler.throttleUntil) {
 		s.throttler.throttleUntil = throttleUntil
-		log.Errorf(s.ctx, "No more Kafka messages until %s", throttleUntil.String())
+		if log.V(1) {
+			log.Infof(s.ctx, "No more Kafka messages until %s", throttleUntil.String())
+		}
 	}
 
 	// (re-)calculate the byte rate we should limit ourselves to in order
@@ -521,9 +523,7 @@ func (s *kafkaSink) throttleForMs(t int64) {
 	for recentBytesPerSecond == 0 {
 		select {
 		case <-ctxWithDeadline.Done():
-			if log.V(1) {
-				log.Error(s.ctx, "Recieved throttling message from Kafka but could not determine recent bytes per second")
-			}
+			log.Warning(s.ctx, "Recieved throttling message from Kafka but could not determine recent bytes per second")
 			recentBytesPerSecond = math.Inf(1)
 		default:
 			recentBytesPerSecond = s.throttler.sampler.Rate1()
@@ -533,10 +533,6 @@ func (s *kafkaSink) throttleForMs(t int64) {
 
 	targetByteRate := (recentBytesPerSecond / float64(t+1000)) * 1000
 
-	if log.V(1) {
-		log.Warningf(s.ctx, "Now targeting a byte rate of %f/sec", targetByteRate)
-	}
-
 	if s.throttler.rateLimiter == nil {
 		metrics := cdcutils.MakeMetrics(time.Minute)
 		s.throttler.rateLimiter = cdcutils.NewThrottler(
@@ -545,7 +541,25 @@ func (s *kafkaSink) throttleForMs(t int64) {
 			&metrics,
 		)
 	} else {
-		s.throttler.rateLimiter.UpdateBytePerSecondRate(targetByteRate)
+		if s.throttler.previousByteRate == 0 || s.throttler.previousByteRate > targetByteRate {
+			s.throttler.rateLimiter.UpdateBytePerSecondRate(targetByteRate)
+			s.throttler.previousByteRate = targetByteRate
+			if log.V(1) {
+				log.Infof(s.ctx, "This changefeed emitter is now targeting a byte rate of %f/sec", targetByteRate)
+			}
+		} else {
+			// According to our metrics, we honored the previous throttling request but still got
+			// throttled again. Increase the fudge factor as it's empirically too low.
+			if s.throttler.fudgeMultiplier == 0 {
+				s.throttler.fudgeMultiplier = 1
+			}
+			s.throttler.fudgeMultiplier += 0.01
+			if log.V(1) {
+				log.Infof(s.ctx, "Throttled multiple times at byte rate %v, so increasing byte rate multiplier to %v",
+					s.throttler.previousByteRate, s.throttler.fudgeMultiplier)
+			}
+
+		}
 	}
 	s.throttler.Unlock()
 }
@@ -555,7 +569,7 @@ func (s *kafkaSink) maybeThrottle(ctx context.Context, msg *sarama.ProducerMessa
 	throttleFor := s.throttler.throttleUntil.Sub(time.Now())
 	s.throttler.RUnlock()
 	if throttleFor > 0 {
-		log.Errorf(ctx, "throttling due to broker response for %v", throttleFor)
+		log.Warningf(ctx, "throttling due to broker response for %v", throttleFor)
 		select {
 		case <-ctx.Done():
 		case <-time.After(throttleFor):
@@ -565,8 +579,13 @@ func (s *kafkaSink) maybeThrottle(ctx context.Context, msg *sarama.ProducerMessa
 	defer s.throttler.RUnlock()
 	if s.throttler.rateLimiter != nil {
 		sz := msg.Key.Length() + msg.Value.Length()
-		log.Errorf(ctx, "Now I'll wait for rateLimiter quota...")
-		defer log.Errorf(ctx, "Done waiting for quota")
+		if s.throttler.fudgeMultiplier > 0 {
+			sz = int(float64(sz) * s.throttler.fudgeMultiplier)
+		}
+		if log.V(2) {
+			log.Infof(ctx, "Kafka throttler may need to wait for rateLimiter quota...")
+			defer log.Infof(ctx, "Kafka throttler done waiting for quota")
+		}
 		return s.throttler.rateLimiter.AcquireMessageQuota(ctx, sz)
 	}
 	return nil
@@ -1221,20 +1240,6 @@ func (m *metricSpyInjector) GetOrRegister(name string, i interface{}) interface{
 	return reg
 }
 
-func (m *metricSpyInjector) Get(name string) interface{} {
-	panic(name)
-	reg := m.Registry.Get(name)
-	// strings.Contains is needed because the broker id gets prepended
-	if strings.Contains(name, m.pattern) {
-		hist, ok := reg.(saramaMetrics.Histogram)
-		if !ok {
-			hist = saramaMetrics.NilHistogram{}
-		}
-		return &metricSpy{Histogram: hist, hook: m.hook}
-	}
-	return reg
-}
-
 // It's difficult to get the asyncProducer to tell us about internal events, so this
 // fairly terrible hack injects a spy into the metric update function for one we care
 // about.  metricName must be a magic string from registerMetrics in
@@ -1245,7 +1250,7 @@ func addMetricSpy(metricName string, config *sarama.Config, onUpdate func(int64)
 
 func addOnThrottleCallback(s *kafkaSink, config *sarama.Config) {
 	addMetricSpy("throttle-time-in-ms", config, func(t int64) {
-		log.Errorf(s.ctx, "Honoring broker request to pause for %d ms", t)
+		log.Warningf(s.ctx, "Honoring broker request to pause for %d ms", t)
 		s.throttleForMs(t)
 	})
 }
