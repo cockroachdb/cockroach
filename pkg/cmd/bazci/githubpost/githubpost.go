@@ -64,7 +64,7 @@ type formatter func(context.Context, failure) (issues.IssueFormatter, issues.Pos
 
 func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, issues.PostRequest) {
 	teams := getOwner(ctx, f.packageName, f.testName)
-	repro := fmt.Sprintf("./dev test ./pkg/%s --race --stress -f %s TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1",
+	repro := fmt.Sprintf("./dev test ./pkg/%s --race --count 250 -f %s",
 		trimPkg(f.packageName), f.testName)
 
 	var projColID int
