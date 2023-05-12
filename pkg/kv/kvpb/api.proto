@@ -2675,6 +2675,9 @@ message Header {
   // by the client's DistSender, however it will preserve the value of the field
   // `ExplicitlyRequested` so that requests passed to DistSender can request
   // `RangeInfos` if desired.
+  //
+  // If empty, range info is never returned (from 23.2 onwards). Use
+  // ExplicitlyRequested to force an update for an otherwise-empty field.
   ClientRangeInfo client_range_info = 17 [(gogoproto.nullable) = false];
   // bounded_staleness is set when a read-only batch is performing a bounded
   // staleness read and wants its timestamp to be chosen dynamically, based

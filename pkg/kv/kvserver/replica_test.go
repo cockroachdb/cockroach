@@ -253,7 +253,7 @@ func (tc *testContext) SendWrapped(args kvpb.Request) (kvpb.Response, *kvpb.Erro
 	return tc.SendWrappedWith(kvpb.Header{}, args)
 }
 
-// addBogusReplicaToRangeDesc modifies the range descriptor to include a second
+// addBogusReplicaToRangeDesc modifies the range descriptor to include an additional
 // replica. This is useful for tests that want to pretend they're transferring
 // the range lease away, as the lease can only be obtained by Replicas which are
 // part of the range descriptor.
@@ -261,15 +261,17 @@ func (tc *testContext) SendWrapped(args kvpb.Request) (kvpb.Response, *kvpb.Erro
 func (tc *testContext) addBogusReplicaToRangeDesc(
 	ctx context.Context,
 ) (roachpb.ReplicaDescriptor, error) {
-	secondReplica := roachpb.ReplicaDescriptor{
-		NodeID:    2,
-		StoreID:   2,
-		ReplicaID: 2,
-	}
 	oldDesc := *tc.repl.Desc()
+	newID := oldDesc.NextReplicaID
+	newReplica := roachpb.ReplicaDescriptor{
+		NodeID:    roachpb.NodeID(newID),
+		StoreID:   roachpb.StoreID(newID),
+		ReplicaID: newID,
+	}
 	newDesc := oldDesc
-	newDesc.InternalReplicas = append(newDesc.InternalReplicas, secondReplica)
-	newDesc.NextReplicaID = 3
+	newDesc.InternalReplicas = append(newDesc.InternalReplicas, newReplica)
+	newDesc.NextReplicaID++
+	newDesc.IncrementGeneration()
 
 	dbDescKV, err := tc.store.DB().Get(ctx, keys.RangeDescriptorKey(oldDesc.StartKey))
 	if err != nil {
@@ -303,7 +305,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.engine)
 	tc.repl.mu.RUnlock()
 	tc.repl.raftMu.Unlock()
-	return secondReplica, nil
+	return newReplica, nil
 }
 
 func newTransaction(
@@ -13867,24 +13869,54 @@ func TestRangeInfoReturned(t *testing.T) {
 	var tc testContext
 	tc.Start(ctx, t, stopper)
 
+	// Add a couple of bogus configuration changes to bump the generation to 2,
+	// and request a new lease to bump the lease sequence to 2.
+	_, err := tc.addBogusReplicaToRangeDesc(ctx)
+	require.NoError(t, err)
+	_, err = tc.addBogusReplicaToRangeDesc(ctx)
+	require.NoError(t, err)
+
+	{
+		lease, _ := tc.repl.GetLease()
+		tc.repl.RevokeLease(ctx, lease.Sequence)
+
+		tc.repl.mu.Lock()
+		st := tc.repl.leaseStatusAtRLocked(ctx, tc.Clock().NowAsClockTimestamp())
+		ll := tc.repl.requestLeaseLocked(ctx, st)
+		tc.repl.mu.Unlock()
+		select {
+		case pErr := <-ll.C():
+			require.NoError(t, pErr.GoError())
+		case <-time.After(5 * time.Second):
+			t.Fatal("timeout")
+		}
+	}
+
 	ri := tc.repl.GetRangeInfo(ctx)
 	require.False(t, ri.Lease.Empty())
 	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, ri.ClosedTimestampPolicy)
+	require.EqualValues(t, 2, ri.Desc.Generation)
+	require.EqualValues(t, 2, ri.Lease.Sequence)
 	staleDescGen := ri.Desc.Generation - 1
 	staleLeaseSeq := ri.Lease.Sequence - 1
 	wrongCTPolicy := roachpb.LEAD_FOR_GLOBAL_READS
 
-	requestLease := ri.Lease
-	requestLease.Sequence = 0
-
 	for _, test := range []struct {
 		cri roachpb.ClientRangeInfo
-		req kvpb.Request
 		exp *roachpb.RangeInfo
 	}{
 		{
-			// Empty client info. This case shouldn't happen.
+			// Empty client info doesn't return any info. This case shouldn't happen
+			// for requests via DistSender, but can happen e.g. with lease requests
+			// that are submitted directly to the replica.
 			cri: roachpb.ClientRangeInfo{},
+			exp: nil,
+		},
+		{
+			// ExplicitlyRequested returns lease info.
+			cri: roachpb.ClientRangeInfo{
+				ExplicitlyRequested: true,
+			},
 			exp: &ri,
 		},
 		{
@@ -13949,26 +13981,12 @@ func TestRangeInfoReturned(t *testing.T) {
 			},
 			exp: &ri,
 		},
-		{
-			// RequestLeaseRequest without ClientRangeInfo. These bypass
-			// DistSender and don't need range info returned.
-			cri: roachpb.ClientRangeInfo{},
-			req: &kvpb.RequestLeaseRequest{
-				Lease:     requestLease,
-				PrevLease: ri.Lease,
-			},
-			exp: nil,
-		},
 	} {
 		t.Run("", func(t *testing.T) {
 			ba := &kvpb.BatchRequest{}
 			ba.Header.ClientRangeInfo = test.cri
-			req := test.req
-			if req == nil {
-				args := getArgs(roachpb.Key("a"))
-				req = &args
-			}
-			ba.Add(req)
+			req := getArgs(roachpb.Key("a"))
+			ba.Add(&req)
 			br, pErr := tc.Sender().Send(ctx, ba)
 			require.NoError(t, pErr.GoError())
 			if test.exp == nil {

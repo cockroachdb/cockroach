@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"runtime/pprof"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -307,12 +308,22 @@ func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
 func (r *Replica) maybeAddRangeInfoToResponse(
 	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
 ) {
-	// Ignore lease requests. These are submitted directly to the replica,
-	// bypassing the DistSender. They don't need range info returned, but their
-	// ClientRangeInfo is always empty, so they'll otherwise always get it.
-	if ba.IsSingleRequestLeaseRequest() {
+	// Only return range info if ClientRangeInfo is non-empty. In particular, we
+	// don't want to populate this for lease requests, since these bypass
+	// DistSender and never use ClientRangeInfo.
+	//
+	// From 23.2, all DistSenders ensure ExplicitlyRequested is set when otherwise
+	// empty. Fall back to check for lease requests, to avoid 23.1 regressions.
+	if r.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_2) {
+		if ba.ClientRangeInfo == (roachpb.ClientRangeInfo{}) {
+			return
+		}
+	} else if ba.IsSingleRequestLeaseRequest() {
+		// TODO(erikgrinaker): Remove this branch when 23.1 support is dropped.
+		_ = clusterversion.V23_1
 		return
 	}
+
 	// Compare the client's info with the replica's info to detect if the client
 	// has stale knowledge. Note that the client can have more recent knowledge
 	// than the replica in case this is a follower.
