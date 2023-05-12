@@ -950,7 +950,7 @@ func (p *Provider) runInstance(
 	} else {
 		machineType = providerOpts.MachineType
 	}
-
+	machineType = strings.ToLower(machineType)
 	cpuOptions := providerOpts.CPUOptions
 
 	// We avoid the need to make a second call to set the tags by jamming
@@ -1019,10 +1019,16 @@ func (p *Provider) runInstance(
 		}
 		return *fl
 	}
-
 	imageID := withFlagOverride(az.region.AMI_X86_64, &providerOpts.ImageAMI)
-	if opts.EnableFIPS {
+	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "7g.") == 1
+	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
+	if useArmAMI {
+		imageID = withFlagOverride(az.region.AMI_ARM64, &providerOpts.ImageAMI)
+		l.Printf("Using ARM64 AMI: %s for machine type: %s", imageID, machineType)
+	}
+	if !useArmAMI && opts.EnableFIPS {
 		imageID = withFlagOverride(az.region.AMI_FIPS, &providerOpts.ImageAMI)
+		l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", imageID, machineType)
 	}
 	args := []string{
 		"ec2", "run-instances",

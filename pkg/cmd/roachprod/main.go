@@ -779,7 +779,7 @@ Currently available application options are:
 		if len(args) == 2 {
 			versionArg = args[1]
 		}
-		urls, err := roachprod.StageURL(config.Logger, args[0], versionArg, stageOS)
+		urls, err := roachprod.StageURL(config.Logger, args[0], versionArg, stageOS, stageArch)
 		if err != nil {
 			return err
 		}
@@ -818,7 +818,7 @@ Some examples of usage:
 		if len(args) == 3 {
 			versionArg = args[2]
 		}
-		return roachprod.Stage(context.Background(), config.Logger, args[0], stageOS, stageDir, args[1], versionArg)
+		return roachprod.Stage(context.Background(), config.Logger, args[0], stageOS, stageArch, stageDir, args[1], versionArg)
 	}),
 }
 

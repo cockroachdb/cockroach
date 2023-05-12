@@ -62,6 +62,7 @@ var (
 	createVMOpts          = vm.DefaultCreateOpts()
 	startOpts             = roachprod.DefaultStartOpts()
 	stageOS               string
+	stageArch             string
 	stageDir              string
 	logsDir               string
 	logsFilter            string
@@ -217,9 +218,11 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	putCmd.Flags().BoolVar(&useTreeDist, "treedist", useTreeDist, "use treedist copy algorithm")
 
 	stageCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
+	stageCmd.Flags().StringVar(&stageArch, "arch", "", "architecture override for staged binaries")
 	stageCmd.Flags().StringVar(&stageDir, "dir", "", "destination for staged binaries")
-
+	// N.B. stageURLCmd just prints the URL that stageCmd would use.
 	stageURLCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
+	stageURLCmd.Flags().StringVar(&stageArch, "arch", "", "architecture override for staged binaries")
 
 	logsCmd.Flags().StringVar(&logsFilter,
 		"filter", "", "re to filter log messages")
