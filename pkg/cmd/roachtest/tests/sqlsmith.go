@@ -237,6 +237,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 					// that are because of #40929.
 					var expectedError bool
 					for _, exp := range []string{
+						"injected panic in optimizer",
 						"could not parse \"0E-2019\" as type decimal",
 					} {
 						expectedError = expectedError || strings.Contains(es, exp)
