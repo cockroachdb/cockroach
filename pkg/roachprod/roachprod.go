@@ -504,7 +504,7 @@ func Stage(
 	ctx context.Context,
 	l *logger.Logger,
 	clusterName string,
-	stageOS, stageDir, applicationName, version string,
+	stageOS, stageArch, stageDir, applicationName, version string,
 ) error {
 	if err := LoadClusters(); err != nil {
 		return err
@@ -515,10 +515,16 @@ func Stage(
 	}
 
 	os := "linux"
+	arch := "amd64"
+
 	if stageOS != "" {
 		os = stageOS
 	} else if c.IsLocal() {
 		os = runtime.GOOS
+		arch = runtime.GOARCH
+	}
+	if stageArch != "" {
+		arch = stageArch
 	}
 
 	dir := "."
@@ -526,7 +532,7 @@ func Stage(
 		dir = stageDir
 	}
 
-	return install.StageApplication(ctx, l, c, applicationName, version, os, dir)
+	return install.StageApplication(ctx, l, c, applicationName, version, os, arch, dir)
 }
 
 // Reset resets all VMs in a cluster.
@@ -1390,12 +1396,18 @@ func Logs(l *logger.Logger, clusterName, dest, username string, logsOpts LogsOpt
 }
 
 // StageURL TODO
-func StageURL(l *logger.Logger, applicationName, version, stageOS string) ([]*url.URL, error) {
+func StageURL(
+	l *logger.Logger, applicationName, version, stageOS string, stageArch string,
+) ([]*url.URL, error) {
 	os := runtime.GOOS
 	if stageOS != "" {
 		os = stageOS
 	}
-	urls, err := install.URLsForApplication(applicationName, version, os)
+	arch := runtime.GOARCH
+	if stageArch != "" {
+		arch = stageArch
+	}
+	urls, err := install.URLsForApplication(applicationName, version, os, arch)
 	if err != nil {
 		return nil, err
 	}
