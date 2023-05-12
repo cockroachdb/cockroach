@@ -87,6 +87,11 @@ func init() {
 	ctx = logtags.AddTag(ctx, "kafka-producer", nil)
 	sarama.Logger = &kafkaLogAdapter{ctx: ctx}
 
+	// go-metrics has a global singleton goroutine for sampling rates, which
+	// gets started lazily and can't be stopped. Trigger it here so it doesn't
+	// look like a leaked goroutine in tests.
+	saramaMetrics.NewMeter().Stop()
+
 	// Sarama should not be rejecting messages based on some arbitrary limits.
 	// This sink already manages its resource usage.  Sarama should attempt to deliver
 	// messages, no matter their size.  Of course, the downstream kafka may reject
@@ -330,6 +335,9 @@ func (s *kafkaSink) Close() error {
 		// Ignore errors related to outstanding messages since we're either shutting
 		// down or beginning to retry regardless
 		_ = s.producer.Close()
+	}
+	if s.throttler.sampler != nil {
+		s.throttler.sampler.Stop()
 	}
 	// s.client is only nil in tests.
 	if s.client != nil {
@@ -1214,6 +1222,7 @@ func (m *metricSpyInjector) GetOrRegister(name string, i interface{}) interface{
 }
 
 func (m *metricSpyInjector) Get(name string) interface{} {
+	panic(name)
 	reg := m.Registry.Get(name)
 	// strings.Contains is needed because the broker id gets prepended
 	if strings.Contains(name, m.pattern) {
@@ -1267,57 +1276,3 @@ func (s *kafkaStats) String() string {
 		atomic.LoadInt64(&s.largestMessageSize),
 	)
 }
-
-/* type byteRatePerSecondBucket struct {
-	windowStart time.Time
-	totalBytes  int64
-	sync.RWMutex
-}
-
-type byteRatePerSecondSampler struct {
-	buckets [60]*byteRatePerSecondBucket
-}
-
-func newByteRatePerSecondSampler() *byteRatePerSecondSampler {
-	b := byteRatePerSecondSampler{}
-	for i := 0; i < 60; i++ {
-		b.buckets[i] = &byteRatePerSecondBucket{}
-	}
-	return &b
-}
-
-func (b *byteRatePerSecondSampler) recordBytesEmitted(bytes int64) {
-	now := time.Now()
-	bucket := b.buckets[now.Second()]
-	bucket.RLock()
-	if now.Sub(bucket.windowStart) > time.Minute {
-		bucket.RUnlock()
-		bucket.Lock()
-		bucket.windowStart = now
-		bucket.totalBytes = bytes
-		bucket.Unlock()
-	} else {
-		atomic.AddInt64(&bucket.totalBytes, bytes)
-		bucket.RUnlock()
-	}
-}
-
-func (b *byteRatePerSecondSampler) recentBytesPerSecond() int64 {
-	var totalBytes, numNonEmptyBuckets int64
-	for numNonEmptyBuckets == 0 {
-		log.Errorf(context.Background(), "Waiting a second to let buckets fill up")
-		time.Sleep(time.Second)
-		for _, bucket := range b.buckets {
-			subTotal := atomic.LoadInt64(&bucket.totalBytes)
-			if subTotal > 0 {
-				totalBytes += bucket.totalBytes
-				numNonEmptyBuckets += 1
-			}
-		}
-	}
-
-	log.Errorf(context.Background(), "byteRatePerSecond calculation: %d / %d", totalBytes, numNonEmptyBuckets)
-
-	return totalBytes / numNonEmptyBuckets
-}
-*/
