@@ -483,8 +483,9 @@ github.com/cockroachdb/pebble v0.0.0-20230524191547-040fb4ea270a h1:O30yjVhQYP1h
 github.com/cockroachdb/pebble v0.0.0-20230524191547-040fb4ea270a/go.mod h1:9lRMC4XN3/BLPtIp6kAKwIaHu369NOf2rMucPzipz50=
 github.com/cockroachdb/raft/v3 v3.0.0-20230519102242-f0bd7a17912d h1:/mNqke/cLy2THF1rbc0LnS0IkPQWJOVDCXx1obfWlsI=
 github.com/cockroachdb/raft/v3 v3.0.0-20230519102242-f0bd7a17912d/go.mod h1:xa/jfCF4K9FpWEAXstT+Nw4ToWdmhJ8oeC5eburtypA=
-github.com/cockroachdb/redact v1.1.3 h1:AKZds10rFSIj7qADf0g46UixK8NNLwWTNdCIGS5wfSQ=
 github.com/cockroachdb/redact v1.1.3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
+github.com/cockroachdb/redact v1.1.4 h1:Y0XrVI2FAyofNyGveodTN//qdpPtFKcKTeCBsK3AHAQ=
+github.com/cockroachdb/redact v1.1.4/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd h1:KFOt5I9nEKZgCnOSmy8r4Oykh8BYQO8bFOTgHDS8YZA=
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd/go.mod h1:AN708GD2FFeLgUHMbD58YPe4Nw8GG//3rwgyG4L9gR0=
 github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b h1:JbkTu68NpiczWOaciC2QSy33RFEnnq6H2pz7viQp0rc=
