@@ -99,6 +99,7 @@ func registerHotSpotSplits(r registry.Registry) {
 		// No problem in 20.1 thanks to:
 		// https://github.com/cockroachdb/cockroach/pull/45323.
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
 				concurrency = 32

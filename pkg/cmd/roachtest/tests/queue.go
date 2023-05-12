@@ -32,6 +32,7 @@ func registerQueue(r registry.Registry) {
 		Name:    fmt.Sprintf("queue/nodes=%d", numNodes-1),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runQueue(ctx, t, c)
 		},

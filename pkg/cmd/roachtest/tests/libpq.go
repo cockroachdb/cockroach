@@ -138,6 +138,7 @@ func registerLibPQ(r registry.Registry) {
 		Name:    "lib/pq",
 		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
+		Leases:  registry.MetamorphicLeases,
 		Tags:    registry.Tags(`default`, `driver`),
 		Run:     runLibPQ,
 	})

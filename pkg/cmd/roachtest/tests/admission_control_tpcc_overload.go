@@ -168,6 +168,7 @@ func registerTPCCOverload(r registry.Registry) {
 			Cluster:           r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
 			Run:               s.run,
 			EncryptionSupport: registry.EncryptionMetamorphic,
+			Leases:            registry.MetamorphicLeases,
 			Timeout:           20 * time.Minute,
 		})
 	}

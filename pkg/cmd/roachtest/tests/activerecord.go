@@ -249,5 +249,6 @@ func registerActiveRecord(r registry.Registry) {
 		NativeLibs: registry.LibGEOS,
 		Tags:       registry.Tags(`default`, `orm`),
 		Run:        runActiveRecord,
+		Leases:     registry.MetamorphicLeases,
 	})
 }
