@@ -106,6 +106,7 @@ type TestServerArgs struct {
 	CacheSize                   int64
 	SnapshotSendLimit           int64
 	SnapshotApplyLimit          int64
+	AcceptSQLWithoutTLS         bool
 
 	// By default, test servers have AutoInitializeCluster=true set in
 	// their config. If NoAutoInitializeCluster is set, that behavior is disabled

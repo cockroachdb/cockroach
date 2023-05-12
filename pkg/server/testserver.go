@@ -161,6 +161,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.ClusterName = params.ClusterName
 	cfg.ExternalIODirConfig = params.ExternalIODirConfig
 	cfg.Insecure = params.Insecure
+	cfg.AcceptSQLWithoutTLS = params.AcceptSQLWithoutTLS
 	cfg.AutoInitializeCluster = !params.NoAutoInitializeCluster
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
