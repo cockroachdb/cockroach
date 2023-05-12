@@ -151,7 +151,7 @@ type hashTableProbeBuffer struct {
 	// calculated as
 	//   ToCheckID[i] = Next[ToCheckID[i]].
 	// Whenever ToCheckID[i] becomes 0, there are no more matches for the ith
-	// probing tuple.
+	// probing tuple, and the ith tuple is no longer included into ToCheck.
 	ToCheckID []keyID
 
 	// differs stores whether the probing tuple included in ToCheck differs
@@ -159,9 +159,8 @@ type hashTableProbeBuffer struct {
 	differs []bool
 
 	// foundNull stores whether the probing tuple contains a NULL value in the
-	// key. Populated only by the unordered distinct when
-	// allowNullEquality=false since a single NULL makes the key distinct from
-	// all other possible "candidates".
+	// key. Populated when allowNullEquality=false since a single NULL makes the
+	// key distinct from all other possible "candidates".
 	foundNull []bool
 
 	// HeadID stores the keyID of the tuple that has an equality match with the
@@ -380,18 +379,6 @@ func NewHashTable(
 
 	ht.cancelChecker.Init(ctx)
 	return ht
-}
-
-// HashTableInitialToCheck is a slice that contains all consequent integers in
-// [0, coldata.MaxBatchSize) range that can be used to initialize ToCheck buffer
-// for most of the join types.
-var HashTableInitialToCheck []uint64
-
-func init() {
-	HashTableInitialToCheck = make([]uint64, coldata.MaxBatchSize)
-	for i := range HashTableInitialToCheck {
-		HashTableInitialToCheck[i] = uint64(i)
-	}
 }
 
 // shouldResize returns whether the hash table storing numTuples should be
@@ -830,15 +817,10 @@ func (ht *HashTable) buildNextChains(first, next []keyID, offset, batchSize uint
 // ToCheck are of the desired length and are set up for probing.
 // Note that if the old ToCheckID or ToCheck slices have enough capacity, they
 // are *not* zeroed out.
-func (p *hashTableProbeBuffer) SetupLimitedSlices(length int, buildMode HashTableBuildMode) {
+func (p *hashTableProbeBuffer) SetupLimitedSlices(length int) {
 	p.HeadID = colexecutils.MaybeAllocateLimitedUint64Array(p.HeadID, length)
 	p.differs = colexecutils.MaybeAllocateLimitedBoolArray(p.differs, length)
-	if buildMode == HashTableDistinctBuildMode {
-		// TODO(yuzefovich): foundNull is not used by the hash aggregator, so we
-		// could only allocate it when the hash table is used by the unordered
-		// distinct.
-		p.foundNull = colexecutils.MaybeAllocateLimitedBoolArray(p.foundNull, length)
-	}
+	p.foundNull = colexecutils.MaybeAllocateLimitedBoolArray(p.foundNull, length)
 	// Note that we don't use maybeAllocate* methods below because ToCheckID and
 	// ToCheck don't need to be zeroed out when reused.
 	if cap(p.ToCheckID) < length {
@@ -942,7 +924,12 @@ func (ht *HashTable) DistinctCheck(nToCheck uint64, probeSel []int) uint64 {
 	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
-		if ht.ProbeScratch.differs[toCheck] {
+		if ht.ProbeScratch.foundNull[toCheck] {
+			// We found a NULL value in the equality column with
+			// allowNullEquality=false, so we know for sure this probing tuple
+			// won't ever get a match.
+			ht.ProbeScratch.ToCheckID[toCheck] = 0
+		} else if ht.ProbeScratch.differs[toCheck] {
 			ht.ProbeScratch.differs[toCheck] = false
 			//gcassert:bce
 			toCheckSlice[nDiffers] = toCheck
