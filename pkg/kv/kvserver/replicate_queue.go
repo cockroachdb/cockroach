@@ -36,7 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/raft/v3"
+	"github.com/cockroachdb/redact"
+	raft "go.etcd.io/raft/v3"
 )
 
 const (
@@ -771,6 +772,13 @@ func (rq *replicateQueue) process(
 // that the error should send the range to purgatory.
 type decommissionPurgatoryError struct{ error }
 
+var _ errors.SafeFormatter = decommissionPurgatoryError{}
+
+func (e decommissionPurgatoryError) SafeFormatError(p errors.Printer) (next error) {
+	p.Print(e.error)
+	return nil
+}
+
 func (decommissionPurgatoryError) PurgatoryErrorMarker() {}
 
 var _ PurgatoryError = decommissionPurgatoryError{}
@@ -823,7 +831,7 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 		loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
 		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
 
-		var traceOutput string
+		var traceOutput redact.RedactableString
 		traceLoggingNeeded := (err != nil || exceededDuration) && log.ExpensiveLogEnabled(ctx, 1)
 		if traceLoggingNeeded {
 			// If we have tracing spans from execChangeReplicasTxn, filter it from
@@ -832,7 +840,7 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 			rec = filterTracingSpans(sp.GetConfiguredRecording(),
 				replicaChangeTxnGetDescOpName, replicaChangeTxnUpdateDescOpName,
 			)
-			traceOutput = fmt.Sprintf("\ntrace:\n%s", rec)
+			traceOutput = redact.Sprintf("\ntrace:\n%s", rec)
 		}
 
 		if err != nil {
