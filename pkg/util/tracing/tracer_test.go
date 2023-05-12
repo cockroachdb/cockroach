@@ -99,7 +99,7 @@ func TestTracerRecording(t *testing.T) {
 	s1.RecordStructured(&types.Int32Value{Value: 5})
 	checkRecording(t, s1.GetRecording(tracingpb.RecordingStructured), `
 		=== operation:a
-		structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":5}`)
+		structured:‹{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":5}›`)
 
 	s1.SetRecordingType(tracingpb.RecordingVerbose)
 	if err := CheckRecordedSpans(s1.GetRecording(tracingpb.RecordingVerbose), `
