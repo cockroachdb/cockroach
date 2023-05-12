@@ -30,7 +30,7 @@ var templates = []struct {
 # TERRAFORM SETTINGS
 # ---------------------------------------------------------------------------------------------------------------------
 terraform {
-  required_version = ">= 0.11.8"
+  required_version = ">= 0.14"
   backend "s3" {
     key            = "terraform/{{ .ResourcePrefix }}"
     bucket         = "{{ .ResourcePrefix }}-cloud-state"
@@ -55,17 +55,14 @@ locals {
 provider "aws" {
   alias   = "{{ $.Resource . }}"
   region  = "{{ . }}"
-
-  # Fixed fields, DO NOT MODIFY.
-  version = "~> 1.41"
 }
 
 module "aws_{{ $.Resource . }}" {
-  providers {
-    aws  = "aws.{{ $.Resource . }}"
+  providers = {
+    aws  = aws.{{ $.Resource . }}
   }
   region = {{ . | printf "%q" }}
-  source = "aws-region"
+  source = "./aws-region"
   label  = {{ $.ResourcePrefix | printf "%q" }}
 }
 {{ end }}`},
@@ -73,25 +70,26 @@ module "aws_{{ $.Resource . }}" {
 	{"peerings",
 		`{{ range  .Peerings }}
 module "vpc_peer_{{index . 0 }}-{{ index . 1 }}" {
-  providers {
-    aws.owner    = "aws.{{ index . 0 }}"
-    aws.peer     = "aws.{{ index . 1 }}"
+  providers = {
+    aws.owner    = aws.{{ index . 0 }}
+    aws.peer     = aws.{{ index . 1 }}
   }
   owner_vpc_info = "${module.aws_{{index . 0}}.vpc_info}"
   peer_vpc_info  = "${module.aws_{{index . 1}}.vpc_info}"
 
   label          = {{ $.ResourcePrefix | printf "%q" }}
-  source         = "aws-vpc-peer"
+  source         = "./aws-vpc-peer"
 }
 {{ end }}
 `},
 
 	{"output",
 		`output "regions" {
-  value = "${list({{- range $index, $el := .Regions }}{{ if $index }},{{end}}
+  value = "${tolist([
+		{{- range $index, $el := .Regions }}{{ if $index }},{{end}}
     "${module.aws_{{ $.Resource . }}.region_info}"
     {{- end }}
-  )}"
+  ])}"
 }
 `},
 	{"terraform",

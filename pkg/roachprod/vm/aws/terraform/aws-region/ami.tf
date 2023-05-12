@@ -12,3 +12,10 @@ data "aws_ami" "node_ami_fips" {
     values = ["${var.image_name_fips}"]
   }
 }
+
+data "aws_ami" "node_ami_arm64" {
+  filter {
+    name   = "name"
+    values = ["${var.image_name_arm64}"]
+  }
+}
