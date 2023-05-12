@@ -555,6 +555,7 @@ export default function Debug() {
         <DebugTableRow title="Metrics">
           <DebugTableLink name="Variables" url="debug/metrics" />
           <DebugTableLink name="Prometheus" url="_status/vars" />
+          <DebugTableLink name="Load" url="_status/load" />
           <DebugTableLink name="Rules" url="api/v2/rules/" />
         </DebugTableRow>
         <DebugTableRow
