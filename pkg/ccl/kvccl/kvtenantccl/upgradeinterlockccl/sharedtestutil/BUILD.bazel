@@ -1,0 +1,15 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sharedtestutil",
+    srcs = ["util.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/sharedtestutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/upgrade/upgradebase",
+    ],
+)
+
+get_x_data(name = "get_x_data")
