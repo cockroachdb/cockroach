@@ -895,7 +895,10 @@ func TestDenylistUpdate(t *testing.T) {
 	// Register one SQL pod in the directory server.
 	tenantID := serverutils.TestTenantID()
 	tds := tenantdirsvr.NewTestStaticDirectoryServer(sql.Stopper(), nil /* timeSource */)
-	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.CreateTenant(tenantID, &tenant.Tenant{
+		TenantID:    tenantID.ToUint64(),
+		ClusterName: "tenant-cluster",
+	})
 	tds.AddPod(tenantID, &tenant.Pod{
 		TenantID:       tenantID.ToUint64(),
 		Addr:           sql.ServingSQLAddr(),
@@ -981,7 +984,10 @@ func TestDirectoryConnect(t *testing.T) {
 	tenantID := serverutils.TestTenantID()
 	tenants := startTestTenantPodsWithStopper(ctx, t, s, tenantID, 1, base.TestingKnobs{}, tenantStopper)
 	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), nil /* timeSource */)
-	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.CreateTenant(tenantID, &tenant.Tenant{
+		TenantID:    tenantID.ToUint64(),
+		ClusterName: "tenant-cluster",
+	})
 	tds.AddPod(tenantID, &tenant.Pod{
 		TenantID:       tenantID.ToUint64(),
 		Addr:           tenants[0].SQLAddr(),
@@ -1091,7 +1097,10 @@ func TestConnectionRebalancingDisabled(t *testing.T) {
 
 	// Register one SQL pod in the directory server.
 	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), nil /* timeSource */)
-	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.CreateTenant(tenantID, &tenant.Tenant{
+		TenantID:    tenantID.ToUint64(),
+		ClusterName: "tenant-cluster",
+	})
 	tds.AddPod(tenantID, &tenant.Pod{
 		TenantID:       tenantID.ToUint64(),
 		Addr:           tenants[0].SQLAddr(),
@@ -1187,7 +1196,10 @@ func TestCancelQuery(t *testing.T) {
 
 	// Register one SQL pod in the directory server.
 	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), timeSource)
-	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.CreateTenant(tenantID, &tenant.Tenant{
+		TenantID:    tenantID.ToUint64(),
+		ClusterName: "tenant-cluster",
+	})
 	tds.AddPod(tenantID, &tenant.Pod{
 		TenantID:       tenantID.ToUint64(),
 		Addr:           tenants[0].SQLAddr(),
@@ -1517,7 +1529,10 @@ func TestPodWatcher(t *testing.T) {
 	// Register only 3 SQL pods in the directory server. We will add the 4th
 	// once the watcher has been established.
 	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), nil /* timeSource */)
-	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.CreateTenant(tenantID, &tenant.Tenant{
+		TenantID:    tenantID.ToUint64(),
+		ClusterName: "tenant-cluster",
+	})
 	for i := 0; i < 3; i++ {
 		tds.AddPod(tenantID, &tenant.Pod{
 			TenantID:       tenantID.ToUint64(),
@@ -2000,7 +2015,10 @@ func TestAcceptedConnCountMetric(t *testing.T) {
 
 	// Register the SQL pod in the directory server.
 	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), nil /* timeSource */)
-	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.CreateTenant(tenantID, &tenant.Tenant{
+		TenantID:    tenantID.ToUint64(),
+		ClusterName: "tenant-cluster",
+	})
 	tds.AddPod(tenantID, &tenant.Pod{
 		TenantID:       tenantID.ToUint64(),
 		Addr:           tenants[0].SQLAddr(),
@@ -2086,7 +2104,10 @@ func TestCurConnCountMetric(t *testing.T) {
 
 	// Register the SQL pod in the directory server.
 	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), nil /* timeSource */)
-	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.CreateTenant(tenantID, &tenant.Tenant{
+		TenantID:    tenantID.ToUint64(),
+		ClusterName: "tenant-cluster",
+	})
 	tds.AddPod(tenantID, &tenant.Pod{
 		TenantID:       tenantID.ToUint64(),
 		Addr:           tenants[0].SQLAddr(),
