@@ -5411,18 +5411,9 @@ CREATE TABLE crdb_internal.kv_catalog_comments (
 	populate: func(
 		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 	) error {
-		all, err := p.Descriptors().GetAll(ctx, p.Txn())
+		all, err := p.Descriptors().GetAllComments(ctx, p.Txn())
 		if err != nil {
 			return err
-		}
-		// Delegate privilege check to system table.
-		{
-			sysTable := all.LookupDescriptor(systemschema.CommentsTable.GetID())
-			if ok, err := p.HasPrivilege(ctx, sysTable, privilege.SELECT, p.User()); err != nil {
-				return err
-			} else if !ok {
-				return nil
-			}
 		}
 		// Loop over all comment entries.
 		// NB if ever anyone were to extend this table to carry column
@@ -5439,8 +5430,7 @@ CREATE TABLE crdb_internal.kv_catalog_comments (
 					dct,
 					tree.NewDInt(tree.DInt(int64(key.ObjectID))),
 					tree.NewDInt(tree.DInt(int64(key.SubID))),
-					tree.NewDString(cmt),
-				)
+					tree.NewDString(cmt))
 			}); err != nil {
 				return err
 			}
