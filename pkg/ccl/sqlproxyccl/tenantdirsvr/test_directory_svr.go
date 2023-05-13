@@ -165,10 +165,13 @@ func (s *TestDirectoryServer) StartTenant(ctx context.Context, id roachpb.Tenant
 // GetTenant returns tenant metadata for a given ID. Hard coded to return every
 // tenant's cluster name as "tenant-cluster"
 func (s *TestDirectoryServer) GetTenant(
-	_ context.Context, _ *tenant.GetTenantRequest,
+	_ context.Context, req *tenant.GetTenantRequest,
 ) (*tenant.GetTenantResponse, error) {
 	return &tenant.GetTenantResponse{
-		ClusterName: "tenant-cluster",
+		Tenant: &tenant.Tenant{
+			TenantID:    req.TenantID,
+			ClusterName: "tenant-cluster",
+		},
 	}, nil
 }
 
@@ -225,6 +228,19 @@ func (s *TestDirectoryServer) WatchPods(
 			}
 		})
 	return err
+}
+
+// WatchTenants returns a new stream, that can be used to monitor server
+// activity. This is a no-op since this directory's implementation has been
+// deprecated.
+func (s *TestDirectoryServer) WatchTenants(
+	_ *tenant.WatchTenantsRequest, server tenant.Directory_WatchTenantsServer,
+) error {
+	// Insted of returning right away, we block until context is done.
+	// This prevents the proxy server from constantly trying to establish
+	// a watch in test environments, causing spammy logs.
+	<-server.Context().Done()
+	return nil
 }
 
 // Drain sends out DRAINING pod notifications for each process managed by the
