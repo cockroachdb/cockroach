@@ -233,10 +233,12 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			if err != nil {
 				es := err.Error()
 				if strings.Contains(es, "internal error") {
-					// TODO(yuzefovich): we temporarily ignore internal errors
-					// that are because of #40929.
 					var expectedError bool
 					for _, exp := range []string{
+						// Optimizer panic-injection surfaces as an internal error.
+						"injected panic in optimizer",
+						// TODO(yuzefovich): we temporarily ignore internal errors
+						// that are because of #40929.
 						"could not parse \"0E-2019\" as type decimal",
 					} {
 						expectedError = expectedError || strings.Contains(es, exp)
