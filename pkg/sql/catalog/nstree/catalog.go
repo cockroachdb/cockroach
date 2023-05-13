@@ -31,6 +31,18 @@ type Catalog struct {
 	byteSize int64
 }
 
+// CommentCatalog is a limited interface wrapper, which is used for partial
+// immutable catalogs that are incomeplete and only contain comment information.
+type CommentCatalog interface {
+	ForEachComment(fn func(key catalogkeys.CommentKey, cmt string) error) error
+	ForEachCommentOnDescriptor(
+		id descpb.ID, fn func(key catalogkeys.CommentKey, cmt string) error) error
+	LookupComment(key catalogkeys.CommentKey) (_ string, found bool)
+}
+
+// Sanity: Catalog implements a comment catalog.
+var _ CommentCatalog = Catalog{}
+
 // ForEachDescriptor iterates over all descriptor table entries in an
 // ordered fashion.
 func (c Catalog) ForEachDescriptor(fn func(desc catalog.Descriptor) error) error {
