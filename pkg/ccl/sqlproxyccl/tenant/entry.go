@@ -80,7 +80,14 @@ func (e *tenantEntry) Initialize(ctx context.Context, client DirectoryClient) er
 			return
 		}
 
-		e.ClusterName = tenantResp.ClusterName
+		// TODO(jaylim-crl): Once tenant directories have been updated to return
+		// the Tenant field, the `else` block can be removed. We should also
+		// return an error if the Tenant field is nil then.
+		if tenantResp.Tenant != nil {
+			e.ClusterName = tenantResp.Tenant.ClusterName
+		} else {
+			e.ClusterName = tenantResp.ClusterName
+		}
 	})
 
 	// If Initialize has already been called, return any error that occurred.
