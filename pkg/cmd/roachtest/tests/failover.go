@@ -731,11 +731,6 @@ func runFailoverNonSystem(
 // The test runs a kv50 workload with batch size 1, using 256 concurrent workers
 // directed at n1-n3 with a rate of 2048 reqs/s. n4 fails and recovers, with 1
 // minute between each operation, for 9 cycles.
-//
-// TODO(erikgrinaker): The metrics resolution of 10 seconds isn't really good
-// enough to accurately measure the number of invalid leases, but it's what we
-// have currently. Prometheus scraping more often isn't enough, because CRDB
-// itself only samples every 10 seconds.
 func runFailoverLiveness(
 	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode, expLeases bool,
 ) {
