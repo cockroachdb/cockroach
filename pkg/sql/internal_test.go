@@ -528,10 +528,8 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 		refreshable  bool
 		exp          bool
 	}{
-		{serializable: false, pushed: false, refreshable: false, exp: false},
-		{serializable: false, pushed: false, refreshable: true, exp: false},
-		{serializable: false, pushed: true, refreshable: false, exp: false},
-		{serializable: false, pushed: true, refreshable: true, exp: false},
+		{serializable: false, pushed: false, exp: false},
+		{serializable: false, pushed: true, exp: false},
 		{serializable: true, pushed: false, refreshable: false, exp: false},
 		{serializable: true, pushed: false, refreshable: true, exp: false},
 		{serializable: true, pushed: true, refreshable: false, exp: true},
@@ -561,7 +559,7 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 				require.NoError(t, txn.Put(ctx, keyA, "x"))
 				require.NotEqual(t, txn.ReadTimestamp(), txn.ProvisionalCommitTimestamp(), "expect txn wts to be pushed")
 			}
-			if !tt.refreshable {
+			if tt.serializable && !tt.refreshable {
 				// Fix the txn's timestamp to prevent refreshes.
 				txn.CommitTimestamp()
 			}

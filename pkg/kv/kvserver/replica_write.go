@@ -353,9 +353,13 @@ func (r *Replica) canAttempt1PCEvaluation(
 		return false
 	}
 
-	if ba.Timestamp != ba.Txn.WriteTimestamp {
-		log.Fatalf(ctx, "unexpected 1PC execution with diverged timestamp. %s != %s",
-			ba.Timestamp, ba.Txn.WriteTimestamp)
+	// isOnePhaseCommit ensured that the transaction has a non-skewed read/write
+	// timestamp, even for isolation levels that can commit with such skew. Sanity
+	// check that this timestamp is equal to the batch timestamp.
+	if ba.Timestamp != ba.Txn.ReadTimestamp || ba.Timestamp != ba.Txn.WriteTimestamp {
+		log.Fatalf(ctx, "unexpected 1PC execution with diverged read or write timestamps; "+
+			"ba.Timestamp: %s, ba.Txn.ReadTimestamp: %s, ba.Txn.WriteTimestamp: %s",
+			ba.Timestamp, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	}
 
 	// The EndTxn checks whether the txn record can be created and, if so, at what
@@ -399,9 +403,10 @@ func (r *Replica) evaluateWriteBatch(
 ) (storage.Batch, enginepb.MVCCStats, *kvpb.BatchResponse, result.Result, *kvpb.Error) {
 	log.Event(ctx, "executing read-write batch")
 
-	// If the transaction has been pushed but it can commit at the higher
+	// If the transaction has been pushed but it can be forwarded to the higher
 	// timestamp, let's evaluate the batch at the bumped timestamp. This will
-	// allow it commit, and also it'll allow us to attempt the 1PC code path.
+	// allow serializable transactions to commit. It will also allow transactions
+	// with any isolation level to attempt the 1PC code path.
 	maybeBumpReadTimestampToWriteTimestamp(ctx, ba, g)
 
 	// Attempt 1PC execution, if applicable. If not transactional or there are
@@ -773,14 +778,28 @@ func (r *Replica) newBatchedEngine(
 // isOnePhaseCommit returns true iff the BatchRequest contains all writes in the
 // transaction and ends with an EndTxn. One phase commits are disallowed if any
 // of the following conditions are true:
-// (1) the transaction has already been flagged with a write too old error
-// (2) the transaction's commit timestamp has been forwarded
-// (3) the transaction exceeded its deadline
-// (4) the transaction is not in its first epoch and the EndTxn request does
-//
-//	not require one phase commit.
+//  1. the transaction's commit timestamp has been forwarded. Note that this
+//     prevents one phase commit even for isolation levels that can otherwise
+//     tolerate write skew.
+//  2. the transaction is failing a commit condition and must retry. This
+//     condition is isolation level dependent.
+//  3. the transaction is not in its first epoch and the EndTxn request does
+//     not require one phase commit.
 func isOnePhaseCommit(ba *kvpb.BatchRequest) bool {
 	if ba.Txn == nil {
+		return false
+	}
+	if ba.Txn.ReadTimestamp != ba.Txn.WriteTimestamp {
+		// If the transaction's read and write timestamp are skewed, one phase
+		// commit is not allowed. This is true even for isolation levels that can
+		// otherwise tolerate write skew. This is because the one phase commit
+		// evaluation logic operates using a non-transactional batch which does not
+		// know how to evaluate with reads and writes at different timestamps. Even
+		// for write-only batches, the non-transactional path would be unable to
+		// detect write-write version conflicts between the transaction's read and
+		// write timestamps.
+		//
+		// NOTE: ba.Timestamp == ba.Txn.ReadTimestamp
 		return false
 	}
 	if !ba.IsCompleteTransaction() {

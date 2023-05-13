@@ -502,7 +502,7 @@ func IsEndTxnTriggeringRetryError(
 		// update anomalies.
 		return true, kvpb.RETRY_WRITE_TOO_OLD, ""
 	}
-	if txn.WriteTimestamp != txn.ReadTimestamp {
+	if !txn.IsoLevel.ToleratesWriteSkew() && txn.WriteTimestamp != txn.ReadTimestamp {
 		// Return a transaction retry error if the commit timestamp isn't equal to
 		// the txn timestamp.
 		return true, kvpb.RETRY_SERIALIZABLE, ""
