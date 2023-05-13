@@ -455,9 +455,9 @@ func (d *directoryCache) updateTenantEntry(ctx context.Context, pod *Pod) {
 	case RUNNING, DRAINING:
 		// Add entries of RUNNING and DRAINING pods if they are not already present.
 		if entry.AddPod(pod) {
-			log.Infof(ctx, "added IP address %s with load %.3f for tenant %d", pod.Addr, pod.Load, pod.TenantID)
+			log.Infof(ctx, "added IP address %s for tenant %d", pod.Addr, pod.TenantID)
 		} else {
-			log.Infof(ctx, "updated IP address %s with load %.3f for tenant %d", pod.Addr, pod.Load, pod.TenantID)
+			log.Infof(ctx, "updated IP address %s for tenant %d", pod.Addr, pod.TenantID)
 		}
 	case DELETING:
 		// Remove addresses of DELETING pods.
