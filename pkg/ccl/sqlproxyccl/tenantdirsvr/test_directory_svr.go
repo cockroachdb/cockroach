@@ -38,10 +38,9 @@ var _ tenant.DirectoryServer = (*TestDirectoryServer)(nil)
 
 // Process stores information about a running tenant process.
 type Process struct {
-	Stopper  *stop.Stopper
-	Cmd      *exec.Cmd
-	SQL      net.Addr
-	FakeLoad float32
+	Stopper *stop.Stopper
+	Cmd     *exec.Cmd
+	SQL     net.Addr
 }
 
 // NewSubStopper creates a new stopper that will be stopped when either the
@@ -315,12 +314,11 @@ func (s *TestDirectoryServer) listLocked(
 		return &tenant.ListPodsResponse{}, nil
 	}
 	resp := tenant.ListPodsResponse{}
-	for addr, proc := range processByAddr {
+	for addr := range processByAddr {
 		resp.Pods = append(resp.Pods, &tenant.Pod{
 			TenantID:       req.TenantID,
 			Addr:           addr.String(),
 			State:          tenant.RUNNING,
-			Load:           proc.FakeLoad,
 			StateTimestamp: timeutil.Now(),
 		})
 	}
@@ -342,7 +340,6 @@ func (s *TestDirectoryServer) registerInstanceLocked(tenantID uint64, process *P
 			TenantID:       tenantID,
 			Addr:           process.SQL.String(),
 			State:          tenant.RUNNING,
-			Load:           process.FakeLoad,
 			StateTimestamp: timeutil.Now(),
 		},
 	})
@@ -390,7 +387,7 @@ func (s *TestDirectoryServer) startTenantLocked(
 	if err != nil {
 		return nil, err
 	}
-	process := &Process{SQL: sqlListener.Addr(), FakeLoad: 0.01}
+	process := &Process{SQL: sqlListener.Addr()}
 	args := s.args
 	if len(args) == 0 {
 		args = append(args,
