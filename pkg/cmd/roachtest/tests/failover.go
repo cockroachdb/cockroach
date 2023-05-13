@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -111,6 +110,7 @@ func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster, expLease
 	require.Equal(t, 6, c.Spec().NodeCount)
 
 	rng, _ := randutil.NewTestRand()
+
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
@@ -125,15 +125,17 @@ func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster, expLease
 		expLeases)
 	require.NoError(t, err)
 
-	constrainAllConfig(t, ctx, conn, 3, []int{4, 5}, 0)
-	constrainConfig(t, ctx, conn, `RANGE liveness`, 3, []int{3, 5}, 4)
+	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
+	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{
+		replicas: 3, onlyNodes: []int{1, 2, 4}, leaseNode: 4})
+
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
 
 	t.Status("creating workload database")
 	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
-	constrainConfig(t, ctx, conn, `DATABASE kv`, 3, []int{2, 3, 5}, 0)
+	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{2, 3, 5}})
 
 	c.Run(ctx, c.Node(6), `./cockroach workload init kv --splits 100 {pgurl:1}`)
 
@@ -246,7 +248,7 @@ func runFailoverNonSystem(
 	require.NoError(t, err)
 
 	// Constrain all existing zone configs to n1-n3.
-	constrainAllConfig(t, ctx, conn, 3, []int{4, 5, 6}, 0)
+	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
@@ -256,7 +258,7 @@ func runFailoverNonSystem(
 	t.Status("creating workload database")
 	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
-	constrainConfig(t, ctx, conn, `DATABASE kv`, 3, []int{1, 2, 3}, 0)
+	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{4, 5, 6}})
 	c.Run(ctx, c.Node(7), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// The replicate queue takes forever to move the kv ranges from n1-n3 to
@@ -390,10 +392,10 @@ func runFailoverLiveness(
 	require.NoError(t, err)
 
 	// Constrain all existing zone configs to n1-n3.
-	constrainAllConfig(t, ctx, conn, 3, []int{4}, 0)
+	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 
 	// Constrain the liveness range to n1-n4, with leaseholder preference on n4.
-	constrainConfig(t, ctx, conn, `RANGE liveness`, 4, nil, 4)
+	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{replicas: 4, leaseNode: 4})
 	require.NoError(t, err)
 
 	// Wait for upreplication.
@@ -404,7 +406,7 @@ func runFailoverLiveness(
 	t.Status("creating workload database")
 	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
-	constrainConfig(t, ctx, conn, `DATABASE kv`, 3, []int{4}, 0)
+	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 	c.Run(ctx, c.Node(5), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// The replicate queue takes forever to move the other ranges off of n4 so we
@@ -534,8 +536,8 @@ func runFailoverSystemNonLiveness(
 
 	// Constrain all existing zone configs to n4-n6, except liveness which is
 	// constrained to n1-n3.
-	constrainAllConfig(t, ctx, conn, 3, []int{1, 2, 3}, 0)
-	constrainConfig(t, ctx, conn, `RANGE liveness`, 3, []int{4, 5, 6}, 0)
+	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{4, 5, 6}})
+	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 	require.NoError(t, err)
 
 	// Wait for upreplication.
@@ -546,7 +548,7 @@ func runFailoverSystemNonLiveness(
 	t.Status("creating workload database")
 	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
-	constrainConfig(t, ctx, conn, `DATABASE kv`, 3, []int{4, 5, 6}, 0)
+	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 	c.Run(ctx, c.Node(7), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// The replicate queue takes forever to move the kv ranges from n4-n6 to
@@ -945,51 +947,64 @@ func relocateLeases(t test.Test, ctx context.Context, conn *gosql.DB, predicate 
 	}
 }
 
-// constrainConfig will alter the zone config for the target to specify the
-// number of nodes the target can be on, the replicas it is prevented from being
-// on and an optional leaseholder.
-func constrainConfig(
-	t test.Test,
-	ctx context.Context,
-	conn *gosql.DB,
-	target string,
-	numNodes int,
-	constrainedReplicas []int,
-	lease int,
+type zoneConfig struct {
+	replicas  int
+	onlyNodes []int
+	leaseNode int
+}
+
+// configureZone sets the zone config for the given target.
+func configureZone(
+	t test.Test, ctx context.Context, conn *gosql.DB, target string, cfg zoneConfig,
 ) {
-	replica := make([]string, len(constrainedReplicas))
-	for i, n := range constrainedReplicas {
-		replica[i] = fmt.Sprintf("-node%d", n)
-	}
-	replicaStr := fmt.Sprintf(`'[%s]'`, strings.Join(replica, ","))
+	require.NotZero(t, cfg.replicas, "num_replicas must be > 0")
 
-	leaseStr := ""
-	if lease > 0 {
-		leaseStr = fmt.Sprintf(`[+node%d]`, lease)
+	// If onlyNodes is given, invert the constraint and specify which nodes are
+	// prohibited. Otherwise, the allocator may leave replicas outside of the
+	// specified nodes.
+	var constraintsString string
+	if len(cfg.onlyNodes) > 0 {
+		nodeCount := t.Spec().(*registry.TestSpec).Cluster.NodeCount - 1 // subtract worker node
+		included := map[int]bool{}
+		for _, nodeID := range cfg.onlyNodes {
+			included[nodeID] = true
+		}
+		excluded := []int{}
+		for nodeID := 1; nodeID <= nodeCount; nodeID++ {
+			if !included[nodeID] {
+				excluded = append(excluded, nodeID)
+			}
+		}
+		for _, nodeID := range excluded {
+			if len(constraintsString) > 0 {
+				constraintsString += ","
+			}
+			constraintsString += fmt.Sprintf("-node%d", nodeID)
+		}
 	}
 
-	str :=
-		fmt.Sprintf(
-			`ALTER %s CONFIGURE ZONE USING num_replicas = %d, constraints = %s, lease_preferences = '[%s]'`,
-			target, numNodes, replicaStr, leaseStr)
-	_, err := conn.ExecContext(ctx, str)
-	t.Status(str)
+	var leaseString string
+	if cfg.leaseNode > 0 {
+		leaseString += fmt.Sprintf("[+node%d]", cfg.leaseNode)
+	}
+
+	query := fmt.Sprintf(
+		`ALTER %s CONFIGURE ZONE USING num_replicas = %d, constraints = '[%s]', lease_preferences = '[%s]'`,
+		target, cfg.replicas, constraintsString, leaseString)
+	t.Status(query)
+	_, err := conn.ExecContext(ctx, query)
 	require.NoError(t, err)
 }
 
-// constrainAllConfig will alter the zone config for all zone configurations to
-// specify the number of nodes the target can be on, the replicas it is
-// prevented from being on and an optional leaseholder.
-func constrainAllConfig(
-	t test.Test, ctx context.Context, conn *gosql.DB, numNodes int, replicas []int, lease int,
-) {
+// configureAllZones will set zone configuration for all targets in the
+// clusters.
+func configureAllZones(t test.Test, ctx context.Context, conn *gosql.DB, cfg zoneConfig) {
 	rows, err := conn.QueryContext(ctx, `SELECT target FROM [SHOW ALL ZONE CONFIGURATIONS]`)
 	require.NoError(t, err)
-
 	for rows.Next() {
 		var target string
 		require.NoError(t, rows.Scan(&target))
-		constrainConfig(t, ctx, conn, target, numNodes, replicas, lease)
+		configureZone(t, ctx, conn, target, cfg)
 	}
 	require.NoError(t, rows.Err())
 }
