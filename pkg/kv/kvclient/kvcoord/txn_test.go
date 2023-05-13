@@ -129,7 +129,7 @@ func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 	}
 }
 
-// TestLostIncrement verifies that Increment with any isolation level is not
+// TestTxnLostIncrement verifies that Increment with any isolation level is not
 // susceptible to the lost update anomaly between the value that the increment
 // reads and the value that it writes. In other words, the increment is atomic,
 // regardless of isolation level.
@@ -143,7 +143,7 @@ func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 // increment. Demonstrate that doing so allows for increment to applied to a
 // newer value than that returned by the get, but that the increment is still
 // atomic.
-func TestLostIncrement(t *testing.T) {
+func TestTxnLostIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -214,7 +214,7 @@ func TestLostIncrement(t *testing.T) {
 	}
 }
 
-// TestLostUpdate verifies that transactions are not susceptible to the
+// TestTxnLostUpdate verifies that transactions are not susceptible to the
 // lost update anomaly, regardless of isolation level.
 //
 // The transaction history looks as follows:
@@ -224,7 +224,7 @@ func TestLostIncrement(t *testing.T) {
 // TODO(nvanbenschoten): once we address #100133, update this test to advance
 // the read snapshot for ReadCommitted transactions between the read and the
 // write. Demonstrate that doing so allows for a lost update.
-func TestLostUpdate(t *testing.T) {
+func TestTxnLostUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -300,6 +300,66 @@ func TestLostUpdate(t *testing.T) {
 				run(isoLevel, commitInBatch)
 			})
 		})
+	}
+}
+
+// TestTxnWeakIsolationLevelsTolerateWriteSkew verifies that transactions run
+// under weak isolation levels (snapshot and read committed) can tolerate their
+// write timestamp being skewed from their read timestamp, while transaction run
+// under strong isolation levels (serializable) cannot.
+func TestTxnWeakIsolationLevelsTolerateWriteSkew(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	run := func(isoLevel isolation.Level) {
+		s := createTestDB(t)
+		defer s.Stop()
+		ctx := context.Background()
+
+		// Begin the test's transaction.
+		txn1 := s.DB.NewTxn(ctx, "txn1")
+		require.NoError(t, txn1.SetIsoLevel(isoLevel))
+
+		// Read from key "a" in txn1 and then write to key "a" in txn2. This
+		// establishes an anti-dependency from txn1 to txn2, meaning that txn1's
+		// read snapshot must be ordered before txn2's commit. In practice, this
+		// prevents txn1 from refreshing.
+		{
+			res, err := txn1.Get(ctx, "a")
+			require.NoError(t, err)
+			require.False(t, res.Exists())
+
+			txn2 := s.DB.NewTxn(ctx, "txn2")
+			require.NoError(t, txn2.Put(ctx, "a", "value"))
+			require.NoError(t, txn2.Commit(ctx))
+		}
+
+		// Now read from key "b" in a txn3 before writing to key "b" in txn1. This
+		// establishes an anti-dependency from txn3 to txn1, meaning that txn3's
+		// read snapshot must be ordered before txn1's commit. In practice, this
+		// pushes txn1's write timestamp forward through the timestamp cache.
+		{
+			txn3 := s.DB.NewTxn(ctx, "txn3")
+			res, err := txn3.Get(ctx, "b")
+			require.NoError(t, err)
+			require.False(t, res.Exists())
+			require.NoError(t, txn3.Commit(ctx))
+
+			require.NoError(t, txn1.Put(ctx, "b", "value"))
+		}
+
+		// Finally, try to commit. This should succeed for isolation levels that
+		// allow for write skew. It should fail for isolation levels that do not.
+		err := txn1.Commit(ctx)
+		if isoLevel.ToleratesWriteSkew() {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+			require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
+		}
+	}
+	for _, isoLevel := range isolation.Levels() {
+		t.Run(isoLevel.String(), func(t *testing.T) { run(isoLevel) })
 	}
 }
 

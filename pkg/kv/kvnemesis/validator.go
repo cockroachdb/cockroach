@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -710,7 +711,15 @@ func (v *validator) processOp(op Operation) {
 		for _, op := range ops {
 			v.processOp(op)
 		}
+		prevFailures := v.failures
+		// TODO(nvanbenschoten): add isolation level to the atomicType string:
+		//   atomicTxnType := fmt.Sprintf(`%s txn`, strings.ToLower(t.IsoLevel.String()))
 		v.checkAtomic(`txn`, t.Result)
+		if t.IsoLevel == isolation.Snapshot {
+			// TODO(nvanbenschoten): for now, we run snapshot transactions in the mix
+			// but don't validate their results. Doing so is non-trivial. See #100169.
+			v.failures = prevFailures
+		}
 	case *SplitOperation:
 		execTimestampStrictlyOptional = true
 		v.failIfError(op, t.Result) // splits should never return *any* error
