@@ -69,9 +69,13 @@ type TestStaticDirectoryServer struct {
 		// tenantNames stores a list of clusterNames associated with each tenant.
 		tenantNames map[roachpb.TenantID]string
 
-		// eventListeners stores a list of listeners that are watching changes
+		// podEventListeners stores a list of listeners that are watching changes
 		// to pods through WatchPods.
-		eventListeners *list.List
+		podEventListeners *list.List
+
+		// tenantEventListeners stores a list of listeners that are watching
+		// changes to tenants through WatchTenants.
+		tenantEventListeners *list.List
 	}
 }
 
@@ -87,7 +91,8 @@ func NewTestStaticDirectoryServer(
 	dir := &TestStaticDirectoryServer{rootStopper: stopper, timeSource: timeSource}
 	dir.mu.tenants = make(map[roachpb.TenantID][]*tenant.Pod)
 	dir.mu.tenantNames = make(map[roachpb.TenantID]string)
-	dir.mu.eventListeners = list.New()
+	dir.mu.podEventListeners = list.New()
+	dir.mu.tenantEventListeners = list.New()
 	return dir
 }
 
@@ -134,12 +139,12 @@ func (d *TestStaticDirectoryServer) WatchPods(
 	addListener := func(ch chan *tenant.WatchPodsResponse) *list.Element {
 		d.mu.Lock()
 		defer d.mu.Unlock()
-		return d.mu.eventListeners.PushBack(ch)
+		return d.mu.podEventListeners.PushBack(ch)
 	}
 	removeListener := func(e *list.Element) chan *tenant.WatchPodsResponse {
 		d.mu.Lock()
 		defer d.mu.Unlock()
-		return d.mu.eventListeners.Remove(e).(chan *tenant.WatchPodsResponse)
+		return d.mu.podEventListeners.Remove(e).(chan *tenant.WatchPodsResponse)
 	}
 
 	// Construct the channel with a small buffer to allow for a burst of
@@ -148,7 +153,7 @@ func (d *TestStaticDirectoryServer) WatchPods(
 	chElement := addListener(c)
 
 	return stopper.RunTask(
-		context.Background(),
+		server.Context(),
 		"watch-pods-server",
 		func(ctx context.Context) {
 			defer func() {
@@ -213,7 +218,74 @@ func (d *TestStaticDirectoryServer) GetTenant(
 	if _, ok := d.mu.tenants[tenantID]; !ok {
 		return nil, status.Errorf(codes.NotFound, "tenant does not exist")
 	}
-	return &tenant.GetTenantResponse{ClusterName: d.mu.tenantNames[tenantID]}, nil
+
+	return &tenant.GetTenantResponse{
+		Tenant: &tenant.Tenant{
+			TenantID:    tenantID.ToUint64(),
+			ClusterName: d.mu.tenantNames[tenantID],
+		},
+	}, nil
+}
+
+// WatchTenants allows callers to monitor for tenant update events.
+//
+// WatchTenants implements the tenant.DirectoryServer interface.
+func (d *TestStaticDirectoryServer) WatchTenants(
+	req *tenant.WatchTenantsRequest, server tenant.Directory_WatchTenantsServer,
+) error {
+	d.process.Lock()
+	stopper := d.process.stopper
+	d.process.Unlock()
+
+	// This cannot happen unless WatchTenants was called directly, which we
+	// shouldn't since it is meant to be called through a GRPC client.
+	if stopper == nil {
+		return status.Errorf(codes.FailedPrecondition, "directory server has not been started")
+	}
+
+	addListener := func(ch chan *tenant.WatchTenantsResponse) *list.Element {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		return d.mu.tenantEventListeners.PushBack(ch)
+	}
+	removeListener := func(e *list.Element) chan *tenant.WatchTenantsResponse {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		return d.mu.tenantEventListeners.Remove(e).(chan *tenant.WatchTenantsResponse)
+	}
+
+	// Construct the channel with a small buffer to allow for a burst of
+	// notifications, and a slow receiver.
+	c := make(chan *tenant.WatchTenantsResponse, 10)
+	chElement := addListener(c)
+
+	return stopper.RunTask(
+		server.Context(),
+		"watch-tenants-server",
+		func(ctx context.Context) {
+			defer func() {
+				if ch := removeListener(chElement); ch != nil {
+					close(ch)
+				}
+			}()
+
+			for watch := true; watch; {
+				select {
+				case e, ok := <-c:
+					// Channel was closed.
+					if !ok {
+						watch = false
+						break
+					}
+					if err := server.Send(e); err != nil {
+						watch = false
+					}
+				case <-stopper.ShouldQuiesce():
+					watch = false
+				}
+			}
+		},
+	)
 }
 
 // CreateTenant creates a tenant with the given tenant ID in the directory
@@ -225,8 +297,15 @@ func (d *TestStaticDirectoryServer) CreateTenant(tenantID roachpb.TenantID, clus
 	if _, ok := d.mu.tenants[tenantID]; ok {
 		return
 	}
+
 	d.mu.tenants[tenantID] = make([]*tenant.Pod, 0)
 	d.mu.tenantNames[tenantID] = clusterName
+
+	// Emit an event indicating that the tenant has been created.
+	d.notifyTenantUpdateLocked(tenant.EVENT_ADDED, &tenant.Tenant{
+		TenantID:    tenantID.ToUint64(),
+		ClusterName: clusterName,
+	})
 }
 
 // DeleteTenant ensures that the tenant with the given tenant ID has been
@@ -249,6 +328,11 @@ func (d *TestStaticDirectoryServer) DeleteTenant(tenantID roachpb.TenantID) {
 	}
 	delete(d.mu.tenants, tenantID)
 	delete(d.mu.tenantNames, tenantID)
+
+	// Emit an event indicating that the tenant has been deleted.
+	d.notifyTenantUpdateLocked(tenant.EVENT_DELETED, &tenant.Tenant{
+		TenantID: tenantID.ToUint64(),
+	})
 }
 
 // AddPod adds the pod to the given tenant pod's list. If a SQL pod with the
@@ -411,7 +495,7 @@ func (d *TestStaticDirectoryServer) DialerFunc(ctx context.Context, addr string)
 func (d *TestStaticDirectoryServer) WatchListenersCount() int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return d.mu.eventListeners.Len()
+	return d.mu.podEventListeners.Len()
 }
 
 // notifyPodUpdateLocked sends a pod update event to all WatchPods listeners.
@@ -420,7 +504,7 @@ func (d *TestStaticDirectoryServer) notifyPodUpdateLocked(pod *tenant.Pod) {
 	copyPod := *pod
 	res := &tenant.WatchPodsResponse{Pod: &copyPod}
 
-	for e := d.mu.eventListeners.Front(); e != nil; {
+	for e := d.mu.podEventListeners.Front(); e != nil; {
 		select {
 		case e.Value.(chan *tenant.WatchPodsResponse) <- res:
 			e = e.Next()
@@ -429,8 +513,31 @@ func (d *TestStaticDirectoryServer) notifyPodUpdateLocked(pod *tenant.Pod) {
 			// and remove it from the list.
 			eToClose := e
 			e = e.Next()
-			ch := d.mu.eventListeners.Remove(eToClose)
+			ch := d.mu.podEventListeners.Remove(eToClose)
 			close(ch.(chan *tenant.WatchPodsResponse))
+		}
+	}
+}
+
+// notifyTenantUpdateLocked sends a tenant update event to all WatchTenants listeners.
+func (d *TestStaticDirectoryServer) notifyTenantUpdateLocked(
+	typ tenant.WatchEventType, t *tenant.Tenant,
+) {
+	// Make a copy of the tenant to prevent race issues.
+	copyTenant := *t
+	res := &tenant.WatchTenantsResponse{Type: typ, Tenant: &copyTenant}
+
+	for e := d.mu.tenantEventListeners.Front(); e != nil; {
+		select {
+		case e.Value.(chan *tenant.WatchTenantsResponse) <- res:
+			e = e.Next()
+		default:
+			// The receiver is unable to consume fast enough. Close the channel
+			// and remove it from the list.
+			eToClose := e
+			e = e.Next()
+			ch := d.mu.tenantEventListeners.Remove(eToClose)
+			close(ch.(chan *tenant.WatchTenantsResponse))
 		}
 	}
 }

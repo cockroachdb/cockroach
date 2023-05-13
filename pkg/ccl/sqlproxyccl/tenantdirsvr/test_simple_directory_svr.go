@@ -128,6 +128,19 @@ func (d *TestSimpleDirectoryServer) GetTenant(
 	return &tenant.GetTenantResponse{}, nil
 }
 
+// WatchTenants is a no-op for the simple directory.
+//
+// WatchTenants implements the tenant.DirectoryServer interface.
+func (d *TestSimpleDirectoryServer) WatchTenants(
+	req *tenant.WatchTenantsRequest, server tenant.Directory_WatchTenantsServer,
+) error {
+	// Insted of returning right away, we block until context is done.
+	// This prevents the proxy server from constantly trying to establish
+	// a watch in test environments, causing spammy logs.
+	<-server.Context().Done()
+	return nil
+}
+
 // DeleteTenant marks the given tenant as deleted, so that a NotFound error
 // will be returned for certain directory server endpoints. This also changes
 // the behavior of ListPods so no pods are returned.
