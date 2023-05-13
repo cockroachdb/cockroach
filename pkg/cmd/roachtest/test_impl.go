@@ -81,7 +81,6 @@ type testImpl struct {
 
 	mu struct {
 		syncutil.RWMutex
-		done bool
 
 		// cancel, if set, is called from the t.Fatal() family of functions when the
 		// test is being marked as failed (i.e. when the failed field above is also
@@ -111,6 +110,9 @@ type testImpl struct {
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
 	skipInit               bool
+
+	// runNum is run number. 1 if --count was not used.
+	runNum int
 }
 
 func newFailure(squashedErr error, errs []error) failure {
@@ -152,6 +154,10 @@ func (t *testImpl) Helper() {}
 
 func (t *testImpl) Name() string {
 	return t.spec.Name
+}
+
+func (t *testImpl) RunNum() int {
+	return t.runNum
 }
 
 // L returns the test's logger.
@@ -256,6 +262,8 @@ func (t *testImpl) Skip(args ...interface{}) {
 	if len(args) > 0 {
 		t.spec.Skip = fmt.Sprint(args[0])
 		args = args[1:]
+	} else {
+		panic("Skip called with no arguments")
 	}
 	t.spec.SkipDetails = fmt.Sprint(args...)
 	panic(errTestFatal)
@@ -382,6 +390,11 @@ func formatFailure(b *strings.Builder, reportFailures ...failure) {
 
 func (t *testImpl) duration() time.Duration {
 	return t.end.Sub(t.start)
+}
+
+// Assumes a test is skipped iff its spec has a non-empty skip reason.
+func (t *testImpl) Skipped() bool {
+	return t.spec.Skip != ""
 }
 
 func (t *testImpl) Failed() bool {

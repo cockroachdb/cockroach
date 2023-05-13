@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
@@ -132,10 +133,13 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 		Name:    "declarative_schema_changer/job-compatibility-mixed-version-V222-V231",
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(4),
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
+		PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+			if tc.Cluster.Cloud == spec.Local && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
+			return nil
+		},
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := version.PredecessorVersion(*t.BuildVersion())
 			require.NoError(t, err)
 

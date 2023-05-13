@@ -142,6 +142,16 @@ func TestCreatePostRequest(t *testing.T) {
 				"cpu":   "4",
 			}),
 		},
+		{true, false, false, true, setupErr, true, false,
+			prefixAll(map[string]string{
+				"cloud":     "gce",
+				"encrypted": "false",
+				"fs":        "ext4",
+				"ssd":       "0",
+				"cpu":       "4",
+				"localSSD":  "true",
+			}),
+		},
 		//Simulate failure loading TEAMS.yaml
 		{true, false, true, false, otherErr, false, false, nil},
 	}
@@ -161,14 +171,12 @@ func TestCreatePostRequest(t *testing.T) {
 			spec: testSpec,
 			l:    nilLogger(),
 		}
-
-		testClusterImpl := &clusterImpl{spec: clusterSpec}
 		vo := vm.DefaultCreateOpts()
 		vmOpts := &vo
+		testClusterImpl := &clusterImpl{spec: clusterSpec, vmCreateOpts: vmOpts}
 
 		if c.clusterCreationFailed {
 			testClusterImpl = nil
-			vmOpts = nil
 		} else if !c.localSSD {
 			// The default is true set in `vm.DefaultCreateOpts`
 			vmOpts.SSDOpts.UseLocalSSD = false
@@ -181,9 +189,8 @@ func TestCreatePostRequest(t *testing.T) {
 		}
 
 		github := &githubIssues{
-			vmCreateOpts: vmOpts,
-			cluster:      testClusterImpl,
-			teamLoader:   teamLoadFn,
+			cluster:    testClusterImpl,
+			teamLoader: teamLoadFn,
 		}
 
 		if c.loadTeamsFailed {
@@ -207,7 +214,12 @@ func TestCreatePostRequest(t *testing.T) {
 			if c.category == clusterCreationErr {
 				expectedTeam = "@cockroachdb/dev-inf"
 				expectedName = "cluster_creation"
-				expectedMessagePrefix = "test github_test was skipped due to "
+				expectedMessagePrefix = "test github_test failed during 'Setup' due to "
+			} else if c.category == setupErr {
+				expectedTeam = "@cockroachdb/test-eng"
+				expectedLabel = "T-testeng"
+				expectedName = "setup_problem"
+				expectedMessagePrefix = "test github_test failed during 'Setup' due to "
 			} else if c.category == sshErr {
 				expectedTeam = "@cockroachdb/test-eng"
 				expectedLabel = "T-testeng"

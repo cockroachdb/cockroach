@@ -41,9 +41,9 @@ type TestSpec struct {
 	// set of values (the keys in the roachtestTeams map).
 	Owner Owner
 	// The maximum duration the test is allowed to run before it is considered
-	// failed. If not specified, the default timeout is 10m before the test's
-	// associated cluster expires. The timeout is always truncated to 10m before
-	// the test's cluster expires.
+	// failed. If not specified, the default timeout is 3 hours before the test is considered failed.
+	// The associated cluster's expiration is extended by an extra 1 hour (in addition to the Timeout)
+	// to allow for cluster reuse.
 	Timeout time.Duration
 	// Tags is a set of tags associated with the test that allow grouping
 	// tests. If no tags are specified, the set ["default"] is automatically
@@ -93,6 +93,21 @@ type TestSpec struct {
 
 	// Run is the test function.
 	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
+
+	// PreSetup is an optional user-defined function. It's called just after a test configuration (test.Test)
+	// is created, but before the cluster is created/reused. The function is expected to return quickly.
+	//
+	// Typical use-case is to dynamically skip a test based on the configuration.
+	// If an error is returned, the test is skipped. Panic with 'errTestFatal' is caught.
+	PreSetup func(ctx context.Context, t test.Test, spec *TestSpec) error
+
+	// PostSetup is an optional user-defined function. It's called just after a cluster is created/reused,
+	// but before the test is Run. The function is executed in a separate goroutine to enforce a timeout, which would
+	// result in an error.
+	//
+	// Typical use-case is to perform expensive or non-deterministic initialization steps inside the cluster.
+	// If an error is returned, the test is skipped. Panic with 'errTestFatal' is caught.
+	PostSetup func(ctx context.Context, t test.Test, c cluster.Cluster) error
 
 	// True iff results from this test should not be published externally,
 	// e.g. to GitHub.

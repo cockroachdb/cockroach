@@ -723,9 +723,6 @@ func c2cRegisterWrapper(
 }
 
 func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
-	if !c.IsLocal() {
-		t.Skip("c2c/acceptance is only meant to run on a local cluster")
-	}
 	sp := replicationSpec{
 		srcNodes: 1,
 		dstNodes: 1,

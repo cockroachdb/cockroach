@@ -67,6 +67,13 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
 		Timeout: sp.timeout,
+		PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+			if tc.Cluster.Cloud != sp.backup.cloud {
+				// For now, only run the test on the cloud provider that also stores the backup.
+				t.Skipf("test configured to run on %s", sp.backup.cloud)
+			}
+			return nil
+		},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -84,6 +91,13 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
 		Timeout: sp.timeout,
+		PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+			if tc.Cluster.Cloud != sp.backup.cloud {
+				// For now, only run the test on the cloud provider that also stores the backup.
+				t.Skipf("test configured to run on %s", sp.backup.cloud)
+			}
+			return nil
+		},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			gatewayNode := 2
@@ -121,6 +135,13 @@ func registerRestore(r registry.Registry) {
 		Cluster: withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
 		Timeout: withPauseSpecs.timeout,
 		Tags:    registry.Tags("aws"),
+		PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+			if tc.Cluster.Cloud != withPauseSpecs.backup.cloud {
+				// For now, only run the test on the cloud provider that also stores the backup.
+				t.Skipf("test configured to run on %s", withPauseSpecs.backup.cloud)
+			}
+			return nil
+		},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			rd := makeRestoreDriver(t, c, withPauseSpecs)
@@ -360,6 +381,13 @@ func registerRestore(r registry.Registry) {
 			// disable metamorphic encryption.
 			EncryptionSupport: registry.EncryptionAlwaysDisabled,
 			Tags:              sp.tags,
+			PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+				if tc.Cluster.Cloud != sp.backup.cloud {
+					// For now, only run the test on the cloud provider that also stores the backup.
+					t.Skipf("test configured to run on %s", withPauseSpecs.backup.cloud)
+				}
+				return nil
+			},
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 				rd := makeRestoreDriver(t, c, sp)
@@ -670,11 +698,6 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
-
-	if rd.c.Spec().Cloud != rd.sp.backup.cloud {
-		// For now, only run the test on the cloud provider that also stores the backup.
-		rd.t.Skip("test configured to run on %s", rd.sp.backup.cloud)
-	}
 
 	rd.c.Put(ctx, rd.t.Cockroach(), "./cockroach")
 	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())

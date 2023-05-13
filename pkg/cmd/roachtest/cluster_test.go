@@ -105,6 +105,10 @@ func (t testWrapper) IsDebug() bool {
 	return false
 }
 
+func (t testWrapper) RunNum() int {
+	return 1
+}
+
 var _ test2.Test = testWrapper{}
 
 // ArtifactsDir is part of the test.Test interface.

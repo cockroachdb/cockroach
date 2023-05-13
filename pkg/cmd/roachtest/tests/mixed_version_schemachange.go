@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -31,10 +32,13 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 		// order to prevent bugs during upgrades.
 		Cluster:    r.MakeClusterSpec(4),
 		NativeLibs: registry.LibGEOS,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
+		PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+			if tc.Cluster.Cloud == spec.Local && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
+			return nil
+		},
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 100
 			concurrency := 5
 			if c.IsLocal() {

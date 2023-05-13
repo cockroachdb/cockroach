@@ -103,8 +103,8 @@ func (p *workPool) getTestToRun(
 			// we're going to release is, which will deallocate its resources, and
 			// then we'll look for a test below.
 			l.PrintfCtx(ctx,
-				"No tests that can reuse cluster %s found (or there are no further tests to run). "+
-					"Destroying.", c)
+				"Found no pending tests that can reuse cluster %s (or no tests remain). "+
+					"Destroying.", c.name)
 			c.Destroy(ctx, closeLogger, l)
 			onDestroy()
 		} else {
@@ -191,10 +191,12 @@ func (p *workPool) selectTest(ctx context.Context, qp *quotapool.IntPool) (testT
 		candidateIdx := -1
 		candidateCount := 0
 		smallestTest := math.MaxInt64
+		smallestIdx := -1
 		for i, t := range p.mu.tests {
 			cpu := t.spec.Cluster.NodeCount * t.spec.Cluster.CPUs
 			if cpu < smallestTest {
 				smallestTest = cpu
+				smallestIdx = i
 			}
 			if uint64(cpu) > pi.Available {
 				continue
@@ -207,7 +209,8 @@ func (p *workPool) selectTest(ctx context.Context, qp *quotapool.IntPool) (testT
 
 		if candidateIdx == -1 {
 			if uint64(smallestTest) > pi.Capacity {
-				return 0, fmt.Errorf("not enough CPU quota to run any of the remaining tests")
+				return 0, fmt.Errorf("not enough CPU quota to run any of the remaining tests; %s requires %d CPUs but capacity is %d",
+					p.mu.tests[smallestIdx].spec.Name, smallestTest, pi.Capacity)
 			}
 
 			return 0, quotapool.ErrNotEnoughQuota

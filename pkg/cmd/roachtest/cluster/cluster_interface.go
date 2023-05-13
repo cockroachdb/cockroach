@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -58,6 +59,9 @@ type Cluster interface {
 	Signal(ctx context.Context, l *logger.Logger, sig int, opts ...option.Option)
 	StopCockroachGracefullyOnNode(ctx context.Context, l *logger.Logger, node int) error
 	NewMonitor(context.Context, ...option.Option) Monitor
+
+	// Extending the lifetime of the cluster.
+	Extend(ctx context.Context, d time.Duration, l *logger.Logger) error
 
 	// Hostnames and IP addresses of the nodes.
 

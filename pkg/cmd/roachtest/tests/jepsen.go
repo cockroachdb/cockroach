@@ -101,18 +101,12 @@ var jepsenNemeses = []struct {
 }
 
 func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenConfig) {
-	// NB: comment this out to see the commands jepsen would run locally.
-	if c.IsLocal() {
-		t.Fatal("local execution not supported")
-	}
-
 	if c.IsLocal() {
 		// We can't perform any of the remaining setup locally and while we can't
 		// run jepsen locally we let the test run to indicate which commands it
 		// would have run remotely.
 		return
 	}
-
 	controller := c.Node(c.Spec().NodeCount)
 	workers := c.Range(1, c.Spec().NodeCount-1)
 
@@ -304,11 +298,9 @@ func (j jepsenConfig) startTest(
 	return errCh
 }
 
-func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, nemesis string) {
-	jc := makeJepsenConfig()
-
-	initJepsen(ctx, t, c, jc)
-
+func runJepsen(
+	ctx context.Context, t test.Test, c cluster.Cluster, testName, nemesis string, jc jepsenConfig,
+) {
 	controller := c.Node(c.Spec().NodeCount)
 
 	// Get the IP addresses for all our workers.
@@ -479,7 +471,9 @@ func registerJepsen(r registry.Registry) {
 	for _, testName := range tests {
 		testName := testName
 		for _, nemesis := range jepsenNemeses {
-			nemesis := nemesis // copy for closure
+			nemesis := nemesis  // copy for closure
+			var jc jepsenConfig // configured in PostSetup, used in Run
+
 			s := registry.TestSpec{
 				Name:  fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
 				Owner: registry.OwnerTestEng,
@@ -491,8 +485,21 @@ func registerJepsen(r registry.Registry) {
 				// if they detect that the machines have already been properly
 				// initialized.
 				Cluster: r.MakeClusterSpec(6, spec.ReuseTagged("jepsen")),
+				PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+					// NB: comment this out to see the commands jepsen would run locally.
+					if tc.Cluster.Cloud == spec.Local {
+						t.Skip("local execution not supported")
+					}
+					return nil
+				},
+				PostSetup: func(ctx context.Context, t test.Test, c cluster.Cluster) error {
+					jc = makeJepsenConfig()
+					initJepsen(ctx, t, c, jc)
+
+					return nil
+				},
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runJepsen(ctx, t, c, testName, nemesis.config)
+					runJepsen(ctx, t, c, testName, nemesis.config, jc)
 				},
 			}
 			r.Add(s)

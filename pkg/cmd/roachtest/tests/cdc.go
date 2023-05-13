@@ -583,9 +583,6 @@ type latencyTargets struct {
 }
 
 func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping cdc/bank under ARM64.")
-	}
 	// Make the logs dir on every node to work around the `roachprod get logs`
 	// spam.
 	c.Run(ctx, c.All(), `mkdir -p logs`)
@@ -1309,6 +1306,12 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4),
 		RequiresLicense: true,
 		Timeout:         30 * time.Minute,
+		PreSetup: func(ctx context.Context, t test.Test, tc *registry.TestSpec) error {
+			if runtime.GOARCH == "arm64" {
+				t.Skip("Skipping cdc/bank under ARM64.")
+			}
+			return nil
+		},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCBank(ctx, t, c)
 		},
