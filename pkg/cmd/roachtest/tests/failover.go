@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -40,9 +39,9 @@ func registerFailover(r registry.Registry) {
 			Name:    "failover/partial/lease-liveness" + suffix,
 			Owner:   registry.OwnerKV,
 			Timeout: 30 * time.Minute,
-			Cluster: r.MakeClusterSpec(6, spec.CPU(4)),
+			Cluster: r.MakeClusterSpec(8, spec.CPU(4)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runDisconnect(ctx, t, c, expirationLeases)
+				runFailoverPartialLeaseLiveness(ctx, t, c, expirationLeases)
 			},
 		})
 
@@ -95,19 +94,28 @@ func registerFailover(r registry.Registry) {
 	}
 }
 
-func randSleep(ctx context.Context, rng *rand.Rand, max time.Duration) {
-	randTimer := time.After(randutil.RandDuration(rng, max))
-	select {
-	case <-randTimer:
-	case <-ctx.Done():
-	}
-}
-
-// 5 nodes fully connected. Break the connection between a pair of nodes 4 and 5
-// while running a workload against nodes 1 through 3. Before each disconnect,
-// move all the leases to nodes 4 and 5 in a different pattern.
-func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster, expLeases bool) {
-	require.Equal(t, 6, c.Spec().NodeCount)
+// runFailoverPartialLeaseLiveness tests a partial network partition between a
+// leaseholder and node liveness. With epoch leases we would normally expect
+// this to recover shortly, since the node can't heartbeat its liveness record
+// and thus its leases will expire. However, it will maintain Raft leadership,
+// and we prevent non-leaders from acquiring leases, which can prevent the lease
+// from moving unless we explicitly handle this. See also:
+// https://github.com/cockroachdb/cockroach/pull/87244.
+//
+// Cluster topology:
+//
+// n1-n3: system ranges and SQL gateways
+// n4:    liveness leaseholder
+// n5-7:  user ranges
+//
+// A partial blackhole network partition is triggered between n4 and each of
+// n5-n7 sequentially, 3 times per node for a total of 9 times. A kv50 workload
+// is running against SQL gateways on n1-n3, and we collect the pMax latency for
+// graphing.
+func runFailoverPartialLeaseLiveness(
+	ctx context.Context, t test.Test, c cluster.Cluster, expLeases bool,
+) {
+	require.Equal(t, 8, c.Spec().NodeCount)
 
 	rng, _ := randutil.NewTestRand()
 
@@ -115,8 +123,12 @@ func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster, expLease
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
+	failer.Setup(ctx)
+	defer failer.Cleanup(ctx)
+
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, t.L(), opts, settings, c.Range(1, 5))
+	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
 
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
@@ -125,36 +137,45 @@ func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster, expLease
 		expLeases)
 	require.NoError(t, err)
 
+	// Place all ranges on n1-n3, and an extra liveness leaseholder replica on n4.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{
-		replicas: 3, onlyNodes: []int{1, 2, 4}, leaseNode: 4})
+		replicas: 4, onlyNodes: []int{1, 2, 3, 4}, leaseNode: 4})
 
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
 
+	// Create the kv database on n5-n7.
 	t.Status("creating workload database")
 	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
-	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{2, 3, 5}})
+	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{5, 6, 7}})
 
-	c.Run(ctx, c.Node(6), `./cockroach workload init kv --splits 100 {pgurl:1}`)
+	c.Run(ctx, c.Node(6), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
-	// Start workload on n6 using nodes 1-3 (not part of partition). We could
-	// additionally test the behavior of running SQL against nodes 4-5 however
-	// that complicates the analysis as we want to focus on KV behavior.
+	// The replicate queue takes forever to move the ranges, so we do it
+	// ourselves. Precreating the database/range and moving it to the correct
+	// nodes first is not sufficient, since workload will spread the ranges across
+	// all nodes regardless.
+	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3, 4}, []int{5, 6, 7})
+	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{5, 6, 7}, []int{1, 2, 3, 4})
+	relocateRanges(t, ctx, conn, `range_id != 2`, []int{4}, []int{1, 2, 3})
+
+	// Start workload on n8 using n1-n3 as gateways (not partitioned).
 	t.Status("running workload")
-	m := c.NewMonitor(ctx, c.Range(1, 3))
+	m := c.NewMonitor(ctx, c.Range(1, 7))
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, c.Node(6), `./cockroach workload run kv --read-percent 50 `+
-			`--duration 10m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+		c.Run(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
+			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
 			`{pgurl:1-3}`)
 		return nil
 	})
-	// Make sure we don't leave an outage if this test fails midway.
-	defer Cleanup(t, c, ctx)
 
-	// Start and stop partial between nodes 4 and 5 every 30 seconds.
+	// Start a worker to fail and recover partial partitions between n4 (liveness)
+	// and workload leaseholders n5-n7 for 1 minute each, 3 times per node for 9
+	// times total.
+	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -162,30 +183,43 @@ func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster, expLease
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 
-		// All the system ranges will be on all the nodes, so they will all move,
-		// plus many of the non-system ranges.
-		for i := 0; i < 9; i++ {
-			t.Status("Moving ranges to nodes 4 and 5 before partition", i)
-			relocateLeases(t, ctx, conn, `range_id = 2`, 4)
-			relocateLeases(t, ctx, conn, `voting_replicas @> ARRAY[5] AND range_id != 2`, 5)
+		for i := 0; i < 3; i++ {
+			for _, node := range []int{5, 6, 7} {
+				select {
+				case <-ticker.C:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
 
-			// Randomly sleep up to the lease renewal interval, to vary the time
-			// between the last lease renewal and the failure.
-			randSleep(ctx, rng, raftCfg.RangeLeaseRenewalDuration())
+				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
-			t.Status("disconnecting n4 and n5")
-			Disconnect(t, c, ctx, []int{4, 5})
+				// Ranges and leases may occasionally escape their constraints. Move
+				// them to where they should be.
+				relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3, 4}, []int{5, 6, 7})
+				relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{node}, []int{1, 2, 3})
+				relocateRanges(t, ctx, conn, `range_id = 2`, []int{5, 6, 7}, []int{1, 2, 3, 4})
+				relocateLeases(t, ctx, conn, `range_id = 2`, 4)
 
-			select {
-			case <-ticker.C:
-			case <-ctx.Done():
-				return ctx.Err()
+				// Randomly sleep up to the lease renewal interval, to vary the time
+				// between the last lease renewal and the failure. We start the timer
+				// before the range relocation above to run them concurrently.
+				select {
+				case <-randTimer:
+				case <-ctx.Done():
+				}
+
+				t.Status(fmt.Sprintf("failing n%d (blackhole lease/liveness)", node))
+				failer.FailPartial(ctx, node, []int{4})
+
+				select {
+				case <-ticker.C:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+
+				t.Status(fmt.Sprintf("recovering n%d (blackhole lease/liveness)", node))
+				failer.Recover(ctx, node)
 			}
-
-			qps := measureQPS(ctx, t, conn, 5*time.Second)
-			t.Status("Node 1 QPS after waiting is: ", qps, " recovering nodes")
-
-			Cleanup(t, c, ctx)
 		}
 		return nil
 	})
@@ -696,38 +730,6 @@ func makeFailer(
 	}
 }
 
-// Disconnect takes a set of nodes and each nodes internal ips. It disconnects
-// each node from all the others in the list.
-func Disconnect(t test.Test, c cluster.Cluster, ctx context.Context, nodes []int) {
-	if c.IsLocal() {
-		t.Status("skipping iptables disconnect on local cluster")
-		return
-	}
-
-	ips, err := c.InternalIP(ctx, t.L(), nodes)
-	require.NoError(t, err)
-
-	// disconnect each node from every other passed in node.
-	for n := 0; n < len(nodes); n++ {
-		for ip := 0; ip < len(ips); ip++ {
-			if n != ip {
-				c.Run(ctx, c.Node(nodes[n]), `sudo iptables -A INPUT -s `+ips[ip]+` -j DROP`)
-				c.Run(ctx, c.Node(nodes[n]), `sudo iptables -A OUTPUT -d `+ips[ip]+` -j DROP`)
-			}
-		}
-	}
-}
-
-// Cleanup takes a set of nodes and each nodes internal ips. It disconnects
-// each node from all the others in the list.
-func Cleanup(t test.Test, c cluster.Cluster, ctx context.Context) {
-	if c.IsLocal() {
-		t.Status("skipping iptables cleanup on local cluster")
-		return
-	}
-	c.Run(ctx, c.All(), `sudo iptables -F`)
-}
-
 // failer fails and recovers a given node in some particular way.
 type failer interface {
 	// Setup prepares the failer. It is called before the cluster is started.
@@ -745,6 +747,14 @@ type failer interface {
 
 	// Recover recovers the given node.
 	Recover(ctx context.Context, nodeID int)
+}
+
+// partialFailer supports partial failures between specific node pairs.
+type partialFailer interface {
+	failer
+
+	// FailPartial fails the node for the given peers.
+	FailPartial(ctx context.Context, nodeID int, peerIDs []int)
 }
 
 // blackholeFailer causes a network failure where TCP/IP packets to/from port
@@ -765,7 +775,7 @@ func (f *blackholeFailer) Ready(_ context.Context, _ cluster.Monitor) {}
 
 func (f *blackholeFailer) Cleanup(ctx context.Context) {
 	if f.c.IsLocal() {
-		f.t.Status("skipping iptables cleanup on local cluster")
+		f.t.Status("skipping blackhole cleanup on local cluster")
 		return
 	}
 	f.c.Run(ctx, f.c.All(), `sudo iptables -F`)
@@ -773,21 +783,25 @@ func (f *blackholeFailer) Cleanup(ctx context.Context) {
 
 func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
 	if f.c.IsLocal() {
-		f.t.Status("skipping fail on local cluster")
+		f.t.Status("skipping blackhole failure on local cluster")
 		return
 	}
-	// When dropping both input and output, we use multiport to block traffic both
-	// to port 26257 and from port 26257 on either side of the connection, to
-	// avoid any spurious packets from making it through.
+	// When dropping both input and output, make sure we drop packets in both
+	// directions for both the inbound and outbound TCP connections, such that we
+	// get a proper black hole. Only dropping one direction for both of INPUT and
+	// OUTPUT will still let e.g. TCP retransmits through, which may affect the
+	// TCP stack behavior and is not representative of real network outages.
 	//
-	// We don't do this when only blocking in one direction, because e.g. in the
-	// input case we don't want inbound connections to work (INPUT to 26257), but
-	// we do want responses for outbound connections to work (INPUT from 26257).
+	// For the asymmetric partitions, only drop packets in one direction since
+	// this is representative of accidental firewall rules we've seen cause such
+	// outages in the wild.
 	if f.input && f.output {
-		f.c.Run(ctx, f.c.Node(nodeID),
-			`sudo iptables -A INPUT -m multiport -p tcp --ports 26257 -j DROP`)
-		f.c.Run(ctx, f.c.Node(nodeID),
-			`sudo iptables -A OUTPUT -m multiport -p tcp --ports 26257 -j DROP`)
+		// Inbound TCP connections, both received and sent packets.
+		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A INPUT -p tcp --dport 26257 -j DROP`)
+		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A OUTPUT -p tcp --sport 26257 -j DROP`)
+		// Outbound TCP connections, both sent and received packets.
+		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP`)
+		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A INPUT -p tcp --sport 26257 -j DROP`)
 	} else if f.input {
 		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A INPUT -p tcp --dport 26257 -j DROP`)
 	} else if f.output {
@@ -795,9 +809,50 @@ func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
 	}
 }
 
+// FailPartial creates a partial blackhole failure between the given node and
+// peers.
+func (f *blackholeFailer) FailPartial(ctx context.Context, nodeID int, peerIDs []int) {
+	if f.c.IsLocal() {
+		f.t.Status("skipping blackhole failure on local cluster")
+		return
+	}
+	peerIPs, err := f.c.InternalIP(ctx, f.t.L(), peerIDs)
+	require.NoError(f.t, err)
+
+	for _, peerIP := range peerIPs {
+		// When dropping both input and output, make sure we drop packets in both
+		// directions for both the inbound and outbound TCP connections, such that
+		// we get a proper black hole. Only dropping one direction for both of INPUT
+		// and OUTPUT will still let e.g. TCP retransmits through, which may affect
+		// TCP stack behavior and is not representative of real network outages.
+		//
+		// For the asymmetric partitions, only drop packets in one direction since
+		// this is representative of accidental firewall rules we've seen cause such
+		// outages in the wild.
+		if f.input && f.output {
+			// Inbound TCP connections, both received and sent packets.
+			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+				`sudo iptables -A INPUT -p tcp -s %s --dport 26257 -j DROP`, peerIP))
+			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+				`sudo iptables -A OUTPUT -p tcp -d %s --sport 26257 -j DROP`, peerIP))
+			// Outbound TCP connections, both sent and received packets.
+			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+				`sudo iptables -A OUTPUT -p tcp -d %s --dport 26257 -j DROP`, peerIP))
+			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+				`sudo iptables -A INPUT -p tcp -s %s --sport 26257 -j DROP`, peerIP))
+		} else if f.input {
+			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+				`sudo iptables -A INPUT -p tcp -s %s --dport 26257 -j DROP`, peerIP))
+		} else if f.output {
+			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
+				`sudo iptables -A OUTPUT -p tcp -d %s --dport 26257 -j DROP`, peerIP))
+		}
+	}
+}
+
 func (f *blackholeFailer) Recover(ctx context.Context, nodeID int) {
 	if f.c.IsLocal() {
-		f.t.Status("skipping iptables recover on local cluster")
+		f.t.Status("skipping blackhole recovery on local cluster")
 		return
 	}
 	f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -F`)
