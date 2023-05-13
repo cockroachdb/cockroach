@@ -367,8 +367,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	// correctly parsing the IP address here.
 	ipAddr, _, err := addr.SplitHostPort(fe.Conn.RemoteAddr().String(), "")
 	if err != nil {
-		clientErr := withCode(errors.New(
-			"unexpected connection address"), codeParamsRoutingFailed)
+		clientErr := withCode(errors.New("unexpected connection address"), codeParamsRoutingFailed)
 		log.Errorf(ctx, "could not parse address: %v", err.Error())
 		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
 		return clientErr
