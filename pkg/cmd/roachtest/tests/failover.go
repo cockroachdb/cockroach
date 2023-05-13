@@ -36,6 +36,16 @@ func registerFailover(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
+			Name:    "failover/partial/lease-gateway" + suffix,
+			Owner:   registry.OwnerKV,
+			Timeout: 30 * time.Minute,
+			Cluster: r.MakeClusterSpec(8, spec.CPU(4)),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runFailoverPartialLeaseGateway(ctx, t, c, expirationLeases)
+			},
+		})
+
+		r.Add(registry.TestSpec{
 			Name:    "failover/partial/lease-liveness" + suffix,
 			Owner:   registry.OwnerKV,
 			Timeout: 30 * time.Minute,
@@ -92,6 +102,169 @@ func registerFailover(r registry.Registry) {
 			})
 		}
 	}
+}
+
+// runFailoverPartialLeaseGateway tests a partial network partition between a
+// SQL gateway and a user range leaseholder. These must be routed via other
+// nodes to be able to serve the request.
+//
+// Cluster topology:
+//
+// n1-n3: system ranges and user ranges (2/5 replicas)
+// n4-n5: user range leaseholders (2/5 replicas)
+// n6-n7: SQL gateways and 1 user replica (1/5 replicas)
+//
+// 5 user range replicas will be placed on n2-n6, with leases on n4. A partial
+// partition will be introduced between n4,n5 and n6,n7, both fully and
+// individually. This corresponds to the case where we have three data centers
+// with a broken network link between one pair. For example:
+//
+//	                        n1-n3 (2 replicas, liveness)
+//	                          A
+//	                        /   \
+//	                       /     \
+//	               n4-n5  B --x-- C  n6-n7  <---  n8 (workload)
+//	(2 replicas, leases)             (1 replica, SQL gateways)
+//
+// Once follower routing is implemented, this tests the following scenarios:
+//
+// - Routes via followers in both A, B, and C when possible.
+// - Skips follower replica on local node that can't reach leaseholder (n6).
+// - Skips follower replica in C that can't reach leaseholder (n7 via n6).
+// - Skips follower replica in B that's unreachable (n5).
+//
+// We run a kv50 workload on SQL gateways and collect pMax latency for graphing.
+func runFailoverPartialLeaseGateway(
+	ctx context.Context, t test.Test, c cluster.Cluster, expLeases bool,
+) {
+	require.Equal(t, 8, c.Spec().NodeCount)
+
+	rng, _ := randutil.NewTestRand()
+
+	// Create cluster.
+	opts := option.DefaultStartOpts()
+	settings := install.MakeClusterSettings()
+
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
+	failer.Setup(ctx)
+	defer failer.Cleanup(ctx)
+
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
+
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
+		expLeases)
+	require.NoError(t, err)
+
+	// Place all ranges on n1-n3 to start with.
+	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
+
+	// Wait for upreplication.
+	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+
+	// Create the kv database with 5 replicas on n2-n6, and leases on n4.
+	t.Status("creating workload database")
+	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	require.NoError(t, err)
+	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{
+		replicas: 5, onlyNodes: []int{2, 3, 4, 5, 6}, leaseNode: 4})
+
+	c.Run(ctx, c.Node(6), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+
+	// Wait for the KV table to upreplicate.
+	waitForUpreplication(t, ctx, conn, `database_name = 'kv'`, 5)
+
+	// The replicate queue takes forever to move the ranges, so we do it
+	// ourselves. Precreating the database/range and moving it to the correct
+	// nodes first is not sufficient, since workload will spread the ranges across
+	// all nodes regardless.
+	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 7}, []int{2, 3, 4, 5, 6})
+	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{4, 5, 6, 7}, []int{1, 2, 3})
+	relocateLeases(t, ctx, conn, `database_name = 'kv'`, 4)
+
+	// Start workload on n8 using n6-n7 as gateways.
+	t.Status("running workload")
+	m := c.NewMonitor(ctx, c.Range(1, 7))
+	m.Go(func(ctx context.Context) error {
+		c.Run(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
+			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
+			`{pgurl:6-7}`)
+		return nil
+	})
+
+	// Start a worker to fail and recover partial partitions between n4,n5
+	// (leases) and n6,n7 (gateways), both fully and individually, for 3 cycles.
+	// Leases are only placed on n4.
+	failer.Ready(ctx, m)
+	m.Go(func(ctx context.Context) error {
+		var raftCfg base.RaftConfig
+		raftCfg.SetDefaults()
+
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+
+		for i := 0; i < 3; i++ {
+			testcases := []struct {
+				nodes []int
+				peers []int
+			}{
+				// Fully partition leases from gateways, must route via n1-n3. In
+				// addition to n4 leaseholder being unreachable, follower on n5 is
+				// unreachable, and follower replica on n6 can't reach leaseholder.
+				{[]int{6, 7}, []int{4, 5}},
+				// Partition n6 (gateway with local follower) from n4 (leaseholder).
+				// Local follower replica can't reach leaseholder.
+				{[]int{6}, []int{4}},
+				// Partition n7 (gateway) from n4 (leaseholder).
+				{[]int{7}, []int{4}},
+			}
+			for _, tc := range testcases {
+				select {
+				case <-ticker.C:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+
+				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
+
+				// Ranges and leases may occasionally escape their constraints. Move
+				// them to where they should be.
+				relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 7}, []int{2, 3, 4, 5, 6})
+				relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{4, 5, 6, 7}, []int{1, 2, 3})
+				relocateLeases(t, ctx, conn, `database_name = 'kv'`, 4)
+
+				// Randomly sleep up to the lease renewal interval, to vary the time
+				// between the last lease renewal and the failure. We start the timer
+				// before the range relocation above to run them concurrently.
+				select {
+				case <-randTimer:
+				case <-ctx.Done():
+				}
+
+				for _, node := range tc.nodes {
+					t.Status(fmt.Sprintf("failing n%d (blackhole lease/gateway)", node))
+					failer.FailPartial(ctx, node, tc.peers)
+				}
+
+				select {
+				case <-ticker.C:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+
+				for _, node := range tc.nodes {
+					t.Status(fmt.Sprintf("recovering n%d (blackhole lease/gateway)", node))
+					failer.Recover(ctx, node)
+				}
+			}
+		}
+		return nil
+	})
+	m.Wait()
 }
 
 // runFailoverPartialLeaseLiveness tests a partial network partition between a
@@ -945,6 +1118,32 @@ func (f *pauseFailer) Fail(ctx context.Context, nodeID int) {
 
 func (f *pauseFailer) Recover(ctx context.Context, nodeID int) {
 	f.c.Signal(ctx, f.t.L(), 18, f.c.Node(nodeID)) // SIGCONT
+}
+
+// waitForUpreplication waits for upreplication of ranges that satisfy the
+// given predicate (using SHOW RANGES).
+//
+// TODO(erikgrinaker): move this into WaitForReplication() when it can use SHOW
+// RANGES, i.e. when it's no longer needed in mixed-version tests with older
+// versions that don't have SHOW RANGES.
+func waitForUpreplication(
+	t test.Test, ctx context.Context, conn *gosql.DB, predicate string, replicationFactor int,
+) {
+	var count int
+	where := fmt.Sprintf("WHERE array_length(replicas, 1) < %d", replicationFactor)
+	if predicate != "" {
+		where += fmt.Sprintf(" AND (%s)", predicate)
+	}
+	for {
+		require.NoError(t, conn.QueryRowContext(ctx,
+			`SELECT count(distinct range_id) FROM [SHOW CLUSTER RANGES WITH TABLES, DETAILS] `+where).
+			Scan(&count))
+		if count == 0 {
+			break
+		}
+		t.Status(fmt.Sprintf("waiting for %d ranges to upreplicate (%s)", count, predicate))
+		time.Sleep(time.Second)
+	}
 }
 
 // relocateRanges relocates all ranges matching the given predicate from a set
