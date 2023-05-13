@@ -107,20 +107,19 @@ func TestRecordingString(t *testing.T) {
 				event: local child 1
 		`))
 
-	require.NoError(t, checkRecording(rec, `
+	checkRecording(t, rec, `
 		=== operation:root _verbose:1
 		[remote child]
 		[local child]
-		event:root 1
+		event:‹root 1›
 			=== operation:remote child _verbose:1
-			event:remote child 1
-		event:root 2
-		event:root 3
+			event:‹remote child 1›
+		event:‹root 2›
+		event:‹root 3›
 			=== operation:local child _verbose:1
-			event:local child 1
-		event:root 4
-		event:root 5
-		`))
+			event:‹local child 1›
+		event:‹root 4›
+		event:‹root 5›`)
 	// Check the timing info on the first two lines.
 	lines := strings.Split(rec.String(), "\n")
 	l, err := parseLine(lines[0])
@@ -187,11 +186,10 @@ func TestRecordingInRecording(t *testing.T) {
 					tags: _verbose=1
 		`))
 
-	require.NoError(t, checkRecording(childRec, `
+	checkRecording(t, childRec, `
 		=== operation:child _verbose:1
 		[grandchild]
-			=== operation:grandchild _verbose:1
-		`))
+			=== operation:grandchild _verbose:1`)
 }
 
 // Verify that GetRecording propagates the structured events even when the
@@ -210,23 +208,25 @@ func TestImportRemoteRecording(t *testing.T) {
 			ch := tr.StartSpan("child", WithParent(sp), WithDetachedRecording())
 			ch.RecordStructured(&types.Int32Value{Value: 4})
 			ch.Record("foo")
+			ch.Recordf("safe %s", "unsafe")
 			sp.ImportRemoteRecording(ch.FinishAndGetRecording(tracingpb.RecordingVerbose))
 
 			if verbose {
-				require.NoError(t, checkRecording(sp.FinishAndGetRecording(tracingpb.RecordingVerbose), `
+				// Note: all the events are marked unsafe because the tracer
+				// was not configured to be redactable.
+				checkRecording(t, sp.FinishAndGetRecording(tracingpb.RecordingVerbose), `
 				=== operation:root _verbose:1
 				[child]
 					=== operation:child _verbose:1
-					event:&Int32Value{Value:4,XXX_unrecognized:[],}
-					event:foo
-					structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
-	`))
+					event:‹&Int32Value{Value:4,XXX_unrecognized:[],}›
+					event:‹foo›
+					event:‹safe unsafe›
+					structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}`)
 			} else {
-				require.NoError(t, checkRecording(sp.FinishAndGetRecording(tracingpb.RecordingStructured), `
+				checkRecording(t, sp.FinishAndGetRecording(tracingpb.RecordingStructured), `
 				=== operation:root
 				[child]
-				structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
-	`))
+				structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}`)
 			}
 		})
 	}
@@ -267,10 +267,9 @@ func TestSpanRecordStructured(t *testing.T) {
 	require.NoError(t, CheckRecordedSpans(rec, `
 		span: root
 		`))
-	require.NoError(t, checkRecording(rec, `
+	checkRecording(t, rec, `
 		=== operation:root
-        structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
-	`))
+structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}`)
 }
 
 // TestSpanRecordStructuredLimit tests recording behavior when the size of
@@ -1334,11 +1333,10 @@ func TestOpenChildIncludedRecording(t *testing.T) {
 	parent := tr.StartSpan("parent", WithRecording(tracingpb.RecordingVerbose))
 	child := tr.StartSpan("child", WithParent(parent))
 	rec := parent.FinishAndGetRecording(tracingpb.RecordingVerbose)
-	require.NoError(t, checkRecording(rec, `
+	checkRecording(t, rec, `
 		=== operation:parent _verbose:1
 		[child]
-			=== operation:child _unfinished:1 _verbose:1
-	`))
+			=== operation:child _unfinished:1 _verbose:1`)
 	child.Finish()
 }
 
@@ -1576,10 +1574,9 @@ func TestWithEventListenersAndVerboseParent(t *testing.T) {
 	_, child := EnsureChildSpan(context.Background(), tr, "child", WithParent(parent), WithEventListeners())
 	defer child.Finish()
 	child.Record("foo")
-	require.NoError(t, checkRecording(parent.GetConfiguredRecording(), `
+	checkRecording(t, parent.GetConfiguredRecording(), `
      === operation:parent _unfinished:1 _verbose:1
      [child]
          === operation:child _unfinished:1 _verbose:1
-         event:foo
-`))
+         event:‹foo›`)
 }
