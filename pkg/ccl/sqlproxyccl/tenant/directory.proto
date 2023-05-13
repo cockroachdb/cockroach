@@ -50,11 +50,7 @@ message Pod {
   string addr = 1;
   // State gives the current status of the tenant pod.
   PodState state = 3;
-  // Load is a number in the range [0, 1] indicating the current amount of load
-  // experienced by this tenant pod.
-  //
-  // TODO(jaylim-crl): Remove the Load field since it is now unused.
-  float Load = 4;
+  reserved 4;
   // StateTimestamp represents the timestamp that the state was last updated.
   google.protobuf.Timestamp stateTimestamp = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }

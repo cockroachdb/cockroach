@@ -52,9 +52,9 @@ func NewTestSimpleDirectoryServer(podAddr string) (*TestSimpleDirectoryServer, *
 	return dir, grpcServer
 }
 
-// ListPods returns a list with a single RUNNING pod. The load of the pod will
-// always be zero, and the address of the pod will be the same regardless of
-// tenant ID. If the tenant has been deleted, no pods will be returned.
+// ListPods returns a list with a single RUNNING pod. The address of the pod
+// will be the same regardless of tenant ID. If the tenant has been deleted, no
+// pods will be returned.
 //
 // ListPods implements the tenant.DirectoryServer interface.
 func (d *TestSimpleDirectoryServer) ListPods(
