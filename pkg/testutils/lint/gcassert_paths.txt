@@ -3,6 +3,7 @@ col/colserde
 keys
 kv/kvclient/rangecache
 kv/kvpb
+kv/kvserver/intentresolver
 roachpb
 sql/catalog/descs
 sql/colcontainer
