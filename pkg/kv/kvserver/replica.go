@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,8 +83,6 @@ const (
 
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
 )
-
-var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
 
 // StrictGCEnforcement controls whether requests are rejected based on the GC
 // threshold and the current GC TTL (true) or just based on the GC threshold

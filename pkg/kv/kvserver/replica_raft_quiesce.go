@@ -20,11 +20,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
 )
+
+// testingDisableQuiescence disables replica quiescence.
+var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
 
 func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) {
 	if !r.mu.quiescent {
