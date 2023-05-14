@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -149,10 +150,14 @@ func TestShouldPushImmediately(t *testing.T) {
 				PushType: test.typ,
 				PusherTxn: roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{
+						// NOTE: different pusher isolation levels tested in TestCanPushWithPriority.
+						IsoLevel: isolation.Serializable,
 						Priority: test.pusherPri,
 					},
 				},
 				PusheeTxn: enginepb.TxnMeta{
+					// NOTE: different pushee isolation levels tested in TestCanPushWithPriority.
+					IsoLevel: isolation.Serializable,
 					Priority: test.pusheePri,
 				},
 			}
@@ -165,36 +170,128 @@ func TestShouldPushImmediately(t *testing.T) {
 func TestCanPushWithPriority(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	SSI := isolation.Serializable
+	SI := isolation.Snapshot
 	min := enginepb.MinTxnPriority
 	max := enginepb.MaxTxnPriority
 	mid1 := enginepb.TxnPriority(1)
 	mid2 := enginepb.TxnPriority(2)
 	testCases := []struct {
-		pusher enginepb.TxnPriority
-		pushee enginepb.TxnPriority
-		exp    bool
+		typ       kvpb.PushTxnType
+		pusherIso isolation.Level
+		pusheeIso isolation.Level
+		pusherPri enginepb.TxnPriority
+		pusheePri enginepb.TxnPriority
+		exp       bool
 	}{
-		{min, min, false},
-		{min, mid1, false},
-		{min, mid2, false},
-		{min, max, false},
-		{mid1, min, true},
-		{mid1, mid1, false},
-		{mid1, mid2, false},
-		{mid1, max, false},
-		{mid2, min, true},
-		{mid2, mid1, false},
-		{mid2, mid2, false},
-		{mid2, max, false},
-		{max, min, true},
-		{max, mid1, true},
-		{max, mid2, true},
-		{max, max, false},
+		// PUSH_ABORT
+		{kvpb.PUSH_ABORT, SSI, SSI, min, min, false},
+		{kvpb.PUSH_ABORT, SSI, SSI, min, mid1, false},
+		{kvpb.PUSH_ABORT, SSI, SSI, min, mid2, false},
+		{kvpb.PUSH_ABORT, SSI, SSI, min, max, false},
+		{kvpb.PUSH_ABORT, SSI, SSI, mid1, min, true},
+		{kvpb.PUSH_ABORT, SSI, SSI, mid1, mid1, false},
+		{kvpb.PUSH_ABORT, SSI, SSI, mid1, mid2, false},
+		{kvpb.PUSH_ABORT, SSI, SSI, mid1, max, false},
+		{kvpb.PUSH_ABORT, SSI, SSI, mid2, min, true},
+		{kvpb.PUSH_ABORT, SSI, SSI, mid2, mid1, false},
+		{kvpb.PUSH_ABORT, SSI, SSI, mid2, mid2, false},
+		{kvpb.PUSH_ABORT, SSI, SSI, mid2, max, false},
+		{kvpb.PUSH_ABORT, SSI, SSI, max, min, true},
+		{kvpb.PUSH_ABORT, SSI, SSI, max, mid1, true},
+		{kvpb.PUSH_ABORT, SSI, SSI, max, mid2, true},
+		{kvpb.PUSH_ABORT, SSI, SSI, max, max, false},
+		// PUSH_TIMESTAMP, SSI pushing SSI
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, min, min, false},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, min, mid1, false},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, min, mid2, false},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, min, max, false},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, mid1, min, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, mid1, mid1, false},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, mid1, mid2, false},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, mid1, max, false},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, mid2, min, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, mid2, mid1, false},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, mid2, mid2, false},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, mid2, max, false},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, max, min, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, max, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, max, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SSI, max, max, false},
+		// PUSH_TIMESTAMP, SSI pushing SI
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, min, min, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, min, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, min, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, min, max, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, mid1, min, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, mid1, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, mid1, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, mid1, max, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, mid2, min, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, mid2, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, mid2, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, mid2, max, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, max, min, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, max, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, max, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SSI, SI, max, max, true},
+		// PUSH_TIMESTAMP, SI pushing SSI
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, min, min, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, min, mid1, false},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, min, mid2, false},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, min, max, false},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, mid1, min, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, mid1, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, mid1, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, mid1, max, false},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, mid2, min, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, mid2, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, mid2, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, mid2, max, false},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, max, min, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, max, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, max, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SSI, max, max, true},
+		// PUSH_TIMESTAMP, SI pushing SI
+		{kvpb.PUSH_TIMESTAMP, SI, SI, min, min, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, min, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, min, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, min, max, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, mid1, min, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, mid1, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, mid1, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, mid1, max, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, mid2, min, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, mid2, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, mid2, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, mid2, max, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, max, min, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, max, mid1, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, max, mid2, true},
+		{kvpb.PUSH_TIMESTAMP, SI, SI, max, max, true},
+		// PUSH_TOUCH
+		{kvpb.PUSH_TOUCH, SSI, SSI, min, min, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, min, mid1, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, min, mid2, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, min, max, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, mid1, min, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, mid1, mid1, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, mid1, mid2, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, mid1, max, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, mid2, min, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, mid2, mid1, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, mid2, mid2, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, mid2, max, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, max, min, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, max, mid1, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, max, mid2, true},
+		{kvpb.PUSH_TOUCH, SSI, SSI, max, max, true},
 	}
 	for _, test := range testCases {
-		name := fmt.Sprintf("pusher=%d/pushee=%d", test.pusher, test.pushee)
+		name := fmt.Sprintf("type=%s/pusherIso=%s/pusheeIso=%s/pusherPri=%d/pusheePri=%d",
+			test.typ, test.pusherIso, test.pusheeIso, test.pusherPri, test.pusheePri)
 		t.Run(name, func(t *testing.T) {
-			canPush := CanPushWithPriority(test.pusher, test.pushee)
+			canPush := CanPushWithPriority(test.typ, test.pusherIso, test.pusheeIso, test.pusherPri, test.pusheePri)
 			require.Equal(t, test.exp, canPush)
 		})
 	}

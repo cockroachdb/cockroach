@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
@@ -58,8 +59,8 @@ import (
 //
 // The input files use the following DSL:
 //
-// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [priority] [uncertainty-limit=<int>[,<int>]]
-// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
+// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]]
+// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
 //
 //	<proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 //
@@ -113,6 +114,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.ScanArgs(t, "epoch", &epoch)
 				}
 
+				iso := scanIsoLevel(t, d)
 				priority := scanTxnPriority(t, d)
 
 				uncertaintyLimit := ts
@@ -130,6 +132,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				txn = &roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{
 						ID:             id,
+						IsoLevel:       iso,
 						Epoch:          enginepb.TxnEpoch(epoch),
 						WriteTimestamp: ts,
 						MinTimestamp:   ts,
@@ -706,16 +709,21 @@ func (c *cluster) PushTransaction(
 		}
 		defer c.unregisterPush(push)
 	}
-	var pusherPriority enginepb.TxnPriority
+	var pusherIso isolation.Level
+	var pusherPri enginepb.TxnPriority
 	if h.Txn != nil {
-		pusherPriority = h.Txn.Priority
+		pusherIso = h.Txn.IsoLevel
+		pusherPri = h.Txn.Priority
 	} else {
-		pusherPriority = roachpb.MakePriority(h.UserPriority)
+		pusherIso = isolation.Serializable
+		pusherPri = roachpb.MakePriority(h.UserPriority)
 	}
 	pushTo := h.Timestamp.Next()
 	for {
 		// Is the pushee pushed?
 		pusheeTxn, pusheeRecordSig := pusheeRecord.asTxn()
+		pusheeIso := pusheeTxn.IsoLevel
+		pusheePri := pusheeTxn.Priority
 		// NOTE: this logic is adapted from cmd_push_txn.go.
 		var pusherWins bool
 		switch {
@@ -727,7 +735,7 @@ func (c *cluster) PushTransaction(
 			return pusheeTxn, nil
 		case pushType == kvpb.PUSH_TOUCH:
 			pusherWins = false
-		case txnwait.CanPushWithPriority(pusherPriority, pusheeTxn.Priority):
+		case txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri):
 			pusherWins = true
 		default:
 			pusherWins = false

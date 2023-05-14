@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -1243,18 +1244,28 @@ func newWriteIntentErr(req Request, ws waitingState, reason kvpb.WriteIntentErro
 }
 
 func canPushWithPriority(req Request, s waitingState) bool {
-	var pusher, pushee enginepb.TxnPriority
-	if req.Txn != nil {
-		pusher = req.Txn.Priority
-	} else {
-		pusher = roachpb.MakePriority(req.NonTxnPriority)
-	}
 	if s.txn == nil {
 		// Can't push a non-transactional request.
 		return false
 	}
-	pushee = s.txn.Priority
-	return txnwait.CanPushWithPriority(pusher, pushee)
+	var pushType kvpb.PushTxnType
+	if s.guardStrength == lock.None {
+		pushType = kvpb.PUSH_TIMESTAMP
+	} else {
+		pushType = kvpb.PUSH_ABORT
+	}
+	var pusherIso, pusheeIso isolation.Level
+	var pusherPri, pusheePri enginepb.TxnPriority
+	if req.Txn != nil {
+		pusherIso = req.Txn.IsoLevel
+		pusherPri = req.Txn.Priority
+	} else {
+		pusherIso = isolation.Serializable
+		pusherPri = roachpb.MakePriority(req.NonTxnPriority)
+	}
+	pusheeIso = s.txn.IsoLevel
+	pusheePri = s.txn.Priority
+	return txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri)
 }
 
 func logResolveIntent(ctx context.Context, intent roachpb.LockUpdate) {
