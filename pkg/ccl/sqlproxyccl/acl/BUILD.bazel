@@ -13,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/acl",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
@@ -32,6 +33,7 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":acl"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/metric",

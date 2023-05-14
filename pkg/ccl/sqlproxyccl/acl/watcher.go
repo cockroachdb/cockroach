@@ -124,35 +124,41 @@ func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 	if options.allowlistFile != "" {
 		c, next, err := newAccessControllerFromFile[*Allowlist](
 			ctx,
-			options.allowlistFile,
-			options.timeSource,
+			w.options.allowlistFile,
+			w.options.timeSource,
 			w.options.pollingInterval,
 			w.options.errorCount,
+			nil,
 		)
 		if err != nil {
 			return nil, err
 		}
-		w.addAccessController(c, next)
+		w.addAccessController(ctx, c, next)
 	}
 	if options.denylistFile != "" {
 		c, next, err := newAccessControllerFromFile[*Denylist](
 			ctx,
-			options.denylistFile,
-			options.timeSource,
+			w.options.denylistFile,
+			w.options.timeSource,
 			w.options.pollingInterval,
 			w.options.errorCount,
+			func(c *Denylist) {
+				c.timeSource = w.options.timeSource
+			},
 		)
 		if err != nil {
 			return nil, err
 		}
-		w.addAccessController(c, next)
+		w.addAccessController(ctx, c, next)
 	}
 	return w, nil
 }
 
 // addAccessController adds a new access controller to the watcher, and spawns a goroutine that watches for updates and
 // replaces the controller as needed, using it's index in the slice.
-func (w *Watcher) addAccessController(controller AccessController, next chan AccessController) {
+func (w *Watcher) addAccessController(
+	ctx context.Context, controller AccessController, next chan AccessController,
+) {
 	w.mu.Lock()
 	index := len(w.controllers)
 	w.controllers = append(w.controllers, controller)
@@ -161,7 +167,7 @@ func (w *Watcher) addAccessController(controller AccessController, next chan Acc
 	if next != nil {
 		go func() {
 			for n := range next {
-				w.updateAccessController(index, n)
+				w.updateAccessController(ctx, index, n)
 			}
 		}()
 	}
@@ -169,14 +175,16 @@ func (w *Watcher) addAccessController(controller AccessController, next chan Acc
 
 // updateAccessController replaces an old instance of a controller at a particular index with a new one. Once the new controller is added,
 // all connections are re-checked to see if they're still valid. This is primarily used by the goroutine spawned in addAccessController.
-func (w *Watcher) updateAccessController(index int, controller AccessController) {
+func (w *Watcher) updateAccessController(
+	ctx context.Context, index int, controller AccessController,
+) {
 	w.mu.Lock()
 	copy := w.listeners.Clone()
 	w.controllers[index] = controller
 	controllers := append([]AccessController(nil), w.controllers...)
 	w.mu.Unlock()
 
-	checkListeners(copy, w.options.timeSource, controllers)
+	checkListeners(ctx, copy, controllers)
 }
 
 // ListenForDenied Adds a listener to the watcher for the given connection. If the
@@ -185,7 +193,7 @@ func (w *Watcher) updateAccessController(index int, controller AccessController)
 //
 // Example Usage:
 //
-//	remove, err := w.ListenForDenied(connection, func(err error) {
+//	remove, err := w.ListenForDenied(ctx, connection, func(err error) {
 //	  /* connection was blocked by change */
 //	})
 //
@@ -194,11 +202,13 @@ func (w *Watcher) updateAccessController(index int, controller AccessController)
 //
 // Warning:
 // Do not call remove() within the error callback. It would deadlock.
-func (w *Watcher) ListenForDenied(connection ConnectionTags, callback func(error)) (func(), error) {
+func (w *Watcher) ListenForDenied(
+	ctx context.Context, connection ConnectionTags, callback func(error),
+) (func(), error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if err := checkConnection(connection, w.options.timeSource, w.controllers); err != nil {
+	if err := checkConnection(ctx, connection, w.controllers); err != nil {
 		return nil, err
 	}
 
@@ -233,12 +243,10 @@ func (l *listener) Less(than btree.Item) bool {
 	return l.id < than.(*listener).id
 }
 
-func checkListeners(
-	listeners *btree.BTree, timesource timeutil.TimeSource, controllers []AccessController,
-) {
+func checkListeners(ctx context.Context, listeners *btree.BTree, controllers []AccessController) {
 	listeners.Ascend(func(i btree.Item) bool {
 		lst := i.(*listener)
-		if err := checkConnection(lst.connection, timesource, controllers); err != nil {
+		if err := checkConnection(ctx, lst.connection, controllers); err != nil {
 			lst.mu.Lock()
 			defer lst.mu.Unlock()
 			if lst.mu.denied != nil {
@@ -251,10 +259,10 @@ func checkListeners(
 }
 
 func checkConnection(
-	connection ConnectionTags, timesource timeutil.TimeSource, controllers []AccessController,
+	ctx context.Context, connection ConnectionTags, controllers []AccessController,
 ) error {
 	for _, c := range controllers {
-		if err := c.CheckConnection(connection, timesource); err != nil {
+		if err := c.CheckConnection(ctx, connection); err != nil {
 			return err
 		}
 	}

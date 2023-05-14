@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/google/btree"
 	"github.com/stretchr/testify/require"
 )
@@ -53,35 +54,36 @@ func allowList(cluster string, ips ...string) *Allowlist {
 }
 
 func TestACLWatcher(t *testing.T) {
+	ctx := context.Background()
 	t.Run("Connection is allowed", func(t *testing.T) {
 		deny := denyList(DenyEntity{Item: "1.1.1.1", Type: IPAddrType}, "should match nothing")
-		allow := allowList("foo", "1.1.0.0/16")
+		allow := allowList("10", "1.1.0.0/16")
 		watcher, _ := NewWatcher(context.Background())
-		watcher.addAccessController(allow, nil)
-		watcher.addAccessController(deny, nil)
+		watcher.addAccessController(ctx, allow, nil)
+		watcher.addAccessController(ctx, deny, nil)
 
 		connection := ConnectionTags{
-			IP:      "1.1.2.2",
-			Cluster: "foo",
+			IP:       "1.1.2.2",
+			TenantID: roachpb.MustMakeTenantID(10),
 		}
 
-		remove, err := watcher.ListenForDenied(connection, noError(t))
+		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
 		require.Nil(t, err)
 		require.NotNil(t, remove)
 		remove()
 	})
 
 	t.Run("Connection is already denied for ip by allowlist", func(t *testing.T) {
-		allow := allowList("foo", "1.1.1.0/24")
+		allow := allowList("10", "1.1.1.0/24")
 		watcher, _ := NewWatcher(context.Background())
 		watcher.controllers = append(watcher.controllers, allow)
 
 		connection := ConnectionTags{
-			IP:      "1.1.2.2",
-			Cluster: "foo",
+			IP:       "1.1.2.2",
+			TenantID: roachpb.MustMakeTenantID(10),
 		}
 
-		remove, err := watcher.ListenForDenied(connection, noError(t))
+		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
 		require.EqualError(t, err, "connection ip '1.1.2.2' denied: ip address not allowed")
 		require.Nil(t, remove)
 	})
@@ -92,11 +94,11 @@ func TestACLWatcher(t *testing.T) {
 		watcher.controllers = append(watcher.controllers, list)
 
 		connection := ConnectionTags{
-			IP:      "1.1.2.2",
-			Cluster: "foo",
+			IP:       "1.1.2.2",
+			TenantID: roachpb.MustMakeTenantID(10),
 		}
 
-		remove, err := watcher.ListenForDenied(connection, noError(t))
+		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
 		require.EqualError(t, err, "connection ip '1.1.2.2' denied: rejected for ip")
 		require.Nil(t, remove)
 	})
@@ -105,16 +107,16 @@ func TestACLWatcher(t *testing.T) {
 		c := make(chan AccessController)
 		defer close(c)
 		watcher, _ := NewWatcher(context.Background())
-		watcher.addAccessController(&Allowlist{}, c)
+		watcher.addAccessController(ctx, &Allowlist{}, c)
 
 		connection := ConnectionTags{
-			IP:      "1.1.2.2",
-			Cluster: "foo-cluster",
+			IP:       "1.1.2.2",
+			TenantID: roachpb.MustMakeTenantID(10),
 		}
 
 		errorChan := make(chan error, 1)
 
-		remove, err := watcher.ListenForDenied(connection, func(e error) { errorChan <- e })
+		remove, err := watcher.ListenForDenied(ctx, connection, func(e error) { errorChan <- e })
 		require.Nil(t, err)
 		require.NotNil(t, remove)
 
@@ -125,7 +127,7 @@ func TestACLWatcher(t *testing.T) {
 			// continue
 		}
 
-		c <- allowList("foo-cluster", "1.1.1.0/24")
+		c <- allowList("10", "1.1.1.0/24")
 
 		require.EqualError(t, <-errorChan, "connection ip '1.1.2.2' denied: ip address not allowed")
 	})
@@ -134,16 +136,16 @@ func TestACLWatcher(t *testing.T) {
 		c := make(chan AccessController)
 		defer close(c)
 		watcher, _ := NewWatcher(context.Background())
-		watcher.addAccessController(&Denylist{}, c)
+		watcher.addAccessController(ctx, &Denylist{}, c)
 
 		connection := ConnectionTags{
-			IP:      "1.1.2.2",
-			Cluster: "foo-cluster",
+			IP:       "1.1.2.2",
+			TenantID: roachpb.MustMakeTenantID(10),
 		}
 
 		errorChan := make(chan error, 1)
 
-		remove, err := watcher.ListenForDenied(connection, func(e error) { errorChan <- e })
+		remove, err := watcher.ListenForDenied(ctx, connection, func(e error) { errorChan <- e })
 		require.Nil(t, err)
 		require.NotNil(t, remove)
 
@@ -154,20 +156,20 @@ func TestACLWatcher(t *testing.T) {
 			// continue
 		}
 
-		c <- denyList(DenyEntity{Item: "foo-cluster", Type: ClusterType}, "denied due to cluster")
+		c <- denyList(DenyEntity{Item: "10", Type: ClusterType}, "denied due to cluster")
 
-		require.EqualError(t, <-errorChan, "connection cluster 'foo-cluster' denied: denied due to cluster")
+		require.EqualError(t, <-errorChan, "connection cluster '10' denied: denied due to cluster")
 	})
 
 	t.Run("Unregister removes listeners", func(t *testing.T) {
 		watcher, _ := NewWatcher(context.Background())
 
 		connection := ConnectionTags{
-			IP:      "1.1.2.2",
-			Cluster: "foo-cluster",
+			IP:       "1.1.2.2",
+			TenantID: roachpb.MustMakeTenantID(10),
 		}
 
-		remove, err := watcher.ListenForDenied(connection, noError(t))
+		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
 		require.Nil(t, err)
 		require.NotNil(t, remove)
 		require.Equal(t, watcher.listeners.Len(), 1)
@@ -179,10 +181,10 @@ func TestACLWatcher(t *testing.T) {
 	t.Run("New watcher allows connections", func(t *testing.T) {
 		watcher, _ := NewWatcher(context.Background())
 		connection := ConnectionTags{
-			IP:      "1.1.2.2",
-			Cluster: "foo-cluster",
+			IP:       "1.1.2.2",
+			TenantID: roachpb.MustMakeTenantID(10),
 		}
-		remove, err := watcher.ListenForDenied(connection, noError(t))
+		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
 		require.Nil(t, err)
 		require.NotNil(t, remove)
 		require.Equal(t, watcher.listeners.Len(), 1)
@@ -195,15 +197,15 @@ func TestACLWatcher(t *testing.T) {
 		c := make(chan AccessController)
 		defer close(c)
 		watcher, _ := NewWatcher(context.Background())
-		watcher.addAccessController(&Denylist{}, c)
+		watcher.addAccessController(ctx, &Denylist{}, c)
 
 		connection := ConnectionTags{
-			IP:      "1.1.2.2",
-			Cluster: "foo-cluster",
+			IP:       "1.1.2.2",
+			TenantID: roachpb.MustMakeTenantID(10),
 		}
 
 		runCount := 0
-		remove, err := watcher.ListenForDenied(connection, func(err error) {
+		remove, err := watcher.ListenForDenied(ctx, connection, func(err error) {
 			require.EqualError(t, err, "connection ip '1.1.2.2' denied: list v1")
 			runCount++
 		})
@@ -221,7 +223,7 @@ func TestACLWatcher(t *testing.T) {
 
 	t.Run("Remove sets the callback to nil", func(t *testing.T) {
 		watcher, _ := NewWatcher(context.Background())
-		remove, err := watcher.ListenForDenied(ConnectionTags{}, noError(t))
+		remove, err := watcher.ListenForDenied(ctx, ConnectionTags{}, noError(t))
 		require.Nil(t, err)
 
 		var l *listener

@@ -8,14 +8,21 @@
 
 package acl
 
-import "github.com/cockroachdb/cockroach/pkg/util/timeutil"
+import (
+	"context"
 
-// ConnectionTags contains connection properties to match against the denylist.
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
+
+// ConnectionTags contains connection properties to match against the ACLs.
 type ConnectionTags struct {
-	IP      string
-	Cluster string
+	IP       string
+	TenantID roachpb.TenantID
 }
 
 type AccessController interface {
-	CheckConnection(ConnectionTags, timeutil.TimeSource) error
+	// CheckConnection is used to indicate whether the given connection is
+	// allowed to maintain a connection with the proxy. This returns an error
+	// if the connection should be blocked, or nil otherwise.
+	CheckConnection(context.Context, ConnectionTags) error
 }
