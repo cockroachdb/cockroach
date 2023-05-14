@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -117,6 +118,10 @@ func WithLookupTenantFn(fn lookupTenantFunc) Option {
 	}
 }
 
+const (
+	defaultPollingInterval = time.Minute
+)
+
 func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 	options := &aclOptions{
 		pollingInterval: defaultPollingInterval,
@@ -162,12 +167,32 @@ func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 		w.addAccessController(ctx, c, next)
 	}
 	if w.options.lookupTenantFn != nil {
-		// TODO(jaylim-crl): Add a watcher or some sort of mechanism to react
-		// to metadata updates. newAccessControllerFromFile uses a file-based
-		// watcher. For now, this only checks on startup.
-		w.addAccessController(ctx, &PrivateEndpoints{
+		controller := &PrivateEndpoints{
 			LookupTenantFn: w.options.lookupTenantFn,
-		}, nil)
+		}
+		// We use a normal polling interval to determine when we should check
+		// the connections for private endpoints update. This is reasonable
+		// for now as:
+		//   1. Calls to LookupTenant are cached most of the time.
+		//   2. This is only applied to existing connections, and a polling
+		//      interval of 1 minute isn't too bad.
+		//   3. We are already iterating all the connections for the other types
+		//      of ACLs.
+		//
+		// TODO(jaylim-crl): The directory cache already knows which tenants
+		// are updated through WatchTenants. We can do better here. Refactor
+		// AccessController in a way that allows those tenant metadata updates
+		// to be batched, and check connections for those tenants only. At the
+		// same time, the current AccessController design is poor because we
+		// iterate through all the connections for each ACL update (i.e. 1 for
+		// allowlist, 1 for denylist, and another for private endpoints).
+		next := pollAndUpdateChan(
+			ctx,
+			w.options.timeSource,
+			w.options.pollingInterval,
+			controller,
+		)
+		w.addAccessController(ctx, controller, next)
 	}
 	return w, nil
 }
@@ -288,4 +313,37 @@ func checkConnection(
 		}
 	}
 	return nil
+}
+
+// pollAndUpdateChan sends the same access controller object into the returned
+// channel every pollingInterval. This is used by ACL types that require calls
+// to the directory cache (and don't store local state).
+//
+// See caller of pollAndUpdateChan for more information. The current design
+// of AccessController doesn't allow us to batch events and check a subset of
+// connections, so we'd have to do this.
+func pollAndUpdateChan(
+	ctx context.Context,
+	timeSource timeutil.TimeSource,
+	pollingInterval time.Duration,
+	accessController AccessController,
+) chan AccessController {
+	result := make(chan AccessController)
+	go func() {
+		t := timeSource.NewTimer()
+		defer t.Stop()
+		for {
+			t.Reset(pollingInterval)
+			select {
+			case <-ctx.Done():
+				close(result)
+				log.Errorf(ctx, "WatchList daemon stopped: %v", ctx.Err())
+				return
+			case <-t.Ch():
+				t.MarkRead()
+				result <- accessController
+			}
+		}
+	}()
+	return result
 }

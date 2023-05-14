@@ -235,18 +235,21 @@ func TestPrivateEndpointsACL(t *testing.T) {
 	tenant20 := roachpb.MustMakeTenantID(20)
 	tenant30 := roachpb.MustMakeTenantID(30)
 	tds.CreateTenant(tenant10, &tenant.Tenant{
+		Version:          "001",
 		TenantID:         tenant10.ToUint64(),
 		ClusterName:      "my-tenant",
 		ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
 		PrivateEndpoints: []string{"vpce-abc123"},
 	})
 	tds.CreateTenant(tenant20, &tenant.Tenant{
+		Version:          "002",
 		TenantID:         tenant20.ToUint64(),
 		ClusterName:      "other-tenant",
 		ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
 		PrivateEndpoints: []string{"vpce-some-other-vpc"},
 	})
 	tds.CreateTenant(tenant30, &tenant.Tenant{
+		Version:          "003",
 		TenantID:         tenant30.ToUint64(),
 		ClusterName:      "public-tenant",
 		ConnectivityType: tenant.ALLOW_PUBLIC,
@@ -266,6 +269,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 	options := &ProxyOptions{
 		SkipVerify:           true,
 		RequireProxyProtocol: true,
+		PollConfigInterval:   10 * time.Millisecond,
 	}
 	options.testingKnobs.directoryServer = tds
 	s, sqlAddr, _ := newSecureProxyServer(ctx, t, sql.Stopper(), options)
@@ -312,8 +316,44 @@ func TestPrivateEndpointsACL(t *testing.T) {
 				c.DialFunc = proxyDialer
 			},
 			func(conn *pgx.Conn) {
+				// Initial connection.
 				require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 				require.NoError(t, runTestQuery(ctx, conn))
+
+				// Remove endpoints and connection should be disconnected.
+				tds.UpdateTenant(tenant10, &tenant.Tenant{
+					Version:          "010",
+					TenantID:         tenant10.ToUint64(),
+					ClusterName:      "my-tenant",
+					ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+					PrivateEndpoints: []string{},
+				})
+
+				// Wait until watcher has received the updated event.
+				testutils.SucceedsSoon(t, func() error {
+					ten, err := s.handler.directoryCache.LookupTenant(ctx, tenant10)
+					if err != nil {
+						return err
+					}
+					if ten.Version != "010" {
+						return errors.New("tenant is not up-to-date")
+					}
+					return nil
+				})
+
+				// Subsequent Exec calls will eventually fail.
+				var err error
+				require.Eventually(
+					t,
+					func() bool {
+						_, err = conn.Exec(ctx, "SELECT 1")
+						return err != nil
+					},
+					time.Second, 5*time.Millisecond,
+					"Expected the connection to eventually fail",
+				)
+				require.Regexp(t, "connection reset by peer|unexpected EOF", err.Error())
+				require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
 			},
 		)
 	})
