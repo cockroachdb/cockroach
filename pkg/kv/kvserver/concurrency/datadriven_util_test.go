@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,6 +46,26 @@ func scanTimestampWithName(t *testing.T, d *datadriven.TestData, name string) hl
 	return ts
 }
 
+func scanIsoLevel(t *testing.T, d *datadriven.TestData) isolation.Level {
+	const key = "iso"
+	if !d.HasArg(key) {
+		return isolation.Serializable
+	}
+	var isoS string
+	d.ScanArgs(t, key, &isoS)
+	switch isoS {
+	case "serializable":
+		return isolation.Serializable
+	case "snapshot":
+		return isolation.Snapshot
+	case "read-committed":
+		return isolation.ReadCommitted
+	default:
+		d.Fatalf(t, "unknown isolation level: %s", isoS)
+		return 0
+	}
+}
+
 func scanTxnPriority(t *testing.T, d *datadriven.TestData) enginepb.TxnPriority {
 	priority := scanUserPriority(t, d)
 	// NB: don't use roachpb.MakePriority to avoid randomness.
@@ -63,10 +84,11 @@ func scanTxnPriority(t *testing.T, d *datadriven.TestData) enginepb.TxnPriority 
 
 func scanUserPriority(t *testing.T, d *datadriven.TestData) roachpb.UserPriority {
 	const key = "priority"
-	priS := "normal"
-	if d.HasArg(key) {
-		d.ScanArgs(t, key, &priS)
+	if !d.HasArg(key) {
+		return roachpb.NormalUserPriority
 	}
+	var priS string
+	d.ScanArgs(t, key, &priS)
 	switch priS {
 	case "low":
 		return roachpb.MinUserPriority

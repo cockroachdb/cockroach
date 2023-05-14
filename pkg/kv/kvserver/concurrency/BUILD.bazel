@@ -18,6 +18,7 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/intentresolver",
@@ -63,6 +64,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/batcheval",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/intentresolver",
