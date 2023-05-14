@@ -21,10 +21,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const (
-	defaultPollingInterval = time.Minute
-)
-
 type FromFile interface {
 	AccessController
 	yaml.Unmarshaler
@@ -87,7 +83,7 @@ func readFile[T FromFile](ctx context.Context, filename string, postRead func(c 
 	return f, nil
 }
 
-// WatchForUpdates periodically reloads the access control list file. The daemon is
+// watchForUpdate periodically reloads the access control list file. The daemon is
 // canceled on ctx cancellation.
 func watchForUpdate[T FromFile](
 	ctx context.Context,
