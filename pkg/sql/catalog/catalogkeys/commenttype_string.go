@@ -14,6 +14,7 @@ func _() {
 	_ = x[IndexCommentType-3]
 	_ = x[SchemaCommentType-4]
 	_ = x[ConstraintCommentType-5]
+	_ = x[FunctionCommentType-6]
 }
 
 const _CommentType_name = "DatabaseCommentTypeTableCommentTypeColumnCommentTypeIndexCommentTypeSchemaCommentTypeConstraintCommentType"

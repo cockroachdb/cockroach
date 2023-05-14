@@ -578,6 +578,7 @@ SELECT
   sub_id,
   to_json(regexp_replace(btrim(comment), 'docs\/v\d+\.\d+\/', 'docs/dev/', 'g'))
 FROM "".crdb_internal.kv_catalog_comments
+WHERE type != 'FunctionCommentType'; -- exclude builtin comments since there are so many.
 ----
 DatabaseCommentType    104         0  "this is the test database"
 TableCommentType       111         0  "this is a table"
@@ -915,6 +916,7 @@ SELECT * FROM crdb_internal.kv_catalog_comments WHERE object_id = $kv_id
 TableCommentType       111  0  this is a table
 ConstraintCommentType  111  1  this is a primary key constraint
 ConstraintCommentType  111  2  this is a check constraint
+FunctionCommentType    111  0  Calculates square of the correlation coefficient.
 
 statement ok
 DROP TABLE db.kv CASCADE;
@@ -947,6 +949,7 @@ SELECT * FROM crdb_internal.kv_catalog_comments WHERE object_id = $kv_id
 TableCommentType       111  0  this is a table
 ConstraintCommentType  111  1  this is a primary key constraint
 ConstraintCommentType  111  2  this is a check constraint
+FunctionCommentType    111  0  Calculates square of the correlation coefficient.
 
 query TIIT
 SELECT * FROM system.comments WHERE object_id = $kv_id
