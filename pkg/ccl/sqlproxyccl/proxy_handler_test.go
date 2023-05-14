@@ -54,6 +54,7 @@ import (
 	pgproto3 "github.com/jackc/pgproto3/v2"
 	pgx "github.com/jackc/pgx/v4"
 	proxyproto "github.com/pires/go-proxyproto"
+	"github.com/pires/go-proxyproto/tlvparse"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -203,6 +204,142 @@ func TestProxyProtocol(t *testing.T) {
 		makeHttpReq(t, &client, httpAddr, true)
 		proxyClient := http.Client{Transport: &http.Transport{DialContext: proxyDialer}}
 		makeHttpReq(t, &proxyClient, httpAddr, false)
+	})
+}
+
+func TestPrivateEndpointsACL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	te := newTester()
+	defer te.Close()
+
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: false,
+		// Need to disable the test tenant here because it appears as though
+		// we're not able to establish the necessary connections from within
+		// it. More investigation required (tracked with #76378).
+		DisableDefaultTestTenant: true,
+	})
+	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
+	defer sql.Stopper().Stop(ctx)
+
+	// Create a default user.
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
+
+	// Create the directory server.
+	tds := tenantdirsvr.NewTestStaticDirectoryServer(sql.Stopper(), nil /* timeSource */)
+	tenant10 := roachpb.MustMakeTenantID(10)
+	tenant20 := roachpb.MustMakeTenantID(20)
+	tenant30 := roachpb.MustMakeTenantID(30)
+	tds.CreateTenant(tenant10, &tenant.Tenant{
+		TenantID:         tenant10.ToUint64(),
+		ClusterName:      "my-tenant",
+		ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+		PrivateEndpoints: []string{"vpce-abc123"},
+	})
+	tds.CreateTenant(tenant20, &tenant.Tenant{
+		TenantID:         tenant20.ToUint64(),
+		ClusterName:      "other-tenant",
+		ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+		PrivateEndpoints: []string{"vpce-some-other-vpc"},
+	})
+	tds.CreateTenant(tenant30, &tenant.Tenant{
+		TenantID:         tenant30.ToUint64(),
+		ClusterName:      "public-tenant",
+		ConnectivityType: tenant.ALLOW_PUBLIC,
+		PrivateEndpoints: []string{},
+	})
+	// All tenants map to the same pod.
+	for _, tenID := range []roachpb.TenantID{tenant10, tenant20, tenant30} {
+		tds.AddPod(tenID, &tenant.Pod{
+			TenantID:       tenID.ToUint64(),
+			Addr:           sql.ServingSQLAddr(),
+			State:          tenant.RUNNING,
+			StateTimestamp: timeutil.Now(),
+		})
+	}
+	require.NoError(t, tds.Start(ctx))
+
+	options := &ProxyOptions{
+		SkipVerify:           true,
+		RequireProxyProtocol: true,
+	}
+	options.testingKnobs.directoryServer = tds
+	s, sqlAddr, _ := newSecureProxyServer(ctx, t, sql.Stopper(), options)
+
+	timeout := 3 * time.Second
+	proxyDialer := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := (&net.Dialer{Timeout: timeout}).Dial(network, addr)
+		if err != nil {
+			return nil, err
+		}
+		header := &proxyproto.Header{
+			Version:           2,
+			Command:           proxyproto.PROXY,
+			TransportProtocol: proxyproto.TCPv4,
+			SourceAddr: &net.TCPAddr{
+				// Use a dummy address so we can check on that.
+				IP:   net.ParseIP("10.20.30.40"),
+				Port: 4242,
+			},
+			DestinationAddr: conn.RemoteAddr(),
+		}
+		if err := header.SetTLVs([]proxyproto.TLV{{
+			Type: tlvparse.PP2_TYPE_AWS,
+			// Points to "vpce-abc123" as endpoint ID.
+			Value: []byte{0x01, 0x76, 0x70, 0x63, 0x65, 0x2d, 0x61, 0x62, 0x63, 0x31, 0x32, 0x33},
+		}}); err != nil {
+			return nil, err
+		}
+		if err := conn.SetWriteDeadline(timeutil.Now().Add(timeout)); err != nil {
+			return nil, err
+		}
+		_, err = header.WriteTo(conn)
+		if err != nil {
+			return nil, err
+		}
+		return conn, nil
+	}
+
+	t.Run("private connection allowed", func(t *testing.T) {
+		url := fmt.Sprintf("postgres://bob:builder@%s/my-tenant-10.defaultdb?sslmode=require", sqlAddr)
+		te.TestConnectWithPGConfig(
+			ctx, t, url,
+			func(c *pgx.ConnConfig) {
+				c.DialFunc = proxyDialer
+			},
+			func(conn *pgx.Conn) {
+				require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+				require.NoError(t, runTestQuery(ctx, conn))
+			},
+		)
+	})
+
+	t.Run("private connection disallowed on another tenant", func(t *testing.T) {
+		url := fmt.Sprintf("postgres://bob:builder@%s/other-tenant-20.defaultdb?sslmode=require", sqlAddr)
+		_ = te.TestConnectErrWithPGConfig(
+			ctx, t, url,
+			func(c *pgx.ConnConfig) {
+				c.DialFunc = proxyDialer
+			},
+			codeProxyRefusedConnection,
+			"connection refused",
+		)
+	})
+
+	t.Run("private connection disallowed on public tenant", func(t *testing.T) {
+		url := fmt.Sprintf("postgres://bob:builder@%s/public-tenant-30.defaultdb?sslmode=require", sqlAddr)
+		_ = te.TestConnectErrWithPGConfig(
+			ctx, t, url,
+			func(c *pgx.ConnConfig) {
+				c.DialFunc = proxyDialer
+			},
+			codeProxyRefusedConnection,
+			"connection refused",
+		)
 	})
 }
 
