@@ -19,6 +19,7 @@ import (
 	"os/user"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -585,6 +586,20 @@ of nodes, outputting a line whenever a change is detected:
 	}),
 }
 
+var signalCmd = &cobra.Command{
+	Use:   "signal <cluster> <signal>",
+	Short: "send signal to cluster",
+	Long:  "Send a POSIX signal to the nodes in a cluster, specified by its integer code.",
+	Args:  cobra.ExactArgs(2),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		sig, err := strconv.ParseInt(args[1], 10, 8)
+		if err != nil {
+			return errors.Wrapf(err, "invalid signal argument")
+		}
+		return roachprod.Signal(context.Background(), config.Logger, args[0], int(sig))
+	}),
+}
+
 var wipeCmd = &cobra.Command{
 	Use:   "wipe <cluster>",
 	Short: "wipe a cluster",
@@ -1085,6 +1100,7 @@ func main() {
 		startTenantCmd,
 		initCmd,
 		runCmd,
+		signalCmd,
 		wipeCmd,
 		reformatCmd,
 		installCmd,
@@ -1114,7 +1130,7 @@ func main() {
 
 	// Add help about specifying nodes
 	for _, cmd := range []*cobra.Command{
-		getCmd, putCmd, runCmd, startCmd, statusCmd, stopCmd,
+		getCmd, putCmd, runCmd, startCmd, statusCmd, stopCmd, signalCmd,
 		wipeCmd, pgurlCmd, adminurlCmd, sqlCmd, installCmd,
 	} {
 		if cmd.Long == "" {
