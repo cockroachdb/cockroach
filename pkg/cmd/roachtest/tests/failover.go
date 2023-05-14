@@ -37,6 +37,25 @@ func registerFailover(r registry.Registry) {
 			suffix = "/lease=expiration"
 		}
 
+		for _, readOnly := range []bool{false, true} {
+			readOnly := readOnly // pin loop variable
+			suffix := suffix
+			if readOnly {
+				suffix = "/read-only" + suffix
+			} else {
+				suffix = "/read-write" + suffix
+			}
+			r.Add(registry.TestSpec{
+				Name:    "failover/chaos" + suffix,
+				Owner:   registry.OwnerKV,
+				Timeout: 60 * time.Minute,
+				Cluster: r.MakeClusterSpec(10, spec.CPU(4)),
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runFailoverChaos(ctx, t, c, readOnly, expirationLeases)
+				},
+			})
+		}
+
 		r.Add(registry.TestSpec{
 			Name:    "failover/partial/lease-gateway" + suffix,
 			Owner:   registry.OwnerKV,
@@ -67,15 +86,7 @@ func registerFailover(r registry.Registry) {
 			},
 		})
 
-		for _, failureMode := range []failureMode{
-			failureModeBlackhole,
-			failureModeBlackholeRecv,
-			failureModeBlackholeSend,
-			failureModeCrash,
-			failureModeDeadlock,
-			failureModeDiskStall,
-			failureModePause,
-		} {
+		for _, failureMode := range allFailureModes {
 			failureMode := failureMode // pin loop variable
 			makeSpec := func(nNodes, nCPU int) spec.ClusterSpec {
 				s := r.MakeClusterSpec(nNodes, spec.CPU(nCPU))
@@ -122,6 +133,158 @@ func registerFailover(r registry.Registry) {
 			})
 		}
 	}
+}
+
+// runFailoverChaos sets up a 9-node cluster with randomly scattered ranges and
+// replicas, and then runs a random failure on a random node for 1 minute with
+// 1 minute recovery, for 20 cycles total (45 minutes). Nodes n1-n2 are
+// used as SQL gateways, to avoid disconnecting the client workload.
+//
+// It runs with either a read-write or read-only KV workload, measuring the pMax
+// unavailability for graphing. The read-only workload is useful to test e.g.
+// recovering nodes stealing Raft leadership away, since this requires the
+// replica to still be up-to-date on the log.
+func runFailoverChaos(
+	ctx context.Context, t test.Test, c cluster.Cluster, readOnly, expLeases bool,
+) {
+	require.Equal(t, 10, c.Spec().NodeCount)
+
+	rng, _ := randutil.NewTestRand()
+
+	// Create cluster, and set up failers for all failure modes.
+	opts := option.DefaultStartOpts()
+	settings := install.MakeClusterSettings()
+
+	failers := []Failer{}
+	for _, failureMode := range allFailureModes {
+		failer := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings)
+		if c.IsLocal() && !failer.CanUseLocal() {
+			t.Status(fmt.Sprintf("skipping failure mode %q on local cluster", failureMode))
+			continue
+		}
+		failer.Setup(ctx)
+		defer failer.Cleanup(ctx)
+		failers = append(failers, failer)
+	}
+
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Start(ctx, t.L(), opts, settings, c.Range(1, 9))
+
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
+		expLeases)
+	require.NoError(t, err)
+
+	// Place all ranges on n3-n9, keeping n1-n2 as SQL gateways.
+	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{3, 4, 5, 6, 7, 8, 9}})
+
+	// Wait for upreplication.
+	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+
+	// Create the kv database. If this is a read-only workload, populate it with
+	// 100.000 keys.
+	var insertCount int
+	if readOnly {
+		insertCount = 100000
+	}
+	t.Status("creating workload database")
+	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	require.NoError(t, err)
+	c.Run(ctx, c.Node(10), fmt.Sprintf(
+		`./cockroach workload init kv --splits 1000 --insert-count %d {pgurl:1}`, insertCount))
+
+	// Scatter the ranges, then relocate them off of the SQL gateways n1-n2.
+	t.Status("scattering table")
+	_, err = conn.ExecContext(ctx, `ALTER TABLE kv.kv SCATTER`)
+	require.NoError(t, err)
+	relocateRanges(t, ctx, conn, `true`, []int{1, 2}, []int{3, 4, 5, 6, 7, 8, 9})
+
+	// Start workload on n10 using n1-n2 as gateways.
+	t.Status("running workload")
+	m := c.NewMonitor(ctx, c.Range(1, 9))
+	m.Go(func(ctx context.Context) error {
+		readPercent := 50
+		if readOnly {
+			readPercent = 100
+		}
+		c.Run(ctx, c.Node(10), fmt.Sprintf(
+			`./cockroach workload run kv --read-percent %d --write-seq R%d `+
+				`--duration 45m --concurrency 256 --max-rate 8192 --timeout 1m --tolerate-errors `+
+				`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
+				`{pgurl:1-2}`, readPercent, insertCount))
+		return nil
+	})
+
+	// Start a worker to randomly fail random nodes for 1 minute, with 20 cycles.
+	for _, failer := range failers {
+		failer.Ready(ctx, m)
+	}
+	m.Go(func(ctx context.Context) error {
+		var raftCfg base.RaftConfig
+		raftCfg.SetDefaults()
+
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+
+		for i := 0; i < 20; i++ {
+			select {
+			case <-ticker.C:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			// Pick a random node and random failure mode. If the failer supports
+			// partial failures (e.g. a partial network partition), do a partial
+			// failure with 50% probability against a single random peer, and include
+			// SQL gateways n1-n2 as peers to maybe fail against.
+			node := 3 + rng.Intn(7) // n1-n2 are SQL gateways, n10 is workload runner
+			failer := failers[rng.Intn(len(failers))]
+			var partialPeer int
+			if _, ok := failer.(PartialFailer); ok && rng.Float64() < 0.5 {
+				for {
+					// NB: Also allow partial failures against SQL gateways n1-n2.
+					if partialPeer = 1 + rng.Intn(9); partialPeer != node {
+						break
+					}
+				}
+			}
+
+			randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
+
+			// Ranges may occasionally escape their constraints. Move them to where
+			// they should be.
+			relocateRanges(t, ctx, conn, `true`, []int{1, 2}, []int{3, 4, 5, 6, 7, 8, 9})
+
+			// Randomly sleep up to the lease renewal interval, to vary the time
+			// between the last lease renewal and the failure. We start the timer
+			// before the range relocation above to run them concurrently.
+			select {
+			case <-randTimer:
+			case <-ctx.Done():
+			}
+
+			if partialPeer > 0 {
+				t.Status(fmt.Sprintf("failing n%d to n%d (%s)", node, partialPeer, failer))
+				failer.(PartialFailer).FailPartial(ctx, node, []int{partialPeer})
+			} else {
+				t.Status(fmt.Sprintf("failing n%d (%s)", node, failer))
+				failer.Fail(ctx, node)
+			}
+
+			select {
+			case <-ticker.C:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			t.Status(fmt.Sprintf("recovering n%d (%s)", node, failer))
+			failer.Recover(ctx, node)
+		}
+		return nil
+	})
+	m.Wait()
 }
 
 // runFailoverPartialLeaseGateway tests a partial network partition between a
@@ -1014,6 +1177,17 @@ const (
 	failureModePause         failureMode = "pause"
 	failureModeNoop          failureMode = "noop"
 )
+
+var allFailureModes = []failureMode{
+	failureModeBlackhole,
+	failureModeBlackholeRecv,
+	failureModeBlackholeSend,
+	failureModeCrash,
+	failureModeDeadlock,
+	failureModeDiskStall,
+	failureModePause,
+	// failureModeNoop omitted on purpose
+}
 
 // makeFailer creates a new failer for the given failureMode. It may return a
 // noopFailer on local clusters.
