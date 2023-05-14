@@ -46,6 +46,16 @@ func registerFailover(r registry.Registry) {
 		})
 
 		r.Add(registry.TestSpec{
+			Name:    "failover/partial/lease-leader" + suffix,
+			Owner:   registry.OwnerKV,
+			Timeout: 30 * time.Minute,
+			Cluster: r.MakeClusterSpec(7, spec.CPU(4)),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runFailoverPartialLeaseLeader(ctx, t, c, expirationLeases)
+			},
+		})
+
+		r.Add(registry.TestSpec{
 			Name:    "failover/partial/lease-liveness" + suffix,
 			Owner:   registry.OwnerKV,
 			Timeout: 30 * time.Minute,
@@ -260,6 +270,159 @@ func runFailoverPartialLeaseGateway(
 					t.Status(fmt.Sprintf("recovering n%d (blackhole lease/gateway)", node))
 					failer.Recover(ctx, node)
 				}
+			}
+		}
+		return nil
+	})
+	m.Wait()
+}
+
+// runFailoverLeaseLeader tests a partial network partition between leaseholders
+// and Raft leaders. These will prevent the leaseholder from making Raft
+// proposals, but it can still hold onto leases as long as it can heartbeat
+// liveness.
+//
+// Cluster topology:
+//
+// n1-n3: system and liveness ranges, SQL gateway
+// n4-n6: user ranges
+//
+// The cluster runs with COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER, which
+// will place Raft leaders and leases independently of each other. We can then
+// assume that some number of user ranges will randomly have split leader/lease,
+// and simply create partial partitions between each of n4-n6 in sequence.
+//
+// We run a kv50 workload on SQL gateways and collect pMax latency for graphing.
+func runFailoverPartialLeaseLeader(
+	ctx context.Context, t test.Test, c cluster.Cluster, expLeases bool,
+) {
+	require.Equal(t, 7, c.Spec().NodeCount)
+
+	rng, _ := randutil.NewTestRand()
+
+	// Create cluster, disabling leader/leaseholder colocation. We only start
+	// n1-n3, to precisely place system ranges, since we'll have to disable the
+	// replicate queue shortly.
+	opts := option.DefaultStartOpts()
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
+
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
+	failer.Setup(ctx)
+	defer failer.Cleanup(ctx)
+
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Start(ctx, t.L(), opts, settings, c.Range(1, 3))
+
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
+		expLeases)
+	require.NoError(t, err)
+
+	// Place all ranges on n1-n3 to start with, and wait for upreplication.
+	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
+	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+
+	// Disable the replicate queue. It can otherwise end up with stuck
+	// overreplicated ranges during rebalancing, because downreplication requires
+	// the Raft leader to be colocated with the leaseholder.
+	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING kv.replicate_queue.enabled = false`)
+	require.NoError(t, err)
+
+	// Now that system ranges are properly placed on n1-n3, start n4-n6.
+	c.Start(ctx, t.L(), opts, settings, c.Range(4, 6))
+
+	// Create the kv database on n4-n6.
+	t.Status("creating workload database")
+	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	require.NoError(t, err)
+	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{4, 5, 6}})
+
+	c.Run(ctx, c.Node(6), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+
+	// Move ranges to the appropriate nodes. Precreating the database/range and
+	// moving it to the correct nodes first is not sufficient, since workload will
+	// spread the ranges across all nodes regardless.
+	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
+	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{4, 5, 6}, []int{1, 2, 3})
+
+	// Check that we have a few split leaders/leaseholders on n4-n6. We give
+	// it a few seconds, since metrics are updated every 10 seconds.
+	for i := 0; ; i++ {
+		var count float64
+		for _, node := range []int{4, 5, 6} {
+			count += nodeMetric(ctx, t, c, node, "replicas.leaders_not_leaseholders")
+		}
+		t.Status(fmt.Sprintf("%.0f split leaders/leaseholders", count))
+		if count >= 3 {
+			break
+		} else if i >= 10 {
+			t.Fatalf("timed out waiting for 3 split leaders/leaseholders")
+		}
+		time.Sleep(time.Second)
+	}
+
+	// Start workload on n7 using n1-n3 as gateways.
+	t.Status("running workload")
+	m := c.NewMonitor(ctx, c.Range(1, 6))
+	m.Go(func(ctx context.Context) error {
+		c.Run(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
+			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
+			`{pgurl:1-3}`)
+		return nil
+	})
+
+	// Start a worker to fail and recover partial partitions between each pair of
+	// n4-n6 for 3 cycles (9 failures total).
+	failer.Ready(ctx, m)
+	m.Go(func(ctx context.Context) error {
+		var raftCfg base.RaftConfig
+		raftCfg.SetDefaults()
+
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+
+		for i := 0; i < 3; i++ {
+			for _, node := range []int{4, 5, 6} {
+				select {
+				case <-ticker.C:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+
+				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
+
+				// Ranges may occasionally escape their constraints. Move them to where
+				// they should be.
+				relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
+				relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{4, 5, 6}, []int{1, 2, 3})
+
+				// Randomly sleep up to the lease renewal interval, to vary the time
+				// between the last lease renewal and the failure. We start the timer
+				// before the range relocation above to run them concurrently.
+				select {
+				case <-randTimer:
+				case <-ctx.Done():
+				}
+
+				t.Status(fmt.Sprintf("failing n%d (blackhole lease/leader)", node))
+				nextNode := node + 1
+				if nextNode > 6 {
+					nextNode = 4
+				}
+				failer.FailPartial(ctx, node, []int{nextNode})
+
+				select {
+				case <-ticker.C:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+
+				t.Status(fmt.Sprintf("recovering n%d (blackhole lease/leader)", node))
+				failer.Recover(ctx, node)
 			}
 		}
 		return nil
@@ -1261,4 +1424,15 @@ func configureAllZones(t test.Test, ctx context.Context, conn *gosql.DB, cfg zon
 		configureZone(t, ctx, conn, target, cfg)
 	}
 	require.NoError(t, rows.Err())
+}
+
+// nodeMetric fetches the given metric value from the given node.
+func nodeMetric(
+	ctx context.Context, t test.Test, c cluster.Cluster, node int, metric string,
+) float64 {
+	var value float64
+	err := c.Conn(ctx, t.L(), node).QueryRowContext(
+		ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = $1`, metric).Scan(&value)
+	require.NoError(t, err)
+	return value
 }
