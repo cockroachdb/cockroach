@@ -195,6 +195,10 @@ func (ex *connExecutor) prepare(
 		return prepared, nil
 	}
 
+	if _, ok := stmt.AST.(*tree.ExplainAnalyze); ok {
+		return nil, pgerror.Newf(pgcode.Syntax, "EXPLAIN ANALYZE can only be used as a top-level statement")
+	}
+
 	origNumPlaceholders := stmt.NumPlaceholders
 	switch stmt.AST.(type) {
 	case *tree.Prepare, *tree.CopyTo:
