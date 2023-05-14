@@ -257,7 +257,7 @@ func runFailoverPartialLeaseGateway(
 				}
 
 				for _, node := range tc.nodes {
-					t.Status(fmt.Sprintf("failing n%d (blackhole lease/gateway)", node))
+					t.Status(fmt.Sprintf("failing n%d to n%v (%s lease/gateway)", node, tc.peers, failer))
 					failer.FailPartial(ctx, node, tc.peers)
 				}
 
@@ -268,7 +268,7 @@ func runFailoverPartialLeaseGateway(
 				}
 
 				for _, node := range tc.nodes {
-					t.Status(fmt.Sprintf("recovering n%d (blackhole lease/gateway)", node))
+					t.Status(fmt.Sprintf("recovering n%d to n%v (%s lease/gateway)", node, tc.peers, failer))
 					failer.Recover(ctx, node)
 				}
 			}
@@ -410,12 +410,12 @@ func runFailoverPartialLeaseLeader(
 				case <-ctx.Done():
 				}
 
-				t.Status(fmt.Sprintf("failing n%d (blackhole lease/leader)", node))
-				nextNode := node + 1
-				if nextNode > 6 {
-					nextNode = 4
+				peer := node + 1
+				if peer > 6 {
+					peer = 4
 				}
-				failer.FailPartial(ctx, node, []int{nextNode})
+				t.Status(fmt.Sprintf("failing n%d to n%d (%s lease/leader)", node, peer, failer))
+				failer.FailPartial(ctx, node, []int{peer})
 
 				select {
 				case <-ticker.C:
@@ -423,7 +423,7 @@ func runFailoverPartialLeaseLeader(
 					return ctx.Err()
 				}
 
-				t.Status(fmt.Sprintf("recovering n%d (blackhole lease/leader)", node))
+				t.Status(fmt.Sprintf("recovering n%d to n%d (%s lease/leader)", node, peer, failer))
 				failer.Recover(ctx, node)
 			}
 		}
@@ -547,8 +547,9 @@ func runFailoverPartialLeaseLiveness(
 				case <-ctx.Done():
 				}
 
-				t.Status(fmt.Sprintf("failing n%d (blackhole lease/liveness)", node))
-				failer.FailPartial(ctx, node, []int{4})
+				peer := 4
+				t.Status(fmt.Sprintf("failing n%d to n%d (%s lease/liveness)", node, peer, failer))
+				failer.FailPartial(ctx, node, []int{peer})
 
 				select {
 				case <-ticker.C:
@@ -556,7 +557,7 @@ func runFailoverPartialLeaseLiveness(
 					return ctx.Err()
 				}
 
-				t.Status(fmt.Sprintf("recovering n%d (blackhole lease/liveness)", node))
+				t.Status(fmt.Sprintf("recovering n%d to n%d (%s lease/liveness)", node, peer, failer))
 				failer.Recover(ctx, node)
 			}
 		}
@@ -686,7 +687,7 @@ func runFailoverNonSystem(
 				case <-ctx.Done():
 				}
 
-				t.Status(fmt.Sprintf("failing n%d (%s)", node, failureMode))
+				t.Status(fmt.Sprintf("failing n%d (%s)", node, failer))
 				failer.Fail(ctx, node)
 
 				select {
@@ -695,7 +696,7 @@ func runFailoverNonSystem(
 					return ctx.Err()
 				}
 
-				t.Status(fmt.Sprintf("recovering n%d (%s)", node, failureMode))
+				t.Status(fmt.Sprintf("recovering n%d (%s)", node, failer))
 				failer.Recover(ctx, node)
 			}
 		}
@@ -831,7 +832,7 @@ func runFailoverLiveness(
 			case <-ctx.Done():
 			}
 
-			t.Status(fmt.Sprintf("failing n%d (%s)", 4, failureMode))
+			t.Status(fmt.Sprintf("failing n%d (%s)", 4, failer))
 			failer.Fail(ctx, 4)
 
 			select {
@@ -840,7 +841,7 @@ func runFailoverLiveness(
 				return ctx.Err()
 			}
 
-			t.Status(fmt.Sprintf("recovering n%d (%s)", 4, failureMode))
+			t.Status(fmt.Sprintf("recovering n%d (%s)", 4, failer))
 			failer.Recover(ctx, 4)
 			relocateLeases(t, ctx, conn, `range_id = 2`, 4)
 		}
@@ -978,7 +979,7 @@ func runFailoverSystemNonLiveness(
 				case <-ctx.Done():
 				}
 
-				t.Status(fmt.Sprintf("failing n%d (%s)", node, failureMode))
+				t.Status(fmt.Sprintf("failing n%d (%s)", node, failer))
 				failer.Fail(ctx, node)
 
 				select {
@@ -987,7 +988,7 @@ func runFailoverSystemNonLiveness(
 					return ctx.Err()
 				}
 
-				t.Status(fmt.Sprintf("recovering n%d (%s)", node, failureMode))
+				t.Status(fmt.Sprintf("recovering n%d (%s)", node, failer))
 				failer.Recover(ctx, node)
 			}
 		}
@@ -1006,10 +1007,29 @@ const (
 	failureModeCrash         failureMode = "crash"
 	failureModeDiskStall     failureMode = "disk-stall"
 	failureModePause         failureMode = "pause"
+	failureModeNoop          failureMode = "noop"
 )
 
-// makeFailer creates a new failer for the given failureMode.
+// makeFailer creates a new failer for the given failureMode. It may return a
+// noopFailer on local clusters.
 func makeFailer(
+	t test.Test,
+	c cluster.Cluster,
+	failureMode failureMode,
+	opts option.StartOpts,
+	settings install.ClusterSettings,
+) failer {
+	f := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings)
+	if c.IsLocal() && !f.CanUseLocal() {
+		t.Status(fmt.Sprintf(
+			`failure mode %q not supported on local clusters, using "noop" failure mode instead`,
+			failureMode))
+		f = &noopFailer{}
+	}
+	return f
+}
+
+func makeFailerWithoutLocalNoop(
 	t test.Test,
 	c cluster.Cluster,
 	failureMode failureMode,
@@ -1044,11 +1064,6 @@ func makeFailer(
 			startSettings: settings,
 		}
 	case failureModeDiskStall:
-		// TODO(baptist): This mode doesn't work on local clusters since
-		// dmsetupDiskStaller does not support local clusters. Either support could
-		// be added for it or there could be a flag to not fatal when run in local
-		// mode. The net impact is that this failure can't be simulated on local
-		// clusters today.
 		return &diskStallFailer{
 			t:             t,
 			c:             c,
@@ -1061,6 +1076,8 @@ func makeFailer(
 			t: t,
 			c: c,
 		}
+	case failureModeNoop:
+		return &noopFailer{}
 	default:
 		t.Fatalf("unknown failure mode %s", failureMode)
 		return nil
@@ -1069,6 +1086,11 @@ func makeFailer(
 
 // failer fails and recovers a given node in some particular way.
 type failer interface {
+	fmt.Stringer
+
+	// CanUseLocal returns true if the failer can be run with a local cluster.
+	CanUseLocal() bool
+
 	// Setup prepares the failer. It is called before the cluster is started.
 	Setup(ctx context.Context)
 
@@ -1094,6 +1116,18 @@ type partialFailer interface {
 	FailPartial(ctx context.Context, nodeID int, peerIDs []int)
 }
 
+// noopFailer doesn't do anything.
+type noopFailer struct{}
+
+func (f *noopFailer) String() string                          { return string(failureModeNoop) }
+func (f *noopFailer) CanUseLocal() bool                       { return true }
+func (f *noopFailer) Setup(context.Context)                   {}
+func (f *noopFailer) Ready(context.Context, cluster.Monitor)  {}
+func (f *noopFailer) Cleanup(context.Context)                 {}
+func (f *noopFailer) Fail(context.Context, int)               {}
+func (f *noopFailer) FailPartial(context.Context, int, []int) {}
+func (f *noopFailer) Recover(context.Context, int)            {}
+
 // blackholeFailer causes a network failure where TCP/IP packets to/from port
 // 26257 are dropped, causing network hangs and timeouts.
 //
@@ -1107,22 +1141,24 @@ type blackholeFailer struct {
 	output bool
 }
 
-func (f *blackholeFailer) Setup(_ context.Context)                    {}
-func (f *blackholeFailer) Ready(_ context.Context, _ cluster.Monitor) {}
+func (f *blackholeFailer) String() string {
+	if f.input && !f.output {
+		return string(failureModeBlackholeRecv)
+	} else if f.output && !f.input {
+		return string(failureModeBlackholeSend)
+	}
+	return string(failureModeBlackhole)
+}
+
+func (f *blackholeFailer) CanUseLocal() bool                      { return false } // needs iptables
+func (f *blackholeFailer) Setup(context.Context)                  {}
+func (f *blackholeFailer) Ready(context.Context, cluster.Monitor) {}
 
 func (f *blackholeFailer) Cleanup(ctx context.Context) {
-	if f.c.IsLocal() {
-		f.t.Status("skipping blackhole cleanup on local cluster")
-		return
-	}
 	f.c.Run(ctx, f.c.All(), `sudo iptables -F`)
 }
 
 func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
-	if f.c.IsLocal() {
-		f.t.Status("skipping blackhole failure on local cluster")
-		return
-	}
 	// When dropping both input and output, make sure we drop packets in both
 	// directions for both the inbound and outbound TCP connections, such that we
 	// get a proper black hole. Only dropping one direction for both of INPUT and
@@ -1149,10 +1185,6 @@ func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
 // FailPartial creates a partial blackhole failure between the given node and
 // peers.
 func (f *blackholeFailer) FailPartial(ctx context.Context, nodeID int, peerIDs []int) {
-	if f.c.IsLocal() {
-		f.t.Status("skipping blackhole failure on local cluster")
-		return
-	}
 	peerIPs, err := f.c.InternalIP(ctx, f.t.L(), peerIDs)
 	require.NoError(f.t, err)
 
@@ -1188,10 +1220,6 @@ func (f *blackholeFailer) FailPartial(ctx context.Context, nodeID int, peerIDs [
 }
 
 func (f *blackholeFailer) Recover(ctx context.Context, nodeID int) {
-	if f.c.IsLocal() {
-		f.t.Status("skipping blackhole recovery on local cluster")
-		return
-	}
 	f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -F`)
 }
 
@@ -1205,6 +1233,8 @@ type crashFailer struct {
 	startSettings install.ClusterSettings
 }
 
+func (f *crashFailer) String() string                             { return string(failureModeCrash) }
+func (f *crashFailer) CanUseLocal() bool                          { return true }
 func (f *crashFailer) Setup(_ context.Context)                    {}
 func (f *crashFailer) Ready(_ context.Context, m cluster.Monitor) { f.m = m }
 func (f *crashFailer) Cleanup(_ context.Context)                  {}
@@ -1228,6 +1258,9 @@ type diskStallFailer struct {
 	startSettings install.ClusterSettings
 	staller       diskStaller
 }
+
+func (f *diskStallFailer) String() string    { return string(failureModeDiskStall) }
+func (f *diskStallFailer) CanUseLocal() bool { return false } // needs dmsetup
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
 	f.staller.Setup(ctx)
@@ -1266,6 +1299,8 @@ type pauseFailer struct {
 	c cluster.Cluster
 }
 
+func (f *pauseFailer) String() string              { return string(failureModePause) }
+func (f *pauseFailer) CanUseLocal() bool           { return true }
 func (f *pauseFailer) Setup(ctx context.Context)   {}
 func (f *pauseFailer) Cleanup(ctx context.Context) {}
 
