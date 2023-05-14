@@ -375,7 +375,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 
 	errConnection := make(chan error, 1)
 	removeListener, err := handler.aclWatcher.ListenForDenied(
-		acl.ConnectionTags{IP: ipAddr, Cluster: tenID.String()},
+		ctx,
+		acl.ConnectionTags{IP: ipAddr, TenantID: tenID},
 		func(err error) {
 			err = withCode(errors.Wrap(err,
 				"connection blocked by access control list"), codeExpiredClientConnection)
