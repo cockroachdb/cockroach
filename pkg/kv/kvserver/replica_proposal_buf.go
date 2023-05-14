@@ -1188,6 +1188,7 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	if p.createdAtTicks == 0 {
 		p.createdAtTicks = rp.mu.ticks
 	}
+	rp.mu.lastProposalAtTicks = rp.mu.ticks // monotonically increasing
 	if prev := rp.mu.proposals[p.idKey]; prev != nil && prev != p {
 		log.Fatalf(rp.store.AnnotateCtx(context.Background()), "two proposals under same ID:\n%+v,\n%+v", prev, p)
 	}

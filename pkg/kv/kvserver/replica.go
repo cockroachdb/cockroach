@@ -741,6 +741,9 @@ type Replica struct {
 		// Counts calls to Replica.tick()
 		ticks int
 
+		// lastProposalAtTicks tracks the time of the last proposal, in ticks.
+		lastProposalAtTicks int
+
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
 

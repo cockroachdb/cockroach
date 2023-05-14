@@ -553,6 +553,12 @@ func (r *Replica) hasPendingProposalQuotaRLocked() bool {
 	return !r.mu.proposalQuota.Full()
 }
 
+// ticksSinceLastProposalRLocked returns the number of ticks since the last
+// proposal.
+func (r *Replica) ticksSinceLastProposalRLocked() int {
+	return r.mu.ticks - r.mu.lastProposalAtTicks
+}
+
 // isRaftLeader returns true if this replica believes it is the current
 // Raft leader.
 //
