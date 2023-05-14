@@ -94,6 +94,29 @@ message EnsurePodRequest {
 message EnsurePodResponse {
 }
 
+// ConnectivityType indicates the extent to which the tenant can be accessed
+// (e.g. private only, public only, or both).
+//
+// NOTE: This is treated as a bitmask, so values should be a factor of 2.
+enum ConnectivityType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // ALLOW_NONE indicates that the cluster is entirely inaccessible.
+  //
+  // TODO(jaylim-crl): For now, this is the same as ALLOW_PUBLIC for backwards
+  // compatiblity. Once we updated the directory server to send this field, we
+  // can reject all connections for tenants where type=ALLOW_NONE.
+  ALLOW_NONE = 0;
+  // ALLOW_PUBLIC indicates that the cluster is exposed to the public internet,
+  // and IP allowlist rules will apply. By default, if there are no rules, the
+  // proxy will block all public connections.
+  ALLOW_PUBLIC = 1;
+  // ALLOW_PRIVATE indicates that the cluster allows private endpoints, and
+  // private endpoint rules will apply. By default, if there are no rules, the
+  // proxy will block all private connections.
+  ALLOW_PRIVATE = 2;
+}
+
 // Tenant contains information about a tenant, such as its name and ID.
 // Fields are optional except TenantID and Version.
 message Tenant {
@@ -104,6 +127,12 @@ message Tenant {
   string version = 2;
   // ClusterName is the name of the tenant's cluster.
   string cluster_name = 3;
+  // ConnectivityType indicates the extent to which the tenant can be accessed.
+  ConnectivityType connectivity_type = 4;
+  // PrivateEndpoints corresponds to the list of available endpoint identifiers
+  // that could access the tenant. This will only apply if the tenant allows
+  // private connections.
+  repeated string private_endpoints = 5;
 }
 
 // GetTenantRequest is used by a client to request from the sever metadata

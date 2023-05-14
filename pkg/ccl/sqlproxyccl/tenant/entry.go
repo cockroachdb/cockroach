@@ -236,13 +236,6 @@ func (e *tenantEntry) EnsureTenantPod(
 }
 
 // UpdateMetadata updates the current entry with the given state.
-//
-// TODO(jaylim-crl): Add more metadata here (e.g. IP allowlists and private
-// endpoints).
-//
-// TODO(jaylim-crl): The directory server will emit an event each time the
-// tenant gets scaled up / down. We should add a checksum to the Tenant struct
-// so that we don't need to perform an update all the time.
 func (e *tenantEntry) UpdateTenant(tenant *Tenant) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -260,10 +253,7 @@ func (e *tenantEntry) UpdateTenant(tenant *Tenant) {
 			return
 		}
 	}
-	// The tenant object is copy on write. This avoids a race with the
-	// tenant object returned in ToProto.
-	newTenant := *tenant
-	e.mu.tenant = &newTenant
+	e.mu.tenant = tenant
 	e.mu.valid = true
 	e.mu.initError = nil
 }
