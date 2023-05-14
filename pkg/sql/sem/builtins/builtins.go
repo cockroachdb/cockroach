@@ -87,6 +87,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -6266,6 +6267,57 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 					bool(*args[4].(*tree.DBool)),     // force
 				); err != nil {
 					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.unsafe_lock_replica": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryTesting,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "range_id", Typ: types.Int},
+				{Name: "lock", Typ: types.Bool}, // true to lock, false to unlock
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx); err != nil {
+					return nil, err
+				} else if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+
+				rangeID := roachpb.RangeID(*args[0].(*tree.DInt))
+				lock := *args[1].(*tree.DBool)
+
+				var replicaMu *syncutil.RWMutex
+				if err := evalCtx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
+					if replicaMu == nil {
+						replicaMu = store.GetReplicaMutexForTesting(rangeID)
+					}
+					return nil
+				}); err != nil {
+					return nil, err
+				} else if replicaMu == nil {
+					return nil, kvpb.NewRangeNotFoundError(rangeID, 0)
+				}
+
+				log.Warningf(ctx, "crdb_internal.unsafe_lock_replica on r%d with lock=%t", rangeID, lock)
+
+				if lock {
+					replicaMu.Lock() // deadlocks if called twice
+				} else {
+					// Unlocking a non-locked mutex will irrecoverably fatal the process.
+					// We do a TryLock() to ensure the mutex is actually locked before
+					// attempting the unlock, even though this is racey.
+					replicaMu.TryLock()
+					replicaMu.Unlock()
 				}
 				return tree.DBoolTrue, nil
 			},
