@@ -1213,6 +1213,10 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
+	if envutil.EnvOrDefaultBool("COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false) {
+		sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true
+		sc.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader = true // otherwise lease requests fail
+	}
 }
 
 // GetStoreConfig exposes the config used for this store.
