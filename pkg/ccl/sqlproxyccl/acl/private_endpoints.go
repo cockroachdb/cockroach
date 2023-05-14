@@ -10,10 +10,14 @@ package acl
 
 import (
 	"context"
+	"net"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
+	"github.com/pires/go-proxyproto"
+	"github.com/pires/go-proxyproto/tlvparse"
 )
 
 type lookupTenantFunc func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error)
@@ -55,4 +59,37 @@ func (p *PrivateEndpoints) CheckConnection(ctx context.Context, conn ConnectionT
 		"connection to '%s' denied: cluster does not allow this private connection",
 		conn.TenantID.String(),
 	)
+}
+
+// FindPrivateEndpointID looks for the endpoint identifier within the connection
+// object (which must be a *proxyproto.Conn) and returns that. If no endpoint
+// IDs are found, an empty string will be returned.
+func FindPrivateEndpointID(conn net.Conn) (string, error) {
+	proxyConn, ok := conn.(*proxyproto.Conn)
+	if !ok {
+		// This should not happen.
+		return "", errors.New("connection isn't a proxyproto.Conn")
+	}
+	header := proxyConn.ProxyHeader()
+	// Not a private connection.
+	if header == nil {
+		return "", nil
+	}
+	tlvs, err := header.TLVs()
+	if err != nil {
+		return "", err
+	}
+	// AWS.
+	if eid := tlvparse.FindAWSVPCEndpointID(tlvs); eid != "" {
+		return eid, nil
+	}
+	// Azure.
+	if eid, found := tlvparse.FindAzurePrivateEndpointLinkID(tlvs); found {
+		return strconv.FormatUint(uint64(eid), 10), nil
+	}
+	// GCP.
+	if eid, found := tlvparse.ExtractPSCConnectionID(tlvs); found {
+		return strconv.FormatUint(eid, 10), nil
+	}
+	return "", nil
 }
