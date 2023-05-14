@@ -144,6 +144,7 @@ SELECT node_id
 		Name:    "gossip/chaos/nodes=9",
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(9),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runGossipChaos(ctx, t, c)
 		},

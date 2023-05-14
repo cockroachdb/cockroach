@@ -27,6 +27,7 @@ func registerInconsistency(r registry.Registry) {
 		Name:    "inconsistency",
 		Owner:   registry.OwnerReplication,
 		Cluster: r.MakeClusterSpec(3),
+		Leases:  registry.MetamorphicLeases,
 		Run:     runInconsistency,
 	})
 }

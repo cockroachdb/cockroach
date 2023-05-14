@@ -158,6 +158,7 @@ func registerGopg(r registry.Registry) {
 		Name:    "gopg",
 		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
+		Leases:  registry.MetamorphicLeases,
 		Tags:    registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runGopg(ctx, t, c)

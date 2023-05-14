@@ -153,6 +153,7 @@ func registerSequelize(r registry.Registry) {
 		Name:       "sequelize",
 		Owner:      registry.OwnerSQLSessions,
 		Cluster:    r.MakeClusterSpec(1),
+		Leases:     registry.MetamorphicLeases,
 		NativeLibs: registry.LibGEOS,
 		Tags:       registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

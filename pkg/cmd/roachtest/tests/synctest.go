@@ -37,6 +37,7 @@ fi
 		Owner: registry.OwnerStorage,
 		// This test sets up a custom file system; we don't want the cluster reused.
 		Cluster: r.MakeClusterSpec(1, spec.ReuseNone()),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			n := c.Node(1)
 			tmpDir, err := os.MkdirTemp("", "synctest")

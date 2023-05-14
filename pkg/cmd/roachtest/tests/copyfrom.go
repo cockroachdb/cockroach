@@ -159,6 +159,7 @@ func registerCopyFrom(r registry.Registry) {
 			Name:    fmt.Sprintf("copyfrom/crdb-atomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
 			Owner:   registry.OwnerSQLQueries,
 			Cluster: r.MakeClusterSpec(tc.nodes),
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopyFromCRDB(ctx, t, c, tc.sf, true /*atomic*/)
 			},
@@ -167,6 +168,7 @@ func registerCopyFrom(r registry.Registry) {
 			Name:    fmt.Sprintf("copyfrom/crdb-nonatomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
 			Owner:   registry.OwnerSQLQueries,
 			Cluster: r.MakeClusterSpec(tc.nodes),
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopyFromCRDB(ctx, t, c, tc.sf, false /*atomic*/)
 			},
@@ -175,6 +177,7 @@ func registerCopyFrom(r registry.Registry) {
 			Name:    fmt.Sprintf("copyfrom/pg/sf=%d/nodes=%d", tc.sf, tc.nodes),
 			Owner:   registry.OwnerSQLQueries,
 			Cluster: r.MakeClusterSpec(tc.nodes),
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopyFromPG(ctx, t, c, tc.sf)
 			},

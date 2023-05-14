@@ -94,6 +94,7 @@ func registerRestart(r registry.Registry) {
 		Name:    "restart/down-for-2m",
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(3),
+		Leases:  registry.MetamorphicLeases,
 		// "cockroach workload is only in 19.1+"
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRestart(ctx, t, c, 2*time.Minute)

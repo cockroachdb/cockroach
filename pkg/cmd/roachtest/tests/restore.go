@@ -66,6 +66,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		Name:    "restore/nodeShutdown/worker",
 		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+		Leases:  registry.MetamorphicLeases,
 		Timeout: sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -83,6 +84,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		Name:    "restore/nodeShutdown/coordinator",
 		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+		Leases:  registry.MetamorphicLeases,
 		Timeout: sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
