@@ -57,6 +57,7 @@ const (
 	CategorySystemInfo          = "System info"
 	CategorySystemRepair        = "System repair"
 	CategoryStreamIngestion     = "Stream Ingestion"
+	CategoryTesting             = "Testing"
 )
 
 const (

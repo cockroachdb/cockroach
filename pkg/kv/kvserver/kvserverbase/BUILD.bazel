@@ -26,6 +26,7 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/quotapool",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",

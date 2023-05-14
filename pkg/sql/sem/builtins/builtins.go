@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fuzzystrmatch"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -87,6 +88,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -148,6 +150,10 @@ CockroachDB supports the following flags:
 | w    | yes                              | yes                                  |
 | p    | no                               | no                                   |
 | m/n  | no                               | yes                                  |`
+
+// enableUnsafeTestBuiltins enables unsafe builtins for testing purposes.
+var enableUnsafeTestBuiltins = envutil.EnvOrDefaultBool(
+	"COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS", false)
 
 // builtinDefinition represents a built-in function before it becomes
 // a tree.FunctionDefinition.
@@ -6270,6 +6276,59 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 					bool(*args[4].(*tree.DBool)),     // force
 				); err != nil {
 					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.unsafe_lock_replica": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryTesting,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "range_id", Typ: types.Int},
+				{Name: "lock", Typ: types.Bool}, // true to lock, false to unlock
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if !enableUnsafeTestBuiltins {
+					return nil, errors.Errorf("requires COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
+				} else if isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx); err != nil {
+					return nil, err
+				} else if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+
+				rangeID := roachpb.RangeID(*args[0].(*tree.DInt))
+				lock := *args[1].(*tree.DBool)
+
+				var replicaMu *syncutil.RWMutex
+				if err := evalCtx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
+					if replicaMu == nil {
+						replicaMu = store.GetReplicaMutexForTesting(rangeID)
+					}
+					return nil
+				}); err != nil {
+					return nil, err
+				} else if replicaMu == nil {
+					return nil, kvpb.NewRangeNotFoundError(rangeID, 0)
+				}
+
+				log.Warningf(ctx, "crdb_internal.unsafe_lock_replica on r%d with lock=%t", rangeID, lock)
+
+				if lock {
+					replicaMu.Lock() // deadlocks if called twice
+				} else {
+					// Unlocking a non-locked mutex will irrecoverably fatal the process.
+					// We do TryLock() as a best-effort guard against this, but it will be
+					// racey. The caller is expected to have locked the mutex first.
+					replicaMu.TryLock()
+					replicaMu.Unlock()
 				}
 				return tree.DBoolTrue, nil
 			},
