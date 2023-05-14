@@ -105,6 +105,7 @@ go_library(
         "//pkg/util/contextutil",
         "//pkg/util/duration",
         "//pkg/util/encoding",
+        "//pkg/util/envutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/fuzzystrmatch",
         "//pkg/util/hlc",
