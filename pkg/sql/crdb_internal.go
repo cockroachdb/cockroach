@@ -5435,6 +5435,22 @@ CREATE TABLE crdb_internal.kv_catalog_comments (
 				return err
 			}
 		}
+		// Loop over all builtin function comments.
+		// TODO(rafi): This could be moved directly into the catalog, similar to
+		// virtual table comments.
+		for _, name := range builtins.AllBuiltinNames() {
+			_, overloads := builtinsregistry.GetBuiltinProperties(name)
+			for _, builtin := range overloads {
+				if err := addRow(
+					tree.NewDString(catalogkeys.FunctionCommentType.String()),
+					tree.NewDInt(tree.DInt(builtin.Oid)),
+					tree.DZero,
+					tree.NewDString(builtin.Info),
+				); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	},
 }

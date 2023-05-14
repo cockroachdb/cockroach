@@ -14,11 +14,12 @@ func _() {
 	_ = x[IndexCommentType-3]
 	_ = x[SchemaCommentType-4]
 	_ = x[ConstraintCommentType-5]
+	_ = x[FunctionCommentType-6]
 }
 
-const _CommentType_name = "DatabaseCommentTypeTableCommentTypeColumnCommentTypeIndexCommentTypeSchemaCommentTypeConstraintCommentType"
+const _CommentType_name = "DatabaseCommentTypeTableCommentTypeColumnCommentTypeIndexCommentTypeSchemaCommentTypeConstraintCommentTypeFunctionCommentType"
 
-var _CommentType_index = [...]uint8{0, 19, 35, 52, 68, 85, 106}
+var _CommentType_index = [...]uint8{0, 19, 35, 52, 68, 85, 106, 125}
 
 func (i CommentType) String() string {
 	if i < 0 || i >= CommentType(len(_CommentType_index)-1) {
