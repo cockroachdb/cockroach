@@ -22,8 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,6 +72,7 @@ func registerFailover(r registry.Registry) {
 			failureModeBlackholeRecv,
 			failureModeBlackholeSend,
 			failureModeCrash,
+			failureModeDeadlock,
 			failureModeDiskStall,
 			failureModePause,
 		} {
@@ -1006,6 +1009,7 @@ const (
 	failureModeBlackholeRecv failureMode = "blackhole-recv"
 	failureModeBlackholeSend failureMode = "blackhole-send"
 	failureModeCrash         failureMode = "crash"
+	failureModeDeadlock      failureMode = "deadlock"
 	failureModeDiskStall     failureMode = "disk-stall"
 	failureModePause         failureMode = "pause"
 	failureModeNoop          failureMode = "noop"
@@ -1063,6 +1067,15 @@ func makeFailerWithoutLocalNoop(
 			c:             c,
 			startOpts:     opts,
 			startSettings: settings,
+		}
+	case failureModeDeadlock:
+		return &deadlockFailer{
+			t:                t,
+			c:                c,
+			startOpts:        opts,
+			startSettings:    settings,
+			onlyLeaseholders: true,
+			numReplicas:      5,
 		}
 	case failureModeDiskStall:
 		return &diskStallFailer{
@@ -1244,6 +1257,95 @@ func (f *crashFailer) Fail(ctx context.Context, nodeID int) {
 
 func (f *crashFailer) Recover(ctx context.Context, nodeID int) {
 	f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
+}
+
+// deadlockFailer deadlocks replicas.
+type deadlockFailer struct {
+	t                test.Test
+	c                cluster.Cluster
+	m                cluster.Monitor
+	startOpts        option.StartOpts
+	startSettings    install.ClusterSettings
+	onlyLeaseholders bool
+	numReplicas      int
+	locks            map[int][]roachpb.RangeID // track locks by node
+}
+
+func (f *deadlockFailer) String() string                             { return string(failureModeDeadlock) }
+func (f *deadlockFailer) CanUseLocal() bool                          { return true }
+func (f *deadlockFailer) Setup(context.Context)                      {}
+func (f *deadlockFailer) Ready(_ context.Context, m cluster.Monitor) { f.m = m }
+func (f *deadlockFailer) Cleanup(context.Context)                    {}
+
+func (f *deadlockFailer) Fail(ctx context.Context, nodeID int) {
+	require.NotZero(f.t, f.numReplicas)
+	if f.locks == nil {
+		f.locks = map[int][]roachpb.RangeID{}
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second) // can take a while to lock
+	defer cancel()
+
+	predicate := `$1 = ANY(replicas)`
+	if f.onlyLeaseholders {
+		predicate = `lease_holder = $1`
+	}
+
+	conn := f.c.Conn(ctx, f.t.L(), nodeID)
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf(
+		`SELECT range_id, crdb_internal.unsafe_lock_replica(range_id, true) FROM [
+			SELECT range_id FROM [SHOW CLUSTER RANGES WITH DETAILS]
+			WHERE %s
+			ORDER BY random()
+			LIMIT $2
+		]`, predicate), nodeID, f.numReplicas)
+	require.NoError(f.t, err)
+	for rows.Next() {
+		var rangeID roachpb.RangeID
+		var locked bool
+		require.NoError(f.t, rows.Scan(&rangeID, &locked))
+		f.t.Status(fmt.Sprintf("locked r%d on n%d", rangeID, nodeID))
+		f.locks[nodeID] = append(f.locks[nodeID], rangeID)
+	}
+	require.NoError(f.t, rows.Err())
+}
+
+func (f *deadlockFailer) Recover(ctx context.Context, nodeID int) {
+	if f.locks == nil || len(f.locks[nodeID]) == 0 {
+		return
+	}
+
+	// We may have locked replicas that prevent us from connecting to the node
+	// again, so we fall back to restarting the node.
+	err := func() error {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		conn, err := f.c.ConnE(ctx, f.t.L(), nodeID)
+		if err != nil {
+			return err
+		}
+		for _, rangeID := range f.locks[nodeID] {
+			var unlocked bool
+			err := conn.QueryRowContext(ctx,
+				`SELECT crdb_internal.unsafe_lock_replica($1, false)`, rangeID).Scan(&unlocked)
+			if err != nil {
+				return err
+			} else if !unlocked {
+				return errors.Errorf("r%d was not unlocked", rangeID)
+			} else {
+				f.t.Status(fmt.Sprintf("unlocked r%d on n%d", rangeID, nodeID))
+			}
+		}
+		return nil
+	}()
+	if err != nil {
+		f.t.Status(fmt.Sprintf("failed to unlock replicas on n%d, restarting node: %s", nodeID, err))
+		f.m.ExpectDeath()
+		f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))
+		f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
+	}
+	delete(f.locks, nodeID)
 }
 
 // diskStallFailer stalls the disk indefinitely. This should cause the node to
