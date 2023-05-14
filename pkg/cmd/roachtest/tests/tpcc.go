@@ -494,6 +494,7 @@ func registerTPCC(r registry.Registry) {
 		Tags:              registry.Tags(`default`, `release_qualification`, `aws`),
 		Cluster:           headroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
@@ -520,6 +521,7 @@ func registerTPCC(r registry.Registry) {
 		Tags:              registry.Tags(`default`),
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCMixedHeadroom(ctx, t, c, cloud, 1)
 		},
@@ -532,6 +534,7 @@ func registerTPCC(r registry.Registry) {
 		Tags:              registry.Tags(`default`),
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCMixedHeadroom(ctx, t, c, cloud, 2)
 		},
@@ -541,6 +544,7 @@ func registerTPCC(r registry.Registry) {
 		Owner:             registry.OwnerTestEng,
 		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   1,
@@ -559,6 +563,7 @@ func registerTPCC(r registry.Registry) {
 		// slowly ramp up the load.
 		Timeout:           4*24*time.Hour + 10*time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			warehouses := 1000
 			runTPCC(ctx, t, c, tpccOptions{
@@ -677,6 +682,7 @@ func registerTPCC(r registry.Registry) {
 				// Add an extra node which serves as the workload nodes.
 				Cluster:           r.MakeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
 				EncryptionSupport: registry.EncryptionMetamorphic,
+				Leases:            registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					t.Status(tc.desc)
 					duration := 90 * time.Minute
@@ -768,6 +774,7 @@ func registerTPCC(r registry.Registry) {
 		Owner:             registry.OwnerTestEng,
 		Cluster:           r.MakeClusterSpec(4),
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
@@ -797,6 +804,7 @@ func registerTPCC(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
 		Timeout:           6 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			skip.WithIssue(t, 53886)
 			runTPCC(ctx, t, c, tpccOptions{
@@ -894,6 +902,35 @@ func registerTPCC(r registry.Registry) {
 
 		Tags: registry.Tags(`weekly`),
 	})
+
+	// Expiration lease benchmarks. These are duplicates of variants above.
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes: 3,
+		CPUs:  4,
+
+		LoadWarehouses:   1000,
+		EstimatedMax:     gceOrAws(cloud, 750, 900),
+		ExpirationLeases: true,
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes: 3,
+		CPUs:  16,
+
+		LoadWarehouses:   gceOrAws(cloud, 3500, 3900),
+		EstimatedMax:     gceOrAws(cloud, 2900, 3500),
+		ExpirationLeases: true,
+		Tags:             registry.Tags(`aws`),
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes: 12,
+		CPUs:  16,
+
+		LoadWarehouses:   gceOrAws(cloud, 11500, 11500),
+		EstimatedMax:     gceOrAws(cloud, 10000, 10000),
+		ExpirationLeases: true,
+
+		Tags: registry.Tags(`weekly`),
+	})
 }
 
 func gceOrAws(cloud string, gce, aws int) int {
@@ -984,6 +1021,8 @@ type tpccBenchSpec struct {
 	// EncryptionEnabled determines if the benchmark uses encrypted stores (i.e.
 	// Encryption-At-Rest / EAR).
 	EncryptionEnabled bool
+	// ExpirationLeases enables use of expiration-based leases.
+	ExpirationLeases bool
 }
 
 // partitions returns the number of partitions specified to the load generator.
@@ -1061,6 +1100,12 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		nameParts = append(nameParts, "enc=true")
 	}
 
+	leases := registry.DefaultLeases
+	if b.ExpirationLeases {
+		leases = registry.ExpirationLeases
+		nameParts = append(nameParts, "lease=expiration")
+	}
+
 	name := strings.Join(nameParts, "/")
 
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
@@ -1073,6 +1118,7 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		Timeout:           7 * time.Hour,
 		Tags:              b.Tags,
 		EncryptionSupport: encryptionSupport,
+		Leases:            leases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},

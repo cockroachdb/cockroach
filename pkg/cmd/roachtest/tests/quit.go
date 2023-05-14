@@ -363,6 +363,7 @@ func registerQuitTransfersLeases(r registry.Registry) {
 			Name:    fmt.Sprintf("transfer-leases/%s", name),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(3),
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runQuitTransfersLeases(ctx, t, c, name, method)
 			},

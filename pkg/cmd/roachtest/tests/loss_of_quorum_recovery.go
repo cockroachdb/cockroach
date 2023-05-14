@@ -73,6 +73,7 @@ func registerLOQRecovery(r registry.Registry) {
 			Owner:               registry.OwnerReplication,
 			Tags:                registry.Tags(`default`),
 			Cluster:             spec,
+			Leases:              registry.MetamorphicLeases,
 			SkipPostValidations: registry.PostValidationInvalidDescriptors | registry.PostValidationNoDeadNodes,
 			NonReleaseBlocker:   true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -84,6 +85,7 @@ func registerLOQRecovery(r registry.Registry) {
 			Owner:               registry.OwnerReplication,
 			Tags:                registry.Tags(`default`),
 			Cluster:             spec,
+			Leases:              registry.MetamorphicLeases,
 			SkipPostValidations: registry.PostValidationInvalidDescriptors | registry.PostValidationNoDeadNodes,
 			NonReleaseBlocker:   true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

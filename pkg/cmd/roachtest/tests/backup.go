@@ -216,6 +216,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           backupNodeRestartSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -237,6 +238,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           backupNodeRestartSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -432,6 +434,7 @@ func registerBackup(r registry.Registry) {
 			Owner:             registry.OwnerDisasterRecovery,
 			Cluster:           r.MakeClusterSpec(3),
 			EncryptionSupport: registry.EncryptionMetamorphic,
+			Leases:            registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.Spec().Cloud != item.machine {
 					t.Skip("backup assumeRole is only configured to run on "+item.machine, "")
@@ -538,6 +541,7 @@ func registerBackup(r registry.Registry) {
 			Owner:             registry.OwnerDisasterRecovery,
 			Cluster:           KMSSpec,
 			EncryptionSupport: registry.EncryptionMetamorphic,
+			Leases:            registry.MetamorphicLeases,
 			Tags:              item.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.Spec().Cloud != item.machine {
@@ -671,6 +675,7 @@ func registerBackup(r registry.Registry) {
 		Name:              `backupTPCC`,
 		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           r.MakeClusterSpec(3),
+		Leases:            registry.MetamorphicLeases,
 		Timeout:           1 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -877,6 +882,7 @@ func registerBackup(r registry.Registry) {
 		Owner:             registry.OwnerDisasterRecovery,
 		Timeout:           4 * time.Hour,
 		Cluster:           r.MakeClusterSpec(3, spec.CPU(8)),
+		Leases:            registry.MetamorphicLeases,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{})

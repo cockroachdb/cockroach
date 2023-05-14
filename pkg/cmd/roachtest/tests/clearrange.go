@@ -37,6 +37,7 @@ func registerClearRange(r registry.Registry) {
 				// to <3:30h but it varies.
 				Timeout: 5*time.Hour + 90*time.Minute,
 				Cluster: r.MakeClusterSpec(10, spec.CPU(16)),
+				Leases:  registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runClearRange(ctx, t, c, checks, rangeTombstones)
 				},
@@ -54,6 +55,7 @@ func registerClearRange(r registry.Registry) {
 				Timeout:           5*time.Hour + 120*time.Minute,
 				Cluster:           r.MakeClusterSpec(10, spec.CPU(16), spec.SetFileSystem(spec.Zfs)),
 				EncryptionSupport: registry.EncryptionMetamorphic,
+				Leases:            registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runClearRange(ctx, t, c, checks, rangeTombstones)
 				},

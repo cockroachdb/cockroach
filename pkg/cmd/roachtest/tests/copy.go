@@ -182,6 +182,7 @@ func registerCopy(r registry.Registry) {
 			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(tc.nodes),
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopy(ctx, t, c, tc.rows, tc.txn)
 			},

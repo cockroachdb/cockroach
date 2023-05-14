@@ -714,6 +714,7 @@ func c2cRegisterWrapper(
 		Name:            sp.name,
 		Owner:           registry.OwnerDisasterRecovery,
 		Cluster:         r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, clusterOps...),
+		Leases:          registry.MetamorphicLeases,
 		Timeout:         sp.timeout,
 		Skip:            sp.skip,
 		Tags:            sp.tags,
