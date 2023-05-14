@@ -16,8 +16,17 @@ import (
 
 // ConnectionTags contains connection properties to match against the ACLs.
 type ConnectionTags struct {
-	IP       string
+	// IP corresponds to the address of the connection.
+	IP string
+	// TODO(jaylim-crl): We're using TenantID to identify tenant for now. Once
+	// all the directory cache APIs are using TenantNames, we should modify this
+	// to use that too.
 	TenantID roachpb.TenantID
+	// EndpointID corresponds to the identifier of the private connection, if
+	// one was used. This will be an empty string if the connection is from
+	// the public internet. It is assumed that the connection is from a private
+	// network if the PROXY headers include cloud provider endpoint identifiers.
+	EndpointID string
 }
 
 type AccessController interface {
