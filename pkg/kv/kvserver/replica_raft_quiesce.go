@@ -27,6 +27,12 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
+// quiesceAfterTicks is the number of ticks without proposals after which ranges
+// should quiesce. Unquiescing incurs a raft proposal which has a non-neglible
+// cost, and low-latency clusters may otherwise (un)quiesce very frequently,
+// e.g. on every tick.
+var quiesceAfterTicks = envutil.EnvOrDefaultInt("COCKROACH_QUIESCE_AFTER_TICKS", 6)
+
 // testingDisableQuiescence disables replica quiescence.
 var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
 
@@ -95,6 +101,7 @@ func (r *Replica) maybeUnquiesceAndWakeLeaderLocked() bool {
 	// Propose an empty command which will wake the leader.
 	data := raftlog.EncodeRaftCommand(raftlog.EntryEncodingStandardWithoutAC, makeIDKey(), nil)
 	_ = r.mu.internalRaftGroup.Propose(data)
+	r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 	return true
 }
 
@@ -205,6 +212,7 @@ type quiescer interface {
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
+	ticksSinceLastProposalRLocked() int
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
 }
@@ -288,6 +296,12 @@ func shouldReplicaQuiesce(
 	if !q.isRaftLeaderRLocked() { // fast path
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leader")
+		}
+		return nil, nil, false
+	}
+	if ticks := q.ticksSinceLastProposalRLocked(); ticks < quiesceAfterTicks {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: proposed %d ticks ago", ticks)
 		}
 		return nil, nil, false
 	}
