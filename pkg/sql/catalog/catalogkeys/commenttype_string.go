@@ -14,7 +14,8 @@ func _() {
 	_ = x[IndexCommentType-3]
 	_ = x[SchemaCommentType-4]
 	_ = x[ConstraintCommentType-5]
-	_ = x[MaxCommentTypeValue-5]
+	_ = x[FunctionCommentType-6]
+	_ = x[MaxCommentTypeValue-6]
 }
 
 func (i CommentType) String() string {
@@ -31,6 +32,8 @@ func (i CommentType) String() string {
 		return "SchemaCommentType"
 	case ConstraintCommentType:
 		return "ConstraintCommentType"
+	case FunctionCommentType:
+		return "FunctionCommentType"
 	default:
 		return "CommentType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
