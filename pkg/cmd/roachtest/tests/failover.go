@@ -1785,11 +1785,9 @@ func configureZone(
 		leaseString += fmt.Sprintf("[+node%d]", cfg.leaseNode)
 	}
 
-	query := fmt.Sprintf(
+	_, err := conn.ExecContext(ctx, fmt.Sprintf(
 		`ALTER %s CONFIGURE ZONE USING num_replicas = %d, constraints = '[%s]', lease_preferences = '[%s]'`,
-		target, cfg.replicas, constraintsString, leaseString)
-	t.L().Printf(query)
-	_, err := conn.ExecContext(ctx, query)
+		target, cfg.replicas, constraintsString, leaseString))
 	require.NoError(t, err)
 }
 
