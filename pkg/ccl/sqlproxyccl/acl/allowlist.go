@@ -21,8 +21,8 @@ type AllowlistFile struct {
 	Allowlist map[string]AllowEntry `yaml:"allowlist"`
 }
 
-// Allowlist represents the current IP Allowlist,
-// which maps cluster IDs to a list of allowed IP ranges.
+// Allowlist represents the current IP Allowlist, which maps tenant IDs to a
+// list of allowed IP ranges.
 type Allowlist struct {
 	entries map[string]AllowEntry
 }
@@ -41,6 +41,10 @@ func (al *Allowlist) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 // CheckConnection implements the AccessController interface.
+//
+// TODO(jaylim-crl): Call LookupTenant and return nil if the cluster has no
+// public connectivity. This ACL shouldn't be applied. We would need to do this
+// eventually once we move IP allowlist entries into the tenant object.
 func (al *Allowlist) CheckConnection(ctx context.Context, connection ConnectionTags) error {
 	entry, ok := al.entries[connection.TenantID.String()]
 	if !ok {

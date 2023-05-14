@@ -14,7 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 	"github.com/stretchr/testify/require"
 )
@@ -49,22 +55,43 @@ func allowList(cluster string, ips ...string) *Allowlist {
 		entry.ips = append(entry.ips, ipNet)
 	}
 	list.entries[cluster] = entry
-
 	return list
 }
 
+func privateEndpoints(fn lookupTenantFunc) *PrivateEndpoints {
+	return &PrivateEndpoints{LookupTenantFn: fn}
+}
+
 func TestACLWatcher(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	dir, tds := tenantdirsvr.SetupTestDirectory(t, ctx, stopper, nil /* timeSource */)
+	tenantID := roachpb.MustMakeTenantID(10)
+	tds.CreateTenant(tenantID, &tenant.Tenant{
+		Version:          "001",
+		TenantID:         tenantID.ToUint64(),
+		ClusterName:      "my-tenant",
+		ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+		PrivateEndpoints: []string{"foo-bar-baz", "cockroachdb"},
+	})
+
 	t.Run("Connection is allowed", func(t *testing.T) {
 		deny := denyList(DenyEntity{Item: "1.1.1.1", Type: IPAddrType}, "should match nothing")
 		allow := allowList("10", "1.1.0.0/16")
-		watcher, _ := NewWatcher(context.Background())
+		pe := privateEndpoints(dir.LookupTenant)
+		watcher, _ := NewWatcher(ctx)
 		watcher.addAccessController(ctx, allow, nil)
 		watcher.addAccessController(ctx, deny, nil)
+		watcher.addAccessController(ctx, pe, nil)
 
 		connection := ConnectionTags{
-			IP:       "1.1.2.2",
-			TenantID: roachpb.MustMakeTenantID(10),
+			IP:         "1.1.2.2",
+			TenantID:   tenantID,
+			EndpointID: "cockroachdb",
 		}
 
 		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
@@ -75,12 +102,12 @@ func TestACLWatcher(t *testing.T) {
 
 	t.Run("Connection is already denied for ip by allowlist", func(t *testing.T) {
 		allow := allowList("10", "1.1.1.0/24")
-		watcher, _ := NewWatcher(context.Background())
+		watcher, _ := NewWatcher(ctx)
 		watcher.controllers = append(watcher.controllers, allow)
 
 		connection := ConnectionTags{
 			IP:       "1.1.2.2",
-			TenantID: roachpb.MustMakeTenantID(10),
+			TenantID: tenantID,
 		}
 
 		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
@@ -90,12 +117,12 @@ func TestACLWatcher(t *testing.T) {
 
 	t.Run("Connection is already denied for ip by denylist", func(t *testing.T) {
 		list := denyList(DenyEntity{Item: "1.1.2.2", Type: IPAddrType}, "rejected for ip")
-		watcher, _ := NewWatcher(context.Background())
+		watcher, _ := NewWatcher(ctx)
 		watcher.controllers = append(watcher.controllers, list)
 
 		connection := ConnectionTags{
 			IP:       "1.1.2.2",
-			TenantID: roachpb.MustMakeTenantID(10),
+			TenantID: tenantID,
 		}
 
 		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
@@ -103,15 +130,31 @@ func TestACLWatcher(t *testing.T) {
 		require.Nil(t, remove)
 	})
 
+	t.Run("Connection is already denied by private endpoints", func(t *testing.T) {
+		pe := privateEndpoints(dir.LookupTenant)
+		watcher, _ := NewWatcher(ctx)
+		watcher.controllers = append(watcher.controllers, pe)
+
+		connection := ConnectionTags{
+			IP:         "1.1.2.2",
+			TenantID:   tenantID,
+			EndpointID: "random-connection",
+		}
+
+		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
+		require.EqualError(t, err, "connection to '10' denied: cluster does not allow this private connection")
+		require.Nil(t, remove)
+	})
+
 	t.Run("Connection is denied by update to the allow list", func(t *testing.T) {
 		c := make(chan AccessController)
 		defer close(c)
-		watcher, _ := NewWatcher(context.Background())
+		watcher, _ := NewWatcher(ctx)
 		watcher.addAccessController(ctx, &Allowlist{}, c)
 
 		connection := ConnectionTags{
 			IP:       "1.1.2.2",
-			TenantID: roachpb.MustMakeTenantID(10),
+			TenantID: tenantID,
 		}
 
 		errorChan := make(chan error, 1)
@@ -135,12 +178,12 @@ func TestACLWatcher(t *testing.T) {
 	t.Run("Connection is denied by update to the deny list", func(t *testing.T) {
 		c := make(chan AccessController)
 		defer close(c)
-		watcher, _ := NewWatcher(context.Background())
+		watcher, _ := NewWatcher(ctx)
 		watcher.addAccessController(ctx, &Denylist{}, c)
 
 		connection := ConnectionTags{
 			IP:       "1.1.2.2",
-			TenantID: roachpb.MustMakeTenantID(10),
+			TenantID: tenantID,
 		}
 
 		errorChan := make(chan error, 1)
@@ -161,12 +204,65 @@ func TestACLWatcher(t *testing.T) {
 		require.EqualError(t, <-errorChan, "connection cluster '10' denied: denied due to cluster")
 	})
 
+	t.Run("Connection is denied by update to the private endpoints", func(t *testing.T) {
+		c := make(chan AccessController)
+		defer close(c)
+		pe := privateEndpoints(dir.LookupTenant)
+		watcher, _ := NewWatcher(ctx)
+		watcher.addAccessController(ctx, pe, c)
+
+		connection := ConnectionTags{
+			IP:         "1.1.2.2",
+			TenantID:   tenantID,
+			EndpointID: "cockroachdb",
+		}
+
+		errorChan := make(chan error, 1)
+
+		remove, err := watcher.ListenForDenied(ctx, connection, func(e error) { errorChan <- e })
+		require.Nil(t, err)
+		require.NotNil(t, remove)
+
+		select {
+		case err := <-errorChan:
+			require.Fail(t, "Did not expect to find an error in the initial config: %v", err)
+		default:
+			// continue
+		}
+
+		// Update the tenant.
+		tds.UpdateTenant(tenantID, &tenant.Tenant{
+			Version:          "002",
+			TenantID:         tenantID.ToUint64(),
+			ClusterName:      "my-tenant",
+			ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+			PrivateEndpoints: []string{"foo-bar-baz"},
+		})
+
+		// Wait until watcher has received the updated event.
+		testutils.SucceedsSoon(t, func() error {
+			ten, err := dir.LookupTenant(ctx, tenantID)
+			if err != nil {
+				return err
+			}
+			if ten.Version != "002" {
+				return errors.New("tenant is not up-to-date")
+			}
+			return nil
+		})
+
+		// Emit the same item.
+		c <- pe
+
+		require.EqualError(t, <-errorChan, "connection to '10' denied: cluster does not allow this private connection")
+	})
+
 	t.Run("Unregister removes listeners", func(t *testing.T) {
-		watcher, _ := NewWatcher(context.Background())
+		watcher, _ := NewWatcher(ctx)
 
 		connection := ConnectionTags{
 			IP:       "1.1.2.2",
-			TenantID: roachpb.MustMakeTenantID(10),
+			TenantID: tenantID,
 		}
 
 		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
@@ -179,10 +275,10 @@ func TestACLWatcher(t *testing.T) {
 	})
 
 	t.Run("New watcher allows connections", func(t *testing.T) {
-		watcher, _ := NewWatcher(context.Background())
+		watcher, _ := NewWatcher(ctx)
 		connection := ConnectionTags{
 			IP:       "1.1.2.2",
-			TenantID: roachpb.MustMakeTenantID(10),
+			TenantID: tenantID,
 		}
 		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
 		require.Nil(t, err)
@@ -196,12 +292,12 @@ func TestACLWatcher(t *testing.T) {
 	t.Run("Callback only fires once", func(t *testing.T) {
 		c := make(chan AccessController)
 		defer close(c)
-		watcher, _ := NewWatcher(context.Background())
+		watcher, _ := NewWatcher(ctx)
 		watcher.addAccessController(ctx, &Denylist{}, c)
 
 		connection := ConnectionTags{
 			IP:       "1.1.2.2",
-			TenantID: roachpb.MustMakeTenantID(10),
+			TenantID: tenantID,
 		}
 
 		runCount := 0
@@ -222,7 +318,7 @@ func TestACLWatcher(t *testing.T) {
 	})
 
 	t.Run("Remove sets the callback to nil", func(t *testing.T) {
-		watcher, _ := NewWatcher(context.Background())
+		watcher, _ := NewWatcher(ctx)
 		remove, err := watcher.ListenForDenied(ctx, ConnectionTags{}, noError(t))
 		require.Nil(t, err)
 
