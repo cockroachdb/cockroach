@@ -318,6 +318,18 @@ func newProxyHandler(
 func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) error {
 	connReceivedTime := timeutil.Now()
 
+	// Parse headers before admitting the connection since the connection may
+	// be upgraded to TLS.
+	var endpointID string
+	if handler.RequireProxyProtocol {
+		var err error
+		endpointID, err = acl.FindPrivateEndpointID(incomingConn)
+		if err != nil {
+			updateMetricsAndSendErrToClient(err, incomingConn, handler.metrics)
+			return err
+		}
+	}
+
 	fe := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
 	defer func() { _ = fe.Conn.Close() }()
 	if fe.Err != nil {
@@ -380,11 +392,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	removeListener, err := handler.aclWatcher.ListenForDenied(
 		ctx,
 		acl.ConnectionTags{
-			IP:       ipAddr,
-			TenantID: tenID,
-			// TODO(jaylim-crl): Parse PROXY headers and include endpoint ID,
-			// if there is one. If PROXY protocol isn't used, we shouldn't parse.
-			EndpointID: "",
+			IP:         ipAddr,
+			TenantID:   tenID,
+			EndpointID: endpointID,
 		},
 		func(err error) {
 			err = withCode(
