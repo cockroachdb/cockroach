@@ -935,43 +935,33 @@ func (ir *IntentResolver) resolveIntents(
 	if err := ctx.Err(); err != nil {
 		return kvpb.NewError(err)
 	}
-	log.Eventf(ctx, "resolving intents")
+	log.Eventf(ctx, "resolving %d intents", intents.Len())
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	respChan := make(chan requestbatcher.Response, intents.Len())
-	for i := 0; i < intents.Len(); i++ {
-		intent := intents.Index(i)
-		rangeID := ir.lookupRangeID(ctx, intent.Key)
-		var req kvpb.Request
+	// Construct a slice of requests to send.
+	var singleReq [1]kvpb.Request //gcassert:noescape
+	reqs := resolveIntentReqs(intents, opts, singleReq[:])
+
+	// Send the requests using their corresponding request batcher.
+	respChan := make(chan requestbatcher.Response, len(reqs))
+	for _, req := range reqs {
 		var batcher *requestbatcher.RequestBatcher
-		if len(intent.EndKey) == 0 {
-			req = &kvpb.ResolveIntentRequest{
-				RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
-				IntentTxn:         intent.Txn,
-				Status:            intent.Status,
-				Poison:            opts.Poison,
-				IgnoredSeqNums:    intent.IgnoredSeqNums,
-				ClockWhilePending: intent.ClockWhilePending,
-			}
+		switch req.Method() {
+		case kvpb.ResolveIntent:
 			batcher = ir.irBatcher
-		} else {
-			req = &kvpb.ResolveIntentRangeRequest{
-				RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
-				IntentTxn:         intent.Txn,
-				Status:            intent.Status,
-				Poison:            opts.Poison,
-				MinTimestamp:      opts.MinTimestamp,
-				IgnoredSeqNums:    intent.IgnoredSeqNums,
-				ClockWhilePending: intent.ClockWhilePending,
-			}
+		case kvpb.ResolveIntentRange:
 			batcher = ir.irRangeBatcher
+		default:
+			panic("unexpected")
 		}
+		rangeID := ir.lookupRangeID(ctx, req.Header().Key)
 		if err := batcher.SendWithChan(ctx, respChan, rangeID, req); err != nil {
 			return kvpb.NewError(err)
 		}
 	}
-	for seen := 0; seen < intents.Len(); seen++ {
+	// Collect responses.
+	for range reqs {
 		select {
 		case resp := <-respChan:
 			if resp.Err != nil {
@@ -985,6 +975,49 @@ func (ir *IntentResolver) resolveIntents(
 		}
 	}
 	return nil
+}
+
+func resolveIntentReqs(
+	intents lockUpdates, opts ResolveOptions, alloc []kvpb.Request,
+) []kvpb.Request {
+	var pointReqs []kvpb.ResolveIntentRequest
+	var rangeReqs []kvpb.ResolveIntentRangeRequest
+	for i := 0; i < intents.Len(); i++ {
+		intent := intents.Index(i)
+		if len(intent.EndKey) == 0 {
+			pointReqs = append(pointReqs, kvpb.ResolveIntentRequest{
+				RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:         intent.Txn,
+				Status:            intent.Status,
+				Poison:            opts.Poison,
+				IgnoredSeqNums:    intent.IgnoredSeqNums,
+				ClockWhilePending: intent.ClockWhilePending,
+			})
+		} else {
+			rangeReqs = append(rangeReqs, kvpb.ResolveIntentRangeRequest{
+				RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:         intent.Txn,
+				Status:            intent.Status,
+				Poison:            opts.Poison,
+				MinTimestamp:      opts.MinTimestamp,
+				IgnoredSeqNums:    intent.IgnoredSeqNums,
+				ClockWhilePending: intent.ClockWhilePending,
+			})
+		}
+	}
+	var reqs []kvpb.Request
+	if cap(alloc) >= intents.Len() {
+		reqs = alloc[:0]
+	} else {
+		reqs = make([]kvpb.Request, 0, intents.Len())
+	}
+	for i := range pointReqs {
+		reqs = append(reqs, &pointReqs[i])
+	}
+	for i := range rangeReqs {
+		reqs = append(reqs, &rangeReqs[i])
+	}
+	return reqs
 }
 
 // intentsByTxn implements sort.Interface to sort intents based on txnID.
