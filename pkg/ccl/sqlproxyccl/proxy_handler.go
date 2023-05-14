@@ -36,7 +36,9 @@ import (
 	"github.com/jackc/pgproto3/v2"
 	proxyproto "github.com/pires/go-proxyproto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -202,17 +204,6 @@ func newProxyHandler(
 		return nil, err
 	}
 
-	handler.aclWatcher, err = acl.NewWatcher(
-		ctx,
-		acl.WithPollingInterval(options.PollConfigInterval),
-		acl.WithAllowListFile(options.Allowlist),
-		acl.WithDenyListFile(options.Denylist),
-		acl.WithErrorCount(proxyMetrics.AccessControlFileErrorCount),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	handler.throttleService = throttler.NewLocalService(
 		throttler.WithBaseDelay(handler.ThrottleBaseDelay),
 	)
@@ -285,6 +276,18 @@ func newProxyHandler(
 
 	client := tenant.NewDirectoryClient(conn)
 	handler.directoryCache, err = tenant.NewDirectoryCache(ctx, stopper, client, dirOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	handler.aclWatcher, err = acl.NewWatcher(
+		ctx,
+		acl.WithLookupTenantFn(handler.directoryCache.LookupTenant),
+		acl.WithPollingInterval(options.PollConfigInterval),
+		acl.WithAllowListFile(options.Allowlist),
+		acl.WithDenyListFile(options.Denylist),
+		acl.WithErrorCount(proxyMetrics.AccessControlFileErrorCount),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -376,10 +379,18 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	errConnection := make(chan error, 1)
 	removeListener, err := handler.aclWatcher.ListenForDenied(
 		ctx,
-		acl.ConnectionTags{IP: ipAddr, TenantID: tenID},
+		acl.ConnectionTags{
+			IP:       ipAddr,
+			TenantID: tenID,
+			// TODO(jaylim-crl): Parse PROXY headers and include endpoint ID,
+			// if there is one. If PROXY protocol isn't used, we shouldn't parse.
+			EndpointID: "",
+		},
 		func(err error) {
-			err = withCode(errors.Wrap(err,
-				"connection blocked by access control list"), codeExpiredClientConnection)
+			err = withCode(
+				errors.Wrap(err, "connection blocked by access control list"),
+				codeExpiredClientConnection,
+			)
 			select {
 			case errConnection <- err: /* error reported */
 			default: /* the channel already contains an error */
@@ -387,9 +398,15 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		},
 	)
 	if err != nil {
-		log.Errorf(ctx, "connection blocked by access control list: %v", err)
-		err = withCode(errors.New(
-			"connection refused"), codeProxyRefusedConnection)
+		if status.Code(err) == codes.NotFound {
+			err = withCode(
+				errors.Newf("cluster %s-%d not found", clusterName, tenID.ToUint64()),
+				codeParamsRoutingFailed,
+			)
+		} else {
+			log.Errorf(ctx, "connection blocked by access control list: %v", err)
+			err = withCode(errors.New("connection refused"), codeProxyRefusedConnection)
+		}
 		updateMetricsAndSendErrToClient(err, fe.Conn, handler.metrics)
 		return err
 	}
