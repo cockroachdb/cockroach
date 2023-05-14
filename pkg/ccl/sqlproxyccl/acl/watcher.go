@@ -37,7 +37,8 @@ type Watcher struct {
 	// All of the listeners waiting for changes to the access control list.
 	listeners *btree.BTree
 
-	// These control whether or not a connection is allowd based on it's ConnectionTags.
+	// These control whether or not a connection is allowd based on it's
+	// ConnectionTags.
 	controllers []AccessController
 }
 
@@ -72,6 +73,7 @@ type aclOptions struct {
 	errorCount      *metric.Gauge
 	allowlistFile   string
 	denylistFile    string
+	lookupTenantFn  lookupTenantFunc
 }
 
 // WithPollingInterval specifies interval between polling for config file
@@ -104,6 +106,14 @@ func WithAllowListFile(allowlistFile string) Option {
 func WithDenyListFile(denylistFile string) Option {
 	return func(op *aclOptions) {
 		op.denylistFile = denylistFile
+	}
+}
+
+// WithLookupTenantFn sets the function used to perform a tenant lookup based
+// on the tenant ID.
+func WithLookupTenantFn(fn lookupTenantFunc) Option {
+	return func(op *aclOptions) {
+		op.lookupTenantFn = fn
 	}
 }
 
@@ -151,11 +161,20 @@ func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 		}
 		w.addAccessController(ctx, c, next)
 	}
+	if w.options.lookupTenantFn != nil {
+		// TODO(jaylim-crl): Add a watcher or some sort of mechanism to react
+		// to metadata updates. newAccessControllerFromFile uses a file-based
+		// watcher. For now, this only checks on startup.
+		w.addAccessController(ctx, &PrivateEndpoints{
+			LookupTenantFn: w.options.lookupTenantFn,
+		}, nil)
+	}
 	return w, nil
 }
 
-// addAccessController adds a new access controller to the watcher, and spawns a goroutine that watches for updates and
-// replaces the controller as needed, using it's index in the slice.
+// addAccessController adds a new access controller to the watcher, and spawns
+// a goroutine that watches for updates and replaces the controller as needed,
+// using it's index in the slice.
 func (w *Watcher) addAccessController(
 	ctx context.Context, controller AccessController, next chan AccessController,
 ) {
@@ -173,8 +192,10 @@ func (w *Watcher) addAccessController(
 	}
 }
 
-// updateAccessController replaces an old instance of a controller at a particular index with a new one. Once the new controller is added,
-// all connections are re-checked to see if they're still valid. This is primarily used by the goroutine spawned in addAccessController.
+// updateAccessController replaces an old instance of a controller at a
+// particular index with a new one. Once the new controller is added, all
+// connections are re-checked to see if they're still valid. This is primarily
+// used by the goroutine spawned in addAccessController.
 func (w *Watcher) updateAccessController(
 	ctx context.Context, index int, controller AccessController,
 ) {

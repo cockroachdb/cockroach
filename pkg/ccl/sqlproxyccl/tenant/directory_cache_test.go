@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
@@ -43,7 +42,7 @@ func TestDirectoryErrors(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	dir, dirServer := setupTestDirectory(t, ctx, stopper, nil /* timeSource */)
+	dir, dirServer := tenantdirsvr.SetupTestDirectory(t, ctx, stopper, nil /* timeSource */)
 
 	// Fail to find a tenant that does not exist.
 	_, err := dir.LookupTenant(ctx, roachpb.MustMakeTenantID(1000))
@@ -85,7 +84,7 @@ func TestWatchTenants(t *testing.T) {
 	// Setup test directory cache and server.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	dir, tds := setupTestDirectory(t, ctx, stopper, nil, /* timeSource */
+	dir, tds := tenantdirsvr.SetupTestDirectory(t, ctx, stopper, nil, /* timeSource */
 		tenant.TenantWatcher(tenantWatcher))
 
 	// Wait until the tenant watcher has been established.
@@ -255,7 +254,7 @@ func TestWatchPods(t *testing.T) {
 	// Setup test directory cache and server.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	dir, tds := setupTestDirectory(t, ctx, stopper, nil /* timeSource */, tenant.PodWatcher(podWatcher))
+	dir, tds := tenantdirsvr.SetupTestDirectory(t, ctx, stopper, nil /* timeSource */, tenant.PodWatcher(podWatcher))
 
 	// Wait until the watcher has been established.
 	testutils.SucceedsSoon(t, func() error {
@@ -631,40 +630,6 @@ func startTenant(
 		return nil, err
 	}
 	return &tenantdirsvr.Process{SQL: sqlAddr, Stopper: tenantStopper}, nil
-}
-
-// setupTestDirectory returns an instance of the directory cache and the
-// in-memory test static directory server. Tenants will need to be added/removed
-// manually.
-func setupTestDirectory(
-	t *testing.T,
-	ctx context.Context,
-	stopper *stop.Stopper,
-	timeSource timeutil.TimeSource,
-	opts ...tenant.DirOption,
-) (tenant.DirectoryCache, *tenantdirsvr.TestStaticDirectoryServer) {
-	t.Helper()
-
-	// Start an in-memory static directory server.
-	directoryServer := tenantdirsvr.NewTestStaticDirectoryServer(stopper, timeSource)
-	require.NoError(t, directoryServer.Start(ctx))
-
-	// Dial the test directory server.
-	conn, err := grpc.DialContext(
-		ctx,
-		"",
-		grpc.WithContextDialer(directoryServer.DialerFunc),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	require.NoError(t, err)
-	stopper.AddCloser(stop.CloserFn(func() {
-		_ = conn.Close() // nolint:grpcconnclose
-	}))
-	client := tenant.NewDirectoryClient(conn)
-	directoryCache, err := tenant.NewDirectoryCache(ctx, stopper, client, opts...)
-	require.NoError(t, err)
-
-	return directoryCache, directoryServer
 }
 
 // Setup directory cache that uses a client connected to a test directory server

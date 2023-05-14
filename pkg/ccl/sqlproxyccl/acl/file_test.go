@@ -186,9 +186,9 @@ denylist:
 			),
 			nil,
 			[]denyIOSpec{
-				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(61)}, "connection ip '1.2.3.4' denied: over quota"},
-				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61)}, ""},
-				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(61)}, ""},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(61), ""}, "connection ip '1.2.3.4' denied: over quota"},
+				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61), ""}, ""},
+				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(61), ""}, ""},
 			},
 		},
 		// Blocks both IP address and tenant cluster.
@@ -208,10 +208,10 @@ denylist:
 			),
 			nil,
 			[]denyIOSpec{
-				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100)}, "connection ip '1.2.3.4' denied: over quota"},
-				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(61)}, "connection ip '1.2.3.4' denied: over quota"},
-				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61)}, "connection cluster '61' denied: splunk pipeline"},
-				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(100)}, ""},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100), ""}, "connection ip '1.2.3.4' denied: over quota"},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(61), ""}, "connection ip '1.2.3.4' denied: over quota"},
+				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61), ""}, "connection cluster '61' denied: splunk pipeline"},
+				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(100), ""}, ""},
 			},
 		},
 		// Entry without any expiration.
@@ -224,9 +224,9 @@ denylist:
   reason: over quota`,
 			nil,
 			[]denyIOSpec{
-				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100)}, "connection ip '1.2.3.4' denied: over quota"},
-				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61)}, ""},
-				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(100)}, ""},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100), ""}, "connection ip '1.2.3.4' denied: over quota"},
+				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61), ""}, ""},
+				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(100), ""}, ""},
 			},
 		},
 		// Entry that has expired.
@@ -245,9 +245,9 @@ denylist:
 				timeSource.AdvanceTo(startTime.Add(20 * time.Minute))
 			},
 			[]denyIOSpec{
-				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100)}, ""},
-				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61)}, ""},
-				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(100)}, ""},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100), ""}, ""},
+				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61), ""}, ""},
+				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(100), ""}, ""},
 			},
 		},
 	}
@@ -459,9 +459,9 @@ allowlist:
     ips: ["1.2.3.4/16"]
 `,
 			[]allowIOSpec{
-				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100)}, ""},
-				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61)}, "connection ip '1.1.1.1' denied: ip address not allowed"},
-				{ConnectionTags{"1.2.1.1", roachpb.MustMakeTenantID(61)}, ""},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100), ""}, ""},
+				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61), ""}, "connection ip '1.1.1.1' denied: ip address not allowed"},
+				{ConnectionTags{"1.2.1.1", roachpb.MustMakeTenantID(61), ""}, ""},
 			},
 		},
 	}
