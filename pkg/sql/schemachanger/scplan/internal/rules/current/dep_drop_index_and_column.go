@@ -61,4 +61,27 @@ func init() {
 			}
 		})
 
+	// This rule ensures if we are dropping a column, we only transition to non-public after
+	// all adding indexes are present in the table descriptor (i.e. all adding indexes reached
+	// BACKFILL_ONLY).
+	// This is used when we are dropping a column but have intermediate primary indexes;
+	// we should delay transitioning the column to non-public after all primary indexes
+	// have been added to the table descriptor as mutations.
+	registerDepRule("all adding indexes reached BACKFILL_ONLY before any of their columns disappear",
+		scgraph.Precedence,
+		"index", "column",
+		func(from, to NodeVars) rel.Clauses {
+			ic := MkNodeVars("index-column")
+			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
+			return rel.Clauses{
+				from.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				ColumnInIndex(ic, from, relationID, columnID, "index-id"),
+				JoinOnColumnID(ic, to, relationID, columnID),
+				from.TargetStatus(scpb.ToPublic, scpb.Transient),
+				from.CurrentStatus(scpb.Status_BACKFILL_ONLY),
+				to.TargetStatus(scpb.ToAbsent),
+				to.CurrentStatus(scpb.Status_WRITE_ONLY),
+			}
+		})
 }

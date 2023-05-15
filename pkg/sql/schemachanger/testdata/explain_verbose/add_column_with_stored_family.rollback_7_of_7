@@ -49,20 +49,20 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
-    │   │   ├── • IndexColumn:{DescID: 106 (tbl), ColumnID: 3 (j-), IndexID: 2 (tbl_pkey-)}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106 (tbl), ColumnID: 3 (j-)}
-    │   │   │   │     rule: "column no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
-    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
-    │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
-    │   │   │   │ WRITE_ONLY → DELETE_ONLY
+    │   │   │   │ TRANSIENT_DELETE_ONLY → ABSENT
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
-    │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
+    │   │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->DELETE_ONLY"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
+    │   │   │   │     rule: "dependents removed before index"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (k), IndexID: 3}
+    │   │   │   │     rule: "dependents removed before index"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 3 (j-), IndexID: 3}
+    │   │   │         rule: "dependents removed before index"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
     │   │   │   │ PUBLIC → ABSENT
@@ -74,6 +74,15 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
     │   │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 106 (tbl), ColumnID: 3 (j-), IndexID: 2 (tbl_pkey-)}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106 (tbl), ColumnID: 3 (j-)}
+    │   │   │   │     rule: "column no longer public before dependents"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 106 (tbl), ColumnID: 3 (j-), IndexID: 3}
@@ -117,17 +126,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       │     TableID: 106
     │       │
     │       ├── • RemoveColumnFromIndex
-    │       │     ColumnID: 3
-    │       │     IndexID: 2
-    │       │     Kind: 2
-    │       │     Ordinal: 1
-    │       │     TableID: 106
-    │       │
-    │       ├── • MakeWriteOnlyIndexDeleteOnly
-    │       │     IndexID: 3
-    │       │     TableID: 106
-    │       │
-    │       ├── • RemoveColumnFromIndex
     │       │     ColumnID: 1
     │       │     IndexID: 3
     │       │     TableID: 106
@@ -140,9 +138,20 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       │
     │       ├── • RemoveColumnFromIndex
     │       │     ColumnID: 3
+    │       │     IndexID: 2
+    │       │     Kind: 2
+    │       │     Ordinal: 1
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
     │       │     IndexID: 3
     │       │     Kind: 2
     │       │     Ordinal: 1
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeIndexAbsent
+    │       │     IndexID: 3
     │       │     TableID: 106
     │       │
     │       ├── • RemoveColumnNotNull
@@ -159,11 +168,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
-        ├── • 7 elements transitioning toward ABSENT
+        ├── • 6 elements transitioning toward ABSENT
         │   │
         │   ├── • Column:{DescID: 106 (tbl), ColumnID: 3 (j-)}
         │   │   │ DELETE_ONLY → ABSENT
@@ -226,21 +235,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
         │   │         rule: "index removed before garbage collection"
         │   │
-        │   ├── • TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
-        │   │   │ DELETE_ONLY → ABSENT
-        │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
-        │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
-        │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
-        │   │   │     rule: "dependents removed before index"
-        │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (k), IndexID: 3}
-        │   │   │     rule: "dependents removed before index"
-        │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 3 (j-), IndexID: 3}
-        │   │         rule: "dependents removed before index"
-        │   │
         │   └── • IndexData:{DescID: 106 (tbl), IndexID: 3}
         │       │ PUBLIC → ABSENT
         │       │
@@ -250,7 +244,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │       └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
         │             rule: "index removed before garbage collection"
         │
-        └── • 8 Mutation operations
+        └── • 7 Mutation operations
             │
             ├── • MakeIndexAbsent
             │     IndexID: 2
@@ -262,10 +256,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
             │       Rollback: true
             │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE
             │         FAMILY bob
-            │     TableID: 106
-            │
-            ├── • MakeIndexAbsent
-            │     IndexID: 3
             │     TableID: 106
             │
             ├── • CreateGCJobForIndex

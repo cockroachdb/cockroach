@@ -573,7 +573,11 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 		}
 		idxStatus := maybeMutationStatus(idx)
 		if idx.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
-			w.ev(idxStatus, &scpb.PrimaryIndex{Index: index})
+			if idx.IsTemporaryIndexForBackfill() {
+				w.ev(idxStatus, &scpb.TemporaryIndex{Index: index})
+			} else {
+				w.ev(idxStatus, &scpb.PrimaryIndex{Index: index})
+			}
 		} else {
 			sec := &scpb.SecondaryIndex{
 				Index: index,

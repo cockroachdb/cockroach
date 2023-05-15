@@ -17,16 +17,16 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l-), ReferencedSequenceIDs: [107 (sq1)]}
            │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey-)}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 2 (tbl_pkey-)}
            │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-)}
            │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 2 (tbl_pkey-)}
            │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 3}
            └── 14 Mutation operations
                 ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
                 ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":106}
                 ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":106}
                 ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":106}
                 ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
                 ├── UpdateTableBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":106}
