@@ -2,9 +2,7 @@
 #
 # This script runs microbenchmarks across a roachprod cluster.
 # Parameters:
-#   GCS_COMPARE_BINARIES: GCS path to a test binaries archive to compare against,
-#   this will be automatically copied to BENCH_COMPARE_BINARIES.
-#   BENCH_COMPARE_BINARIES: path to a to a test binaries archive to compare this run against (default: ./bin)
+#   GCS_COMPARE_BINARIES: GCS path to a test binaries archive to compare against.
 #   GCE_NODE_COUNT: number of nodes to use in the roachprod cluster (default: 12)
 #   CLUSTER_LIFETIME: lifetime of the roachprod cluster (default: 24h)
 #   GCE_MACHINE_TYPE: machine type to use in the roachprod cluster (default: n1-standard-8)
@@ -14,8 +12,6 @@
 #   BENCH_SHELL: command to run before each iteration (default: export COCKROACH_RANDOM_SEED=1)
 #   SHEET_DESCRIPTION: Adds a description to the name of the published spreadsheets (e.g., "22.2 -> 22.1")
 #   BENCH_TIMEOUT: timeout for each microbenchmark on a function level (default: 20m)
-#   BENCH_PUBLISH_DIR: directory to publish results to (default: gs://cockroach-microbench)
-#   BENCH_COMPARE_DIR: directory to compare results against (default: none)
 #   BENCH_EXCLUDE: comma-separated list of benchmarks to exclude (default: none)
 #   TEST_ARGS: additional arguments to pass to the test binary (default: none)
 
@@ -23,6 +19,7 @@ set -exuo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 source "$dir/teamcity-support.sh"
+output_dir="./artifacts/microbench"
 
 # Set up credentials
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
@@ -56,7 +53,8 @@ mv ./artifacts/libgeos* ./bin/lib/
 
 # Copy comparison binaries to bin directory if specified
 if [[ -n "${GCS_COMPARE_BINARIES}" ]] ; then
-  gsutil cp "$GCS_COMPARE_BINARIES" "$BENCH_COMPARE_BINARIES"
+  bench_compare_binaries="./bin/compare_test_binaries.tar.gz"
+  gsutil -q cp "$GCS_COMPARE_BINARIES" "$bench_compare_binaries"
 fi
 
 # Build test binaries
@@ -71,15 +69,19 @@ fi
   --os-volume-size=128
 
 # Execute microbenchmarks
-./bin/roachprod-microbench ./artifacts/microbench \
-  -cluster "$ROACHPROD_CLUSTER" \
-  -iterations "$BENCH_ITERATIONS" \
-  -libdir=./bin/lib \
-  -shell="$BENCH_SHELL" \
-  ${BENCH_COMPARE_BINARIES:+-compare-binaries="$BENCH_COMPARE_BINARIES"} \
-  ${SHEET_DESCRIPTION:+-sheet-desc="$SHEET_DESCRIPTION"} \
-  ${BENCH_TIMEOUT:+-timeout="$BENCH_TIMEOUT"} \
-  ${BENCH_PUBLISH_DIR:+-publishdir="$BENCH_PUBLISH_DIR"} \
-  ${BENCH_COMPARE_DIR:+-comparedir="$BENCH_COMPARE_DIR"} \
-  ${BENCH_EXCLUDE:+-exclude="$BENCH_EXCLUDE"} \
+./bin/roachprod-microbench run "$ROACHPROD_CLUSTER" \
+  --outputdir="$output_dir" \
+  --iterations "$BENCH_ITERATIONS" \
+  --libdir=./bin/lib \
+  --shell="$BENCH_SHELL" \
+  ${bench_compare_binaries:+--compare-binaries="$bench_compare_binaries"} \
+  ${BENCH_TIMEOUT:+--timeout="$BENCH_TIMEOUT"} \
+  ${BENCH_EXCLUDE:+--exclude="$BENCH_EXCLUDE"} \
+  --quiet \
   -- "$TEST_ARGS"
+
+# Generate sheets if comparing
+if [[ -n "${GCS_COMPARE_BINARIES}" ]] ; then
+  ./bin/roachprod-microbench compare "$output_dir/0" "$output_dir/1" \
+    --sheet-desc="$SHEET_DESCRIPTION" 2>&1 | tee "$output_dir/sheets.txt"
+fi

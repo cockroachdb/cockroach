@@ -52,11 +52,18 @@ func TestCompareBenchmarks(t *testing.T) {
 		if d.Cmd != "compare" {
 			d.Fatalf(t, "unknown command %s", d.Cmd)
 		}
-		src := datapathutils.TestDataPath(t, "reports", d.CmdArgs[0].String())
-		dst := datapathutils.TestDataPath(t, "reports", d.CmdArgs[1].String())
-		packages, err := getPackagesFromLogs(src)
+		newDir := datapathutils.TestDataPath(t, "reports", d.CmdArgs[0].String())
+		oldDir := datapathutils.TestDataPath(t, "reports", d.CmdArgs[1].String())
+		packages, err := getPackagesFromLogs(oldDir)
 		require.NoError(t, err)
-		tables, err := compareBenchmarks(packages, src, dst)
+		c := &compare{
+			compareConfig: compareConfig{
+				newDir: newDir,
+				oldDir: oldDir,
+			},
+			packages: packages,
+		}
+		tables, err := c.compareBenchmarks()
 		require.NoError(t, err)
 		return tablesToText(tables)
 
