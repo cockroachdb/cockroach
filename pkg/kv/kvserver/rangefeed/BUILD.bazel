@@ -6,6 +6,7 @@ go_library(
         "budget.go",
         "catchup_scan.go",
         "filter.go",
+        "interface.go",
         "metrics.go",
         "processor.go",
         "registry.go",

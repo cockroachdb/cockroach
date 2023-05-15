@@ -13,7 +13,6 @@ package rangefeed
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -26,83 +25,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// defaultPushTxnsInterval is the default interval at which a Processor will
-	// push all transactions in the unresolvedIntentQueue that are above the age
-	// specified by PushTxnsAge.
-	defaultPushTxnsInterval = 250 * time.Millisecond
-	// defaultPushTxnsAge is the default age at which a Processor will begin to
-	// consider a transaction old enough to push.
-	defaultPushTxnsAge = 10 * time.Second
-)
-
-// newErrBufferCapacityExceeded creates an error that is returned to subscribers
-// if the rangefeed processor is not able to keep up with the flow of incoming
-// events and is forced to drop events in order to not block.
-func newErrBufferCapacityExceeded() *kvpb.Error {
-	return kvpb.NewError(
-		kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER),
-	)
-}
-
-// Config encompasses the configuration required to create a Processor.
-type Config struct {
-	log.AmbientContext
-	Clock   *hlc.Clock
-	RangeID roachpb.RangeID
-	Span    roachpb.RSpan
-
-	TxnPusher TxnPusher
-	// PushTxnsInterval specifies the interval at which a Processor will push
-	// all transactions in the unresolvedIntentQueue that are above the age
-	// specified by PushTxnsAge.
-	PushTxnsInterval time.Duration
-	// PushTxnsAge specifies the age at which a Processor will begin to consider
-	// a transaction old enough to push.
-	PushTxnsAge time.Duration
-
-	// EventChanCap specifies the capacity to give to the Processor's input
-	// channel.
-	EventChanCap int
-	// EventChanTimeout specifies the maximum time to wait when sending on the
-	// Processor's input channel before giving up and shutting down the Processor.
-	// 0 disables the timeout, backpressuring writers up through Raft (for tests).
-	EventChanTimeout time.Duration
-
-	// Metrics is for production monitoring of RangeFeeds.
-	Metrics *Metrics
-
-	// Optional Processor memory budget.
-	MemBudget *FeedBudget
-}
-
-// SetDefaults initializes unset fields in Config to values
-// suitable for use by a Processor.
-func (sc *Config) SetDefaults() {
-	if sc.TxnPusher == nil {
-		if sc.PushTxnsInterval != 0 {
-			panic("nil TxnPusher with non-zero PushTxnsInterval")
-		}
-		if sc.PushTxnsAge != 0 {
-			panic("nil TxnPusher with non-zero PushTxnsAge")
-		}
-	} else {
-		if sc.PushTxnsInterval == 0 {
-			sc.PushTxnsInterval = defaultPushTxnsInterval
-		}
-		if sc.PushTxnsAge == 0 {
-			sc.PushTxnsAge = defaultPushTxnsAge
-		}
-	}
-}
-
-// Processor manages a set of rangefeed registrations and handles the routing of
-// logical updates to these registrations. While routing logical updates to
-// rangefeed registrations, the processor performs two important tasks:
-//  1. it translates logical updates into rangefeed events.
-//  2. it transforms a range-level closed timestamp to a rangefeed-level resolved
-//     timestamp.
-type Processor struct {
+type LegacyProcessor struct {
 	Config
 	reg registry
 	rts resolvedTimestamp
@@ -119,115 +42,14 @@ type Processor struct {
 	stoppedC   chan struct{}
 }
 
-var eventSyncPool = sync.Pool{
-	New: func() interface{} {
-		return new(event)
-	},
-}
-
-func getPooledEvent(ev event) *event {
-	e := eventSyncPool.Get().(*event)
-	*e = ev
-	return e
-}
-
-func putPooledEvent(ev *event) {
-	*ev = event{}
-	eventSyncPool.Put(ev)
-}
-
-// event is a union of different event types that the Processor goroutine needs
-// to be informed of. It is used so that all events can be sent over the same
-// channel, which is necessary to prevent reordering.
-type event struct {
-	// Event variants. Only one set.
-	ops     opsEvent
-	ct      ctEvent
-	initRTS initRTSEvent
-	sst     *sstEvent
-	sync    *syncEvent
-	// Budget allocated to process the event.
-	alloc *SharedBudgetAllocation
-}
-
-type opsEvent []enginepb.MVCCLogicalOp
-
-type ctEvent struct {
-	hlc.Timestamp
-}
-
-type initRTSEvent bool
-
-type sstEvent struct {
-	data []byte
-	span roachpb.Span
-	ts   hlc.Timestamp
-}
-
-type syncEvent struct {
-	c chan struct{}
-	// This setting is used in conjunction with c in tests in order to ensure that
-	// all registrations have fully finished outputting their buffers. This has to
-	// be done by the processor in order to avoid race conditions with the
-	// registry. Should be used only in tests.
-	testRegCatchupSpan *roachpb.Span
-}
-
-// spanErr is an error across a key span that will disconnect overlapping
-// registrations.
-type spanErr struct {
-	span roachpb.Span
-	pErr *kvpb.Error
-}
-
-// NewProcessor creates a new rangefeed Processor. The corresponding goroutine
-// should be launched using the Start method.
-func NewProcessor(cfg Config) *Processor {
-	cfg.SetDefaults()
-	cfg.AmbientContext.AddLogTag("rangefeed", nil)
-	p := &Processor{
-		Config: cfg,
-		reg:    makeRegistry(cfg.Metrics),
-		rts:    makeResolvedTimestamp(),
-
-		regC:       make(chan registration),
-		unregC:     make(chan *registration),
-		lenReqC:    make(chan struct{}),
-		lenResC:    make(chan int),
-		filterReqC: make(chan struct{}),
-		filterResC: make(chan *Filter),
-		eventC:     make(chan *event, cfg.EventChanCap),
-		spanErrC:   make(chan spanErr),
-		stopC:      make(chan *kvpb.Error, 1),
-		stoppedC:   make(chan struct{}),
-	}
-	return p
-}
-
-// IntentScannerConstructor is used to construct an IntentScanner. It
-// should be called from underneath a stopper task to ensure that the
-// engine has not been closed.
-type IntentScannerConstructor func() IntentScanner
-
-// CatchUpIteratorConstructor is used to construct an iterator that can be used
-// for catchup-scans. Takes the key span and exclusive start time to run the
-// catchup scan for. It should be called from underneath a stopper task to
-// ensure that the engine has not been closed.
-type CatchUpIteratorConstructor func(roachpb.Span, hlc.Timestamp) *CatchUpIterator
-
-// Start launches a goroutine to process rangefeed events and send them to
-// registrations.
-//
-// The provided iterator is used to initialize the rangefeed's resolved
-// timestamp. It must obey the contract of an iterator used for an
-// initResolvedTSScan. The Processor promises to clean up the iterator by
-// calling its Close method when it is finished. If the iterator is nil then
-// no initialization scan will be performed and the resolved timestamp will
-// immediately be considered initialized.
-func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor) error {
+// Start implements Processor interface.
+// LegacyProcessor launches a goroutine with its internal workloop that processes
+// requests for registrations, timestamp pushes etc as well as forwarding pending
+// data to registrations.
+func (p *LegacyProcessor) Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error {
 	ctx := p.AnnotateCtx(context.Background())
-	if err := stopper.RunAsyncTask(ctx, "rangefeed.Processor", func(ctx context.Context) {
-		p.run(ctx, p.RangeID, rtsIterFunc, stopper)
+	if err := stopper.RunAsyncTask(ctx, "rangefeed.LegacyProcessor", func(ctx context.Context) {
+		p.run(ctx, p.RangeID, newRtsIter, stopper)
 	}); err != nil {
 		p.reg.DisconnectWithErr(all, kvpb.NewError(err))
 		close(p.stoppedC)
@@ -237,7 +59,7 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstr
 }
 
 // run is called from Start and runs the rangefeed.
-func (p *Processor) run(
+func (p *LegacyProcessor) run(
 	ctx context.Context,
 	_forStacks roachpb.RangeID,
 	rtsIterFunc IntentScannerConstructor,
@@ -257,7 +79,7 @@ func (p *Processor) run(
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
 	if rtsIterFunc != nil {
 		rtsIter := rtsIterFunc()
-		initScan := newInitResolvedTSScan(p, rtsIter)
+		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
 			initScan.Cancel()
@@ -373,7 +195,7 @@ func (p *Processor) run(
 				// Launch an async transaction push attempt that pushes the
 				// timestamp of all transactions beneath the push offset.
 				// Ignore error if quiescing.
-				pushTxns := newTxnPushAttempt(p, toPush, now, txnPushAttemptC)
+				pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, txnPushAttemptC)
 				err := stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
 				if err != nil {
 					pushTxns.Cancel()
@@ -401,17 +223,13 @@ func (p *Processor) run(
 	}
 }
 
-// Stop shuts down the processor and closes all registrations. Safe to call on
-// nil Processor. It is not valid to restart a processor after it has been
-// stopped.
-func (p *Processor) Stop() {
+// Stop implements Processor interface.
+func (p *LegacyProcessor) Stop() {
 	p.StopWithErr(nil)
 }
 
-// StopWithErr shuts down the processor and closes all registrations with the
-// specified error. Safe to call on nil Processor. It is not valid to restart a
-// processor after it has been stopped.
-func (p *Processor) StopWithErr(pErr *kvpb.Error) {
+// StopWithErr implements Processor interface.
+func (p *LegacyProcessor) StopWithErr(pErr *kvpb.Error) {
 	if p == nil {
 		return
 	}
@@ -421,9 +239,8 @@ func (p *Processor) StopWithErr(pErr *kvpb.Error) {
 	p.sendStop(pErr)
 }
 
-// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
-// the given span with the given error.
-func (p *Processor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
+// DisconnectSpanWithErr implements Processor interface.
+func (p *LegacyProcessor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
 	if p == nil {
 		return
 	}
@@ -434,7 +251,7 @@ func (p *Processor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
 	}
 }
 
-func (p *Processor) sendStop(pErr *kvpb.Error) {
+func (p *LegacyProcessor) sendStop(pErr *kvpb.Error) {
 	select {
 	case p.stopC <- pErr:
 		// stopC has non-zero capacity so this should not block unless
@@ -444,25 +261,8 @@ func (p *Processor) sendStop(pErr *kvpb.Error) {
 	}
 }
 
-// Register registers the stream over the specified span of keys.
-//
-// The registration will not observe any events that were consumed before this
-// method was called. It is undefined whether the registration will observe
-// events that are consumed concurrently with this call. The channel will be
-// provided an error when the registration closes.
-//
-// The optionally provided "catch-up" iterator is used to read changes from the
-// engine which occurred after the provided start timestamp (exclusive).
-//
-// If the method returns false, the processor will have been stopped, so calling
-// Stop is not necessary. If the method returns true, it will also return an
-// updated operation filter that includes the operations required by the new
-// registration.
-//
-// NOT safe to call on nil Processor.
-//
-// NB: startTS is exclusive; the first possible event will be at startTS.Next().
-func (p *Processor) Register(
+// Register  implements Processor interface.
+func (p *LegacyProcessor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchUpIterConstructor CatchUpIteratorConstructor,
@@ -479,7 +279,8 @@ func (p *Processor) Register(
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done)
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
+	)
 	select {
 	case p.regC <- r:
 		// Wait for response.
@@ -489,8 +290,8 @@ func (p *Processor) Register(
 	}
 }
 
-// Len returns the number of registrations attached to the processor.
-func (p *Processor) Len() int {
+// Len implements Processor interface.
+func (p *LegacyProcessor) Len() int {
 	if p == nil {
 		return 0
 	}
@@ -505,9 +306,8 @@ func (p *Processor) Len() int {
 	}
 }
 
-// Filter returns a new operation filter based on the registrations attached to
-// the processor. Returns nil if the processor has been stopped already.
-func (p *Processor) Filter() *Filter {
+// Filter implements Processor interface.
+func (p *LegacyProcessor) Filter() *Filter {
 	if p == nil {
 		return nil
 	}
@@ -522,12 +322,10 @@ func (p *Processor) Filter() *Filter {
 	}
 }
 
-// ConsumeLogicalOps informs the rangefeed processor of the set of logical
-// operations. It returns false if consuming the operations hit a timeout, as
-// specified by the EventChanTimeout configuration. If the method returns false,
-// the processor will have been stopped, so calling Stop is not necessary. Safe
-// to call on nil Processor.
-func (p *Processor) ConsumeLogicalOps(ctx context.Context, ops ...enginepb.MVCCLogicalOp) bool {
+// ConsumeLogicalOps implements Processor interface.
+func (p *LegacyProcessor) ConsumeLogicalOps(
+	ctx context.Context, ops ...enginepb.MVCCLogicalOp,
+) bool {
 	if p == nil {
 		return true
 	}
@@ -537,12 +335,8 @@ func (p *Processor) ConsumeLogicalOps(ctx context.Context, ops ...enginepb.MVCCL
 	return p.sendEvent(ctx, event{ops: ops}, p.EventChanTimeout)
 }
 
-// ConsumeSSTable informs the rangefeed processor of an SSTable that was added
-// via AddSSTable. It returns false if consuming the SSTable hit a timeout, as
-// specified by the EventChanTimeout configuration. If the method returns false,
-// the processor will have been stopped, so calling Stop is not necessary. Safe
-// to call on nil Processor.
-func (p *Processor) ConsumeSSTable(
+// ConsumeSSTable implements Processor interface.
+func (p *LegacyProcessor) ConsumeSSTable(
 	ctx context.Context, sst []byte, sstSpan roachpb.Span, writeTS hlc.Timestamp,
 ) bool {
 	if p == nil {
@@ -551,13 +345,8 @@ func (p *Processor) ConsumeSSTable(
 	return p.sendEvent(ctx, event{sst: &sstEvent{sst, sstSpan, writeTS}}, p.EventChanTimeout)
 }
 
-// ForwardClosedTS indicates that the closed timestamp that serves as the basis
-// for the rangefeed processor's resolved timestamp has advanced. It returns
-// false if forwarding the closed timestamp hit a timeout, as specified by the
-// EventChanTimeout configuration. If the method returns false, the processor
-// will have been stopped, so calling Stop is not necessary.  Safe to call on
-// nil Processor.
-func (p *Processor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool {
+// ForwardClosedTS implements Processor interface.
+func (p *LegacyProcessor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool {
 	if p == nil {
 		return true
 	}
@@ -570,7 +359,7 @@ func (p *Processor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp)
 // sendEvent informs the Processor of a new event. If a timeout is specified,
 // the method will wait for no longer than that duration before giving up,
 // shutting down the Processor, and returning false. 0 for no timeout.
-func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duration) bool {
+func (p *LegacyProcessor) sendEvent(ctx context.Context, e event, timeout time.Duration) bool {
 	// The code is a bit unwieldy because we try to avoid any allocations on fast
 	// path where we have enough budget and outgoing channel is free. If not, we
 	// try to set up timeout for acquiring budget and then reuse this timeout when
@@ -665,14 +454,14 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 
 // setResolvedTSInitialized informs the Processor that its resolved timestamp has
 // all the information it needs to be considered initialized.
-func (p *Processor) setResolvedTSInitialized(ctx context.Context) {
+func (p *LegacyProcessor) setResolvedTSInitialized(ctx context.Context) {
 	p.sendEvent(ctx, event{initRTS: true}, 0)
 }
 
 // syncEventC synchronizes access to the Processor goroutine, allowing the
 // caller to establish causality with actions taken by the Processor goroutine.
 // It does so by flushing the event pipeline.
-func (p *Processor) syncEventC() {
+func (p *LegacyProcessor) syncEventC() {
 	syncC := make(chan struct{})
 	ev := getPooledEvent(event{sync: &syncEvent{c: syncC}})
 	select {
@@ -688,7 +477,7 @@ func (p *Processor) syncEventC() {
 	}
 }
 
-func (p *Processor) consumeEvent(ctx context.Context, e *event) {
+func (p *LegacyProcessor) consumeEvent(ctx context.Context, e *event) {
 	switch {
 	case e.ops != nil:
 		p.consumeLogicalOps(ctx, e.ops, e.alloc)
@@ -714,7 +503,7 @@ func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 	}
 }
 
-func (p *Processor) consumeLogicalOps(
+func (p *LegacyProcessor) consumeLogicalOps(
 	ctx context.Context, ops []enginepb.MVCCLogicalOp, alloc *SharedBudgetAllocation,
 ) {
 	for _, op := range ops {
@@ -756,7 +545,7 @@ func (p *Processor) consumeLogicalOps(
 	}
 }
 
-func (p *Processor) consumeSSTable(
+func (p *LegacyProcessor) consumeSSTable(
 	ctx context.Context,
 	sst []byte,
 	sstSpan roachpb.Span,
@@ -766,19 +555,19 @@ func (p *Processor) consumeSSTable(
 	p.publishSSTable(ctx, sst, sstSpan, sstWTS, alloc)
 }
 
-func (p *Processor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
+func (p *LegacyProcessor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
 	if p.rts.ForwardClosedTS(newClosedTS) {
 		p.publishCheckpoint(ctx)
 	}
 }
 
-func (p *Processor) initResolvedTS(ctx context.Context) {
+func (p *LegacyProcessor) initResolvedTS(ctx context.Context) {
 	if p.rts.Init() {
 		p.publishCheckpoint(ctx)
 	}
 }
 
-func (p *Processor) publishValue(
+func (p *LegacyProcessor) publishValue(
 	ctx context.Context,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
@@ -805,7 +594,7 @@ func (p *Processor) publishValue(
 	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, alloc)
 }
 
-func (p *Processor) publishDeleteRange(
+func (p *LegacyProcessor) publishDeleteRange(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
@@ -824,7 +613,7 @@ func (p *Processor) publishDeleteRange(
 	p.reg.PublishToOverlapping(ctx, span, &event, alloc)
 }
 
-func (p *Processor) publishSSTable(
+func (p *LegacyProcessor) publishSSTable(
 	ctx context.Context,
 	sst []byte,
 	sstSpan roachpb.Span,
@@ -846,7 +635,7 @@ func (p *Processor) publishSSTable(
 	}, alloc)
 }
 
-func (p *Processor) publishCheckpoint(ctx context.Context) {
+func (p *LegacyProcessor) publishCheckpoint(ctx context.Context) {
 	// TODO(nvanbenschoten): persist resolvedTimestamp. Give Processor a client.DB.
 	// TODO(nvanbenschoten): rate limit these? send them periodically?
 
@@ -854,7 +643,7 @@ func (p *Processor) publishCheckpoint(ctx context.Context) {
 	p.reg.PublishToOverlapping(ctx, all, event, nil)
 }
 
-func (p *Processor) newCheckpointEvent() *kvpb.RangeFeedEvent {
+func (p *LegacyProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {
 	// Create a RangeFeedCheckpoint over the Processor's entire span. Each
 	// individual registration will trim this down to just the key span that
 	// it is listening on in registration.maybeStripEvent before publishing.
@@ -864,20 +653,4 @@ func (p *Processor) newCheckpointEvent() *kvpb.RangeFeedEvent {
 		ResolvedTS: p.rts.Get(),
 	})
 	return &event
-}
-
-// calculateDateEventSize returns estimated size of the event that contain actual
-// data. We only account for logical ops and sst's. Those events come from raft
-// and are budgeted. Other events come from processor jobs and update timestamps
-// we don't take them into account as they are supposed to be small and to avoid
-// complexity of having multiple producers getting from budget.
-func calculateDateEventSize(e event) int64 {
-	var size int64
-	for _, op := range e.ops {
-		size += int64(op.Size())
-	}
-	if e.sst != nil {
-		size += int64(len(e.sst.data))
-	}
-	return size
 }
