@@ -356,7 +356,6 @@ func registerImportMixedVersion(r registry.Registry) {
 		Owner: registry.OwnerSQLQueries,
 		// Mixed-version support was added in 21.1.
 		Cluster: r.MakeClusterSpec(4),
-		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
