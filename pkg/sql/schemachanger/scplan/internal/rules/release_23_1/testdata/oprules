@@ -12,7 +12,7 @@ ColumnInSwappedInPrimaryIndex($index-column, $index, $table-id, $column-id, $ind
 ToPublicOrTransient($target1, $target2):
     - $target1[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
     - $target2[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
-descriptorIsNotBeingDropped-23.2($element):
+descriptorIsNotBeingDropped-23.1($element):
     not-join:
         - $descriptor[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
         - joinTarget($descriptor, $descriptor-Target)

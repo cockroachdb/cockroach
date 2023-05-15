@@ -113,10 +113,8 @@ const ingestMultiplierMax = 1.5
 type storePerWorkTokenEstimator struct {
 	atAdmissionWorkTokens int64
 
-	// TODO(irfansharif): The linear model fitters below are actually not used
-	// for upfront per-work token estimation. They're used in the granter to
-	// figure out the rate of tokens to produce. This code organization is
-	// confusing -- rename the type?
+	// NB: The linear model fitters below are used to determine how many tokens
+	// to consume once the size of the work is known.
 
 	atDoneL0WriteTokensLinearModel  tokensLinearModelFitter
 	atDoneL0IngestTokensLinearModel tokensLinearModelFitter
