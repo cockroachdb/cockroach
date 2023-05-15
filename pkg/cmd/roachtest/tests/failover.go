@@ -165,7 +165,7 @@ func runFailoverPartialLeaseGateway(
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -317,7 +317,7 @@ func runFailoverPartialLeaseLeader(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -469,7 +469,7 @@ func runFailoverPartialLeaseLiveness(
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -1026,7 +1026,7 @@ func makeFailer(
 	failureMode failureMode,
 	opts option.StartOpts,
 	settings install.ClusterSettings,
-) failer {
+) Failer {
 	f := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings)
 	if c.IsLocal() && !f.CanUseLocal() {
 		t.Status(fmt.Sprintf(
@@ -1043,7 +1043,7 @@ func makeFailerWithoutLocalNoop(
 	failureMode failureMode,
 	opts option.StartOpts,
 	settings install.ClusterSettings,
-) failer {
+) Failer {
 	switch failureMode {
 	case failureModeBlackhole:
 		return &blackholeFailer{
@@ -1101,8 +1101,8 @@ func makeFailerWithoutLocalNoop(
 	}
 }
 
-// failer fails and recovers a given node in some particular way.
-type failer interface {
+// Failer fails and recovers a given node in some particular way.
+type Failer interface {
 	fmt.Stringer
 
 	// CanUseLocal returns true if the failer can be run with a local cluster.
@@ -1125,9 +1125,9 @@ type failer interface {
 	Recover(ctx context.Context, nodeID int)
 }
 
-// partialFailer supports partial failures between specific node pairs.
-type partialFailer interface {
-	failer
+// PartialFailer supports partial failures between specific node pairs.
+type PartialFailer interface {
+	Failer
 
 	// FailPartial fails the node for the given peers.
 	FailPartial(ctx context.Context, nodeID int, peerIDs []int)
