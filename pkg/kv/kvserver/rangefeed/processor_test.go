@@ -166,7 +166,8 @@ func newTestProcessorWithTxnPusher(
 		Metrics:              NewMetrics(),
 	})
 	require.NoError(t, p.Start(stopper, makeIntentScannerConstructor(rtsIter)))
-	return p, stopper
+	impl := p.(*Processor)
+	return impl, stopper
 }
 
 func makeIntentScannerConstructor(rtsIter storage.SimpleMVCCIterator) IntentScannerConstructor {
@@ -565,6 +566,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
+	m := NewMetrics()
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:                hlc.NewClockForTesting(nil),
@@ -573,7 +575,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 		PushTxnsAge:          pushTxnAge,
 		EventChanCap:         testProcessorEventCCap,
 		CheckStreamsInterval: 10 * time.Millisecond,
-		Metrics:              NewMetrics(),
+		Metrics:              m,
 		MemBudget:            fb,
 		EventChanTimeout:     time.Millisecond,
 	})
@@ -593,7 +595,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 		func() {},
 		&r1Done,
 	)
-	p.syncEventAndRegistrations()
+	syncEventAndRegistrations(p)
 
 	// Block it.
 	unblock := r1Stream.BlockSend()
@@ -614,16 +616,16 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 	}
 
 	// Unblock stream processing part to consume error.
-	p.syncEventAndRegistrations()
+	syncEventAndRegistrations(p)
 
 	// Unblock the 'send' channel. The events should quickly be consumed.
 	unblock()
 	unblock = nil
-	p.syncEventAndRegistrations()
+	syncEventAndRegistrations(p)
 
 	require.Equal(t, newErrBufferCapacityExceeded().GoError(), waitErrorFuture(&r1Done))
-	require.Equal(t, 0, p.reg.Len(), "registration was not removed")
-	require.Equal(t, int64(1), p.Metrics.RangeFeedBudgetExhausted.Count())
+	require.Equal(t, 0, p.Len(), "registration was not removed")
+	require.Equal(t, int64(1), m.RangeFeedBudgetExhausted.Count())
 }
 
 // TestProcessorMemoryBudgetReleased that memory budget is correctly released.
@@ -663,7 +665,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 		func() {},
 		&r1Done,
 	)
-	p.syncEventAndRegistrations()
+	syncEventAndRegistrations(p)
 
 	// Write entries and check they are consumed so that we could write more
 	// data than total budget if inflight messages are within budget.
@@ -674,7 +676,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 			hlc.Timestamp{WallTime: int64(i + 2)},
 			[]byte("value")))
 	}
-	p.syncEventAndRegistrations()
+	syncEventAndRegistrations(p)
 
 	// Count consumed values
 	consumedOps := 0
@@ -683,7 +685,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 			consumedOps++
 		}
 	}
-	require.Equal(t, 1, p.reg.Len(), "registration was removed")
+	require.Equal(t, 1, p.Len(), "registration was removed")
 	require.Equal(t, 10, consumedOps)
 }
 
@@ -1153,7 +1155,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 		&done,
 	)
 	rErrC := notifyWhenDone(&done)
-	p.syncEventAndRegistrations()
+	syncEventAndRegistrations(p)
 
 	for i := 0; i < totalEvents; i++ {
 		p.ConsumeLogicalOps(ctx, writeValueOpWithKV(
@@ -1244,7 +1246,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 		&done,
 	)
 	rErrC := notifyWhenDone(&done)
-	p.syncEventAndRegistrations()
+	syncEventAndRegistrations(p)
 
 	for i := 0; i < totalEvents; i++ {
 		p.ConsumeLogicalOps(ctx, writeValueOpWithKV(
@@ -1337,7 +1339,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		func() {},
 		&r2Done,
 	)
-	p.syncEventAndRegistrations()
+	syncEventAndRegistrations(p)
 
 	for i := 0; i < totalEvents; i++ {
 		p.ConsumeLogicalOps(ctx, writeValueOpWithKV(
@@ -1367,7 +1369,8 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 // stop and drain remaining allocations.
 // We use account and not a monitor for those checks because monitor doesn't
 // necessary return all data to the pool until processor is stopped.
-func requireBudgetDrainedSoon(t *testing.T, processor *Processor, stream *consumer) {
+func requireBudgetDrainedSoon(t *testing.T, s Server, stream *consumer) {
+	processor := s.(*Processor)
 	testutils.SucceedsSoon(t, func() error {
 		processor.MemBudget.mu.Lock()
 		used := processor.MemBudget.mu.memBudget.Used()
@@ -1496,7 +1499,7 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 		func() {},
 		&r1Done,
 	)
-	p.syncEventAndRegistrations()
+	syncEventAndRegistrations(p)
 
 	b.ResetTimer()
 	for bi := 0; bi < b.N; bi++ {
@@ -1508,12 +1511,17 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 		}
 	}
 
-	p.syncEventAndRegistrations()
+	syncEventAndRegistrations(p)
 
 	// Sanity check that subscription was not dropped.
-	if p.reg.Len() == 0 {
+	if p.Len() == 0 {
 		require.NoError(b, waitErrorFuture(&r1Done))
 	}
+}
+
+func syncEventAndRegistrations(p Server) {
+	impl := p.(*Processor)
+	impl.syncEventAndRegistrations()
 }
 
 // TestSizeOfEvent tests the size of the event struct. It is fine if this struct

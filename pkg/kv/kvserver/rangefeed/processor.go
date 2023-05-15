@@ -106,6 +106,55 @@ func (sc *Config) SetDefaults() {
 	}
 }
 
+type Server interface {
+	// Lifecycle of server.
+
+	// Start processor with intent scanner.
+	// Intent scanner factory should move to config for consistency.
+	Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor) error
+	// TODO: it is currently possible to do that on nil processor.
+	// Never nil
+	Stop()
+	// TODO: it is currently possible to do that on nil processor.
+	// Never nil
+	StopWithErr(pErr *kvpb.Error)
+
+	// Lifecycle of registrations.
+
+	Register(
+		span roachpb.RSpan,
+		startTS hlc.Timestamp,
+		catchUpIterConstructor CatchUpIteratorConstructor,
+		withDiff bool,
+		stream Stream,
+		disconnectFn func(),
+		done *future.ErrorFuture,
+	) (bool, *Filter)
+	// TODO: it is currently possible to do that on nil processor.
+	// Never nil
+	DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error)
+	// TODO: it is currently possible to do that on nil processor.
+	// Never nil
+	Filter() *Filter
+	// TODO: it is currently possible to do that on nil processor.
+	// Never nil
+	Len() int
+
+	// Data flow.
+
+	// TODO: it is currently possible to do that on nil processor.
+	// Never nil
+	ConsumeLogicalOps(ctx context.Context, ops ...enginepb.MVCCLogicalOp) bool
+	// TODO: it is currently possible to do that on nil processor.
+	// Never nil
+	ConsumeSSTable(
+		ctx context.Context, sst []byte, sstSpan roachpb.Span, writeTS hlc.Timestamp,
+	) bool
+	// TODO: it is currently possible to do that on nil processor.
+	// Never nil
+	ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool
+}
+
 // Processor manages a set of rangefeed registrations and handles the routing of
 // logical updates to these registrations. While routing logical updates to
 // rangefeed registrations, the processor performs two important tasks:
@@ -192,7 +241,7 @@ type spanErr struct {
 
 // NewProcessor creates a new rangefeed Processor. The corresponding goroutine
 // should be launched using the Start method.
-func NewProcessor(cfg Config) *Processor {
+func NewProcessor(cfg Config) Server {
 	cfg.SetDefaults()
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
 	p := &Processor{
