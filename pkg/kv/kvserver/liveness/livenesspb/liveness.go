@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -30,18 +30,16 @@ import (
 // considered expired. For that purpose, it's better to pass in
 // clock.Now().GoTime() rather than clock.PhysicalNow() - the former takes into
 // consideration clock signals from other nodes, the latter doesn't.
-func (l *Liveness) IsLive(now time.Time) bool {
-	expiration := timeutil.Unix(0, l.Expiration.WallTime)
-	return now.Before(expiration)
+func (l *Liveness) IsLive(now hlc.Timestamp) bool {
+	return now.Less(l.Expiration.ToTimestamp())
 }
 
 // IsDead returns true if the liveness expired more than threshold ago.
 //
 // Note that, because of threshold, IsDead() is not the inverse of IsLive().
-func (l *Liveness) IsDead(now time.Time, threshold time.Duration) bool {
-	expiration := timeutil.Unix(0, l.Expiration.WallTime)
-	deadAsOf := expiration.Add(threshold)
-	return !now.Before(deadAsOf)
+func (l *Liveness) IsDead(now hlc.Timestamp, threshold time.Duration) bool {
+	expiration := l.Expiration.ToTimestamp().AddDuration(threshold)
+	return !now.Less(expiration)
 }
 
 // Compare returns an integer comparing two pieces of liveness information,

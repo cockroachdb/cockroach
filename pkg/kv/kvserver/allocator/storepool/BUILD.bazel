@@ -48,7 +48,6 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//require",

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -206,9 +205,9 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	mnl.SetNodeStatus(deadStore.Node.NodeID, livenesspb.NodeLivenessStatus_DEAD)
 	sp.DetailsMu.Lock()
 	// Set declinedStore as throttled.
-	sp.DetailsMu.StoreDetails[declinedStore.StoreID].ThrottledUntil = sp.clock.Now().GoTime().Add(time.Hour)
+	sp.DetailsMu.StoreDetails[declinedStore.StoreID].ThrottledUntil = sp.clock.Now().AddDuration(time.Hour)
 	// Set suspectedStore as suspected.
-	sp.DetailsMu.StoreDetails[suspectedStore.StoreID].LastUnavailable = sp.clock.Now().GoTime()
+	sp.DetailsMu.StoreDetails[suspectedStore.StoreID].LastUnavailable = sp.clock.Now()
 	sp.DetailsMu.Unlock()
 
 	// No filter or limited set of store IDs.
@@ -589,13 +588,13 @@ func TestStorePoolThrottle(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
-	expected := sp.clock.Now().GoTime().Add(FailedReservationsTimeout.Get(&sp.st.SV))
+	expected := sp.clock.Now().AddDuration(FailedReservationsTimeout.Get(&sp.st.SV))
 	sp.Throttle(ThrottleFailed, "", 1)
 
 	sp.DetailsMu.Lock()
 	detail := sp.GetStoreDetailLocked(1)
 	sp.DetailsMu.Unlock()
-	if !detail.ThrottledUntil.Equal(expected) {
+	if detail.ThrottledUntil.WallTime != expected.WallTime {
 		t.Errorf("expected store to have been throttled to %v, found %v",
 			expected, detail.ThrottledUntil)
 	}
@@ -614,7 +613,7 @@ func TestStorePoolSuspected(t *testing.T) {
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
 
-	now := sp.clock.Now().GoTime()
+	now := sp.clock.Now()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 
@@ -622,7 +621,7 @@ func TestStorePoolSuspected(t *testing.T) {
 	detail := sp.GetStoreDetailLocked(0)
 	s := detail.status(now, timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect)
 	require.Equal(t, s, storeStatusUnknown)
-	require.True(t, detail.LastUnavailable.IsZero())
+	require.Equal(t, hlc.Timestamp{}, detail.LastUnavailable)
 
 	// Now start gossiping the stores statuses.
 	sg := gossiputil.NewStoreGossiper(g)
@@ -637,13 +636,13 @@ func TestStorePoolSuspected(t *testing.T) {
 
 	s = detail.status(now, timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect)
 	require.Equal(t, s, storeStatusAvailable)
-	require.True(t, detail.LastUnavailable.IsZero())
+	require.Equal(t, hlc.Timestamp{}, detail.LastUnavailable)
 
 	// When the store transitions to unavailable, its status changes to temporarily unknown.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_UNAVAILABLE)
 	s = detail.status(now, timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect)
 	require.Equal(t, s, storeStatusUnknown)
-	require.False(t, detail.LastUnavailable.IsZero())
+	require.NotEqual(t, hlc.Timestamp{}, detail.LastUnavailable)
 
 	// When the store transitions back to live, it passes through suspect for a period.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
@@ -651,7 +650,7 @@ func TestStorePoolSuspected(t *testing.T) {
 	require.Equal(t, s, storeStatusSuspect)
 
 	// Once the window has passed, it will return to available.
-	now = now.Add(timeAfterStoreSuspect).Add(time.Millisecond)
+	now = now.AddDuration(timeAfterStoreSuspect).AddDuration(time.Millisecond)
 	s = detail.status(now, timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect)
 	require.Equal(t, s, storeStatusAvailable)
 
@@ -666,7 +665,7 @@ func TestStorePoolSuspected(t *testing.T) {
 	require.Equal(t, s, storeStatusSuspect)
 
 	// Verify it also returns correctly to available after suspect time.
-	now = now.Add(timeAfterStoreSuspect).Add(time.Millisecond)
+	now = now.AddDuration(timeAfterStoreSuspect).AddDuration(time.Millisecond)
 	s = detail.status(now, timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect)
 	require.Equal(t, s, storeStatusAvailable)
 
@@ -680,7 +679,7 @@ func TestStorePoolSuspected(t *testing.T) {
 	s = detail.status(now, timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect)
 	require.Equal(t, s, storeStatusSuspect)
 
-	now = now.Add(timeAfterStoreSuspect).Add(time.Millisecond)
+	now = now.AddDuration(timeAfterStoreSuspect).AddDuration(time.Millisecond)
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
 	s = detail.status(now, timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect)
 	require.Equal(t, s, storeStatusAvailable)
@@ -866,120 +865,95 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 func TestNodeLivenessLivenessStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	now := timeutil.Now()
+	now := hlc.Timestamp{
+		WallTime: time.Date(2020, 0, 0, 0, 0, 0, 0, time.UTC).UnixNano(),
+	}
 	threshold := 5 * time.Minute
 
 	for _, tc := range []struct {
+		name     string
 		liveness livenesspb.Liveness
 		expected livenesspb.NodeLivenessStatus
 	}{
 		// Valid status.
 		{
+			name: "Valid 5 min",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.Add(5 * time.Minute).UnixNano(),
-				},
-				Draining: false,
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.AddDuration(5 * time.Minute).ToLegacyTimestamp(),
+				Draining:   false,
 			},
 			expected: livenesspb.NodeLivenessStatus_LIVE,
 		},
 		{
+			name: "Expires just slightly in the future",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					// Expires just slightly in the future.
-					WallTime: now.UnixNano() + 1,
-				},
-				Draining: false,
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.AddDuration(time.Nanosecond).ToLegacyTimestamp(),
+				Draining:   false,
 			},
 			expected: livenesspb.NodeLivenessStatus_LIVE,
 		},
-		// Expired status.
 		{
+			name: "Expired status",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					// Just expired.
-					WallTime: now.UnixNano(),
-				},
-				Draining: false,
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.ToLegacyTimestamp(),
+				Draining:   false,
 			},
 			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
 		},
-		// Expired status.
 		{
+			name: "Max bound of expired",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.UnixNano(),
-				},
-				Draining: false,
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.AddDuration(-threshold).AddDuration(time.Nanosecond).ToLegacyTimestamp(),
+				Draining:   false,
 			},
 			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
 		},
-		// Max bound of expired.
 		{
+			name: "Dead",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.Add(-threshold).UnixNano() + 1,
-				},
-				Draining: false,
-			},
-			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
-		},
-		// Dead status.
-		{
-			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.Add(-threshold).UnixNano(),
-				},
-				Draining: false,
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.AddDuration(-threshold).ToLegacyTimestamp(),
+				Draining:   false,
 			},
 			expected: livenesspb.NodeLivenessStatus_DEAD,
 		},
-		// Decommissioning.
 		{
+			name: "Decommissioning",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.Add(time.Second).UnixNano(),
-				},
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.AddDuration(time.Second).ToLegacyTimestamp(),
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
 				Draining:   false,
 			},
 			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 		},
-		// Decommissioning + expired.
 		{
+			name: "Decommissioning + expired",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.Add(-threshold).UnixNano(),
-				},
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.AddDuration(-threshold).ToLegacyTimestamp(),
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
 				Draining:   false,
 			},
 			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONED,
 		},
-		// Decommissioned + live.
 		{
+			name: "Decommissioning + live",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.Add(time.Second).UnixNano(),
-				},
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.AddDuration(time.Second).ToLegacyTimestamp(),
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONED,
 				Draining:   false,
 			},
@@ -988,60 +962,52 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			// "Decommissioning". See #50707 for more details.
 			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 		},
-		// Decommissioned + expired.
 		{
+			name: "Decommissioning + expired",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.Add(-threshold).UnixNano(),
-				},
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.AddDuration(-threshold).ToLegacyTimestamp(),
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONED,
 				Draining:   false,
 			},
 			expected: livenesspb.NodeLivenessStatus_DECOMMISSIONED,
 		},
-		// Draining
 		{
+			name: "Draining",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.Add(5 * time.Minute).UnixNano(),
-				},
-				Draining: true,
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.AddDuration(5 * time.Minute).ToLegacyTimestamp(),
+				Draining:   true,
 			},
 			expected: livenesspb.NodeLivenessStatus_DRAINING,
 		},
-		// Decommissioning that is unavailable.
 		{
+			name: "Decommissioning that is unavailable",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.UnixNano(),
-				},
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.ToLegacyTimestamp(),
 				Draining:   false,
 				Membership: livenesspb.MembershipStatus_DECOMMISSIONING,
 			},
 			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
 		},
-		// Draining that is unavailable.
 		{
+			name: "Draining that is unavailable",
 			liveness: livenesspb.Liveness{
-				NodeID: 1,
-				Epoch:  1,
-				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.UnixNano(),
-				},
-				Draining: true,
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: now.ToLegacyTimestamp(),
+				Draining:   true,
 			},
 			expected: livenesspb.NodeLivenessStatus_UNAVAILABLE,
 		},
 	} {
-		t.Run("", func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			if a, e := LivenessStatus(tc.liveness, now, threshold), tc.expected; a != e {
-				t.Errorf("liveness status was %s, wanted %s", a.String(), e.String())
+				t.Errorf("liveness status was %s, wanted %s for %+v, %v", a.String(), e.String(), tc.liveness, now)
 			}
 		})
 	}
