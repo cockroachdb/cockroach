@@ -307,6 +307,43 @@ func printRangeAnalyzedConstraints(
 		rac.votersDiversityScore, rac.replicasDiversityScore)
 }
 
+func testingAnalyzeFn(
+	rac *rangeAnalyzedConstraints, fn string, store roachpb.StoreID,
+) (toRemove []roachpb.StoreID, toAdd constraintsDisj, err error) {
+	switch fn {
+	case "nonVoterToVoter":
+		toRemove, err = rac.candidatesToConvertFromNonVoterToVoter()
+	case "addingVoter":
+		toAdd, err = rac.constraintsForAddingVoter()
+	case "addingNonVoter":
+		toAdd, err = rac.constraintsForAddingNonVoter()
+	case "voterToNonVoter":
+		toRemove, err = rac.candidatesToConvertFromVoterToNonVoter()
+	case "roleSwap":
+		var toSwap [numReplicaKinds][]roachpb.StoreID
+		toSwap, err = rac.candidatesForRoleSwapForConstraints()
+		toRemove = append(toRemove, toSwap[voterIndex]...)
+		toRemove = append(toRemove, toSwap[nonVoterIndex]...)
+	case "toRemove":
+		toRemove, err = rac.candidatesToRemove()
+	case "voterUnsatisfied":
+		toRemove, toAdd, err = rac.candidatesVoterConstraintsUnsatisfied()
+	case "nonVoterUnsatisfied":
+		toRemove, toAdd, err = rac.candidatesNonVoterConstraintsUnsatisfied()
+	case "replaceVoterRebalance":
+		var toAddConj constraintsConj
+		toAddConj, err = rac.candidatesToReplaceVoterForRebalance(store)
+		toAdd = constraintsDisj{toAddConj}
+	case "replaceNonVoterRebalance":
+		var toAddConj constraintsConj
+		toAddConj, err = rac.candidatesToReplaceNonVoterForRebalance(store)
+		toAdd = constraintsDisj{toAddConj}
+	default:
+		panic("unknown candidate function " + fn)
+	}
+	return toRemove, toAdd, err
+}
+
 // TODO(sumeer): testing of query methods.
 func TestRangeAnalyzedConstraints(t *testing.T) {
 	interner := newStringInterner()
@@ -314,6 +351,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 	ltInterner := newLocalityTierInterner(interner)
 	configs := map[string]*normalizedSpanConfig{}
 	stores := map[roachpb.StoreID]roachpb.StoreDescriptor{}
+	var lastRangeAnalyzedConstraints *rangeAnalyzedConstraints
 
 	datadriven.RunTest(t, "testdata/range_analyzed_constraints",
 		func(t *testing.T, d *datadriven.TestData) string {
@@ -370,9 +408,88 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 				rac.finishInit(nConf, cm)
 				var b strings.Builder
 				printRangeAnalyzedConstraints(&b, rac, ltInterner)
-				releaseRangeAnalyzedConstraints(rac)
+				// If there is a previous rangeAnalyzedConstraints, release it before
+				// assigning the rangeAnalyzedConstraints just added as the last.
+				if lastRangeAnalyzedConstraints != nil {
+					releaseRangeAnalyzedConstraints(lastRangeAnalyzedConstraints)
+				}
+				lastRangeAnalyzedConstraints = rac
 				return b.String()
+			case "candidates":
+				if lastRangeAnalyzedConstraints == nil {
+					return "error: cannot evaluate nil analyzed constraints"
+				}
+				rac := lastRangeAnalyzedConstraints
 
+				candidateFns := []string{
+					"nonVoterToVoter",
+					"addingVoter",
+					"voterToNonVoter",
+					"addingNonVoter",
+					"roleSwap",
+					"toRemove",
+					"voterUnsatisfied",
+					"nonVoterUnsatisfied",
+					"replaceVoterRebalance",
+					"replaceNonVoterRebalance",
+				}
+
+				var voterStores, nonVoterStores []roachpb.StoreID
+				for _, voter := range rac.replicas[voterIndex] {
+					voterStores = append(voterStores, voter.StoreID)
+				}
+				for _, nonVoter := range rac.replicas[nonVoterIndex] {
+					nonVoterStores = append(nonVoterStores, nonVoter.StoreID)
+				}
+
+				var buf strings.Builder
+				for _, fn := range candidateFns {
+					var candidateStores []roachpb.StoreID
+					if fn == "replaceNonVoterRebalance" {
+						candidateStores = nonVoterStores
+					} else if fn == "replaceVoterRebalance" {
+						candidateStores = voterStores
+					} else {
+						// Store is ignored for non replace functions.
+						candidateStores = []roachpb.StoreID{-1}
+					}
+
+					for _, store := range candidateStores {
+						toRemove, toAdd, err := testingAnalyzeFn(rac, fn, store)
+						fmt.Fprintf(&buf, "%s", fn)
+						if store != -1 {
+							fmt.Fprintf(&buf, " replace=%d", store)
+						}
+						fmt.Fprintf(&buf, "\n")
+
+						if err != nil {
+							fmt.Fprintf(&buf, "\terr: %s\n", err.Error())
+							continue
+						}
+						if toRemove != nil {
+							fmt.Fprintf(&buf, "\tremove:")
+							for _, storeID := range toRemove {
+								fmt.Fprintf(&buf, " %d", storeID)
+							}
+							fmt.Fprintf(&buf, "\n")
+						}
+						if toAdd != nil {
+							fmt.Fprintf(&buf, "\tadd:")
+							for _, conj := range toAdd {
+								fmt.Fprintf(&buf, " (")
+								for i, c := range conj {
+									if i > 0 {
+										buf.WriteString(",")
+									}
+									fmt.Fprintf(&buf, "%s", c.unintern(ltInterner.si))
+								}
+								fmt.Fprintf(&buf, ")")
+							}
+							fmt.Fprintf(&buf, "\n")
+						}
+					}
+				}
+				return buf.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
