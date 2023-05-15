@@ -350,6 +350,102 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 	}
 }
 
+// TestTxnSpanRefresherDowngradesStagingTxnStatus tests that the txnSpanRefresher
+// tolerates retry errors with a STAGING transaction status. In such cases, it
+// will downgrade the status to PENDING before refreshing and retrying, because
+// the presence of an error proves that the transaction failed to implicitly
+// commit.
+func TestTxnSpanRefresherDowngradesStagingTxnStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tsr, mockSender := makeMockTxnSpanRefresher()
+
+	txn := makeTxnProto()
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+	conflictTs := txn.WriteTimestamp.Add(15, 0)
+
+	// Collect some refresh spans.
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	scanArgs := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}}
+	ba.Add(&scanArgs)
+
+	br, pErr := tsr.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
+	require.False(t, tsr.refreshInvalid)
+	require.Zero(t, tsr.refreshedTimestamp)
+
+	// Hook up a chain of mocking functions.
+	onPutAndEndTxn := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 2)
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+		require.True(t, ba.Requests[1].GetEndTxn().IsParallelCommit())
+
+		// Return a write-too-old error with a STAGING status, emulating a
+		// successful EndTxn request and a failed Put request. This mixed success
+		// state is possible if the requests were split across ranges.
+		pErrTxn := ba.Txn.Clone()
+		pErrTxn.Status = roachpb.STAGING
+		pErr := &kvpb.WriteTooOldError{ActualTimestamp: conflictTs}
+		return nil, kvpb.NewErrorWithTxn(pErr, pErrTxn)
+	}
+	onRefresh := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Equal(t, roachpb.PENDING, ba.Txn.Status) // downgraded
+		require.Len(t, ba.Requests, 1)
+		require.Equal(t, conflictTs, ba.Txn.ReadTimestamp)
+		require.IsType(t, &kvpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+
+		refReq := ba.Requests[0].GetRefreshRange()
+		require.Equal(t, scanArgs.Span(), refReq.Span())
+		require.Equal(t, txn.ReadTimestamp, refReq.RefreshFrom)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn.Clone()
+		return br, nil
+	}
+	onPut := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Equal(t, roachpb.PENDING, ba.Txn.Status) // downgraded
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn.Clone()
+		return br, nil
+	}
+	onEndTxn := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Equal(t, roachpb.PENDING, ba.Txn.Status) // downgraded
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+		require.False(t, ba.Requests[0].GetEndTxn().IsParallelCommit())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn.Clone()
+		br.Txn.Status = roachpb.COMMITTED
+		return br, nil
+	}
+	mockSender.ChainMockSend(onPutAndEndTxn, onRefresh, onPut, onEndTxn)
+
+	// Send a request that will hit a write-too-old error while also returning a
+	// STAGING transaction status.
+	ba.Requests = nil
+	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
+	etArgs := kvpb.EndTxnRequest{Commit: true}
+	putArgs.Sequence = 1
+	etArgs.Sequence = 2
+	etArgs.InFlightWrites = []roachpb.SequencedWrite{{Key: keyB, Sequence: 1}}
+	ba.Add(&putArgs, &etArgs)
+
+	br, pErr = tsr.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.NotNil(t, br.Txn)
+	require.Equal(t, roachpb.COMMITTED, br.Txn.Status)
+}
+
 // TestTxnSpanRefresherMaxRefreshAttempts tests that the txnSpanRefresher
 // attempts some number of retries before giving up and passing retryable
 // errors back up the stack.

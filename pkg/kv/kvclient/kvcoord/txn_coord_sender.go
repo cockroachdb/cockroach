@@ -163,8 +163,8 @@ type TxnCoordSender struct {
 		txnHeartbeater
 		txnSeqNumAllocator
 		txnPipeliner
-		txnSpanRefresher
 		txnCommitter
+		txnSpanRefresher
 		txnMetricRecorder
 		txnLockGatekeeper // not in interceptorStack array.
 	}
@@ -254,6 +254,7 @@ func newRootTxnCoordSender(
 	tcs.interceptorAlloc.txnCommitter = txnCommitter{
 		st:      tcf.st,
 		stopper: tcs.stopper,
+		metrics: &tcs.metrics,
 		mu:      &tcs.mu.Mutex,
 	}
 	tcs.interceptorAlloc.txnMetricRecorder = txnMetricRecorder{
@@ -274,18 +275,20 @@ func newRootTxnCoordSender(
 		// never generate transaction retry errors that could be avoided
 		// with a refresh.
 		&tcs.interceptorAlloc.txnPipeliner,
+		// The committer sits above the span refresher because it will
+		// never generate transaction retry errors that could be avoided
+		// with a refresh. However, it may re-issue parts of "successful"
+		// batches that failed to qualify for the parallel commit condition.
+		// These re-issued batches benefit from pre-emptive refreshes in the
+		// span refresher.
+		&tcs.interceptorAlloc.txnCommitter,
 		// The span refresher may resend entire batches to avoid transaction
 		// retries. Because of that, we need to be careful which interceptors
 		// sit below it in the stack.
+		// The span refresher sits below the committer, so it must be prepared
+		// to see STAGING transaction protos in responses and errors. It should
+		// defer to the committer for how to handle those.
 		&tcs.interceptorAlloc.txnSpanRefresher,
-		// The committer sits beneath the span refresher so that any
-		// retryable errors that it generates have a chance of being
-		// "refreshed away" without the need for a txn restart. Because the
-		// span refresher can re-issue batches, it needs to be careful about
-		// what parts of the batch it mutates. Any mutation needs to be
-		// idempotent and should avoid writing to memory when not changing
-		// it to avoid looking like a data race.
-		&tcs.interceptorAlloc.txnCommitter,
 		// The metrics recorder sits at the bottom of the stack so that it
 		// can observe all transformations performed by other interceptors.
 		&tcs.interceptorAlloc.txnMetricRecorder,
