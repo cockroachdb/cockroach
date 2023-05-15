@@ -104,10 +104,12 @@ func init() {
 	)
 }
 
-// This rule ensures that before an offline-backfilled index can begin
-// backfilling, the corresponding temporary index exists in WRITE_ONLY.
+// This rule ensures that primary indexes and their corresponding temporary
+// indexes appear in an appropriate order to correctly support index backfilling.
 func init() {
 
+	// Offline-backfilled index can begin backfilling after the corresponding
+	// temporary index exists in WRITE_ONLY.
 	registerDepRule(
 		"temp index is WRITE_ONLY before backfill",
 		scgraph.Precedence,
@@ -126,6 +128,57 @@ func init() {
 				to.TargetStatus(scpb.ToPublic, scpb.Transient),
 				from.CurrentStatus(scpb.Status_WRITE_ONLY),
 				to.CurrentStatus(scpb.Status_BACKFILLED),
+			}
+		},
+	)
+
+	// The following two rules together ensure that temporary index is dropped
+	// after its master index has merged its data (MERGED) and before its master
+	// index advances into the next status (WRITE_ONLY).
+
+	// Temporary index starts to disappear after its master index has merged
+	// this temporary index's data.
+	registerDepRule(
+		"index is MERGED before its temp index starts to disappear",
+		scgraph.Precedence,
+		"index", "temp",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				to.Type((*scpb.TemporaryIndex)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				JoinOn(
+					from, screl.TemporaryIndexID,
+					to, screl.IndexID,
+					"temp-index-id",
+				),
+				from.TargetStatus(scpb.ToPublic, scpb.Transient),
+				from.CurrentStatus(scpb.Status_MERGED),
+				to.TargetStatus(scpb.Transient),
+				to.CurrentStatus(scpb.Status_TRANSIENT_DELETE_ONLY),
+			}
+		},
+	)
+
+	// Temporary index disappeared before its master index reaches WRITE_ONLY.
+	registerDepRule(
+		"temp index disappeared before its master index reaches WRITE_ONLY",
+		scgraph.Precedence,
+		"temp", "index",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.TemporaryIndex)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				JoinOn(
+					from, screl.IndexID,
+					to, screl.TemporaryIndexID,
+					"temp-index-id",
+				),
+				from.TargetStatus(scpb.Transient),
+				from.CurrentStatus(scpb.Status_TRANSIENT_DELETE_ONLY),
+				to.TargetStatus(scpb.ToPublic, scpb.Transient),
+				to.CurrentStatus(scpb.Status_WRITE_ONLY),
 			}
 		},
 	)

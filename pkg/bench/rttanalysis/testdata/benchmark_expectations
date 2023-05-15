@@ -62,6 +62,7 @@ exp,benchmark
 17,GrantRole/grant_1_role
 22,GrantRole/grant_2_roles
 3,ORMQueries/activerecord_type_introspection_query
+0,ORMQueries/column_descriptions_json_agg
 4,ORMQueries/django_column_introspection_1_table
 4,ORMQueries/django_column_introspection_4_tables
 4,ORMQueries/django_column_introspection_8_tables
@@ -77,7 +78,6 @@ exp,benchmark
 12,ORMQueries/hasura_column_descriptions_8_tables
 5,ORMQueries/hasura_column_descriptions_modified
 4,ORMQueries/information_schema._pg_index_position
-0,ORMQueries/column_descriptions_json_agg
 4,ORMQueries/introspection_description_join
 4,ORMQueries/pg_attribute
 4,ORMQueries/pg_class

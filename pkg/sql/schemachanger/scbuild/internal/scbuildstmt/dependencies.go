@@ -225,7 +225,7 @@ type TableHelpers interface {
 
 	// NextTableIndexID returns the ID that should be used for any new index added
 	// to this table.
-	NextTableIndexID(table *scpb.Table) catid.IndexID
+	NextTableIndexID(tableID catid.DescID) catid.IndexID
 
 	// NextViewIndexID returns the ID that should be used for any new index added
 	// to this materialized view.
@@ -233,7 +233,17 @@ type TableHelpers interface {
 
 	// NextTableConstraintID returns the ID that should be used for any new constraint
 	// added to this table.
-	NextTableConstraintID(id catid.DescID) catid.ConstraintID
+	NextTableConstraintID(tableID catid.DescID) catid.ConstraintID
+
+	// NextTableTentativeIndexID returns the tentative ID, starting from
+	// scbuild.TABLE_TENTATIVE_IDS_START, that should be used for any new index added to
+	// this table.
+	NextTableTentativeIndexID(tableID catid.DescID) catid.IndexID
+
+	// NextTableTentativeConstraintID parallels NextTableTentativeIndexID and
+	// returns tentative constraint ID, starting from scbuild.TABLE_TENTATIVE_IDS_START,
+	// that should be used for any new index added to this table.
+	NextTableTentativeConstraintID(tableID catid.DescID) catid.ConstraintID
 
 	// IndexPartitioningDescriptor creates a new partitioning descriptor
 	// for the secondary index element, or panics.

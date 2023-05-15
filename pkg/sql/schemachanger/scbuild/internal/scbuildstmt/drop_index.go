@@ -155,13 +155,23 @@ func dropSecondaryIndex(
 		// using the expression column.
 		dropAdditionallyForExpressionIndex(next, sie)
 	}
-	// Finally, drop the index's public elements and trigger a GC job.
-	b.QueryByID(sie.TableID).
-		Filter(hasIndexIDAttrFilter(sie.IndexID)).
-		Filter(publicTargetFilter).
-		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			b.Drop(e)
-		})
+	// Finally, drop all elements associated with this index.
+	tblElts := b.QueryByID(sie.TableID)
+	if sie.TemporaryIndexID != 0 {
+		// If this secondary index has an associated temporary index, which happens
+		// when it is newly added, but now needs to be dropped (e.g. CREATE INDEX
+		// followed by DROP INDEX), we also need to drop the temporary index.
+		tblElts = tblElts.
+			Filter(orFilter(hasIndexIDAttrFilter(sie.IndexID), hasIndexIDAttrFilter(sie.TemporaryIndexID))).
+			Filter(orFilter(publicTargetFilter, transientTargetFilter))
+	} else {
+		tblElts = tblElts.
+			Filter(hasIndexIDAttrFilter(sie.IndexID)).
+			Filter(publicTargetFilter)
+	}
+	tblElts.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		b.Drop(e)
+	})
 }
 
 // maybeDropDependentViews attempts to drop all views that depend
@@ -360,7 +370,7 @@ func maybeDropAdditionallyForShardedIndex(
 // expression column if the to-be-dropped index is an expression index
 // and no other index uses this expression column.
 func dropAdditionallyForExpressionIndex(b BuildCtx, toBeDroppedIndex *scpb.SecondaryIndex) {
-	keyColumnIDs, _, _ := getSortedColumnIDsInIndex(b, toBeDroppedIndex.TableID, toBeDroppedIndex.IndexID)
+	keyColumnIDs, _, _ := getSortedColumnIDsInIndexByKind(b, toBeDroppedIndex.TableID, toBeDroppedIndex.IndexID)
 	scpb.ForEachColumn(b.QueryByID(toBeDroppedIndex.TableID), func(
 		current scpb.Status, target scpb.TargetStatus, ce *scpb.Column,
 	) {
@@ -401,7 +411,7 @@ func anyIndexUsesColOtherThan(
 	scpb.ForEachPrimaryIndex(b.QueryByID(relationID), func(
 		_ scpb.Status, _ scpb.TargetStatus, e *scpb.PrimaryIndex,
 	) {
-		keyColumnIDs, _, _ := getSortedColumnIDsInIndex(b, e.TableID, e.IndexID)
+		keyColumnIDs, _, _ := getSortedColumnIDsInIndexByKind(b, e.TableID, e.IndexID)
 		used = used || (e.IndexID != indexID && hasColID(keyColumnIDs))
 	})
 
@@ -413,7 +423,7 @@ func anyIndexUsesColOtherThan(
 	scpb.ForEachSecondaryIndex(b.QueryByID(relationID), func(
 		_ scpb.Status, _ scpb.TargetStatus, e *scpb.SecondaryIndex,
 	) {
-		keyColumnIDs, keySuffixColumnIDs, storingColumnIDs := getSortedColumnIDsInIndex(b, e.TableID, e.IndexID)
+		keyColumnIDs, keySuffixColumnIDs, storingColumnIDs := getSortedColumnIDsInIndexByKind(b, e.TableID, e.IndexID)
 		used = used || (e.IndexID != indexID &&
 			(hasColID(keyColumnIDs) ||
 				hasColID(keySuffixColumnIDs) ||
@@ -444,7 +454,7 @@ func explicitColumnStartIdx(b BuildCtx, ie *scpb.Index) int {
 // of index element `ie`.
 func explicitKeyColumnIDsWithoutShardColumn(b BuildCtx, ie *scpb.Index) descpb.ColumnIDs {
 	// Retrieve all key column IDs in index `ie`.
-	indexKeyColumnIDs, _, _ := getSortedColumnIDsInIndex(b, ie.TableID, ie.IndexID)
+	indexKeyColumnIDs, _, _ := getSortedColumnIDsInIndexByKind(b, ie.TableID, ie.IndexID)
 
 	// Exclude implicit key columns, if any.
 	explicitColIDs := indexKeyColumnIDs[explicitColumnStartIdx(b, ie):]
@@ -488,7 +498,7 @@ func isIndexUniqueAndCanServeFK(
 		return false
 	}
 
-	keyColIDs, _, _ := getSortedColumnIDsInIndex(b, ie.TableID, ie.IndexID)
+	keyColIDs, _, _ := getSortedColumnIDsInIndexByKind(b, ie.TableID, ie.IndexID)
 	implicitKeyColIDs := keyColIDs[:explicitColumnStartIdx(b, ie)]
 	explicitKeyColIDsWithoutShardCol := explicitKeyColumnIDsWithoutShardColumn(b, ie)
 	allKeyColIDsWithoutShardCol := descpb.ColumnIDs(append(implicitKeyColIDs, explicitKeyColIDsWithoutShardCol...))
