@@ -1,0 +1,225 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+
+/* test */
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count=3);
+EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
+----
+• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›);
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
+        │
+        ├── • 14 elements transitioning toward ABSENT
+        │   │
+        │   ├── • PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
+        │   │   │ BACKFILL_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
+        │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 4 (t_pkey-)}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_pkey-)}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 4 (t_pkey-)}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 4 (t_pkey-)}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_pkey-)}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
+        │   │
+        │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 4 (t_pkey-)}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
+        │   │
+        │   ├── • IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey-)}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
+        │   │         rule: "index removed before garbage collection"
+        │   │
+        │   ├── • TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
+        │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 5}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 5}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 5}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 5}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
+        │   │
+        │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 5}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
+        │   │
+        │   ├── • Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
+        │   │   │     rule: "indexes containing column reach absent before column"
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
+        │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_3", ColumnID: 3 (crdb_internal_j_shard_3-)}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │
+        │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3-)}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │     rule: "column type removed right before column when not dropping relation"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 4 (t_pkey-)}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 4 (t_pkey-)}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 5}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key-), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey-)}
+        │   │   │     rule: "indexes containing column reach absent before column"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 2 (t_i_key-)}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 3}
+        │   │         rule: "dependents removed before column"
+        │   │
+        │   ├── • ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_3", ColumnID: 3 (crdb_internal_j_shard_3-)}
+        │   │     PUBLIC → ABSENT
+        │   │
+        │   ├── • ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3-)}
+        │   │     PUBLIC → ABSENT
+        │   │
+        │   ├── • CheckConstraint:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
+        │   │   │ WRITE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
+        │   │   │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_j_shard_3", ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
+        │   │         rule: "Constraint should be hidden before name"
+        │   │
+        │   ├── • ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_j_shard_3", ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
+        │   │         rule: "Constraint should be hidden before name"
+        │   │
+        │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 4 (t_pkey-)}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
+        │   │
+        │   └── • IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 5}
+        │       │ PUBLIC → ABSENT
+        │       │
+        │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
+        │             rule: "index drop mutation visible before cleaning up index columns"
+        │
+        └── • 15 Mutation operations
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 1
+            │     IndexID: 4
+            │     Kind: 2
+            │     TableID: 104
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 2
+            │     IndexID: 4
+            │     Ordinal: 1
+            │     TableID: 104
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 1
+            │     IndexID: 5
+            │     Kind: 2
+            │     TableID: 104
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 2
+            │     IndexID: 5
+            │     Ordinal: 1
+            │     TableID: 104
+            │
+            ├── • SetColumnName
+            │     ColumnID: 3
+            │     Name: crdb_internal_column_3_name_placeholder
+            │     TableID: 104
+            │
+            ├── • SetConstraintName
+            │     ConstraintID: 2
+            │     Name: crdb_internal_constraint_2_name_placeholder
+            │     TableID: 104
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 3
+            │     IndexID: 4
+            │     TableID: 104
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 3
+            │     IndexID: 5
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 4
+            │     TableID: 104
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 4
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING
+            │         HASH WITH (bucket_count = 3)
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 5
+            │     TableID: 104
+            │
+            ├── • MakeDeleteOnlyColumnAbsent
+            │     ColumnID: 3
+            │     TableID: 104
+            │
+            ├── • RemoveCheckConstraint
+            │     ConstraintID: 2
+            │     TableID: 104
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed

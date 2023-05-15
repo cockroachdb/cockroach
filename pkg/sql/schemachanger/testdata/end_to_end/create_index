@@ -383,7 +383,7 @@ begin transaction #7
 merge temporary indexes [3] into backfilled indexes [2] in table #106
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 7 with 5 MutationType ops
+## PostCommitPhase stage 6 of 7 with 6 MutationType ops
 upsert descriptor #104
   ...
      referencingDescriptorIds:
@@ -401,9 +401,18 @@ upsert descriptor #106
          version: 4
        mutationId: 1
   -    state: MERGING
+  -  - direction: ADD
   +    state: WRITE_ONLY
-     - direction: ADD
+  +  - direction: DROP
        index:
+         constraintId: 1
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -417,112 +426,7 @@ begin transaction #9
 validate forward indexes [2] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
-upsert descriptor #104
-  ...
-         id: 104
-         name: e
-  -    revertible: true
-     enumMembers:
-     - logicalRepresentation: a
-  ...
-     referencingDescriptorIds:
-     - 106
-  -  version: "7"
-  +  version: "8"
-upsert descriptor #105
-  ...
-       jobId: "1"
-       nameMapping: {}
-  -    revertible: true
-     id: 105
-     kind: ALIAS
-  ...
-     referencingDescriptorIds:
-     - 106
-  -  version: "7"
-  +  version: "8"
-upsert descriptor #106
-  ...
-           statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
-           statementTag: CREATE INDEX
-  -    revertible: true
-       targetRanks: <redacted>
-       targets: <redacted>
-  ...
-     formatVersion: 3
-     id: 106
-  +  indexes:
-  +  - createdAtNanos: "1640998800000000000"
-  +    createdExplicitly: true
-  +    foreignKey: {}
-  +    geoConfig: {}
-  +    id: 2
-  +    interleave: {}
-  +    keyColumnDirections:
-  +    - ASC
-  +    keyColumnIds:
-  +    - 2
-  +    keyColumnNames:
-  +    - v
-  +    keySuffixColumnIds:
-  +    - 1
-  +    name: idx1
-  +    partitioning: {}
-  +    predicate: v = b'@':::@100104
-  +    sharded: {}
-  +    storeColumnNames: []
-  +    version: 4
-     modificationTime: {}
-     mutations:
-  -  - direction: ADD
-  +  - direction: DROP
-       index:
-  -      createdAtNanos: "1640998800000000000"
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 2
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 2
-  -      keyColumnNames:
-  -      - v
-  -      keySuffixColumnIds:
-  -      - 1
-  -      name: idx1
-  -      partitioning: {}
-  -      predicate: v = b'@':::@100104
-  -      sharded: {}
-  -      storeColumnNames: []
-  -      version: 4
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-  -  - direction: ADD
-  -    index:
-         constraintId: 1
-         createdExplicitly: true
-  ...
-         version: 4
-       mutationId: 1
-  -    state: WRITE_ONLY
-  +    state: DELETE_ONLY
-     name: t
-     nextColumnId: 3
-  ...
-       time: {}
-     unexposedParentSchemaId: 101
-  -  version: "6"
-  +  version: "7"
-persist all catalog changes to storage
-adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
-set schema change job #1 to non-cancellable
-commit transaction #10
-begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
    type:
      arrayTypeId: 105
@@ -533,13 +437,14 @@ upsert descriptor #104
   -    nameMapping:
   -      id: 104
   -      name: e
+  -    revertible: true
      enumMembers:
      - logicalRepresentation: a
   ...
      referencingDescriptorIds:
      - 106
-  -  version: "8"
-  +  version: "9"
+  -  version: "7"
+  +  version: "8"
 upsert descriptor #105
   ...
        family: ArrayFamily
@@ -549,13 +454,14 @@ upsert descriptor #105
   -      userName: root
   -    jobId: "1"
   -    nameMapping: {}
+  -    revertible: true
      id: 105
      kind: ALIAS
   ...
      referencingDescriptorIds:
      - 106
-  -  version: "8"
-  +  version: "9"
+  -  version: "7"
+  +  version: "8"
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -584,14 +490,61 @@ upsert descriptor #106
   -          (‹v› = ‹'a'›)
   -        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
   -        statementTag: CREATE INDEX
+  -    revertible: true
   -    targetRanks: <redacted>
   -    targets: <redacted>
      families:
      - columnIds:
   ...
-       version: 4
+     formatVersion: 3
+     id: 106
+  +  indexes:
+  +  - createdAtNanos: "1640998800000000000"
+  +    createdExplicitly: true
+  +    foreignKey: {}
+  +    geoConfig: {}
+  +    id: 2
+  +    interleave: {}
+  +    keyColumnDirections:
+  +    - ASC
+  +    keyColumnIds:
+  +    - 2
+  +    keyColumnNames:
+  +    - v
+  +    keySuffixColumnIds:
+  +    - 1
+  +    name: idx1
+  +    partitioning: {}
+  +    predicate: v = b'@':::@100104
+  +    sharded: {}
+  +    storeColumnNames: []
+  +    version: 4
      modificationTime: {}
   -  mutations:
+  -  - direction: ADD
+  -    index:
+  -      createdAtNanos: "1640998800000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 2
+  -      keyColumnNames:
+  -      - v
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: idx1
+  -      partitioning: {}
+  -      predicate: v = b'@':::@100104
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      version: 4
+  -    mutationId: 1
+  -    state: WRITE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 1
@@ -622,9 +575,10 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
+  -  version: "6"
+  +  version: "7"
 persist all catalog changes to storage
+adding table for stats refresh: 106
 create job #2 (non-cancelable: true): "GC for CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
@@ -633,6 +587,6 @@ updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 106
-commit transaction #11
+commit transaction #10
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

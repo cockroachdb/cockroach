@@ -111,8 +111,8 @@ upsert descriptor #105
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "10"
-  +  version: "11"
+  -  version: "9"
+  +  version: "10"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
 upsert descriptor #106
   ...
@@ -219,8 +219,8 @@ upsert descriptor #105
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "10"
-  +  version: "11"
+  -  version: "9"
+  +  version: "10"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
 upsert descriptor #106
   ...
@@ -279,8 +279,8 @@ upsert descriptor #105
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "11"
-  +  version: "12"
+  -  version: "10"
+  +  version: "11"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
@@ -355,8 +355,8 @@ upsert descriptor #105
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "12"
-  +  version: "13"
+  -  version: "11"
+  +  version: "12"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
 persist all catalog changes to storage
 create job #3 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"

@@ -1234,10 +1234,10 @@ SELECT * FROM [SHOW INDEX FROM t1]
 table_name  index_name     non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
 t1          t1_pkey        false       1             other        other       ASC        false    false     true     1
 t1          t1_pkey        false       2             c            c           N/A        true     false     true     1
-t1          t1_c_key       false       1             c            c           ASC        false    false     true     1
-t1          t1_c_key       false       2             other        other       ASC        true     true      true     1
 t1          idx_visible    true        1             other        other       ASC        false    false     true     1
 t1          idx_invisible  true        1             other        other       ASC        false    false     false    0
+t1          t1_c_key       false       1             c            c           ASC        false    false     true     1
+t1          t1_c_key       false       2             other        other       ASC        true     true      true     1
 
 # Changing the old primary key index t1_c_key (secondary index now) to invisible
 # is fine.
