@@ -72,7 +72,7 @@ func TestFakeSpanResolver(t *testing.T) {
 				t.Fatal(it.Error())
 			}
 			desc := it.Desc()
-			rinfo, err := it.ReplicaInfo(ctx)
+			rinfo, _, err := it.ReplicaInfo(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -650,9 +650,9 @@ func (it *testSpanResolverIterator) Desc() roachpb.RangeDescriptor {
 // ReplicaInfo is part of the SpanResolverIterator interface.
 func (it *testSpanResolverIterator) ReplicaInfo(
 	_ context.Context,
-) (roachpb.ReplicaDescriptor, error) {
+) (roachpb.ReplicaDescriptor, bool, error) {
 	n := it.tsr.nodes[it.tsr.ranges[it.curRangeIdx].node-1]
-	return roachpb.ReplicaDescriptor{NodeID: n.NodeID}, nil
+	return roachpb.ReplicaDescriptor{NodeID: n.NodeID}, false, nil
 }
 
 func TestPartitionSpans(t *testing.T) {
