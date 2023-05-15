@@ -59,6 +59,8 @@ type BatchEncoder struct {
 	// Slice of keys we can reuse across each call to Prepare and between each
 	// column family.
 	keys []roachpb.Key
+	// Slice of keys prefixes so we don't have to re-encode PK for each family.
+	savedPrefixes []roachpb.Key
 	// Slice of value we can reuse across each call to Prepare and between each
 	// column family.
 	values [][]byte
@@ -205,6 +207,8 @@ func (b *BatchEncoder) resetBuffers() {
 		b.extraKeys[row] = b.extraKeys[row][:0]
 		b.lastColIDs[row] = 0
 	}
+
+	b.savedPrefixes = nil
 }
 
 func intMax(a, b int) int {
@@ -389,6 +393,14 @@ func (b *BatchEncoder) encodePK(ctx context.Context, ind catalog.Index) error {
 			}
 		}
 
+		// If we have more than one family we have to copy the keys in order to
+		// re-use their prefixes because the putter routines will sort
+		// and mutate the kys slice.
+		if len(families) > 1 && b.savedPrefixes == nil {
+			b.savedPrefixes = make([]roachpb.Key, len(kys))
+			copy(b.savedPrefixes, kys)
+		}
+
 		// TODO(cucaroach): For updates overwrite makes this a plain put.
 		b.p.CPutTuplesEmpty(kys, values)
 
@@ -537,6 +549,15 @@ func (b *BatchEncoder) encodeSecondaryIndexWithFamilies(
 				continue
 			}
 		}
+
+		// If we have more than one family we have to copy the keys in order to
+		// re-use their prefixes because the putter routines will sort
+		// and mutate the kys slice.
+		if len(familyIDs) > 1 && b.savedPrefixes == nil {
+			b.savedPrefixes = make([]roachpb.Key, len(kys))
+			copy(b.savedPrefixes, kys)
+		}
+
 		// If we are looking at family 0, encode the data as BYTES, as it might
 		// include encoded primary key columns. For other families,
 		// use the tuple encoding for the value.
@@ -651,8 +672,8 @@ func (b *BatchEncoder) initFamily(familyIndex, familyID int) {
 				continue
 			}
 			offset := row * b.keyBufSize
-			// Save old slice.
-			prefix := kys[row][:b.keyPrefixOffsets[row]]
+			// Get a slice pointing to prefix bytes.
+			prefix := b.savedPrefixes[row][:b.keyPrefixOffsets[row]]
 			// Set slice to new space.
 			kys[row] = keyBuf[offset : offset : b.keyBufSize+offset]
 			// Append prefix.

@@ -395,6 +395,27 @@ func TestColFamDropPKNot(t *testing.T) {
 	checkEqual(t, kvs1, kvs2)
 }
 
+func TestColFamilies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, db, kvdb := serverutils.StartServer(t, testArgs)
+	defer s.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, c1 INT NOT NULL, c2 INT NOT NULL, FAMILY cf1 (id, c1), FAMILY cf2(c2))")
+	sv := &s.ClusterSettings().SV
+	desc := desctestutils.TestingGetTableDescriptor(
+		kvdb, keys.SystemSQLCodec, "defaultdb", "public", "t")
+
+	row1 := []tree.Datum{tree.NewDInt(2), tree.NewDInt(1), tree.NewDInt(2)}
+	row2 := []tree.Datum{tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(1)}
+	kvs1, err1 := buildRowKVs([]tree.Datums{row1, row2}, desc, desc.PublicColumns(), sv)
+	require.NoError(t, err1)
+	kvs2, err2 := buildVecKVs([]tree.Datums{row1, row2}, desc, desc.PublicColumns(), sv)
+	require.NoError(t, err2)
+	checkEqual(t, kvs1, kvs2)
+}
+
 // TestColIDToRowIndexNull tests case where insert cols is subset of public columns.
 func TestColIDToRowIndexNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -19,6 +19,7 @@ import (
 	"math/rand"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -155,16 +156,17 @@ func TestDataDriven(t *testing.T) {
 								}()
 								require.NoError(t, err)
 								vals := make([]driver.Value, 1)
-								var results strings.Builder
+								var results []string
 								for err = nil; err == nil; {
 									err = rows.Next(vals)
 									if err == io.EOF {
 										break
 									}
 									require.NoError(t, err)
-									results.WriteString(fmt.Sprintf("%v\n", vals[0]))
+									results = append(results, fmt.Sprintf("%v", vals[0]))
 								}
-								return results.String()
+								sort.Strings(results)
+								return strings.Join(results, "\n")
 							}
 						case "copy-to", "copy-to-error":
 							var buf bytes.Buffer
