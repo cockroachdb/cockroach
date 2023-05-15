@@ -157,16 +157,6 @@ func TestNormalizedSpanConfig(t *testing.T) {
 		})
 }
 
-func printPostingList(b *strings.Builder, pl storeIDPostingList) {
-	for i := range pl {
-		prefix := ""
-		if i > 0 {
-			prefix = ", "
-		}
-		fmt.Fprintf(b, "%s%d", prefix, pl[i])
-	}
-}
-
 func TestStoreIDPostingList(t *testing.T) {
 	pls := map[string]storeIDPostingList{}
 	forceAllocation := rand.Intn(2) == 1

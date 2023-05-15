@@ -1,0 +1,172 @@
+set-store
+store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
+store-id=2 node-id=1 attrs=yellow locality-tiers=region=us-west-1,zone=us-west-1a
+----
+node-id=1 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 attrs=purple locality-code=1:2:3:
+  store-id=2 attrs=yellow locality-code=1:2:3:
+
+set-store
+store-id=3 node-id=2 attrs=green  locality-tiers=region=us-west-1,zone=us-west-1b
+store-id=4 node-id=2 attrs=orange locality-tiers=region=us-west-1,zone=us-west-1b
+store-id=5 node-id=3 attrs=blue   locality-tiers=region=us-west-1,zone=us-west-1c
+store-id=6 node-id=3 attrs=red    locality-tiers=region=us-west-1,zone=us-west-1c
+store-id=7 node-id=4 attrs=purple locality-tiers=region=us-east-1,zone=us-east-1a
+store-id=8 node-id=4 attrs=teal   locality-tiers=region=us-east-1,zone=us-east-1a
+----
+node-id=1 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 attrs=purple locality-code=1:2:3:
+  store-id=2 attrs=yellow locality-code=1:2:3:
+node-id=2 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1b,node=2
+  store-id=3 attrs=green locality-code=1:4:5:
+  store-id=4 attrs=orange locality-code=1:4:5:
+node-id=3 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1c,node=3
+  store-id=5 attrs=blue locality-code=1:6:7:
+  store-id=6 attrs=red locality-code=1:6:7:
+node-id=4 failure-summary=ok locality-tiers=region=us-east-1,zone=us-east-1a,node=4
+  store-id=7 attrs=purple locality-code=8:9:10:
+  store-id=8 attrs=teal locality-code=8:9:10:
+
+remove-node node-id=4
+----
+node-id=1 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 attrs=purple locality-code=1:2:3:
+  store-id=2 attrs=yellow locality-code=1:2:3:
+node-id=2 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1b,node=2
+  store-id=3 attrs=green locality-code=1:4:5:
+  store-id=4 attrs=orange locality-code=1:4:5:
+node-id=3 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1c,node=3
+  store-id=5 attrs=blue locality-code=1:6:7:
+  store-id=6 attrs=red locality-code=1:6:7:
+
+update-failure-detection node-id=2 summary=suspect
+----
+node-id=1 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 attrs=purple locality-code=1:2:3:
+  store-id=2 attrs=yellow locality-code=1:2:3:
+node-id=2 failure-summary=suspect locality-tiers=region=us-west-1,zone=us-west-1b,node=2
+  store-id=3 attrs=green locality-code=1:4:5:
+  store-id=4 attrs=orange locality-code=1:4:5:
+node-id=3 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1c,node=3
+  store-id=5 attrs=blue locality-code=1:6:7:
+  store-id=6 attrs=red locality-code=1:6:7:
+
+buffer-load-msg 
+node-id=1 cpu-load=60 cpu-capacity=100
+  store: store-id=1 load=(20,15,10) capacity=(-1,100,100) secondary-load=25
+    topk: range-id=1 load=(4,3,2) cpu-raft=1
+  store: store-id=2 load=(40,30,20) capacity=(-1,200,200) secondary-load=50
+    topk: range-id=2 load=(8,6,3) cpu-raft=2
+----
+
+buffer-lease-msg node-id=1
+store: store-id=1 
+  range: range-id=1
+    replica: store-id=1 replica-id=1 lease=true  type=VOTER_FULL
+    replica: store-id=3 replica-id=2 lease=false type=VOTER_FULL
+    replica: store-id=5 replica-id=3 lease=false type=VOTER_FULL
+store: store-id=2 
+  range: range-id=2
+    replica: store-id=2 replica-id=1 lease=true  type=VOTER_FULL
+    replica: store-id=4 replica-id=2 lease=false type=VOTER_FULL
+    replica: store-id=6 replica-id=3 lease=false type=VOTER_FULL
+----
+
+send last-seq=-1 cur-seq=-1
+----
+OK
+
+ranges
+----
+range-id=1
+  store-id=1 replica-id=1 lease=true type=VOTER_FULL
+  store-id=3 replica-id=2 lease=false type=VOTER_FULL
+  store-id=5 replica-id=3 lease=false type=VOTER_FULL
+range-id=2
+  store-id=2 replica-id=1 lease=true type=VOTER_FULL
+  store-id=4 replica-id=2 lease=false type=VOTER_FULL
+  store-id=6 replica-id=3 lease=false type=VOTER_FULL
+
+load-summary
+store-means: load=(20,20,20) capacity=(-1,50,50) secondary-load=100
+node-means:  cpu-load=50 cpu-capacity=100
+----
+store-id=1 store-load=low node-load=normal failure-detection=ok seq=1
+store-id=2 store-load=low node-load=normal failure-detection=ok seq=1
+store-id=3 store-load=low node-load=low failure-detection=suspect seq=0
+store-id=4 store-load=low node-load=low failure-detection=suspect seq=0
+store-id=5 store-load=low node-load=low failure-detection=ok seq=0
+store-id=6 store-load=low node-load=low failure-detection=ok seq=0
+
+buffer-load-msg 
+node-id=2 cpu-load=100 cpu-capacity=100
+  store: store-id=3 load=(50,15,10) capacity=(-1,100,100) secondary-load=25
+    topk: range-id=1 load=(4,3,2) cpu-raft=1
+  store: store-id=4 load=(50,30,20) capacity=(-1,200,200) secondary-load=50
+    topk: range-id=2 load=(8,6,3) cpu-raft=2
+----
+
+send last-seq=-1 cur-seq=-1
+----
+OK
+
+load-summary
+store-means: load=(20,20,20) capacity=(-1,50,50) secondary-load=100
+node-means:  cpu-load=50 cpu-capacity=100
+----
+store-id=1 store-load=low node-load=normal failure-detection=ok seq=1
+store-id=2 store-load=low node-load=normal failure-detection=ok seq=1
+store-id=3 store-load=low node-load=overload-urgent failure-detection=suspect seq=1
+store-id=4 store-load=low node-load=overload-urgent failure-detection=suspect seq=1
+store-id=5 store-load=low node-load=low failure-detection=ok seq=0
+store-id=6 store-load=low node-load=low failure-detection=ok seq=0
+
+make-pending-changes tick=10 range-id=1
+transfer-lease: remove-store=1 add-store=3 load=(8,6,3) cpu-raft=2
+----
+pending
+  change-id=1 start=0 store-id=1 range-id=1 delta=[-6 0 0] prev=(replica-id=1 lease=true type=VOTER_FULL) next=(replica-id=1 lease=false type=VOTER_FULL)
+  change-id=2 start=0 store-id=3 range-id=1 delta=[6 0 0] prev=(replica-id=2 lease=false type=VOTER_FULL) next=(replica-id=2 lease=true type=VOTER_FULL)
+
+ranges
+----
+range-id=1
+  store-id=1 replica-id=1 lease=false type=VOTER_FULL
+  store-id=3 replica-id=2 lease=true type=VOTER_FULL
+  store-id=5 replica-id=3 lease=false type=VOTER_FULL
+range-id=2
+  store-id=2 replica-id=1 lease=true type=VOTER_FULL
+  store-id=4 replica-id=2 lease=false type=VOTER_FULL
+  store-id=6 replica-id=3 lease=false type=VOTER_FULL
+
+tick seconds=150
+----
+clock=150s
+
+tick seconds=150
+----
+clock=300s
+
+gc-pending-changes
+----
+pending
+
+ranges
+----
+range-id=1
+  store-id=1 replica-id=1 lease=true type=VOTER_FULL
+  store-id=3 replica-id=2 lease=false type=VOTER_FULL
+  store-id=5 replica-id=3 lease=false type=VOTER_FULL
+range-id=2
+  store-id=2 replica-id=1 lease=true type=VOTER_FULL
+  store-id=4 replica-id=2 lease=false type=VOTER_FULL
+  store-id=6 replica-id=3 lease=false type=VOTER_FULL
+
+# add-replica:       add-store=2 type=VOTER_FULL
+# remove-replica:    remove-store=1
+# rebalance-replica: remove-store=1 add-store=3
+#
+# gc-pending-changes time=...
+# ----
+#
+# vim:ft=sh
