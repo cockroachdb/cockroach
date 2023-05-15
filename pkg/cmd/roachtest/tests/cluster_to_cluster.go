@@ -963,6 +963,11 @@ func (rrd *replResilienceDriver) getTargetAndWatcherNodes(ctx context.Context) {
 }
 
 func (rrd *replResilienceDriver) getPhase() c2cPhase {
+	var jobStatus string
+	rrd.setup.dst.sysSQL.QueryRow(rrd.t, `SELECT status FROM [SHOW JOBS] WHERE job_id=$1`,
+		rrd.dstJobID).Scan(&jobStatus)
+	require.Equal(rrd.t, jobs.StatusRunning, jobs.Status(jobStatus))
+
 	progress := getJobProgress(rrd.t, rrd.setup.dst.sysSQL, rrd.dstJobID)
 	streamIngestProgress := progress.GetStreamIngest()
 	highWater := progress.GetHighWater()
@@ -993,11 +998,11 @@ func (rrd *replResilienceDriver) waitForTargetPhase() error {
 }
 
 func (rrd *replResilienceDriver) sleepBeforeResiliencyEvent() {
-	// Assuming every C2C phase lasts at least 10 seconds, introduce some waiting
+	// Assuming every C2C phase lasts at least 5 seconds, introduce some waiting
 	// before a resiliency event (e.g. a node shutdown) to ensure the event occurs
 	// once we're fully settled into the target phase (e.g. the stream ingestion
 	// processors have observed the cutover signal).
-	randomSleep := time.Duration(5+rrd.rng.Intn(6)) * time.Second
+	randomSleep := time.Duration(1+rrd.rng.Intn(2)) * time.Second
 	rrd.t.L().Printf("Take a %s power nap", randomSleep)
 	time.Sleep(randomSleep)
 }
@@ -1028,7 +1033,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			srcNodes:           4,
 			dstNodes:           4,
 			cpus:               8,
-			workload:           replicateKV{readPercent: 0, initRows: 1000000, maxBlockBytes: 1024},
+			workload:           replicateKV{readPercent: 0, initRows: 5000000, maxBlockBytes: 1024},
 			timeout:            20 * time.Minute,
 			additionalDuration: 6 * time.Minute,
 			cutover:            3 * time.Minute,
@@ -1039,6 +1044,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 				rrd := makeReplResilienceDriver(t, c, rsp)
+				rrd.t.L().Printf("Planning to shut down node during %s phase", rrd.phase)
 				rrd.setupC2C(ctx, t, c)
 
 				shutdownSetupDone := make(chan struct{})
