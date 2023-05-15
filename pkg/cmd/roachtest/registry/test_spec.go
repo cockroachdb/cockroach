@@ -159,6 +159,8 @@ type LeaseType int
 
 func (l LeaseType) String() string {
 	switch l {
+	case DefaultLeases:
+		return "default"
 	case EpochLeases:
 		return "epoch"
 	case ExpirationLeases:
