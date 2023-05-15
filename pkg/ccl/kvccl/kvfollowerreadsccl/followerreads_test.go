@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -679,7 +680,7 @@ func TestOracle(t *testing.T) {
 				Clock:      clock,
 			})
 
-			res, err := o.ChoosePreferredReplica(ctx, c.txn, desc, c.lh, c.ctPolicy, replicaoracle.QueryState{})
+			res, _, err := o.ChoosePreferredReplica(ctx, c.txn, desc, c.lh, c.ctPolicy, replicaoracle.QueryState{})
 			require.NoError(t, err)
 			require.Equal(t, c.exp, res)
 		})
@@ -692,6 +693,7 @@ func TestOracle(t *testing.T) {
 // encountering this situation, and then follower reads work.
 func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	// The test uses follower_read_timestamp().
@@ -826,6 +828,43 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Greater(t, followerReadsCountAfter, followerReadsCountBefore)
+
+	// Now verify that follower reads aren't mistakenly counted as "misplanned
+	// ranges" (#61313).
+
+	// First, run a query on n3 to populate its cache.
+	n3 := sqlutils.MakeSQLRunner(tc.Conns[2])
+	n3.Exec(t, "SELECT * from test WHERE k=1")
+	n3Cache := tc.Server(2).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
+	entry = n3Cache.GetCached(ctx, tablePrefix, false /* inverted */)
+	require.NotNil(t, entry)
+	require.False(t, entry.Lease().Empty())
+	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
+	require.Equal(t, []roachpb.ReplicaDescriptor{
+		{NodeID: 1, StoreID: 1, ReplicaID: 1},
+		{NodeID: 3, StoreID: 3, ReplicaID: 3, Type: roachpb.NON_VOTER},
+	}, entry.Desc().Replicas().Descriptors())
+
+	// Enable DistSQL so that we have a distributed plan with a single flow on
+	// n3 (local plans ignore the misplanned ranges).
+	n4.Exec(t, "SET distsql=on")
+
+	// Run a historical query and assert that it's served from the follower (n3).
+	// n4 should choose n3 to plan the TableReader on because we pretend n3 has
+	// a lower latency (see testing knob).
+	n4.Exec(t, historicalQuery)
+	rec = <-recCh
+
+	// Sanity check that the plan was distributed.
+	require.True(t, strings.Contains(rec.String(), "creating DistSQL plan with isLocal=false"))
+	// Look at the trace and check that we've served a follower read.
+	require.True(t, kv.OnlyFollowerReads(rec), "query was not served through follower reads: %s", rec)
+	// Verify that we didn't produce the "misplanned ranges" metadata that would
+	// purge the non-stale entries from the range cache on n4.
+	require.False(t, strings.Contains(rec.String(), "clearing entries overlapping"))
+	// Also confirm that we didn't even check for the "misplanned ranges"
+	// metadata on n3.
+	require.False(t, strings.Contains(rec.String(), "checking range cache to see if range info updates should be communicated to the gateway"))
 }
 
 // TestSecondaryTenantFollowerReadsRouting ensures that secondary tenants route
