@@ -83,6 +83,7 @@ type kv struct {
 	sequential                           bool
 	zipfian                              bool
 	splits                               int
+	scatter                              bool
 	secondaryIndex                       bool
 	shards                               int
 	targetCompressionRatio               float64
@@ -143,6 +144,8 @@ var kvMeta = workload.Meta{
 				`previous --sequential run and R implies a previous random run.`)
 		g.flags.IntVar(&g.splits, `splits`, 0,
 			`Number of splits to perform before starting normal operations.`)
+		g.flags.BoolVar(&g.scatter, `scatter`, false,
+			`Scatter ranges before starting normal operations.`)
 		g.flags.BoolVar(&g.secondaryIndex, `secondary-index`, false,
 			`Add a secondary index to the schema.`)
 		g.flags.IntVar(&g.shards, `num-shards`, 0,
@@ -171,13 +174,20 @@ func (w *kv) Flags() workload.Flags { return w.flags }
 func (w *kv) Hooks() workload.Hooks {
 	return workload.Hooks{
 		PostLoad: func(_ context.Context, db *gosql.DB) error {
-			if !w.enum {
-				return nil
-			}
-			_, err := db.Exec(`
+			if w.enum {
+				_, err := db.Exec(`
 CREATE TYPE enum_type AS ENUM ('v');
 ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
-			return err
+				if err != nil {
+					return err
+				}
+			}
+			if w.scatter {
+				if _, err := db.Exec(`ALTER TABLE kv SCATTER`); err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 		Validate: func() error {
 			if w.maxBlockSizeBytes < w.minBlockSizeBytes {
