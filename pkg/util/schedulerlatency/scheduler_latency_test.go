@@ -87,13 +87,12 @@ func TestSchedulerLatencySampler(t *testing.T) {
 		var err error
 		reg.Each(func(name string, mtr interface{}) {
 			wh := mtr.(metric.WindowedHistogram)
-			count := float64(wh.TotalCountWindowed())
-			avg := wh.TotalSumWindowed() / count
+			avg := wh.MeanWindowed()
 			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 				avg = 0
 			}
 
-			if wh.ValueAtQuantileWindowed(99) == 0 || count == 0 || avg == 0 {
+			if wh.ValueAtQuantileWindowed(99) == 0 || avg == 0 {
 				err = fmt.Errorf("expected non-zero p99 scheduling latency metrics")
 			}
 		})
