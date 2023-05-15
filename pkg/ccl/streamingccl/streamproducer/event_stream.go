@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -55,6 +56,7 @@ type eventStream struct {
 	errCh       chan error                    // Signaled when error occurs in rangefeed.
 	streamCh    chan tree.Datums              // Channel signaled to forward datums to consumer.
 	sp          *tracing.Span                 // Span representing the lifetime of the eventStream.
+	exportsCh   chan kvpb.ExportResponse_File // HACK
 }
 
 var _ eval.ValueGenerator = (*eventStream)(nil)
@@ -87,6 +89,9 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	// Events channel gets RangeFeedEvents and is consumed by ValueGenerator.
 	s.eventsCh = make(chan kvcoord.RangeFeedMessage)
 
+	// HACK
+	s.exportsCh = make(chan kvpb.ExportResponse_File, 16)
+
 	// Stream channel receives datums to be sent to the consumer.
 	s.streamCh = make(chan tree.Datums)
 
@@ -113,6 +118,54 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	}
 
 	initialTimestamp := s.spec.InitialScanTimestamp
+	spansCh := make(chan roachpb.Span, 128)
+
+	startExportRequests := func() error {
+		log.Infof(ctx, "C2C TEST: hack starting!")
+		err := ctxgroup.GroupWorkers(ctx, 16, func(ctx context.Context, _ int) error {
+			for {
+				span, ok := <-spansCh
+				if !ok {
+					return nil
+				}
+				for {
+					header := kvpb.Header{
+						TargetBytes: 1,
+						Timestamp:   initialTimestamp,
+					}
+					req := &kvpb.ExportRequest{
+						RequestHeader:  kvpb.RequestHeaderFromSpan(span),
+						MVCCFilter:     kvpb.MVCCFilter_Latest,
+						TargetFileSize: 1 << 20,
+					}
+					r, pErr := kv.SendWrappedWith(ctx, s.execCfg.DistSender, header, req)
+					if pErr != nil {
+						log.Fatalf(ctx, "C2C TEST: hack failed sending export: %s ==> %v span: %v", pErr, req, span)
+						return pErr.GoError()
+					}
+					res := r.(*kvpb.ExportResponse)
+					log.Infof(ctx, "C2C TEST: hack sent export successfully for span: %v", span)
+					for _, f := range res.Files {
+						s.exportsCh <- f
+					}
+					resumeSpan := res.ResumeSpan
+					if resumeSpan == nil {
+						log.Infof(ctx, "C2C TEST: hack resume span is nil! DONE. span: %v", span)
+						break
+					}
+					span = *resumeSpan
+				}
+			}
+		})
+		close(s.exportsCh)
+		return err
+	}
+
+	if s.spec.PreviousHighWaterTimestamp.IsEmpty() {
+		log.Infof(ctx, "C2C TEST: hack setting PreviousHighWaterTimestamp to: %v", initialTimestamp)
+		s.spec.PreviousHighWaterTimestamp = initialTimestamp
+	}
+
 	if s.spec.PreviousHighWaterTimestamp.IsEmpty() {
 		opts = append(opts,
 			rangefeed.WithInitialScan(func(ctx context.Context) {}),
@@ -152,6 +205,43 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		return errors.Wrapf(err, "failed to allocated %d bytes from monitor", s.spec.Config.BatchByteSize)
 	}
 
+	// Context group responsible for coordinating rangefeed event production with
+	// ValueGenerator implementation that consumes rangefeed events and forwards them to the
+	// destination cluster consumer.
+	streamCtx, sp := tracing.ChildSpan(ctx, "event stream")
+	s.sp = sp
+	s.streamGroup = ctxgroup.WithContext(streamCtx)
+
+	s.streamGroup.GoCtx(func(ctx context.Context) error {
+		return startExportRequests()
+	})
+
+	for _, s1 := range s.spec.Spans {
+		log.Infof(ctx, "C2C TEST: hack span to process: %v", s1)
+		span, err := keys.SpanAddr(s1)
+		if err != nil {
+			log.Fatalf(ctx, "C2C TEST: hack got err: %v", err)
+		}
+		lastKey := span.Key
+		ri := kvcoord.MakeRangeIterator(s.execCfg.DistSender)
+		for ri.Seek(ctx, span.Key, kvcoord.Ascending); ; ri.Next(ctx) {
+			if !ri.Valid() {
+				log.Fatalf(ctx, "C2C TEST: hack got err: %v", ri.Error())
+			}
+			endKey := ri.Desc().EndKey
+			if span.EndKey.Less(endKey) {
+				endKey = span.EndKey
+			}
+			spn := roachpb.Span{Key: lastKey.AsRawKey(), EndKey: endKey.AsRawKey()}
+			log.Infof(ctx, "C2C TEST: hack send single range span: %v", spn)
+			spansCh <- spn
+			if !ri.NeedAnother(span) {
+				break
+			}
+			lastKey = endKey
+		}
+	}
+	close(spansCh)
 	// NB: statements below should not return errors (otherwise, we may fail to release
 	// bound account resources).
 	s.startStreamProcessor(ctx, frontier)
@@ -182,12 +272,6 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 		}
 	}
 
-	// Context group responsible for coordinating rangefeed event production with
-	// ValueGenerator implementation that consumes rangefeed events and forwards them to the
-	// destination cluster consumer.
-	streamCtx, sp := tracing.ChildSpan(ctx, "event stream")
-	s.sp = sp
-	s.streamGroup = ctxgroup.WithContext(streamCtx)
 	s.streamGroup.GoCtx(withErrCapture(func(ctx context.Context) error {
 		return s.streamLoop(ctx, frontier)
 	}))
@@ -439,6 +523,18 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 
 	const forceFlush = true
 	const flushIfNeeded = false
+
+	log.Infof(ctx, "C2C TEST: hack streamLoop starting!")
+	for f := range s.exportsCh {
+		var b streampb.StreamEvent_Batch
+		b.Ssts = append(b.Ssts, kvpb.RangeFeedSSTable{Data: f.SST, Span: f.Span, WriteTS: f.EndKeyTS})
+		log.Infof(ctx, "C2C TEST: hack streamLoop flushing an SST: %v", f.Span)
+		if err := s.flushEvent(ctx, &streampb.StreamEvent{Batch: &b}); err != nil {
+			log.Infof(ctx, "C2C TEST: hack streamLoop FAILED: %v", err)
+			return err
+		}
+	}
+	log.Infof(ctx, "C2C TEST: hack streamLoop done!")
 
 	// Note: we rely on the closed timestamp system to publish events periodically.
 	// Thus, we don't need to worry about flushing batched data on a timer -- we simply
