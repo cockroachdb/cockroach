@@ -27,8 +27,13 @@ go_test(
         "memo_helper_test.go",
     ],
     args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
     embed = [":allocator2"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/roachpb",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 get_x_data(name = "get_x_data")
