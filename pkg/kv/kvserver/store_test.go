@@ -454,6 +454,40 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	}
 }
 
+// TestStoreConfigSetDefaults checks that StoreConfig.SetDefaults() sets proper
+// defaults based on numStores.
+func TestStoreConfigSetDefaultsNumStores(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testcases := map[string]struct {
+		conc        int
+		defaultConc int
+		numStores   int
+		expectConc  int
+	}{
+		"zero default is retained":         {defaultConc: 0, numStores: 4, expectConc: 0},
+		"negative default is retained":     {defaultConc: -1, numStores: 4, expectConc: -1},
+		"zero stores retains default":      {defaultConc: 4, expectConc: 4},
+		"explicit value not distributed":   {conc: 4, numStores: 2, expectConc: 4},
+		"explicit value overrides default": {conc: 4, defaultConc: 16, numStores: 2, expectConc: 4},
+		"default value is distributed":     {defaultConc: 16, numStores: 4, expectConc: 4},
+		"default value uses ceil division": {defaultConc: 16, numStores: 5, expectConc: 4},
+		"all stores have at least 1":       {defaultConc: 4, numStores: 10, expectConc: 1},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			defer func(original int) {
+				defaultRaftSchedulerConcurrency = original // restore global default
+			}(defaultRaftSchedulerConcurrency)
+			defaultRaftSchedulerConcurrency = tc.defaultConc
+			cfg := StoreConfig{RaftSchedulerConcurrency: tc.conc}
+			cfg.SetDefaults(tc.numStores)
+			require.Equal(t, tc.expectConc, cfg.RaftSchedulerConcurrency)
+		})
+	}
+}
+
 // TestStoreInitAndBootstrap verifies store initialization and bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
