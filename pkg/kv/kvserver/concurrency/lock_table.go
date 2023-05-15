@@ -428,20 +428,26 @@ type lockTableGuardImpl struct {
 		state  waitingState
 		signal chan struct{}
 
-		// locks for which this request has a reservation or is in the queue of
-		// writers (active or inactive) or actively waiting as a reader.
+		// locks for which this request is in the list of queued{Readers,Writers}.
+		// For writers, this includes both active and inactive waiters. For readers,
+		// there's no such thing as inactive readers, so by definition the request
+		// must be an active waiter. This map also includes locks for which the
+		// request holds a reservation.
+		//
+		// TODO(arul): this reservation comment will be stale when we remove the
+		// concept of reservations.
 		//
 		// TODO(sbhola): investigate whether the logic to maintain this locks map
-		// can be simplified so it doesn't need to be adjusted by various
-		// lockState methods. It adds additional bookkeeping burden that means it
-		// is more prone to inconsistencies. There are two main uses: (a) removing
-		// from various lockStates when done() is called, (b) tryActiveWait() uses
+		// can be simplified so it doesn't need to be adjusted by various lockState
+		// methods. It adds additional bookkeeping burden that means it is more
+		// prone to inconsistencies. There are two main uses: (a) removing from
+		// various lockStates when requestDone() is called, (b) tryActiveWait() uses
 		// it as an optimization to know that this request is not known to the
 		// lockState. (b) can be handled by other means -- the first scan the
-		// request won't be in the lockState and the second scan it likely will.
-		// (a) doesn't necessarily require this map to be consistent -- the
-		// request could track the places where it is has enqueued as places where
-		// it could be present and then do the search.
+		// request won't be in the lockState and the second scan it likely will. (a)
+		// doesn't necessarily require this map to be consistent -- the request
+		// could track the places where it is has enqueued as places where it could
+		// be present and then do the search.
 
 		locks map[*lockState]struct{}
 
@@ -639,18 +645,15 @@ func (g *lockTableGuardImpl) notify() {
 	}
 }
 
-// Called when the request is no longer actively waiting at lock l, and should
-// look for the next lock to wait at. hasReservation is true iff the request
-// acquired the reservation at l. Note that it will be false for requests that
-// were doing a read at the key, or non-transactional writes at the key.
-func (g *lockTableGuardImpl) doneWaitingAtLock(hasReservation bool, l *lockState) {
-	g.mu.Lock()
-	if !hasReservation {
-		delete(g.mu.locks, l)
-	}
+// doneActivelyWaitingAtLock is called when a request, that was previously
+// actively waiting at a lock, is no longer doing so. It may have transitioned
+// to become an inactive waiter or removed from the lock's wait queues entirely
+// -- either way, it should find the next lock (if any) to wait at.
+//
+// REQUIRES: g.mu to be locked.
+func (g *lockTableGuardImpl) doneActivelyWaitingAtLock() {
 	g.mu.mustFindNextLockAfter = true
 	g.notify()
-	g.mu.Unlock()
 }
 
 func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
@@ -1339,17 +1342,7 @@ func (l *lockState) releaseWritersFromTxn(txn *enginepb.TxnMeta) {
 		e = e.Next()
 		g := qg.guard
 		if g.isSameTxn(txn) {
-			if qg.active {
-				if g == l.distinguishedWaiter {
-					l.distinguishedWaiter = nil
-				}
-				g.doneWaitingAtLock(false, l)
-			} else {
-				g.mu.Lock()
-				delete(g.mu.locks, l)
-				g.mu.Unlock()
-			}
-			l.queuedWriters.Remove(curr)
+			l.removeWriter(curr)
 		}
 	}
 }
@@ -2298,13 +2291,7 @@ func (l *lockState) increasedLockTs(newTs hlc.Timestamp) {
 		curr := e
 		e = e.Next()
 		if g.ts.Less(newTs) {
-			// Stop waiting.
-			l.waitingReaders.Remove(curr)
-			if g == l.distinguishedWaiter {
-				distinguishedRemoved = true
-				l.distinguishedWaiter = nil
-			}
-			g.doneWaitingAtLock(false, l)
+			distinguishedRemoved = distinguishedRemoved || l.removeReader(curr)
 		}
 		// Else don't inform an active waiter which continues to be an active waiter
 		// despite the timestamp increase.
@@ -2312,6 +2299,43 @@ func (l *lockState) increasedLockTs(newTs hlc.Timestamp) {
 	if distinguishedRemoved {
 		l.tryMakeNewDistinguished()
 	}
+}
+
+// removeWriter removes the writer, referenced by the supplied list.Element,
+// from the lock's queuedWriters list. Returns whether the writer was the
+// distinguished waiter.
+func (l *lockState) removeWriter(e *list.Element) bool {
+	qg := e.Value.(*queuedGuard)
+	g := qg.guard
+	l.queuedWriters.Remove(e)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.mu.locks, l)
+	if qg.active {
+		g.doneActivelyWaitingAtLock()
+		if g == l.distinguishedWaiter {
+			l.distinguishedWaiter = nil
+			return true
+		}
+	}
+	return false
+}
+
+// removeReader removes the reader, referenced by the supplied list.Element,
+// from the lock's queuedReaders list. Returns whether the reader was the
+// distinguished waiter or not.
+func (l *lockState) removeReader(e *list.Element) bool {
+	g := e.Value.(*lockTableGuardImpl)
+	l.waitingReaders.Remove(e)
+	g.mu.Lock()
+	delete(g.mu.locks, l)
+	g.doneActivelyWaitingAtLock()
+	g.mu.Unlock()
+	if g == l.distinguishedWaiter {
+		l.distinguishedWaiter = nil
+		return true
+	}
+	return false
 }
 
 // A request known to this lockState is done. The request could be a reserver,
@@ -2428,14 +2452,9 @@ func (l *lockState) lockIsFree() (gc bool) {
 	// All waiting readers don't need to wait here anymore.
 	// NB: all waiting readers are by definition active waiters.
 	for e := l.waitingReaders.Front(); e != nil; {
-		g := e.Value.(*lockTableGuardImpl)
 		curr := e
 		e = e.Next()
-		l.waitingReaders.Remove(curr)
-		if g == l.distinguishedWaiter {
-			l.distinguishedWaiter = nil
-		}
-		g.doneWaitingAtLock(false, l)
+		l.removeReader(curr)
 	}
 
 	// The prefix of the queue that is non-transactional writers is done
@@ -2443,23 +2462,12 @@ func (l *lockState) lockIsFree() (gc bool) {
 	for e := l.queuedWriters.Front(); e != nil; {
 		qg := e.Value.(*queuedGuard)
 		g := qg.guard
-		if g.txn == nil {
-			curr := e
-			e = e.Next()
-			l.queuedWriters.Remove(curr)
-			if qg.active {
-				if g == l.distinguishedWaiter {
-					l.distinguishedWaiter = nil
-				}
-				g.doneWaitingAtLock(false, l)
-			} else {
-				g.mu.Lock()
-				delete(g.mu.locks, l)
-				g.mu.Unlock()
-			}
-		} else {
+		if g.txn != nil { // transactional writer
 			break
 		}
+		curr := e
+		e = e.Next()
+		l.removeWriter(curr)
 	}
 
 	if l.queuedWriters.Len() == 0 {
@@ -2472,12 +2480,20 @@ func (l *lockState) lockIsFree() (gc bool) {
 	qg := e.Value.(*queuedGuard)
 	g := qg.guard
 	l.reservation = g
+	// TODO(arul): Even though we're removing this writer from the list, we do so
+	// directly without calling into removeWriter. This is because we don't want
+	// to modify the g.mu.locks bookkeeping when giving this request the
+	// reservation. This is temporary -- once we remove the concept of
+	// reservations, we'll no longer be removing the request from the
+	// queuedWriters list.
 	l.queuedWriters.Remove(e)
 	if qg.active {
 		if g == l.distinguishedWaiter {
 			l.distinguishedWaiter = nil
 		}
-		g.doneWaitingAtLock(true, l)
+		g.mu.Lock()
+		g.doneActivelyWaitingAtLock()
+		g.mu.Unlock()
 	}
 	// Else inactive waiter and is waiting elsewhere.
 
