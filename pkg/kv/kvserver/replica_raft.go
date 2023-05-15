@@ -2166,7 +2166,7 @@ func shouldCampaignOnLeaseRequestRedirect(
 	// Store.updateLivenessMap). We only care whether the leader is currently live
 	// according to node liveness because this determines whether it will be able
 	// to acquire an epoch-based lease.
-	return !livenessEntry.Liveness.IsLive(now.GoTime())
+	return !livenessEntry.Liveness.IsLive(now)
 }
 
 func (r *Replica) campaignLocked(ctx context.Context) {
