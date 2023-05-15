@@ -16,14 +16,14 @@ EXTRA_TARGETS=
 if [ "$CONFIG" == "crosslinux" ]
 then
     DOC_TARGETS=$(grep '^//' docs/generated/bazel_targets.txt)
-    BINARY_TARGETS="@com_github_cockroachdb_go_test_teamcity//:go-test-teamcity //pkg/cmd/dev //pkg/cmd/workload"
+    BINARY_TARGETS="@com_github_cockroachdb_go_test_teamcity//:go-test-teamcity"
     EXTRA_TARGETS="$DOC_TARGETS $BINARY_TARGETS"
 fi
 
 # Extra targets to build on Unix only.
 if [ "$CONFIG" != "crosswindows" ]
 then
-    EXTRA_TARGETS="$EXTRA_TARGETS //pkg/cmd/roachprod"
+    EXTRA_TARGETS="$EXTRA_TARGETS //pkg/cmd/roachprod //pkg/cmd/workload //pkg/cmd/dev"
 fi
 
 bazel build //pkg/cmd/bazci --config=ci

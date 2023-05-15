@@ -1,7 +1,7 @@
 explain_stmt ::=
 	'EXPLAIN' explainable_stmt
-	| 'EXPLAIN' '(' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ( ( ',' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ) )* ')' explainable_stmt
+	| 'EXPLAIN' '(' ( 'PLAN' | 'VERBOSE' | 'TYPES' | 'DEBUG' | 'REDACT' | 'DISTSQL') ( ( ',' ( 'PLAN' | 'VERBOSE' | 'TYPES' | 'DEBUG' | 'REDACT' | 'DISTSQL') ) )* ')' explainable_stmt
 	| 'EXPLAIN' 'ANALYZE' explainable_stmt
 	| 'EXPLAIN' 'ANALYSE' explainable_stmt
-	| 'EXPLAIN' 'ANALYZE' '(' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ( ( ',' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ) )* ')' explainable_stmt
-	| 'EXPLAIN' 'ANALYSE' '(' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ( ( ',' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ) )* ')' explainable_stmt
+	| 'EXPLAIN' 'ANALYZE' '(' ( 'PLAN' | 'VERBOSE' | 'TYPES' | 'DEBUG' | 'REDACT' | 'DISTSQL') ( ( ',' ( 'PLAN' | 'VERBOSE' | 'TYPES' | 'DEBUG' | 'REDACT' | 'DISTSQL') ) )* ')' explainable_stmt
+	| 'EXPLAIN' 'ANALYSE' '(' ( 'PLAN' | 'VERBOSE' | 'TYPES' | 'DEBUG' | 'REDACT' | 'DISTSQL') ( ( ',' ( 'PLAN' | 'VERBOSE' | 'TYPES' | 'DEBUG' | 'REDACT' | 'DISTSQL') ) )* ')' explainable_stmt
