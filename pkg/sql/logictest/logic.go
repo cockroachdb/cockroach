@@ -1326,7 +1326,7 @@ func (t *logicTest) newCluster(
 	if serverArgs.MaxSQLMemoryLimit == 0 {
 		// Specify a fixed memory limit (some test cases verify OOM conditions;
 		// we don't want those to take long on large machines).
-		serverArgs.MaxSQLMemoryLimit = 192 * 1024 * 1024
+		serverArgs.MaxSQLMemoryLimit = 256 * 1024 * 1024
 	}
 	// We have some queries that bump into 100MB default temp storage limit
 	// when run with fakedist-disk config, so we'll use a larger limit here.
