@@ -20,12 +20,18 @@ if [ ! -z "${BAZEL_OUTPUT_BASE-}" ]; then
   return
 fi
 
-
-# If we're not on macOS/haven't enabled multi-bases, just run bazel normally.
-OUTPUT_BASES="/private/var/tmp/_bazel_${USER}/bases/"
-if [ ! -d "${OUTPUT_BASES}" ]; then 
+# If the env var is set to disable multiple output bases, just use default.
+if [ ! -z "${BAZEL_DEFAULT_OUTPUT_BASE-}" ]; then
   return
 fi
+
+# If we're not on macOS, just run bazel normally.
+if [ ! -d "/private/var/tmp" ]; then
+  return
+fi
+
+OUTPUT_BASES="/private/var/tmp/_bazel_${USER}/bases/"
+mkdir -p "$OUTPUT_BASES"
 
 # We need to use a unique output base for each workspace; if we weren't manually
 # specifying bazel would resolve the workspace root then hash it. Rather than 
