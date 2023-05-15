@@ -55,7 +55,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
                 "columnIds": [
                     2
                 ],
-                "constraintId": 4,
+                "constraintId": 2,
                 "expr": "b != '_':::STRING",
                 "name": "check_b"
             }
@@ -112,7 +112,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
             "compositeColumnIds": [
                 1
             ],
-            "constraintId": 2,
+            "constraintId": 3,
             "createdExplicitly": true,
             "encodingType": 1,
             "foreignKey": {},

@@ -226,7 +226,10 @@ type TableHelpers interface {
 
 	// NextTableIndexID returns the ID that should be used for any new index added
 	// to this table.
-	NextTableIndexID(table *scpb.Table) catid.IndexID
+	// `useTempID`, if true, returns a "temporary"/"placeholder" ID which is generated
+	// from a sequence starting from scbuild.TABLETEMPIDSSTART. Otherwise, it returns
+	// the normal, actual ID that typically starts from 1.
+	NextTableIndexID(tableID catid.DescID, useTempID bool) catid.IndexID
 
 	// NextViewIndexID returns the ID that should be used for any new index added
 	// to this materialized view.
@@ -234,7 +237,10 @@ type TableHelpers interface {
 
 	// NextTableConstraintID returns the ID that should be used for any new constraint
 	// added to this table.
-	NextTableConstraintID(id catid.DescID) catid.ConstraintID
+	// `useTempID`, if true, returns a "temporary"/"placeholder" ID which is generated
+	// from a sequence starting from scbuild.TABLETEMPIDSSTART. Otherwise, it returns
+	// the normal, actual ID that typically starts from 1.
+	NextTableConstraintID(id catid.DescID, useTempID bool) catid.ConstraintID
 
 	// IndexPartitioningDescriptor creates a new partitioning descriptor
 	// for the secondary index element, or panics.

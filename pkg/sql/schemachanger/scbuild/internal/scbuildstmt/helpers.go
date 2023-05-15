@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -280,18 +281,28 @@ func constraintElements(
 	})
 }
 
+// getSortedColumnIDsInIndex return an all column IDs in an index, sorted.
+func getSortedColumnIDsInIndex(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) (ret []catid.ColumnID) {
+	keys, keySuffixs, storeds := getSortedColumnIDsInIndexByKind(b, tableID, indexID)
+	ret = append(keys, keySuffixs...)
+	ret = append(ret, storeds...)
+	return ret
+}
+
 // indexColumnIDs return an index's key column IDs, key suffix column IDs,
 // and storing column IDs, in sorted order.
-func getSortedColumnIDsInIndex(
+func getSortedColumnIDsInIndexByKind(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
 ) (
 	keyColumnIDs []catid.ColumnID,
 	keySuffixColumnIDs []catid.ColumnID,
 	storingColumnIDs []catid.ColumnID,
 ) {
-	// Retrieve all columns of this index
+	// Retrieve all columns of this index.
 	allColumns := make([]*scpb.IndexColumn, 0)
-	scpb.ForEachIndexColumn(b.QueryByID(tableID), func(
+	scpb.ForEachIndexColumn(b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)), func(
 		current scpb.Status, target scpb.TargetStatus, ice *scpb.IndexColumn,
 	) {
 		if ice.TableID != tableID || ice.IndexID != indexID {
@@ -381,21 +392,11 @@ func mustGetTableIDFromTableName(b BuildCtx, tableName tree.TableName) catid.Des
 	return tableElem.TableID
 }
 
-func toPublicNotCurrentlyPublicFilter(
-	status scpb.Status, target scpb.TargetStatus, _ scpb.Element,
-) bool {
-	return status != scpb.Status_PUBLIC && target == scpb.ToPublic
-}
-
-func isColumnFilter(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
-	_, isColumn := e.(*scpb.Column)
-	return isColumn
-}
-
 func orFilter(
-	fs ...func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool,
-) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
-	return func(status scpb.Status, target scpb.TargetStatus, e scpb.Element) (ret bool) {
+	fs ...func(scpb.Status, scpb.TargetStatus, scpb.Element) bool,
+) func(scpb.Status, scpb.TargetStatus, scpb.Element) bool {
+	return func(status scpb.Status, target scpb.TargetStatus, e scpb.Element) bool {
+		ret := false
 		for _, f := range fs {
 			ret = ret || f(status, target, e)
 		}
@@ -404,11 +405,16 @@ func orFilter(
 }
 
 func notFilter(
-	f func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool,
-) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	f func(scpb.Status, scpb.TargetStatus, scpb.Element) bool,
+) func(scpb.Status, scpb.TargetStatus, scpb.Element) bool {
 	return func(status scpb.Status, target scpb.TargetStatus, e scpb.Element) bool {
 		return !f(status, target, e)
 	}
+}
+
+func isColumnFilter(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+	_, isColumn := e.(*scpb.Column)
+	return isColumn
 }
 
 func publicTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
@@ -419,6 +425,10 @@ func absentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element)
 	return target == scpb.ToAbsent
 }
 
+func transientTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+	return target == scpb.Transient
+}
+
 func publicStatusFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
 	return status == scpb.Status_PUBLIC
 }
@@ -427,8 +437,14 @@ func absentStatusFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element)
 	return status == scpb.Status_ABSENT
 }
 
-func backfillOnlyStatusFilter(status scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
-	return status == scpb.Status_BACKFILL_ONLY
+// "ghost elements" refer to those that were previously added (via b.Add or b.AddTransient)
+// but later dropped (via b.Drop).
+func ghostElementFilter(status scpb.Status, target scpb.TargetStatus, e scpb.Element) bool {
+	return absentStatusFilter(status, target, e) && absentTargetFilter(status, target, e)
+}
+
+func notReachedTargetYetFilter(status scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+	return status != target.Status()
 }
 
 func hasIndexIDAttrFilter(
@@ -470,30 +486,6 @@ func referencesColumnIDFilter(
 		})
 		return included
 	}
-}
-
-// getPrimaryIndexes returns the primary indexes of the current table.
-// Note that it assumes that there are at most two primary indexes and at
-// least one. The existing primary index is the primary index which is
-// currently public. The freshlyAdded primary index is one which is targeting
-// public.
-//
-// TODO(ajwerner): This will not be true at some point in the near future when
-// we need an intermediate primary index to support adding and dropping columns
-// in the same transaction.
-func getPrimaryIndexes(
-	b BuildCtx, tableID catid.DescID,
-) (existing, freshlyAdded *scpb.PrimaryIndex) {
-	allTargets := b.QueryByID(tableID)
-	_, _, freshlyAdded = scpb.FindPrimaryIndex(allTargets.
-		Filter(publicTargetFilter).
-		Filter(orFilter(absentStatusFilter, backfillOnlyStatusFilter)))
-	_, _, existing = scpb.FindPrimaryIndex(allTargets.Filter(publicStatusFilter))
-	if existing == nil {
-		// TODO(postamar): can this even be possible?
-		panic(pgerror.Newf(pgcode.NoPrimaryKey, "missing active primary key"))
-	}
-	return existing, freshlyAdded
 }
 
 // indexColumnDirection converts tree.Direction to catenumpb.IndexColumn_Direction.
@@ -595,7 +587,7 @@ func (s indexSpec) clone() (c indexSpec) {
 
 // makeIndexSpec constructs an indexSpec based on an existing index element.
 func makeIndexSpec(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (s indexSpec) {
-	tableElts := b.QueryByID(tableID).Filter(notFilter(absentTargetFilter))
+	tableElts := b.QueryByID(tableID)
 	idxElts := tableElts.Filter(hasIndexIDAttrFilter(indexID))
 	var constraintID catid.ConstraintID
 	var n int
@@ -686,24 +678,37 @@ func makeTempIndexSpec(src indexSpec) indexSpec {
 }
 
 // indexColumnSpec specifies how to construct a scpb.IndexColumn element.
+// Note it is table and index agnostic.
 type indexColumnSpec struct {
-	columnID  catid.ColumnID
-	kind      scpb.IndexColumn_Kind
-	direction catenumpb.IndexColumn_Direction
+	columnID     catid.ColumnID
+	kind         scpb.IndexColumn_Kind
+	direction    catenumpb.IndexColumn_Direction
+	implicit     bool
+	invertedKind catpb.InvertedIndexColumnKind
 }
 
 func makeIndexColumnSpec(ic *scpb.IndexColumn) indexColumnSpec {
 	return indexColumnSpec{
-		columnID:  ic.ColumnID,
-		kind:      ic.Kind,
-		direction: ic.Direction,
+		columnID:     ic.ColumnID,
+		kind:         ic.Kind,
+		direction:    ic.Direction,
+		implicit:     ic.Implicit,
+		invertedKind: ic.InvertedKind,
 	}
 }
 
 // makeSwapIndexSpec constructs a pair of indexSpec for the new index and the
 // accompanying temporary index to swap out an existing index with.
+//
+// `inUseTempIDs`, if true, assign "temporary"/"placeholder" index/constraint
+// IDs for the to-be-returned index pair. Otherwise, actual, final index/constraint
+// IDs will be assigned to them.
 func makeSwapIndexSpec(
-	b BuildCtx, out indexSpec, sourceIndexID catid.IndexID, inColumns []indexColumnSpec,
+	b BuildCtx,
+	out indexSpec,
+	inSourceIndexID catid.IndexID,
+	inColumns []indexColumnSpec,
+	inUseTempIDs bool,
 ) (in, temp indexSpec) {
 	isSecondary := out.secondary != nil
 	// Determine table ID and validate input.
@@ -732,14 +737,11 @@ func makeSwapIndexSpec(
 		}
 	}
 	// Determine old and new IDs.
-	var inID, tempID catid.IndexID
+	var inID, inTempID catid.IndexID
 	var inConstraintID catid.ConstraintID
-	{
-		_, _, tbl := scpb.FindTable(b.QueryByID(tableID).Filter(notFilter(absentTargetFilter)))
-		inID = b.NextTableIndexID(tbl)
-		inConstraintID = b.NextTableConstraintID(tbl.TableID)
-		tempID = inID + 1
-	}
+	inID = b.NextTableIndexID(tableID, inUseTempIDs)
+	inTempID = inID + 1
+	inConstraintID = b.NextTableConstraintID(tableID, inUseTempIDs)
 	// Setup new primary or secondary index.
 	{
 		in = out.clone()
@@ -750,8 +752,8 @@ func makeSwapIndexSpec(
 			idx = &in.primary.Index
 		}
 		idx.IndexID = inID
-		idx.SourceIndexID = sourceIndexID
-		idx.TemporaryIndexID = tempID
+		idx.SourceIndexID = inSourceIndexID
+		idx.TemporaryIndexID = inTempID
 		idx.ConstraintID = inConstraintID
 		if in.name != nil {
 			in.name.IndexID = inID
@@ -774,6 +776,8 @@ func makeSwapIndexSpec(
 				OrdinalInKind: ordinalInKind,
 				Kind:          cs.kind,
 				Direction:     cs.direction,
+				Implicit:      cs.implicit,
+				InvertedKind:  cs.invertedKind,
 			})
 		}
 		if in.idxComment != nil {
@@ -944,4 +948,122 @@ func panicIfSystemColumn(column *scpb.Column, columnName string) {
 			pgcode.FeatureNotSupported,
 			"cannot alter system column %q", columnName))
 	}
+}
+
+// addASwapInIndexByCloningFromSource adds a primary index `in` that is going
+// to swap out `out` yet `in`'s columns are cloned from `out`.
+//
+// It might sound redundant to do so such thing ("backfilling from an index into
+// another of the same columns"). Yes, but it is a prep step to facilitate us
+// later to modify columns of `in`, be it an ADD COLUMN, DROP COLUMN,
+// or ALTER PRIMARY KEY.
+//
+// `isInFinal` is set if `in` is going to be the final primary indexes, in which
+// case we set its target to PUBLIC. Otherwise, `in`'s target is set to TRANSIENT.
+func addASwapInIndexByCloningFromSource(
+	b BuildCtx, tableID catid.DescID, out *scpb.PrimaryIndex, isInFinal bool,
+) (inSpec indexSpec) {
+	outSpec := makeIndexSpec(b, tableID, out.IndexID)
+
+	inColumns := make([]indexColumnSpec, 0)
+	fromKeyCols := getIndexColumns(b.QueryByID(tableID), out.IndexID, scpb.IndexColumn_KEY)
+	fromStoringCols := getIndexColumns(b.QueryByID(tableID), out.IndexID, scpb.IndexColumn_STORED)
+	for _, fromIndexCol := range append(fromKeyCols, fromStoringCols...) {
+		inColumns = append(inColumns, makeIndexColumnSpec(fromIndexCol))
+	}
+
+	inSpec, inTempSpec := makeSwapIndexSpec(b, outSpec, out.IndexID, inColumns, true /* inUseTempIDs */)
+	if isInFinal {
+		inSpec.apply(b.Add)
+	} else {
+		inSpec.apply(b.AddTransient)
+	}
+	inTempSpec.apply(b.AddTransient)
+	return inSpec
+}
+
+// updateElementsToDependOnNewFromOld finds all elements of this table that
+// "depend" on index `old`, meaning they use index `old` to either backfill
+// data from (for indexes) or check validity against (for constraints), and
+// update them to "depend" on index `new`.
+//
+// Note that this function excludes acting upon indexes whose IDs are in `excludes`.
+func updateElementsToDependOnNewFromOld(
+	b BuildCtx, tableID catid.DescID, old catid.IndexID, new catid.IndexID, excludes catid.IndexSet,
+) {
+	b.QueryByID(tableID).
+		ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+			switch e := e.(type) {
+			case *scpb.PrimaryIndex:
+				if e.SourceIndexID == old && !excludes.Contains(e.IndexID) {
+					e.SourceIndexID = new
+				}
+			case *scpb.TemporaryIndex:
+				if e.SourceIndexID == old && !excludes.Contains(e.IndexID) {
+					e.SourceIndexID = new
+				}
+			case *scpb.SecondaryIndex:
+				if e.SourceIndexID == old && !excludes.Contains(e.IndexID) {
+					e.SourceIndexID = new
+				}
+			case *scpb.CheckConstraint:
+				if e.IndexIDForValidation == old {
+					e.IndexIDForValidation = new
+				}
+			case *scpb.ForeignKeyConstraint:
+				if e.IndexIDForValidation == old {
+					e.IndexIDForValidation = new
+				}
+			case *scpb.ColumnNotNull:
+				if e.IndexIDForValidation == old {
+					e.IndexIDForValidation = new
+				}
+			}
+		})
+}
+
+// ensureFourNonNilPrimaryIndexes ensures we have four non nil primary indexes,
+// and they have been accordingly dropped and added in the builder state.
+// They are constructed from previous ADD COLUMN, DROP COLUMN,
+// or ALTER PRIMARY KEY commands. If any of them is nil, it will be created
+// in this function by cloning from the previous one, so that when this function
+// returns, we have a valid but possibly redundant sequence of primary indexes,
+// where each one is sourcing from its precedent, to achieve the schema change.
+func ensureFourNonNilPrimaryIndexes(
+	b BuildCtx, tableID catid.DescID,
+) (oldSpec, inter1Spec, inter2Spec, finalSpec indexSpec) {
+	old, inter1, inter2, final := getAllPrimaryIndexesSortedBySourcing(b, tableID)
+	// Sanity check: old is never nil
+	if old == nil {
+		panic(errors.AssertionFailedf("programming error: old primary index is nil"))
+	}
+
+	primaryIndexes := []*scpb.PrimaryIndex{old, inter1, inter2, final}
+	ret := [4]indexSpec{}
+	for i, primaryIndex := range primaryIndexes {
+		if i == 0 {
+			// We enter this function because we need to add new primary index(es)
+			// and we drop `old` here. b.Drop is idempotent so it's fine even if
+			// `old` has been dropped previously.
+			ret[i] = makeIndexSpec(b, tableID, primaryIndex.IndexID)
+			ret[i].apply(b.Drop)
+		} else {
+			if primaryIndex == nil {
+				// From left to right, if a primary index is nil, create one by cloning
+				// and sourcing from its predecessor.
+				ret[i] = addASwapInIndexByCloningFromSource(b, tableID,
+					ret[i-1].primary, i == len(primaryIndexes)-1)
+				updateElementsToDependOnNewFromOld(b, tableID,
+					ret[i-1].primary.IndexID, ret[i].primary.IndexID,
+					catid.MakeIndexIDSet(ret[i].primary.IndexID, ret[i].primary.TemporaryIndexID))
+			} else {
+				ret[i] = makeIndexSpec(b, tableID, primaryIndex.IndexID)
+			}
+		}
+	}
+
+	// Validate we end up with a valid chain of primary indexes.
+	validateAddingPrimaryIndexes(b, tableID)
+
+	return ret[0], ret[1], ret[2], ret[3]
 }

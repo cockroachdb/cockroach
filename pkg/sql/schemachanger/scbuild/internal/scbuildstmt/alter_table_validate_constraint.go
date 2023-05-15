@@ -114,7 +114,7 @@ type validateConstraintSpec struct {
 }
 
 func validateConstraint(b BuildCtx, tableID catid.DescID, spec validateConstraintSpec) {
-	nextConstraintID := b.NextTableConstraintID(tableID)
+	nextConstraintID := b.NextTableConstraintID(tableID, false /* useTempID */)
 	if spec.ckNotValidElem != nil {
 		b.Drop(spec.ckNotValidElem)
 		b.Add(&scpb.CheckConstraint{

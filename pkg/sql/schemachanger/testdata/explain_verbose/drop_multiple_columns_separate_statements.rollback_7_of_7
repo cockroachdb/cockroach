@@ -137,10 +137,13 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │   │         rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   └── • TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
-    │   │       │ WRITE_ONLY → DELETE_ONLY
+    │   │       │ TRANSIENT_DELETE_ONLY → ABSENT
     │   │       │
-    │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
-    │   │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
+    │   │       ├── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+    │   │       │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->DELETE_ONLY"
+    │   │       │
+    │   │       └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
+    │   │             rule: "dependents removed before index"
     │   │
     │   └── • 19 Mutation operations
     │       │
@@ -182,10 +185,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • MakeWriteOnlyIndexDeleteOnly
-    │       │     IndexID: 4
-    │       │     TableID: 104
-    │       │
     │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 2
     │       │     TableID: 104
@@ -200,6 +199,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       │
     │       ├── • RemoveColumnFromIndex
     │       │     ColumnID: 1
+    │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeIndexAbsent
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
@@ -223,11 +226,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
-        ├── • 4 elements transitioning toward ABSENT
+        ├── • 3 elements transitioning toward ABSENT
         │   │
         │   ├── • IndexData:{DescID: 104 (t), IndexID: 3 (t_pkey-)}
         │   │   │ PUBLIC → ABSENT
@@ -244,35 +247,22 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │   │   └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
         │   │         rule: "index removed before garbage collection"
         │   │
-        │   ├── • PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
-        │   │   │ DELETE_ONLY → ABSENT
-        │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (t_pkey-)}
-        │   │   │     rule: "dependents removed before index"
-        │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
-        │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
-        │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 3 (t_pkey-)}
-        │   │         rule: "dependents removed before index"
-        │   │
-        │   └── • TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+        │   └── • PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
         │       │ DELETE_ONLY → ABSENT
         │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
+        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (t_pkey-)}
         │       │     rule: "dependents removed before index"
         │       │
-        │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
-        │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
+        │       │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │       │
+        │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 3 (t_pkey-)}
+        │             rule: "dependents removed before index"
         │
-        └── • 6 Mutation operations
+        └── • 5 Mutation operations
             │
             ├── • MakeIndexAbsent
             │     IndexID: 3
-            │     TableID: 104
-            │
-            ├── • MakeIndexAbsent
-            │     IndexID: 4
             │     TableID: 104
             │
             ├── • CreateGCJobForIndex

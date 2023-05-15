@@ -82,10 +82,13 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
-    │   │   │   │ WRITE_ONLY → DELETE_ONLY
+    │   │   │   │ TRANSIENT_DELETE_ONLY → ABSENT
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
-    │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+    │   │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->DELETE_ONLY"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4}
+    │   │   │         rule: "dependents removed before index"
     │   │   │
     │   │   └── • IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4}
     │   │       │ PUBLIC → ABSENT
@@ -121,10 +124,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • MakeWriteOnlyIndexDeleteOnly
-    │       │     IndexID: 4
-    │       │     TableID: 104
-    │       │
     │       ├── • RemoveColumnFromIndex
     │       │     ColumnID: 1
     │       │     IndexID: 4
@@ -144,17 +143,21 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
+    │       ├── • MakeIndexAbsent
+    │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
     │       ├── • SetJobStateOnDescriptor
     │       │     DescriptorID: 104
     │       │
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
-        ├── • 4 elements transitioning toward ABSENT
+        ├── • 3 elements transitioning toward ABSENT
         │   │
         │   ├── • PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1 (t_pkey+)}
         │   │   │ DELETE_ONLY → ABSENT
@@ -174,15 +177,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1 (t_pkey+)}
         │   │         rule: "index removed before garbage collection"
         │   │
-        │   ├── • TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
-        │   │   │ DELETE_ONLY → ABSENT
-        │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
-        │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
-        │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4}
-        │   │         rule: "dependents removed before index"
-        │   │
         │   └── • IndexData:{DescID: 104 (t), IndexID: 4}
         │       │ PUBLIC → ABSENT
         │       │
@@ -192,7 +186,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │       └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
         │             rule: "index removed before garbage collection"
         │
-        └── • 6 Mutation operations
+        └── • 5 Mutation operations
             │
             ├── • MakeIndexAbsent
             │     IndexID: 3
@@ -203,10 +197,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
             │     StatementForDropJob:
             │       Rollback: true
             │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
-            │     TableID: 104
-            │
-            ├── • MakeIndexAbsent
-            │     IndexID: 4
             │     TableID: 104
             │
             ├── • CreateGCJobForIndex
