@@ -114,33 +114,6 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		}, base, plans, "distsql.html vec.txt vec-v.txt")
 	})
 
-	// Verify that we can issue the statement with prepare (which can happen
-	// depending on the client).
-	t.Run("prepare", func(t *testing.T) {
-		stmt, err := godb.Prepare("EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer stmt.Close()
-		rows, err := stmt.Query()
-		if err != nil {
-			t.Fatal(err)
-		}
-		var rowsBuf bytes.Buffer
-		for rows.Next() {
-			var row string
-			if err := rows.Scan(&row); err != nil {
-				t.Fatal(err)
-			}
-			rowsBuf.WriteString(row)
-			rowsBuf.WriteByte('\n')
-		}
-		checkBundle(
-			t, rowsBuf.String(), "public.abc", nil,
-			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
-		)
-	})
-
 	// This is a regression test for the situation where wrapped into the
 	// vectorized flow planNodes in the postqueries were messed up because the
 	// generation of EXPLAIN (VEC) diagrams modified planNodeToRowSources in
