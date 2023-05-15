@@ -399,8 +399,8 @@ func TestRestoreReplicas(t *testing.T) {
 			successes++
 		}
 	}
-	require.Equal(t, failures, 1)
-	require.Equal(t, successes, 1)
+	require.Equal(t, 1, failures, "replica command failed (non leaseholders)")
+	require.Equal(t, 1, successes, "replica command succeeded (leaseholders)")
 
 	testutils.SucceedsSoon(t, func() error {
 		getArgs := getArgs([]byte("a"))
