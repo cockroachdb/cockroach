@@ -211,7 +211,7 @@ func registerPgjdbc(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "pgjdbc",
-		Owner:   registry.OwnerSQLSessions,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
 		Leases:  registry.MetamorphicLeases,
 		Tags:    registry.Tags(`default`, `driver`),

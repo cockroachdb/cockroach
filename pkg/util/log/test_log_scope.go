@@ -365,7 +365,7 @@ func (l *TestLogScope) Rotate(t tShim) {
 	t.Helper()
 	t.Logf("-- test log scope file rotation --")
 	// Ensure remaining logs are written.
-	FlushFileSinks()
+	Flush()
 
 	if err := logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
 		l.mu.Lock()
@@ -387,7 +387,7 @@ func (l *TestLogScope) Close(t tShim) {
 	t.Logf("-- test log scope end --")
 
 	// Ensure any remaining logs are written to files.
-	FlushFileSinks()
+	Flush()
 
 	if l.logDir != "" {
 		defer func() {

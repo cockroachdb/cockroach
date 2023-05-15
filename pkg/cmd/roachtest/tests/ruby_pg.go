@@ -230,7 +230,7 @@ func registerRubyPG(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:       "ruby-pg",
 		Timeout:    1 * time.Hour,
-		Owner:      registry.OwnerSQLSessions,
+		Owner:      registry.OwnerSQLFoundations,
 		Cluster:    r.MakeClusterSpec(1),
 		Leases:     registry.MetamorphicLeases,
 		NativeLibs: registry.LibGEOS,

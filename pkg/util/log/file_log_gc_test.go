@@ -158,7 +158,7 @@ func testLogGC(t *testing.T, fileSink *fileSink, logFn func(ctx context.Context,
 	const newLogFiles = 20
 	for i := 1; i < newLogFiles; i++ {
 		logFn(context.Background(), fmt.Sprint(i))
-		FlushFileSinks()
+		Flush()
 	}
 	if _, err := expectFileCount(newLogFiles); err != nil {
 		t.Fatal(err)
@@ -169,7 +169,7 @@ func testLogGC(t *testing.T, fileSink *fileSink, logFn func(ctx context.Context,
 
 	// Emit a log line which will rotate the files and trigger GC.
 	logFn(context.Background(), "final")
-	FlushFileSinks()
+	Flush()
 
 	succeedsSoon(t, func() error {
 		_, err := expectFileCount(expectedFilesAfterGC)

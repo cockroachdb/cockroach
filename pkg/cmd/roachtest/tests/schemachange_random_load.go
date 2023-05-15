@@ -44,7 +44,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 	geoZonesStr := strings.Join(geoZones, ",")
 	r.Add(registry.TestSpec{
 		Name:  "schemachange/random-load",
-		Owner: registry.OwnerSQLSchema,
+		Owner: registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(
 			3,
 			spec.Geo(),
@@ -90,7 +90,7 @@ func registerRandomLoadBenchSpec(r registry.Registry, b randomLoadBenchSpec) {
 
 	r.Add(registry.TestSpec{
 		Name:       name,
-		Owner:      registry.OwnerSQLSchema,
+		Owner:      registry.OwnerSQLFoundations,
 		Cluster:    r.MakeClusterSpec(b.Nodes),
 		NativeLibs: registry.LibGEOS,
 		Skip:       "https://github.com/cockroachdb/cockroach/issues/56230",

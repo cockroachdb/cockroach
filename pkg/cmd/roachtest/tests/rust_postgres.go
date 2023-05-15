@@ -166,7 +166,7 @@ func registerRustPostgres(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "rust-postgres",
-		Owner:   registry.OwnerSQLSessions,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
 		Leases:  registry.MetamorphicLeases,
 		Tags:    registry.Tags(`default`, `orm`),

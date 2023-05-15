@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,7 +53,7 @@ var memoryMonitorSSTs = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"bulkio.restore.memory_monitor_ssts",
 	"if true, restore will limit number of simultaneously open SSTs based on available memory",
-	util.ConstantWithMetamorphicTestBool("restore-memory-monitor-ssts", true),
+	false,
 )
 
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It

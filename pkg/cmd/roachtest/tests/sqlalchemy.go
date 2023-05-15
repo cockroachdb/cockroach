@@ -37,7 +37,7 @@ var supportedSQLAlchemyTag = "2.0.2"
 func registerSQLAlchemy(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "sqlalchemy",
-		Owner:   registry.OwnerSQLSessions,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
 		Leases:  registry.MetamorphicLeases,
 		Tags:    registry.Tags(`default`, `orm`),

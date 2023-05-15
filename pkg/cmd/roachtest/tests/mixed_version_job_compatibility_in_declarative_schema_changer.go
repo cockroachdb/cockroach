@@ -130,7 +130,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 	// supported in the "previous" major release.
 	r.Add(registry.TestSpec{
 		Name:    "declarative_schema_changer/job-compatibility-mixed-version-V222-V231",
-		Owner:   registry.OwnerSQLSchema,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
