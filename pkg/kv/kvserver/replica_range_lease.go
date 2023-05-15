@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -87,6 +88,12 @@ var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	!syncutil.DeadlockEnabled &&
 		util.ConstantWithMetamorphicTestBool("kv.expiration_leases_only.enabled", false),
 )
+
+// DisableExpirationLeasesOnly is an escape hatch for ExpirationLeasesOnly,
+// which can be used to hard-disable expiration-based leases e.g. if clusters
+// are unable to start back up due to the lease extension load.
+var DisableExpirationLeasesOnly = envutil.EnvOrDefaultBool(
+	"COCKROACH_DISABLE_EXPIRATION_LEASES_ONLY", false)
 
 var leaseStatusLogLimiter = func() *log.EveryN {
 	e := log.Every(15 * time.Second)
@@ -794,7 +801,8 @@ func (r *Replica) requiresExpirationLeaseRLocked() bool {
 // expiration-based lease, either because it requires one or because
 // kv.expiration_leases_only.enabled is enabled.
 func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
-	return ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) || r.requiresExpirationLeaseRLocked()
+	return (ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) && !DisableExpirationLeasesOnly) ||
+		r.requiresExpirationLeaseRLocked()
 }
 
 // requestLeaseLocked executes a request to obtain or extend a lease
