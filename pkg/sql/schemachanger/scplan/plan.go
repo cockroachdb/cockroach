@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_22_2"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_23_1"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -158,7 +159,8 @@ type rulesForRelease struct {
 // rulesForRelease supported rules for each release, this is an ordered array
 // with the newest supported version first.
 var rulesForReleases = []rulesForRelease{
-	{activeVersion: clusterversion.V23_1, rulesRegistry: current.GetRegistry()},
+	{activeVersion: clusterversion.V23_2, rulesRegistry: current.GetRegistry()},
+	{activeVersion: clusterversion.V23_1, rulesRegistry: release_23_1.GetRegistry()},
 	{activeVersion: clusterversion.V22_2, rulesRegistry: release_22_2.GetRegistry()},
 }
 
