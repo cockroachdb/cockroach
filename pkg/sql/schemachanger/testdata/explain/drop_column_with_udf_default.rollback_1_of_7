@@ -13,20 +13,20 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
            │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 105, ColumnID: 2}
            │    └── ABSENT        → PUBLIC ColumnName:{DescID: 105, Name: b, ColumnID: 2}
            ├── 5 elements transitioning toward ABSENT
-           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 2}
-           │    ├── PUBLIC        → ABSENT IndexData:{DescID: 105, IndexID: 2}
-           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-           │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}
+           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 105, IndexID: 6, ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 6}
+           │    ├── PUBLIC        → ABSENT IndexData:{DescID: 105, IndexID: 6}
+           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 105, IndexID: 7, ConstraintID: 7, SourceIndexID: 1}
+           │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 7}
            └── 11 Mutation operations
                 ├── SetColumnName {"ColumnID":2,"Name":"b","TableID":105}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":105}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":105}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":6,"TableID":105}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":7,"TableID":105}
                 ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":105}
                 ├── RefreshStats {"TableID":105}
-                ├── MakeIndexAbsent {"IndexID":2,"TableID":105}
-                ├── CreateGCJobForIndex {"IndexID":2,"TableID":105}
-                ├── MakeIndexAbsent {"IndexID":3,"TableID":105}
+                ├── MakeIndexAbsent {"IndexID":6,"TableID":105}
+                ├── CreateGCJobForIndex {"IndexID":6,"TableID":105}
+                ├── MakeIndexAbsent {"IndexID":7,"TableID":105}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

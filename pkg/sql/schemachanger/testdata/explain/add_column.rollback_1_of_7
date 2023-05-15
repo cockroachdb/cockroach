@@ -18,27 +18,27 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 106, Name: j, ColumnID: 3}
            │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
            │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
-           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}
-           │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106, IndexID: 2}
-           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
-           │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 3}
+           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 106, IndexID: 6, ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 6}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 6}
+           │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106, IndexID: 6}
+           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 106, IndexID: 7, ConstraintID: 7, SourceIndexID: 1}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 7}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 7}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 6}
+           │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 7}
            └── 14 Mutation operations
                 ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":2,"Ordinal":1,"TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":2,"Ordinal":1,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":6,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":6,"Kind":2,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":7,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":7,"Kind":2,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":6,"Kind":2,"Ordinal":1,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":7,"Kind":2,"Ordinal":1,"TableID":106}
                 ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":106}
-                ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
-                ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
-                ├── MakeIndexAbsent {"IndexID":3,"TableID":106}
+                ├── MakeIndexAbsent {"IndexID":6,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":6,"TableID":106}
+                ├── MakeIndexAbsent {"IndexID":7,"TableID":106}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

@@ -366,7 +366,7 @@ begin transaction #7
 merge temporary indexes [3] into backfilled indexes [2] in table #106
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 7 with 5 MutationType ops
+## PostCommitPhase stage 6 of 7 with 6 MutationType ops
 upsert descriptor #104
   ...
      referencingDescriptorIds:
@@ -384,9 +384,18 @@ upsert descriptor #106
          version: 4
        mutationId: 1
   -    state: MERGING
+  -  - direction: ADD
   +    state: WRITE_ONLY
-     - direction: ADD
+  +  - direction: DROP
        index:
+         constraintId: 1
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -400,11 +409,14 @@ begin transaction #9
 validate forward indexes [2] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
-  ...
-         userName: root
-       jobId: "1"
+   type:
+     arrayTypeId: 105
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
   -    revertible: true
      enumMembers:
      - logicalRepresentation: a
@@ -415,8 +427,12 @@ upsert descriptor #104
   +  version: "8"
 upsert descriptor #105
   ...
-         userName: root
-       jobId: "1"
+       family: ArrayFamily
+       oid: 100105
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
   -    revertible: true
      id: 105
      kind: ALIAS
@@ -427,11 +443,24 @@ upsert descriptor #105
   +  version: "8"
 upsert descriptor #106
   ...
-           statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
-           statementTag: CREATE INDEX
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE
+  -          (‹v› = ‹'a'›)
+  -        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
+  -        statementTag: CREATE INDEX
   -    revertible: true
-       targetRanks: <redacted>
-       targets: <redacted>
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
   ...
      formatVersion: 3
      id: 106
@@ -457,10 +486,9 @@ upsert descriptor #106
   +    storeColumnNames: []
   +    version: 4
      modificationTime: {}
-     mutations:
+  -  mutations:
   -  - direction: ADD
-  +  - direction: DROP
-       index:
+  -    index:
   -      createdAtNanos: "1640998800000000000"
   -      createdExplicitly: true
   -      foreignKey: {}
@@ -483,81 +511,6 @@ upsert descriptor #106
   -      version: 4
   -    mutationId: 1
   -    state: WRITE_ONLY
-  -  - direction: ADD
-  -    index:
-         constraintId: 1
-         createdExplicitly: true
-  ...
-         version: 4
-       mutationId: 1
-  -    state: WRITE_ONLY
-  +    state: DELETE_ONLY
-     name: t
-     nextColumnId: 3
-  ...
-       time: {}
-     unexposedParentSchemaId: 101
-  -  version: "6"
-  +  version: "7"
-persist all catalog changes to storage
-adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
-set schema change job #1 to non-cancellable
-commit transaction #10
-begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
-upsert descriptor #104
-   type:
-     arrayTypeId: 105
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    jobId: "1"
-     enumMembers:
-     - logicalRepresentation: a
-  ...
-     referencingDescriptorIds:
-     - 106
-  -  version: "8"
-  +  version: "9"
-upsert descriptor #105
-  ...
-       family: ArrayFamily
-       oid: 100105
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    jobId: "1"
-     id: 105
-     kind: ALIAS
-  ...
-     referencingDescriptorIds:
-     - 106
-  -  version: "8"
-  +  version: "9"
-upsert descriptor #106
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE
-  -          (‹v› = ‹'a'›)
-  -        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
-  -        statementTag: CREATE INDEX
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
-  ...
-       version: 4
-     modificationTime: {}
-  -  mutations:
   -  - direction: DROP
   -    index:
   -      constraintId: 1
@@ -588,9 +541,10 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
+  -  version: "6"
+  +  version: "7"
 persist all catalog changes to storage
+adding table for stats refresh: 106
 create job #2 (non-cancelable: true): "GC for CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
@@ -599,6 +553,6 @@ updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 106
-commit transaction #11
+commit transaction #10
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

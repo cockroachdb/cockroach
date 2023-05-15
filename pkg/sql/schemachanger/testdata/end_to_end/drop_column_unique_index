@@ -63,12 +63,12 @@ upsert descriptor #106
   +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
-  +      constraintId: 7
+  +      constraintId: 15
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 6
+  +      id: 14
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -76,7 +76,7 @@ upsert descriptor #106
   +      - 1
   +      keyColumnNames:
   +      - k
-  +      name: crdb_internal_index_6_name_placeholder
+  +      name: crdb_internal_index_14_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
@@ -91,12 +91,12 @@ upsert descriptor #106
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 8
+  +      constraintId: 16
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 7
+  +      id: 15
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -104,7 +104,7 @@ upsert descriptor #106
   +      - 1
   +      keyColumnNames:
   +      - k
-  +      name: crdb_internal_index_7_name_placeholder
+  +      name: crdb_internal_index_15_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
@@ -120,11 +120,11 @@ upsert descriptor #106
   +    state: DELETE_ONLY
      name: test
      nextColumnId: 5
-  -  nextConstraintId: 7
-  +  nextConstraintId: 9
+  -  nextConstraintId: 11
+  +  nextConstraintId: 17
      nextFamilyId: 1
-  -  nextIndexId: 6
-  +  nextIndexId: 8
+  -  nextIndexId: 10
+  +  nextIndexId: 16
      nextMutationId: 1
      parentId: 104
   ...
@@ -137,8 +137,8 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "16"
-  +  version: "17"
+  -  version: "15"
+  +  version: "16"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
@@ -200,12 +200,12 @@ upsert descriptor #106
   +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
-  +      constraintId: 7
+  +      constraintId: 15
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 6
+  +      id: 14
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -213,7 +213,7 @@ upsert descriptor #106
   +      - 1
   +      keyColumnNames:
   +      - k
-  +      name: crdb_internal_index_6_name_placeholder
+  +      name: crdb_internal_index_14_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
@@ -228,12 +228,12 @@ upsert descriptor #106
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 8
+  +      constraintId: 16
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 7
+  +      id: 15
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -241,7 +241,7 @@ upsert descriptor #106
   +      - 1
   +      keyColumnNames:
   +      - k
-  +      name: crdb_internal_index_7_name_placeholder
+  +      name: crdb_internal_index_15_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
@@ -257,11 +257,11 @@ upsert descriptor #106
   +    state: DELETE_ONLY
      name: test
      nextColumnId: 5
-  -  nextConstraintId: 7
-  +  nextConstraintId: 9
+  -  nextConstraintId: 11
+  +  nextConstraintId: 17
      nextFamilyId: 1
-  -  nextIndexId: 6
-  +  nextIndexId: 8
+  -  nextIndexId: 10
+  +  nextIndexId: 16
      nextMutationId: 1
      parentId: 104
   ...
@@ -274,8 +274,8 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "16"
-  +  version: "17"
+  -  version: "15"
+  +  version: "16"
 persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE t.public.test DROP COLUMN pi"
   descriptor IDs: [106]
@@ -298,14 +298,14 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "17"
-  +  version: "18"
+  -  version: "16"
+  +  version: "17"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 7 with 1 BackfillType op
-backfill indexes [6] from index #4 in table #106
+backfill indexes [14] from index #8 in table #106
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 3 MutationType ops
@@ -320,8 +320,8 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "18"
-  +  version: "19"
+  -  version: "17"
+  +  version: "18"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
 commit transaction #5
@@ -338,36 +338,45 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "19"
-  +  version: "20"
+  -  version: "18"
+  +  version: "19"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 7 with 1 BackfillType op
-merge temporary indexes [7] into backfilled indexes [6] in table #106
+merge temporary indexes [15] into backfilled indexes [14] in table #106
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 7 with 3 MutationType ops
+## PostCommitPhase stage 6 of 7 with 4 MutationType ops
 upsert descriptor #106
   ...
          version: 4
        mutationId: 1
   -    state: MERGING
+  -  - direction: ADD
   +    state: WRITE_ONLY
-     - direction: ADD
+  +  - direction: DROP
        index:
+         constraintId: 16
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: test
+     nextColumnId: 5
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "20"
-  +  version: "21"
+  -  version: "19"
+  +  version: "20"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 ValidationType op pending"
 commit transaction #8
 begin transaction #9
 ## PostCommitPhase stage 7 of 7 with 1 ValidationType op
-validate forward indexes [6] in table #106
+validate forward indexes [14] in table #106
 commit transaction #9
 begin transaction #10
 ## PostCommitNonRevertiblePhase stage 1 of 3 with 11 MutationType ops
@@ -383,52 +392,51 @@ upsert descriptor #106
        mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
+  -    index:
+  -      constraintId: 15
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 14
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - k
+  -      name: crdb_internal_index_14_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      - 4
+  -      storeColumnNames:
+  -      - v
+  -      - x
+  -      unique: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
-  +  - direction: DROP
+     - direction: DROP
        index:
-  -      constraintId: 7
+  -      constraintId: 16
   +      constraintId: 8
          createdExplicitly: true
          encodingType: 1
          foreignKey: {}
          geoConfig: {}
-  -      id: 6
-  +      id: 7
+  -      id: 15
+  +      id: 8
          interleave: {}
          keyColumnDirections:
   ...
          keyColumnNames:
          - k
-  -      name: crdb_internal_index_6_name_placeholder
-  +      name: crdb_internal_index_7_name_placeholder
-         partitioning: {}
-         sharded: {}
-  ...
-         - x
-         unique: true
-  +      useDeletePreservingEncoding: true
-         version: 4
-       mutationId: 1
-  -    state: WRITE_ONLY
-  -  - direction: ADD
-  +    state: DELETE_ONLY
-  +  - direction: DROP
-       index:
-  -      constraintId: 8
-  +      constraintId: 4
-         createdExplicitly: true
-         encodingType: 1
-         foreignKey: {}
-         geoConfig: {}
-  -      id: 7
-  +      id: 4
-         interleave: {}
-         keyColumnDirections:
-  ...
-         keyColumnNames:
-         - k
-  -      name: crdb_internal_index_7_name_placeholder
-  +      name: crdb_internal_index_4_name_placeholder
+  -      name: crdb_internal_index_15_name_placeholder
+  +      name: crdb_internal_index_8_name_placeholder
          partitioning: {}
          sharded: {}
          storeColumnIds:
@@ -443,17 +451,21 @@ upsert descriptor #106
   -      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: test
+     nextColumnId: 5
   ...
      parentId: 104
      primaryIndex:
-  -    constraintId: 4
-  +    constraintId: 7
+  -    constraintId: 8
+  +    constraintId: 15
        createdExplicitly: true
        encodingType: 1
        foreignKey: {}
        geoConfig: {}
-  -    id: 4
-  +    id: 6
+  -    id: 8
+  +    id: 14
        interleave: {}
        keyColumnDirections:
   ...
@@ -469,49 +481,15 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "21"
-  +  version: "22"
+  -  version: "20"
+  +  version: "21"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
 upsert descriptor #106
-  ...
-     - direction: DROP
-       index:
-  -      constraintId: 8
-  -      createdExplicitly: true
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 7
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 1
-  -      keyColumnNames:
-  -      - k
-  -      name: crdb_internal_index_7_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnIds:
-  -      - 2
-  -      - 4
-  -      storeColumnNames:
-  -      - v
-  -      - x
-  -      unique: true
-  -      useDeletePreservingEncoding: true
-  -      version: 4
-  -    mutationId: 1
-  -    state: DELETE_ONLY
-  -  - direction: DROP
-  -    index:
-         constraintId: 4
-         createdExplicitly: true
   ...
          version: 4
        mutationId: 1
@@ -522,8 +500,8 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "22"
-  +  version: "23"
+  -  version: "21"
+  +  version: "22"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops pending"
 commit transaction #11
@@ -574,12 +552,12 @@ upsert descriptor #106
   -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
-  -      constraintId: 4
+  -      constraintId: 8
   -      createdExplicitly: true
   -      encodingType: 1
   -      foreignKey: {}
   -      geoConfig: {}
-  -      id: 4
+  -      id: 8
   -      interleave: {}
   -      keyColumnDirections:
   -      - ASC
@@ -587,7 +565,7 @@ upsert descriptor #106
   -      - 1
   -      keyColumnNames:
   -      - k
-  -      name: crdb_internal_index_4_name_placeholder
+  -      name: crdb_internal_index_8_name_placeholder
   -      partitioning: {}
   -      sharded: {}
   -      storeColumnIds:
@@ -608,8 +586,8 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "23"
-  +  version: "24"
+  -  version: "22"
+  +  version: "23"
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE t.public.test DROP COLUMN pi"
   descriptor IDs: [106]

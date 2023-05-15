@@ -55,7 +55,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
                 "columnIds": [
                     2
                 ],
-                "constraintId": 4,
+                "constraintId": 8,
                 "expr": "b != '_':::STRING",
                 "name": "check_b"
             }
@@ -103,21 +103,21 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
         "modificationTime": {},
         "name": "collate_partition",
         "nextColumnId": 3,
-        "nextConstraintId": 5,
+        "nextConstraintId": 9,
         "nextFamilyId": 1,
-        "nextIndexId": 4,
+        "nextIndexId": 8,
         "nextMutationId": 1,
         "parentId": 104,
         "primaryIndex": {
             "compositeColumnIds": [
                 1
             ],
-            "constraintId": 2,
+            "constraintId": 6,
             "createdExplicitly": true,
             "encodingType": 1,
             "foreignKey": {},
             "geoConfig": {},
-            "id": 2,
+            "id": 6,
             "interleave": {},
             "keyColumnDirections": [
                 "ASC"

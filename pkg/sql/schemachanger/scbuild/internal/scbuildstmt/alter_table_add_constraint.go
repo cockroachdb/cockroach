@@ -77,7 +77,7 @@ func alterTableAddPrimaryKey(
 
 	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
 	// Ensure that there is a default rowid column.
-	oldPrimaryIndex := mustRetrievePrimaryIndexElement(b, tbl.TableID)
+	oldPrimaryIndex := mustRetrieveCurrentPrimaryIndexElement(b, tbl.TableID)
 	if getPrimaryIndexDefaultRowIDColumn(
 		b, tbl.TableID, oldPrimaryIndex.IndexID,
 	) == nil {
@@ -303,7 +303,7 @@ func alterTableAddForeignKey(
 		if primaryIndexPartitioningElemInReferencedTable != nil {
 			numImplicitCols = int(primaryIndexPartitioningElemInReferencedTable.NumImplicitColumns)
 		}
-		keyColIDsOfPrimaryIndexInReferencedTable, _, _ := getSortedColumnIDsInIndex(b, referencedTableID, primaryIndexIDInReferencedTable)
+		keyColIDsOfPrimaryIndexInReferencedTable, _, _ := getSortedColumnIDsInIndexByKind(b, referencedTableID, primaryIndexIDInReferencedTable)
 		for i := numImplicitCols; i < len(keyColIDsOfPrimaryIndexInReferencedTable); i++ {
 			fkDef.ToCols = append(
 				fkDef.ToCols,

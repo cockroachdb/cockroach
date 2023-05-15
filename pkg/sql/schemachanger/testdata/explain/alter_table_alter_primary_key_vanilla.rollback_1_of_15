@@ -1,0 +1,29 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+INSERT INTO t(i, j) VALUES (-4, -4), (-2, -2), (-3, -3);
+
+/* test */
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
+EXPLAIN (ddl) rollback at post-commit stage 1 of 15;
+----
+Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›);
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 7 elements transitioning toward ABSENT
+           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 6}
+           │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104, IndexID: 6}
+           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 7, ConstraintID: 7, SourceIndexID: 1}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 7}
+           │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 7}
+           └── 9 Mutation operations
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":6,"Kind":2,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":6,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":7,"Kind":2,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":7,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":6,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":6,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":7,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

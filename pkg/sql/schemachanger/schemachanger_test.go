@@ -242,7 +242,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 						return nil
 					}
 					for _, op := range s.EdgeOps {
-						if backfillOp, ok := op.(*scop.BackfillIndex); ok && backfillOp.IndexID == descpb.IndexID(2) {
+						if backfillOp, ok := op.(*scop.BackfillIndex); ok && backfillOp.IndexID == descpb.IndexID(6) {
 							job1Backfill.Do(func() {
 								close(job1BackfillNotification)
 								<-job1ContinueNotification
@@ -901,7 +901,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 	// the hex-encoded wrapped data, decode it, then pretty-print it to ensure
 	// it looks right.
 	wrappedPutRE := regexp.MustCompile(fmt.Sprintf(
-		"Put /Table/%d/3/10/0 -> /BYTES/0x([0-9a-f]+)$", desc.GetID(),
+		"Put /Table/%d/7/10/0 -> /BYTES/0x([0-9a-f]+)$", desc.GetID(),
 	))
 	match := wrappedPutRE.FindStringSubmatch(results[1][0])
 	require.NotEmpty(t, match)

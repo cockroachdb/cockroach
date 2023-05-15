@@ -61,7 +61,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 13 MutationType ops
+## StatementPhase stage 1 of 1 with 6 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -69,12 +69,12 @@ upsert descriptor #104
   +  mutations:
   +  - direction: ADD
   +    index:
-  +      constraintId: 2
+  +      constraintId: 6
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 2
+  +      id: 6
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -82,7 +82,7 @@ upsert descriptor #104
   +      - 2
   +      keyColumnNames:
   +      - j
-  +      name: crdb_internal_index_2_name_placeholder
+  +      name: crdb_internal_index_6_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
@@ -95,12 +95,12 @@ upsert descriptor #104
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 3
+  +      constraintId: 7
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 3
+  +      id: 7
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -108,63 +108,13 @@ upsert descriptor #104
   +      - 2
   +      keyColumnNames:
   +      - j
-  +      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_7_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
   +      - 1
   +      storeColumnNames:
   +      - i
-  +      unique: true
-  +      useDeletePreservingEncoding: true
-  +      version: 4
-  +    mutationId: 1
-  +    state: DELETE_ONLY
-  +  - direction: ADD
-  +    index:
-  +      constraintId: 4
-  +      createdAtNanos: "1640998800000000000"
-  +      createdExplicitly: true
-  +      foreignKey: {}
-  +      geoConfig: {}
-  +      id: 4
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      keyColumnIds:
-  +      - 1
-  +      keyColumnNames:
-  +      - i
-  +      keySuffixColumnIds:
-  +      - 2
-  +      name: t_i_key
-  +      partitioning: {}
-  +      sharded: {}
-  +      storeColumnNames: []
-  +      unique: true
-  +      version: 4
-  +    mutationId: 1
-  +    state: BACKFILLING
-  +  - direction: ADD
-  +    index:
-  +      constraintId: 5
-  +      createdExplicitly: true
-  +      foreignKey: {}
-  +      geoConfig: {}
-  +      id: 5
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      keyColumnIds:
-  +      - 1
-  +      keyColumnNames:
-  +      - i
-  +      keySuffixColumnIds:
-  +      - 2
-  +      name: crdb_internal_index_5_name_placeholder
-  +      partitioning: {}
-  +      sharded: {}
-  +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
   +      version: 4
@@ -173,10 +123,10 @@ upsert descriptor #104
      name: t
      nextColumnId: 3
   -  nextConstraintId: 2
-  +  nextConstraintId: 6
+  +  nextConstraintId: 8
      nextFamilyId: 1
   -  nextIndexId: 2
-  +  nextIndexId: 6
+  +  nextIndexId: 8
      nextMutationId: 1
      parentId: 100
   ...
@@ -189,7 +139,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 19 MutationType ops
+## PreCommitPhase stage 2 of 2 with 10 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -216,12 +166,12 @@ upsert descriptor #104
   +  mutations:
   +  - direction: ADD
   +    index:
-  +      constraintId: 2
+  +      constraintId: 6
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 2
+  +      id: 6
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -229,7 +179,7 @@ upsert descriptor #104
   +      - 2
   +      keyColumnNames:
   +      - j
-  +      name: crdb_internal_index_2_name_placeholder
+  +      name: crdb_internal_index_6_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
@@ -242,12 +192,12 @@ upsert descriptor #104
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 3
+  +      constraintId: 7
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 3
+  +      id: 7
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -255,63 +205,13 @@ upsert descriptor #104
   +      - 2
   +      keyColumnNames:
   +      - j
-  +      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_7_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
   +      - 1
   +      storeColumnNames:
   +      - i
-  +      unique: true
-  +      useDeletePreservingEncoding: true
-  +      version: 4
-  +    mutationId: 1
-  +    state: DELETE_ONLY
-  +  - direction: ADD
-  +    index:
-  +      constraintId: 4
-  +      createdAtNanos: "1640998800000000000"
-  +      createdExplicitly: true
-  +      foreignKey: {}
-  +      geoConfig: {}
-  +      id: 4
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      keyColumnIds:
-  +      - 1
-  +      keyColumnNames:
-  +      - i
-  +      keySuffixColumnIds:
-  +      - 2
-  +      name: t_i_key
-  +      partitioning: {}
-  +      sharded: {}
-  +      storeColumnNames: []
-  +      unique: true
-  +      version: 4
-  +    mutationId: 1
-  +    state: BACKFILLING
-  +  - direction: ADD
-  +    index:
-  +      constraintId: 5
-  +      createdExplicitly: true
-  +      foreignKey: {}
-  +      geoConfig: {}
-  +      id: 5
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      keyColumnIds:
-  +      - 1
-  +      keyColumnNames:
-  +      - i
-  +      keySuffixColumnIds:
-  +      - 2
-  +      name: crdb_internal_index_5_name_placeholder
-  +      partitioning: {}
-  +      sharded: {}
-  +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
   +      version: 4
@@ -320,10 +220,10 @@ upsert descriptor #104
      name: t
      nextColumnId: 3
   -  nextConstraintId: 2
-  +  nextConstraintId: 6
+  +  nextConstraintId: 8
      nextFamilyId: 1
   -  nextIndexId: 2
-  +  nextIndexId: 6
+  +  nextIndexId: 8
      nextMutationId: 1
      parentId: 100
   ...
@@ -341,15 +241,8 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 1 of 7 with 4 MutationType ops
+## PostCommitPhase stage 1 of 15 with 3 MutationType ops
 upsert descriptor #104
-  ...
-         version: 4
-       mutationId: 1
-  -    state: DELETE_ONLY
-  +    state: WRITE_ONLY
-     - direction: ADD
-       index:
   ...
          version: 4
        mutationId: 1
@@ -363,22 +256,15 @@ upsert descriptor #104
   -  version: "2"
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 2 BackfillType ops pending"
+update progress of schema change job #1: "PostCommitPhase stage 2 of 15 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 7 with 2 BackfillType ops
-backfill indexes [2 4] from index #1 in table #104
+## PostCommitPhase stage 2 of 15 with 1 BackfillType op
+backfill indexes [6] from index #1 in table #104
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 3 of 7 with 4 MutationType ops
+## PostCommitPhase stage 3 of 15 with 3 MutationType ops
 upsert descriptor #104
-  ...
-         version: 4
-       mutationId: 1
-  -    state: BACKFILLING
-  +    state: DELETE_ONLY
-     - direction: ADD
-       index:
   ...
          version: 4
        mutationId: 1
@@ -392,18 +278,11 @@ upsert descriptor #104
   -  version: "3"
   +  version: "4"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 2 MutationType ops pending"
+update progress of schema change job #1: "PostCommitPhase stage 4 of 15 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
-## PostCommitPhase stage 4 of 7 with 4 MutationType ops
+## PostCommitPhase stage 4 of 15 with 3 MutationType ops
 upsert descriptor #104
-  ...
-         version: 4
-       mutationId: 1
-  -    state: DELETE_ONLY
-  +    state: MERGING
-     - direction: ADD
-       index:
   ...
          version: 4
        mutationId: 1
@@ -417,185 +296,178 @@ upsert descriptor #104
   -  version: "4"
   +  version: "5"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 2 BackfillType ops pending"
+update progress of schema change job #1: "PostCommitPhase stage 5 of 15 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
-## PostCommitPhase stage 5 of 7 with 2 BackfillType ops
-merge temporary indexes [3 5] into backfilled indexes [2 4] in table #104
+## PostCommitPhase stage 5 of 15 with 1 BackfillType op
+merge temporary indexes [7] into backfilled indexes [6] in table #104
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 7 with 4 MutationType ops
+## PostCommitPhase stage 6 of 15 with 4 MutationType ops
 upsert descriptor #104
   ...
          version: 4
        mutationId: 1
   -    state: MERGING
+  -  - direction: ADD
   +    state: WRITE_ONLY
-     - direction: ADD
+  +  - direction: DROP
        index:
+         constraintId: 7
   ...
          version: 4
        mutationId: 1
-  -    state: MERGING
-  +    state: WRITE_ONLY
-     - direction: ADD
-       index:
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 101
   -  version: "5"
   +  version: "6"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 2 ValidationType ops pending"
+update progress of schema change job #1: "PostCommitPhase stage 7 of 15 with 1 ValidationType op pending"
 commit transaction #8
 begin transaction #9
-## PostCommitPhase stage 7 of 7 with 2 ValidationType ops
-validate forward indexes [2] in table #104
-validate forward indexes [4] in table #104
+## PostCommitPhase stage 7 of 15 with 1 ValidationType op
+validate forward indexes [6] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
+## PostCommitPhase stage 8 of 15 with 15 MutationType ops
 upsert descriptor #104
   ...
-           statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
-           statementTag: ALTER TABLE
-  -    revertible: true
-       targetRanks: <redacted>
-       targets: <redacted>
-  ...
-     formatVersion: 3
-     id: 104
-  +  indexes:
-  +  - constraintId: 4
-  +    createdAtNanos: "1640998800000000000"
-  +    createdExplicitly: true
-  +    foreignKey: {}
-  +    geoConfig: {}
-  +    id: 4
-  +    interleave: {}
-  +    keyColumnDirections:
-  +    - ASC
-  +    keyColumnIds:
-  +    - 1
-  +    keyColumnNames:
-  +    - i
-  +    keySuffixColumnIds:
-  +    - 2
-  +    name: t_i_key
-  +    partitioning: {}
-  +    sharded: {}
-  +    storeColumnNames: []
-  +    unique: true
-  +    version: 4
      modificationTime: {}
      mutations:
   -  - direction: ADD
   +  - direction: DROP
        index:
-  -      constraintId: 2
-  -      createdExplicitly: true
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 2
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 2
-  -      keyColumnNames:
-  -      - j
-  -      name: crdb_internal_index_2_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnIds:
-  -      - 1
-  -      storeColumnNames:
-  -      - i
-  -      unique: true
-  -      version: 4
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-  -  - direction: ADD
-  -    index:
-         constraintId: 3
+  -      constraintId: 6
+  +      constraintId: 7
          createdExplicitly: true
-  ...
-         version: 4
-       mutationId: 1
-  -    state: WRITE_ONLY
-  -  - direction: ADD
-  +    state: DELETE_ONLY
-  +  - direction: DROP
-       index:
-  -      constraintId: 4
-  -      createdAtNanos: "1640998800000000000"
-  +      constraintId: 5
-         createdExplicitly: true
+         encodingType: 1
          foreignKey: {}
          geoConfig: {}
-  -      id: 4
-  +      id: 5
+  -      id: 6
+  +      id: 7
          interleave: {}
          keyColumnDirections:
   ...
-         keySuffixColumnIds:
-         - 2
-  -      name: t_i_key
-  +      name: crdb_internal_index_5_name_placeholder
+         keyColumnNames:
+         - j
+  -      name: crdb_internal_index_6_name_placeholder
+  +      name: crdb_internal_index_7_name_placeholder
          partitioning: {}
          sharded: {}
-         storeColumnNames: []
+  ...
+         - i
          unique: true
   +      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
   -    state: WRITE_ONLY
-  -  - direction: ADD
   +    state: DELETE_ONLY
-  +  - direction: DROP
+     - direction: DROP
        index:
-  -      constraintId: 5
+  -      constraintId: 7
   -      createdExplicitly: true
   +      constraintId: 1
   +      createdAtNanos: "1640995200000000000"
-  +      encodingType: 1
+         encodingType: 1
          foreignKey: {}
          geoConfig: {}
-  -      id: 5
+  -      id: 7
   +      id: 1
          interleave: {}
          keyColumnDirections:
-  ...
-         keyColumnNames:
-         - i
-  -      keySuffixColumnIds:
+         - ASC
+         keyColumnIds:
   -      - 2
-  -      name: crdb_internal_index_5_name_placeholder
+  +      - 1
+         keyColumnNames:
+  -      - j
+  -      name: crdb_internal_index_7_name_placeholder
+  +      - i
   +      name: crdb_internal_index_1_name_placeholder
          partitioning: {}
          sharded: {}
-  -      storeColumnNames: []
-  +      storeColumnIds:
+         storeColumnIds:
+  -      - 1
   +      - 2
-  +      storeColumnNames:
+         storeColumnNames:
   +      - j
+  +      unique: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 8
+  +      createdAtNanos: "1640998800000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 8
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+         - i
+  +      keySuffixColumnIds:
+  +      - 2
+  +      name: t_i_key
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnNames: []
          unique: true
-  -      useDeletePreservingEncoding: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 9
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 9
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      keySuffixColumnIds:
+  +      - 2
+  +      name: crdb_internal_index_9_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      unique: true
+         useDeletePreservingEncoding: true
          version: 4
-       mutationId: 1
   ...
+     name: t
+     nextColumnId: 3
+  -  nextConstraintId: 8
+  +  nextConstraintId: 10
+     nextFamilyId: 1
+  -  nextIndexId: 8
+  +  nextIndexId: 10
+     nextMutationId: 1
      parentId: 100
      primaryIndex:
   -    constraintId: 1
   -    createdAtNanos: "1640995200000000000"
-  +    constraintId: 2
+  +    constraintId: 6
   +    createdExplicitly: true
        encodingType: 1
        foreignKey: {}
        geoConfig: {}
   -    id: 1
-  +    id: 2
+  +    id: 6
        interleave: {}
        keyColumnDirections:
        - ASC
@@ -622,22 +494,145 @@ upsert descriptor #104
   -  version: "6"
   +  version: "7"
 persist all catalog changes to storage
-adding table for stats refresh: 104
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending"
-set schema change job #1 to non-cancellable
+update progress of schema change job #1: "PostCommitPhase stage 9 of 15 with 1 MutationType op pending"
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
+## PostCommitPhase stage 9 of 15 with 3 MutationType ops
 upsert descriptor #104
   ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 10 of 15 with 1 BackfillType op pending"
+commit transaction #11
+begin transaction #12
+## PostCommitPhase stage 10 of 15 with 1 BackfillType op
+backfill indexes [8] from index #6 in table #104
+commit transaction #12
+begin transaction #13
+## PostCommitPhase stage 11 of 15 with 3 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "8"
+  +  version: "9"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 12 of 15 with 1 MutationType op pending"
+commit transaction #13
+begin transaction #14
+## PostCommitPhase stage 12 of 15 with 3 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: MERGING
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "9"
+  +  version: "10"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 13 of 15 with 1 BackfillType op pending"
+commit transaction #14
+begin transaction #15
+## PostCommitPhase stage 13 of 15 with 1 BackfillType op
+merge temporary indexes [9] into backfilled indexes [8] in table #104
+commit transaction #15
+begin transaction #16
+## PostCommitPhase stage 14 of 15 with 4 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: MERGING
+  -  - direction: ADD
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+       index:
+         constraintId: 9
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "10"
+  +  version: "11"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 15 of 15 with 1 ValidationType op pending"
+commit transaction #16
+begin transaction #17
+## PostCommitPhase stage 15 of 15 with 1 ValidationType op
+validate forward indexes [8] in table #104
+commit transaction #17
+begin transaction #18
+## PostCommitNonRevertiblePhase stage 1 of 2 with 13 MutationType ops
+upsert descriptor #104
+  ...
+           statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
+           statementTag: ALTER TABLE
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+     formatVersion: 3
+     id: 104
+  +  indexes:
+  +  - constraintId: 8
+  +    createdAtNanos: "1640998800000000000"
+  +    createdExplicitly: true
+  +    foreignKey: {}
+  +    geoConfig: {}
+  +    id: 8
+  +    interleave: {}
+  +    keyColumnDirections:
+  +    - ASC
+  +    keyColumnIds:
+  +    - 1
+  +    keyColumnNames:
+  +    - i
+  +    keySuffixColumnIds:
+  +    - 2
+  +    name: t_i_key
+  +    partitioning: {}
+  +    sharded: {}
+  +    storeColumnNames: []
+  +    unique: true
+  +    version: 4
+     modificationTime: {}
+     mutations:
      - direction: DROP
        index:
-  -      constraintId: 3
+  -      constraintId: 7
   -      createdExplicitly: true
   -      encodingType: 1
   -      foreignKey: {}
   -      geoConfig: {}
-  -      id: 3
+  -      id: 7
   -      interleave: {}
   -      keyColumnDirections:
   -      - ASC
@@ -645,7 +640,7 @@ upsert descriptor #104
   -      - 2
   -      keyColumnNames:
   -      - j
-  -      name: crdb_internal_index_3_name_placeholder
+  -      name: crdb_internal_index_7_name_placeholder
   -      partitioning: {}
   -      sharded: {}
   -      storeColumnIds:
@@ -659,11 +654,20 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
-  -      constraintId: 5
+         constraintId: 1
+         createdAtNanos: "1640995200000000000"
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 8
+  -      createdAtNanos: "1640998800000000000"
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}
-  -      id: 5
+  -      id: 8
   -      interleave: {}
   -      keyColumnDirections:
   -      - ASC
@@ -673,7 +677,31 @@ upsert descriptor #104
   -      - i
   -      keySuffixColumnIds:
   -      - 2
-  -      name: crdb_internal_index_5_name_placeholder
+  -      name: t_i_key
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 9
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 9
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      keySuffixColumnIds:
+  -      - 2
+  -      name: crdb_internal_index_9_name_placeholder
   -      partitioning: {}
   -      sharded: {}
   -      storeColumnNames: []
@@ -681,28 +709,20 @@ upsert descriptor #104
   -      useDeletePreservingEncoding: true
   -      version: 4
   -    mutationId: 1
-  -    state: DELETE_ONLY
-  -  - direction: DROP
-  -    index:
-         constraintId: 1
-         createdAtNanos: "1640995200000000000"
-  ...
-         version: 4
-       mutationId: 1
-  -    state: WRITE_ONLY
-  +    state: DELETE_ONLY
+       state: DELETE_ONLY
      name: t
-     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
+  -  version: "11"
+  +  version: "12"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops pending"
-commit transaction #11
-begin transaction #12
-## PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops
+adding table for stats refresh: 104
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending"
+set schema change job #1 to non-cancellable
+commit transaction #18
+begin transaction #19
+## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -758,8 +778,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "8"
-  +  version: "9"
+  -  version: "12"
+  +  version: "13"
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)"
   descriptor IDs: [104]
@@ -769,6 +789,6 @@ updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #12
+commit transaction #19
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

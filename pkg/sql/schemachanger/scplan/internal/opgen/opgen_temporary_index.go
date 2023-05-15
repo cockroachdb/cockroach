@@ -47,7 +47,6 @@ func init() {
 		toAbsent(
 			scpb.Status_WRITE_ONLY,
 			to(scpb.Status_DELETE_ONLY,
-				revertible(false),
 				emit(func(this *scpb.TemporaryIndex) *scop.MakeWriteOnlyIndexDeleteOnly {
 					return &scop.MakeWriteOnlyIndexDeleteOnly{
 						TableID: this.TableID,

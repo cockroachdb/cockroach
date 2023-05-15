@@ -83,6 +83,22 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		// Ignore no-op changes.
 		return
 	}
+
+	// We were about to overwrite an element's target and metadata.
+	// Assert one disallowed case: reviving a "ghost" element, that is,
+	// add an element that was previously added and then dropped.
+	// This assertion is artificial per se and should not be taken as holy and
+	// unbreakable. It is just that we don't think why someone would need to do
+	// this for now, so we simply put a gate here as a sanity check. If we
+	// do find a case where we need to revive a ghost element in the future,
+	// feel free to remove this check.
+	if dst.current == scpb.Status_ABSENT &&
+		dst.target == scpb.ToAbsent &&
+		(target == scpb.ToPublic || target == scpb.Transient) {
+		panic(errors.AssertionFailedf("attempt to revive a ghost element:"+
+			" [elem=%v],[current=ABSENT],[target=ToAbsent],[newTarget=%v]", dst.element.String(), target.Status()))
+	}
+
 	// Henceforth all possibilities lead to the target and metadata being
 	// overwritten. See below for explanations as to why this is legal.
 	oldTarget := dst.target
@@ -336,8 +352,8 @@ func (b *builderState) NextColumnFamilyID(table *scpb.Table) (ret catid.FamilyID
 }
 
 // NextTableIndexID implements the scbuildstmt.TableHelpers interface.
-func (b *builderState) NextTableIndexID(table *scpb.Table) (ret catid.IndexID) {
-	return b.nextIndexID(table.TableID)
+func (b *builderState) NextTableIndexID(tableID catid.DescID) (ret catid.IndexID) {
+	return b.nextIndexID(tableID)
 }
 
 // NextViewIndexID implements the scbuildstmt.TableHelpers interface.

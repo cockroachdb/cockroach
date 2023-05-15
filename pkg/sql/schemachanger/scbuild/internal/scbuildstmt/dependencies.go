@@ -223,7 +223,7 @@ type TableHelpers interface {
 
 	// NextTableIndexID returns the ID that should be used for any new index added
 	// to this table.
-	NextTableIndexID(table *scpb.Table) catid.IndexID
+	NextTableIndexID(tableID catid.DescID) catid.IndexID
 
 	// NextViewIndexID returns the ID that should be used for any new index added
 	// to this materialized view.

@@ -31,16 +31,16 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [107]}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 6, ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1}
         │   │   │     rule: "indexes containing column reach absent before column"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 6}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 7}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+        │   │   └── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 6}
         │   │         rule: "dependents removed before column"
         │   │
         │   ├── • ColumnName:{DescID: 106, Name: l, ColumnID: 2}
@@ -55,61 +55,61 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [107]}
         │   │     PUBLIC → ABSENT
         │   │
-        │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   ├── • PrimaryIndex:{DescID: 106, IndexID: 6, ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1}
         │   │   │ BACKFILL_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 6, ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1}
         │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
+        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 6}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 6}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 6}
         │   │         rule: "dependents removed before index"
         │   │
-        │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+        │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 6}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 6, ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1}
         │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
-        │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+        │   ├── • IndexData:{DescID: 106, IndexID: 6}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-        │   │         rule: "index drop mutation visible before cleaning up index columns"
-        │   │
-        │   ├── • IndexData:{DescID: 106, IndexID: 2}
-        │   │   │ PUBLIC → ABSENT
-        │   │   │
-        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 6, ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1}
         │   │         rule: "index removed before garbage collection"
         │   │
-        │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │   ├── • TemporaryIndex:{DescID: 106, IndexID: 7, ConstraintID: 7, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 7, ConstraintID: 7, SourceIndexID: 1}
         │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 7}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 7}
         │   │         rule: "dependents removed before index"
         │   │
-        │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+        │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 7}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 7, ConstraintID: 7, SourceIndexID: 1}
         │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
-        │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+        │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 6}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 6, ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
+        │   │
+        │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 7}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 7, ConstraintID: 7, SourceIndexID: 1}
         │             rule: "index drop mutation visible before cleaning up index columns"
         │
         └── • 14 Mutation operations
@@ -121,23 +121,23 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │
             ├── • RemoveColumnFromIndex
             │     ColumnID: 1
-            │     IndexID: 2
-            │     TableID: 106
-            │
-            ├── • RemoveColumnFromIndex
-            │     ColumnID: 2
-            │     IndexID: 2
-            │     Kind: 2
+            │     IndexID: 6
             │     TableID: 106
             │
             ├── • RemoveColumnFromIndex
             │     ColumnID: 1
-            │     IndexID: 3
+            │     IndexID: 7
             │     TableID: 106
             │
             ├── • RemoveColumnFromIndex
             │     ColumnID: 2
-            │     IndexID: 3
+            │     IndexID: 6
+            │     Kind: 2
+            │     TableID: 106
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 2
+            │     IndexID: 7
             │     Kind: 2
             │     TableID: 106
             │
@@ -152,18 +152,18 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │     - 107
             │
             ├── • MakeIndexAbsent
-            │     IndexID: 2
+            │     IndexID: 6
             │     TableID: 106
             │
             ├── • CreateGCJobForIndex
-            │     IndexID: 2
+            │     IndexID: 6
             │     StatementForDropJob:
             │       Rollback: true
             │       Statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
-            │     IndexID: 3
+            │     IndexID: 7
             │     TableID: 106
             │
             ├── • MakeDeleteOnlyColumnAbsent
