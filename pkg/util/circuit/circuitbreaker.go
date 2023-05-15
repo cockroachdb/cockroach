@@ -151,15 +151,17 @@ func (b *Breaker) Report(err error) {
 // Outside of testing, there should be no reason to call this
 // as it is the probe's job to reset the breaker if appropriate.
 func (b *Breaker) Reset() {
-	b.Opts().EventHandler.OnReset(b)
+	var prev error
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	// Avoid replacing errAndCh if it wasn't tripped. Otherwise,
 	// clients waiting on it would never get cancelled even if the
 	// breaker did trip in the future.
 	if wasTripped := b.mu.errAndCh.err != nil; wasTripped {
+		prev = b.mu.errAndCh.err
 		b.mu.errAndCh = b.newErrAndCh()
 	}
+	b.mu.Unlock()
+	b.Opts().EventHandler.OnReset(b, prev)
 }
 
 // String returns the Breaker's name.

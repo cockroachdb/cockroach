@@ -20,7 +20,7 @@ type EventHandler interface {
 	OnTrip(_ *Breaker, prev, cur error)
 	OnProbeLaunched(*Breaker)
 	OnProbeDone(*Breaker)
-	OnReset(*Breaker)
+	OnReset(_ *Breaker, prev error)
 }
 
 // EventLogger is an implementation of EventHandler that relays to a logging
@@ -61,9 +61,9 @@ func (d *EventLogger) OnProbeDone(b *Breaker) {
 }
 
 // OnReset implements EventHandler. It logs a message.
-func (d *EventLogger) OnReset(b *Breaker) {
+func (d *EventLogger) OnReset(breaker *Breaker, prev error) {
 	var buf redact.StringBuilder
-	EventFormatter{}.OnReset(b, &buf)
+	EventFormatter{}.OnReset(breaker, &buf)
 	d.maybeLog(buf)
 }
 
