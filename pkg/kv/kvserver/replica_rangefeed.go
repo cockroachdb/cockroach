@@ -241,25 +241,25 @@ func (r *Replica) RangeFeed(
 	return &done
 }
 
-func (r *Replica) getRangefeedProcessorAndFilter() (*rangefeed.Processor, *rangefeed.Filter) {
+func (r *Replica) getRangefeedProcessorAndFilter() (rangefeed.Server, *rangefeed.Filter) {
 	r.rangefeedMu.RLock()
 	defer r.rangefeedMu.RUnlock()
 	return r.rangefeedMu.proc, r.rangefeedMu.opFilter
 }
 
-func (r *Replica) getRangefeedProcessor() *rangefeed.Processor {
+func (r *Replica) getRangefeedProcessor() rangefeed.Server {
 	p, _ := r.getRangefeedProcessorAndFilter()
 	return p
 }
 
-func (r *Replica) setRangefeedProcessor(p *rangefeed.Processor) {
+func (r *Replica) setRangefeedProcessor(p rangefeed.Server) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	r.rangefeedMu.proc = p
 	r.store.addReplicaWithRangefeed(r.RangeID)
 }
 
-func (r *Replica) unsetRangefeedProcessorLocked(p *rangefeed.Processor) {
+func (r *Replica) unsetRangefeedProcessorLocked(p rangefeed.Server) {
 	if r.rangefeedMu.proc != p {
 		// The processor was already unset.
 		return
@@ -269,7 +269,7 @@ func (r *Replica) unsetRangefeedProcessorLocked(p *rangefeed.Processor) {
 	r.store.removeReplicaWithRangefeed(r.RangeID)
 }
 
-func (r *Replica) unsetRangefeedProcessor(p *rangefeed.Processor) {
+func (r *Replica) unsetRangefeedProcessor(p rangefeed.Server) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	r.unsetRangefeedProcessorLocked(p)
@@ -332,7 +332,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	withDiff bool,
 	stream rangefeed.Stream,
 	done *future.ErrorFuture,
-) *rangefeed.Processor {
+) rangefeed.Server {
 	defer logSlowRangefeedRegistration(ctx)()
 
 	// Attempt to register with an existing Rangefeed processor, if one exists.
@@ -435,7 +435,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 // maybeDisconnectEmptyRangefeed tears down the provided Processor if it is
 // still active and if it no longer has any registrations.
-func (r *Replica) maybeDisconnectEmptyRangefeed(p *rangefeed.Processor) {
+func (r *Replica) maybeDisconnectEmptyRangefeed(p rangefeed.Server) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	if p == nil || p != r.rangefeedMu.proc {
@@ -452,7 +452,7 @@ func (r *Replica) maybeDisconnectEmptyRangefeed(p *rangefeed.Processor) {
 
 // disconnectRangefeedWithErr broadcasts the provided error to all rangefeed
 // registrations and tears down the provided rangefeed Processor.
-func (r *Replica) disconnectRangefeedWithErr(p *rangefeed.Processor, pErr *kvpb.Error) {
+func (r *Replica) disconnectRangefeedWithErr(p rangefeed.Server, pErr *kvpb.Error) {
 	p.StopWithErr(pErr)
 	r.unsetRangefeedProcessor(p)
 }
