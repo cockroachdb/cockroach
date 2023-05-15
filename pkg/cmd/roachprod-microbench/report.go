@@ -25,20 +25,23 @@ const (
 	analyticsLogName = "analytics"
 )
 
-type Report struct {
+type report struct {
+	log             *logger.Logger
 	benchmarkOutput map[string]*os.File
 	analyticsOutput map[string]*os.File
 	path            string
 }
 
-func initLogger(path string) {
+// TODO: move this
+func initLogger(path string) *logger.Logger {
 	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
 	var loggerError error
-	l, loggerError = loggerCfg.NewLogger(path)
+	l, loggerError := loggerCfg.NewLogger(path)
 	if loggerError != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "unable to configure logger: %s\n", loggerError)
 		os.Exit(1)
 	}
+	return l
 }
 
 func getReportLogName(name string, pkg string) string {
@@ -56,7 +59,8 @@ func isReportLog(name string) bool {
 	return strings.HasSuffix(name, reportLogName+".log")
 }
 
-func (report *Report) createReports(path string, packages []string) error {
+func (report *report) createReports(log *logger.Logger, path string, packages []string) error {
+	report.log = log
 	report.benchmarkOutput = make(map[string]*os.File)
 	report.analyticsOutput = make(map[string]*os.File)
 	report.path = path
@@ -75,26 +79,26 @@ func (report *Report) createReports(path string, packages []string) error {
 	return nil
 }
 
-func (report *Report) closeReports() {
+func (report *report) closeReports() {
 	for _, file := range report.benchmarkOutput {
 		err := file.Close()
 		if err != nil {
-			l.Errorf("Error closing benchmark output file: %s", err)
+			report.log.Errorf("Error closing benchmark output file: %s", err)
 		}
 	}
 	for _, file := range report.analyticsOutput {
 		err := file.Close()
 		if err != nil {
-			l.Errorf("Error closing analytics output file: %s", err)
+			report.log.Errorf("Error closing analytics output file: %s", err)
 		}
 	}
 }
 
-func (report *Report) writeBenchmarkErrorLogs(response cluster.RemoteResponse, tag string) error {
+func (report *report) writeBenchmarkErrorLogs(response cluster.RemoteResponse, tag string) error {
 	benchmarkResponse := response.Metadata.(benchmarkIndexed)
 	stdoutLogName := fmt.Sprintf("%s-%s-stdout.log", benchmarkResponse.name, tag)
 	stderrLogName := fmt.Sprintf("%s-%s-stderr.log", benchmarkResponse.name, tag)
-	l.Printf("Writing error logs for benchmark at %s, %s\n", stdoutLogName, stderrLogName)
+	report.log.Printf("Writing error logs for benchmark at %s, %s\n", stdoutLogName, stderrLogName)
 
 	if err := os.WriteFile(filepath.Join(report.path, stdoutLogName), []byte(response.Stdout), 0644); err != nil {
 		return err
