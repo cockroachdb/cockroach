@@ -664,7 +664,13 @@ func wrapFilesystemMiddleware(opts *pebble.Options) (vfs.FS, io.Closer) {
 	// wraps the filesystem with a layer that times all write-oriented
 	// operations.
 	fs, closer := vfs.WithDiskHealthChecks(opts.FS, diskHealthCheckInterval,
-		opts.EventListener.DiskSlow)
+		func(name string, opType vfs.OpType, duration time.Duration) {
+			opts.EventListener.DiskSlow(pebble.DiskSlowInfo{
+				Path:     name,
+				OpType:   opType,
+				Duration: duration,
+			})
+		})
 	// If we encounter ENOSPC, exit with an informative exit code.
 	fs = vfs.OnDiskFull(fs, func() {
 		exit.WithCode(exit.DiskFull())
