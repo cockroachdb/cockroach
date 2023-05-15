@@ -16,6 +16,7 @@ import (
 	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/apache/arrow/go/v11/parquet/compress"
 	"github.com/apache/arrow/go/v11/parquet/file"
+	"github.com/apache/arrow/go/v11/parquet/metadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -24,6 +25,9 @@ type config struct {
 	maxRowGroupLength int64
 	version           parquet.Version
 	compression       compress.Compression
+
+	// Arbitrary kv metadata.
+	metadata metadata.KeyValueMetadata
 }
 
 // An Option is a configurable setting for the Writer.
@@ -68,6 +72,19 @@ func WithCompressionCodec(compression CompressionCodec) Option {
 		}
 
 		c.compression = compressionCodecToParquet[compression]
+		return nil
+	}
+}
+
+// WithMetadata adds arbitrary kv metadata to the parquet file which can be
+// read by a reader.
+func WithMetadata(m map[string]string) Option {
+	return func(c *config) error {
+		for k, v := range m {
+			if err := c.metadata.Append(k, v); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 }
@@ -117,6 +134,7 @@ type Writer struct {
 
 	ba *batchAlloc
 
+	// The current number of rows written to the row group writer.
 	currentRowGroupSize   int64
 	currentRowGroupWriter file.BufferedRowGroupWriter
 }
@@ -131,6 +149,7 @@ func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, 
 		maxRowGroupLength: parquet.DefaultMaxRowGroupLen,
 		version:           parquet.V2_6,
 		compression:       compress.Codecs.Uncompressed,
+		metadata:          metadata.KeyValueMetadata{},
 	}
 	for _, opt := range opts {
 		err := opt.apply(&cfg)
@@ -139,10 +158,13 @@ func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, 
 		}
 	}
 
-	parquetOpts := []parquet.WriterProperty{parquet.WithCreatedBy("cockroachdb"),
-		parquet.WithVersion(cfg.version), parquet.WithCompression(cfg.compression)}
+	parquetOpts := []parquet.WriterProperty{
+		parquet.WithCreatedBy("cockroachdb"),
+		parquet.WithVersion(cfg.version),
+		parquet.WithCompression(cfg.compression),
+	}
 	props := parquet.NewWriterProperties(parquetOpts...)
-	writer := file.NewParquetWriter(sink, sch.schema.Root(), file.WithWriterProps(props))
+	writer := file.NewParquetWriter(sink, sch.schema.Root(), file.WithWriterProps(props), file.WithWriteMetadata(cfg.metadata))
 
 	return &Writer{
 		sch:    sch,

@@ -499,6 +499,12 @@ func TestServerStartStop(t *testing.T) {
 		if err := db2.Ping(); err != nil {
 			return err
 		}
+
+		// Don't wait for graceful jobs shutdown in this test since
+		// we want to make sure test completes reasonably quickly.
+		_, err = db2.Exec("SET CLUSTER SETTING server.shutdown.jobs_wait='0s'")
+		require.NoError(t, err)
+
 		return nil
 	})
 
