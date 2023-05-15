@@ -144,6 +144,10 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 	canTransferLeaseFrom CanTransferLeaseFrom,
 ) (shouldPlanChange bool, priority float64) {
 	desc, conf := repl.DescAndSpanConfig()
+
+	log.KvDistribution.VEventf(ctx, 6,
+		"computing range action desc=%s config=%s",
+		desc, conf.String())
 	action, priority := rp.allocator.ComputeAction(ctx, rp.storePool, conf, desc)
 
 	if action == allocatorimpl.AllocatorNoop {
@@ -249,6 +253,9 @@ func (rp ReplicaPlanner) PlanOneChange(
 	// successfully execute a decision that was based on the state of a stale
 	// range descriptor.
 	desc, conf := repl.DescAndSpanConfig()
+	log.KvDistribution.VEventf(ctx, 6,
+		"planning range change desc=%s config=%s",
+		desc, conf.String())
 
 	voterReplicas, nonVoterReplicas,
 		liveVoterReplicas, deadVoterReplicas,
