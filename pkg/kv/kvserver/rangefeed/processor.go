@@ -102,7 +102,88 @@ func (sc *Config) SetDefaults() {
 //  1. it translates logical updates into rangefeed events.
 //  2. it transforms a range-level closed timestamp to a rangefeed-level resolved
 //     timestamp.
-type Processor struct {
+type Processor interface {
+	// Lifecycle of processor.
+
+	// Start processor will start internal tasks and background initializations.
+	// It is ok to start registering streams before background initialization
+	// completes.
+	// The provided iterator is used to initialize the rangefeed's resolved
+	// timestamp. It must obey the contract of an iterator used for an
+	// initResolvedTSScan. The Processor promises to clean up the iterator by
+	// calling its Close method when it is finished.
+	// Note that newRtsIter must be called synchronously within Start by the
+	// implementation as it relies on raftMuLock being held to ensure consistent
+	// snapshot between scan and subsequent events.
+	// If the iterator is nil then no initialization scan will be performed and
+	// the resolved timestamp will immediately be considered initialized.
+	Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error
+	// Stop processor. It is meant to be called by replica when it finds that all
+	// streams were stopped before removing references to the processor.
+	Stop()
+	// StopWithErr terminates all registrations with an error and then winds down
+	// any internal resources.
+	StopWithErr(pErr *kvpb.Error)
+
+	// Lifecycle of registrations.
+
+	// Register registers the stream over the specified span of keys.
+	//
+	// The registration will not observe any events that were consumed before this
+	// method was called. It is undefined whether the registration will observe
+	// events that are consumed concurrently with this call. The channel will be
+	// provided an error when the registration closes.
+	//
+	// The optionally provided "catch-up" iterator is used to read changes from the
+	// engine which occurred after the provided start timestamp (exclusive).
+	//
+	// If the method returns false, the processor will have been stopped, so calling
+	// Stop is not necessary. If the method returns true, it will also return an
+	// updated operation filter that includes the operations required by the new
+	// registration.
+	//
+	// NB: startTS is exclusive; the first possible event will be at startTS.Next().
+	Register(
+		span roachpb.RSpan,
+		startTS hlc.Timestamp, // exclusive
+		catchUpIterConstructor CatchUpIteratorConstructor,
+		withDiff bool,
+		stream Stream,
+		disconnectFn func(),
+		done *future.ErrorFuture,
+	) (bool, *Filter)
+	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
+	// the given span with the given error.
+	DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error)
+	// Filter returns a new operation filter based on the registrations attached to
+	// the processor. Returns nil if the processor has been stopped already.
+	Filter() *Filter
+	// Len returns the number of registrations attached to the processor.
+	Len() int
+
+	// Data flow.
+
+	// ConsumeLogicalOps informs the rangefeed processor of the set of logical
+	// operations. It returns false if consuming the operations hit a timeout, as
+	// specified by the EventChanTimeout configuration. If the method returns false,
+	// the processor will have been stopped, so calling Stop is not necessary.
+	ConsumeLogicalOps(ctx context.Context, ops ...enginepb.MVCCLogicalOp) bool
+	// ConsumeSSTable informs the rangefeed processor of an SSTable that was added
+	// via AddSSTable. It returns false if consuming the SSTable hit a timeout, as
+	// specified by the EventChanTimeout configuration. If the method returns false,
+	// the processor will have been stopped, so calling Stop is not necessary.
+	ConsumeSSTable(
+		ctx context.Context, sst []byte, sstSpan roachpb.Span, writeTS hlc.Timestamp,
+	) bool
+	// ForwardClosedTS indicates that the closed timestamp that serves as the basis
+	// for the rangefeed processor's resolved timestamp has advanced. It returns
+	// false if forwarding the closed timestamp hit a timeout, as specified by the
+	// EventChanTimeout configuration. If the method returns false, the processor
+	// will have been stopped, so calling Stop is not necessary.
+	ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool
+}
+
+type LegacyProcessor struct {
 	Config
 	reg registry
 	rts resolvedTimestamp
@@ -182,10 +263,10 @@ type spanErr struct {
 
 // NewProcessor creates a new rangefeed Processor. The corresponding goroutine
 // should be launched using the Start method.
-func NewProcessor(cfg Config) *Processor {
+func NewProcessor(cfg Config) Processor {
 	cfg.SetDefaults()
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
-	p := &Processor{
+	p := &LegacyProcessor{
 		Config: cfg,
 		reg:    makeRegistry(cfg.Metrics),
 		rts:    makeResolvedTimestamp(),
@@ -224,10 +305,11 @@ type CatchUpIteratorConstructor func(roachpb.Span, hlc.Timestamp) *CatchUpIterat
 // calling its Close method when it is finished. If the iterator is nil then
 // no initialization scan will be performed and the resolved timestamp will
 // immediately be considered initialized.
-func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor) error {
+// Start implements Processor interface.
+func (p *LegacyProcessor) Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error {
 	ctx := p.AnnotateCtx(context.Background())
-	if err := stopper.RunAsyncTask(ctx, "rangefeed.Processor", func(ctx context.Context) {
-		p.run(ctx, p.RangeID, rtsIterFunc, stopper)
+	if err := stopper.RunAsyncTask(ctx, "rangefeed.LegacyProcessor", func(ctx context.Context) {
+		p.run(ctx, p.RangeID, newRtsIter, stopper)
 	}); err != nil {
 		p.reg.DisconnectWithErr(all, kvpb.NewError(err))
 		close(p.stoppedC)
@@ -237,7 +319,7 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstr
 }
 
 // run is called from Start and runs the rangefeed.
-func (p *Processor) run(
+func (p *LegacyProcessor) run(
 	ctx context.Context,
 	_forStacks roachpb.RangeID,
 	rtsIterFunc IntentScannerConstructor,
@@ -257,7 +339,7 @@ func (p *Processor) run(
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
 	if rtsIterFunc != nil {
 		rtsIter := rtsIterFunc()
-		initScan := newInitResolvedTSScan(p, rtsIter)
+		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
 			initScan.Cancel()
@@ -373,7 +455,7 @@ func (p *Processor) run(
 				// Launch an async transaction push attempt that pushes the
 				// timestamp of all transactions beneath the push offset.
 				// Ignore error if quiescing.
-				pushTxns := newTxnPushAttempt(p, toPush, now, txnPushAttemptC)
+				pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, txnPushAttemptC)
 				err := stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
 				if err != nil {
 					pushTxns.Cancel()
@@ -404,17 +486,16 @@ func (p *Processor) run(
 // Stop shuts down the processor and closes all registrations. Safe to call on
 // nil Processor. It is not valid to restart a processor after it has been
 // stopped.
-func (p *Processor) Stop() {
+// Stop implements Processor interface.
+func (p *LegacyProcessor) Stop() {
 	p.StopWithErr(nil)
 }
 
 // StopWithErr shuts down the processor and closes all registrations with the
 // specified error. Safe to call on nil Processor. It is not valid to restart a
 // processor after it has been stopped.
-func (p *Processor) StopWithErr(pErr *kvpb.Error) {
-	if p == nil {
-		return
-	}
+// StopWithErr implements Processor interface.
+func (p *LegacyProcessor) StopWithErr(pErr *kvpb.Error) {
 	// Flush any remaining events before stopping.
 	p.syncEventC()
 	// Send the processor a stop signal.
@@ -423,10 +504,8 @@ func (p *Processor) StopWithErr(pErr *kvpb.Error) {
 
 // DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 // the given span with the given error.
-func (p *Processor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
-	if p == nil {
-		return
-	}
+// DisconnectSpanWithErr implements Processor interface.
+func (p *LegacyProcessor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
 	select {
 	case p.spanErrC <- spanErr{span: span, pErr: pErr}:
 	case <-p.stoppedC:
@@ -434,7 +513,7 @@ func (p *Processor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
 	}
 }
 
-func (p *Processor) sendStop(pErr *kvpb.Error) {
+func (p *LegacyProcessor) sendStop(pErr *kvpb.Error) {
 	select {
 	case p.stopC <- pErr:
 		// stopC has non-zero capacity so this should not block unless
@@ -462,7 +541,8 @@ func (p *Processor) sendStop(pErr *kvpb.Error) {
 // NOT safe to call on nil Processor.
 //
 // NB: startTS is exclusive; the first possible event will be at startTS.Next().
-func (p *Processor) Register(
+// Register  implements Processor interface.
+func (p *LegacyProcessor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchUpIterConstructor CatchUpIteratorConstructor,
@@ -479,7 +559,8 @@ func (p *Processor) Register(
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done)
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
+	)
 	select {
 	case p.regC <- r:
 		// Wait for response.
@@ -490,11 +571,8 @@ func (p *Processor) Register(
 }
 
 // Len returns the number of registrations attached to the processor.
-func (p *Processor) Len() int {
-	if p == nil {
-		return 0
-	}
-
+// Len implements Processor interface.
+func (p *LegacyProcessor) Len() int {
 	// Ask the processor goroutine.
 	select {
 	case p.lenReqC <- struct{}{}:
@@ -507,11 +585,8 @@ func (p *Processor) Len() int {
 
 // Filter returns a new operation filter based on the registrations attached to
 // the processor. Returns nil if the processor has been stopped already.
-func (p *Processor) Filter() *Filter {
-	if p == nil {
-		return nil
-	}
-
+// Filter implements Processor interface.
+func (p *LegacyProcessor) Filter() *Filter {
 	// Ask the processor goroutine.
 	select {
 	case p.filterReqC <- struct{}{}:
@@ -525,12 +600,11 @@ func (p *Processor) Filter() *Filter {
 // ConsumeLogicalOps informs the rangefeed processor of the set of logical
 // operations. It returns false if consuming the operations hit a timeout, as
 // specified by the EventChanTimeout configuration. If the method returns false,
-// the processor will have been stopped, so calling Stop is not necessary. Safe
-// to call on nil Processor.
-func (p *Processor) ConsumeLogicalOps(ctx context.Context, ops ...enginepb.MVCCLogicalOp) bool {
-	if p == nil {
-		return true
-	}
+// the processor will have been stopped, so calling Stop is not necessary.
+// ConsumeLogicalOps implements Processor interface.
+func (p *LegacyProcessor) ConsumeLogicalOps(
+	ctx context.Context, ops ...enginepb.MVCCLogicalOp,
+) bool {
 	if len(ops) == 0 {
 		return true
 	}
@@ -540,14 +614,11 @@ func (p *Processor) ConsumeLogicalOps(ctx context.Context, ops ...enginepb.MVCCL
 // ConsumeSSTable informs the rangefeed processor of an SSTable that was added
 // via AddSSTable. It returns false if consuming the SSTable hit a timeout, as
 // specified by the EventChanTimeout configuration. If the method returns false,
-// the processor will have been stopped, so calling Stop is not necessary. Safe
-// to call on nil Processor.
-func (p *Processor) ConsumeSSTable(
+// the processor will have been stopped, so calling Stop is not necessary.
+// ConsumeSSTable implements Processor interface.
+func (p *LegacyProcessor) ConsumeSSTable(
 	ctx context.Context, sst []byte, sstSpan roachpb.Span, writeTS hlc.Timestamp,
 ) bool {
-	if p == nil {
-		return true
-	}
 	return p.sendEvent(ctx, event{sst: &sstEvent{sst, sstSpan, writeTS}}, p.EventChanTimeout)
 }
 
@@ -555,12 +626,9 @@ func (p *Processor) ConsumeSSTable(
 // for the rangefeed processor's resolved timestamp has advanced. It returns
 // false if forwarding the closed timestamp hit a timeout, as specified by the
 // EventChanTimeout configuration. If the method returns false, the processor
-// will have been stopped, so calling Stop is not necessary.  Safe to call on
-// nil Processor.
-func (p *Processor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool {
-	if p == nil {
-		return true
-	}
+// will have been stopped, so calling Stop is not necessary.
+// ForwardClosedTS implements Processor interface.
+func (p *LegacyProcessor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool {
 	if closedTS.IsEmpty() {
 		return true
 	}
@@ -570,7 +638,7 @@ func (p *Processor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp)
 // sendEvent informs the Processor of a new event. If a timeout is specified,
 // the method will wait for no longer than that duration before giving up,
 // shutting down the Processor, and returning false. 0 for no timeout.
-func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duration) bool {
+func (p *LegacyProcessor) sendEvent(ctx context.Context, e event, timeout time.Duration) bool {
 	// The code is a bit unwieldy because we try to avoid any allocations on fast
 	// path where we have enough budget and outgoing channel is free. If not, we
 	// try to set up timeout for acquiring budget and then reuse this timeout when
@@ -665,14 +733,14 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 
 // setResolvedTSInitialized informs the Processor that its resolved timestamp has
 // all the information it needs to be considered initialized.
-func (p *Processor) setResolvedTSInitialized(ctx context.Context) {
+func (p *LegacyProcessor) setResolvedTSInitialized(ctx context.Context) {
 	p.sendEvent(ctx, event{initRTS: true}, 0)
 }
 
 // syncEventC synchronizes access to the Processor goroutine, allowing the
 // caller to establish causality with actions taken by the Processor goroutine.
 // It does so by flushing the event pipeline.
-func (p *Processor) syncEventC() {
+func (p *LegacyProcessor) syncEventC() {
 	syncC := make(chan struct{})
 	ev := getPooledEvent(event{sync: &syncEvent{c: syncC}})
 	select {
@@ -688,7 +756,7 @@ func (p *Processor) syncEventC() {
 	}
 }
 
-func (p *Processor) consumeEvent(ctx context.Context, e *event) {
+func (p *LegacyProcessor) consumeEvent(ctx context.Context, e *event) {
 	switch {
 	case e.ops != nil:
 		p.consumeLogicalOps(ctx, e.ops, e.alloc)
@@ -714,7 +782,7 @@ func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 	}
 }
 
-func (p *Processor) consumeLogicalOps(
+func (p *LegacyProcessor) consumeLogicalOps(
 	ctx context.Context, ops []enginepb.MVCCLogicalOp, alloc *SharedBudgetAllocation,
 ) {
 	for _, op := range ops {
@@ -756,7 +824,7 @@ func (p *Processor) consumeLogicalOps(
 	}
 }
 
-func (p *Processor) consumeSSTable(
+func (p *LegacyProcessor) consumeSSTable(
 	ctx context.Context,
 	sst []byte,
 	sstSpan roachpb.Span,
@@ -766,19 +834,19 @@ func (p *Processor) consumeSSTable(
 	p.publishSSTable(ctx, sst, sstSpan, sstWTS, alloc)
 }
 
-func (p *Processor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
+func (p *LegacyProcessor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
 	if p.rts.ForwardClosedTS(newClosedTS) {
 		p.publishCheckpoint(ctx)
 	}
 }
 
-func (p *Processor) initResolvedTS(ctx context.Context) {
+func (p *LegacyProcessor) initResolvedTS(ctx context.Context) {
 	if p.rts.Init() {
 		p.publishCheckpoint(ctx)
 	}
 }
 
-func (p *Processor) publishValue(
+func (p *LegacyProcessor) publishValue(
 	ctx context.Context,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
@@ -805,7 +873,7 @@ func (p *Processor) publishValue(
 	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, alloc)
 }
 
-func (p *Processor) publishDeleteRange(
+func (p *LegacyProcessor) publishDeleteRange(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
@@ -824,7 +892,7 @@ func (p *Processor) publishDeleteRange(
 	p.reg.PublishToOverlapping(ctx, span, &event, alloc)
 }
 
-func (p *Processor) publishSSTable(
+func (p *LegacyProcessor) publishSSTable(
 	ctx context.Context,
 	sst []byte,
 	sstSpan roachpb.Span,
@@ -846,7 +914,7 @@ func (p *Processor) publishSSTable(
 	}, alloc)
 }
 
-func (p *Processor) publishCheckpoint(ctx context.Context) {
+func (p *LegacyProcessor) publishCheckpoint(ctx context.Context) {
 	// TODO(nvanbenschoten): persist resolvedTimestamp. Give Processor a client.DB.
 	// TODO(nvanbenschoten): rate limit these? send them periodically?
 
@@ -854,7 +922,7 @@ func (p *Processor) publishCheckpoint(ctx context.Context) {
 	p.reg.PublishToOverlapping(ctx, all, event, nil)
 }
 
-func (p *Processor) newCheckpointEvent() *kvpb.RangeFeedEvent {
+func (p *LegacyProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {
 	// Create a RangeFeedCheckpoint over the Processor's entire span. Each
 	// individual registration will trim this down to just the key span that
 	// it is listening on in registration.maybeStripEvent before publishing.

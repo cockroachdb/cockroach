@@ -347,7 +347,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			// Mock processor. We just needs its eventC.
-			p := Processor{
+			p := LegacyProcessor{
 				Config: Config{
 					Span: roachpb.RSpan{
 						Key:    startKey,
@@ -358,7 +358,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 			}
 			isc, cleanup := tc.intentScanner()
 			defer cleanup()
-			initScan := newInitResolvedTSScan(&p, isc)
+			initScan := newInitResolvedTSScan(p.Span, &p, isc)
 			initScan.Run(context.Background())
 			// Compare the event channel to the expected events.
 			assert.Equal(t, len(expEvents), len(p.eventC))
@@ -489,13 +489,14 @@ func TestTxnPushAttempt(t *testing.T) {
 
 	// Mock processor. We configure its key span to exclude one of txn2's lock
 	// spans and a portion of three of txn4's lock spans.
-	p := Processor{eventC: make(chan *event, 100)}
+	p := LegacyProcessor{eventC: make(chan *event, 100)}
 	p.Span = roachpb.RSpan{Key: roachpb.RKey("b"), EndKey: roachpb.RKey("m")}
 	p.TxnPusher = &tp
 
 	txns := []enginepb.TxnMeta{txn1Meta, txn2Meta, txn3Meta, txn4Meta}
 	doneC := make(chan struct{})
-	pushAttempt := newTxnPushAttempt(&p, txns, hlc.Timestamp{WallTime: 15}, doneC)
+	pushAttempt := newTxnPushAttempt(p.Span, p.TxnPusher, &p, txns, hlc.Timestamp{WallTime: 15},
+		doneC)
 	pushAttempt.Run(context.Background())
 	<-doneC // check if closed
 
