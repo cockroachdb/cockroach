@@ -771,7 +771,7 @@ func createAndStartServerAsync(
 
 	go func() {
 		// Ensure that the log files see the startup messages immediately.
-		defer log.FlushFileSinks()
+		defer log.Flush()
 		// If anything goes dramatically wrong, use Go's panic/recover
 		// mechanism to intercept the panic and log the panic details to
 		// the error reporting server.
@@ -1524,7 +1524,7 @@ func reportReadinessExternally(ctx context.Context, cmd *cobra.Command, waitForI
 	// Ensure the configuration logging is written to disk in case a
 	// process is waiting for the sdnotify readiness to read important
 	// information from there.
-	log.FlushFileSinks()
+	log.Flush()
 
 	// Signal readiness. This unblocks the process when running with
 	// --background or under systemd.

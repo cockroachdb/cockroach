@@ -24,7 +24,20 @@ const (
 	JWTAuthEnabledSettingName  = baseJWTAuthSettingName + "enabled"
 	JWTAuthIssuersSettingName  = baseJWTAuthSettingName + "issuers"
 	JWTAuthJWKSSettingName     = baseJWTAuthSettingName + "jwks"
+	JWTAuthClaimSettingName    = baseJWTAuthSettingName + "claim"
 )
+
+// JWTAuthClaim sets the JWT claim that is parsed to get the username.
+var JWTAuthClaim = func() *settings.StringSetting {
+	s := settings.RegisterStringSetting(
+		settings.TenantWritable,
+		JWTAuthClaimSettingName,
+		"sets the JWT claim that is parsed to get the username",
+		"",
+	)
+	s.SetReportable(true)
+	return s
+}()
 
 // JWTAuthAudience sets accepted audience values for JWT logins over the SQL interface.
 var JWTAuthAudience = func() *settings.StringSetting {

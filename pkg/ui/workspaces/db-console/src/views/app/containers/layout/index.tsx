@@ -106,7 +106,9 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
               <NavigationBar />
             </div>
             <div ref={this.contentRef} className="layout-panel__content">
-              <ErrorBoundary>{this.props.children}</ErrorBoundary>
+              <ErrorBoundary key={this.props.location.pathname}>
+                {this.props.children}
+              </ErrorBoundary>
             </div>
           </div>
         </div>

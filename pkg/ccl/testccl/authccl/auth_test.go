@@ -227,6 +227,11 @@ func jwtRunTest(t *testing.T, insecure bool) {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting jwks: %d", len(a.Vals))
 							}
 							jwtauthccl.JWTAuthJWKS.Override(context.Background(), sv, a.Vals[0])
+						case "claim":
+							if len(a.Vals) != 1 {
+								t.Fatalf("wrong number of argumenets to jwt_cluster_setting claim: %d", len(a.Vals))
+							}
+							jwtauthccl.JWTAuthClaim.Override(context.Background(), sv, a.Vals[0])
 						case "ident_map":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting ident_map: %d", len(a.Vals))
@@ -528,7 +533,7 @@ func TestClientAddrOverride(t *testing.T) {
 			t.Run("check-server-log-uses-override", func(t *testing.T) {
 				// Wait for the disconnection event in logs.
 				testutils.SucceedsSoon(t, func() error {
-					log.FlushFileSinks()
+					log.Flush()
 					entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, sessionTerminatedRe,
 						log.WithMarkedSensitiveData)
 					if err != nil {
@@ -541,7 +546,7 @@ func TestClientAddrOverride(t *testing.T) {
 				})
 
 				// Now we want to check that the logging tags are also updated.
-				log.FlushFileSinks()
+				log.Flush()
 				entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, authLogFileRe,
 					log.WithMarkedSensitiveData)
 				if err != nil {

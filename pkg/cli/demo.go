@@ -378,7 +378,7 @@ func runDemoInternal(
 	}
 
 	// Ensure the last few entries in the log files are flushed at the end.
-	defer log.FlushFileSinks()
+	defer log.Flush()
 
 	return sqlCtx.Run(ctx, conn)
 }
