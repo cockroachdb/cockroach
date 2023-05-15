@@ -699,26 +699,30 @@ func registerKVSplits(r registry.Registry) {
 	for _, item := range []struct {
 		quiesce bool
 		splits  int
+		leases  registry.LeaseType
 		timeout time.Duration
 	}{
 		// NB: with 500000 splits, this test sometimes fails since it's pushing
 		// far past the number of replicas per node we support, at least if the
 		// ranges start to unquiesce (which can set off a cascade due to resource
 		// exhaustion).
-		{true, 300000, 2 * time.Hour},
+		{true, 300000, registry.EpochLeases, 2 * time.Hour},
 		// This version of the test prevents range quiescence to trigger the
 		// badness described above more reliably for when we wish to improve
 		// the performance. For now, just verify that 30k unquiesced ranges
 		// is tenable.
-		{false, 30000, 2 * time.Hour},
+		{false, 30000, registry.EpochLeases, 2 * time.Hour},
+		// Expiration-based leases prevent quiescence, and are also more expensive
+		// to keep alive. Again, just verify that 30k ranges is ok.
+		{false, 30000, registry.ExpirationLeases, 2 * time.Hour},
 	} {
 		item := item // for use in closure below
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", item.quiesce),
+			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases),
 			Owner:   registry.OwnerKV,
 			Timeout: item.timeout,
 			Cluster: r.MakeClusterSpec(4),
-			Leases:  registry.MetamorphicLeases,
+			Leases:  item.leases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				nodes := c.Spec().NodeCount - 1
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
