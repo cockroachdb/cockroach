@@ -408,6 +408,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		// We should observe the schema change was tried at least twice.
 		require.GreaterOrEqual(t, atomic.LoadInt32(&completionCount), int32(1))
 	})
+
 	t.Run("wait for declarative schema changes for type", func(t *testing.T) {
 		// This test starts a declarative schema change job (job 1), and then starts
 		// another declarative schema change job (job 2) involving dropping tables.

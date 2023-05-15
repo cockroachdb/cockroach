@@ -55,12 +55,12 @@ upsert descriptor #106
   +    state: DELETE_ONLY
   +  - direction: ADD
   +    index:
-  +      constraintId: 2
+  +      constraintId: 4
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 2
+  +      id: 4
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -68,7 +68,7 @@ upsert descriptor #106
   +      - 1
   +      keyColumnNames:
   +      - i
-  +      name: crdb_internal_index_2_name_placeholder
+  +      name: crdb_internal_index_4_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
@@ -81,12 +81,12 @@ upsert descriptor #106
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 3
+  +      constraintId: 5
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 3
+  +      id: 5
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -94,7 +94,7 @@ upsert descriptor #106
   +      - 1
   +      keyColumnNames:
   +      - i
-  +      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_5_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
@@ -110,10 +110,10 @@ upsert descriptor #106
   -  nextColumnId: 2
   -  nextConstraintId: 2
   +  nextColumnId: 3
-  +  nextConstraintId: 4
+  +  nextConstraintId: 6
      nextFamilyId: 1
   -  nextIndexId: 2
-  +  nextIndexId: 4
+  +  nextIndexId: 6
      nextMutationId: 1
      parentId: 104
   ...
@@ -146,8 +146,8 @@ upsert descriptor #106
   +        "0": primary
   +      id: 106
   +      indexes:
-  +        "2": tbl_pkey
-  +        "4": tbl_j_key
+  +        "2": tbl_j_key
+  +        "4": tbl_pkey
   +      name: tbl
   +    relevantStatements:
   +    - statement:
@@ -186,12 +186,12 @@ upsert descriptor #106
   +    state: DELETE_ONLY
   +  - direction: ADD
   +    index:
-  +      constraintId: 2
+  +      constraintId: 4
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 2
+  +      id: 4
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -199,7 +199,7 @@ upsert descriptor #106
   +      - 1
   +      keyColumnNames:
   +      - i
-  +      name: crdb_internal_index_2_name_placeholder
+  +      name: crdb_internal_index_4_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
@@ -212,12 +212,12 @@ upsert descriptor #106
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 3
+  +      constraintId: 5
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 3
+  +      id: 5
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -225,7 +225,7 @@ upsert descriptor #106
   +      - 1
   +      keyColumnNames:
   +      - i
-  +      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_5_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
@@ -241,10 +241,10 @@ upsert descriptor #106
   -  nextColumnId: 2
   -  nextConstraintId: 2
   +  nextColumnId: 3
-  +  nextConstraintId: 4
+  +  nextConstraintId: 6
      nextFamilyId: 1
   -  nextIndexId: 2
-  +  nextIndexId: 4
+  +  nextIndexId: 6
      nextMutationId: 1
      parentId: 104
   ...
@@ -288,7 +288,7 @@ update progress of schema change job #1: "PostCommitPhase stage 2 of 15 with 1 B
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 15 with 1 BackfillType op
-backfill indexes [2] from index #1 in table #106
+backfill indexes [4] from index #1 in table #106
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 3 of 15 with 3 MutationType ops
@@ -328,18 +328,27 @@ update progress of schema change job #1: "PostCommitPhase stage 5 of 15 with 1 B
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 15 with 1 BackfillType op
-merge temporary indexes [3] into backfilled indexes [2] in table #106
+merge temporary indexes [5] into backfilled indexes [4] in table #106
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 15 with 3 MutationType ops
+## PostCommitPhase stage 6 of 15 with 4 MutationType ops
 upsert descriptor #106
   ...
          version: 4
        mutationId: 1
   -    state: MERGING
+  -  - direction: ADD
   +    state: WRITE_ONLY
-     - direction: ADD
+  +  - direction: DROP
        index:
+         constraintId: 5
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: tbl
+     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -350,29 +359,32 @@ update progress of schema change job #1: "PostCommitPhase stage 7 of 15 with 1 V
 commit transaction #8
 begin transaction #9
 ## PostCommitPhase stage 7 of 15 with 1 ValidationType op
-validate forward indexes [2] in table #106
+validate forward indexes [4] in table #106
 commit transaction #9
 begin transaction #10
 ## PostCommitPhase stage 8 of 15 with 15 MutationType ops
 upsert descriptor #106
   ...
-     - direction: ADD
+       mutationId: 1
+       state: WRITE_ONLY
+  -  - direction: ADD
+  +  - direction: DROP
        index:
-  -      constraintId: 2
-  +      constraintId: 3
+  -      constraintId: 4
+  +      constraintId: 5
          createdExplicitly: true
          encodingType: 1
          foreignKey: {}
          geoConfig: {}
-  -      id: 2
-  +      id: 3
+  -      id: 4
+  +      id: 5
          interleave: {}
          keyColumnDirections:
   ...
          keyColumnNames:
          - i
-  -      name: crdb_internal_index_2_name_placeholder
-  +      name: crdb_internal_index_3_name_placeholder
+  -      name: crdb_internal_index_4_name_placeholder
+  +      name: crdb_internal_index_5_name_placeholder
          partitioning: {}
          sharded: {}
   ...
@@ -381,25 +393,25 @@ upsert descriptor #106
   +      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
-       state: WRITE_ONLY
-  -  - direction: ADD
-  +  - direction: DROP
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: DROP
        index:
-  -      constraintId: 3
+  -      constraintId: 5
   -      createdExplicitly: true
   +      constraintId: 1
   +      createdAtNanos: "1640995200000000000"
          encodingType: 1
          foreignKey: {}
          geoConfig: {}
-  -      id: 3
+  -      id: 5
   +      id: 1
          interleave: {}
          keyColumnDirections:
   ...
          keyColumnNames:
          - i
-  -      name: crdb_internal_index_3_name_placeholder
+  -      name: crdb_internal_index_5_name_placeholder
   +      name: crdb_internal_index_1_name_placeholder
          partitioning: {}
          sharded: {}
@@ -410,12 +422,12 @@ upsert descriptor #106
   +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
-  +      constraintId: 4
+  +      constraintId: 2
   +      createdAtNanos: "1640998800000000000"
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 4
+  +      id: 2
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -436,11 +448,11 @@ upsert descriptor #106
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 5
+  +      constraintId: 3
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
-  +      id: 5
+  +      id: 3
   +      interleave: {}
   +      keyColumnDirections:
   +      - ASC
@@ -450,35 +462,25 @@ upsert descriptor #106
   +      - j
   +      keySuffixColumnIds:
   +      - 1
-  +      name: crdb_internal_index_5_name_placeholder
+  +      name: crdb_internal_index_3_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnNames: []
   +      unique: true
          useDeletePreservingEncoding: true
          version: 4
-       mutationId: 1
-  -    state: WRITE_ONLY
-  +    state: DELETE_ONLY
-     name: tbl
-     nextColumnId: 3
-  -  nextConstraintId: 4
-  +  nextConstraintId: 6
-     nextFamilyId: 1
-  -  nextIndexId: 4
-  +  nextIndexId: 6
-     nextMutationId: 1
+  ...
      parentId: 104
      primaryIndex:
   -    constraintId: 1
   -    createdAtNanos: "1640995200000000000"
-  +    constraintId: 2
+  +    constraintId: 4
   +    createdExplicitly: true
        encodingType: 1
        foreignKey: {}
        geoConfig: {}
   -    id: 1
-  +    id: 2
+  +    id: 4
        interleave: {}
        keyColumnDirections:
   ...
@@ -518,7 +520,7 @@ update progress of schema change job #1: "PostCommitPhase stage 10 of 15 with 1 
 commit transaction #11
 begin transaction #12
 ## PostCommitPhase stage 10 of 15 with 1 BackfillType op
-backfill indexes [4] from index #2 in table #106
+backfill indexes [2] from index #4 in table #106
 commit transaction #12
 begin transaction #13
 ## PostCommitPhase stage 11 of 15 with 3 MutationType ops
@@ -558,18 +560,27 @@ update progress of schema change job #1: "PostCommitPhase stage 13 of 15 with 1 
 commit transaction #14
 begin transaction #15
 ## PostCommitPhase stage 13 of 15 with 1 BackfillType op
-merge temporary indexes [5] into backfilled indexes [4] in table #106
+merge temporary indexes [3] into backfilled indexes [2] in table #106
 commit transaction #15
 begin transaction #16
-## PostCommitPhase stage 14 of 15 with 3 MutationType ops
+## PostCommitPhase stage 14 of 15 with 4 MutationType ops
 upsert descriptor #106
   ...
          version: 4
        mutationId: 1
   -    state: MERGING
+  -  - direction: ADD
   +    state: WRITE_ONLY
-     - direction: ADD
+  +  - direction: DROP
        index:
+         constraintId: 3
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: tbl
+     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -580,7 +591,7 @@ update progress of schema change job #1: "PostCommitPhase stage 15 of 15 with 1 
 commit transaction #16
 begin transaction #17
 ## PostCommitPhase stage 15 of 15 with 1 ValidationType op
-validate forward indexes [4] in table #106
+validate forward indexes [2] in table #106
 commit transaction #17
 begin transaction #18
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 12 MutationType ops
@@ -608,12 +619,12 @@ upsert descriptor #106
      formatVersion: 3
      id: 106
   +  indexes:
-  +  - constraintId: 4
+  +  - constraintId: 2
   +    createdAtNanos: "1640998800000000000"
   +    createdExplicitly: true
   +    foreignKey: {}
   +    geoConfig: {}
-  +    id: 4
+  +    id: 2
   +    interleave: {}
   +    keyColumnDirections:
   +    - ASC
@@ -643,31 +654,49 @@ upsert descriptor #106
   -    direction: ADD
   -    mutationId: 1
   -    state: WRITE_ONLY
-  -  - direction: ADD
-  +  - direction: DROP
-       index:
-         constraintId: 3
-  ...
-         version: 4
-       mutationId: 1
-  -    state: WRITE_ONLY
-  +    state: DELETE_ONLY
      - direction: DROP
        index:
+  -      constraintId: 5
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 5
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_5_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      storeColumnNames:
+  -      - j
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+         constraintId: 1
+         createdAtNanos: "1640995200000000000"
   ...
          version: 4
        mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
-  +    state: DELETE_ONLY
-  +  - direction: DROP
-       index:
-  -      constraintId: 4
+  -    index:
+  -      constraintId: 2
   -      createdAtNanos: "1640998800000000000"
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}
-  -      id: 4
+  -      id: 2
   -      interleave: {}
   -      keyColumnDirections:
   -      - ASC
@@ -685,17 +714,32 @@ upsert descriptor #106
   -      version: 4
   -    mutationId: 1
   -    state: WRITE_ONLY
-  -  - direction: ADD
+  -  - direction: DROP
   -    index:
-         constraintId: 5
-         createdExplicitly: true
-  ...
-         version: 4
-       mutationId: 1
-  -    state: WRITE_ONLY
-  +    state: DELETE_ONLY
+  -      constraintId: 3
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 3
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 2
+  -      keyColumnNames:
+  -      - j
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: crdb_internal_index_3_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 1
+       state: DELETE_ONLY
      name: tbl
-     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -703,11 +747,11 @@ upsert descriptor #106
   +  version: "12"
 persist all catalog changes to storage
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #18
 begin transaction #19
-## PostCommitNonRevertiblePhase stage 2 of 2 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -727,8 +771,8 @@ upsert descriptor #106
   -        "0": primary
   -      id: 106
   -      indexes:
-  -        "2": tbl_pkey
-  -        "4": tbl_j_key
+  -        "2": tbl_j_key
+  -        "4": tbl_pkey
   -      name: tbl
   -    relevantStatements:
   -    - statement:
@@ -745,33 +789,6 @@ upsert descriptor #106
        version: 4
      modificationTime: {}
   -  mutations:
-  -  - direction: DROP
-  -    index:
-  -      constraintId: 3
-  -      createdExplicitly: true
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 3
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 1
-  -      keyColumnNames:
-  -      - i
-  -      name: crdb_internal_index_3_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnIds:
-  -      - 2
-  -      storeColumnNames:
-  -      - j
-  -      unique: true
-  -      useDeletePreservingEncoding: true
-  -      version: 4
-  -    mutationId: 1
-  -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 1
@@ -791,31 +808,6 @@ upsert descriptor #106
   -      partitioning: {}
   -      sharded: {}
   -      unique: true
-  -      version: 4
-  -    mutationId: 1
-  -    state: DELETE_ONLY
-  -  - direction: DROP
-  -    index:
-  -      constraintId: 5
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 5
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 2
-  -      keyColumnNames:
-  -      - j
-  -      keySuffixColumnIds:
-  -      - 1
-  -      name: crdb_internal_index_5_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnNames: []
-  -      unique: true
-  -      useDeletePreservingEncoding: true
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY

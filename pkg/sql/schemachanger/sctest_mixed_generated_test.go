@@ -120,6 +120,11 @@ func TestValidateMixedVersionElements_alter_table_drop_constraint_uwi(t *testing
 	defer log.Scope(t).Close(t)
 	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_drop_constraint_uwi", sctest.SingleNodeMixedCluster)
 }
+func TestValidateMixedVersionElements_alter_table_multiple_commands(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_multiple_commands", sctest.SingleNodeMixedCluster)
+}
 func TestValidateMixedVersionElements_alter_table_validate_constraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
