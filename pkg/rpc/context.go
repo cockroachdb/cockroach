@@ -207,7 +207,6 @@ type Context struct {
 	ContextOptions
 	*SecurityContext
 
-	breakerClock breakerClock
 	RemoteClocks *RemoteClockMonitor
 	MasterCtx    context.Context // cancel on stopper quiesce
 
@@ -462,11 +461,8 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	secCtx.useNodeAuth = opts.UseNodeAuth
 
 	rpcCtx := &Context{
-		ContextOptions:  opts,
-		SecurityContext: secCtx,
-		breakerClock: breakerClock{
-			clock: opts.Clock,
-		},
+		ContextOptions:    opts,
+		SecurityContext:   secCtx,
 		rpcCompression:    enableRPCCompression,
 		MasterCtx:         masterCtx,
 		metrics:           makeMetrics(),
