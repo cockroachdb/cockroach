@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/google/btree"
 )
@@ -363,10 +364,10 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 	}
 	et := args.(*kvpb.EndTxnRequest)
 	if len(et.LockSpans) > 0 {
-		return ba, kvpb.NewErrorf("client must not pass intents to EndTxn")
+		return ba, kvpb.NewError(errors.AssertionFailedf("client must not pass intents to EndTxn"))
 	}
 	if len(et.InFlightWrites) > 0 {
-		return ba, kvpb.NewErrorf("client must not pass in-flight writes to EndTxn")
+		return ba, kvpb.NewError(errors.AssertionFailedf("client must not pass in-flight writes to EndTxn"))
 	}
 
 	// Populate et.LockSpans and et.InFlightWrites.

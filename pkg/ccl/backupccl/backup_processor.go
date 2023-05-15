@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -55,7 +57,7 @@ var (
 		time.Minute,
 		settings.NonNegativeDuration,
 	).WithPublic()
-	delayPerAttmpt = settings.RegisterDurationSetting(
+	delayPerAttempt = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"bulkio.backup.read_retry_delay",
 		"amount of time since the read-as-of time, per-prior attempt, to wait before making another attempt",
@@ -81,6 +83,13 @@ var (
 		"bulkio.backup.split_keys_on_timestamps",
 		"split backup data on timestamps when writing revision history",
 		true,
+	)
+
+	sendExportRequestWithVerboseTracing = settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		"bulkio.backup.export_request_verbose_tracing",
+		"send each export request with a verbose tracing span",
+		util.ConstantWithMetamorphicTestBool("export_request_verbose_tracing", false),
 	)
 )
 
@@ -378,7 +387,7 @@ func runBackupProcessor(
 						// We're okay with delaying this worker until then since we assume any
 						// other work it could pull off the queue will likely want to delay to
 						// a similar or later time anyway.
-						if delay := delayPerAttmpt.Get(&clusterSettings.SV) - timeutil.Since(span.lastTried); delay > 0 {
+						if delay := delayPerAttempt.Get(&clusterSettings.SV) - timeutil.Since(span.lastTried); delay > 0 {
 							timer.Reset(delay)
 							log.Infof(ctx, "waiting %s to start attempt %d of remaining spans", delay, span.attempts+1)
 							select {
@@ -427,13 +436,22 @@ func runBackupProcessor(
 					log.VEventf(ctx, 1, "sending ExportRequest for span %s (attempt %d, priority %s)",
 						span.span, span.attempts+1, header.UserPriority.String())
 					var rawResp kvpb.Response
+					var recording tracingpb.Recording
 					var pErr *kvpb.Error
 					requestSentAt := timeutil.Now()
 					exportRequestErr := contextutil.RunWithTimeout(ctx,
 						fmt.Sprintf("ExportRequest for span %s", span.span),
 						timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
+							sp := tracing.SpanFromContext(ctx)
+							opts := make([]tracing.SpanOption, 0)
+							opts = append(opts, tracing.WithParent(sp))
+							if sendExportRequestWithVerboseTracing.Get(&clusterSettings.SV) {
+								opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
+							}
+							ctx, exportSpan := sp.Tracer().StartSpanCtx(ctx, "backupccl.ExportRequest", opts...)
 							rawResp, pErr = kv.SendWrappedWithAdmission(
 								ctx, flowCtx.Cfg.DB.KV().NonTransactionalSender(), header, admissionHeader, req)
+							recording = exportSpan.FinishAndGetConfiguredRecording()
 							if pErr != nil {
 								return pErr.GoError()
 							}
@@ -453,6 +471,9 @@ func runBackupProcessor(
 						// TimeoutError improves the opaque `context deadline exceeded` error
 						// message so use that instead.
 						if errors.HasType(exportRequestErr, (*contextutil.TimeoutError)(nil)) {
+							if recording != nil {
+								log.Errorf(ctx, "failed export request for span %s\n trace:\n%s", span.span, recording)
+							}
 							return errors.Wrap(exportRequestErr, "export request timeout")
 						}
 						// BatchTimestampBeforeGCError is returned if the ExportRequest
@@ -466,6 +487,10 @@ func runBackupProcessor(
 								span = spanAndTime{}
 								continue
 							}
+						}
+
+						if recording != nil {
+							log.Errorf(ctx, "failed export request %s\n trace:\n%s", span.span, recording)
 						}
 						return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 					}

@@ -300,6 +300,18 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	refreshFrom := txn.ReadTimestamp
 	refreshToTxn := txn.Clone()
 	refreshToTxn.Refresh(refreshTS)
+	switch refreshToTxn.Status {
+	case roachpb.PENDING:
+	case roachpb.STAGING:
+		// If the batch resulted in an error but the EndTxn request succeeded,
+		// staging the transaction record in the process, downgrade the status
+		// back to PENDING. Even though the transaction record may have a status
+		// of STAGING, we know that the transaction failed to implicitly commit.
+		refreshToTxn.Status = roachpb.PENDING
+	default:
+		return nil, kvpb.NewError(errors.AssertionFailedf(
+			"unexpected txn status during refresh: %v", refreshToTxn))
+	}
 	log.VEventf(ctx, 2, "trying to refresh to %s because of %s",
 		refreshToTxn.ReadTimestamp, pErr)
 
