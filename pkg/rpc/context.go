@@ -499,7 +499,6 @@ type Context struct {
 	ContextOptions
 	*SecurityContext
 
-	breakerClock breakerClock
 	RemoteClocks *RemoteClockMonitor
 	MasterCtx    context.Context // cancel on stopper quiesce
 
@@ -779,11 +778,8 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	secCtx.useNodeAuth = opts.UseNodeAuth
 
 	rpcCtx := &Context{
-		ContextOptions:  opts,
-		SecurityContext: secCtx,
-		breakerClock: breakerClock{
-			clock: opts.Clock,
-		},
+		ContextOptions:    opts,
+		SecurityContext:   secCtx,
 		rpcCompression:    enableRPCCompression,
 		MasterCtx:         masterCtx,
 		metrics:           makeMetrics(),
@@ -2423,20 +2419,6 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	p.b.Report(ErrNotHeartbeated)
 	conns.mu.m[k] = p
 	return p.snap().c
-}
-
-var noopDeprecatedBreakers bool = func() bool {
-	return envutil.EnvOrDefaultBool("COCKROACH_DISABLE_DEPRECATED_RPC_BREAKER", true)
-}()
-
-// NewBreaker creates a new circuit breaker properly configured for RPC
-// connections. name is used internally for logging state changes of the
-// returned breaker.
-func (rpcCtx *Context) NewBreaker(name string) *circuit.Breaker {
-	if rpcCtx.BreakerFactory != nil {
-		return rpcCtx.BreakerFactory()
-	}
-	return newBreaker(rpcCtx.MasterCtx, name, &rpcCtx.breakerClock, noopDeprecatedBreakers)
 }
 
 // ErrNotHeartbeated is returned by ConnHealth or Connection.Health when we have
