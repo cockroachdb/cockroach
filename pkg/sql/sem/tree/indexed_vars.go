@@ -91,13 +91,6 @@ func (v *IndexedVar) Format(ctx *FmtCtx) {
 	}
 }
 
-// NewOrdinalReference is a helper routine to create a standalone
-// IndexedVar with the given index value. This needs to undergo
-// BindIfUnbound() below before it can be fully used.
-func NewOrdinalReference(r int) *IndexedVar {
-	return &IndexedVar{Idx: r}
-}
-
 // NewTypedOrdinalReference returns a new IndexedVar with the given index value
 // that is verified to be well-typed.
 func NewTypedOrdinalReference(r int, typ *types.T) *IndexedVar {

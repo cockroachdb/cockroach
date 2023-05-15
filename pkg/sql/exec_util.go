@@ -3510,10 +3510,6 @@ func (m *sessionDataMutator) SetExperimentalHashGroupJoinEnabled(val bool) {
 	m.data.ExperimentalHashGroupJoinEnabled = val
 }
 
-func (m *sessionDataMutator) SetAllowOrdinalColumnReference(val bool) {
-	m.data.AllowOrdinalColumnReferences = val
-}
-
 func (m *sessionDataMutator) SetOptimizerUseImprovedDisjunctionStats(val bool) {
 	m.data.OptimizerUseImprovedDisjunctionStats = val
 }

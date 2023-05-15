@@ -593,42 +593,6 @@ sort
       └── projections
            └── b:2 + 2 [as=y:6]
 
-build
-SELECT b, c FROM t ORDER BY @2
-----
-error (01P01): invalid syntax @2
-
-build
-SELECT b, c FROM t ORDER BY @4
-----
-error (01P01): invalid syntax @4
-
-build set=allow_ordinal_column_references=true
-SELECT b, c FROM t ORDER BY @2
-----
-sort
- ├── columns: b:2 c:3  [hidden: column6:6]
- ├── ordering: +6
- └── project
-      ├── columns: column6:6 b:2 c:3
-      ├── scan t
-      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-      └── projections
-           └── b:2 [as=column6:6]
-
-build set=allow_ordinal_column_references=true
-SELECT b, c FROM t ORDER BY @4
-----
-sort
- ├── columns: b:2 c:3  [hidden: column6:6]
- ├── ordering: +6
- └── project
-      ├── columns: column6:6 b:2 c:3
-      ├── scan t
-      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-      └── projections
-           └── crdb_internal_mvcc_timestamp:4 [as=column6:6]
-
 exec-ddl
 CREATE TABLE abc (
   a INT,

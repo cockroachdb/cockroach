@@ -352,22 +352,6 @@ func (b *Builder) buildScalar(
 		orElse := b.buildScalar(orElseExpr, inScope, nil, nil, colRefs)
 		out = b.factory.ConstructCase(input, whens, orElse)
 
-	case *tree.IndexedVar:
-		// TODO(mgartner): Disallow ordinal column references completely in
-		// v23.2.
-		if !b.evalCtx.SessionData().AllowOrdinalColumnReferences {
-			panic(errors.WithHintf(
-				pgerror.Newf(pgcode.WarningDeprecatedFeature, "invalid syntax @%d", t.Idx+1),
-				"ordinal column references have been deprecated. "+
-					"Use `SET allow_ordinal_column_references=true` to allow them",
-			))
-		}
-		if t.Idx < 0 || t.Idx >= len(inScope.cols) {
-			panic(pgerror.Newf(pgcode.UndefinedColumn,
-				"invalid column ordinal: @%d", t.Idx+1))
-		}
-		out = b.factory.ConstructVariable(inScope.cols[t.Idx].id)
-
 	case *tree.NotExpr:
 		input := b.buildScalar(reType(t.TypedInnerExpr(), types.Bool), inScope, nil, nil, colRefs)
 		out = b.factory.ConstructNot(input)
