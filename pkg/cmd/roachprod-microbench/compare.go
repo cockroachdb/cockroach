@@ -12,21 +12,50 @@ package main
 
 import (
 	"context"
+	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/google"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	//lint:ignore SA1019 benchstat is deprecated
 	"golang.org/x/perf/benchstat"
 	//lint:ignore SA1019 storage/benchfmt is deprecated
 	"golang.org/x/perf/storage/benchfmt"
 )
 
-func compareBenchmarks(
-	packages []string, currentDir, previousDir string,
-) (map[string][]*benchstat.Table, error) {
+type compareConfig struct {
+	newDir    string
+	oldDir    string
+	sheetDesc string
+}
+
+type compare struct {
+	compareConfig
+	service  *google.Service
+	packages []string
+	ctx      context.Context
+}
+
+func newCompare(config compareConfig) (*compare, error) {
+	// Use the old directory to infer package info.
+	packages, err := getPackagesFromLogs(config.oldDir)
+	if err != nil {
+		return nil, err
+	}
+	ctx := context.Background()
+	service, err := google.New(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &compare{compareConfig: config, service: service, packages: packages, ctx: ctx}, nil
+}
+
+func (c *compare) compareBenchmarks() (map[string][]*benchstat.Table, error) {
 	type packageResults struct {
 		old []*benchfmt.Result
 		new []*benchfmt.Result
@@ -35,8 +64,8 @@ func compareBenchmarks(
 	var resultMutex syncutil.Mutex
 	var wg sync.WaitGroup
 	errorsFound := false
-	wg.Add(len(packages))
-	for _, pkg := range packages {
+	wg.Add(len(c.packages))
+	for _, pkg := range c.packages {
 		go func(pkg string) {
 			defer wg.Done()
 			basePackage := pkg[:strings.Index(pkg[4:]+"/", "/")+4]
@@ -51,24 +80,22 @@ func compareBenchmarks(
 			// Read the previous and current results. If either is missing, we'll just
 			// skip it. The not found error is ignored since it can be expected that
 			// some benchmarks have changed names or been removed.
-			if err := readReportFile(joinPath(previousDir, getReportLogName(reportLogName, pkg)),
+			if err := readReportFile(filepath.Join(c.oldDir, getReportLogName(reportLogName, pkg)),
 				func(result *benchfmt.Result) {
 					resultMutex.Lock()
 					results.old = append(results.old, postfixResultWithPackage(pkg, result))
 					resultMutex.Unlock()
-				}); err != nil &&
-				!isNotFoundError(err) {
-				l.Errorf("failed to add report for %s: %s", pkg, err)
+				}); err != nil && !oserror.IsNotExist(err) {
+				log.Printf("failed to add report for %s: %s", pkg, err)
 				errorsFound = true
 			}
-			if err := readReportFile(joinPath(currentDir, getReportLogName(reportLogName, pkg)),
+			if err := readReportFile(filepath.Join(c.newDir, getReportLogName(reportLogName, pkg)),
 				func(result *benchfmt.Result) {
 					resultMutex.Lock()
 					results.new = append(results.new, postfixResultWithPackage(pkg, result))
 					resultMutex.Unlock()
-				}); err != nil &&
-				!isNotFoundError(err) {
-				l.Errorf("failed to add report for %s: %s", pkg, err)
+				}); err != nil && !oserror.IsNotExist(err) {
+				log.Printf("failed to add report for %s: %s", pkg, err)
 				errorsFound = true
 			}
 		}(pkg)
@@ -90,10 +117,25 @@ func compareBenchmarks(
 			tables := prefixBenchmarkNamesWithPackage(c.Tables())
 			tableResults[pkgGroup] = tables
 		} else if len(results.old)+len(results.new) > 0 {
-			l.Printf("Only one set of results present for %s", pkgGroup)
+			log.Printf("Only one set of results present for %s", pkgGroup)
 		}
 	}
 	return tableResults, nil
+}
+
+func (c *compare) publishToGoogleSheets(tableResults map[string][]*benchstat.Table) error {
+	for pkgGroup, tables := range tableResults {
+		sheetName := pkgGroup + "/..."
+		if c.sheetDesc != "" {
+			sheetName += " " + c.sheetDesc
+		}
+		url, err := c.service.CreateSheet(c.ctx, sheetName, tables)
+		if err != nil {
+			return err
+		}
+		log.Printf("Generated sheet for %s: %s\n", sheetName, url)
+	}
+	return nil
 }
 
 // postfixResultWithPackage appends the package name to the benchmark name
@@ -130,19 +172,8 @@ func prefixBenchmarkNamesWithPackage(tables []*benchstat.Table) []*benchstat.Tab
 	return tables
 }
 
-func publishToGoogleSheets(
-	ctx context.Context, srv *google.Service, sheetName string, tables []*benchstat.Table,
-) error {
-	url, err := srv.CreateSheet(ctx, sheetName, tables)
-	if err != nil {
-		return err
-	}
-	l.Printf("Generated sheet for %s: %s\n", sheetName, url)
-	return nil
-}
-
 func readReportFile(path string, reportResults func(*benchfmt.Result)) error {
-	reader, err := createReader(path)
+	reader, err := os.Open(path)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create reader for %s", path)
 	}
