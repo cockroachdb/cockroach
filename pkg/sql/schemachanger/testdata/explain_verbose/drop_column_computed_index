@@ -448,10 +448,28 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │   │   │   └── • PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey+), ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1 (t_pkey-)}
 │   │   │       │ MERGED → WRITE_ONLY
 │   │   │       │
-│   │   │       └── • PreviousTransactionPrecedence dependency from MERGED PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey+), ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1 (t_pkey-)}
-│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY"
+│   │   │       ├── • PreviousTransactionPrecedence dependency from MERGED PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey+), ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1 (t_pkey-)}
+│   │   │       │     rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY"
+│   │   │       │
+│   │   │       └── • SameStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+│   │   │             rule: "temp index disappeared before its master index reaches WRITE_ONLY"
 │   │   │
-│   │   └── • 3 Mutation operations
+│   │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
+│   │   │   │
+│   │   │   └── • TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+│   │   │       │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
+│   │   │       │
+│   │   │       ├── • Precedence dependency from MERGED PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey+), ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1 (t_pkey-)}
+│   │   │       │     rule: "index is MERGED before its temp index starts to disappear"
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+│   │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
+│   │   │
+│   │   └── • 4 Mutation operations
+│   │       │
+│   │       ├── • MakeWriteOnlyIndexDeleteOnly
+│   │       │     IndexID: 4
+│   │       │     TableID: 104
 │   │       │
 │   │       ├── • MakeMergedIndexWriteOnly
 │   │       │     IndexID: 3
@@ -511,10 +529,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │   ├── • 2 elements transitioning toward TRANSIENT_ABSENT
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
-    │   │   │   │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
+    │   │   │   │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
-    │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+    │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4}
+    │   │   │         rule: "dependents removed before index"
     │   │   │
     │   │   └── • IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4}
     │   │       │ PUBLIC → TRANSIENT_ABSENT
@@ -602,10 +623,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │       │     Name: t_pkey
     │       │     TableID: 104
     │       │
-    │       ├── • MakeWriteOnlyIndexDeleteOnly
-    │       │     IndexID: 4
-    │       │     TableID: 104
-    │       │
     │       ├── • RemoveColumnFromIndex
     │       │     ColumnID: 1
     │       │     IndexID: 4
@@ -622,6 +639,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic
     │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeIndexAbsent
+    │       │     IndexID: 4
     │       │     TableID: 104
     │       │
     │       ├── • RemoveColumnFromIndex
@@ -641,20 +662,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending
     │
     ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
-    │   │
-    │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
-    │   │   │
-    │   │   └── • TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
-    │   │       │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
-    │   │       │
-    │   │       ├── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
-    │   │       │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
-    │   │       │
-    │   │       └── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4}
-    │   │             rule: "dependents removed before index"
     │   │
     │   ├── • 6 elements transitioning toward ABSENT
     │   │   │
@@ -719,14 +729,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │   │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104 (t), Name: "t_expr_idx", IndexID: 2 (t_expr_idx-)}
     │   │             rule: "dependents removed before index"
     │   │
-    │   └── • 8 Mutation operations
+    │   └── • 7 Mutation operations
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 2
-    │       │     TableID: 104
-    │       │
-    │       ├── • MakeIndexAbsent
-    │       │     IndexID: 4
     │       │     TableID: 104
     │       │
     │       ├── • MakeDeleteOnlyColumnAbsent
