@@ -69,6 +69,8 @@ func SuffixFromPlatform(platform Platform) string {
 		return ".darwin-10.9-amd64"
 	case PlatformMacOSArm:
 		return ".darwin-11.0-arm64.unsigned"
+	case PlatformMacOSArmSigned:
+		return ".darwin-11.0-arm64"
 	case PlatformWindows:
 		return ".windows-6.2-amd64.exe"
 	default:
@@ -88,7 +90,7 @@ func CrossConfigFromPlatform(platform Platform) string {
 		return "crosslinuxarmbase"
 	case PlatformMacOS:
 		return "crossmacosbase"
-	case PlatformMacOSArm:
+	case PlatformMacOSArm, PlatformMacOSArmSigned:
 		return "crossmacosarmbase"
 	case PlatformWindows:
 		return "crosswindowsbase"
@@ -107,7 +109,7 @@ func TargetTripleFromPlatform(platform Platform) string {
 		return "aarch64-unknown-linux-gnu"
 	case PlatformMacOS:
 		return "x86_64-apple-darwin19"
-	case PlatformMacOSArm:
+	case PlatformMacOSArm, PlatformMacOSArmSigned:
 		return "aarch64-apple-darwin21.2"
 	case PlatformWindows:
 		return "x86_64-w64-mingw32"
@@ -123,7 +125,7 @@ func SharedLibraryExtensionFromPlatform(platform Platform) string {
 		return ".so"
 	case PlatformWindows:
 		return ".dll"
-	case PlatformMacOS, PlatformMacOSArm:
+	case PlatformMacOS, PlatformMacOSArm, PlatformMacOSArmSigned:
 		return ".dylib"
 	default:
 		panic(errors.Newf("unknown platform %d", platform))
@@ -160,7 +162,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		return errors.Newf("cannot set the telemetry channel to %s, supported channels: %s and %s", opts.Channel, build.DefaultTelemetryChannel, build.FIPSTelemetryChannel)
 	}
 	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//pkg/cmd/cockroach-sql"}
-	if platform != PlatformMacOSArm {
+	if platform != PlatformMacOSArm && platform != PlatformMacOSArmSigned {
 		buildArgs = append(buildArgs, "//c-deps:libgeos")
 	}
 	targetTriple := TargetTripleFromPlatform(platform)
@@ -290,6 +292,8 @@ const (
 	PlatformMacOS
 	// PlatformMacOSArm is the Darwin aarch6 target.
 	PlatformMacOSArm
+	// PlatformMacOSArmSigned is the Darwin aarch6 target.
+	PlatformMacOSArmSigned
 	// PlatformWindows is the Windows (mingw) x86_64 target.
 	PlatformWindows
 )
@@ -337,7 +341,7 @@ func stageBinary(
 }
 
 func stageLibraries(platform Platform, bazelBin string, dir string) error {
-	if platform == PlatformMacOSArm {
+	if platform == PlatformMacOSArm || platform == PlatformMacOSArmSigned {
 		return nil
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {

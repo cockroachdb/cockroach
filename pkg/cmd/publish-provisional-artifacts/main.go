@@ -37,6 +37,7 @@ func main() {
 	var doProvisional bool
 	var isRelease bool
 	var doBless bool
+	var signedPlatforms bool
 	flag.BoolVar(&isRelease, "release", false, "build in release mode instead of bleeding-edge mode")
 	flag.StringVar(&gcsBucket, "gcs-bucket", "", "GCS bucket")
 	flag.StringVar(&outputDirectory, "output-directory", "",
@@ -44,6 +45,7 @@ func main() {
 	flag.StringVar(&buildTagOverride, "build-tag-override", "", "override the version from version.txt")
 	flag.BoolVar(&doProvisional, "provisional", false, "publish provisional binaries")
 	flag.BoolVar(&doBless, "bless", false, "bless provisional binaries")
+	flag.BoolVar(&signedPlatforms, "signed-platforms", false, "use signed archives for publishing")
 
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -92,6 +94,7 @@ func main() {
 		pkgDir:           pkg,
 		sha:              string(bytes.TrimSpace(shaOut)),
 		outputDirectory:  outputDirectory,
+		signedPlatforms:  signedPlatforms,
 	}, release.ExecFn{})
 }
 
@@ -104,6 +107,7 @@ type runFlags struct {
 	sha              string
 	pkgDir           string
 	outputDirectory  string
+	signedPlatforms  bool
 }
 
 func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
@@ -143,14 +147,21 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 		versionStr = flags.sha
 		updateLatest = true
 	}
+	if flags.signedPlatforms && !flags.doBless {
+		log.Fatal("Cannot use --signed-platforms without --bless")
+	}
 
 	platforms := []release.Platform{
 		release.PlatformLinux,
 		release.PlatformLinuxFIPS,
 		release.PlatformMacOS,
-		release.PlatformMacOSArm,
 		release.PlatformWindows,
 		release.PlatformLinuxArm,
+	}
+	if flags.signedPlatforms {
+		platforms = append(platforms, release.PlatformMacOSArmSigned)
+	} else {
+		platforms = append(platforms, release.PlatformMacOSArm)
 	}
 	var cockroachBuildOpts []opts
 	for _, platform := range platforms {
