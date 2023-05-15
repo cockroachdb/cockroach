@@ -314,6 +314,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 	ltInterner := newLocalityTierInterner(interner)
 	configs := map[string]*normalizedSpanConfig{}
 	stores := map[roachpb.StoreID]roachpb.StoreDescriptor{}
+	var lastRangeAnalyzedConstraints *rangeAnalyzedConstraints
 
 	datadriven.RunTest(t, "testdata/range_analyzed_constraints",
 		func(t *testing.T, d *datadriven.TestData) string {
@@ -339,7 +340,9 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 
 			case "analyze-constraints":
 				var configName string
+				releaseAfter := true
 				d.ScanArgs(t, "config-name", &configName)
+				d.MaybeScanArgs(t, "release", &releaseAfter)
 				nConf := configs[configName]
 				rac := rangeAnalyzedConstraintsPool.Get().(*rangeAnalyzedConstraints)
 				buf := rac.stateForInit()
@@ -370,9 +373,89 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 				rac.finishInit(nConf, cm)
 				var b strings.Builder
 				printRangeAnalyzedConstraints(&b, rac, ltInterner)
-				releaseRangeAnalyzedConstraints(rac)
+				if releaseAfter {
+					releaseRangeAnalyzedConstraints(rac)
+				} else {
+					lastRangeAnalyzedConstraints = rac
+				}
 				return b.String()
+			case "release":
+				if lastRangeAnalyzedConstraints == nil {
+					return "error: releasing nil analyzed constraints"
+				}
+				releaseRangeAnalyzedConstraints(lastRangeAnalyzedConstraints)
+				lastRangeAnalyzedConstraints = nil
+				return "released"
+			case "candidates":
+				var candidateFn string
+				var store int
+				d.ScanArgs(t, "type", &candidateFn)
+				d.MaybeScanArgs(t, "store", &store)
+				if lastRangeAnalyzedConstraints == nil {
+					return "error: cannot evaluate nil analyzed constraints"
+				}
+				rac := lastRangeAnalyzedConstraints
 
+				var toRemove []roachpb.StoreID
+				var toAdd constraintsDisj
+				var err error
+
+				switch candidateFn {
+				case "nonVoterToVoter":
+					toRemove, err = rac.candidatesToConvertFromNonVoterToVoter()
+				case "addingVoter":
+					toAdd, err = rac.constraintsForAddingNonVoter()
+				case "addingNonVoter":
+					toAdd, err = rac.constraintsForAddingNonVoter()
+				case "voterToNonVoter":
+					toRemove, err = rac.candidatesToConvertFromVoterToNonVoter()
+				case "roleSwap":
+					var toSwap [numReplicaKinds][]roachpb.StoreID
+					toSwap, err = rac.candidatesForRoleSwapForConstraints()
+					toRemove = append(toRemove, toSwap[voterIndex]...)
+					toRemove = append(toRemove, toSwap[nonVoterIndex]...)
+				case "toRemove":
+					toRemove, err = rac.candidatesToRemove()
+				case "voterUnsatisfied":
+					toRemove, toAdd, err = rac.candidatesVoterConstraintsUnsatisfied()
+				case "nonVoterUnsatisfied":
+					toRemove, toAdd, err = rac.candidatesNonVoterConstraintsUnsatisfied()
+				case "replaceVoterRebalance":
+					var toAddConj constraintsConj
+					toAddConj, err = rac.candidatesToReplaceVoterForRebalance(
+						roachpb.StoreID(store))
+					toAdd = constraintsDisj{toAddConj}
+				case "replaceNonVoterRebalance":
+					var toAddConj constraintsConj
+					toAddConj, err = rac.candidatesToReplaceNonVoterForRebalance(
+						roachpb.StoreID(store))
+					toAdd = constraintsDisj{toAddConj}
+				default:
+					t.Fatalf("unknown candidate function %s", candidateFn)
+				}
+				var buf strings.Builder
+				if err != nil {
+					return fmt.Sprintf("err: %s\n", err.Error())
+				}
+				if toRemove != nil {
+					fmt.Fprintf(&buf, "remove\n")
+					for _, storeID := range toRemove {
+						fmt.Fprintf(&buf, "\ts%d\n", storeID)
+					}
+				}
+				if toAdd != nil {
+					fmt.Fprintf(&buf, "add\n")
+					for _, conj := range toAdd {
+						fmt.Fprintf(&buf, "\t")
+						for i, c := range conj {
+							if i > 0 {
+								fmt.Fprintf(&buf, " ")
+							}
+							fmt.Fprintf(&buf, "%s", c.unintern(ltInterner.si))
+						}
+					}
+				}
+				return buf.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}

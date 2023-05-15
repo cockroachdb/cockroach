@@ -131,7 +131,7 @@ store store-id=10 attrs=tape locality-tiers=region=a,zone=a3 node-id=7
 ----
 
 # Stores 3, 6, 7, 8, 9, 10 are not ssd.
-analyze-constraints config-name=multi-region1
+analyze-constraints config-name=multi-region1 release=false
 store-id=2 type=VOTER_FULL
 store-id=3 type=VOTER_FULL
 store-id=5 type=NON_VOTER
@@ -165,3 +165,36 @@ voter-constraints:
     voters: 3 9
     non-voters: 5 6 8
 diversity: voter 0.833333, all 0.857143
+
+candidates type=nonVoterToVoter
+----
+err: expected enough=false voters but have: 4 actual and 3 needed
+
+candidates type=addingVoter
+----
+err: expected enough=false non-voters but have: 3 actual and 2 needed
+
+candidates type=voterToNonVoter
+----
+err: expected enough=false non-voters but have: 3 actual and 2 needed
+
+candidates type=roleSwap
+----
+
+candidates type=toRemove
+----
+remove
+	s5
+	s8
+	s6
+
+candidates type=voterUnsatisfied
+----
+
+candidates type=replaceVoterRebalance store=2
+----
+err: expected no unsatisfied constraints
+
+candidates type=replaceNonVoterRebalance store=5
+----
+err: expected no unsatisfied constraints
