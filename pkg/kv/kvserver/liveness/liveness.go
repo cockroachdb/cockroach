@@ -699,7 +699,7 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	}
 	// NB: We use clock.Now().GoTime() instead of clock.PhysicalTime() in order to
 	// consider clock signals from other nodes.
-	return liveness.IsLive(nl.clock.Now().GoTime()), nil
+	return liveness.IsLive(nl.clock.Now()), nil
 }
 
 // IsAvailable returns whether or not the specified node is available to serve
@@ -708,7 +708,7 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 // Returns false if the node is not in the local liveness table.
 func (nl *NodeLiveness) IsAvailable(nodeID roachpb.NodeID) bool {
 	liveness, ok := nl.GetLiveness(nodeID)
-	return ok && liveness.IsLive(nl.clock.Now().GoTime()) && !liveness.Membership.Decommissioned()
+	return ok && liveness.IsLive(nl.clock.Now()) && !liveness.Membership.Decommissioned()
 }
 
 // IsAvailableNotDraining returns whether or not the specified node is available
@@ -720,7 +720,7 @@ func (nl *NodeLiveness) IsAvailable(nodeID roachpb.NodeID) bool {
 func (nl *NodeLiveness) IsAvailableNotDraining(nodeID roachpb.NodeID) bool {
 	liveness, ok := nl.GetLiveness(nodeID)
 	return ok &&
-		liveness.IsLive(nl.clock.Now().GoTime()) &&
+		liveness.IsLive(nl.clock.Now()) &&
 		!liveness.Membership.Decommissioning() &&
 		!liveness.Membership.Decommissioned() &&
 		!liveness.Draining
@@ -1007,7 +1007,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		// return a success even if the expiration is only 5 seconds in the
 		// future. The next heartbeat will then start with only 0.5 seconds
 		// before expiration.
-		if actual.IsLive(nl.clock.Now().GoTime()) && !incrementEpoch {
+		if actual.IsLive(nl.clock.Now()) && !incrementEpoch {
 			return errNodeAlreadyLive
 		}
 		// Otherwise, return error.
@@ -1055,7 +1055,7 @@ func (nl *NodeLiveness) GetIsLiveMap() livenesspb.IsLiveMap {
 	lMap := livenesspb.IsLiveMap{}
 	nl.mu.RLock()
 	defer nl.mu.RUnlock()
-	now := nl.clock.Now().GoTime()
+	now := nl.clock.Now()
 	for nID, l := range nl.mu.nodes {
 		isLive := l.IsLive(now)
 		if !isLive && !l.Membership.Active() {
@@ -1215,7 +1215,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness livenesspb.
 		<-sem
 	}()
 
-	if liveness.IsLive(nl.clock.Now().GoTime()) {
+	if liveness.IsLive(nl.clock.Now()) {
 		return errors.Errorf("cannot increment epoch on live node: %+v", liveness)
 	}
 
@@ -1445,7 +1445,7 @@ func (nl *NodeLiveness) maybeUpdate(ctx context.Context, newLivenessRec Record) 
 		return
 	}
 
-	now := nl.clock.Now().GoTime()
+	now := nl.clock.Now()
 	if !oldLivenessRec.IsLive(now) && newLivenessRec.IsLive(now) {
 		for _, fn := range onIsLive {
 			fn(newLivenessRec.Liveness)
@@ -1524,7 +1524,7 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 	if !ok {
 		return 0
 	}
-	now := nl.clock.Now().GoTime()
+	now := nl.clock.Now()
 	// If this node isn't live, we don't want to report its view of node liveness
 	// because it's more likely to be inaccurate than the view of a live node.
 	if !self.IsLive(now) {

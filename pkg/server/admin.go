@@ -2183,7 +2183,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 	if !ok {
 		return grpcstatus.Error(codes.Unavailable, "liveness record not found")
 	}
-	if !l.IsLive(s.clock.Now().GoTime()) {
+	if !l.IsLive(s.clock.Now()) {
 		return grpcstatus.Errorf(codes.Unavailable, "node is not healthy")
 	}
 	if l.Draining {
@@ -2212,7 +2212,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 //
 // getLivenessStatusMap() includes removed nodes (dead + decommissioned).
 func getLivenessStatusMap(
-	ctx context.Context, nl *liveness.NodeLiveness, now time.Time, st *cluster.Settings,
+	ctx context.Context, nl *liveness.NodeLiveness, now hlc.Timestamp, st *cluster.Settings,
 ) (map[roachpb.NodeID]livenesspb.NodeLivenessStatus, error) {
 	livenesses, err := nl.GetLivenessesFromKV(ctx)
 	if err != nil {
@@ -2232,7 +2232,7 @@ func getLivenessStatusMap(
 // a slice containing the liveness record of all nodes that have ever been a part of the
 // cluster.
 func getLivenessResponse(
-	ctx context.Context, nl optionalnodeliveness.Interface, now time.Time, st *cluster.Settings,
+	ctx context.Context, nl optionalnodeliveness.Interface, now hlc.Timestamp, st *cluster.Settings,
 ) (*serverpb.LivenessResponse, error) {
 	livenesses, err := nl.GetLivenessesFromKV(ctx)
 	if err != nil {
@@ -2274,7 +2274,7 @@ func (s *systemAdminServer) Liveness(
 ) (*serverpb.LivenessResponse, error) {
 	clock := s.clock
 
-	return getLivenessResponse(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
+	return getLivenessResponse(ctx, s.nodeLiveness, clock.Now(), s.st)
 }
 
 func (s *adminServer) Jobs(
@@ -2718,7 +2718,7 @@ func (s *systemAdminServer) DecommissionPreCheck(
 
 	// Initially evaluate node liveness status, so we filter the nodes to check.
 	var nodesToCheck []roachpb.NodeID
-	livenessStatusByNodeID, err := getLivenessStatusMap(ctx, s.nodeLiveness, s.clock.Now().GoTime(), s.st)
+	livenessStatusByNodeID, err := getLivenessStatusMap(ctx, s.nodeLiveness, s.clock.Now(), s.st)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2927,7 +2927,7 @@ func (s *systemAdminServer) decommissionStatusHelper(
 			Draining:         l.Draining,
 			ReportedReplicas: replicasToReport[l.NodeID],
 		}
-		if l.IsLive(s.clock.Now().GoTime()) {
+		if l.IsLive(s.clock.Now()) {
 			nodeResp.IsLive = true
 		}
 		res.Status = append(res.Status, nodeResp)
