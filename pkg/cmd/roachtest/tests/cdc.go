@@ -740,7 +740,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 				l.Printf("%d of %d resolved timestamps validated, latest is %s behind realtime",
 					v.NumResolvedWithRows, requestedResolved, timeutil.Since(resolved.GoTime()))
 
-				l.Printf("%s was spent validating this resolved timestamp: %s", timeutil.Since(noteResolvedStartTime))
+				l.Printf("%s was spent validating this resolved timestamp: %s", timeutil.Since(noteResolvedStartTime), resolved)
 				l.Printf("%s was spent validating %d rows", timeSpentValidatingRows, numRowsValidated)
 
 				numRowsValidated = 0
