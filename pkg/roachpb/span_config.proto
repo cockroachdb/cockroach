@@ -165,6 +165,57 @@ message SpanConfig {
   // on. This must be compatible with the Constraints field above, but not
   // necessarily a subset. It's compatible as long as there are no prohibitive
   // constraints above that are required here.
+  //
+  // As of v23.2, if both VoterConstraints and Constraints are specified, we
+  // require that VoterConstraints is stricter than Constraints. Strictness is
+  // defined as: if we satisfy VoterConstraints (by satisfying NumVoters and
+  // ConstraintsConjunction.NumReplicas for all ConstraintsConjunctions in
+  // VoterConstraints), then:
+  //
+  // - Any replica chosen to be a voter will satisfy some
+  //   ConstraintsConjunction in Constraints.
+  //
+  // - If no ConstraintsConjunction in VoterConstraints is over-satisfied
+  //   (exceeds the implicit or explicit NumReplicas), then voters by
+  //   themselves will not over-satisfy any ConstraintsConjunction in
+  //   Constraints.
+  //
+  // For existing clusters, these strictness requirements may not be met, so
+  // internally the system tries to do a normalization to meet the strictness
+  // requirement.
+  //
+  // Here is an example that does not satisfy strictness:
+  // num-replicas=9 num-voters=9
+  // constraints:
+  //   +region=a:1
+  //   +region=b:1
+  //   +region=c:1
+  //   +region=d:1
+  //   +region=e:1
+  // voter-constraints:
+  //   +region=f:2
+  //
+  // This is because 7 replicas are unconstrained according to
+  // VoterConstraints, and 4 replicas are unconstrained according to
+  // Constraints. So (the difference) 3 replicas can satisfy VoterConstraints
+  // without any restriction and can over-satisfy some constraint in
+  // Constraints.
+  //
+  // The stricter version of this config has the following VoterConstraints:
+  //   +region=a:1
+  //   +region=b:1
+  //   +region=c:1
+  //   +region=d:1
+  //   +region=e:1
+  //   +region=f:2
+  //
+  // TODO(kvoli,sumeer): document how we will inform the operator when this
+  // normalization fails.
+  //
+  // It is also highly recommended that when there are multiple
+  // ConstraintsConjunctions in Constraints (or VoterConstraints), they are
+  // specified in a manner that the same store cannot satisfy multiple
+  // conjunctions.
   repeated ConstraintsConjunction voter_constraints = 8 [(gogoproto.nullable) = false];
 
   // LeasePreference captures the preference for how range leases are to be
