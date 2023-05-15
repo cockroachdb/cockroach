@@ -79,22 +79,11 @@ type normalizedSpanConfig struct {
 	// multiple conjunctions.
 	//
 	// TODO(sumeer):
-	// - Document the above strictness requirement in roachpb.SpanConfig.
-	//
 	// - For existing clusters this strictness requirement may not be met, so we
 	//   will do a structural-normalization to meet this requirement, and if
 	//   this structural-normalization is not possible, we will log an error and
 	//   not switch the cluster to the new allocator until the operator fixes
 	//   their SpanConfigs and retries.
-	//
-	// - Write the code for this structural-normalization. It will establish
-	//   subset or non-intersecting relationships between every pair of
-	//   ConstraintsConjunctions, and then try to map CC's in replicaConstraints
-	//   to the containing set in constraints and vice-versa to (a) check for no
-	//   over-satisfaction, (b) split sets in replicaConstraints into subsets
-	//   based on CC's in constraints. See
-	//   https://cockroachlabs.slack.com/archives/D0367JZG864/p1679064458668199
-	//   for an example where we need to do the latter.
 
 	// constraints applies to all replicas.
 	constraints []internedConstraintsConjunction
@@ -117,13 +106,134 @@ type internedConstraint struct {
 	value stringCode
 }
 
+func (ic internedConstraint) less(b internedConstraint) bool {
+	if ic.typ < b.typ {
+		return true
+	}
+	if ic.key < b.key {
+		return true
+	}
+	if ic.value < b.value {
+		return true
+	}
+	return false
+}
+
+// constraints are in increasing order using internedConstraint.less.
+type constraintsConj []internedConstraint
+
+type conjunctionRelationship int
+
+func (nconf *normalizedSpanConfig) uninternedConfig() roachpb.SpanConfig {
+	var conf roachpb.SpanConfig
+	conf.NumReplicas = nconf.numReplicas
+	conf.NumVoters = nconf.numVoters
+	makeConstraints := func(
+		nconstraints []internedConstraintsConjunction) []roachpb.ConstraintsConjunction {
+		var rv []roachpb.ConstraintsConjunction
+		for _, ncc := range nconstraints {
+			var cc roachpb.ConstraintsConjunction
+			cc.NumReplicas = ncc.numReplicas
+			for _, c := range ncc.constraints {
+				cc.Constraints = append(cc.Constraints, roachpb.Constraint{
+					Type:  c.typ,
+					Key:   nconf.interner.toString(c.key),
+					Value: nconf.interner.toString(c.value),
+				})
+			}
+			rv = append(rv, cc)
+		}
+		return rv
+	}
+	conf.Constraints = makeConstraints(nconf.constraints)
+	conf.VoterConstraints = makeConstraints(nconf.voterConstraints)
+	for _, nlp := range nconf.leasePreferences {
+		var cc []roachpb.Constraint
+		for _, c := range nlp.constraints {
+			cc = append(cc, roachpb.Constraint{
+				Type:  c.typ,
+				Key:   nconf.interner.toString(c.key),
+				Value: nconf.interner.toString(c.value),
+			})
+		}
+		conf.LeasePreferences = append(conf.LeasePreferences, roachpb.LeasePreference{Constraints: cc})
+	}
+	return conf
+}
+
+// Relationship between conjunctions used for structural normalization. This
+// relationship is solely defined based on the conjunctions, and not based on
+// what stores actually match. It simply assumes that if two conjuncts are not
+// equal their sets are non-overlapping. This simplifying assumption is made
+// since we are only trying to do a best-effort structural normalization.
+const (
+	conjIntersecting conjunctionRelationship = iota
+	conjEqualSet
+	conjStrictSubset
+	conjStrictSuperset
+	conjNonIntersecting
+)
+
+func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationship {
+	n := len(cc)
+	m := len(b)
+	extraInCC := 0
+	extraInB := 0
+	inBoth := 0
+	for i, j := 0, 0; i < n || j < m; {
+		if i >= n {
+			extraInB++
+			j++
+			continue
+		}
+		if j >= m {
+			extraInCC++
+			i++
+			continue
+		}
+		if cc[i] == b[j] {
+			inBoth++
+			i++
+			j++
+			continue
+		}
+		if cc[i].less(b[j]) {
+			// Found a conjunct that is not in b.
+			extraInCC++
+			i++
+			continue
+		} else {
+			extraInB++
+			j++
+			continue
+		}
+	}
+	if extraInCC > 0 && extraInB == 0 {
+		return conjStrictSubset
+	}
+	if extraInB > 0 && extraInCC == 0 {
+		return conjStrictSuperset
+	}
+	// (extraInCC == 0 || extraInBB > 0) && (extraInB == 0 || extraInCC > 0)
+	// =>
+	// (extraInCC == 0 && extraInB == 0) || (extraInBB > 0 && extraInCC > 0)
+	if extraInCC == 0 && extraInB == 0 {
+		return conjEqualSet
+	}
+	// (extraInBB > 0 && extraInCC > 0)
+	if inBoth > 0 {
+		return conjIntersecting
+	}
+	return conjNonIntersecting
+}
+
 type internedConstraintsConjunction struct {
 	numReplicas int32
-	constraints []internedConstraint
+	constraints constraintsConj
 }
 
 type internedLeasePreference struct {
-	constraints []internedConstraint
+	constraints constraintsConj
 }
 
 // makeNormalizedSpanConfig is called infrequently, when there is a new
@@ -153,14 +263,15 @@ func makeNormalizedSpanConfig(
 		lps = append(lps, internedLeasePreference{
 			constraints: interner.internConstraints(conf.LeasePreferences[i].Constraints)})
 	}
-	return &normalizedSpanConfig{
+	nConf := &normalizedSpanConfig{
 		numVoters:        conf.NumVoters,
 		numReplicas:      conf.NumReplicas,
 		constraints:      normalizedConstraints,
 		voterConstraints: normalizedVoterConstraints,
 		leasePreferences: lps,
 		interner:         interner,
-	}, nil
+	}
+	return doStructuralNormalization(nConf)
 }
 
 func normalizeConstraints(
@@ -203,12 +314,252 @@ func normalizeConstraints(
 	}
 	var rv []internedConstraintsConjunction
 	for i := range nc {
-		rv = append(rv, internedConstraintsConjunction{
+		icc := internedConstraintsConjunction{
 			numReplicas: nc[i].NumReplicas,
 			constraints: interner.internConstraints(nc[i].Constraints),
-		})
+		}
+		if len(icc.constraints) > 0 {
+			sort.Slice(icc.constraints, func(j, k int) bool {
+				return icc.constraints[j].less(icc.constraints[k])
+			})
+			j := 0
+			// De-dup conjuncts in the conjunction.
+			for k := 1; k < len(icc.constraints); k++ {
+				if !(icc.constraints[j] == icc.constraints[k]) {
+					j++
+					icc.constraints[j] = icc.constraints[k]
+				}
+			}
+			icc.constraints = icc.constraints[:j+1]
+		}
+		rv = append(rv, icc)
 	}
 	return rv, nil
+}
+
+// Structural normalization establishes relationships between every pair of
+// ConstraintsConjunctions in constraints and voterConstraints, and then tries
+// to map conjunctions in voterConstraints to narrower conjunctions in
+// constraints. This is done to handle configs which under-specify
+// conjunctions in voterConstraints under the assumption that one does not
+// need to repeat information provided in constraints (see the new
+// "strictness" comment in roachpb.SpanConfig which now requires users to
+// repeat the information).
+//
+// This function does some structural normalization even when returning an
+// error. See the under-specified voter constraint examples in the datadriven
+// test -- we sometimes see these in production settings, and we want to fix
+// ones that we can, and raise an error for users to fix their configs.
+func doStructuralNormalization(conf *normalizedSpanConfig) (*normalizedSpanConfig, error) {
+	if len(conf.constraints) == 0 || len(conf.voterConstraints) == 0 {
+		return conf, nil
+	}
+	// Relationships between each voter constraint and each all replica
+	// constraint.
+	type relationshipVoterAndAll struct {
+		voterIndex     int
+		allIndex       int
+		voterAndAllRel conjunctionRelationship
+	}
+	emptyConstraintIndex := -1
+	emptyVoterConstraintIndex := -1
+	var rels []relationshipVoterAndAll
+	for i := range conf.voterConstraints {
+		if len(conf.voterConstraints[i].constraints) == 0 {
+			emptyVoterConstraintIndex = i
+		}
+		for j := range conf.constraints {
+			if len(conf.constraints[j].constraints) == 0 {
+				emptyConstraintIndex = j
+			}
+			rels = append(rels, relationshipVoterAndAll{
+				voterIndex:     i,
+				allIndex:       j,
+				voterAndAllRel: conf.voterConstraints[i].constraints.relationship(conf.constraints[j].constraints),
+			})
+		}
+	}
+	// Sort these relationships in the order we want to examine them.
+	sort.Slice(rels, func(i, j int) bool {
+		return rels[i].voterAndAllRel < rels[j].voterAndAllRel
+	})
+	// First are the intersecting constraints, which cause an error.
+	index := 0
+	for rels[index].voterAndAllRel == conjIntersecting {
+		index++
+	}
+	var err error
+	if index > 0 {
+		err = errors.Errorf("intersecting conjunctions in constraints and voter constraints")
+	}
+	// Even if there was an error, we will continue normalization.
+
+	// For each all-replica constraint, track how many replicas are remaining
+	// (not already taken by a voter constraint). Additionally, when we find an
+	// all replica constraint that is a subset of one or more voter constraints,
+	// and create a new voter constraint, we record the index of that new voter
+	// constraint in newVoterIndex.
+	type allReplicaConstraintsInfo struct {
+		remainingReplicas int32
+		newVoterIndex     int
+	}
+	var allReplicaConstraints []allReplicaConstraintsInfo
+	for i := range conf.constraints {
+		allReplicaConstraints = append(allReplicaConstraints,
+			allReplicaConstraintsInfo{
+				// Initially all of numReplicas are remaining.
+				remainingReplicas: conf.constraints[i].numReplicas,
+				newVoterIndex:     -1,
+			})
+	}
+	// For each voter replica constraint, we keep the current
+	// internedConstraintsConjunction. The numReplicas start with 0 and build up
+	// towards the desired number in the corresponding un-normalized voter
+	// constraint. In addition, if the voter constraint had a superset
+	// relationship with one or more all-replica constraint, we may take some of
+	// its voter count and construct narrower voter constraints.
+	// additionalReplicas tracks the total count of replicas in such narrower
+	// voter constraints.
+	type voterConstraintsAndAdditionalInfo struct {
+		internedConstraintsConjunction
+		additionalReplicas int32
+	}
+	var voterConstraints []voterConstraintsAndAdditionalInfo
+	for _, constraint := range conf.voterConstraints {
+		constraint.numReplicas = 0
+		voterConstraints = append(voterConstraints, voterConstraintsAndAdditionalInfo{
+			internedConstraintsConjunction: constraint,
+		})
+	}
+	// Now resume iterating from index, and consume all relationships that are
+	// conjEqualSet and conjStrictSubset.
+	for ; index < len(rels) && rels[index].voterAndAllRel <= conjStrictSubset; index++ {
+		rel := rels[index]
+		if rel.voterIndex == emptyVoterConstraintIndex {
+			// Don't try to satisfy the empty constraint with the corresponding
+			// empty constraint since the latter may be needed by some other voter
+			// constraint.
+			continue
+		}
+		remainingAll := allReplicaConstraints[rel.allIndex].remainingReplicas
+		// NB: we don't bother subtracting
+		// voterConstraints[rel.voterIndex].additionalReplicas since it is always
+		// 0 at this point in the code.
+		neededVoterReplicas := conf.voterConstraints[rel.voterIndex].numReplicas -
+			voterConstraints[rel.voterIndex].numReplicas
+		if neededVoterReplicas > 0 && remainingAll > 0 {
+			// We can satisfy some voter replicas.
+			toAdd := remainingAll
+			if toAdd > neededVoterReplicas {
+				toAdd = neededVoterReplicas
+			}
+			voterConstraints[rel.voterIndex].numReplicas += toAdd
+			allReplicaConstraints[rel.allIndex].remainingReplicas -= toAdd
+		}
+	}
+	// The only relationships remaining are conjStrictSuperset and
+	// conjNonIntersecting. We don't care about the latter. conjStrictSuperset
+	// can be used to narrow a voter constraint. As a heuristic we try to even
+	// out the satisfaction across various constraints. For example, if we have
+	// a voter constraint with conjunction c1 that needs 2 more replicas, and we
+	// have all constraints with conjuctions:
+	// - c1 and c2, with 2 remainingReplicas
+	// - c1 and c3, with 2 remainingReplicas
+	// instead of greedily adding a voter constraint c1 and c2 with 2 voter
+	// replicas, we add both with 1 voter replica each ("load-balancing").
+	//
+	// Before we do the narrowing, we consider the pair of conjunctions that are
+	// empty: emptyVoterConstraintIndex and emptyConstraintIndex. We don't want
+	// to narrow unnecessarily, and so if emptyConstraintIndex has some
+	// remainingReplicas, we take them here.
+	if emptyVoterConstraintIndex > 0 && emptyConstraintIndex > 0 {
+		neededReplicas := conf.voterConstraints[emptyVoterConstraintIndex].numReplicas
+		actualReplicas := voterConstraints[emptyVoterConstraintIndex].numReplicas
+		remaining := neededReplicas - actualReplicas
+		if remaining > 0 {
+			remainingSatisfiable := allReplicaConstraints[emptyConstraintIndex].remainingReplicas
+			if remainingSatisfiable > 0 {
+				count := remainingSatisfiable
+				if count > remaining {
+					count = remaining
+				}
+				voterConstraints[emptyVoterConstraintIndex].numReplicas += count
+				allReplicaConstraints[emptyConstraintIndex].remainingReplicas -= count
+			}
+		}
+	}
+
+	// The aforementioned "load-balancing" of the satisfaction is why we need
+	// the outer for loop below.
+	//
+	// The outer for loop causes repeated iteration over the strict superset
+	// relationship. When the inner loop finds a voter constraint that needs
+	// more replicas, and the subset conjunction in constraints has some
+	// remaining replicas, we replace the weaker voter constraint with the
+	// stronger/tighter conjunction for 1 voter. Note that we don't exclude the
+	// emptyVoterConstraintIndex for consideration here, since this is exactly
+	// the place where we want to see if we can replace it with tighter
+	// conjunctions.
+	for {
+		added := false
+		for i := index; i < len(rels) && rels[i].voterAndAllRel == conjStrictSuperset; i++ {
+			rel := rels[i]
+			remainingAll := allReplicaConstraints[rel.allIndex].remainingReplicas
+			neededVoterReplicas := conf.voterConstraints[rel.voterIndex].numReplicas -
+				voterConstraints[rel.voterIndex].numReplicas -
+				voterConstraints[rel.voterIndex].additionalReplicas
+			if neededVoterReplicas > 0 && remainingAll > 0 {
+				// Satisfy 1 replica.
+				voterConstraints[rel.voterIndex].additionalReplicas++
+				allReplicaConstraints[rel.allIndex].remainingReplicas--
+				newVoterIndex := allReplicaConstraints[rel.allIndex].newVoterIndex
+				if newVoterIndex == -1 {
+					// We haven't yet created a narrower voter constraint for this.
+					newVoterIndex = len(voterConstraints)
+					allReplicaConstraints[rel.allIndex].newVoterIndex = newVoterIndex
+					voterConstraints = append(voterConstraints, voterConstraintsAndAdditionalInfo{
+						internedConstraintsConjunction: internedConstraintsConjunction{
+							numReplicas: 0,
+							constraints: conf.constraints[rel.allIndex].constraints,
+						},
+						additionalReplicas: 0,
+					})
+				}
+				voterConstraints[newVoterIndex].numReplicas++
+				added = true
+			}
+		}
+		if !added {
+			break
+		}
+	}
+	for i := range conf.voterConstraints {
+		neededReplicas := conf.voterConstraints[i].numReplicas
+		actualReplicas := voterConstraints[i].numReplicas + voterConstraints[i].additionalReplicas
+		if actualReplicas > neededReplicas {
+			panic("code bug")
+		}
+		if actualReplicas < neededReplicas {
+			err = errors.Errorf("could not satisfy all voter constraints due to " +
+				"non-intersecting conjunctions in voter and all replica constraints")
+			// Just force the satisfaction.
+			voterConstraints[i].numReplicas += neededReplicas - actualReplicas
+		}
+	}
+	n := len(voterConstraints) - 1
+	if emptyVoterConstraintIndex >= 0 && emptyVoterConstraintIndex < n {
+		// Move it to the end, since it is the biggest set.
+		voterConstraints[emptyVoterConstraintIndex], voterConstraints[n] =
+			voterConstraints[n], voterConstraints[emptyVoterConstraintIndex]
+	}
+	var vc []internedConstraintsConjunction
+	for i := range voterConstraints {
+		if voterConstraints[i].numReplicas > 0 {
+			vc = append(vc, voterConstraints[i].internedConstraintsConjunction)
+		}
+	}
+	conf.voterConstraints = vc
+	return conf, err
 }
 
 type replicaKindIndex int32
