@@ -5,7 +5,6 @@ set -euxo pipefail
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
 source "$dir/teamcity-support.sh"  # For log_into_gcloud
 source "$dir/release/teamcity-support.sh"
-source "$dir/teamcity-bazel-support.sh"  # for run_bazel
 
 tc_start_block "Variable Setup"
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
@@ -167,16 +166,18 @@ tc_start_block "Publish binaries and archive as latest"
 # Only push the "latest" for our most recent release branch.
 # https://github.com/cockroachdb/cockroach/issues/41067
 if [[ -n "${PUBLISH_LATEST}" && $prerelease == false ]]; then
-    BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$version -e gcs_credentials -e gcs_bucket=$gcs_bucket" run_bazel << 'EOF'
-bazel build --config ci //pkg/cmd/publish-provisional-artifacts
-BAZEL_BIN=$(bazel info bazel-bin --config ci)
-export google_credentials="$gcs_credentials"
-source "build/teamcity-support.sh"  # For log_into_gcloud
-log_into_gcloud
-export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
-$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -bless -release --gcs-bucket="$gcs_bucket"
-EOF
-
+  for product in cockroach cockroach-sql; do
+    for platform in linux-amd64 linux-amd64-fips linux-arm64 darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
+        archive_suffix=tgz
+        if [[ $platform == *"windows"* ]]; then 
+            archive_suffix=zip
+        fi
+        from="$product-$version.$platform.$archive_suffix"
+        to="$product-latest.$platform.$archive_suffix"
+        gsutil cp "gs://$gcs_bucket/$from" "gs://$gcs_bucket/$to"
+        gsutil cp "gs://$gcs_bucket/$from.sha256sum" "gs://$gcs_bucket/$to.sha256sum"
+    done
+  done
 else
   echo "The latest binaries and archive were _not_ updated."
 fi
