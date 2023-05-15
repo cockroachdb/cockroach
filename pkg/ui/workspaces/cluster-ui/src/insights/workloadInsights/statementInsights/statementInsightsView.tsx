@@ -256,7 +256,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
   return (
     <div className={cx("root")}>
       <PageConfig>
-        {!isTenant && <PageConfigItem>{dropDownSelect}</PageConfigItem>}
+        <PageConfigItem>{dropDownSelect}</PageConfigItem>
         <PageConfigItem>
           <Search
             placeholder="Search Statements"
