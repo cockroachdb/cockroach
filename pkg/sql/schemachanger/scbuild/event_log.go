@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -130,6 +131,38 @@ func fullyQualifiedName(b buildCtx, e scpb.Element) string {
 	return tree.NewTableNameWithSchema(
 		tree.Name(nsDatabase.Name), tree.Name(nsSchema.Name), tree.Name(ns.Name),
 	).FQString()
+}
+
+// functionName returns the fully qualified function name of the function
+// descriptor that `e` belongs to.
+// `e` must therefore have a DescID attr and is a function-related element.
+func functionName(b buildCtx, e scpb.Element) string {
+	// Retrieve the function's name.
+	descID := screl.GetDescID(e)
+	var fnNameElem *scpb.FunctionName
+	scpb.ForEachFunctionName(b.QueryByID(descID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.FunctionName,
+	) {
+		if e.FunctionID == descID {
+			fnNameElem = e
+		}
+	})
+	if fnNameElem == nil {
+		panic(errors.AssertionFailedf("cannot find FunctionName element for function with ID %v", descID))
+	}
+	// Retrieve parent schema and database name.
+	var schemaID catid.DescID
+	scpb.ForEachSchemaChild(b.QueryByID(descID), func(
+		_ scpb.Status, _ scpb.TargetStatus, e *scpb.SchemaChild,
+	) {
+		if e.ChildObjectID == descID {
+			schemaID = e.SchemaID
+		}
+	})
+	schemaNamespaceElem := namespace(b, schemaID)
+	databaseNamespaceElem := namespace(b, schemaNamespaceElem.DatabaseID)
+	fnName := tree.MakeQualifiedFunctionName(databaseNamespaceElem.Name, schemaNamespaceElem.Name, fnNameElem.Name)
+	return fnName.FQString()
 }
 
 // ownerName finds the owner of the descriptor that element `e` belongs to.
@@ -367,10 +400,13 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 		}
 	case *scpb.Function:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
-			return nil
+			return &eventpb.CreateFunction{
+				FunctionName: functionName(b, e),
+				IsReplace:    false, // TODO (xiang): refine this once we support replacing a function.
+			}
 		} else {
 			return &eventpb.DropFunction{
-				FunctionName: fullyQualifiedName(b, e),
+				FunctionName: functionName(b, e),
 			}
 		}
 	}

@@ -11,6 +11,14 @@ CREATE UNIQUE INDEX idx ON t(b);
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE FUNCTION
+write *eventpb.CreateFunction to event log:
+  functionName: defaultdb.public.t
+  sql:
+    descriptorId: 105
+    statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE
+      SQL\n\tAS $$SELECT ‹1›;$$"
+    tag: CREATE FUNCTION
+    user: root
 ## StatementPhase stage 1 of 1 with 9 MutationType ops
 upsert descriptor #105
   -
