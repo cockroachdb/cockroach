@@ -1162,12 +1162,25 @@ func (dsp *DistSQLPlanner) checkInstanceHealthAndVersionSystem(
 func (dsp *DistSQLPlanner) PartitionSpans(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
 ) ([]SpanPartition, error) {
+	partitions, _, err := dsp.partitionSpansEx(ctx, planCtx, spans)
+	return partitions, err
+}
+
+// partitionSpansEx is the same as PartitionSpans but additionally returns a
+// boolean indicating whether the misplanned ranges metadata should not be
+// generated.
+func (dsp *DistSQLPlanner) partitionSpansEx(
+	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
+) (_ []SpanPartition, ignoreMisplannedRanges bool, _ error) {
 	if len(spans) == 0 {
-		return nil, errors.AssertionFailedf("no spans")
+		return nil, false, errors.AssertionFailedf("no spans")
 	}
 	if planCtx.isLocal {
-		// If we're planning locally, map all spans to the gateway.
-		return []SpanPartition{{dsp.gatewaySQLInstanceID, spans}}, nil
+		// If we're planning locally, map all spans to the gateway. Note that we
+		// always ignore misplanned ranges for local-only plans, and we choose
+		// to return `true` to explicitly highlight this fact, yet the boolean
+		// doesn't really matter.
+		return []SpanPartition{{dsp.gatewaySQLInstanceID, spans}}, true /* ignoreMisplannedRanges */, nil
 	}
 	if dsp.useGossipPlanning(ctx, planCtx) {
 		return dsp.deprecatedPartitionSpansSystem(ctx, planCtx, spans)
@@ -1196,6 +1209,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 	partitions []SpanPartition,
 	nodeMap map[base.SQLInstanceID]int,
 	getSQLInstanceIDForKVNodeID func(roachpb.NodeID) base.SQLInstanceID,
+	ignoreMisplannedRanges *bool,
 ) (_ []SpanPartition, lastPartitionIdx int, _ error) {
 	it := planCtx.spanIter
 	// rSpan is the span we are currently partitioning.
@@ -1217,10 +1231,11 @@ func (dsp *DistSQLPlanner) partitionSpan(
 		if !it.Valid() {
 			return nil, 0, it.Error()
 		}
-		replDesc, err := it.ReplicaInfo(ctx)
+		replDesc, ignore, err := it.ReplicaInfo(ctx)
 		if err != nil {
 			return nil, 0, err
 		}
+		*ignoreMisplannedRanges = *ignoreMisplannedRanges || ignore
 		desc := it.Desc()
 		if log.V(1) {
 			descCpy := desc // don't let desc escape
@@ -1285,7 +1300,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 // for a system tenant.
 func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
-) (partitions []SpanPartition, _ error) {
+) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
 	nodeMap := make(map[base.SQLInstanceID]int)
 	resolver := func(nodeID roachpb.NodeID) base.SQLInstanceID {
 		return dsp.deprecatedSQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID)
@@ -1293,13 +1308,13 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 	for _, span := range spans {
 		var err error
 		partitions, _, err = dsp.partitionSpan(
-			ctx, planCtx, span, partitions, nodeMap, resolver,
+			ctx, planCtx, span, partitions, nodeMap, resolver, &ignoreMisplannedRanges,
 		)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
-	return partitions, nil
+	return partitions, ignoreMisplannedRanges, nil
 }
 
 // partitionSpans assigns SQL instances to spans. In mixed sql and KV mode it
@@ -1310,10 +1325,10 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 // the instances, and it falls back to naive round-robin assignment if not.
 func (dsp *DistSQLPlanner) partitionSpans(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
-) (partitions []SpanPartition, _ error) {
+) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
 	resolver, instances, err := dsp.makeInstanceResolver(ctx, planCtx.localityFilter)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	nodeMap := make(map[base.SQLInstanceID]int)
 	var lastKey roachpb.Key
@@ -1334,18 +1349,18 @@ func (dsp *DistSQLPlanner) partitionSpans(
 			lastKey = safeKey
 		}
 		partitions, lastPartitionIdx, err = dsp.partitionSpan(
-			ctx, planCtx, span, partitions, nodeMap, resolver,
+			ctx, planCtx, span, partitions, nodeMap, resolver, &ignoreMisplannedRanges,
 		)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	if planCtx.localityFilter.Empty() {
 		if err = dsp.maybeReassignToGatewaySQLInstance(partitions, instances); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
-	return partitions, nil
+	return partitions, ignoreMisplannedRanges, nil
 }
 
 // deprecatedSQLInstanceIDForKVNodeIDSystem returns the SQL instance that should
@@ -1581,7 +1596,11 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	if !it.Valid() {
 		return 0, it.Error()
 	}
-	replDesc, err := it.ReplicaInfo(ctx)
+	// Note that regardless of the second return value from ReplicaInfo method,
+	// ignoreMisplannedRanges will be set to true by the caller because the
+	// spans might cover multiple ranges, yet we're planning the scan only on a
+	// single node.
+	replDesc, _, err := it.ReplicaInfo(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -1845,7 +1864,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		// still read too eagerly in the soft limit case. To prevent this we'll
 		// need a new mechanism on the execution side to modulate table reads.
 		// TODO(yuzefovich): add that mechanism.
-		spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, info.spans)
+		spanPartitions, ignoreMisplannedRanges, err = dsp.partitionSpansEx(ctx, planCtx, info.spans)
 		if err != nil {
 			return err
 		}

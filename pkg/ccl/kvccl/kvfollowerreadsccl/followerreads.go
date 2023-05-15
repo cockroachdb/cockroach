@@ -167,7 +167,7 @@ func (o *followerReadOracle) ChoosePreferredReplica(
 	leaseholder *roachpb.ReplicaDescriptor,
 	ctPolicy roachpb.RangeClosedTimestampPolicy,
 	queryState replicaoracle.QueryState,
-) (roachpb.ReplicaDescriptor, error) {
+) (_ roachpb.ReplicaDescriptor, ignoreMisplannedRanges bool, _ error) {
 	var oracle replicaoracle.Oracle
 	if o.useClosestOracle(txn, ctPolicy) {
 		oracle = o.closest
