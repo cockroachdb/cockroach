@@ -162,7 +162,7 @@ func gossipSucceedsSoon(
 			// If the client wasn't able to connect, restart it.
 			g := gossip[client]
 			g.mu.Lock()
-			client.startLocked(g, disconnected, rpcContext, stopper, rpcContext.NewBreaker(""))
+			client.startLocked(g, disconnected, rpcContext, stopper)
 			g.mu.Unlock()
 		default:
 		}
@@ -319,7 +319,7 @@ func TestClientNodeID(t *testing.T) {
 		case <-disconnected:
 			// The client hasn't been started or failed to start, loop and try again.
 			local.mu.Lock()
-			c.startLocked(local, disconnected, rpcContext, stopper, rpcContext.NewBreaker(""))
+			c.startLocked(local, disconnected, rpcContext, stopper)
 			local.mu.Unlock()
 		}
 	}

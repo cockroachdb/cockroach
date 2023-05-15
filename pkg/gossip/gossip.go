@@ -57,7 +57,6 @@ import (
 	"time"
 	"unsafe"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -233,8 +232,6 @@ type Gossip struct {
 	clientsMu struct {
 		syncutil.Mutex
 		clients []*client
-		// One breaker per client for the life of the process.
-		breakers map[string]*circuit.Breaker
 	}
 
 	disconnected chan *client  // Channel of disconnected clients
@@ -307,7 +304,6 @@ func New(
 	stopper.AddCloser(stop.CloserFn(g.server.AmbientContext.FinishEventLog))
 
 	registry.AddMetric(g.outgoing.gauge)
-	g.clientsMu.breakers = map[string]*circuit.Breaker{}
 
 	g.mu.Lock()
 	// Add ourselves as a SystemConfig watcher.
@@ -1456,17 +1452,11 @@ func (g *Gossip) signalConnectedLocked() {
 func (g *Gossip) startClientLocked(addr util.UnresolvedAddr, rpcContext *rpc.Context) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
-	breaker, ok := g.clientsMu.breakers[addr.String()]
-	if !ok {
-		name := fmt.Sprintf("gossip %v->%v", rpcContext.Config.Addr, addr)
-		breaker = rpcContext.NewBreaker(name)
-		g.clientsMu.breakers[addr.String()] = breaker
-	}
 	ctx := g.AnnotateCtx(context.TODO())
 	log.VEventf(ctx, 1, "starting new client to %s", addr)
 	c := newClient(g.server.AmbientContext, &addr, g.serverMetrics)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
-	c.startLocked(g, g.disconnected, rpcContext, g.server.stopper, breaker)
+	c.startLocked(g, g.disconnected, rpcContext, g.server.stopper)
 }
 
 // removeClientLocked removes the specified client. Called when a client
