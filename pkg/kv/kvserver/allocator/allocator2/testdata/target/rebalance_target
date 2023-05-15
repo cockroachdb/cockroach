@@ -1,0 +1,59 @@
+store 
+  store-id=1 node-id=1 attrs=green   locality-tiers=region=us-west-1,zone=us-west-1a
+  store-id=2 node-id=2 attrs=blue    locality-tiers=region=us-west-1,zone=us-west-1a
+  store-id=3 node-id=3 attrs=yellow  locality-tiers=region=us-west-1,zone=us-west-1b
+  store-id=4 node-id=4 attrs=red     locality-tiers=region=us-west-1,zone=us-west-1b
+  store-id=5 node-id=5 attrs=orange  locality-tiers=region=us-west-1,zone=us-west-1c
+----
+ 1 2 3 4 5
+
+span-config range-id=1 num-replicas=3 num-voters=3
+lease-preference +region=us-west-1
+----
+
+range
+  range-id=1 voters=(1,2,3)
+----
+map[1:[1 2 3]]
+
+load
+  node-id=1  cpu-load=800 cpu-capacity=1000
+  node-id=2  cpu-load=600 cpu-capacity=1000
+  node-id=3  cpu-load=300 cpu-capacity=1000
+  node-id=4  cpu-load=200 cpu-capacity=1000
+  node-id=5  cpu-load=100 cpu-capacity=1000
+  store-id=1 load=(800,100,1000) capacity=(-1,400,800) secondary-load=50
+  store-id=2 load=(600,100,1000) capacity=(-1,400,800) secondary-load=50
+  store-id=3 load=(300,100,1000) capacity=(-1,400,800) secondary-load=50
+  store-id=4 load=(200,100,1000) capacity=(-1,400,800) secondary-load=50
+  store-id=5 load=(100,100,1000) capacity=(-1,400,800) secondary-load=50
+  range-id=1 load=(100,10,100) cpu-raft=50
+----
+
+rebalance-lease range-id=1 store-id=1
+----
+target=3: (store=low node=low failure=ok diversity-score=0.00)
+
+rebalance-replica range-id=1 store-id=1
+----
+target=4: (store=low node=low failure=ok diversity-score=-0.67)
+
+rebalance-replica range-id=1 store-id=2
+----
+target=4: (store=low node=low failure=ok diversity-score=-0.67)
+
+move-range range-id=1 store-id=1
+----
+changes
+  id=1 start=1686091494550693909 store-id=1 range-id=1 delta=[-50 0 0] prev=(replica-id=1 lease=true type=VOTER_FULL) next=(replica-id=1 lease=false type=VOTER_FULL)
+  id=2 start=1686091494550693909 store-id=3 range-id=1 delta=[50 0 0] prev=(replica-id=3 lease=false type=VOTER_FULL) next=(replica-id=3 lease=true type=VOTER_FULL)
+
+move-range range-id=1 store-id=2
+----
+changes
+  id=3 start=1686091494550806477 store-id=4 range-id=1 delta=[50 0 0] prev=(replica-id=none lease=false type=VOTER_FULL) next=(replica-id=unknown lease=false type=VOTER_FULL)
+  id=4 start=1686091494550806477 store-id=2 range-id=1 delta=[-50 0 0] prev=(replica-id=2 lease=false type=VOTER_FULL) next=(replica-id=none lease=false type=VOTER_FULL)
+
+rebalance-stores
+----
+no changes

@@ -11,9 +11,14 @@
 package allocator2
 
 import (
+	"context"
+	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type allocatorState struct {
@@ -29,9 +34,9 @@ type allocatorState struct {
 	diversityScoringMemo *diversityScoringMemo
 }
 
-func newAllocatorState() *allocatorState {
+func newAllocatorState(clock *hlc.Clock) *allocatorState {
 	interner := newStringInterner()
-	cs := newClusterState(interner)
+	cs := newClusterState(clock, interner)
 	return &allocatorState{
 		cs:                     cs,
 		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
@@ -41,7 +46,7 @@ func newAllocatorState() *allocatorState {
 }
 
 // Called periodically, say every 10s.
-func (a *allocatorState) computeChanges() []*pendingReplicaChange {
+func (a *allocatorState) computeChanges(ctx context.Context) []*pendingReplicaChange {
 	// TODO(sumeer): rebalancing. To select which stores are overloaded, we will
 	// use a notion of overload that is based on cluster means (and of course
 	// individual store/node capacities). We do not want to loop through all
@@ -60,12 +65,11 @@ func (a *allocatorState) computeChanges() []*pendingReplicaChange {
 	// responsible for equalizing load across two nodes that have 30% and 50%
 	// cpu utilization while the cluster mean is 70% utilization (as an
 	// example).
-	return nil
+	return a.rebalanceStores(ctx)
 }
 
 // TODO(sumeer): look at support methods for allocatorState.tryMovingRange in
 // the allocator kernel draft PR.
-
 type candidateInfo struct {
 	roachpb.StoreID
 	sls            loadSummary
@@ -74,9 +78,233 @@ type candidateInfo struct {
 	diversityScore float64
 }
 
+func (ci candidateInfo) String() string {
+	if ci.StoreID > 0 {
+		return fmt.Sprintf("%v: (store=%v node=%v failure=%v diversity-score=%.2f)",
+			ci.StoreID, ci.sls, ci.nls, ci.fd, ci.diversityScore)
+	}
+	return "none"
+}
+
 type candidateSet struct {
 	candidates []candidateInfo
 	means      *meansForStoreSet
+}
+
+func (cs candidateSet) String() string {
+	return fmt.Sprintf("%v %v", cs.means, cs.candidates)
+}
+
+// orderByDiversityDescAndLoadAsc orders the candidateSet.candidates first by
+// diversity, then on ties by the node load summary, then again on ties by
+// store load summary.
+func (cs candidateSet) orderByDiversityDescAndLoadAsc() {
+	sort.SliceStable(cs.candidates, func(i, j int) bool {
+		if cs.candidates[i].diversityScore == cs.candidates[j].diversityScore {
+			if cs.candidates[i].nls == cs.candidates[j].nls {
+				return cs.candidates[i].sls < cs.candidates[j].sls
+			}
+			return cs.candidates[i].nls < cs.candidates[j].nls
+		}
+		return cs.candidates[i].diversityScore > cs.candidates[j].diversityScore
+	})
+}
+
+func (a *allocatorState) rebalanceStores(ctx context.Context) []*pendingReplicaChange {
+	var changes []*pendingReplicaChange
+	var sourceStores, targetStores []roachpb.StoreID
+
+	// Get the means for all stores and nodes we know of.
+	means := a.meansMemo.getMeans(nil)
+	sheddingThreshold := overloadSlow
+	// Find the stores which have too much load, these will be the source stores
+	// to rebalance load away from. The remaining stores do not have to much
+	// load, these will be the target stores to rebalance load towards.
+	for _, storeID := range a.cs.storeList {
+		sls := a.meansMemo.getStoreLoadSummary(means, storeID, todoLoadSeqNum)
+		if sls.sls >= sheddingThreshold {
+			sourceStores = append(sourceStores, storeID)
+		} else {
+			targetStores = append(targetStores, storeID)
+		}
+	}
+	for _, storeID := range sourceStores {
+		if len(targetStores) == 0 {
+			break
+		}
+		for _, rLoad := range a.cs.stores[storeID].topKRanges {
+			a.tryMovingRange(ctx, storeID, rLoad, targetStores, &changes)
+			sls := a.meansMemo.getStoreLoadSummary(means, storeID, todoLoadSeqNum)
+			if sls.sls >= loadNoChange || len(targetStores) == 0 {
+				// Done with this store.
+				break
+			}
+		}
+	}
+	return changes
+}
+
+func (a *allocatorState) tryMovingRange(
+	ctx context.Context,
+	storeID roachpb.StoreID,
+	rLoad rangeLoad,
+	targetStores storeIDPostingList,
+	changes *[]*pendingReplicaChange,
+) {
+	repl := a.cs.stores[storeID].adjusted.replicas[rLoad.RangeID]
+	if repl.replicaType.isLeaseholder {
+		// Try and move the lease first, if the store's replica has the lease -
+		// this is generally cheaper than rebalancing replicas.
+		if target, err := a.rebalanceLeaseTarget(ctx, storeID, rLoad, targetStores); err != nil {
+			log.VEventf(ctx, 2,
+				"error finding lease rebalance for store %d range %d err=%v",
+				storeID, rLoad.RangeID, err)
+		} else if target.StoreID != 0 {
+			transferReplicaChanges := makeLeaseTransferChanges(
+				rLoad, a.cs.ranges[rLoad.RangeID], target.StoreID, storeID,
+			)
+			log.Infof(ctx, "found move: transfer lease %+v", transferReplicaChanges)
+			pendingChanges := a.cs.makePendingChanges(
+				rLoad.RangeID,
+				transferReplicaChanges[:],
+			)
+			*changes = append(*changes, pendingChanges...)
+			return
+		}
+		// Fall through to try replica rebalancing.
+	}
+	if target, err := a.rebalanceReplicaTarget(ctx, storeID, rLoad, targetStores); err != nil {
+		log.VEventf(ctx, 2,
+			"error finding replica rebalance for store %d range %d err=%v",
+			storeID, rLoad.RangeID, err)
+	} else if target.StoreID != 0 {
+		rebalanceReplicaChanges := makeRebalanceReplicaChanges(
+			rLoad, a.cs.ranges[rLoad.RangeID], target.StoreID, storeID,
+		)
+		log.Infof(ctx, "found move: rebalance replicas %+v", rebalanceReplicaChanges)
+		pendingChanges := a.cs.makePendingChanges(
+			rLoad.RangeID,
+			rebalanceReplicaChanges[:],
+		)
+		*changes = append(*changes, pendingChanges...)
+		return
+	}
+}
+
+func (a *allocatorState) rebalanceLeaseTarget(
+	ctx context.Context,
+	loadSheddingStore roachpb.StoreID,
+	rLoad rangeLoad,
+	targetStores storeIDPostingList,
+) (candidateInfo, error) {
+	rState := a.cs.ranges[rLoad.RangeID]
+	a.ensureAnalyzedConstraints(rLoad.RangeID, rState)
+	// The lease will only ever be transferred to a voter.
+	targetStores.intersect(rState.replicas.voters().stores())
+
+	pickCandidate := func(cs candidateSet) candidateInfo {
+		cs.orderByDiversityDescAndLoadAsc()
+		for _, candidate := range cs.candidates {
+			if targetStores.contains(candidate.StoreID) {
+				return candidate
+			}
+		}
+		return candidateInfo{}
+	}
+	// Find the first preference which has at least 1 candidate.
+	var picked candidateInfo
+	for _, preference := range rState.conf.leasePreferences {
+		candidates := a.computeCandidatesForRange(
+			constraintsDisj{preference.constraints},
+			targetStores,
+			nil,
+			loadSheddingStore,
+		)
+		if picked = pickCandidate(candidates); picked.StoreID != 0 {
+			break
+		}
+	}
+	// There were no candidates which could satisfy the lease preference. Try one
+	// more time, ignoring the lease preference.
+	if picked.StoreID == 0 {
+		candidates := a.computeCandidatesForRange(nil, nil, nil, loadSheddingStore)
+		picked = pickCandidate(candidates)
+	}
+	return picked, nil
+}
+
+func (a *allocatorState) rebalanceReplicaTarget(
+	ctx context.Context,
+	loadSheddingStore roachpb.StoreID,
+	rLoad rangeLoad,
+	targetStores storeIDPostingList,
+) (candidateInfo, error) {
+	rState := a.cs.ranges[rLoad.RangeID]
+	a.ensureAnalyzedConstraints(rLoad.RangeID, rState)
+	existingVoters := rState.replicas.voters().stores()
+	existingNonVoters := rState.replicas.nonVoters().stores()
+	existing := rState.replicas.stores()
+	// TODO(kvoli): Bug with clone().
+	// existing := existingVoters.clone()
+	// existing.union(existingNonVoters)
+	// existing.union(existingVoters)
+	var toReplace constraintsConj
+	var err error
+	if existingVoters.contains(loadSheddingStore) {
+		toReplace, err = rState.constraints.candidatesToReplaceVoterForRebalance(loadSheddingStore)
+	} else if existingNonVoters.contains(loadSheddingStore) {
+		toReplace, err = rState.constraints.candidatesToReplaceNonVoterForRebalance(loadSheddingStore)
+	} else {
+		// The range doesn't have a voter or non-voter on the shedding store. Skip
+		// the replica rebalance, nothing to do.
+		return candidateInfo{}, nil
+	}
+	if err != nil {
+		return candidateInfo{}, err
+	}
+	log.Infof(ctx, "replace conjunction %+v, existing=%v", toReplace, existing)
+	// Exclude the existing replica stores as rebalance target candidates.
+	candSet := a.computeCandidatesForRange(
+		constraintsDisj{toReplace},
+		existing, /* storesToExclude */
+		targetStores,
+		loadSheddingStore,
+	)
+	log.Infof(ctx, "candidates=%v", candSet.candidates)
+	if len(candSet.candidates) < 1 {
+		return candidateInfo{}, nil
+	}
+	// Populate the diveristy score for each candidate.
+	existingLocalities := a.diversityScoringMemo.getExistingReplicaLocalities(
+		a.cs.getStoreLocalities(existing...),
+	)
+	removeLocality := a.cs.getStoreLocalities(loadSheddingStore)[0]
+	for i := range candSet.candidates {
+		addLocality := a.cs.getStoreLocalities(candSet.candidates[i].StoreID)[0]
+		diversityRebalanceScore := existingLocalities.getScoreChangeForRebalance(
+			removeLocality,
+			addLocality,
+		)
+		candSet.candidates[i].diversityScore = diversityRebalanceScore
+	}
+	candSet.orderByDiversityDescAndLoadAsc()
+	return candSet.candidates[0], nil
+}
+
+func (a *allocatorState) ensureAnalyzedConstraints(
+	rangeID roachpb.RangeID, rangeState *rangeState,
+) {
+	if rangeState.constraints != nil {
+		return
+	}
+	rac := rangeAnalyzedConstraintsPool.Get().(*rangeAnalyzedConstraints)
+	buf := rac.stateForInit()
+	for _, repl := range rangeState.replicas {
+		tiers := a.cs.stores[repl.StoreID].localityTiers
+		buf.tryAddingStore(repl.StoreID, repl.replicaType.replicaType, tiers)
+	}
+	rac.finishInit(rangeState.conf, a.cs.constraintMatcher)
+	rangeState.constraints = rac
 }
 
 // Consider the core logic for a change, rebalancing or recovery.
@@ -141,22 +369,38 @@ type candidateSet struct {
 
 // loadSheddingStore is only specified if this candidate computation is
 // happening because of overload.
+// targets is specified if this candidate computation should only select
+// candidates that are also in targets.
 func (a *allocatorState) computeCandidatesForRange(
-	expr constraintsDisj, storesToExclude storeIDPostingList, loadSheddingStore roachpb.StoreID,
+	expr constraintsDisj,
+	storesToExclude, targets storeIDPostingList,
+	loadSheddingStore roachpb.StoreID,
 ) candidateSet {
 	means := a.meansMemo.getMeans(expr)
-	sheddingThreshold := overloadUrgent
+	log.Infof(context.Background(), "%v", means)
+
+	if means == nil {
+		return candidateSet{}
+	}
+
+	nodeSheddingThreshold := overloadUrgent
+	storeSheddingThreshold := overloadUrgent
 	if loadSheddingStore > 0 {
 		sheddingSS := a.cs.stores[loadSheddingStore]
 		sheddingSLS := a.meansMemo.getStoreLoadSummary(means, loadSheddingStore, sheddingSS.loadSeqNum)
-		if sheddingSLS.sls > sheddingThreshold {
-			sheddingThreshold = sheddingSLS.sls
+		log.Infof(context.Background(), "shedding store %d summary=%v",
+			loadSheddingStore,
+			sheddingSLS,
+		)
+		if sheddingSLS.nls > nodeSheddingThreshold {
+			nodeSheddingThreshold = sheddingSLS.nls
 		}
-		if sheddingSLS.nls > sheddingThreshold {
-			sheddingThreshold = sheddingSLS.nls
+		if sheddingSLS.sls > storeSheddingThreshold {
+			storeSheddingThreshold = sheddingSLS.sls
 		}
 		if sheddingSLS.sls >= loadNoChange && sheddingSLS.nls >= loadNoChange {
 			// In this set of stores, this store no longer looks overloaded.
+			log.Infof(context.Background(), "store %d no longer appears overloaded", loadSheddingStore)
 			return candidateSet{}
 		}
 	}
@@ -166,9 +410,14 @@ func (a *allocatorState) computeCandidatesForRange(
 		if storesToExclude.contains(storeID) {
 			continue
 		}
+		if targets != nil && !targets.contains(storeID) {
+			continue
+		}
 		ss := a.cs.stores[storeID]
 		csls := a.meansMemo.getStoreLoadSummary(means, storeID, ss.loadSeqNum)
-		if csls.sls <= sheddingThreshold || csls.nls <= sheddingThreshold || csls.fd != fdOK {
+		if (csls.sls <= storeSheddingThreshold && csls.nls <= nodeSheddingThreshold) || csls.fd != fdOK {
+			log.Infof(context.Background(), "store %d doesn't meet criteria to be added %v shredding-threshold: store=%v node=%v",
+				storeID, csls, storeSheddingThreshold, nodeSheddingThreshold)
 			continue
 		}
 		cset.candidates = append(cset.candidates, candidateInfo{
@@ -341,7 +590,6 @@ func (erl *existingReplicaLocalities) getScoreSum(replica localityTiers) float64
 }
 
 // Avoid unused lint errors.
-
 var _ = newAllocatorState
 var _ = (&allocatorState{}).computeChanges
 var _ = (&allocatorState{}).computeCandidatesForRange

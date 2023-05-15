@@ -1,0 +1,55 @@
+add-node 
+  node-id=1
+----
+node-id=1
+
+add-store
+  store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
+  store-id=2 node-id=1 attrs=yellow locality-tiers=region=us-west-1,zone=us-west-1a
+----
+node-id=1 locality-tiers=region=us-west-1,zone=us-west-1a
+  store-id=1 attrs=purple
+  store-id=2 attrs=yellow
+
+add-node
+  node-id=2
+  node-id=3
+----
+node-id=1 locality-tiers=region=us-west-1,zone=us-west-1a
+  store-id=1 attrs=purple
+  store-id=2 attrs=yellow
+node-id=2
+node-id=3
+
+add-store
+  store-id=3 node-id=2 attrs=green  locality-tiers=region=us-west-1,zone=us-west-1b
+  store-id=4 node-id=2 attrs=orange locality-tiers=region=us-west-1,zone=us-west-1b
+  store-id=5 node-id=3 attrs=blue   locality-tiers=region=us-west-1,zone=us-west-1c
+  store-id=6 node-id=3 attrs=red    locality-tiers=region=us-west-1,zone=us-west-1c
+----
+node-id=1 locality-tiers=region=us-west-1,zone=us-west-1a
+  store-id=1 attrs=purple
+  store-id=2 attrs=yellow
+node-id=2 locality-tiers=region=us-west-1,zone=us-west-1b
+  store-id=3 attrs=green
+  store-id=4 attrs=orange
+node-id=3 locality-tiers=region=us-west-1,zone=us-west-1c
+  store-id=5 attrs=blue
+  store-id=6 attrs=red
+
+change-store
+  store-id=1 node-id=1 attrs=pink locality-tiers=region=us-west-1,zone=us-west-1d
+----
+node-id=1 locality-tiers=region=us-west-1,zone=us-west-1d
+  store-id=1 attrs=pink
+  store-id=2 attrs=yellow
+node-id=2 locality-tiers=region=us-west-1,zone=us-west-1b
+  store-id=3 attrs=green
+  store-id=4 attrs=orange
+node-id=3 locality-tiers=region=us-west-1,zone=us-west-1c
+  store-id=5 attrs=blue
+  store-id=6 attrs=red
+
+node-load-resp
+----
+

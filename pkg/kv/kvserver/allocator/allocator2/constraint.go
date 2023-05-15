@@ -1804,6 +1804,15 @@ func (s *storeIDPostingList) contains(storeID roachpb.StoreID) bool {
 	return index != n && (*s)[index] == storeID
 }
 
+func (s *storeIDPostingList) clone() *storeIDPostingList {
+	if s == nil {
+		return nil
+	}
+	cloned := make(storeIDPostingList, 0, len(*s))
+	copy(cloned, *s)
+	return &cloned
+}
+
 const (
 	// offset64 is the initial hash value, and is taken from fnv.go
 	offset64 = 14695981039346656037

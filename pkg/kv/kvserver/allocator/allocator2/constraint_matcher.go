@@ -11,7 +11,10 @@
 package allocator2
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -120,7 +123,11 @@ func (cm *constraintMatcher) storeMatchesConstraint(
 	store roachpb.StoreDescriptor, c internedConstraint,
 ) bool {
 	matches := false
-	if c.key == emptyStringCode {
+	// All stores match the empty constraint.
+	if c.key == emptyStringCode && c.value == emptyStringCode {
+		log.Infof(context.Background(), "s%d matches empty", store.StoreID)
+		return true
+	} else if c.key == emptyStringCode {
 		for _, attrs := range []roachpb.Attributes{store.Attrs, store.Node.Attrs} {
 			for _, attr := range attrs.Attrs {
 				if cm.interner.toCode(attr) == c.value {
@@ -169,6 +176,14 @@ func (cm *constraintMatcher) getMatchedSetForConstraint(c internedConstraint) *m
 func (cm *constraintMatcher) constrainStoresForConjunction(
 	constraints []internedConstraint, storeSet *storeIDPostingList,
 ) {
+	// The empty constraint list matches every store.
+	if len(constraints) == 0 {
+		for storeID := range cm.stores {
+			storeSet.insert(storeID)
+		}
+		return
+	}
+	log.Infof(context.Background(), "constrain stores %v for conj %+v", storeSet, constraints)
 	*storeSet = (*storeSet)[:0]
 	for i := range constraints {
 		matchedSet := cm.getMatchedSetForConstraint(constraints[i])
@@ -214,6 +229,16 @@ func (cm *constraintMatcher) storeMatches(
 func (cm *constraintMatcher) constrainStoresForExpr(
 	expr constraintsDisj, storeSet *storeIDPostingList,
 ) {
+	log.Infof(context.Background(), "constraint stores %v for expr %+v", storeSet, expr)
+	// Handle the empty constraint disjunction, which matches every store.
+	if len(expr) == 0 {
+		for storeID := range cm.stores {
+			storeSet.insert(storeID)
+		}
+		log.Infof(context.Background(), "empty expr stores=%v", storeSet)
+		return
+	}
+
 	// Optimize for a single conjunction, by using storeSet directly in the call
 	// to constrainStoresForConjunction.
 	var scratch storeIDPostingList
