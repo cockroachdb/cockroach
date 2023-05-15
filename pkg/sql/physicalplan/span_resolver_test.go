@@ -402,7 +402,7 @@ func resolveSpans(
 			if !it.Valid() {
 				return nil, it.Error()
 			}
-			repl, err := it.ReplicaInfo(ctx)
+			repl, _, err := it.ReplicaInfo(ctx)
 			if err != nil {
 				return nil, err
 			}

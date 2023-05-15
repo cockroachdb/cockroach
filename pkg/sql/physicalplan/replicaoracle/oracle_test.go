@@ -62,7 +62,7 @@ func TestClosest(t *testing.T) {
 		rand.Shuffle(len(internalReplicas), func(i, j int) {
 			internalReplicas[i], internalReplicas[j] = internalReplicas[j], internalReplicas[i]
 		})
-		info, err := o.ChoosePreferredReplica(
+		info, ignoreMisplannedRanges, err := o.ChoosePreferredReplica(
 			ctx,
 			nil, /* txn */
 			&roachpb.RangeDescriptor{
@@ -77,6 +77,9 @@ func TestClosest(t *testing.T) {
 		}
 		if info.NodeID != 2 {
 			t.Fatalf("Failed to choose node 2, got %v", info.NodeID)
+		}
+		if ignoreMisplannedRanges {
+			t.Fatalf("Expected ignoreMisplannedRanges to be false since nil leaseholder was provided")
 		}
 	})
 }
@@ -136,7 +139,7 @@ func TestPreferFollower(t *testing.T) {
 	rand.Shuffle(len(internalReplicas), func(i, j int) {
 		internalReplicas[i], internalReplicas[j] = internalReplicas[j], internalReplicas[i]
 	})
-	info, err := o.ChoosePreferredReplica(
+	info, _, err := o.ChoosePreferredReplica(
 		ctx,
 		nil, /* txn */
 		&roachpb.RangeDescriptor{
