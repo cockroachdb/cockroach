@@ -84,6 +84,22 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		// Ignore no-op changes.
 		return
 	}
+
+	// We were about to overwrite an element's target and metadata.
+	// Assert one disallowed case: reviving a "ghost" element, that is,
+	// add an element that was previously added and then dropped.
+	// This assertion is artificial per se and should not be taken as holy and
+	// unbreakable. It is just that we don't think why someone would need to do
+	// this for now, so we simply put a gate here as a sanity check. If we
+	// do find a case where we need to revive a ghost element in the future,
+	// feel free to remove this check.
+	if dst.current == scpb.Status_ABSENT &&
+		dst.target == scpb.ToAbsent &&
+		(target == scpb.ToPublic || target == scpb.Transient) {
+		panic(errors.AssertionFailedf("attempt to revive a ghost element:"+
+			" [elem=%v],[current=ABSENT],[target=ToAbsent],[newTarget=%v]", dst.element.String(), target.Status()))
+	}
+
 	// Henceforth all possibilities lead to the target and metadata being
 	// overwritten. See below for explanations as to why this is legal.
 	oldTarget, oldStatementID := dst.target, dst.metadata.StatementID
@@ -336,8 +352,8 @@ func (b *builderState) NextColumnFamilyID(table *scpb.Table) (ret catid.FamilyID
 }
 
 // NextTableIndexID implements the scbuildstmt.TableHelpers interface.
-func (b *builderState) NextTableIndexID(table *scpb.Table) (ret catid.IndexID) {
-	return b.nextIndexID(table.TableID)
+func (b *builderState) NextTableIndexID(tableID catid.DescID, useTempID bool) (ret catid.IndexID) {
+	return b.nextIndexID(tableID, useTempID)
 }
 
 // NextViewIndexID implements the scbuildstmt.TableHelpers interface.
@@ -345,12 +361,18 @@ func (b *builderState) NextViewIndexID(view *scpb.View) (ret catid.IndexID) {
 	if !view.IsMaterialized {
 		panic(errors.AssertionFailedf("expected materialized view: %s", screl.ElementString(view)))
 	}
-	return b.nextIndexID(view.ViewID)
+	return b.nextIndexID(view.ViewID, false /* isTemp */)
 }
 
 // NextTableConstraintID implements the scbuildstmt.TableHelpers interface.
-func (b *builderState) NextTableConstraintID(id catid.DescID) (ret catid.ConstraintID) {
-	{
+func (b *builderState) NextTableConstraintID(
+	id catid.DescID, useTempID bool,
+) (ret catid.ConstraintID) {
+	// Temporary IDs source from TABLETEMPIDSSTART struct whereas actual
+	// IDs source from tbl.nextConstraintID field.
+	if useTempID {
+		ret = catid.ConstraintID(scbuildstmt.TABLETEMPIDSSTART)
+	} else {
 		b.ensureDescriptor(id)
 		desc := b.descCache[id].desc
 		tbl, ok := desc.(catalog.TableDescriptor)
@@ -363,14 +385,17 @@ func (b *builderState) NextTableConstraintID(id catid.DescID) (ret catid.Constra
 			ret = 1
 		}
 	}
-
+	// Consult all present element in case they have a ConstraintID field and it's larger.
 	b.QueryByID(id).ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		v, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
-		if id, ok := v.(catid.ConstraintID); ok && id >= ret {
-			ret = id + 1
+		if id, ok := v.(catid.ConstraintID); ok {
+			if useTempID && id >= catid.ConstraintID(scbuildstmt.TABLETEMPIDSSTART) && id >= ret {
+				ret = id + 1
+			} else if !useTempID && id < catid.ConstraintID(scbuildstmt.TABLETEMPIDSSTART) && id >= ret {
+				ret = id + 1
+			}
 		}
 	})
-
 	return ret
 }
 
@@ -382,8 +407,12 @@ func (b *builderState) IsTableEmpty(table *scpb.Table) bool {
 	return b.tr.IsTableEmpty(b.ctx, table.TableID, index.IndexID)
 }
 
-func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
-	{
+func (b *builderState) nextIndexID(id catid.DescID, useTemp bool) (ret catid.IndexID) {
+	// Temporary IDs source from TABLETEMPIDSSTART whereas actual
+	// IDs source from tbl.nextIndexID field.
+	if useTemp {
+		ret = catid.IndexID(scbuildstmt.TABLETEMPIDSSTART)
+	} else {
 		b.ensureDescriptor(id)
 		desc := b.descCache[id].desc
 		tbl, ok := desc.(catalog.TableDescriptor)
@@ -393,19 +422,18 @@ func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 		}
 		ret = tbl.GetNextIndexID()
 	}
-	scpb.ForEachPrimaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.PrimaryIndex) {
-		if index.TableID == id && index.IndexID >= ret {
-			ret = index.IndexID + 1
-		}
-	})
-	scpb.ForEachTemporaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.TemporaryIndex) {
-		if index.TableID == id && index.IndexID >= ret {
-			ret = index.IndexID + 1
-		}
-	})
-	scpb.ForEachSecondaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.SecondaryIndex) {
-		if index.TableID == id && index.IndexID >= ret {
-			ret = index.IndexID + 1
+
+	// Consult all present index-related element in case their ID is larger.
+	b.QueryByID(id).ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		switch e.(type) {
+		case *scpb.PrimaryIndex, *scpb.TemporaryIndex, *scpb.SecondaryIndex:
+			val, _ := screl.Schema.GetAttribute(screl.IndexID, e)
+			indexID := val.(catid.IndexID)
+			if useTemp && indexID >= catid.IndexID(scbuildstmt.TABLETEMPIDSSTART) && indexID >= ret {
+				ret = indexID + 1
+			} else if !useTemp && indexID < catid.IndexID(scbuildstmt.TABLETEMPIDSSTART) && indexID >= ret {
+				ret = indexID + 1
+			}
 		}
 	})
 	return ret

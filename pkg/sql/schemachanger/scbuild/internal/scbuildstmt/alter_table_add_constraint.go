@@ -77,7 +77,7 @@ func alterTableAddPrimaryKey(
 
 	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
 	// Ensure that there is a default rowid column.
-	oldPrimaryIndex := mustRetrievePrimaryIndexElement(b, tbl.TableID)
+	oldPrimaryIndex := mustRetrieveCurrentPrimaryIndexElement(b, tbl.TableID)
 	if getPrimaryIndexDefaultRowIDColumn(
 		b, tbl.TableID, oldPrimaryIndex.IndexID,
 	) == nil {
@@ -129,7 +129,7 @@ func alterTableAddCheck(
 	// 3. Add relevant check constraint element:
 	// - CheckConstraint or CheckConstraintUnvalidated
 	// - ConstraintName
-	constraintID := b.NextTableConstraintID(tbl.TableID)
+	constraintID := b.NextTableConstraintID(tbl.TableID, false /* useTempID */)
 	if t.ValidationBehavior == tree.ValidationDefault {
 		ck := &scpb.CheckConstraint{
 			TableID:               tbl.TableID,
@@ -303,7 +303,7 @@ func alterTableAddForeignKey(
 		if primaryIndexPartitioningElemInReferencedTable != nil {
 			numImplicitCols = int(primaryIndexPartitioningElemInReferencedTable.NumImplicitColumns)
 		}
-		keyColIDsOfPrimaryIndexInReferencedTable, _, _ := getSortedColumnIDsInIndex(b, referencedTableID, primaryIndexIDInReferencedTable)
+		keyColIDsOfPrimaryIndexInReferencedTable, _, _ := getSortedColumnIDsInIndexByKind(b, referencedTableID, primaryIndexIDInReferencedTable)
 		for i := numImplicitCols; i < len(keyColIDsOfPrimaryIndexInReferencedTable); i++ {
 			fkDef.ToCols = append(
 				fkDef.ToCols,
@@ -383,7 +383,7 @@ func alterTableAddForeignKey(
 
 	// 12. (Finally!) Add a ForeignKey_Constraint, ConstraintName element to
 	// builder state.
-	constraintID := b.NextTableConstraintID(tbl.TableID)
+	constraintID := b.NextTableConstraintID(tbl.TableID, false /* useTempID */)
 	if t.ValidationBehavior == tree.ValidationDefault {
 		fk := &scpb.ForeignKeyConstraint{
 			TableID:                 tbl.TableID,
@@ -504,7 +504,7 @@ func alterTableAddUniqueWithoutIndex(
 	}
 
 	// 5. (Finally!) Add a UniqueWithoutIndex, ConstraintName element to builder state.
-	constraintID := b.NextTableConstraintID(tbl.TableID)
+	constraintID := b.NextTableConstraintID(tbl.TableID, false /* useTempID */)
 	if t.ValidationBehavior == tree.ValidationDefault {
 		uwi := &scpb.UniqueWithoutIndexConstraint{
 			TableID:              tbl.TableID,

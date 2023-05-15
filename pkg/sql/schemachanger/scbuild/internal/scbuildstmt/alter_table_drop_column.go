@@ -11,8 +11,6 @@
 package scbuildstmt
 
 import (
-	"sort"
-
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -36,6 +34,10 @@ func alterTableDropColumn(
 	fallBackIfRegionalByRowTable(b, n, tbl.TableID)
 	checkSafeUpdatesForDropColumn(b)
 	checkRegionalByRowColumnConflict(b, tbl, n)
+	// Version gates functionally that is implemented after the statement is
+	// publicly published.
+	fallbackIfAddColDropColAlterPKInOneAlterTableStmtBeforeV232(b, tbl.TableID, n)
+
 	col, elts, done := resolveColumnForDropColumn(b, tn, tbl, n)
 	if done {
 		return
@@ -319,7 +321,7 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 	var sequencesToDrop catalog.DescriptorIDSet
 	var indexesToDrop catid.IndexSet
 	var columnsToDrop catalog.TableColSet
-	tblElts := b.QueryByID(col.TableID).Filter(publicTargetFilter)
+	tblElts := b.QueryByID(col.TableID).Filter(orFilter(publicTargetFilter, transientTargetFilter))
 	// Panic if `col` is referenced in a predicate of an index or
 	// unique without index constraint.
 	// TODO (xiang): Remove this restriction when #96924 is fixed.
@@ -468,108 +470,180 @@ func panicIfColReferencedInPredicate(b BuildCtx, col *scpb.Column, tblElts Eleme
 func handleDropColumnPrimaryIndexes(
 	b BuildCtx, tbl *scpb.Table, n tree.NodeFormatter, col *scpb.Column,
 ) {
-	// For now, disallow adding and dropping columns at the same time.
-	// In this case, we may need an intermediate index.
-	// TODO(ajwerner): Support mixing adding and dropping columns.
-	if addingAnyColumns := !b.QueryByID(tbl.TableID).
-		Filter(toPublicNotCurrentlyPublicFilter).
-		Filter(isColumnFilter).
-		IsEmpty(); addingAnyColumns {
-		panic(scerrors.NotImplementedErrorf(n, "DROP COLUMN after ADD COLUMN"))
-	}
-	existing, freshlyAdded := getPrimaryIndexes(b, tbl.TableID)
-	if freshlyAdded != nil {
-		handleDropColumnFreshlyAddedPrimaryIndex(b, freshlyAdded, col)
-	} else {
-		handleDropColumnCreateNewPrimaryIndex(b, existing, col)
-	}
+	_, _, _, finalSpec := ensureFourNonNilPrimaryIndexes(b, tbl.TableID)
+	dropStoredColumnFromPrimaryIndex(b, tbl.TableID, finalSpec.primary, col)
 }
 
-func handleDropColumnCreateNewPrimaryIndex(
-	b BuildCtx, existing *scpb.PrimaryIndex, col *scpb.Column,
-) *scpb.PrimaryIndex {
-	out := makeIndexSpec(b, existing.TableID, existing.IndexID)
-	inColumns := make([]indexColumnSpec, 0, len(out.columns)-1)
-	var dropped *scpb.IndexColumn
-	for _, ic := range out.columns {
-		if ic.ColumnID == col.ColumnID {
-			dropped = ic
-		} else {
-			inColumns = append(inColumns, makeIndexColumnSpec(ic))
-		}
-	}
-	if dropped == nil {
-		panic(errors.AssertionFailedf("failed to find column"))
-	}
-	if dropped.Kind != scpb.IndexColumn_STORED {
-		panic(errors.AssertionFailedf("can only drop columns which are stored in the primary index, this one is %v ",
-			dropped.Kind))
-	}
-	out.apply(b.Drop)
-	in, temp := makeSwapIndexSpec(b, out, out.primary.IndexID, inColumns)
-	in.apply(b.Add)
-	temp.apply(b.AddTransient)
-	return in.primary
-}
-
-func handleDropColumnFreshlyAddedPrimaryIndex(
-	b BuildCtx, freshlyAdded *scpb.PrimaryIndex, col *scpb.Column,
+// dropStoredColumnFromPrimaryIndex removes `col` from a primary index `from` and
+// its temporary index.
+func dropStoredColumnFromPrimaryIndex(
+	b BuildCtx, tableID catid.DescID, from *scpb.PrimaryIndex, col *scpb.Column,
 ) {
-	// We want to find the freshly added index and go ahead and remove this
-	// column from the stored set. That means going through the other
-	// index columns for this index and adjusting their ordinal appropriately.
-	var storedColumns, storedTempColumns []*scpb.IndexColumn
-	var tempIndex *scpb.TemporaryIndex
-	scpb.ForEachTemporaryIndex(b.QueryByID(freshlyAdded.TableID), func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex,
-	) {
-		if e.IndexID == freshlyAdded.TemporaryIndexID {
-			tempIndex = e
+	dropIndexColumnFromInternal(b, tableID, from.IndexID, col.ColumnID, scpb.IndexColumn_STORED)
+	dropIndexColumnFromInternal(b, tableID, from.TemporaryIndexID, col.ColumnID, scpb.IndexColumn_STORED)
+}
+
+// dropIndexColumnFromInternal drops column `columnID` of kind `kind` from
+// index `fromID` in the table.
+func dropIndexColumnFromInternal(
+	b BuildCtx,
+	tableID catid.DescID,
+	fromID catid.IndexID,
+	columnID catid.ColumnID,
+	kind scpb.IndexColumn_Kind,
+) {
+	found := false
+	for _, storedCol := range getIndexColumns(b.QueryByID(tableID), fromID, kind) {
+		if found {
+			// Adjust ordinalInKind for all following index columns
+			storedCol.OrdinalInKind--
 		}
-	})
-	if tempIndex == nil {
-		panic(errors.AssertionFailedf("failed to find temp index %d", freshlyAdded.TemporaryIndexID))
+		if storedCol.ColumnID == columnID {
+			// b.Drop effectively undoes adding `storedCol`, either it was
+			// previously targeting PUBLIC or TRANSIENT.
+			b.Drop(storedCol)
+			found = true
+		}
 	}
-	scpb.ForEachIndexColumn(b.QueryByID(freshlyAdded.TableID), func(
-		_ scpb.Status, targetStatus scpb.TargetStatus, e *scpb.IndexColumn,
-	) {
-		if targetStatus == scpb.ToAbsent {
-			return
+	if !found {
+		panic(errors.AssertionFailedf("programming error: didn't find column %v fromID "+
+			"primary index %v storing columns in table %v", columnID, fromID, tableID))
+	}
+}
+
+// haveSameIndexColsByKind returns true if two indexes have the same index
+// columns of a particular kind.
+func haveSameIndexColsByKind(
+	b BuildCtx, tableID catid.DescID, indexID1, indexID2 catid.IndexID, kind scpb.IndexColumn_Kind,
+) bool {
+	tableElems := b.QueryByID(tableID)
+	keyCols1 := getIndexColumns(tableElems, indexID1, kind)
+	keyCols2 := getIndexColumns(tableElems, indexID2, kind)
+	if len(keyCols1) != len(keyCols2) {
+		return false
+	}
+	for i := range keyCols1 {
+		if keyCols1[i].ColumnID != keyCols2[i].ColumnID ||
+			keyCols1[i].Direction != keyCols2[i].Direction {
+			return false
 		}
-		if e.Kind != scpb.IndexColumn_STORED {
-			return
-		}
-		switch e.IndexID {
-		case tempIndex.IndexID:
-			storedTempColumns = append(storedTempColumns, e)
-		case freshlyAdded.IndexID:
-			storedColumns = append(storedColumns, e)
-		}
-	})
-	sort.Slice(storedColumns, func(i, j int) bool {
-		return storedColumns[i].OrdinalInKind < storedColumns[j].OrdinalInKind
-	})
-	sort.Slice(storedColumns, func(i, j int) bool {
-		return storedTempColumns[i].OrdinalInKind < storedTempColumns[j].OrdinalInKind
-	})
-	n := -1
-	for i, c := range storedColumns {
-		if c.ColumnID == col.ColumnID {
-			n = i
+	}
+	return true
+}
+
+// haveSameIndexCols returns true if two indexes have the same index columns.
+func haveSameIndexCols(b BuildCtx, tableID catid.DescID, indexID1, indexID2 catid.IndexID) bool {
+	return haveSameIndexColsByKind(b, tableID, indexID1, indexID2, scpb.IndexColumn_KEY) &&
+		haveSameIndexColsByKind(b, tableID, indexID1, indexID2, scpb.IndexColumn_KEY_SUFFIX) &&
+		haveSameIndexColsByKind(b, tableID, indexID1, indexID2, scpb.IndexColumn_STORED)
+}
+
+// getAllPrimaryIndexesSortedBySourcing returns all "adding" primary indexes
+// in the table and ensure they are "sorted by sourcing".
+//   - "adding" means they are targeting public but currently not public;
+//   - "sorted by sourcing" means if primary_index_j's source index ID points
+//     to primary_index_i, then primary_index_i comes before primary_index_j.
+//
+// We conclude that the return has at least 1 and at most 4 primary indexes.
+// To facilitate conversation, let's call them (`old`, `inter1`, `inter2`, `final`):
+//   - `old` is the original, currently public primary index (it's always going
+//     to exist and hence "at least 1").
+//   - `inter1` is the newly added primary index that contains all the added/dropped
+//     columns in this statement.
+//   - `inter2` is same as `inter1` but with altered primary key.
+//   - `final` is same as `inter2` but without dropped column.
+//
+// The following comments explain in what cases would we have 2, 3, or 4 adding
+// primary indexes.
+//
+// Usually, if there is just one add column, or one drop column, or one
+// alter primary key in one alter table statement, we will only create one new
+// primary index with the correct columns. That would be `final` and we backfill
+// it from `old`, that is, (`old`, nil, nil, `final`).
+//
+// Occasionally, we might need one intermediate primary index. It happens in the
+// following two cases:
+// 1). `ALTER TABLE t ALTER PRIMARY KEY where old PK is on rowid;`
+// 2). `ALTER TALBE t ADD COLUMN, DROP COLUMN;`
+// For 1), the intermediate primary index will be one with the altered PK but
+// retaining rowid in its storing columns. The final primary index will then be
+// one that drops rowid from its storing columns, so, (`old`, nil, `inter2`, `final`).
+// For 2), the intermediate primary index will be one with all the added and
+// dropped columns in its storing columns. Its final primary index will then be
+// one that drops those to-be-dropped columns from its storing columns, so,
+// (`old`, `inter1`, nil, `final`).
+//
+// Rarely, we would encounter something like
+// `ALTER TABLE ADD COLUMN, DROP COLUMN, ALTER PRIMARY KEY;`
+// To correctly build this statement, we will need two intermediate primary
+// indexes where intermediate1 will be one that has all the added and dropped
+// columns in its storing columns, and intermediate2 will be one that drops all
+// to-be-dropped columns from its storing columns, and `final` will be one with
+// altered PK, so, (`old`, `inter1`, `inter2`, `final`).
+func getAllPrimaryIndexesSortedBySourcing(
+	b BuildCtx, tableID catid.DescID,
+) (old, inter1, inter2, final *scpb.PrimaryIndex) {
+	// Collect all "adding" primary indexes (i.e. target public currently not public)
+	// in this table and sort them by their `SourceIndexID`.
+	primaryIndexes := make(map[*scpb.PrimaryIndex]bool)
+	scpb.ForEachPrimaryIndex(b.QueryByID(tableID).
+		Filter(orFilter(publicTargetFilter, transientTargetFilter)).
+		Filter(notReachedTargetYetFilter),
+		func(
+			current scpb.Status, target scpb.TargetStatus, e *scpb.PrimaryIndex,
+		) {
+			primaryIndexes[e] = true
+		})
+	// Collect the existing, public primary index (i.e. `old`).
+	_, _, old = scpb.FindPrimaryIndex(b.QueryByID(tableID).Filter(publicStatusFilter))
+	primaryIndexes[old] = true
+
+	// The following convoluted logic attempts to sort all adding primary indexes
+	// by their SourceIndexID "locationally".
+	sortedPrimaryIndexes := make([]*scpb.PrimaryIndex, len(primaryIndexes))
+	sources := make(map[catid.IndexID]bool)
+	for addingPrimaryIndex := range primaryIndexes {
+		sources[addingPrimaryIndex.SourceIndexID] = true
+	}
+	for len(primaryIndexes) > 0 {
+		for primaryIndex := range primaryIndexes {
+			if _, ok := sources[primaryIndex.IndexID]; ok {
+				// this primary index is currently used as someone else's source.
+				continue
+			}
+			// Find the one that's nobody's source!
+			// Put it to `sourtedPrimaryIndexes`, back to front.
+			sortedPrimaryIndexes[len(primaryIndexes)-1] = primaryIndex
+			delete(primaryIndexes, primaryIndex)
+			delete(sources, primaryIndex.SourceIndexID)
 			break
 		}
 	}
-	if n == -1 {
-		return
+
+	// Sanity check: There should be at least 1, and at most 4 primary indexes.
+	if len(sortedPrimaryIndexes) < 1 || len(sortedPrimaryIndexes) > 4 {
+		panic(errors.AssertionFailedf("programming error: table %v has %v primary indexes; "+
+			"should be between 1 and 4", tableID, len(sortedPrimaryIndexes)))
 	}
-	b.Drop(storedColumns[n])
-	b.Drop(storedTempColumns[n])
-	for i := n + 1; i < len(storedColumns); i++ {
-		storedColumns[i].OrdinalInKind--
-		b.Add(storedColumns[i])
-		storedTempColumns[i].OrdinalInKind--
-		b.Add(storedTempColumns[i])
+
+	switch len(sortedPrimaryIndexes) {
+	case 2:
+		final = sortedPrimaryIndexes[1]
+	case 3:
+		final = sortedPrimaryIndexes[2]
+		if haveSameIndexColsByKind(b, tableID,
+			sortedPrimaryIndexes[0].IndexID, sortedPrimaryIndexes[1].IndexID, scpb.IndexColumn_KEY) {
+			inter1 = sortedPrimaryIndexes[1]
+		} else {
+			inter2 = sortedPrimaryIndexes[1]
+		}
+	case 4:
+		inter1 = sortedPrimaryIndexes[1]
+		inter2 = sortedPrimaryIndexes[2]
+		final = sortedPrimaryIndexes[3]
 	}
+
+	return old, inter1, inter2, final
 }
 
 func assertAllColumnElementsAreDropped(colElts ElementResultSet) {
