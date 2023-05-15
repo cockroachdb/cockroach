@@ -920,6 +920,9 @@ func (rac *rangeAnalyzedConstraints) candidatesVoterConstraintsUnsatisfied() (
 					toRemoveVoters, rac.voterConstraints.satisfiedByReplica[voterIndex][i]...)
 			}
 		}
+
+		// Always include the voters which are satisfying no constraints as
+		// candidates to remove.
 		toRemoveVoters = append(
 			toRemoveVoters, rac.voterConstraints.satisfiedNoConstraintReplica[voterIndex]...)
 	}
@@ -932,25 +935,124 @@ func (rac *rangeAnalyzedConstraints) candidatesVoterConstraintsUnsatisfied() (
 }
 
 func (rac *rangeAnalyzedConstraints) candidatesNonVoterConstraintsUnsatisfied() (
-	toRemoveVoters []roachpb.StoreID,
+	toRemoveNonVoters []roachpb.StoreID,
 	toAdd constraintsDisj,
 ) {
-	// TODO(sumeer): implement
-	return nil, nil
+	if rac.notEnoughVoters() || rac.notEnoughNonVoters() {
+		// Add first.
+		return nil, nil
+	}
+	// We can ignore voter constraints.
+	if rac.constraints.isEmpty() {
+		return nil, nil
+	}
+
+	// Only need to remove a non-voter if some conjunction is oversatisfied
+	// purely due to non-voters.
+	for i, c := range rac.constraints.constraints {
+		neededReplicas := int(c.NumReplicas)
+		actualVoterReplicas := len(rac.constraints.satisfiedByReplica[voterIndex][i])
+		actualNonVoterReplicas := len(rac.constraints.satisfiedByReplica[nonVoterIndex][i])
+		if neededReplicas > actualVoterReplicas+actualNonVoterReplicas {
+			toAdd = append(toAdd, c)
+		} else if neededReplicas < actualNonVoterReplicas {
+			toRemoveNonVoters = append(toRemoveNonVoters,
+				rac.constraints.satisfiedByReplica[nonVoterIndex][i]...)
+		}
+	}
+	// Always include the non-voters which are satisfying no constraints as
+	// candidates to remove.
+	toRemoveNonVoters = append(
+		toRemoveNonVoters, rac.constraints.satisfiedNoConstraintReplica[nonVoterIndex]...)
+
+	if len(toRemoveNonVoters) == 0 {
+		toAdd = nil
+	} else if len(toAdd) == 0 {
+		toRemoveNonVoters = nil
+	}
+	return toRemoveNonVoters, toAdd
 }
 
 func (rac *rangeAnalyzedConstraints) candidatesToReplaceVoterForRebalance(
 	storeID roachpb.StoreID,
-) []roachpb.ConstraintsConjunction {
-	// TODO(sumeer): implement
-	return nil
+) (toReplace constraintsDisj) {
+	if rac.notEnoughVoters() || rac.notEnoughNonVoters() {
+		// Add first.
+		return nil
+	}
+
+	// There are no constraints.
+	if rac.constraints.isEmpty() && rac.voterConstraints.isEmpty() {
+		return nil
+	}
+
+	// Find all the constraints which the store being rebalanced away from was
+	// required for satisfaction.
+	for i, c := range rac.constraints.constraints {
+		var candidateSatisfyingConstraint bool
+		// TODO(kvoli): Optimize iteration. This is looping through replicas
+		// satisfying a constraint to determine if the storeID given has a replica.
+		for _, checkStoreID := range rac.constraints.satisfiedByReplica[voterIndex][i] {
+			if checkStoreID == storeID {
+				candidateSatisfyingConstraint = true
+			}
+		}
+		if candidateSatisfyingConstraint &&
+			int(c.NumReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i])+
+				len(rac.constraints.satisfiedByReplica[nonVoterIndex][i])-1 {
+			toReplace = append(toReplace, c)
+		}
+	}
+	if !rac.voterConstraints.isEmpty() {
+		// TODO(kvoli): Optimize iteration ditto.
+		for i, c := range rac.voterConstraints.constraints {
+			var candidateSatisfyingConstraint bool
+			for _, checkStoreID := range rac.constraints.satisfiedByReplica[voterIndex][i] {
+				if checkStoreID == storeID {
+					candidateSatisfyingConstraint = true
+				}
+			}
+
+			if candidateSatisfyingConstraint &&
+				int(c.NumReplicas) > len(rac.voterConstraints.satisfiedByReplica[voterIndex][i])-1 {
+				toReplace = append(toReplace, c)
+			}
+		}
+	}
+
+	return toReplace
 }
 
 func (rac *rangeAnalyzedConstraints) candidatesToReplaceNonVoterForRebalance(
 	storeID roachpb.StoreID,
-) []roachpb.ConstraintsConjunction {
-	// TODO(sumeer): implement
-	return nil
+) (toReplace constraintsDisj) {
+	if rac.notEnoughVoters() || rac.notEnoughNonVoters() {
+		// Add first.
+		return nil
+	}
+
+	// We can ignore voter constraints.
+	if rac.constraints.isEmpty() {
+		return nil
+	}
+
+	// Find all the constraints which the store being rebalanced away from was
+	// required for satisfaction.
+	for i, c := range rac.constraints.constraints {
+		var candidateSatisfyingConstraint bool
+		// TODO(kvoli): Optimize iteration ditto.
+		for _, checkStoreID := range rac.constraints.satisfiedByReplica[voterIndex][i] {
+			if checkStoreID == storeID {
+				candidateSatisfyingConstraint = true
+			}
+		}
+		if candidateSatisfyingConstraint &&
+			int(c.NumReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i])+
+				len(rac.constraints.satisfiedByReplica[nonVoterIndex][i])-1 {
+			toReplace = append(toReplace, c)
+		}
+	}
+	return toReplace
 }
 
 // Helper for constructing rangeAnalyzedConstraints. Contains initial state
