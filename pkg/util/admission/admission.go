@@ -17,8 +17,8 @@
 // - Limiting node overload, so that bad things don't happen due to starvation
 //   of resources.
 // - Providing performance isolation between low and high importance
-//   activities, so that overload caused by the latter does not impact the
-//   latency of the former. Additionally, for multi-tenant KV nodes, the
+//   activities, so that overload caused by the former does not impact the
+//   latency of the latter. Additionally, for multi-tenant KV nodes, the
 //   isolation should extend to inter-tenant performance isolation.
 //   Isolation is strictly harder than limiting node overload, and the
 //   abstractions here are likely to be average quality in doing so.
