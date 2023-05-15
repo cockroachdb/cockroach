@@ -4,12 +4,12 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 go_library(
     name = "roachprod-microbench_lib",
     srcs = [
-        "benchmark.go",
         "compare.go",
+        "executor.go",
         "main.go",
         "metadata.go",
         "report.go",
-        "storage.go",
+        "util.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench",
     visibility = ["//visibility:private"],
@@ -25,7 +25,7 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_klauspost_compress//gzip",
-        "@com_google_cloud_go_storage//:storage",
+        "@com_github_spf13_cobra//:cobra",
         "@org_golang_x_perf//benchstat",
         "@org_golang_x_perf//storage/benchfmt",
     ],
@@ -40,8 +40,8 @@ go_binary(
 go_test(
     name = "roachprod-microbench_test",
     srcs = [
-        "benchmark_test.go",
         "compare_test.go",
+        "executor_test.go",
     ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
