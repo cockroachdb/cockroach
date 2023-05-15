@@ -520,7 +520,6 @@ func registerTPCC(r registry.Registry) {
 		Tags:              []string{`default`},
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
-		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCMixedHeadroom(ctx, t, c, cloud, 1)
 		},
@@ -532,7 +531,6 @@ func registerTPCC(r registry.Registry) {
 		Tags:              []string{`default`},
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
-		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCMixedHeadroom(ctx, t, c, cloud, 2)
 		},
