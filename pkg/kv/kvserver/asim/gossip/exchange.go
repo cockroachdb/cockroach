@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // exchangeInfo contains the information of a gossiped store descriptor.
@@ -58,6 +59,6 @@ func (u *fixedDelayExchange) updates(tick time.Time) []*storepool.StoreDetail {
 func makeStoreDetail(desc *roachpb.StoreDescriptor, tick time.Time) *storepool.StoreDetail {
 	return &storepool.StoreDetail{
 		Desc:            desc,
-		LastUpdatedTime: tick,
+		LastUpdatedTime: hlc.Timestamp{WallTime: tick.UnixNano()},
 	}
 }
