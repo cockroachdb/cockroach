@@ -3542,6 +3542,10 @@ func (m *sessionDataMutator) SetOptimizerHoistUncorrelatedEqualitySubqueries(val
 	m.data.OptimizerHoistUncorrelatedEqualitySubqueries = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseImprovedComputedColumnFiltersDerivation(val bool) {
+	m.data.OptimizerUseImprovedComputedColumnFiltersDerivation = val
+}
+
 func (m *sessionDataMutator) SetEnableCreateStatsUsingExtremes(val bool) {
 	m.data.EnableCreateStatsUsingExtremes = val
 }
