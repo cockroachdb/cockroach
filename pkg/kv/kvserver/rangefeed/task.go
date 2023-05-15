@@ -12,6 +12,7 @@ package rangefeed
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -32,6 +33,15 @@ type runnable interface {
 	Cancel()
 }
 
+// ProcessorTaskHelper abstracts away processor for tasks.
+type ProcessorTaskHelper interface {
+	span() roachpb.RSpan
+	StopWithErr(pErr *kvpb.Error)
+	setResolvedTSInitialized(ctx context.Context)
+	sendEvent(ctx context.Context, e event, timeout time.Duration) bool
+	pusher() TxnPusher
+}
+
 // initResolvedTSScan scans over all keys using the provided iterator and
 // informs the rangefeed Processor of any intents. This allows the Processor to
 // backfill its unresolvedIntentQueue with any intents that were written before
@@ -39,11 +49,11 @@ type runnable interface {
 // The Processor can initialize its resolvedTimestamp once the scan completes
 // because it knows it is now tracking all intents in its key range.
 type initResolvedTSScan struct {
-	p  *Processor
+	p  ProcessorTaskHelper
 	is IntentScanner
 }
 
-func newInitResolvedTSScan(p *Processor, c IntentScanner) runnable {
+func newInitResolvedTSScan(p ProcessorTaskHelper, c IntentScanner) runnable {
 	return &initResolvedTSScan{p: p, is: c}
 }
 
@@ -60,8 +70,9 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 }
 
 func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
-	startKey := s.p.Span.Key.AsRawKey()
-	endKey := s.p.Span.EndKey.AsRawKey()
+	span := s.p.span()
+	startKey := span.Key.AsRawKey()
+	endKey := span.EndKey.AsRawKey()
 	return s.is.ConsumeIntents(ctx, startKey, endKey, func(op enginepb.MVCCWriteIntentOp) bool {
 		var ops [1]enginepb.MVCCLogicalOp
 		ops[0].SetValue(&op)
@@ -249,14 +260,14 @@ type TxnPusher interface {
 //     - ABORTED:   inform the Processor to stop caring about the transaction.
 //     It will never commit and its intents can be safely ignored.
 type txnPushAttempt struct {
-	p     *Processor
+	p     ProcessorTaskHelper
 	txns  []enginepb.TxnMeta
 	ts    hlc.Timestamp
 	doneC chan struct{}
 }
 
 func newTxnPushAttempt(
-	p *Processor, txns []enginepb.TxnMeta, ts hlc.Timestamp, doneC chan struct{},
+	p ProcessorTaskHelper, txns []enginepb.TxnMeta, ts hlc.Timestamp, doneC chan struct{},
 ) runnable {
 	return &txnPushAttempt{
 		p:     p,
@@ -278,7 +289,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	// This may cause transaction restarts, but span refreshing should
 	// prevent a restart for any transaction that has not been written
 	// over at a larger timestamp.
-	pushedTxns, err := a.p.TxnPusher.PushTxns(ctx, a.txns, a.ts)
+	pushedTxns, err := a.p.pusher().PushTxns(ctx, a.txns, a.ts)
 	if err != nil {
 		return err
 	}
@@ -319,7 +330,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// intents are resolved before the resolved timestamp can advance past the
 			// transaction's commit timestamp, so the best we can do is help speed up
 			// the resolution.
-			txnIntents := intentsInBound(txn, a.p.Span.AsRawSpanWithNoLocals())
+			txnIntents := intentsInBound(txn, a.p.span().AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
 		case roachpb.ABORTED:
 			// The transaction is aborted, so it doesn't need to be tracked
@@ -346,7 +357,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// LockSpans populated. If, however, we ran into a transaction that its
 			// coordinator tried to rollback but didn't follow up with garbage
 			// collection, then LockSpans will be populated.
-			txnIntents := intentsInBound(txn, a.p.Span.AsRawSpanWithNoLocals())
+			txnIntents := intentsInBound(txn, a.p.span().AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
 		}
 	}
@@ -355,7 +366,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	a.p.sendEvent(ctx, event{ops: ops}, 0)
 
 	// Resolve intents, if necessary.
-	return a.p.TxnPusher.ResolveIntents(ctx, intentsToCleanup)
+	return a.p.pusher().ResolveIntents(ctx, intentsToCleanup)
 }
 
 func (a *txnPushAttempt) Cancel() {
