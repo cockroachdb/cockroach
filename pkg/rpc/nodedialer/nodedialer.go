@@ -234,11 +234,6 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 	if n == nil || n.resolver == nil {
 		return errors.New("no node dialer configured")
 	}
-	// NB: Don't call Ready(). The breaker protocol would require us to follow
-	// that up with a dial, which we won't do as this is called in hot paths.
-	if n.getBreaker(nodeID, class).Tripped() {
-		return circuit.ErrBreakerOpen
-	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {
 		return err
@@ -265,7 +260,7 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 // is the caller really wants can likely be achieved by more direct means.
 func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
 	err := n.ConnHealth(nodeID, class)
-	if err == nil || !n.getBreaker(nodeID, class).Ready() {
+	if err == nil {
 		return err
 	}
 	addr, err := n.resolver(nodeID)
