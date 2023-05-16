@@ -241,7 +241,7 @@ func TestACLWatcher(t *testing.T) {
 
 		// Wait until watcher has received the updated event.
 		testutils.SucceedsSoon(t, func() error {
-			ten, err := dir.LookupTenant(ctx, tenantID)
+			ten, err := dir.LookupTenant(ctx, tenantID, "")
 			if err != nil {
 				return err
 			}

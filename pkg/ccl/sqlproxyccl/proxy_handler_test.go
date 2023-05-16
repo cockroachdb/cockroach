@@ -331,7 +331,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 
 				// Wait until watcher has received the updated event.
 				testutils.SucceedsSoon(t, func() error {
-					ten, err := s.handler.directoryCache.LookupTenant(ctx, tenant10)
+					ten, err := s.handler.directoryCache.LookupTenant(ctx, tenant10, "my-tenant")
 					if err != nil {
 						return err
 					}

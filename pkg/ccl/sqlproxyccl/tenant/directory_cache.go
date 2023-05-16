@@ -27,10 +27,10 @@ import (
 //
 // See directoryCache for more information.
 type DirectoryCache interface {
-	// LookupTenant returns the tenant entry associated to the requested tenant
-	// ID. If the tenant cannot be found, this will return a GRPC NotFound
-	// error.
-	LookupTenant(ctx context.Context, tenantID roachpb.TenantID) (*Tenant, error)
+	// LookupTenant returns the tenant entry associated with the requested
+	// tenant ID. If the tenant cannot be found (e.g. cluster name mismatch, or
+	// tenant was deleted), this will return a GRPC NotFound error.
+	LookupTenant(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (*Tenant, error)
 
 	// LookupTenantPods returns a list of SQL pods in the RUNNING and DRAINING
 	// states for the given tenant. This blocks until there is at least one
@@ -173,12 +173,23 @@ func NewDirectoryCache(
 	return dir, nil
 }
 
-// LookupTenant returns the tenant entry associated to the requested tenant
-// ID. If the tenant cannot be found, this will return a GRPC NotFound error.
+// LookupTenant returns the tenant entry associated with the requested tenant
+// ID.
+//
+// If clusterName is non-empty, then a GRPC NotFound error is returned if the
+// cluster name of the tenant with the given ID does not match clusterName. This
+// can be used to ensure that the incoming SQL connection "knows" some
+// additional information about the tenant, such as the name of the cluster,
+// before being allowed to connect. Similarly, if the tenant does not exist
+// (e.g. because it was deleted), LookupTenant returns a GRPC NotFound error.
+//
+// WARNING: Callers should never attempt to modify values returned by this
+// method, or else they may be a race. Other instances may be reading from the
+// same object.
 //
 // LookupTenant implements the DirectoryCache interface.
 func (d *directoryCache) LookupTenant(
-	ctx context.Context, tenantID roachpb.TenantID,
+	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
 ) (*Tenant, error) {
 	// Ensure that a directory entry has been created for this tenant. This will
 	// attempt to initialize the tenant in the cache.
@@ -186,7 +197,16 @@ func (d *directoryCache) LookupTenant(
 	if err != nil {
 		return nil, err
 	}
-	return entry.ToProto(), nil
+	// Check if the cluster name matches. This can be skipped if clusterName
+	// is empty, or the ClusterName returned by the directory server is empty.
+	tenant := entry.ToProto()
+	if clusterName != "" && tenant.ClusterName != "" && clusterName != tenant.ClusterName {
+		// Return a GRPC NotFound error.
+		log.Errorf(ctx, "cluster name %s doesn't match expected %s", clusterName, tenant.ClusterName)
+		return nil, status.Errorf(codes.NotFound,
+			"cluster name %s doesn't match expected %s", clusterName, tenant.ClusterName)
+	}
+	return tenant, nil
 }
 
 // LookupTenantPods returns a list of SQL pods in the RUNNING and DRAINING
@@ -560,6 +580,19 @@ func (d *directoryCache) watchTenants(ctx context.Context, stopper *stop.Stopper
 				// (for a long time, or until the watcher catches up). Marking
 				// them as stale allows LookupTenant to fetch a new right away
 				// if needed.
+				//
+				// TODO(jaylim-crl): One optimization that could be done here is
+				// to build a new cache, while allowing the old one to work.
+				// Once the cache has been populated, we will swap the new and
+				// old caches. We can tell that the cache has been populated
+				// when events switch from ADDED to MODIFIED. Though, if we use
+				// this approach, it is possible that there aren't any MODIFIED
+				// events, and we're stuck waiting to switch the cache over.
+				// Perhaps a better idea would be to invoke GetTenant on the
+				// list of tenants which were previously valid individually.
+				// Note that it's unlikely for us to hit multiple cache misses
+				// during this short period unless we're getting thousands of
+				// connections with unique tenant IDs for the first time.
 				d.markAllEntriesInvalid()
 				// If stream ends, immediately try to establish a new one.
 				// Otherwise, wait for a second to avoid slamming server.

@@ -392,9 +392,10 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	removeListener, err := handler.aclWatcher.ListenForDenied(
 		ctx,
 		acl.ConnectionTags{
-			IP:         ipAddr,
-			TenantID:   tenID,
-			EndpointID: endpointID,
+			IP:          ipAddr,
+			TenantID:    tenID,
+			ClusterName: clusterName,
+			EndpointID:  endpointID,
 		},
 		func(err error) {
 			err = withCode(

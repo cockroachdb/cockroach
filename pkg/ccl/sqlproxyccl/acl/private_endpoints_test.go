@@ -29,15 +29,18 @@ func TestPrivateEndpoints(t *testing.T) {
 
 	makeConn := func(endpoint string) acl.ConnectionTags {
 		return acl.ConnectionTags{
-			IP:         "10.0.0.8",
-			TenantID:   roachpb.MustMakeTenantID(42),
-			EndpointID: endpoint,
+			IP:          "10.0.0.8",
+			TenantID:    roachpb.MustMakeTenantID(42),
+			EndpointID:  endpoint,
+			ClusterName: "dim-dog",
 		}
 	}
 
 	t.Run("lookup error", func(t *testing.T) {
 		p := &acl.PrivateEndpoints{
-			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
+			LookupTenantFn: func(
+				ctx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) (*tenant.Tenant, error) {
 				return nil, errors.New("foo")
 			},
 		}
@@ -48,7 +51,9 @@ func TestPrivateEndpoints(t *testing.T) {
 	// Public connection should allow, despite not having any private endpoints.
 	t.Run("public connection", func(t *testing.T) {
 		p := &acl.PrivateEndpoints{
-			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
+			LookupTenantFn: func(
+				ctx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
 					ConnectivityType: tenant.ALLOW_PRIVATE,
 				}, nil
@@ -61,7 +66,9 @@ func TestPrivateEndpoints(t *testing.T) {
 	// EndpointID does not match.
 	t.Run("bad private connection", func(t *testing.T) {
 		p := &acl.PrivateEndpoints{
-			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
+			LookupTenantFn: func(
+				ctx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
 					ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
 					PrivateEndpoints: []string{"foo", "baz"},
@@ -74,7 +81,10 @@ func TestPrivateEndpoints(t *testing.T) {
 
 	t.Run("good private connection", func(t *testing.T) {
 		p := &acl.PrivateEndpoints{
-			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
+			LookupTenantFn: func(
+				ctx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) (*tenant.Tenant, error) {
+				require.Equal(t, "dim-dog", clusterName)
 				return &tenant.Tenant{
 					ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
 					PrivateEndpoints: []string{"foo"},
@@ -88,7 +98,9 @@ func TestPrivateEndpoints(t *testing.T) {
 	// Does not have tenant.ALLOW_PRIVATE.
 	t.Run("disallow private connections", func(t *testing.T) {
 		p := &acl.PrivateEndpoints{
-			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
+			LookupTenantFn: func(
+				ctx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
 					ConnectivityType: tenant.ALLOW_PUBLIC,
 					PrivateEndpoints: []string{"foo"},

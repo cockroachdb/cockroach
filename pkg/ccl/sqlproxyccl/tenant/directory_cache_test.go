@@ -45,7 +45,7 @@ func TestDirectoryErrors(t *testing.T) {
 	dir, dirServer := tenantdirsvr.SetupTestDirectory(t, ctx, stopper, nil /* timeSource */)
 
 	// Fail to find a tenant that does not exist.
-	_, err := dir.LookupTenant(ctx, roachpb.MustMakeTenantID(1000))
+	_, err := dir.LookupTenant(ctx, roachpb.MustMakeTenantID(1000), "")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant does not exist")
 
 	// Fail to find a tenant that does not exist.
@@ -67,6 +67,9 @@ func TestDirectoryErrors(t *testing.T) {
 		ClusterName: "tenant-cluster",
 	})
 	_, err = dir.LookupTenantPods(ctx, tenantID, "unknown")
+	require.EqualError(t, err, "rpc error: code = NotFound desc = cluster name unknown doesn't match expected tenant-cluster")
+
+	_, err = dir.LookupTenant(ctx, tenantID, "unknown")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = cluster name unknown doesn't match expected tenant-cluster")
 
 	// No-op when reporting failure for tenant that doesn't exit.
@@ -117,7 +120,7 @@ func TestWatchTenants(t *testing.T) {
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 20 not in directory cache")
 
 	// Now perform the lookup, which will call Initialize.
-	tenantObj, err := dir.LookupTenant(ctx, tenantID)
+	tenantObj, err := dir.LookupTenant(ctx, tenantID, "my-tenant")
 	require.NoError(t, err)
 	require.Equal(t, &tenant.Tenant{
 		Version:          "010",
@@ -139,7 +142,7 @@ func TestWatchTenants(t *testing.T) {
 	require.Equal(t, updatedTenant, resp.Tenant)
 
 	// The tenant should be updated.
-	tenantObj, err = dir.LookupTenant(ctx, tenantID)
+	tenantObj, err = dir.LookupTenant(ctx, tenantID, "foo-bar")
 	require.NoError(t, err)
 	require.Equal(t, &tenant.Tenant{
 		Version:          "011",
@@ -160,7 +163,7 @@ func TestWatchTenants(t *testing.T) {
 	require.Equal(t, updatedTenant, resp.Tenant)
 
 	// Tenant should still stay as v=011.
-	tenantObj, err = dir.LookupTenant(ctx, tenantID)
+	tenantObj, err = dir.LookupTenant(ctx, tenantID, "foo-bar")
 	require.NoError(t, err)
 	require.Equal(t, &tenant.Tenant{
 		Version:          "011",
@@ -174,7 +177,7 @@ func TestWatchTenants(t *testing.T) {
 	resp = <-tenantWatcher
 	require.Equal(t, tenant.EVENT_DELETED, resp.Type)
 	require.Equal(t, &tenant.Tenant{TenantID: 20}, resp.Tenant)
-	_, err = dir.LookupTenant(ctx, tenantID)
+	_, err = dir.LookupTenant(ctx, tenantID, "")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant does not exist")
 
 	// Create two tenants: one to delete, and the other to modify.
@@ -193,13 +196,13 @@ func TestWatchTenants(t *testing.T) {
 	tds.CreateTenant(tenant10, tenant10Data)
 	tds.CreateTenant(tenant20, tenant20Data)
 
-	tenantObj, err = dir.LookupTenant(ctx, tenant10)
+	tenantObj, err = dir.LookupTenant(ctx, tenant10, "")
 	require.NoError(t, err)
 	require.Equal(t, tenant10Data, tenantObj)
 	resp = <-tenantWatcher
 	require.Equal(t, tenant.EVENT_ADDED, resp.Type)
 	require.Equal(t, tenant10Data, resp.Tenant)
-	tenantObj, err = dir.LookupTenant(ctx, tenant20)
+	tenantObj, err = dir.LookupTenant(ctx, tenant20, "")
 	require.NoError(t, err)
 	require.Equal(t, tenant20Data, tenantObj)
 	resp = <-tenantWatcher
@@ -217,7 +220,7 @@ func TestWatchTenants(t *testing.T) {
 	})
 
 	// Entry was invalidated.
-	_, err = dir.LookupTenant(ctx, tenant10)
+	_, err = dir.LookupTenant(ctx, tenant10, "")
 	require.Regexp(t, "directory server has not been started", err.Error())
 
 	// Trigger events, which will be missed by the tenant watcher.
@@ -236,9 +239,9 @@ func TestWatchTenants(t *testing.T) {
 	})
 
 	// Cache should be updated.
-	_, err = dir.LookupTenant(ctx, tenant10)
+	_, err = dir.LookupTenant(ctx, tenant10, "")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant does not exist")
-	tenantObj, err = dir.LookupTenant(ctx, tenant20)
+	tenantObj, err = dir.LookupTenant(ctx, tenant20, "")
 	require.NoError(t, err)
 	require.Equal(t, tenant20Data, tenantObj)
 }
@@ -477,7 +480,7 @@ func TestDeleteTenant(t *testing.T) {
 	addr := pods[0].Addr
 
 	// LookupTenant should work.
-	ten, err := dir.LookupTenant(ctx, tenantID)
+	ten, err := dir.LookupTenant(ctx, tenantID, "")
 	require.NoError(t, err)
 	require.Equal(t, &tenant.Tenant{TenantID: 50, ClusterName: "tenant-cluster"}, ten)
 

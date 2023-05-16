@@ -20,7 +20,7 @@ import (
 	"github.com/pires/go-proxyproto/tlvparse"
 )
 
-type lookupTenantFunc func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error)
+type lookupTenantFunc func(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (*tenant.Tenant, error)
 
 // PrivateEndpoints represents the controller used to manage ACL rules for
 // private connections. A connection is assumed to be private if it includes
@@ -33,7 +33,7 @@ var _ AccessController = &PrivateEndpoints{}
 
 // CheckConnection implements the AccessController interface.
 func (p *PrivateEndpoints) CheckConnection(ctx context.Context, conn ConnectionTags) error {
-	tenantObj, err := p.LookupTenantFn(ctx, conn.TenantID)
+	tenantObj, err := p.LookupTenantFn(ctx, conn.TenantID, conn.ClusterName)
 	if err != nil {
 		return err
 	}

@@ -27,6 +27,10 @@ type ConnectionTags struct {
 	// the public internet. It is assumed that the connection is from a private
 	// network if the PROXY headers include cloud provider endpoint identifiers.
 	EndpointID string
+	// ClusterName represents the name of the cluster (e.g. dim-dog). This is
+	// used to ensure that the incoming connection knows something about the
+	// cluster (in addition to the TenantID) before it is allowed to connect.
+	ClusterName string
 }
 
 type AccessController interface {
