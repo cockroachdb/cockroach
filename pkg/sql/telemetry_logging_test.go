@@ -24,10 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -114,6 +116,7 @@ func TestTelemetryLogging(t *testing.T) {
 		queryLevelStats         execstats.QueryLevelStats
 		enableTracing           bool
 		enableInjectTxErrors    bool
+		expectedStatsCollector  sqlstats.StatsCollector
 	}{
 		{
 			// Test case with statement that is not of type DML.
@@ -124,7 +127,7 @@ func TestTelemetryLogging(t *testing.T) {
 			query:                   "TRUNCATE t;",
 			queryNoConstants:        "TRUNCATE TABLE t",
 			execTimestampsSeconds:   []float64{1, 1.1, 1.2, 2},
-			expectedLogStatement:    `TRUNCATE TABLE`,
+			expectedLogStatement:    `TRUNCATE TABLE defaultdb.public.t`,
 			stubMaxEventFrequency:   1,
 			expectedSkipped:         []int{0, 0, 0, 0},
 			expectedUnredactedTags:  []string{"client"},
@@ -135,13 +138,29 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedWrite:           false,
 			expectedIndexes:         false,
 			queryLevelStats: execstats.QueryLevelStats{
-				ContentionTime:   0 * time.Nanosecond,
-				NetworkBytesSent: 1,
-				MaxMemUsage:      2,
-				MaxDiskUsage:     3,
-				KVBytesRead:      4,
-				KVRowsRead:       5,
-				NetworkMessages:  6,
+				ContentionTime:                     0 * time.Nanosecond,
+				NetworkBytesSent:                   1,
+				MaxMemUsage:                        2,
+				MaxDiskUsage:                       3,
+				KVBytesRead:                        4,
+				KVRowsRead:                         5,
+				NetworkMessages:                    6,
+				MvccValueBytes:                     100,
+				MvccSteps:                          101,
+				MvccStepsInternal:                  102,
+				MvccSeeks:                          103,
+				MvccSeeksInternal:                  104,
+				MvccRangeKeySkippedPoints:          105,
+				MvccRangeKeyCount:                  106,
+				MvccRangeKeyContainedPoints:        107,
+				MvccPointsCoveredByRangeTombstones: 108,
+				MvccPointCount:                     109,
+				MvccKeyBytes:                       110,
+				MvccBlockBytesInCache:              111,
+				MvccBlockBytes:                     112,
+				CPUTime:                            113,
+				KVBatchRequestsIssued:              113,
+				KVTime:                             114,
 			},
 			enableTracing: false,
 		},
@@ -341,6 +360,49 @@ func TestTelemetryLogging(t *testing.T) {
 			enableTracing:           false,
 			enableInjectTxErrors:    true,
 		},
+		{
+			// Test case verifies max int64 values for all query level stats
+			name:                    "select-with-order-by-max",
+			query:                   "SELECT x FROM u ORDER BY x DESC",
+			queryNoConstants:        "SELECT x FROM u ORDER BY x DESC",
+			execTimestampsSeconds:   []float64{20},
+			expectedLogStatement:    `SELECT x FROM \"\".\"\".u ORDER BY x DESC`,
+			stubMaxEventFrequency:   1,
+			expectedSkipped:         []int{24},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        true,
+			expectedStatsAvailable:  true,
+			expectedRead:            true,
+			expectedWrite:           false,
+			expectedIndexes:         true,
+			queryLevelStats: execstats.QueryLevelStats{
+				ContentionTime:                     9223372036854775807 * time.Nanosecond,
+				NetworkBytesSent:                   9223372036854775807,
+				MaxMemUsage:                        9223372036854775807,
+				MaxDiskUsage:                       9223372036854775807,
+				KVBytesRead:                        9223372036854775807,
+				KVRowsRead:                         9223372036854775807,
+				NetworkMessages:                    9223372036854775807,
+				MvccValueBytes:                     9223372036854775807,
+				MvccSteps:                          9223372036854775807,
+				MvccStepsInternal:                  9223372036854775807,
+				MvccSeeks:                          9223372036854775807,
+				MvccSeeksInternal:                  9223372036854775807,
+				MvccRangeKeySkippedPoints:          9223372036854775807,
+				MvccRangeKeyCount:                  9223372036854775807,
+				MvccRangeKeyContainedPoints:        9223372036854775807,
+				MvccPointsCoveredByRangeTombstones: 9223372036854775807,
+				MvccPointCount:                     9223372036854775807,
+				MvccKeyBytes:                       9223372036854775807,
+				MvccBlockBytesInCache:              9223372036854775807,
+				MvccBlockBytes:                     9223372036854775807,
+				CPUTime:                            9223372036854775807,
+				KVBatchRequestsIssued:              9223372036854775807,
+				KVTime:                             9223372036854775807,
+			},
+			enableTracing: true,
+		},
 	}
 
 	for _, tc := range testData {
@@ -396,11 +458,16 @@ func TestTelemetryLogging(t *testing.T) {
 			// NB: FetchEntriesFromFiles delivers entries in reverse order.
 			for i := len(entries) - 1; i >= 0; i-- {
 				e := entries[i]
-				if strings.Contains(e.Message, tc.expectedLogStatement) {
+				if strings.Contains(e.Message, tc.expectedLogStatement+"\"") {
+
 					if logCount == expectedLogCount {
 						t.Errorf("%s: found more than %d expected log entries", tc.name, expectedLogCount)
 						break
 					}
+
+					var sampledQueryFromLog eventpb.SampledQuery
+					err = json.Unmarshal([]byte(e.Message), &sampledQueryFromLog)
+					require.NoError(t, err)
 					expectedSkipped := tc.expectedSkipped[logCount]
 					logCount++
 					if expectedSkipped == 0 {
@@ -480,6 +547,7 @@ func TestTelemetryLogging(t *testing.T) {
 						if !nanosSinceStatsCollectedRe.MatchString(e.Message) {
 							t.Errorf("expected to find NanosSinceStatsCollected but none was found in: %s", e.Message)
 						}
+
 					} else {
 						if totalScanRowsRe.MatchString(e.Message) {
 							t.Errorf("expected not to find TotalScanRowsEstimate but it was found in: %s", e.Message)
@@ -494,6 +562,28 @@ func TestTelemetryLogging(t *testing.T) {
 							t.Errorf("expected not to find NanosSinceStatsCollected but it was found in: %s", e.Message)
 						}
 					}
+
+					require.Equal(t, tc.queryLevelStats.MvccBlockBytesInCache, sampledQueryFromLog.MvccBlockBytesInCache)
+					require.Equal(t, tc.queryLevelStats.MvccKeyBytes, sampledQueryFromLog.MvccKeyBytes)
+					require.Equal(t, tc.queryLevelStats.MvccPointCount, sampledQueryFromLog.MvccPointCount)
+					require.Equal(t, tc.queryLevelStats.MvccBlockBytes, sampledQueryFromLog.MvccBlockBytes)
+					require.Equal(t, tc.queryLevelStats.MvccPointsCoveredByRangeTombstones, sampledQueryFromLog.MvccPointsCoveredByRangeTombstones)
+					require.Equal(t, tc.queryLevelStats.MvccRangeKeyCount, sampledQueryFromLog.MvccRangeKeyCount)
+					require.Equal(t, tc.queryLevelStats.MvccRangeKeyContainedPoints, sampledQueryFromLog.MvccRangeKeyContainedPoints)
+					require.Equal(t, tc.queryLevelStats.MvccRangeKeySkippedPoints, sampledQueryFromLog.MvccRangeKeySkippedPoints)
+					require.Equal(t, tc.queryLevelStats.MvccSeeksInternal, sampledQueryFromLog.MvccSeekCountInternal)
+					require.Equal(t, tc.queryLevelStats.MvccSeeks, sampledQueryFromLog.MvccSeekCount)
+					require.Equal(t, tc.queryLevelStats.MvccValueBytes, sampledQueryFromLog.MvccValueBytes)
+					require.Equal(t, tc.queryLevelStats.MvccSteps, sampledQueryFromLog.MvccStepCount)
+					require.Equal(t, tc.queryLevelStats.KVBatchRequestsIssued, sampledQueryFromLog.KvGrpcCalls)
+					require.Equal(t, tc.queryLevelStats.KVTime.Nanoseconds(), sampledQueryFromLog.KvTimeNanos)
+
+					require.Equal(t, tc.queryLevelStats.CPUTime.Nanoseconds(), sampledQueryFromLog.CpuTimeNanos)
+					require.Greater(t, sampledQueryFromLog.PlanLatencyNanos, int64(0))
+					require.Greater(t, sampledQueryFromLog.RunLatencyNanos, int64(0))
+					require.Equal(t, int64(0), sampledQueryFromLog.IdleLatencyNanos)
+					require.Greater(t, sampledQueryFromLog.ServiceLatencyNanos, int64(0))
+
 					BytesReadRe := regexp.MustCompile("\"BytesRead\":[0-9]*")
 					RowsReadRe := regexp.MustCompile("\"RowsRead\":[0-9]*")
 					if tc.expectedRead {

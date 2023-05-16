@@ -2930,6 +2930,28 @@ contains common SQL event/execution details.
 | `TotalScanRowsWithoutForecastsEstimate` | Total number of rows read by all scans in the query, as estimated by the optimizer without using forecasts. | no |
 | `NanosSinceStatsForecasted` | The greatest quantity of nanoseconds that have passed since the forecast time (or until the forecast time, if it is in the future, in which case it will be negative) for any table with forecasted stats scanned by this query. | no |
 | `Indexes` | The list of indexes used by this query. | no |
+| `CpuTimeNanos` | Collects the cumulative CPU time spent executing SQL operations in nanoseconds. Currently, it is only collected for statements without mutations that have a vectorized plan. | no |
+| `KvGrpcCalls` | The number of grpc calls done to get data form KV nodes | no |
+| `KvTimeNanos` | Cumulated time spent waiting for a KV request. This includes disk IO time and potentially network time (if any of the keys are not local). | no |
+| `ServiceLatencyNanos` | The time to service the query, from start of parse to end of execute. | no |
+| `OverheadLatencyNanos` | The difference between service latency and the sum of parse latency + plan latency + run latency . | no |
+| `RunLatencyNanos` | The time to run the query and fetch or compute the result rows. | no |
+| `PlanLatencyNanos` | The time to transform the AST into a logical query plan. | no |
+| `IdleLatencyNanos` | The time between statement executions in a transaction | no |
+| `ParseLatencyNanos` | The time to transform the SQL string into an abstract syntax tree (AST). | no |
+| `MvccStepCount` | StepCount collects the number of times the iterator moved forward or backward over the DB's underlying storage keyspace. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `MvccStepCountInternal` | StepCountInternal collects the number of times the iterator moved forward or backward over LSM internal keys. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `MvccSeekCount` | SeekCount collects the number of times the iterator moved to a specific key/value pair in the DB's underlying storage keyspace. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `MvccSeekCountInternal` | SeekCountInternal collects the number of times the iterator moved to a specific LSM internal key. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `MvccBlockBytes` | BlockBytes collects the bytes in the loaded SSTable data blocks. For details, see pebble.InternalIteratorStats. | no |
+| `MvccBlockBytesInCache` | BlockBytesInCache collects the subset of BlockBytes in the block cache. For details, see pebble.InternalIteratorStats. | no |
+| `MvccKeyBytes` | KeyBytes collects the bytes in keys that were iterated over. For details, see pebble.InternalIteratorStats. | no |
+| `MvccValueBytes` | ValueBytes collects the bytes in values that were iterated over. For details, see pebble.InternalIteratorStats. | no |
+| `MvccPointCount` | PointCount collects the count of point keys iterated over. For details, see pebble.InternalIteratorStats. | no |
+| `MvccPointsCoveredByRangeTombstones` | PointsCoveredByRangeTombstones collects the count of point keys that were iterated over that were covered by range tombstones. For details, see pebble.InternalIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
+| `MvccRangeKeyCount` | RangeKeyCount collects the count of range keys encountered during iteration. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
+| `MvccRangeKeyContainedPoints` | RangeKeyContainedPoints collects the count of point keys encountered within the bounds of a range key. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
+| `MvccRangeKeySkippedPoints` | RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that were skipped during iteration due to range-key masking. For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
 
 
 #### Common fields
