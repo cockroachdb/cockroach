@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -52,7 +52,7 @@ func newWriter(codec keys.SQLCodec, id IDGen, table catalog.TableDescriptor) *Wr
 // WriteRangeLogEvent implements kvserver.RangeLogWriter. It writes the event
 // to the system.rangelog table in the provided transaction.
 func (s *Writer) WriteRangeLogEvent(
-	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
+	ctx context.Context, runner kvserver.DBOrTxn, event kvserverpb.RangeLogEvent,
 ) error {
 	ts, err := tree.MakeDTimestampTZ(event.Timestamp, time.Microsecond)
 	if err != nil {
@@ -80,11 +80,20 @@ func (s *Writer) WriteRangeLogEvent(
 		}
 		args[5] = tree.NewDString(string(infoBytes))
 	}
-	ba := txn.NewBatch()
+	ba := runner.NewBatch()
 	if err := s.w.Insert(ctx, ba, false /* kvTrace */, args[:]...); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(
 			err, "failed to encode rangelog index entries",
 		)
 	}
-	return txn.Run(ctx, ba)
+	// TODO(mira #104075): Logging to system.rangelog is async by default, which
+	// means a range change might succeed but the logging might fail. We should
+	// log a *structured* event to KV_DISTRIBUTION here as an auxiliary logging
+	// mechanism. Currently, we can't use kvserver.RangeLogEvent directly as a
+	// structured event because that will introduce an unnecessary dependency from
+	// eventpb to kvserver and roachpb. We should either refactor the
+	// RangeLogEvent struct, or create a new struct for structured logging.
+	return runner.Run(ctx, ba)
 }
+
+var _ kvserver.RangeLogWriter = &Writer{}
