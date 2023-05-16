@@ -70,7 +70,21 @@ RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/' WITH skip_localities
 ----
 
 exec-sql
+ALTER DATABASE d SET PRIMARY REGION 'eu-central-1';
+ALTER DATABASE d DROP REGION 'us-east-1';
+ALTER DATABASE d DROP REGION 'us-west-1';
+ALTER DATABASE d ADD REGION 'eu-north-1';
+----
+
+exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database_backup/' WITH skip_localities_check, new_db_name='d_new';
+----
+
+exec-sql
+ALTER DATABASE d_new SET PRIMARY REGION 'eu-central-1';
+ALTER DATABASE d_new DROP REGION 'us-east-1';
+ALTER DATABASE d_new DROP REGION 'us-west-1';
+ALTER DATABASE d_new ADD REGION 'eu-north-1';
 ----
 
 exec-sql
