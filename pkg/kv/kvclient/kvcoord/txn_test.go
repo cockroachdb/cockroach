@@ -786,49 +786,6 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// Test that in some write too old situations (i.e. when the server returns the
-// WriteTooOld flag set and then the client fails to refresh), intents are
-// properly left behind.
-func TestTxnLeavesIntentBehindAfterWriteTooOldError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	s := createTestDB(t)
-	defer s.Stop()
-
-	key := []byte("b")
-
-	txn := s.DB.NewTxn(ctx, "test txn")
-	// Perform a Get so that the transaction can't refresh.
-	_, err := txn.Get(ctx, key)
-	require.NoError(t, err)
-
-	// Another guy writes at a higher timestamp.
-	require.NoError(t, s.DB.Put(ctx, key, "newer value"))
-
-	// Now we write and expect a WriteTooOld.
-	intentVal := []byte("test")
-	err = txn.Put(ctx, key, intentVal)
-	require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
-	require.Regexp(t, "WriteTooOld", err)
-
-	// Check that the intent was left behind.
-	b := kv.Batch{}
-	b.Header.ReadConsistency = kvpb.READ_UNCOMMITTED
-	b.Get(key)
-	require.NoError(t, s.DB.Run(ctx, &b))
-	getResp := b.RawResponse().Responses[0].GetGet()
-	require.NotNil(t, getResp)
-	intent := getResp.IntentValue
-	require.NotNil(t, intent)
-	intentBytes, err := intent.GetBytes()
-	require.NoError(t, err)
-	require.Equal(t, intentVal, intentBytes)
-
-	// Cleanup.
-	require.NoError(t, txn.Rollback(ctx))
-}
-
 // Test that a transaction can be used after a CPut returns a
 // ConditionFailedError. This is not generally allowed for other errors, but
 // ConditionFailedError is special.

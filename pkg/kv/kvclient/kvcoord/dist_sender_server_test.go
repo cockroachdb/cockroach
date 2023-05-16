@@ -3211,13 +3211,13 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			priorReads: true,
-			// The Put to "c" will fail, failing the parallel commit and forcing a
-			// parallel commit auto-retry and preemptive client-side refresh.
+			// The Put to "c" will fail, failing the parallel commit with an error and
+			// forcing a client-side refresh and auto-retry of the full batch.
 			allIsoLevels: &expect{
 				expServerRefresh:               false,
 				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: false,
-				expParallelCommitAutoRetry:     true,
+				expClientAutoRetryAfterRefresh: true,
+				expParallelCommitAutoRetry:     false,
 			},
 		},
 		{

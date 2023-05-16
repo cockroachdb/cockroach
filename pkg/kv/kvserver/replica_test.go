@@ -4722,30 +4722,31 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 
 		// Send a batch with put & end txn.
 		ba := &kvpb.BatchRequest{}
+		ba.Txn = txn
 		ba.CanForwardReadTimestamp = noPriorReads
 		put := putArgs(key, []byte("value"))
 		et, _ := endTxnArgs(txn, true)
 		et.LockSpans = []roachpb.Span{{Key: key, EndKey: nil}}
-		ba.Header = kvpb.Header{Txn: txn}
-		ba.Add(&put)
-		ba.Add(&et)
+		ba.Add(&put, &et)
 		assignSeqNumsForReqs(txn, &put, &et)
 		_, pErr := tc.Sender().Send(ctx, ba)
-		if pErr != nil {
-			t.Fatalf("unexpected error: %s", pErr)
-		}
+		require.Nil(t, pErr)
 
 		// Replay the request. It initially tries to execute as a 1PC transaction,
 		// but will fail because of a WriteTooOldError that pushes the transaction.
-		// This forces the txn to execute normally, at which point it fails because
-		// the EndTxn is detected to be a duplicate.
+		// This forces the txn to execute normally, at which point it fails, either
+		// because of a WriteTooOld error, if it cannot server-side refresh, or
+		// because the EndTxn is detected to be a duplicate, if it can server-side
+		// refresh to avoid the WriteTooOld error. Either way, it fails.
 		_, pErr = tc.Sender().Send(ctx, ba)
-		if pErr == nil {
-			t.Fatalf("expected error, got nil")
+		require.NotNil(t, pErr)
+		var expRx string
+		if noPriorReads {
+			expRx = `TransactionAbortedError\(ABORT_REASON_RECORD_ALREADY_WRITTEN_POSSIBLE_REPLAY\)`
+		} else {
+			expRx = `WriteTooOldError`
 		}
-		require.Regexp(t,
-			`TransactionAbortedError\(ABORT_REASON_RECORD_ALREADY_WRITTEN_POSSIBLE_REPLAY\)`,
-			pErr)
+		require.Regexp(t, expRx, pErr)
 	})
 }
 
@@ -4823,7 +4824,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	// Send a put for keyA.
 	ba := &kvpb.BatchRequest{}
 	put := putArgs(key, []byte("value"))
-	ba.Header = kvpb.Header{Txn: txn}
+	ba.Header = kvpb.Header{Txn: txn, CanForwardReadTimestamp: true}
 	ba.Add(&put)
 	assignSeqNumsForReqs(txn, &put)
 	if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
@@ -4872,10 +4873,12 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	}
 
 	// Now replay put for key A; this succeeds as there's nothing to detect
-	// the replay. The WriteTooOld flag will be set though.
+	// the replay and server-side refreshes were permitted. The transaction's
+	// timestamp will be pushed due to the server-side refresh.
+	preReplayTxn := ba.Txn.Clone()
 	br, pErr = tc.Sender().Send(ctx, ba)
 	require.NoError(t, pErr.GoError())
-	require.True(t, br.Txn.WriteTooOld)
+	require.True(t, preReplayTxn.ReadTimestamp.Less(br.Txn.ReadTimestamp))
 
 	// Intent should have been created.
 	gArgs := getArgs(key)

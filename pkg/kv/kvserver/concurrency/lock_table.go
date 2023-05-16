@@ -1184,7 +1184,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		l.reservation.mu.Lock()
 		lockWaiters = append(lockWaiters, lock.Waiter{
 			WaitingTxn:   l.reservation.txn,
-			ActiveWaiter: true,
+			ActiveWaiter: false,
 			Strength:     lock.Exclusive,
 			WaitDuration: now.Sub(l.reservation.mu.curLockWaitStart),
 		})
@@ -1197,7 +1197,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		readerGuard.mu.Lock()
 		lockWaiters = append(lockWaiters, lock.Waiter{
 			WaitingTxn:   readerGuard.txn,
-			ActiveWaiter: false,
+			ActiveWaiter: true, // readers always actively wait at a lock
 			Strength:     lock.None,
 			WaitDuration: now.Sub(readerGuard.mu.curLockWaitStart),
 		})
