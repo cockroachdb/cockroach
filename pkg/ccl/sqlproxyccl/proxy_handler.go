@@ -388,6 +388,15 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		return clientErr
 	}
 
+	// Validate the incoming connection and ensure that the cluster name
+	// matches the tenant's. This avoids malicious actors from attempting to
+	// connect to the cluster using just the tenant ID.
+	if err := handler.validateConnection(ctx, tenID, clusterName); err != nil {
+		// We do not need to log here as validateConnection already logs.
+		updateMetricsAndSendErrToClient(err, fe.Conn, handler.metrics)
+		return err
+	}
+
 	errConnection := make(chan error, 1)
 	removeListener, err := handler.aclWatcher.ListenForDenied(
 		ctx,
@@ -408,15 +417,12 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		},
 	)
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			err = withCode(
-				errors.Newf("cluster %s-%d not found", clusterName, tenID.ToUint64()),
-				codeParamsRoutingFailed,
-			)
-		} else {
-			log.Errorf(ctx, "connection blocked by access control list: %v", err)
-			err = withCode(errors.New("connection refused"), codeProxyRefusedConnection)
-		}
+		// It is possible that we get a NotFound error here because of a race
+		// with a deleting tenant. This case is rare, and we'll just return a
+		// "connection refused" error. The next time they connect, they will
+		// get a "not found" error.
+		log.Errorf(ctx, "connection blocked by access control list: %v", err)
+		err = withCode(errors.New("connection refused"), codeProxyRefusedConnection)
 		updateMetricsAndSendErrToClient(err, fe.Conn, handler.metrics)
 		return err
 	}
@@ -537,6 +543,33 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		handler.metrics.updateForError(err)
 		return err
 	}
+}
+
+// validateRequest validates the incoming connection by ensuring that the SQL
+// connection knows some additional information about the tenant (i.e. the
+// cluster name) before being allowed to connect.
+func (handler *proxyHandler) validateConnection(
+	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
+) error {
+	tenant, err := handler.directoryCache.LookupTenant(ctx, tenantID)
+	if err != nil && status.Code(err) != codes.NotFound {
+		return err
+	}
+	if err == nil {
+		if tenant.ClusterName == "" || tenant.ClusterName == clusterName {
+			return nil
+		}
+		log.Errorf(
+			ctx,
+			"could not validate connection: cluster name '%s' doesn't match expected '%s'",
+			clusterName,
+			tenant.ClusterName,
+		)
+	}
+	return withCode(
+		errors.Newf("cluster %s-%d not found", clusterName, tenantID.ToUint64()),
+		codeParamsRoutingFailed,
+	)
 }
 
 // handleCancelRequest handles a pgwire query cancel request by either
