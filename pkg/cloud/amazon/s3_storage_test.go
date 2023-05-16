@@ -589,3 +589,52 @@ func TestNewClientErrorsOnBucketRegion(t *testing.T) {
 	_, _, err = newClient(ctx, cfg, testSettings)
 	require.Regexp(t, "could not find s3 bucket's region", err)
 }
+
+// TestReadFileAtReturnsSize tests that ReadFileAt returns
+// a cloud.ResumingReader that contains the size of the file.
+func TestReadFileAtReturnsSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	_, err := credentials.NewEnvCredentials().Get()
+	if err != nil {
+		skip.IgnoreLint(t, "No AWS credentials")
+	}
+
+	bucket := os.Getenv("AWS_S3_BUCKET")
+	if bucket == "" {
+		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
+	}
+
+	user := username.RootUserName()
+	ctx := context.Background()
+	testSettings := cluster.MakeTestingClusterSettings()
+	file := "testfile"
+	data := []byte("hello world")
+
+	gsURI := fmt.Sprintf("s3://%s/%s?AUTH=implicit", bucket, "read-file-at-returns-size")
+	conf, err := cloud.ExternalStorageConfFromURI(gsURI, user)
+	require.NoError(t, err)
+	args := cloud.ExternalStorageContext{
+		IOConf:          base.ExternalIODirConfig{},
+		Settings:        testSettings,
+		DB:              nil,
+		Options:         nil,
+		Limiters:        nil,
+		MetricsRecorder: cloud.NilMetrics,
+	}
+	s, err := MakeS3Storage(ctx, args, conf)
+	require.NoError(t, err)
+
+	w, err := s.Writer(ctx, file)
+	require.NoError(t, err)
+
+	_, err = w.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	reader, _, err := s.ReadFile(ctx, file, cloud.ReadOptions{NoFileSize: true})
+	require.NoError(t, err)
+
+	rr, ok := reader.(*cloud.ResumingReader)
+	require.True(t, ok)
+	require.Equal(t, int64(len(data)), rr.Size)
+}
