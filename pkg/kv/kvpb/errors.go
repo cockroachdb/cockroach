@@ -928,11 +928,11 @@ func NewWriteTooOldError(operationTS, actualTS hlc.Timestamp, key roachpb.Key) *
 
 func (e *WriteTooOldError) SafeFormatError(p errors.Printer) (next error) {
 	if len(e.Key) > 0 {
-		p.Printf("WriteTooOldError: write for key %s at timestamp %s too old; wrote at %s",
+		p.Printf("WriteTooOldError: write for key %s at timestamp %s too old; must write at or above %s",
 			e.Key, e.Timestamp, e.ActualTimestamp)
 		return nil
 	}
-	p.Printf("WriteTooOldError: write at timestamp %s too old; wrote at %s",
+	p.Printf("WriteTooOldError: write at timestamp %s too old; must write at or above %s",
 		e.Timestamp, e.ActualTimestamp)
 	return nil
 }

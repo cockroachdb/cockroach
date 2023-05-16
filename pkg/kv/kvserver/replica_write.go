@@ -667,21 +667,13 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, g, st, ui)
 
-		var success bool
-		if pErr == nil {
-			wto := br.Txn != nil && br.Txn.WriteTooOld
-			success = !wto
-		} else {
-			success = false
-		}
-
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
-		if success || retries > 0 {
+		if pErr == nil || retries > 0 {
 			break
 		}
 		// If we can retry, set a higher batch timestamp and continue.
-		if !canDoServersideRetry(ctx, pErr, ba, br, g, deadline) {
+		if !canDoServersideRetry(ctx, pErr, ba, g, deadline) {
 			r.store.Metrics().WriteEvaluationServerSideRetryFailure.Inc(1)
 			break
 		} else {
