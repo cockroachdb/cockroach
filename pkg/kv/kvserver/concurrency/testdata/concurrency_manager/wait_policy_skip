@@ -113,7 +113,8 @@ num=4
  lock: "k3"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
  lock: "k4"
-  res: req: 4, txn: 00000004-0000-0000-0000-000000000000, ts: 13.000000000,0, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000004-0000-0000-0000-000000000000
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Skip hits lock sequences

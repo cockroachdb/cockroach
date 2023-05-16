@@ -212,7 +212,8 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  res: req: 3, txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 3, txn: 00000002-0000-0000-0000-000000000000
 
 on-lock-acquired req=req2 key=k
 ----
@@ -321,7 +322,8 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  res: req: 4, txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000003-0000-0000-0000-000000000000
 
 on-lock-acquired req=req3 key=k
 ----
@@ -478,7 +480,8 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  res: req: 6, txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 6, txn: 00000002-0000-0000-0000-000000000000
 
 on-lock-acquired req=req2 key=k
 ----
@@ -697,7 +700,8 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  res: req: 10, txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 10, txn: 00000002-0000-0000-0000-000000000000
 
 on-lock-acquired req=req2 key=k
 ----
@@ -854,7 +858,8 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  res: req: 12, txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 12, txn: 00000002-0000-0000-0000-000000000000
 
 on-lock-acquired req=req2 key=k
 ----

@@ -60,10 +60,16 @@ const (
 	// However, sequencing information inside the lockTable is mostly discarded.
 	waitElsewhere
 
-	// waitSelf indicates that a different requests from the same transaction
-	// has a conflicting reservation. See the comment about "Reservations" in
-	// lockState. This request should sit tight and wait for a new notification
-	// without pushing anyone.
+	// waitSelf indicates that a different request from the same transaction has
+	// claimed the lock already. This request should sit tight and wait for a new
+	// notification without pushing anyone.
+	//
+	// By definition, the lock cannot be held at this point -- if it were, another
+	// request from the same transaction would not be in the lock's wait-queues,
+	// obviating the need for this state.
+	//
+	// TODO(arul): this waitSelf state + claimantTxn stuff won't extend well to
+	// multiple lock holders. See TODO in informActiveWaiters.
 	waitSelf
 
 	// waitQueueMaxLengthExceeded indicates that the request attempted to enter a
@@ -214,8 +220,8 @@ type lockTableImpl struct {
 	// Example 2:
 	// - Same as example 1 but lock at A is held by txn3 and lock at B is held
 	//   by txn4.
-	// - Lock at A is released so req1 acquires the reservation at A and starts
-	//   waiting at B.
+	// - Lock at A is released so req1 claims the lock at A and starts waiting at
+	//   B.
 	// - It is unfair for req1 to wait behind req2 at B. The sequence number
 	//   assigned to req1 and req2 will restore the fairness by making req1
 	//   wait before req2.
@@ -228,11 +234,11 @@ type lockTableImpl struct {
 	//   It proceeds to evaluation and acquires the lock at A for txn2 and then
 	//   the request is done. The lock is still held.
 	// - req3 (from txn3) wants to write to A and B. It queues at A.
-	// - txn2 releases A. req3 is in the front of the queue at A and gets the
-	//   reservation and starts waiting at B behind req1.
-	// - txn0 releases B. req1 gets the reservation at B and does another scan
-	//   and adds itself to the queue at A, behind req3 which holds the
-	//   reservation at A.
+	// - txn2 releases A. req3 is in the front of the queue at A so it claims the
+	//   lock and starts waiting at B behind req1.
+	// - txn0 releases B. req1 gets to claim the lock at B and does another scan
+	//   and adds itself to the queue at A, behind req3 which holds the claim for
+	//   A.
 	// Now in the queues for A and B req1 is behind req3 and vice versa and
 	// this deadlock has been created entirely due to the lock table's behavior.
 	// TODO(nvanbenschoten): use an atomic.Uint64.
@@ -348,8 +354,8 @@ func (t *lockTableImpl) setMaxLocks(maxLocks int64) {
 //     lockTable is mostly discarded.
 //
 //   - The waitSelf state is a rare state when a different request from the same
-//     transaction has a reservation. See the comment about "Reservations" in
-//     lockState.
+//     transaction has claimed the lock. See the comment about the concept of
+//     claiming a lock on claimantTxn().
 //
 //   - The waitQueueMaxLengthExceeded state is used to indicate that the request
 //     was rejected because it attempted to enter a lock wait-queue as a writer
@@ -374,14 +380,14 @@ type lockTableGuardImpl struct {
 	// the lockStates in this snapshot may have been removed from
 	// lockTableImpl. Additionally, it is possible that there is a new lockState
 	// for the same key. This can result in various harmless anomalies:
-	// - the request may hold a reservation on a lockState that is no longer
+	// - the request may hold a claim on a lockState that is no longer
 	//   in the tree. When it next does a scan, it will either find a new
 	//   lockState where it will compete or none. Both lockStates can be in
 	//   the mu.locks map, which is harmless.
-	// - the request may wait behind a reservation holder that is not the
-	//   lock holder. This could cause a delay in pushing the lock holder.
-	//   This is not a correctness issue (the whole system is not deadlocked)
-	//   and we expect will not be a real performance issue.
+	// - the request may wait behind a transaction that has claimed a lock but is
+	//   yet to acquire it. This could cause a delay in pushing the lock holder.
+	//   This is not a correctness issue (the whole system is not deadlocked) and we
+	//   expect will not be a real performance issue.
 	//
 	// TODO(sbhola): experimentally evaluate the lazy queueing of the current
 	// implementation, in comparison with eager queueing. If eager queueing
@@ -410,9 +416,9 @@ type lockTableGuardImpl struct {
 	// release etc.) may cause the request to no longer need to wait at this
 	// key. It then needs to continue iterating through spans to find the next
 	// key to wait at (we don't want to wastefully start at the beginning since
-	// this request probably has a reservation at the contended keys there): sa,
-	// ss, index, key collectively track the current position to allow it to
-	// continue iterating.
+	// this request probably has a claim at the contended keys there): str, index,
+	// and key collectively track the current position to allow it to continue
+	// iterating.
 
 	// The key for the lockState.
 	key roachpb.Key
@@ -436,11 +442,7 @@ type lockTableGuardImpl struct {
 		// locks for which this request is in the list of queued{Readers,Writers}.
 		// For writers, this includes both active and inactive waiters. For readers,
 		// there's no such thing as inactive readers, so by definition the request
-		// must be an active waiter. This map also includes locks for which the
-		// request holds a reservation.
-		//
-		// TODO(arul): this reservation comment will be stale when we remove the
-		// concept of reservations.
+		// must be an active waiter.
 		//
 		// TODO(sbhola): investigate whether the logic to maintain this locks map
 		// can be simplified so it doesn't need to be adjusted by various lockState
@@ -460,8 +462,8 @@ type lockTableGuardImpl struct {
 		// signaled, but what the state should be has not been computed. The call
 		// to CurState() needs to compute that current state. Deferring the
 		// computation makes the waiters do this work themselves instead of making
-		// the call to release/update locks or release reservations do this work
-		// (proportional to number of waiters).
+		// the call to release locks or update locks or remove the request's claims
+		// on (unheld) locks. This is proportional to number of waiters.
 		mustFindNextLockAfter bool
 	}
 	// Locks to resolve before scanning again. Doesn't need to be protected by
@@ -613,24 +615,21 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 		// The lock is empty but has not yet been deleted.
 		return false, nil
 	}
-	if !l.holder.locked {
-		// Key reserved.
+	conflictingTxn, held := l.claimantTxn()
+	assert(conflictingTxn != nil, "non-empty lockState with no claimant transaction")
+	if !held {
 		if strength == lock.None {
-			// Non-locking reads only care about locks, not reservations.
+			// Non-locking reads only care about locks that are held.
 			return false, nil
 		}
-		if g.isSameTxn(l.reservation.txn) {
-			// Already reserved by this txn.
+		if g.isSameTxn(conflictingTxn) {
 			return false, nil
 		}
-		// "If the key is reserved, nil is returned."
+		// If the key is claimed but the lock isn't held (yet), nil is returned.
 		return true, nil
 	}
 	// Key locked.
 	txn, ts := l.getLockHolder()
-	if txn == nil {
-		panic("non-empty lockState with nil lock holder and nil reservation")
-	}
 	if strength == lock.None && g.ts.Less(ts) {
 		// Non-locking read below lock's timestamp.
 		return false, nil
@@ -665,6 +664,7 @@ func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
 	return g.txn != nil && g.txn.ID == txn.ID
 }
 
+// TODO(arul): get rid of this once tryActiveWait is cleaned up.
 func (g *lockTableGuardImpl) isSameTxnAsReservation(ws waitingState) bool {
 	return !ws.held && g.isSameTxn(ws.txn)
 }
@@ -755,16 +755,19 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 // writer is typically waiting in an active state, i.e., the
 // lockTableGuardImpl.key refers to this lockState. However, there are
 // multiple reasons that can cause a writer to be an inactive waiter:
-//   - Breaking of reservations (see the comment on reservations below, in
-//     lockState) can cause a writer to be an inactive waiter.
+//   - The first transactional writer is able to claim a lock when it is
+//     released. Doing so entails the writer being marked inactive.
+//   - It is able to claim a lock that was previously claimed by a request with
+//     a higher sequence number. In such cases, the writer adds itself to the
+//     head of the queue as an inactive waiter and proceeds with its scan.
 //   - A discovered lock causes the discoverer to become an inactive waiter
 //     (until it scans again).
 //   - A lock held by a finalized txn causes the first waiter to be an inactive
 //     waiter.
 //
-// The first case above (breaking reservations) only occurs for transactional
-// requests, but the other cases can happen for both transactional and
-// non-transactional requests.
+// The first two cases above (claiming an unheld lock) only occur for
+// transactional requests, but the other cases can happen for both transactional
+// and non-transactional requests.
 type queuedGuard struct {
 	guard  *lockTableGuardImpl
 	active bool // protected by lockState.mu
@@ -819,6 +822,10 @@ type lockState struct {
 	// - !holder.locked => waitingReaders.Len() == 0. That is, readers wait
 	//   only if the lock is held. They do not wait for a reservation.
 	// - If reservation != nil, that request is not in queuedWriters.
+	//
+	// TODO(arul): These invariants are stale now that we don't have reservations.
+	// However, we'll replace this structure soon with what's proposed in the
+	// SHARED locks RFC, at which point there will be new invariants altogether.
 
 	// Information about whether the lock is held and the holder. We track
 	// information for each durability level separately since a transaction can
@@ -851,144 +858,6 @@ type lockState struct {
 }
 
 type lockWaitQueue struct {
-	// Reservations:
-	//
-	// A not-held lock can be "reserved". A reservation is just a claim that
-	// prevents multiple requests from racing when the lock is released. A
-	// reservation by req2 can be broken by req1 is req1 has a smaller seqNum
-	// than req2. Only requests that specify SpanReadWrite for a key can make
-	// reservations. This means a reservation can only be made when the lock is
-	// not held, since the reservation (which can acquire an Exclusive lock) and
-	// the lock holder (which is an Exclusive lock) conflict.
-	//
-	// Read reservations are not permitted due to the complexities discussed in
-	// the review for #43740. Additionally, reads do not queue for their turn at
-	// all -- they are held in the waitingReaders list while the lock is held
-	// and removed when the lock is not released, so they race with
-	// reservations. Let us consider scenarios where reads did wait in the same
-	// queue: the lock could be held or reserved by a write at ts=20, followed
-	// by a waiting writer at ts=18, writer at ts=10, reader at ts=12. That
-	// reader is waiting not because of a conflict with the holder, or reserver,
-	// or the first waiter, but because there is a waiter ahead of it which it
-	// conflicts with. This introduces more complexity in tracking who this
-	// reader should push. Also consider a scenario where a reader did not wait
-	// in the queue and waited on the side like in waitingReaders but acquired a
-	// read reservation (together with other readers) when the lock was
-	// released. Ignoring the unfairness of this, we can construct a deadlock
-	// scenario with request req1 with seqnum 1 and req2 with seqnum 2 where
-	// req1 and req2 both want to write at one key and so get ordered by their
-	// seqnums but at another key req2 wants to read and req1 wants to write and
-	// since req2 does not wait in the queue it acquires a read reservation
-	// before req1. See the discussion at the end of this comment section on how
-	// the behavior will extend when we start supporting Shared and Update
-	// locks.
-	//
-	// Non-transactional requests can do both reads and writes but cannot be
-	// depended on since they don't have a transaction that can be pushed.
-	// Therefore they not only do not acquire locks, but cannot make reservations.
-	// The non-reservation for reads is already covered in the previous
-	// paragraph. For non-transactional writes, the request waits in the queue
-	// with other writers. The difference occurs:
-	// - when it gets to the front of the queue and there is no lock holder
-	//   or reservation: instead of acquiring the reservation it removes
-	//   itself from the lockState and proceeds to the next lock. If it
-	//   does not need to wait for any more locks and manages to acquire
-	//   latches before those locks are acquired by some other request, it
-	//   will evaluate.
-	// - when deciding to wait at a lock: if the lock has a reservation with
-	//   a sequence num higher than this non-transactional request it will
-	//   ignore that reservation. Note that ignoring such reservations is
-	//   safe since when this non-transactional request is holding latches
-	//   those reservation holders cannot be holding latches, so they cannot
-	//   conflict.
-	//
-	// Multiple requests from the same transaction wait independently, including
-	// the situation where one of the requests has a reservation and the other
-	// is waiting (currently this can only happen if both requests are doing
-	// SpanReadWrite). Making multiple requests from the same transaction
-	// jointly hold the reservation introduces code complexity since joint
-	// reservations can be partially broken (see deadlock example below), and is
-	// not necessarily fair to other requests. Additionally, if req1 from txn1
-	// is holding a a reservation and req2 from txn1 is waiting, they must
-	// conflict wrt latches and cannot evaluate concurrently so there isn't a
-	// benefit to joint reservations. However, if one of the requests acquires
-	// the lock the other request no longer needs to wait on this lock. This
-	// situation motivates the waitSelf state.
-	//
-	// Deadlock example if joint reservations were supported and we did not
-	// allow partial breaking of such reservations:
-	//
-	// - Keys are A, B, C, D.
-	// - Key D is locked by some random txn.
-	// - req1 from txn1 writes A, B, D. It waits at D.
-	// - Some other request from some random txn that writes C arrives,
-	//   evaluates, and locks C.
-	// - req2 from txn2 that writes A, C. It waits at C.
-	// - Some other request from some random txn that writes A arrives,
-	//   evaluates, and locks A.
-	// - req3 from txn1 that writes A, C. It waits at A. Note that req1 and req3
-	//   are from the same txn.
-	// - A is unlocked. req3 reserves A and waits at C behind req2.
-	// - B is locked by some random txn.
-	// - D is unlocked. req1 reserves D and proceeds to scan again and finds A
-	//   is reserved by req3 which is the same txn so becomes a joint
-	//   reservation holder at A.
-	// - Since B is locked, req1 waits at B.
-	// - C is unlocked. req2 reserves C. It scans and finds req1+req3 holding
-	//   the joint reservation at A. If it queues behind this joint reservation
-	//   we have the following situation:
-	//        reservation   waiter
-	//   A     req1+req3     req2
-	//   C       req2        req3
-	//   This is a deadlock caused by the lock table unless req2 partially
-	//   breaks the reservation at A.
-	//
-	// Extension for Shared and Update locks:
-	// There are 3 aspects to consider: holders; reservers; the dependencies
-	// that need to be captured when waiting.
-	//
-	// - Holders: only shared locks are compatible with themselves, so there can
-	//   be one of (a) no holder (b) multiple shared lock holders, (c) one
-	//   exclusive holder, (d) one upgrade holder. Non-locking reads will
-	//   wait in waitingReaders for only an incompatible exclusive holder.
-	//
-	// - Reservers: This follows the same pattern as holders. Non-locking reads
-	//   do not wait on reservers.
-	//
-	// - Queueing and dependencies: All potential lockers and non-transactional
-	//   writers will wait in the same queue. A sequence of consecutive requests
-	//   that have the potential to acquire a shared lock will jointly reserve
-	//   that shared lock. Such requests cannot jump ahead of requests with a
-	//   lower seqnum just because there is currently a shared lock reservation
-	//   (this can cause lockTable induced deadlocks). Such joint reservations
-	//   can be partially broken by a waiter desiring an exclusive or upgrade
-	//   lock. Like the current code, non-transactional writes will wait for
-	//   reservations that have a lower sequence num, but not make their own
-	//   reservation. Additionally, they can partially break joint reservations.
-	//
-	//   Reservations that are (partially or fully) broken cause requests to
-	//   reenter the queue as inactive waiters. This is no different than the
-	//   current behavior. Each request can specify the same key in spans for
-	//   ReadOnly, ReadShared, ReadUpgrade, ReadWrite. The spans will be
-	//   iterated over in decreasing order of strength, to only wait at a lock
-	//   at the highest strength (this is similar to the current behavior using
-	//   accessDecreasingStrength).
-	//
-	//   For dependencies, a waiter desiring an exclusive or upgrade lock always
-	//   conflicts with the holder(s) or reserver(s) so that is the dependency
-	//   that will be captured. A waiter desiring a shared lock may encounter a
-	//   situation where it does not conflict with the holder(s) or reserver(s)
-	//   since those are also shared lockers. In that case it will depend on the
-	//   first waiter since that waiter must be desiring a lock that is
-	//   incompatible with a shared lock.
-	//
-	// TODO(arul): The paragraph above still talks about declaring access on keys
-	// in terms of SpanAccess instead of lock strength. Switch over this verbiage
-	// to reference locking/non-locking requests once we support multiple lock
-	// strengths and add support for joint reservations.
-
-	reservation *lockTableGuardImpl
-
 	// TODO(sbhola): There are a number of places where we iterate over these
 	// lists looking for something, as described below. If some of these turn
 	// out to be inefficient, consider better data-structures. One idea is that
@@ -1009,13 +878,103 @@ type lockWaitQueue struct {
 	// Waiters: An active waiter needs to be notified about changes in who it is
 	// waiting for.
 
-	// List of *queuedGuard. A subset of these are actively waiting. If
-	// non-empty, either the lock is held or there is a reservation.
+	// List of *queueGuard. The list is maintained in increasing order of sequence
+	// numbers. This helps ensure some degree of fairness as requests are released
+	// from the head of the queue. Typically, this happens when the associated
+	// lock is released.
+	//
+	// When a lock is not held, the head of the list should be comprised of an
+	// inactive, transactional writer (if the list is non-empty). Keeping its
+	// position as an inactive waiter at the head of the queue serves as a claim
+	// to prevent other concurrent requests (with higher sequence numbers) from
+	// barging in front of it. This is important for two reasons:
+	//
+	// 1. It helps ensure some degree of fairness, as sequence numbers are a proxy
+	// for arrival order.
+	// 2. Perhaps more importantly, enforcing this ordering helps prevent
+	// range-local lock table deadlocks. This is because all locks aren't known
+	// upfront to the lock table (as uncontended, replicated locks are only
+	// discovered during evaluation). This means that no total ordering of lock
+	// acquisition is enforced by the lock table -- using sequence numbers to
+	// break ties allows us to prevent deadlocks that would have arisen otherwise.
+	//
+	// Conversely, a request with a lower sequence number is allowed to barge in
+	// front of an inactive waiter with a higher sequence number if the lock is
+	// not held. This can be thought of as "breaking the claim" that the higher
+	// sequence numbered request tried to claim. As both these requests sequence
+	// through the lock table one of them will win the race. This is fine, as the
+	// request that wins the race can only evaluate while holding latches and the
+	// two requests must conflict on latches. As a result they're guaranteed to be
+	// isolated. We don't concern ourselves with the possible fairness issue if
+	// the higher sequence number wins the race.
+	//
+	// Non-locking readers are held in a separate list to the list of
+	// waitingReaders, and they make no claims on unheld locks like writers do.
+	// They race with the transactional writer that has made the claim.
+	//
+	// Similarly, non-transactional requests make no claims either, regardless of
+	// their read/write status. Non-transactional writes wait in the queuedWriters
+	// list along with transactional writers. The difference is as follows:
+	// 1. When a lock transitions from held to released, the head of the queue
+	// that is made of non-transactional writes is cleared in one swoop (until we
+	// hit the first transactional writer or the queue is entirely drained). This
+	// means non-transactional writers race with a transactional writer's claim,
+	// like read requests.
+	// 2. When deciding whether to wait at an unheld lock or not, a
+	// non-transactional writer will check how its sequence number compares to the
+	// head of the queuedWriters list. If its lower, it'll proceed; otherwise,
+	// it'll wait.
+	//
+	// Multiple requests from the same transaction wait independently, including
+	// the situation where one of the requests is an inactive waiter at the head
+	// of the queue. However, if the inactive waiter manages to sequence,
+	// evaluate, and acquire the lock, other requests from the same transaction
+	// are allowed to be released.
+	//
+	// The behavior of only one transactional writer being allowed to make a claim
+	// by marking itself as inactive when a lock transitions from held to free is
+	// subject to change. As we introduce support for multiple locking strengths,
+	// and in particular locking strengths that are compatible with each other
+	// (read: shared locks), one could imagine a scheme where the head of the
+	// queuedWriters (s/queuedWriters/queuedLockers/g) that is compatible with
+	// each other is marked as inactive and allowed to proceed. A "joint claim".
+	//
+	// Once we introduce joint claims, we'll also need to support partially
+	// breaking such claims. This means that a request that was previously
+	// marked as inactive may have to come back to a lock and actively wait on it.
+	// Here's a sketch of what a deadlock could look like if this wasn't
+	// supported:
+	//
+	// - Keys are A, B, C, D.
+	// - Key D is locked by some random txn.
+	// - req1 from txn1 writes A, B, D. It waits at D.
+	// - Some other request from some random txn that writes C arrives,
+	//   evaluates, and locks C.
+	// - req2 from txn2 that writes A, C. It waits at C.
+	// - Some other request from some random txn that writes A arrives,
+	//   evaluates, and locks A.
+	// - req3 from txn1 that writes A, C. It waits at A. Note that req1 and req3
+	//   are from the same txn.
+	// - A is unlocked. req3 claims A and waits at C behind req2.
+	// - B is locked by some random txn.
+	// - D is unlocked. req1 claims D and proceeds to scan again and finds A
+	//   is claimed by req3 which is the same txn so becomes a joint
+	//   claim holder at A.
+	// - Since B is locked, req1 waits at B.
+	// - C is unlocked. req2 claims C. It scans and finds req1+req3 holding
+	//   the joint claim at A. If it queues behind this joint claim
+	//   we have the following situation:
+	//           claim      waiter
+	//   A     req1+req3     req2
+	//   C       req2        req3
+	//   This is a deadlock caused by the lock table unless req2 partially
+	//   breaks the claim at A.
 	queuedWriters list.List
 
 	// List of *lockTableGuardImpl. All of these are actively waiting. If
 	// non-empty, the lock must be held. By definition these cannot be in
-	// waitSelf state since that state is only used when there is a reservation.
+	// waitSelf state since that requests don't conflict with locks held by their
+	// transaction.
 	waitingReaders list.List
 
 	// If there is a non-empty set of active waiters that are not waitSelf, then
@@ -1057,12 +1016,6 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, finalizedTxnCache *txnC
 		sb.SafeString("  empty\n")
 		return
 	}
-	writeResInfo := func(sb *redact.StringBuilder, txn *enginepb.TxnMeta, ts hlc.Timestamp) {
-		// TODO(sbhola): strip the leading 0 bytes from the UUID string since tests are assigning
-		// UUIDs using a counter and makes this output more readable.
-		sb.Printf("txn: %v, ts: %v, seq: %v\n",
-			redact.Safe(txn.ID), redact.Safe(ts), redact.Safe(txn.Sequence))
-	}
 	writeHolderInfo := func(sb *redact.StringBuilder, txn *enginepb.TxnMeta, ts hlc.Timestamp) {
 		sb.Printf("  holder: txn: %v, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(ts))
 		first := true
@@ -1102,10 +1055,7 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, finalizedTxnCache *txnC
 		sb.SafeString("\n")
 	}
 	txn, ts := l.getLockHolder()
-	if txn == nil {
-		sb.Printf("  res: req: %d, ", l.reservation.seqNum)
-		writeResInfo(sb, l.reservation.txn, l.reservation.ts)
-	} else {
+	if txn != nil {
 		writeHolderInfo(sb, txn, ts)
 	}
 	// TODO(sumeer): Add an optional `description string` field to Request and
@@ -1151,14 +1101,22 @@ func (l *lockState) collectLockStateInfo(
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// Don't include locks that have neither lock holders, nor reservations, nor
+	// Don't include locks that have neither lock holders, nor claims, nor
 	// waiting readers/writers.
 	if l.isEmptyLock() {
 		return false, roachpb.LockStateInfo{}
 	}
 
-	// Filter out locks without waiting readers/writers unless explicitly requested.
-	if !includeUncontended && l.waitingReaders.Len() == 0 && l.queuedWriters.Len() == 0 {
+	// Filter out locks without waiting readers/writers unless explicitly
+	// requested.
+	//
+	// TODO(arul): This should consider the active/inactive status of all queued
+	// writers. If all waiting writers are inactive (and there are no waiting
+	// readers either), we should consider the lock to be uncontended. File an
+	// issue about this.
+	if !includeUncontended && l.waitingReaders.Len() == 0 &&
+		(l.queuedWriters.Len() == 0 ||
+			(l.queuedWriters.Len() == 1 && !l.queuedWriters.Front().Value.(*queuedGuard).active)) {
 		return false, roachpb.LockStateInfo{}
 	}
 
@@ -1181,25 +1139,9 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 	}
 
 	waiterCount := l.waitingReaders.Len() + l.queuedWriters.Len()
-	hasReservation := l.reservation != nil && l.reservation.txn != nil
-	if hasReservation {
-		waiterCount++
-	}
 	lockWaiters := make([]lock.Waiter, 0, waiterCount)
 
-	// Consider the reservation as the "first waiter" (albeit on an unheld lock).
-	if hasReservation {
-		l.reservation.mu.Lock()
-		lockWaiters = append(lockWaiters, lock.Waiter{
-			WaitingTxn:   l.reservation.txn,
-			ActiveWaiter: false,
-			Strength:     lock.Exclusive,
-			WaitDuration: now.Sub(l.reservation.mu.curLockWaitStart),
-		})
-		l.reservation.mu.Unlock()
-	}
-
-	// Next, add waiting readers before writers as they should run first.
+	// Add waiting readers before writers as they should run first.
 	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
 		readerGuard := e.Value.(*lockTableGuardImpl)
 		readerGuard.mu.Lock()
@@ -1259,30 +1201,34 @@ func (l *lockState) addToMetrics(m *LockTableMetrics, now time.Time) {
 // Called for a write request when there is a reservation. Returns true iff it
 // succeeds.
 // REQUIRES: l.mu is locked.
+// TODO(arul): get rid of this function when refactoring tryActiveWait.
 func (l *lockState) tryBreakReservation(seqNum uint64) bool {
-	if l.reservation.seqNum > seqNum {
-		qg := &queuedGuard{
-			guard:  l.reservation,
-			active: false,
-		}
-		l.queuedWriters.PushFront(qg)
-		l.reservation = nil
-		return true
-	}
-	return false
+	qg := l.queuedWriters.Front().Value.(*queuedGuard)
+	return qg.guard.seqNum > seqNum
 }
 
-// Informs active waiters about reservation or lock holder. The reservation
-// may have changed so this needs to fix any inconsistencies wrt waitSelf and
-// waitForDistinguished states.
+// informActiveWaiters informs active waiters about the transaction that has
+// claimed the lock. The claimant transaction may have changed, so there may be
+// inconsistencies with waitSelf and waitForDistinguished states that need
+// changing.
 // REQUIRES: l.mu is locked.
 func (l *lockState) informActiveWaiters() {
+	if l.waitingReaders.Len() == 0 && l.queuedWriters.Len() == 0 {
+		return // no active waiters to speak of; early return
+	}
 	waitForState := waitingState{
 		kind:          waitFor,
 		key:           l.key,
 		queuedWriters: l.queuedWriters.Len(),
 		queuedReaders: l.waitingReaders.Len(),
 	}
+	// TODO(arul): This is entirely busted once we have multiple lock holders.
+	// In such cases, there may be a request waiting not on the head of the
+	// queue, but because there is a waiter with a lower sequence number that it
+	// is incompatible with. In such cases, its this guy it should be pushing.
+	// However, if we naively plugged things into the current structure, it would
+	// either sit tight (because its waiting for itself) or, worse yet, push a
+	// transaction it's actually compatible with!
 	waitForState.txn, waitForState.held = l.claimantTxn()
 	findDistinguished := false
 	// We need to find a (possibly new) distinguished waiter if either:
@@ -1385,7 +1331,14 @@ func (l *lockState) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
 	if lockHolderTxn, _ := l.getLockHolder(); lockHolderTxn != nil {
 		return lockHolderTxn, true
 	}
-	return l.reservation.txn, false
+	if l.queuedWriters.Len() == 0 {
+		panic("no queued writers or lock holder; no one should be waiting on the lock")
+	}
+	qg := l.queuedWriters.Front().Value.(*queuedGuard)
+	if qg.active || qg.guard.txn == nil {
+		panic("first queued writer should be transactional and inactive")
+	}
+	return qg.guard.txn, false
 }
 
 // releaseWritersFromTxn removes all waiting writers for the lockState that are
@@ -1406,15 +1359,25 @@ func (l *lockState) releaseWritersFromTxn(txn *enginepb.TxnMeta) {
 // When the active waiters have shrunk and the distinguished waiter has gone,
 // try to make a new distinguished waiter if there is at least 1 active
 // waiter.
+//
+// This function should only be called if the claimant transaction has
+// not changed. This is asserted below. If the claimant transaction has changed,
+// we not only need to find a new distinguished waiter, we also need to update
+// the waiting state for other actively waiting requests as well; as such,
+// informActiveWaiters is more appropriate.
+//
 // REQUIRES: l.mu is locked.
 func (l *lockState) tryMakeNewDistinguished() {
 	var g *lockTableGuardImpl
+	claimantTxn, _ := l.claimantTxn()
 	if l.waitingReaders.Len() > 0 {
 		g = l.waitingReaders.Front().Value.(*lockTableGuardImpl)
 	} else if l.queuedWriters.Len() > 0 {
 		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
-			if qg.active && (l.reservation == nil || !qg.guard.isSameTxn(l.reservation.txn)) {
+			// Only requests actively waiting at this lock should be considered for
+			// the distinguished distinction.
+			if qg.active && !qg.guard.isSameTxn(claimantTxn) {
 				g = qg.guard
 				break
 			}
@@ -1423,6 +1386,9 @@ func (l *lockState) tryMakeNewDistinguished() {
 	if g != nil {
 		l.distinguishedWaiter = g
 		g.mu.Lock()
+		assert(
+			g.mu.state.txn.ID == claimantTxn.ID, "tryMakeNewDistinguished called with new claimant txn",
+		)
 		g.mu.state.kind = waitForDistinguished
 		// The rest of g.state is already up-to-date.
 		g.notify()
@@ -1430,22 +1396,23 @@ func (l *lockState) tryMakeNewDistinguished() {
 	}
 }
 
-// Returns true iff the lockState is empty, i.e., there is no lock holder or
-// reservation.
+// Returns true iff the lockState is empty, i.e., there is no lock holder and no
+// waiters.
 // REQUIRES: l.mu is locked.
 func (l *lockState) isEmptyLock() bool {
-	if !l.holder.locked && l.reservation == nil {
-		for i := range l.holder.holder {
-			if !l.holder.holder[i].isEmpty() {
-				panic("lockState with !locked but non-zero lockHolderInfo")
-			}
-		}
-		if l.waitingReaders.Len() > 0 || l.queuedWriters.Len() > 0 {
-			panic("lockState with waiters but no holder or reservation")
-		}
-		return true
+	if l.holder.locked {
+		return false // lock is held
 	}
-	return false
+	// The lock isn't held. Sanity check the lock state is sane:
+	// 1. Lock holder information should be zero-ed out.
+	// 2. There should be no waiting readers.
+	for i := range l.holder.holder {
+		assert(l.holder.holder[i].isEmpty(), "lockState with !locked but non-zero lockHolderInfo")
+	}
+	assert(l.waitingReaders.Len() == 0, "lockState with waiting readers but no holder")
+	// Determine if the lock is empty or not by checking the list of queued
+	// writers.
+	return l.queuedWriters.Len() == 0
 }
 
 // assertEmptyLock asserts that the lockState is empty. This condition must hold
@@ -1712,26 +1679,30 @@ func (l *lockState) tryActiveWait(
 		}
 	}
 
-	if l.reservation != nil {
-		if l.reservation == g {
-			// Already reserved by this request.
+	if !l.holder.locked && l.queuedWriters.Len() > 0 {
+		qg := l.queuedWriters.Front().Value.(*queuedGuard)
+		if qg.guard == g {
+			// Already claimed by this request.
 			return false, false
 		}
-		// A non-transactional write request never makes or breaks reservations, and
-		// only waits for a reservation if the reservation has a lower seqNum. Note
-		// that `str == lock.None && lockHolderTxn == nil` was already checked
-		// above.
-		if g.txn == nil && l.reservation.seqNum > g.seqNum {
-			// Reservation is held by a request with a higher seqNum and g is a
-			// non-transactional request. Ignore the reservation.
+		// A non-transactional write request never makes or breaks claims, and only
+		// waits for a claim if the claim holder has a lower seqNum. Note that `str
+		// == lock.None && lockHolderTxn == nil` was already checked above.
+		if g.txn == nil && qg.guard.seqNum > g.seqNum {
+			// Claimed by a request with a higher seqNum and g is a non-transactional
+			// request. Ignore the claim.
 			return false, false
 		}
 	}
 
 	// Incompatible with whoever is holding lock or reservation.
 
-	if l.reservation != nil && str == lock.Intent && l.tryBreakReservation(g.seqNum) {
-		l.reservation = g
+	if !l.holder.locked && l.queuedWriters.Len() > 0 && str == lock.Intent && l.tryBreakReservation(g.seqNum) {
+		qg := &queuedGuard{
+			guard:  g,
+			active: false,
+		}
+		l.queuedWriters.PushFront(qg)
 		g.mu.Lock()
 		g.mu.locks[l] = struct{}{}
 		g.mu.Unlock()
@@ -1869,17 +1840,31 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, str lock.Strengt
 	// Lock is not empty.
 	lockHolderTxn, lockHolderTS := l.getLockHolder()
 	if lockHolderTxn == nil {
-		// Reservation holders are non-conflicting.
+		// Transactions that have claimed the lock, but have not acquired it yet,
+		// are considered non-conflicting.
 		//
-		// When optimistic evaluation holds latches, there cannot be a conflicting
-		// reservation holder that is also holding latches (reservation holder
-		// without latches can happen due to lock discovery). So after this
-		// optimistic evaluation succeeds and releases latches, the reservation
-		// holder will acquire latches and scan the lock table again. When
-		// optimistic evaluation does not hold latches, it will check for
-		// conflicting latches before declaring success and a reservation holder
-		// that holds latches will be discovered, and the optimistic evaluation
-		// will retry as pessimistic.
+		// Optimistic evaluation may call into this function with or without holding
+		// latches. It's worth considering both these cases separately:
+		//
+		// 1. If Optimistic evaluation is holding latches, then there cannot be a
+		// conflicting request that has claimed (but not acquired) the lock that is
+		// also holding latches. A request could have claimed this lock, discovered
+		// a different lock, and dropped its latches before waiting in this second
+		// lock's wait queue. In such cases, the request that claimed this lock will
+		// have to re-acquire and re-scan the lock table after this optimistic
+		// evaluation request drops its latches.
+		//
+		// 2. If optimistic evaluation does not hold latches, then it will check for
+		// conflicting latches before declaring success. A request that claimed this
+		// lock, did not discover any other locks, and proceeded to evaluation would
+		// thus conflict on latching with our request going through optimistic
+		// evaluation. This will be detected, and the request will have to retry
+		// pessimistically.
+		//
+		// All this is to say that if we found a claimed, but not yet acquired lock,
+		// we can treat it as non-conflicting. It'll either be detected as a true
+		// conflict when we check for conflicting latches, or the request that
+		// claimed the lock will know what happened and what to do about it.
 		return true
 	}
 	if g.isSameTxn(lockHolderTxn) {
@@ -2026,46 +2011,33 @@ func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 		}
 		return nil
 	}
-	// Not already held, so may have been reserved by this request. There is also
-	// the possibility that some other request has broken this reservation because
-	// of a concurrent release but that is harmless since this request is
-	// holding latches and has proceeded to evaluation.
-	if l.reservation != nil {
-		if l.reservation.txn.ID != acq.Txn.ID {
-			// Reservation is broken.
-			qg := &queuedGuard{
-				guard:  l.reservation,
-				active: false,
-			}
-			l.queuedWriters.PushFront(qg)
-		} else {
-			// Else, reservation is not broken, or broken by a different request
-			// from the same transaction. In the latter case, both requests are not
-			// actively waiting at this lock. We don't know which is in the queue
-			// and which is holding the reservation but it does not matter. Both
-			// will have their requestGuardImpl.mu.locks updated and neither will be
-			// in the queue at the end of this method.
-			l.reservation.mu.Lock()
-			delete(l.reservation.mu.locks, l)
-			l.reservation.mu.Unlock()
-		}
-		if l.waitingReaders.Len() > 0 {
-			panic("lockTable bug")
-		}
-	} else {
-		if l.queuedWriters.Len() > 0 || l.waitingReaders.Len() > 0 {
-			panic("lockTable bug")
-		}
+
+	// NB: The lock isn't held, so the request trying to acquire the lock must be
+	// an (inactive) queued writer in the lock's wait queues. Typically, we expect
+	// this to be the first queued writer; the list of queued writers is
+	// maintained in lock table arrival order. When a lock transitions from held
+	// to released, the first of these writers is marked as inactive and allowed
+	// to proceed. This is done to uphold fairness between concurrent lock
+	// acquirers. However, in some rare cases, this may not be true -- i.e., the
+	// request trying to  acquire the lock here may not be the first queued
+	// writer. This does not violate any correctness properties. This is because
+	// the request must be holding latches, as it has proceeded to evaluation for
+	// it to be calling into this method. As such, it is isolated from the first
+	// inactive queued writer.
+
+	l.releaseWritersFromTxn(&acq.Txn)
+
+	// Sanity check that there aren't any waiting readers on this lock. There
+	// shouldn't be any, as the lock wasn't held.
+	if l.waitingReaders.Len() > 0 {
+		panic("lockTable bug")
 	}
-	l.reservation = nil
+
 	l.holder.locked = true
 	l.holder.holder[acq.Durability].txn = &acq.Txn
 	l.holder.holder[acq.Durability].ts = acq.Txn.WriteTimestamp
 	l.holder.holder[acq.Durability].seqs = append([]enginepb.TxnSeq(nil), acq.Txn.Sequence)
 	l.holder.startTime = clock.PhysicalTime()
-
-	// If there are waiting requests from the same txn, they no longer need to wait.
-	l.releaseWritersFromTxn(&acq.Txn)
 
 	// Inform active waiters since lock has transitioned to held.
 	l.informActiveWaiters()
@@ -2104,20 +2076,6 @@ func (l *lockState) discoveredLock(
 		holder.txn = txn
 		holder.ts = ts
 		holder.seqs = append(holder.seqs, txn.Sequence)
-	}
-
-	// Queue the existing reservation holder. Note that this reservation
-	// holder may not be equal to g due to two reasons (a) the reservation
-	// of g could have been broken even though g is holding latches (see
-	// the comment in acquireLock()), (b) g may be a non-transactional
-	// request (read or write) that can ignore the reservation.
-	if l.reservation != nil {
-		qg := &queuedGuard{
-			guard:  l.reservation,
-			active: false,
-		}
-		l.queuedWriters.PushFront(qg)
-		l.reservation = nil
 	}
 
 	switch accessStrength {
@@ -2216,15 +2174,6 @@ func (l *lockState) tryClearLock(force bool) bool {
 		}
 	}
 	l.clearLockHolder()
-
-	// Clear reservation.
-	if l.reservation != nil {
-		g := l.reservation
-		g.mu.Lock()
-		delete(g.mu.locks, l)
-		g.mu.Unlock()
-		l.reservation = nil
-	}
 
 	// Clear waitingReaders.
 	for e := l.waitingReaders.Front(); e != nil; {
@@ -2431,11 +2380,12 @@ func (l *lockState) removeReader(e *list.Element) bool {
 	return false
 }
 
-// A request known to this lockState is done. The request could be a reserver,
-// or waiting reader or writer. Acquires l.mu. Note that there is the
-// possibility of a race and the g may no longer be known to l, which we treat
-// as a noop (this race is allowed since we order l.mu > g.mu). Returns whether
-// the lockState can be garbage collected.
+// A request known to this lockState is done. The request could be a waiting
+// reader or writer. Note that there is the possibility of a race and the g may
+// no longer be known to l, which we treat as a noop (this race is allowed since
+// we order l.mu > g.mu). Returns whether the lockState can be garbage
+// collected.
+//
 // Acquires l.mu.
 func (l *lockState) requestDone(g *lockTableGuardImpl) (gc bool) {
 	l.mu.Lock()
@@ -2449,29 +2399,31 @@ func (l *lockState) requestDone(g *lockTableGuardImpl) (gc bool) {
 	delete(g.mu.locks, l)
 	g.mu.Unlock()
 
-	doneRemoval := false
-	if l.reservation == g {
-		l.reservation = nil
-		l.maybeReleaseFirstTransactionalWriter()
-		doneRemoval = true
-	}
-
 	// May be in queuedWriters or waitingReaders.
 	distinguishedRemoved := false
-	if !doneRemoval {
-		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
-			qg := e.Value.(*queuedGuard)
-			if qg.guard == g {
-				l.queuedWriters.Remove(e)
-				if qg.guard == l.distinguishedWaiter {
-					distinguishedRemoved = true
-					l.distinguishedWaiter = nil
-				}
-				doneRemoval = true
-				break
+	doneRemoval := false
+	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
+		qg := e.Value.(*queuedGuard)
+		if qg.guard == g {
+			l.queuedWriters.Remove(e)
+			if qg.guard == l.distinguishedWaiter {
+				distinguishedRemoved = true
+				l.distinguishedWaiter = nil
 			}
+			doneRemoval = true
+			break
 		}
 	}
+
+	if !l.holder.locked && doneRemoval {
+		// The head of the list of waiting writers should always be an inactive,
+		// transactional writer if the lock isn't held. That may no longer be true
+		// if the guy we removed above was serving this purpose; the call to
+		// maybeReleaseFirstTransactionalWriter should fix that. And if it wasn't,
+		// it'll be a no-op.
+		l.maybeReleaseFirstTransactionalWriter()
+	}
+
 	if !doneRemoval {
 		for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
 			gg := e.Value.(*lockTableGuardImpl)
@@ -2535,16 +2487,14 @@ func (l *lockState) tryFreeLockOnReplicatedAcquire() bool {
 	return true
 }
 
-// The lock has transitioned from locked to unlocked. There could be waiters,
-// but there cannot be a reservation.
+// The lock has transitioned from locked to unlocked. There could be waiters.
 //
 // REQUIRES: l.mu is locked.
+// TODO(arul): rename this + improve comment here to better reflect the state
+// transitions this function performs.
 func (l *lockState) lockIsFree() (gc bool) {
 	if l.holder.locked {
 		panic("called lockIsFree on lock with holder")
-	}
-	if l.reservation != nil {
-		panic("called lockIsFree on lock with reservation")
 	}
 
 	// All waiting readers don't need to wait here anymore.
@@ -2558,8 +2508,8 @@ func (l *lockState) lockIsFree() (gc bool) {
 	l.maybeReleaseFirstTransactionalWriter()
 
 	// We've already cleared waiting readers above. The lock can be released if
-	// there is no reservation or waiting writers.
-	if l.queuedWriters.Len() == 0 && l.reservation == nil {
+	// there are no waiting writers, active or otherwise.
+	if l.queuedWriters.Len() == 0 {
 		l.assertEmptyLock()
 		return true
 	}
@@ -2608,27 +2558,24 @@ func (l *lockState) maybeReleaseFirstTransactionalWriter() {
 		return // no transactional writer
 	}
 
-	// First waiting writer (it must be transactional) gets the reservation.
+	// Check if the first (transactional) writer is active, and if it is, mark
+	// it as inactive. The call to doneActivelyWaitingAtLock should nudge it to
+	// pick up its scan from where it left off.
 	e := l.queuedWriters.Front()
 	qg := e.Value.(*queuedGuard)
 	g := qg.guard
-	l.reservation = g
-	// TODO(arul): Even though we're removing this writer from the list, we do so
-	// directly without calling into removeWriter. This is because we don't want
-	// to modify the g.mu.locks bookkeeping when giving this request the
-	// reservation. This is temporary -- once we remove the concept of
-	// reservations, we'll no longer be removing the request from the
-	// queuedWriters list.
-	l.queuedWriters.Remove(e)
 	if qg.active {
+		qg.active = false // mark as inactive
 		if g == l.distinguishedWaiter {
+			// We're only clearing hte distinguishedWaiter for now; a new one will be
+			// selected below in the call to informActiveWaiters.
 			l.distinguishedWaiter = nil
 		}
 		g.mu.Lock()
 		g.doneActivelyWaitingAtLock()
 		g.mu.Unlock()
 	}
-	// Else inactive waiter and is waiting elsewhere.
+	// Else the waiter is already inactive.
 
 	// Tell the active waiters who they are waiting for.
 	l.informActiveWaiters()
