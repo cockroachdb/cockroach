@@ -292,6 +292,11 @@ func (db *DB) Context() DBContext {
 	return db.ctx
 }
 
+// NewBatch creates a new empty batch.
+func (db *DB) NewBatch() *Batch {
+	return &Batch{}
+}
+
 // NewDB returns a new DB.
 func NewDB(
 	actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock, stopper *stop.Stopper,

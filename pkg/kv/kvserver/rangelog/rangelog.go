@@ -17,12 +17,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,7 +53,7 @@ func newWriter(codec keys.SQLCodec, id IDGen, table catalog.TableDescriptor) *Wr
 // WriteRangeLogEvent implements kvserver.RangeLogWriter. It writes the event
 // to the system.rangelog table in the provided transaction.
 func (s *Writer) WriteRangeLogEvent(
-	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
+	ctx context.Context, runner kvserver.DBOrTxn, event kvserverpb.RangeLogEvent,
 ) error {
 	ts, err := tree.MakeDTimestampTZ(event.Timestamp, time.Microsecond)
 	if err != nil {
@@ -80,11 +81,14 @@ func (s *Writer) WriteRangeLogEvent(
 		}
 		args[5] = tree.NewDString(string(infoBytes))
 	}
-	ba := txn.NewBatch()
+	ba := runner.NewBatch()
 	if err := s.w.Insert(ctx, ba, false /* kvTrace */, args[:]...); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(
 			err, "failed to encode rangelog index entries",
 		)
 	}
-	return txn.Run(ctx, ba)
+	log.KvDistribution.Infof(ctx, "logging RangeLogEvent %v to system.rangelog", event)
+	return runner.Run(ctx, ba)
 }
+
+var _ kvserver.RangeLogWriter = &Writer{}
