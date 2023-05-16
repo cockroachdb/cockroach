@@ -818,7 +818,6 @@ var specs = []stmtSpec{
 			"func_as":                     "'SCONST'",
 			"non_reserved_word_or_sconst": "'SQL'",
 			"'DEFAULT'":                   "",
-			"'SETOF'":                     "",
 			"'='":                         "",
 			"a_expr":                      ""},
 		nosplit: true,
