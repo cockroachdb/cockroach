@@ -34,6 +34,7 @@ message Function {
   enum Language {
     UNKNOWN_LANGUAGE = 0;
     SQL = 1;
+    PLPGSQL = 2;
   }
 
   message Param {

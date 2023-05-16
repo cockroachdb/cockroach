@@ -24,6 +24,11 @@ type PLpgSQLStatement interface {
 	GetLineNo() int
 	GetStmtID() uint
 	plpgsqlStmt()
+	WalkStmt(PLpgSQLStmtVisitor)
+}
+
+type TaggedPLpgSQLStatement interface {
+	PlpgSQLStatementTag() string
 }
 
 type PLpgSQLStatementImpl struct {
@@ -71,6 +76,17 @@ func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("<NOT DONE YET>")
 }
 
+func (s *PLpgSQLStmtBlock) PlpgSQLStatementTag() string {
+	return "stmt_block"
+}
+
+func (s *PLpgSQLStmtBlock) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+	for _, stmt := range s.Body {
+		stmt.WalkStmt(visitor)
+	}
+}
+
 // stmt_assign
 type PLpgSQLStmtAssign struct {
 	PLpgSQLStatement
@@ -80,8 +96,16 @@ type PLpgSQLStmtAssign struct {
 	Value string
 }
 
+func (s *PLpgSQLStmtAssign) PlpgSQLStatementTag() string {
+	return "stmt_assign"
+}
+
 func (s *PLpgSQLStmtAssign) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("ASSIGN %s := %s\n", s.Var, s.Value))
+}
+
+func (s *PLpgSQLStmtAssign) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
 }
 
 // stmt_if
@@ -115,6 +139,27 @@ func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("<NOT DONE YET>")
 }
 
+func (s *PLpgSQLStmtIf) PlpgSQLStatementTag() string {
+	return "stmt_if"
+}
+
+func (s *PLpgSQLStmtIf) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+
+	for _, thenStmt := range s.ThenBody {
+		thenStmt.WalkStmt(visitor)
+	}
+
+	for _, elseIf := range s.ElseIfList {
+		elseIf.WalkStmt(visitor)
+	}
+
+	for _, elseStmt := range s.ElseBody {
+		elseStmt.WalkStmt(visitor)
+	}
+
+}
+
 type PLpgSQLStmtIfElseIfArm struct {
 	PLpgSQLStatementImpl
 	LineNo int
@@ -128,6 +173,18 @@ func (s *PLpgSQLStmtIfElseIfArm) Format(ctx *tree.FmtCtx) {
 	for _, stmt := range s.Stmts {
 		ctx.WriteString("\t")
 		stmt.Format(ctx)
+	}
+}
+
+func (s *PLpgSQLStmtIfElseIfArm) PlpgSQLStatementTag() string {
+	return "stmt_if_else_if"
+}
+
+func (s *PLpgSQLStmtIfElseIfArm) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+
+	for _, stmt := range s.Stmts {
+		stmt.WalkStmt(visitor)
 	}
 }
 
@@ -164,8 +221,26 @@ func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
 
 }
 
+func (s *PLpgSQLStmtCase) PlpgSQLStatementTag() string {
+	return "stmt_case"
+}
+
+func (s *PLpgSQLStmtCase) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+
+	for _, when := range s.CaseWhenList {
+		when.WalkStmt(visitor)
+	}
+
+	if s.HaveElse {
+		for _, stmt := range s.ElseStmts {
+			stmt.WalkStmt(visitor)
+		}
+	}
+}
+
 type PLpgSQLStmtCaseWhenArm struct {
-	LineNo int
+	PLpgSQLStatementImpl
 	// TODO: Change to PLpgSQLExpr
 	Expr  string
 	Stmts []PLpgSQLStatement
@@ -182,6 +257,18 @@ func (s *PLpgSQLStmtCaseWhenArm) Format(ctx *tree.FmtCtx) {
 	}
 }
 
+func (s *PLpgSQLStmtCaseWhenArm) PlpgSQLStatementTag() string {
+	return "stmt_when"
+}
+
+func (s *PLpgSQLStmtCaseWhenArm) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+
+	for _, stmt := range s.Stmts {
+		stmt.WalkStmt(visitor)
+	}
+}
+
 // stmt_loop
 type PLpgSQLStmtSimpleLoop struct {
 	PLpgSQLStatementImpl
@@ -189,7 +276,18 @@ type PLpgSQLStmtSimpleLoop struct {
 	Body  []PLpgSQLStatement
 }
 
+func (s *PLpgSQLStmtSimpleLoop) PlpgSQLStatementTag() string {
+	return "stmt_simple_loop"
+}
+
 func (s *PLpgSQLStmtSimpleLoop) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtSimpleLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+	for _, stmt := range s.Body {
+		stmt.WalkStmt(visitor)
+	}
 }
 
 // stmt_while
@@ -201,6 +299,17 @@ type PLpgSQLStmtWhileLoop struct {
 }
 
 func (s *PLpgSQLStmtWhileLoop) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtWhileLoop) PlpgSQLStatementTag() string {
+	return "stmt_while"
+}
+
+func (s *PLpgSQLStmtWhileLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+	for _, stmt := range s.Body {
+		stmt.WalkStmt(visitor)
+	}
 }
 
 // stmt_for
@@ -218,6 +327,17 @@ type PLpgSQLStmtForIntLoop struct {
 func (s *PLpgSQLStmtForIntLoop) Format(ctx *tree.FmtCtx) {
 }
 
+func (s *PLpgSQLStmtForIntLoop) PlpgSQLStatementTag() string {
+	return "stmt_for_int_loop"
+}
+
+func (s *PLpgSQLStmtForIntLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+	for _, stmt := range s.Body {
+		stmt.WalkStmt(visitor)
+	}
+}
+
 type PLpgSQLStmtForQueryLoop struct {
 	PLpgSQLStatementImpl
 	Label string
@@ -228,12 +348,32 @@ type PLpgSQLStmtForQueryLoop struct {
 func (s *PLpgSQLStmtForQueryLoop) Format(ctx *tree.FmtCtx) {
 }
 
+func (s *PLpgSQLStmtForQueryLoop) PlpgSQLStatementTag() string {
+	return "stmt_for_query_loop"
+}
+
+func (s *PLpgSQLStmtForQueryLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+	for _, stmt := range s.Body {
+		stmt.WalkStmt(visitor)
+	}
+}
+
 type PLpgSQLStmtForQuerySelectLoop struct {
 	PLpgSQLStmtForQueryLoop
 	Query PLpgSQLExpr
 }
 
 func (s *PLpgSQLStmtForQuerySelectLoop) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtForQuerySelectLoop) PlpgSQLStatementTag() string {
+	return "stmt_query_select_loop"
+}
+
+func (s *PLpgSQLStmtForQuerySelectLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+	s.PLpgSQLStmtForQueryLoop.WalkStmt(visitor)
 }
 
 type PLpgSQLStmtForQueryCursorLoop struct {
@@ -245,6 +385,15 @@ type PLpgSQLStmtForQueryCursorLoop struct {
 func (s *PLpgSQLStmtForQueryCursorLoop) Format(ctx *tree.FmtCtx) {
 }
 
+func (s *PLpgSQLStmtForQueryCursorLoop) PlpgSQLStatementTag() string {
+	return "stmt_for_query_cursor_loop"
+}
+
+func (s *PLpgSQLStmtForQueryCursorLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+	s.PLpgSQLStmtForQueryLoop.WalkStmt(visitor)
+}
+
 type PLpgSQLStmtForDynamicLoop struct {
 	PLpgSQLStmtForQueryLoop
 	Query  PLpgSQLExpr
@@ -252,6 +401,15 @@ type PLpgSQLStmtForDynamicLoop struct {
 }
 
 func (s *PLpgSQLStmtForDynamicLoop) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtForDynamicLoop) PlpgSQLStatementTag() string {
+	return "stmt_for_dyn_loop"
+}
+
+func (s *PLpgSQLStmtForDynamicLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+	s.PLpgSQLStmtForQueryLoop.WalkStmt(visitor)
 }
 
 // stmt_foreach_a
@@ -265,6 +423,18 @@ type PLpgSQLStmtForEachALoop struct {
 }
 
 func (s *PLpgSQLStmtForEachALoop) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtForEachALoop) PlpgSQLStatementTag() string {
+	return "stmt_for_each_a"
+}
+
+func (s *PLpgSQLStmtForEachALoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+
+	for _, stmt := range s.Body {
+		stmt.WalkStmt(visitor)
+	}
 }
 
 // stmt_exit
@@ -282,6 +452,14 @@ func (s *PLpgSQLStmtExit) Format(ctx *tree.FmtCtx) {
 
 }
 
+func (s *PLpgSQLStmtExit) PlpgSQLStatementTag() string {
+	return "stmt_exit"
+}
+
+func (s *PLpgSQLStmtExit) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+}
+
 // stmt_return
 type PLpgSQLStmtReturn struct {
 	PLpgSQLStatementImpl
@@ -290,6 +468,14 @@ type PLpgSQLStmtReturn struct {
 }
 
 func (s *PLpgSQLStmtReturn) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtReturn) PlpgSQLStatementTag() string {
+	return "stmt_return"
+}
+
+func (s *PLpgSQLStmtReturn) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
 }
 
 type PLpgSQLStmtReturnNext struct {
@@ -301,6 +487,14 @@ type PLpgSQLStmtReturnNext struct {
 func (s *PLpgSQLStmtReturnNext) Format(ctx *tree.FmtCtx) {
 }
 
+func (s *PLpgSQLStmtReturnNext) PlpgSQLStatementTag() string {
+	return "stmt_return_next"
+}
+
+func (s *PLpgSQLStmtReturnNext) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+}
+
 type PLpgSQLStmtReturnQuery struct {
 	PLpgSQLStatementImpl
 	Query        PLpgSQLExpr
@@ -309,6 +503,14 @@ type PLpgSQLStmtReturnQuery struct {
 }
 
 func (s *PLpgSQLStmtReturnQuery) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtReturnQuery) PlpgSQLStatementTag() string {
+	return "stmt_return_query"
+}
+
+func (s *PLpgSQLStmtReturnQuery) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
 }
 
 // stmt_raise
@@ -332,6 +534,14 @@ type PLpgSQLStmtRaiseOption struct {
 func (s *PLpgSQLStmtRaiseOption) Format(ctx *tree.FmtCtx) {
 }
 
+func (s *PLpgSQLStmtRaise) PlpgSQLStatementTag() string {
+	return "stmt_raise"
+}
+
+func (s *PLpgSQLStmtRaise) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+}
+
 // stmt_assert
 type PLpgSQLStmtAssert struct {
 	PLpgSQLStatementImpl
@@ -343,6 +553,14 @@ func (s *PLpgSQLStmtAssert) Format(ctx *tree.FmtCtx) {
 	// TODO: Pretty print the assert condition and message
 	ctx.WriteString("ASSERT\n")
 	ctx.WriteString("<NOT DONE YET>\n")
+}
+
+func (s *PLpgSQLStmtAssert) PlpgSQLStatementTag() string {
+	return "stmt_assert"
+}
+
+func (s *PLpgSQLStmtAssert) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
 }
 
 // stmt_execsql
@@ -364,6 +582,14 @@ func (s *PLpgSQLStmtExecSql) Format(ctx *tree.FmtCtx) {
 	}
 	ctx.WriteString("\n")
 	ctx.WriteString("<NOT DONE YET>")
+}
+
+func (s *PLpgSQLStmtExecSql) PlpgSQLStatementTag() string {
+	return "stmt_exec_sql"
+}
+
+func (s *PLpgSQLStmtExecSql) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
 }
 
 // stmt_dynexecute
@@ -393,6 +619,14 @@ func (s *PLpgSQLStmtDynamicExecute) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("<NOT DONE YET>")
 }
 
+func (s *PLpgSQLStmtDynamicExecute) PlpgSQLStatementTag() string {
+	return "stmt_dyn_exec"
+}
+
+func (s *PLpgSQLStmtDynamicExecute) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+}
+
 // stmt_perform
 type PLpgSQLStmtPerform struct {
 	PLpgSQLStatementImpl
@@ -400,6 +634,14 @@ type PLpgSQLStmtPerform struct {
 }
 
 func (s *PLpgSQLStmtPerform) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtPerform) PlpgSQLStatementTag() string {
+	return "stmt_perform"
+}
+
+func (s *PLpgSQLStmtPerform) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
 }
 
 // stmt_call
@@ -419,6 +661,14 @@ func (s *PLpgSQLStmtCall) Format(ctx *tree.FmtCtx) {
 	}
 	ctx.WriteString("<NOT DONE YET>\n")
 
+}
+
+func (s *PLpgSQLStmtCall) PlpgSQLStatementTag() string {
+	return "stmt_call"
+}
+
+func (s *PLpgSQLStmtCall) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
 }
 
 // stmt_getdiag
@@ -455,6 +705,14 @@ func (s *PLpgSQLStmtGetDiagItem) Format(ctx *tree.FmtCtx) {
 }
 
 type PLpgSQLStmtGetDiagItemList []*PLpgSQLStmtGetDiagItem
+
+func (s *PLpgSQLStmtGetDiag) PlpgSQLStatementTag() string {
+	return "stmt_get_diag"
+}
+
+func (s *PLpgSQLStmtGetDiag) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+}
 
 // stmt_open
 type PLpgSQLStmtOpen struct {
@@ -505,6 +763,14 @@ func (s *PLpgSQLStmtOpen) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("\n")
 }
 
+func (s *PLpgSQLStmtOpen) PlpgSQLStatementTag() string {
+	return "stmt_open"
+}
+
+func (s *PLpgSQLStmtOpen) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+}
+
 // stmt_fetch
 // stmt_move (where IsMove = true)
 type PLpgSQLStmtFetch struct {
@@ -521,6 +787,17 @@ type PLpgSQLStmtFetch struct {
 func (s *PLpgSQLStmtFetch) Format(ctx *tree.FmtCtx) {
 }
 
+func (s *PLpgSQLStmtFetch) PlpgSQLStatementTag() string {
+	if s.IsMove {
+		return "stmt_move"
+	}
+	return "stmt_fetch"
+}
+
+func (s *PLpgSQLStmtFetch) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+}
+
 // stmt_close
 type PLpgSQLStmtClose struct {
 	PLpgSQLStatementImpl
@@ -534,6 +811,14 @@ func (s *PLpgSQLStmtClose) Format(ctx *tree.FmtCtx) {
 
 }
 
+func (s *PLpgSQLStmtClose) PlpgSQLStatementTag() string {
+	return "stmt_close"
+}
+
+func (s *PLpgSQLStmtClose) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+}
+
 // stmt_commit
 type PLpgSQLStmtCommit struct {
 	PLpgSQLStatementImpl
@@ -541,6 +826,14 @@ type PLpgSQLStmtCommit struct {
 }
 
 func (s *PLpgSQLStmtCommit) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtCommit) PlpgSQLStatementTag() string {
+	return "stmt_commit"
+}
+
+func (s *PLpgSQLStmtCommit) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
 }
 
 // stmt_rollback
@@ -552,6 +845,14 @@ type PLpgSQLStmtRollback struct {
 func (s *PLpgSQLStmtRollback) Format(ctx *tree.FmtCtx) {
 }
 
+func (s *PLpgSQLStmtRollback) PlpgSQLStatementTag() string {
+	return "stmt_rollback"
+}
+
+func (s *PLpgSQLStmtRollback) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
+}
+
 // stmt_null
 type PLpgSQLStmtNull struct {
 	PLpgSQLStatementImpl
@@ -559,4 +860,12 @@ type PLpgSQLStmtNull struct {
 
 func (s *PLpgSQLStmtNull) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("NULL\n")
+}
+
+func (s *PLpgSQLStmtNull) PlpgSQLStatementTag() string {
+	return "stmt_null"
+}
+
+func (s *PLpgSQLStmtNull) WalkStmt(visitor PLpgSQLStmtVisitor) {
+	visitor.Visit(s)
 }

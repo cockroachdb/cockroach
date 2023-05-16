@@ -4,7 +4,7 @@ CREATE TABLE ab (
   b INT
 )
 
-statement error pgcode 0A000 unimplemented: PL/pgSQL is not yet supported
+statement error pq: plpgsql not supported in user-defined functions
 CREATE FUNCTION populate() RETURNS integer AS $$
 DECLARE
     -- declarations

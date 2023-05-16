@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -392,4 +393,15 @@ func (l *lexer) Error(e string) {
 	err := pgerror.WithCandidateCode(errors.Newf("%s", e), pgcode.Syntax)
 	lastTok := l.lastToken()
 	l.lastError = parser.PopulateErrorDetails(lastTok.id, lastTok.str, lastTok.pos, err, l.in)
+}
+
+// Unimplemented wraps Error, setting lastUnimplementedError.
+func (l *lexer) Unimplemented(feature string) {
+	l.lastError = unimp.New(feature, "this syntax")
+	lastTok := l.lastToken()
+	l.lastError = parser.PopulateErrorDetails(lastTok.id, lastTok.str, lastTok.pos, l.lastError, l.in)
+	l.lastError = &tree.UnsupportedError{
+		Err:         l.lastError,
+		FeatureName: feature,
+	}
 }

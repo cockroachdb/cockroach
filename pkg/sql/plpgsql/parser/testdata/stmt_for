@@ -1,0 +1,42 @@
+parse
+DECLARE
+BEGIN
+FOR counter IN 1..5 LOOP
+  EXECUTE 'any command';
+END LOOP;
+END
+----
+expected parse error: at or near "counter": syntax error: unimplemented: this syntax
+
+
+parse
+DECLARE
+BEGIN
+<<for_loop>>
+FOR counter IN 1..5 LOOP
+  EXECUTE 'any command';
+END LOOP for_loop;
+END
+----
+expected parse error: at or near "for": syntax error: unimplemented: this syntax
+
+parse
+DECLARE
+BEGIN
+FOR counter IN 1..5 LOOP
+  EXECUTE 'any command';
+END LOOP;
+END
+----
+expected parse error: at or near "counter": syntax error: unimplemented: this syntax
+
+parse
+DECLARE
+BEGIN
+FOR yr IN SELECT * FROM generate_series(1,10,1) AS y_(y)
+LOOP
+    RETURN NEXT;
+END LOOP;
+RETURN;
+----
+expected parse error: at or near "yr": syntax error: unimplemented: this syntax

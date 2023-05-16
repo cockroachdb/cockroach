@@ -12,6 +12,7 @@ go_library(
         "extension.go",
         "feature_flags.go",
         "follower_reads.go",
+        "function.go",
         "iam.go",
         "multiregion.go",
         "partitioning.go",
