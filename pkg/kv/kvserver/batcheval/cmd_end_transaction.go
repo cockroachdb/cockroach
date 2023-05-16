@@ -285,13 +285,12 @@ func EndTxn(
 				// The transaction has already been aborted by other.
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
-				desc := cArgs.EvalCtx.Desc()
-				resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+				resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
 				if err != nil {
 					return result.Result{}, err
 				}
 				if err := updateFinalizedTxn(
-					ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
+					ctx, readWriter, cArgs.EvalCtx, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
 				); err != nil {
 					return result.Result{}, err
 				}
@@ -433,13 +432,12 @@ func EndTxn(
 	// we position the transaction record next to the first write of a transaction.
 	// This avoids the need for the intentResolver to have to return to this range
 	// to resolve locks for this transaction in the future.
-	desc := cArgs.EvalCtx.Desc()
-	resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+	resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
 	if err != nil {
 		return result.Result{}, err
 	}
 	if err := updateFinalizedTxn(
-		ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
+		ctx, readWriter, cArgs.EvalCtx, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
 	); err != nil {
 		return result.Result{}, err
 	}
@@ -532,12 +530,11 @@ const lockResolutionBatchByteSize = 4 << 20 // 4 MB.
 // external and are resolved asynchronously with the external locks.
 func resolveLocalLocks(
 	ctx context.Context,
-	desc *roachpb.RangeDescriptor,
 	readWriter storage.ReadWriter,
+	evalCtx EvalContext,
 	ms *enginepb.MVCCStats,
 	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
-	evalCtx EvalContext,
 ) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, _ error) {
 	var resolveAllowance int64 = lockResolutionBatchSize
 	var targetBytes int64 = lockResolutionBatchByteSize
@@ -548,22 +545,22 @@ func resolveLocalLocks(
 		resolveAllowance = 0
 		targetBytes = 0
 	}
-	return resolveLocalLocksWithPagination(ctx, desc, readWriter, ms, args, txn, evalCtx, resolveAllowance, targetBytes)
+	return resolveLocalLocksWithPagination(ctx, readWriter, evalCtx, ms, args, txn, resolveAllowance, targetBytes)
 }
 
 // resolveLocalLocksWithPagination is resolveLocalLocks but with a max key and
 // target bytes limit.
 func resolveLocalLocksWithPagination(
 	ctx context.Context,
-	desc *roachpb.RangeDescriptor,
 	readWriter storage.ReadWriter,
+	evalCtx EvalContext,
 	ms *enginepb.MVCCStats,
 	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
-	evalCtx EvalContext,
 	maxKeys int64,
 	targetBytes int64,
 ) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, _ error) {
+	desc := evalCtx.Desc()
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
 		// which locks are local (note that for a split, we want to use the
@@ -698,6 +695,7 @@ func updateStagingTxn(
 func updateFinalizedTxn(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
+	evalCtx EvalContext,
 	ms *enginepb.MVCCStats,
 	key []byte,
 	args *kvpb.EndTxnRequest,
@@ -705,7 +703,7 @@ func updateFinalizedTxn(
 	recordAlreadyExisted bool,
 	externalLocks []roachpb.Span,
 ) error {
-	if txnAutoGC && len(externalLocks) == 0 {
+	if !evalCtx.EvalKnobs().DisableTxnAutoGC && len(externalLocks) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
 		}
@@ -1409,17 +1407,4 @@ func computeSplitRangeKeyStatsDelta(
 	}
 
 	return ms, nil
-}
-
-// txnAutoGC controls whether Transaction entries are automatically gc'ed upon
-// EndTxn if they only have local locks (which can be resolved synchronously
-// with EndTxn). Certain tests become simpler with this being turned off.
-var txnAutoGC = true
-
-// TestingSetTxnAutoGC is used in tests to temporarily enable/disable
-// txnAutoGC.
-func TestingSetTxnAutoGC(to bool) func() {
-	prev := txnAutoGC
-	txnAutoGC = to
-	return func() { txnAutoGC = prev }
 }
