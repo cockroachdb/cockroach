@@ -119,7 +119,8 @@ release txn=txn2 span=a
 ----
 num=3
  lock: "a"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
  lock: "c"
@@ -137,7 +138,8 @@ print
 ----
 num=3
  lock: "a"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
  lock: "c"
@@ -153,12 +155,13 @@ release txn=txn2 span=c
 ----
 num=3
  lock: "a"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
  lock: "c"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
    queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req1
@@ -173,15 +176,16 @@ print
 ----
 num=3
  lock: "a"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
    waiting readers:
     req: 1, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 1
  lock: "c"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
    queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
 
 # req1 is done waiting.
@@ -190,10 +194,11 @@ release txn=txn2 span=b
 ----
 num=2
  lock: "a"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
- lock: "c"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
    queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req1
@@ -204,7 +209,8 @@ dequeue r=req1
 ----
 num=1
  lock: "c"
-  res: req: 2, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 2, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req2
 ----

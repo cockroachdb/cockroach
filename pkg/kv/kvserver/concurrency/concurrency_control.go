@@ -781,6 +781,8 @@ type lockTableGuard interface {
 	// locked to itself (false is returned). The method is used by requests in
 	// conjunction with the SkipLocked wait policy to determine which keys they
 	// should skip over during evaluation.
+	// TODO(XXX): clean up this comment. Not entirely sure how to talk about this
+	// without the concept of reservations.
 	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
 }
 

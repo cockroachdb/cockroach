@@ -52,7 +52,8 @@ print
 ----
 num=1
  lock: "a"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
 scan r=req1
 ----
@@ -66,21 +67,24 @@ add-discovered r=req1 k=b txn=txn3 consult-finalized-txn-cache=true
 ----
 num=1
  lock: "a"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
 # Txn is finalized and finalizedTxnCache is consulted.
 add-discovered r=req1 k=c txn=txn3 consult-finalized-txn-cache=true
 ----
 num=1
  lock: "a"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
 # Txn is not finalized and finalizedTxnCache is consulted.
 add-discovered r=req1 k=d txn=txn4 consult-finalized-txn-cache=true
 ----
 num=2
  lock: "a"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000004, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
    queued writers:
