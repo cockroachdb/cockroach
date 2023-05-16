@@ -3284,9 +3284,8 @@ func (ex *connExecutor) setTransactionModes(
 			return err
 		}
 	}
-	if modes.Isolation != tree.UnspecifiedIsolation && modes.Isolation != tree.SerializableIsolation {
-		return errors.AssertionFailedf(
-			"unknown isolation level: %s", errors.Safe(modes.Isolation))
+	if modes.Isolation != tree.UnspecifiedIsolation {
+		// TODO(rafi): set the isolation level in the transaction state.
 	}
 	rwMode := modes.ReadWriteMode
 	if modes.AsOf.Expr != nil && asOfTs.IsEmpty() {

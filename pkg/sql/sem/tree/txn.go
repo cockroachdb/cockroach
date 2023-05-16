@@ -25,17 +25,20 @@ type IsolationLevel int
 const (
 	UnspecifiedIsolation IsolationLevel = iota
 	SerializableIsolation
+	ReadCommittedIsolation
 )
 
 var isolationLevelNames = [...]string{
-	UnspecifiedIsolation:  "UNSPECIFIED",
-	SerializableIsolation: "SERIALIZABLE",
+	UnspecifiedIsolation:   "UNSPECIFIED",
+	SerializableIsolation:  "SERIALIZABLE",
+	ReadCommittedIsolation: "READ COMMITTED",
 }
 
 // IsolationLevelMap is a map from string isolation level name to isolation
 // level, in the lowercase format that set isolation_level supports.
 var IsolationLevelMap = map[string]IsolationLevel{
-	"serializable": SerializableIsolation,
+	"serializable":   SerializableIsolation,
+	"read committed": ReadCommittedIsolation,
 }
 
 func (i IsolationLevel) String() string {
