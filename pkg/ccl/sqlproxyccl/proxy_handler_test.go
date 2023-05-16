@@ -434,7 +434,8 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	})
 
 	require.Equal(t, int64(4), s.metrics.SuccessfulConnCount.Count())
-	require.Equal(t, int64(4), s.metrics.ConnectionLatency.TotalCount())
+	count, _ := s.metrics.ConnectionLatency.Total()
+	require.Equal(t, int64(4), count)
 	require.Equal(t, int64(2), s.metrics.AuthFailedCount.Count())
 	require.Equal(t, int64(1), s.metrics.RoutingErrCount.Count())
 }
@@ -575,7 +576,8 @@ func TestProxyTLSClose(t *testing.T) {
 	_ = conn.Close(ctx)
 
 	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
-	require.Equal(t, int64(1), s.metrics.ConnectionLatency.TotalCount())
+	count, _ := s.metrics.ConnectionLatency.Total()
+	require.Equal(t, int64(1), count)
 	require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
 }
 
@@ -682,7 +684,8 @@ func TestInsecureProxy(t *testing.T) {
 	})
 	require.Equal(t, int64(1), s.metrics.AuthFailedCount.Count())
 	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
-	require.Equal(t, int64(1), s.metrics.ConnectionLatency.TotalCount())
+	count, _ := s.metrics.ConnectionLatency.Total()
+	require.Equal(t, int64(1), count)
 }
 
 func TestErroneousFrontend(t *testing.T) {
@@ -791,7 +794,8 @@ func TestProxyRefuseConn(t *testing.T) {
 	_ = te.TestConnectErr(ctx, t, url, codeProxyRefusedConnection, "too many attempts")
 	require.Equal(t, int64(1), s.metrics.RefusedConnCount.Count())
 	require.Equal(t, int64(0), s.metrics.SuccessfulConnCount.Count())
-	require.Equal(t, int64(0), s.metrics.ConnectionLatency.TotalCount())
+	count, _ := s.metrics.ConnectionLatency.Total()
+	require.Equal(t, int64(0), count)
 	require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
 }
 
@@ -1616,10 +1620,10 @@ func TestConnectionMigration(t *testing.T) {
 			proxy.metrics.ConnMigrationErrorRecoverableCount.Count() +
 			proxy.metrics.ConnMigrationErrorFatalCount.Count()
 		require.Equal(t, totalAttempts, proxy.metrics.ConnMigrationAttemptedCount.Count())
-		require.Equal(t, totalAttempts,
-			proxy.metrics.ConnMigrationAttemptedLatency.TotalCount())
-		require.Equal(t, totalAttempts,
-			proxy.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
+		count, _ := proxy.metrics.ConnMigrationAttemptedLatency.Total()
+		require.Equal(t, totalAttempts, count)
+		count, _ = proxy.metrics.ConnMigrationTransferResponseMessageSize.Total()
+		require.Equal(t, totalAttempts, count)
 	}
 
 	transferConnWithRetries := func(t *testing.T, f *forwarder) error {
@@ -1939,12 +1943,12 @@ func TestConnectionMigration(t *testing.T) {
 			f.metrics.ConnMigrationErrorRecoverableCount.Count() +
 			f.metrics.ConnMigrationErrorFatalCount.Count()
 		require.Equal(t, totalAttempts, f.metrics.ConnMigrationAttemptedCount.Count())
-		require.Equal(t, totalAttempts,
-			f.metrics.ConnMigrationAttemptedLatency.TotalCount())
+		count, _ := f.metrics.ConnMigrationAttemptedLatency.Total()
+		require.Equal(t, totalAttempts, count)
 		// Here, we get a transfer timeout in response, so the message size
 		// should not be recorded.
-		require.Equal(t, totalAttempts-1,
-			f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
+		count, _ = f.metrics.ConnMigrationTransferResponseMessageSize.Total()
+		require.Equal(t, totalAttempts-1, count)
 	})
 
 	// All connections should eventually be terminated.

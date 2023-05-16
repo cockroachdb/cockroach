@@ -103,12 +103,12 @@ func (t *TSDB) Scrape(ctx context.Context) {
 
 		switch mtr := val.(type) {
 		case metric.WindowedHistogram:
-			n := float64(mtr.TotalCountWindowed())
 			if _, ok := t.mu.points[name]; !ok {
 				return
 			}
-			t.mu.points[name+"-count"] = append(t.mu.points[name+"-count"], n)
-			avg := mtr.TotalSumWindowed() / n
+			count, _ := mtr.Total()
+			t.mu.points[name+"-count"] = append(t.mu.points[name+"-count"], float64(count))
+			avg := mtr.MeanWindowed()
 			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 				avg = 0
 			}

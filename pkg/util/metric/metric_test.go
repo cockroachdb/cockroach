@@ -280,15 +280,18 @@ func TestNewHistogramRotate(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		// Windowed histogram is initially empty.
 		h.Inspect(func(interface{}) {}) // triggers ticking
-		require.Zero(t, h.TotalSumWindowed())
+		_, sum := h.TotalWindowed()
+		require.Zero(t, sum)
 		// But cumulative histogram has history (if i > 0).
-		require.EqualValues(t, i, h.TotalCount())
+		count, _ := h.Total()
+		require.EqualValues(t, i, count)
 
 		// Add a measurement and verify it's there.
 		{
 			h.RecordValue(12345)
 			f := float64(12345)
-			require.Equal(t, h.TotalSumWindowed(), f)
+			_, wSum := h.TotalWindowed()
+			require.Equal(t, wSum, f)
 		}
 		// Tick. This rotates the histogram.
 		setNow(time.Duration(i+1) * 10 * time.Second)

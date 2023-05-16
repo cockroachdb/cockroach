@@ -1154,6 +1154,8 @@ func checkTxnMetrics(
 func checkTxnMetricsOnce(
 	metrics kvcoord.TxnMetrics, name string, commits, commits1PC, aborts, restarts int64,
 ) error {
+	durationCounts, _ := metrics.Durations.Total()
+	restartsCounts, _ := metrics.Restarts.Total()
 	testcases := []struct {
 		name string
 		a, e int64
@@ -1161,8 +1163,8 @@ func checkTxnMetricsOnce(
 		{"commits", metrics.Commits.Count(), commits},
 		{"commits1PC", metrics.Commits1PC.Count(), commits1PC},
 		{"aborts", metrics.Aborts.Count(), aborts},
-		{"durations", metrics.Durations.TotalCount(), commits + aborts},
-		{"restarts", metrics.Restarts.TotalCount(), restarts},
+		{"durations", durationCounts, commits + aborts},
+		{"restarts", restartsCounts, restarts},
 	}
 
 	for _, tc := range testcases {
@@ -1379,7 +1381,8 @@ func TestTxnDurations(t *testing.T) {
 	// introducing spurious errors or being overly lax.
 	//
 	// TODO(cdo): look into cause of variance.
-	if a, e := hist.TotalCount(), int64(puts); a != e {
+	count, _ := hist.Total()
+	if a, e := count, int64(puts); a != e {
 		t.Fatalf("durations %d != expected %d", a, e)
 	}
 
