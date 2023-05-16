@@ -123,8 +123,20 @@ func (s *Store) LogReplicaChangeTest(
 	desc roachpb.RangeDescriptor,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
+	logAsync bool,
 ) error {
-	return s.logChange(ctx, txn, changeType, replica, desc, reason, details)
+	return s.logChange(ctx, txn, changeType, replica, desc, reason, details, logAsync)
+}
+
+// LogSplitTest adds a fake split event to the rangelog.
+func (s *Store) LogSplitTest(
+	ctx context.Context,
+	txn *kv.Txn,
+	updatedDesc, newDesc roachpb.RangeDescriptor,
+	reason string,
+	logAsync bool,
+) error {
+	return s.logSplit(ctx, txn, updatedDesc, newDesc, reason, logAsync)
 }
 
 // ReplicateQueuePurgatoryLength returns the number of replicas in replicate
