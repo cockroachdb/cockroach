@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
@@ -31,11 +32,15 @@ const noSizeTrigger = 0
 const noMaxBufferSize = 0
 
 func getMockBufferedSync(
-	t *testing.T, maxStaleness time.Duration, sizeTrigger uint64, maxBufferSize uint64,
+	t *testing.T,
+	maxStaleness time.Duration,
+	sizeTrigger uint64,
+	maxBufferSize uint64,
+	fmtType *logconfig.BufferFormat,
 ) (sink *bufferedSink, mock *MockLogSink, cleanup func()) {
 	ctrl := gomock.NewController(t)
 	mock = NewMockLogSink(ctrl)
-	sink = newBufferedSink(mock, maxStaleness, sizeTrigger, maxBufferSize, false /* crashOnAsyncFlushErr */)
+	sink = newBufferedSink(mock, maxStaleness, sizeTrigger, maxBufferSize, false /* crashOnAsyncFlushErr */, fmtType)
 	closer := newBufferedSinkCloser()
 	sink.Start(closer)
 	cleanup = func() {
@@ -55,7 +60,7 @@ func addArgs(f func()) func([]byte, sinkOutputOptions) {
 
 func TestBufferOneLine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, noSizeTrigger, noMaxBufferSize)
+	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, noSizeTrigger, noMaxBufferSize, nil)
 	defer cleanup()
 
 	var wg sync.WaitGroup
@@ -72,7 +77,7 @@ func TestBufferOneLine(t *testing.T) {
 
 func TestBufferSinkBuffers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, noSizeTrigger, noMaxBufferSize)
+	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, noSizeTrigger, noMaxBufferSize, nil)
 	defer cleanup()
 
 	flushC := make(chan struct{})
@@ -99,7 +104,7 @@ func TestBufferSinkBuffers(t *testing.T) {
 
 func TestBufferMaxStaleness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferedSync(t, time.Second /* maxStaleness*/, noSizeTrigger, noMaxBufferSize)
+	sink, mock, cleanup := getMockBufferedSync(t, time.Second /* maxStaleness*/, noSizeTrigger, noMaxBufferSize, nil)
 	defer cleanup()
 
 	var wg sync.WaitGroup
@@ -116,7 +121,7 @@ func TestBufferMaxStaleness(t *testing.T) {
 
 func TestBufferSizeTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, 2 /* sizeTrigger */, noMaxBufferSize)
+	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, 2 /* sizeTrigger */, noMaxBufferSize, nil)
 	defer cleanup()
 
 	var wg sync.WaitGroup
@@ -133,7 +138,7 @@ func TestBufferSizeTrigger(t *testing.T) {
 
 func TestBufferSizeTriggerMultipleFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, 8 /* sizeTrigger */, noMaxBufferSize)
+	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, 8 /* sizeTrigger */, noMaxBufferSize, nil)
 	defer cleanup()
 
 	flush1C := make(chan struct{})
@@ -174,7 +179,7 @@ func TestBufferedSinkCrashOnAsyncFlushErr(t *testing.T) {
 	bufferMaxSize := uint64(20)
 	triggerSize := uint64(10)
 	// Configure a sink to crash on flush errors.
-	sink := newBufferedSink(mock, noMaxStaleness, triggerSize, bufferMaxSize, true /* crashOnAsyncFlushErr */)
+	sink := newBufferedSink(mock, noMaxStaleness, triggerSize, bufferMaxSize, true /* crashOnAsyncFlushErr */, nil)
 	sink.Start(closer)
 
 	crashC := make(chan struct{})
@@ -201,7 +206,7 @@ func TestBufferedSinkCrashOnAsyncFlushErr(t *testing.T) {
 // the flush is done.
 func TestBufferedSinkForceSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, noSizeTrigger, noMaxBufferSize)
+	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, noSizeTrigger, noMaxBufferSize, nil)
 	defer cleanup()
 
 	ch := make(chan struct{})
@@ -237,7 +242,7 @@ func TestBufferedSinkBlockedFlush(t *testing.T) {
 	mock := NewMockLogSink(ctrl)
 	bufferMaxSize := uint64(20)
 	triggerSize := uint64(10)
-	sink := newBufferedSink(mock, noMaxStaleness, triggerSize, bufferMaxSize, false /* crashOnAsyncFlushErr */)
+	sink := newBufferedSink(mock, noMaxStaleness, triggerSize, bufferMaxSize, false /* crashOnAsyncFlushErr */, nil)
 	sink.Start(closer)
 
 	// firstFlushSem will be signaled when the bufferedSink flushes for the first
@@ -315,7 +320,7 @@ func TestBufferedSinkSyncFlush(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mock := NewMockLogSink(ctrl)
-	sink := newBufferedSink(mock, noMaxStaleness, noSizeTrigger, noMaxBufferSize, false /* crashOnAsyncFlushErr */)
+	sink := newBufferedSink(mock, noMaxStaleness, noSizeTrigger, noMaxBufferSize, false /* crashOnAsyncFlushErr */, nil)
 	sink.Start(closer)
 
 	mock.EXPECT().output(gomock.Eq([]byte("a")), gomock.Any())
@@ -329,7 +334,7 @@ func TestBufferCtxDoneFlushesRemainingMsgs(t *testing.T) {
 	closer := newBufferedSinkCloser()
 	ctrl := gomock.NewController(t)
 	mock := NewMockLogSink(ctrl)
-	sink := newBufferedSink(mock, noMaxStaleness, noSizeTrigger, noMaxBufferSize, false /* crashOnAsyncFlushErr */)
+	sink := newBufferedSink(mock, noMaxStaleness, noSizeTrigger, noMaxBufferSize, false /* crashOnAsyncFlushErr */, nil)
 	sink.Start(closer)
 	defer ctrl.Finish()
 
@@ -346,6 +351,45 @@ func TestBufferCtxDoneFlushesRemainingMsgs(t *testing.T) {
 	require.NoError(t, sink.output([]byte("test2"), sinkOutputOptions{}))
 	require.NoError(t, sink.output([]byte("test3"), sinkOutputOptions{}))
 	require.NoError(t, closer.Close(defaultCloserTimeout))
+}
+
+func TestBufferFormatJsonArray(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	fmtType := logconfig.BufferFormat("json-array")
+	sink, mock, cleanup := getMockBufferedSync(t, noMaxStaleness, 8 /* sizeTrigger */, noMaxBufferSize, &fmtType)
+	defer cleanup()
+
+	// Test that the following occurs:
+	// json-array format should prepend '[' and append ']' to the buffer output.
+	// Entries are separated with ",".
+	// It does not modify log entries themselves.
+
+	flush1C := make(chan struct{})
+	flush2C := make(chan struct{})
+
+	gomock.InOrder(
+		mock.EXPECT().
+			output(gomock.Eq([]byte("[test1,test2]")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)}).
+			Do(addArgs(func() { close(flush1C) })),
+		mock.EXPECT().
+			output(gomock.Eq([]byte("[test3]")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)}).
+			Do(addArgs(func() { close(flush2C) })),
+	)
+
+	require.NoError(t, sink.output([]byte("test1"), sinkOutputOptions{}))
+	require.NoError(t, sink.output([]byte("test2"), sinkOutputOptions{}))
+	select {
+	case <-flush1C:
+	case <-time.After(10 * time.Second):
+		t.Fatal("first flush didn't happen")
+	}
+	require.NoError(t, sink.output([]byte("test3"), sinkOutputOptions{extraFlush: true}))
+	select {
+	case <-flush2C:
+	case <-time.After(10 * time.Second):
+		t.Fatal("second flush didn't happen")
+	}
+
 }
 
 type sinkOutputOptionsMatcher struct {
