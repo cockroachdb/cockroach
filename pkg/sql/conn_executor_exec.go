@@ -1311,6 +1311,10 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 		ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
 	}
 
+	if err := ex.validateDbZoneConfigs(ctx); err != nil {
+		return err
+	}
+
 	if err := ex.createJobs(ctx); err != nil {
 		return err
 	}
@@ -1353,6 +1357,33 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 		return err
 	}
 	ex.extraTxnState.descCollection.ReleaseLeases(ctx)
+	return nil
+}
+
+// validateDbZoneConfigs validates zone configs for any modified databases.
+func (ex *connExecutor) validateDbZoneConfigs(ctx context.Context) error {
+	// If no DDL was executed requiring pre-commit validation,
+	// then nothing to do.
+	if !ex.extraTxnState.validateDbZoneConfig {
+		return nil
+	}
+	for _, db := range ex.extraTxnState.descCollection.GetUncommittedDatabases() {
+		regionConfig, err := SynthesizeRegionConfig(
+			ctx, ex.planner.txn, db.GetID(), ex.planner.Descriptors(),
+		)
+		if err != nil {
+			return err
+		}
+		_, err = generateAndValidateZoneConfigForMultiRegionDatabase(ctx,
+			ex.planner.regionsProvider(),
+			ex.planner.execCfg,
+			regionConfig,
+			true, /*validateLocalities*/
+		)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
