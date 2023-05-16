@@ -400,7 +400,7 @@ on-txn-updated txn=txn1 status=aborted
 [5] sequence req1w2: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 0.000s
 [5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [7] sequence req3w2: resolving intent "a" for txn 00000001 with ABORTED status
-[7] sequence req3w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "a" (queuedWriters: 1, queuedReaders: 0)
+[7] sequence req3w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "a" (queuedWriters: 2, queuedReaders: 0)
 [7] sequence req3w2: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 0.000s
 [7] sequence req3w2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [7] sequence req3w2: pushing txn 00000004 to detect request deadlock
@@ -575,7 +575,8 @@ num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
-  res: req: 17, txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 17, txn: 00000004-0000-0000-0000-000000000000
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
@@ -600,7 +601,7 @@ sequence req=req1w2
 [5] sequence req1w2: acquiring latches
 [5] sequence req1w2: scanning lock table for conflicting locks
 [5] sequence req1w2: waiting in lock wait-queues
-[5] sequence req1w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "b" (queuedWriters: 1, queuedReaders: 0)
+[5] sequence req1w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "b" (queuedWriters: 2, queuedReaders: 0)
 [5] sequence req1w2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req1w2: pushing txn 00000004 to detect request deadlock
 [5] sequence req1w2: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -628,8 +629,8 @@ num=3
     active: true req: 19, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 19
  lock: "b"
-  res: req: 17, txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
    queued writers:
+    active: false req: 17, txn: 00000004-0000-0000-0000-000000000000
     active: true req: 18, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 18
  lock: "c"
@@ -810,7 +811,8 @@ num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "b"
-  res: req: 23, txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 23, txn: 00000004-0000-0000-0000-000000000000
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    queued writers:
@@ -835,7 +837,7 @@ sequence req=req1w2
 [5] sequence req1w2: acquiring latches
 [5] sequence req1w2: scanning lock table for conflicting locks
 [5] sequence req1w2: waiting in lock wait-queues
-[5] sequence req1w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "b" (queuedWriters: 1, queuedReaders: 0)
+[5] sequence req1w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "b" (queuedWriters: 2, queuedReaders: 0)
 [5] sequence req1w2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req1w2: pushing txn 00000004 to detect request deadlock
 [5] sequence req1w2: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -863,8 +865,8 @@ num=3
     active: true req: 25, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 25
  lock: "b"
-  res: req: 23, txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
    queued writers:
+    active: false req: 23, txn: 00000004-0000-0000-0000-000000000000
     active: true req: 24, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 24
  lock: "c"
@@ -1072,7 +1074,7 @@ on-txn-updated txn=txn2 status=committed
 [4] sequence req5w: pushing txn 00000003 to abort
 [4] sequence req5w: blocked on select in concurrency_test.(*cluster).PushTransaction
 [5] sequence req4w: resolving intent "b" for txn 00000002 with COMMITTED status
-[5] sequence req4w: lock wait-queue event: wait for (distinguished) txn 00000005 running request @ key "b" (queuedWriters: 1, queuedReaders: 0)
+[5] sequence req4w: lock wait-queue event: wait for (distinguished) txn 00000005 running request @ key "b" (queuedWriters: 2, queuedReaders: 0)
 [5] sequence req4w: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 0.000s
 [5] sequence req4w: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req4w: pushing txn 00000005 to detect request deadlock
@@ -1082,10 +1084,11 @@ debug-lock-table
 ----
 num=3
  lock: "a"
-  res: req: 30, txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
- lock: "b"
-  res: req: 29, txn: 00000005-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
    queued writers:
+    active: false req: 30, txn: 00000004-0000-0000-0000-000000000000
+ lock: "b"
+   queued writers:
+    active: false req: 29, txn: 00000005-0000-0000-0000-000000000000
     active: true req: 30, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 30
  lock: "c"
@@ -1110,7 +1113,7 @@ sequence req=req3w2
 [6] sequence req3w2: acquiring latches
 [6] sequence req3w2: scanning lock table for conflicting locks
 [6] sequence req3w2: waiting in lock wait-queues
-[6] sequence req3w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "a" (queuedWriters: 1, queuedReaders: 0)
+[6] sequence req3w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "a" (queuedWriters: 2, queuedReaders: 0)
 [6] sequence req3w2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [6] sequence req3w2: pushing txn 00000004 to detect request deadlock
 [6] sequence req3w2: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -1120,13 +1123,13 @@ debug-lock-table
 ----
 num=3
  lock: "a"
-  res: req: 30, txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
    queued writers:
+    active: false req: 30, txn: 00000004-0000-0000-0000-000000000000
     active: true req: 31, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 31
  lock: "b"
-  res: req: 29, txn: 00000005-0000-0000-0000-000000000000, ts: 10.000000000,1, seq: 0
    queued writers:
+    active: false req: 29, txn: 00000005-0000-0000-0000-000000000000
     active: true req: 30, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 30
  lock: "c"

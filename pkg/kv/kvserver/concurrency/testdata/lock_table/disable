@@ -89,7 +89,8 @@ release txn=txn2 span=a
 ----
 num=1
  lock: "a"
-  res: req: 2, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 2, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req2
 ----
@@ -99,7 +100,8 @@ acquire r=req2 k=c durability=u
 ----
 num=2
  lock: "a"
-  res: req: 2, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 2, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
