@@ -705,11 +705,6 @@ func (txn *Txn) commit(ctx context.Context) error {
 	et := endTxnReq(true, txn.deadline())
 	ba := &kvpb.BatchRequest{Requests: et.unionArr[:]}
 	_, pErr := txn.Send(ctx, ba)
-	if pErr == nil {
-		for _, t := range txn.commitTriggers {
-			t(ctx)
-		}
-	}
 	return pErr.GoError()
 }
 
@@ -1089,6 +1084,15 @@ func (txn *Txn) Send(
 	sender := txn.mu.sender
 	txn.mu.Unlock()
 	br, pErr := txn.db.sendUsingSender(ctx, ba, sender)
+
+	// Invoking the commit triggers here ensures they run even in the case when a
+	// commit request is issued manually (not via Commit).
+	if et, ok := ba.GetArg(kvpb.EndTxn); ok && et.(*kvpb.EndTxnRequest).Commit && pErr == nil {
+		for _, t := range txn.commitTriggers {
+			t(ctx)
+		}
+	}
+
 	if pErr == nil {
 		return br, nil
 	}
