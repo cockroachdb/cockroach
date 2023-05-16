@@ -2670,13 +2670,6 @@ statement error pgcode 0A000 unimplemented: DROP TABLE usage inside a function d
 CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'DROP TABLE t'
 
 
-subtest mutation
-
-# Not all mutations are currently supported in UDF bodies.
-statement error pgcode 0A000 unimplemented: DELETE usage inside a function definition
-CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'DELETE FROM t WHERE a = 1'
-
-
 subtest prepared_statement
 
 # Prepared statements are not currently supported in UDF bodies.
