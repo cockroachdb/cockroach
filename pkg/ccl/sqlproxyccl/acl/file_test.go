@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -112,9 +113,11 @@ denylist:
 		for i, tc := range testCases {
 			filename := filepath.Join(tempDir, fmt.Sprintf("denylist%d.yaml", i))
 			require.NoError(t, os.WriteFile(filename, []byte(tc.input), 0777))
+			timeSource := timeutil.DefaultTimeSource{}
 			controller, _, err := newAccessControllerFromFile[*Denylist](
-				ctx, filename, timeutil.DefaultTimeSource{}, defaultPollingInterval, nil,
-			)
+				ctx, filename, timeSource, defaultPollingInterval, nil, func(c *Denylist) {
+					c.timeSource = timeSource
+				})
 			require.NoError(t, err)
 			entries := emptyMap
 			if controller != nil {
@@ -183,9 +186,9 @@ denylist:
 			),
 			nil,
 			[]denyIOSpec{
-				{ConnectionTags{"1.2.3.4", "foo"}, "connection ip '1.2.3.4' denied: over quota"},
-				{ConnectionTags{"1.1.1.1", "61"}, ""},
-				{ConnectionTags{"1.2.3.5", "foo"}, ""},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(61), ""}, "connection ip '1.2.3.4' denied: over quota"},
+				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61), ""}, ""},
+				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(61), ""}, ""},
 			},
 		},
 		// Blocks both IP address and tenant cluster.
@@ -205,10 +208,10 @@ denylist:
 			),
 			nil,
 			[]denyIOSpec{
-				{ConnectionTags{"1.2.3.4", "foo"}, "connection ip '1.2.3.4' denied: over quota"},
-				{ConnectionTags{"1.2.3.4", "61"}, "connection ip '1.2.3.4' denied: over quota"},
-				{ConnectionTags{"1.1.1.1", "61"}, "connection cluster '61' denied: splunk pipeline"},
-				{ConnectionTags{"1.2.3.5", "foo"}, ""},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100), ""}, "connection ip '1.2.3.4' denied: over quota"},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(61), ""}, "connection ip '1.2.3.4' denied: over quota"},
+				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61), ""}, "connection cluster '61' denied: splunk pipeline"},
+				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(100), ""}, ""},
 			},
 		},
 		// Entry without any expiration.
@@ -221,9 +224,9 @@ denylist:
   reason: over quota`,
 			nil,
 			[]denyIOSpec{
-				{ConnectionTags{"1.2.3.4", "foo"}, "connection ip '1.2.3.4' denied: over quota"},
-				{ConnectionTags{"1.1.1.1", "61"}, ""},
-				{ConnectionTags{"1.2.3.5", "foo"}, ""},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100), ""}, "connection ip '1.2.3.4' denied: over quota"},
+				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61), ""}, ""},
+				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(100), ""}, ""},
 			},
 		},
 		// Entry that has expired.
@@ -242,9 +245,9 @@ denylist:
 				timeSource.AdvanceTo(startTime.Add(20 * time.Minute))
 			},
 			[]denyIOSpec{
-				{ConnectionTags{"1.2.3.4", "foo"}, ""},
-				{ConnectionTags{"1.1.1.1", "61"}, ""},
-				{ConnectionTags{"1.2.3.5", "foo"}, ""},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100), ""}, ""},
+				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61), ""}, ""},
+				{ConnectionTags{"1.2.3.5", roachpb.MustMakeTenantID(100), ""}, ""},
 			},
 		},
 	}
@@ -260,13 +263,13 @@ denylist:
 	timeSource := timeutil.NewManualTime(startTime)
 	loadInterval := 100 * time.Millisecond
 	_, channel, err := newAccessControllerFromFile[*Denylist](
-		ctx, filename, timeSource, loadInterval, nil,
+		ctx, filename, timeSource, loadInterval, nil, func(c *Denylist) { c.timeSource = timeSource },
 	)
 	require.NoError(t, err)
 
 	validateSpecs := func(controller AccessController, spec []denyIOSpec) error {
 		for _, ioPairs := range spec {
-			err := controller.CheckConnection(ioPairs.connection, timeSource)
+			err := controller.CheckConnection(ctx, ioPairs.connection)
 			if ioPairs.outcome == "" {
 				if err != nil {
 					return errors.Newf("expected no error, but got %v", err) // nolint:errwrap
@@ -377,7 +380,7 @@ func TestAllowListFileParsing(t *testing.T) {
 SequenceNumber: 9
 allowlist:
   "61":
-    ips: ["1.2.3.4/16"]				
+    ips: ["1.2.3.4/16"]
 
 `,
 				map[string]AllowEntry{
@@ -393,7 +396,7 @@ allowlist:
 SequenceNumber: 9
 allowlist:
   "61":
-    ips: ["4.3.2.1/16"]				
+    ips: ["4.3.2.1/16"]
   "1357":
     ips: ["44.22.33.11/19", "not-an-ip-address", "12.34.56.78/5"]
 
@@ -422,7 +425,7 @@ allowlist:
 			filename := filepath.Join(tempDir, fmt.Sprintf("allowlist%d.yaml", i))
 			require.NoError(t, os.WriteFile(filename, []byte(tc.input), 0777))
 			controller, _, err := newAccessControllerFromFile[*Allowlist](
-				ctx, filename, timeutil.DefaultTimeSource{}, defaultPollingInterval, nil)
+				ctx, filename, timeutil.DefaultTimeSource{}, defaultPollingInterval, nil, nil)
 			require.NoError(t, err)
 			dl := controller.(*Allowlist)
 			var entries map[string]AllowEntry
@@ -456,9 +459,9 @@ allowlist:
     ips: ["1.2.3.4/16"]
 `,
 			[]allowIOSpec{
-				{ConnectionTags{"1.2.3.4", "foo"}, ""},
-				{ConnectionTags{"1.1.1.1", "61"}, "connection ip '1.1.1.1' denied: ip address not allowed"},
-				{ConnectionTags{"1.2.1.1", "61"}, ""},
+				{ConnectionTags{"1.2.3.4", roachpb.MustMakeTenantID(100), ""}, ""},
+				{ConnectionTags{"1.1.1.1", roachpb.MustMakeTenantID(61), ""}, "connection ip '1.1.1.1' denied: ip address not allowed"},
+				{ConnectionTags{"1.2.1.1", roachpb.MustMakeTenantID(61), ""}, ""},
 			},
 		},
 	}
@@ -470,14 +473,14 @@ allowlist:
 	filename := filepath.Join(tempDir, "allowlist.yaml")
 	require.NoError(t, os.WriteFile(filename, []byte("{}"), 0777))
 	_, channel, err := newAccessControllerFromFile[*Allowlist](
-		ctx, filename, timeutil.DefaultTimeSource{}, 100*time.Millisecond, nil)
+		ctx, filename, timeutil.DefaultTimeSource{}, 100*time.Millisecond, nil, nil)
 	require.NoError(t, err)
 	for _, tc := range testCases {
 		require.NoError(t, os.WriteFile(filename, []byte(tc.input), 0777))
 
 		controller := <-channel
 		for _, ioPairs := range tc.specs {
-			err := controller.CheckConnection(ioPairs.connection, nil)
+			err := controller.CheckConnection(ctx, ioPairs.connection)
 			if ioPairs.outcome == "" {
 				require.Nil(t, err)
 			} else {
@@ -501,7 +504,7 @@ func TestParsingErrorHandling(t *testing.T) {
 		require.NoError(t, os.WriteFile(filename, []byte("not yaml"), 0777))
 
 		_, _, err := newAccessControllerFromFile[*Allowlist](
-			ctx, filename, timeutil.DefaultTimeSource{}, 100*time.Millisecond, errorCountMetric)
+			ctx, filename, timeutil.DefaultTimeSource{}, 100*time.Millisecond, errorCountMetric, nil)
 
 		require.Error(t, err)
 		require.ErrorContains(t, err, "error when creating access controller from file")
@@ -517,7 +520,7 @@ func TestParsingErrorHandling(t *testing.T) {
 		require.NoError(t, os.WriteFile(filename, []byte(`{"allowlist":{"tenant":{"ips": ["1.1.1.1/32"]}}}`), 0777))
 
 		controller, next, err := newAccessControllerFromFile[*Allowlist](
-			ctx, filename, timeutil.DefaultTimeSource{}, 100*time.Millisecond, errorCountMetric)
+			ctx, filename, timeutil.DefaultTimeSource{}, 100*time.Millisecond, errorCountMetric, nil)
 
 		require.NoError(t, err)
 		require.NotNil(t, next)
