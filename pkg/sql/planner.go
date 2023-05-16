@@ -109,6 +109,9 @@ type extendedEvalContext struct {
 	SchemaChangerState *SchemaChangerState
 
 	statementPreparer statementPreparer
+
+	// validateDbZoneConfig should the DB zone config on commit.
+	validateDbZoneConfig *bool
 }
 
 // copyFromExecCfg copies relevant fields from an ExecutorConfig.

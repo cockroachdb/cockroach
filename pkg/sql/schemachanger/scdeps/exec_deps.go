@@ -203,7 +203,10 @@ func (d *txnDeps) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
 
 // Validate implements the scexec.Catalog interface.
 func (d *txnDeps) Validate(ctx context.Context) error {
-	return d.descsCollection.ValidateUncommittedDescriptors(ctx, d.txn.KV())
+	return d.descsCollection.ValidateUncommittedDescriptors(ctx,
+		d.txn.KV(),
+		false, /*validateZoneConfigs*/
+		nil /*zoneConfigValidator*/)
 }
 
 // Run implements the scexec.Catalog interface.
