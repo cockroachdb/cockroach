@@ -708,8 +708,8 @@ FROM system.eventlog
 WHERE "eventType" = 'create_schema'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.sc", "Statement": "CREATE SCHEMA \"\".sc", "Tag": "CREATE SCHEMA", "User": "root"}
-1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.s", "Statement": "CREATE SCHEMA \"\".s", "Tag": "CREATE SCHEMA", "User": "root"}
+1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.sc", "Statement": "CREATE SCHEMA test.sc", "Tag": "CREATE SCHEMA", "User": "root"}
+1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.s", "Statement": "CREATE SCHEMA test.s", "Tag": "CREATE SCHEMA", "User": "root"}
 1  {"EventType": "create_schema", "Owner": "u", "SchemaName": "test.u", "Statement": "CREATE SCHEMA AUTHORIZATION u", "Tag": "CREATE SCHEMA", "User": "root"}
 
 statement ok
@@ -1119,3 +1119,22 @@ ORDER BY "timestamp" DESC, info
 LIMIT 1
 ----
 1  {"CascadeDroppedViews": ["defaultdb.public.v", "defaultdb.public.vv"], "EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE defaultdb.public.x DROP COLUMN b CASCADE", "TableName": "defaultdb.public.x", "Tag": "ALTER TABLE", "User": "root"}
+
+# This subtests test event logs of creating and dropping functions.
+subtest eventlog_create_drop_functions
+
+statement ok
+create function f (input int) returns int stable language sql as $$ select 123$$;
+
+statement ok
+drop function f
+
+query TT
+SELECT "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+FROM system.eventlog
+WHERE "eventType" IN ('create_function', 'drop_function')
+ORDER BY "timestamp" DESC, info
+LIMIT 2
+----
+drop_function    {"EventType": "drop_function", "FunctionName": "defaultdb.public.f", "Statement": "DROP FUNCTION \"\".\"\".f", "Tag": "DROP FUNCTION", "User": "root"}
+create_function  {"EventType": "create_function", "FunctionName": "defaultdb.public.f", "Statement": "CREATE FUNCTION defaultdb.public.f(IN input INT8)\n\tRETURNS INT8\n\tSTABLE\n\tLANGUAGE SQL\n\tAS $$SELECT 123;$$", "Tag": "CREATE FUNCTION", "User": "root"}

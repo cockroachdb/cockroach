@@ -109,13 +109,17 @@ func (d *buildDeps) MayResolveDatabase(
 
 // MayResolveSchema implements the scbuild.CatalogReader interface.
 func (d *buildDeps) MayResolveSchema(
-	ctx context.Context, name tree.ObjectNamePrefix,
+	ctx context.Context, name tree.ObjectNamePrefix, withOffline bool,
 ) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
 	if !name.ExplicitCatalog {
 		name.CatalogName = tree.Name(d.schemaResolver.CurrentDatabase())
 	}
 	db := d.MayResolveDatabase(ctx, name.CatalogName)
-	schema, err := d.descsCollection.ByName(d.txn).MaybeGet().Schema(ctx, db, name.Schema())
+	byNameGetterBuilder := d.descsCollection.ByName(d.txn)
+	if withOffline {
+		byNameGetterBuilder = byNameGetterBuilder.WithOffline()
+	}
+	schema, err := byNameGetterBuilder.MaybeGet().Schema(ctx, db, name.Schema())
 	if err != nil {
 		panic(err)
 	}
@@ -131,7 +135,7 @@ func (d *buildDeps) MustResolvePrefix(
 	}
 
 	if name.ExplicitSchema {
-		db, sc := d.MayResolveSchema(ctx, name)
+		db, sc := d.MayResolveSchema(ctx, name, false /* withOffline */)
 		if sc == nil {
 			panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
 		}
@@ -143,7 +147,7 @@ func (d *buildDeps) MustResolvePrefix(
 	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 		name.SchemaName = tree.Name(scName)
 		name.ExplicitSchema = true
-		db, sc := d.MayResolveSchema(ctx, name)
+		db, sc := d.MayResolveSchema(ctx, name, false /* withOffline */)
 		if sc != nil {
 			return db, sc
 		}

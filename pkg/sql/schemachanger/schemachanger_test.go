@@ -394,13 +394,13 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 
 		require.NoError(t, g.Wait())
 
+		// Expect two NEW SCHEMA CHANGE jobs for stmt1 and stmt2.
+		// The CREATE DATABASE and two CREATE SCHEMAs don't create jobs.
 		tdb.CheckQueryResults(t,
 			fmt.Sprintf(`SELECT job_type, status FROM crdb_internal.jobs WHERE job_type = '%s' OR job_type = '%s' ORDER BY created`,
 				jobspb.TypeSchemaChange.String(), jobspb.TypeNewSchemaChange.String(),
 			),
 			[][]string{
-				{jobspb.TypeSchemaChange.String(), string(jobs.StatusSucceeded)},
-				{jobspb.TypeSchemaChange.String(), string(jobs.StatusSucceeded)},
 				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded)},
 				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded)},
 			},

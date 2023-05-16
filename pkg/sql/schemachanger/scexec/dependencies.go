@@ -63,6 +63,9 @@ type Catalog interface {
 	// DeleteName deletes a namespace entry.
 	DeleteName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error
 
+	// AddName adds a namespace entry.
+	AddName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error
+
 	// DeleteDescriptor deletes a descriptor entry.
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
 

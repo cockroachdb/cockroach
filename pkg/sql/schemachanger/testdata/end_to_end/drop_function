@@ -33,6 +33,13 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP FUNCTION
 increment telemetry for sql.schema.drop_function
+write *eventpb.DropFunction to event log:
+  functionName: defaultdb.public.f
+  sql:
+    descriptorId: 109
+    statement: DROP FUNCTION ‹""›.‹""›.‹f›
+    tag: DROP FUNCTION
+    user: root
 ## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #101
    schema:
