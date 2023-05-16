@@ -1,0 +1,102 @@
+pl name=a
+23 2 42 31 52
+----
+2, 23, 31, 42, 52
+
+hash name=a
+----
+12503236775746800197
+
+pl name=b
+23 42 73 71 1
+----
+1, 23, 42, 71, 73
+
+hash name=b
+----
+11728207050653014929
+
+intersect x=a y=b
+----
+23, 42
+
+is-equal x=a y=b
+----
+false
+
+union x=a y=b
+----
+1, 23, 42, 71, 73
+
+is-equal x=a y=b
+----
+true
+
+hash name=a
+----
+11728207050653014929
+
+pl name=c
+42 1 56 95
+----
+1, 42, 56, 95
+
+union x=c y=a
+----
+1, 23, 42, 56, 71, 73, 95
+
+hash name=c
+----
+10433122099588051032
+
+contains name=c store-id=5
+----
+false
+
+contains name=c store-id=71
+----
+true
+
+insert name=c store-id=23
+----
+false: 1, 23, 42, 56, 71, 73, 95
+
+remove name=c store-id=1
+----
+true: 23, 42, 56, 71, 73, 95
+
+remove name=c store-id=23
+----
+true: 42, 56, 71, 73, 95
+
+remove name=c store-id=95
+----
+true: 42, 56, 71, 73
+
+remove name=c store-id=56
+----
+true: 42, 71, 73
+
+remove name=c store-id=1
+----
+false: 42, 71, 73
+
+remove name=c store-id=72
+----
+false: 42, 71, 73
+
+remove name=c store-id=100
+----
+false: 42, 71, 73
+
+insert name=c store-id=23
+----
+true: 23, 42, 71, 73
+
+insert name=c store-id=45
+----
+true: 23, 42, 45, 71, 73
+
+insert name=c store-id=100
+----
+true: 23, 42, 45, 71, 73, 100
