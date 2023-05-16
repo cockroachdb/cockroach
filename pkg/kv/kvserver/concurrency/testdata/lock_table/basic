@@ -695,18 +695,18 @@ topklocksbywaitduration:
 
 query
 ----
-num locks: 3, bytes returned: 292, resume reason: RESUME_UNKNOWN, resume span: <nil>
+num locks: 3, bytes returned: 288, resume reason: RESUME_UNKNOWN, resume span: <nil>
  locks:
   range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Replicated duration=2.65s
    waiters:
     waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Exclusive wait_duration:2.65s
   range_id=3 key="b" holder=<nil> durability=Unreplicated duration=0s
    waiters:
-    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Exclusive wait_duration:2.65s
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:2.65s
     waiting_txn:00000000-0000-0000-0000-000000000001 active_waiter:true strength:Exclusive wait_duration:250ms
   range_id=3 key="c" holder=<nil> durability=Unreplicated duration=0s
    waiters:
-    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Exclusive wait_duration:2.65s
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:2.65s
     waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Exclusive wait_duration:0s
 
 # 100ms passes between before releasing a
@@ -860,6 +860,23 @@ topklocksbywaitduration:
   waitingwriters: 0
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
+
+
+query
+----
+num locks: 3, bytes returned: 268, resume reason: RESUME_UNKNOWN, resume span: <nil>
+ locks:
+  range_id=3 key="b" holder=<nil> durability=Unreplicated duration=0s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:0s
+    waiting_txn:00000000-0000-0000-0000-000000000001 active_waiter:true strength:Exclusive wait_duration:350ms
+  range_id=3 key="c" holder=<nil> durability=Unreplicated duration=0s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:0s
+    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Exclusive wait_duration:100ms
+  range_id=3 key="f" holder=00000000-0000-0000-0000-000000000003 durability=Replicated duration=2.75s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:None wait_duration:0s
 
 # 500ms passes between before releasing f
 time-tick ms=500
