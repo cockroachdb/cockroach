@@ -1531,7 +1531,7 @@ func (s *storeIDPostingList) insert(storeID roachpb.StoreID) bool {
 	a := *s
 	n := len(a)
 	var pos int
-	for pos := range a {
+	for pos = 0; pos < len(a); pos++ {
 		if storeID < a[pos] {
 			break
 		} else if storeID == a[pos] {
@@ -1548,8 +1548,9 @@ func (s *storeIDPostingList) insert(storeID roachpb.StoreID) bool {
 			m = minLength
 		}
 		b = make([]roachpb.StoreID, n+1, m)
+		// Insert at pos, so pos-1 is the last element before the insertion.
 		if pos > 0 {
-			copy(b[:pos-1], a[:pos-1])
+			copy(b[:pos], a[:pos])
 		}
 	}
 	copy(b[pos+1:n+1], a[pos:n])
