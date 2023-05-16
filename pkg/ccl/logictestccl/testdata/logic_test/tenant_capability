@@ -235,6 +235,11 @@ ALTER TENANT scb GRANT CAPABILITY span_config_bounds = crdb_internal.json_to_pb(
     '{"gcTtlSeconds": {"start": 60, "end":600}, "rangeMaxBytes": {"start": 100, "end":200}}'
 )
 
+ALTER TENANT scb GRANT CAPABILITY span_config_bounds = crdb_internal.json_to_pb(
+    'cockroach.multitenant.tenantcapabilitiespb.SpanConfigBounds',
+    '{"num_replicas": {"start": 3, "end":5}}'
+)
+
 # Observe the side-effect.
 
 query TT colnames

@@ -1278,7 +1278,7 @@ func (l *lockState) informActiveWaiters() {
 		queuedWriters: l.queuedWriters.Len(),
 		queuedReaders: l.waitingReaders.Len(),
 	}
-	waitForState.txn, waitForState.held = l.distinguishedTxn()
+	waitForState.txn, waitForState.held = l.claimantTxn()
 	findDistinguished := false
 	// We need to find a (possibly new) distinguished waiter if either:
 	//   There isn't one for this lock.
@@ -1291,7 +1291,17 @@ func (l *lockState) informActiveWaiters() {
 		// that waiters in the lock wait queue are waiting on, then the lock cannot
 		// be held by it. This is because if it were, this request would no longer
 		// be waiting in lock wait queues (via a call to releaseWritersFromTxn).
+		// This is asserted below.
 		l.distinguishedWaiter.isSameTxn(waitForState.txn) {
+		// Ensure that if we're trying to find a new distinguished waiter because
+		// all waiters on the lock are waiting on the (old) distinguished waiter,
+		// the lock is not held.
+		assert(
+			l.distinguishedWaiter == nil || !l.holder.locked, errors.AssertionFailedf(
+				"distinguished waiter waiting from txn %s waiting on itself with un-held lock",
+				waitForState.txn,
+			))
+
 		findDistinguished = true
 		l.distinguishedWaiter = nil // we'll find a new one
 	}
@@ -1344,19 +1354,29 @@ func (l *lockState) informActiveWaiters() {
 	}
 }
 
-// distinguishedTxn returns the distinguished transaction associated with the
-// receiver lock. Every lock stored in the lock table must have a distinguished
-// transaction associated with it. This is the transaction any actively waiting
-// requests should push for {liveness,deadlock,etc.} detection.
+// claimantTxn returns the transaction that the lock table deems as having
+// claimed the lock. Every lock stored in the lock table must have one and only
+// one transaction associated with it that claims the lock. All actively waiting
+// requests in this lock's wait queues should use this transaction as the
+// transaction to push for {liveness,deadlock,etc.} detection purposes related
+// to this key.
 //
-// The distinguished transaction may be the lock holder, in which case the
-// return value of held will be true. It may also be another request being
-// sequenced through the lock table that other waiters conflict with. In such
-// cases, this request is deemed to be the next preferred lock holder by the
-// lock table. This preference is based on the lock tables notion of fairness.
+// The transaction that is considered to have claimed the lock may be the lock
+// holder, in which case the return value of held will be true. It may also be
+// another request being sequenced through the lock table that other waiters
+// conflict with. In such cases, this request is deemed to be the next preferred
+// lock holder by the lock table. This preference is based on the lock table's
+// notion of fairness.
+//
+// Locks on a particular key can be acquired by multiple transactions. There may
+// also be multiple (compatible) requests being sequenced through the lock table
+// concurrently that can acquire locks on a particular key, one of which will
+// win the race. Waiting requests should be oblivious to such details; instead,
+// they use the concept of the transaction that has claimed a particular lock
+// as the transaction to push.
 //
 // REQUIRES: l.mu to be locked.
-func (l *lockState) distinguishedTxn() (_ *enginepb.TxnMeta, held bool) {
+func (l *lockState) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
 	if lockHolderTxn, _ := l.getLockHolder(); lockHolderTxn != nil {
 		return lockHolderTxn, true
 	}
@@ -1723,7 +1743,7 @@ func (l *lockState) tryActiveWait(
 		queuedWriters: l.queuedWriters.Len(),
 		queuedReaders: l.waitingReaders.Len(),
 	}
-	waitForState.txn, waitForState.held = l.distinguishedTxn()
+	waitForState.txn, waitForState.held = l.claimantTxn()
 
 	// May need to wait.
 	wait = true
@@ -2385,23 +2405,27 @@ func (l *lockState) requestDone(g *lockTableGuardImpl) (gc bool) {
 	delete(g.mu.locks, l)
 	g.mu.Unlock()
 
+	doneRemoval := false
 	if l.reservation == g {
 		l.reservation = nil
-		return l.lockIsFree()
+		l.maybeReleaseFirstTransactionalWriter()
+		doneRemoval = true
 	}
+
 	// May be in queuedWriters or waitingReaders.
 	distinguishedRemoved := false
-	doneRemoval := false
-	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
-		qg := e.Value.(*queuedGuard)
-		if qg.guard == g {
-			l.queuedWriters.Remove(e)
-			if qg.guard == l.distinguishedWaiter {
-				distinguishedRemoved = true
-				l.distinguishedWaiter = nil
+	if !doneRemoval {
+		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
+			qg := e.Value.(*queuedGuard)
+			if qg.guard == g {
+				l.queuedWriters.Remove(e)
+				if qg.guard == l.distinguishedWaiter {
+					distinguishedRemoved = true
+					l.distinguishedWaiter = nil
+				}
+				doneRemoval = true
+				break
 			}
-			doneRemoval = true
-			break
 		}
 	}
 	if !doneRemoval {
@@ -2424,7 +2448,7 @@ func (l *lockState) requestDone(g *lockTableGuardImpl) (gc bool) {
 	if distinguishedRemoved {
 		l.tryMakeNewDistinguished()
 	}
-	return false
+	return l.isEmptyLock()
 }
 
 // tryFreeLockOnReplicatedAcquire attempts to free a write-uncontended lock
@@ -2467,8 +2491,9 @@ func (l *lockState) tryFreeLockOnReplicatedAcquire() bool {
 	return true
 }
 
-// The lock has transitioned from locked/reserved to unlocked. There could be
-// waiters, but there cannot be a reservation.
+// The lock has transitioned from locked to unlocked. There could be waiters,
+// but there cannot be a reservation.
+//
 // REQUIRES: l.mu is locked.
 func (l *lockState) lockIsFree() (gc bool) {
 	if l.holder.locked {
@@ -2486,6 +2511,42 @@ func (l *lockState) lockIsFree() (gc bool) {
 		l.removeReader(curr)
 	}
 
+	l.maybeReleaseFirstTransactionalWriter()
+
+	// We've already cleared waiting readers above. The lock can be released if
+	// there is no reservation or waiting writers.
+	if l.queuedWriters.Len() == 0 && l.reservation == nil {
+		l.assertEmptyLock()
+		return true
+	}
+	return false
+}
+
+// maybeReleaseFirstTransactionalWriter goes through the list of writers waiting
+// in the receiver's lock wait queues and, if present and actively waiting,
+// releases the first transactional writer it finds. Releasing a transactional
+// writer entails marking it as inactive and nudging it via a call to notify().
+//
+// Any non-transactional writers at the head of the queue are also released. If
+// no transactional writers are to be found, the list of queued writers will be
+// empty when this function returns[1]. The function will no-op if the first
+// transactional writer is already marked inactive (i.e. there's no releasing to
+// do).
+//
+// [1] As if there are any requests in the list, they must be non-transactional,
+// and all of them will be released.
+//
+// REQUIRES: l.mu is locked.
+// REQUIRES: the (receiver) lock must not be held.
+// REQUIRES: there should not be any waitingReaders in the lock's wait queues.
+func (l *lockState) maybeReleaseFirstTransactionalWriter() {
+	if l.holder.locked {
+		panic("maybeReleaseFirstTransactionalWriter called when lock is held")
+	}
+	if l.waitingReaders.Len() != 0 {
+		panic("there cannot be waiting readers")
+	}
+
 	// The prefix of the queue that is non-transactional writers is done
 	// waiting.
 	for e := l.queuedWriters.Front(); e != nil; {
@@ -2500,8 +2561,7 @@ func (l *lockState) lockIsFree() (gc bool) {
 	}
 
 	if l.queuedWriters.Len() == 0 {
-		l.assertEmptyLock()
-		return true
+		return // no transactional writer
 	}
 
 	// First waiting writer (it must be transactional) gets the reservation.
@@ -2528,7 +2588,6 @@ func (l *lockState) lockIsFree() (gc bool) {
 
 	// Tell the active waiters who they are waiting for.
 	l.informActiveWaiters()
-	return false
 }
 
 // Delete removes the specified lock from the tree.
@@ -3109,4 +3168,11 @@ func (t *lockTableImpl) String() string {
 	}
 	t.locks.mu.RUnlock()
 	return sb.String()
+}
+
+// assert panics with the supplied error if the condition does not hold true.
+func assert(condition bool, err error) {
+	if !condition {
+		panic(err)
+	}
 }
