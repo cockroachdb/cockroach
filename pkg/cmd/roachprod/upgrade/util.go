@@ -20,7 +20,7 @@ import (
 )
 
 func PromptYesNo(msg string) bool {
-	fmt.Printf("%s (y[default]/n)", msg)
+	fmt.Printf("%s y[default]/n: ", msg)
 	var answer string
 	_, _ = fmt.Scanln(&answer)
 	answer = strings.TrimSpace(answer)
@@ -41,7 +41,9 @@ func SwapBinary(old, new string) error {
 			return errors.WithDetail(err, "binary does not exist: "+new)
 		}
 		return err
-	} else if destInfo.IsDir() {
+	}
+
+	if destInfo.IsDir() {
 		return errors.Newf("binary path is a directory, not a file: %s", new)
 	}
 

@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
@@ -33,65 +34,62 @@ var (
 	apiBase   = "https://teamcity.cockroachdb.com/guestAuth/app/rest"
 )
 
-func downloadURL(buildId int32) string {
-	url := fmt.Sprintf("%s%s",
-		apiBase,
-		fmt.Sprintf("/builds/id:%v/artifacts/content/bazel-bin/pkg/cmd/roachprod/roachprod_/roachprod", buildId),
-	)
-	fmt.Println(url)
-	return url
-}
-
 // DownloadLatestRoadprod attempts to download the latest binary to the
 // current binary's directory. It returns the path to the downloaded binary.
-func DownloadLatestRoadprod() (string, error) {
+// toFile is the path to the file to download to.
+func DownloadLatestRoadprod(toFile string) error {
 	if buildType == "" {
-		panic("unable to find build type for this platform")
+		fmt.Println("Supported platforms:")
+		for k := range buildIDs {
+			fmt.Printf("\t%s\n", k)
+		}
+		return fmt.Errorf("unable to find build type for this platform")
 	}
-	builds, err := GetBuilds("count:1,status:SUCCESS,branch:master,buildType:" + buildType)
+	// Build are sorted by build date desc, so limiting to 1 will get the latest.
+	builds, err := getBuilds("count:1,status:SUCCESS,branch:master,buildType:" + buildType)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if len(builds.Build) == 0 {
-		return "", fmt.Errorf("no builds found")
+		return fmt.Errorf("no builds found")
 	}
 
-	currentRoachprod, err := os.Executable()
+	err = downloadRoachprod(builds.Build[0].Id, toFile)
 	if err != nil {
-		return "", err
+		return err
 	}
-
-	newRoachprod := currentRoachprod + ".new"
-	err = DownloadRoachprod(builds.Build[0], newRoachprod)
-	if err != nil {
-		return "", err
-	}
-	fmt.Printf("Latest roachprod downloaded to %s\n", newRoachprod)
-	return newRoachprod, nil
+	return nil
 }
 
-func GetBuilds(locator string) (TCBuildResponse, error) {
-	// Get the latest successful build
+// getBuilds returns a list of builds matching the locator
+// See https://www.jetbrains.com/help/teamcity/rest/buildlocator.html
+func getBuilds(locator string) (TCBuildResponse, error) {
 	urlWithLocator := fmt.Sprintf("%s/builds?locator=%s", apiBase, locator)
-	fmt.Println("URL: ", urlWithLocator)
-
 	buildResp := &TCBuildResponse{}
-	err := httputil.GetJSONWithOptions(*httputil.DefaultClient.Client, urlWithLocator, buildResp, httputil.IgnoreUnknownFields())
-
+	err := httputil.GetJSONWithOptions(*httputil.DefaultClient.Client, urlWithLocator, buildResp,
+		httputil.IgnoreUnknownFields())
 	return *buildResp, err
 }
 
-// DownloadRoachprod downloads the roachprod binary from the build
+// downloadRoachprod downloads the roachprod binary from the build
 // to the specified destination file.
-func DownloadRoachprod(build *TCBuild, destFile string) error {
+func downloadRoachprod(buildID int32, destFile string) error {
+	if buildID <= 0 {
+		return fmt.Errorf("invalid build id")
+	}
 	out, err := os.Create(destFile)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 
-	resp, err := httputil.Get(context.Background(), downloadURL(build.Id))
+	url := roachprodDownloadURL(buildID)
+	fmt.Printf("Downloading latest roachprod \n\tfrom:\t%s \n\tto  :\t%s\n", url, destFile)
+
+	// Set a long timeout here because the download can take a while.
+	httpClient := httputil.NewClientWithTimeouts(httputil.StandardHTTPTimeout, 10*time.Minute)
+	resp, err := httpClient.Get(context.Background(), url)
 	if err != nil {
 		return err
 	}
@@ -104,6 +102,13 @@ func DownloadRoachprod(build *TCBuild, destFile string) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
+}
+
+func roachprodDownloadURL(buildID int32) string {
+	url := fmt.Sprintf("%s%s",
+		apiBase,
+		fmt.Sprintf("/builds/id:%v/artifacts/content/bazel-bin/pkg/cmd/roachprod/roachprod_/roachprod", buildID),
+	)
+	return url
 }
