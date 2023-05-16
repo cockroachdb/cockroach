@@ -136,6 +136,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 		sc,
 		fnID,
 		privilege.Functions,
+		b.CurrentUser(),
 	)
 	b.Add(owner)
 	for _, up := range ups {
@@ -145,6 +146,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 	validateTypeReferences(b, refProvider, db.DatabaseID)
 	validateFunctionRelationReferences(b, refProvider, db.DatabaseID)
 	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, refProvider))
+	b.LogEventForExistingTarget(&fn)
 }
 
 func validateParameters(n *tree.CreateFunction) {

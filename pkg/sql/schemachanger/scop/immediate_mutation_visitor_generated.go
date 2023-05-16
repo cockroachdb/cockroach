@@ -38,6 +38,7 @@ type ImmediateMutationVisitor interface {
 	MarkDescriptorAsPublic(context.Context, MarkDescriptorAsPublic) error
 	MarkDescriptorAsDropped(context.Context, MarkDescriptorAsDropped) error
 	DrainDescriptorName(context.Context, DrainDescriptorName) error
+	AddDescriptorName(context.Context, AddDescriptorName) error
 	MakeDeleteOnlyColumnWriteOnly(context.Context, MakeDeleteOnlyColumnWriteOnly) error
 	MakePublicSecondaryIndexWriteOnly(context.Context, MakePublicSecondaryIndexWriteOnly) error
 	MakeWriteOnlyIndexDeleteOnly(context.Context, MakeWriteOnlyIndexDeleteOnly) error
@@ -70,6 +71,7 @@ type ImmediateMutationVisitor interface {
 	MakePublicUniqueWithoutIndexConstraintValidated(context.Context, MakePublicUniqueWithoutIndexConstraintValidated) error
 	RemoveUniqueWithoutIndexConstraint(context.Context, RemoveUniqueWithoutIndexConstraint) error
 	RemoveSchemaParent(context.Context, RemoveSchemaParent) error
+	AddSchemaParent(context.Context, AddSchemaParent) error
 	AddIndexPartitionInfo(context.Context, AddIndexPartitionInfo) error
 	AddColumnFamily(context.Context, AddColumnFamily) error
 	AssertColumnFamilyIsRemoved(context.Context, AssertColumnFamilyIsRemoved) error
@@ -119,6 +121,8 @@ type ImmediateMutationVisitor interface {
 	SetObjectParentID(context.Context, SetObjectParentID) error
 	UpdateUserPrivileges(context.Context, UpdateUserPrivileges) error
 	UpdateOwner(context.Context, UpdateOwner) error
+	CreateSchemaDescriptor(context.Context, CreateSchemaDescriptor) error
+	SetSchemaName(context.Context, SetSchemaName) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -199,6 +203,11 @@ func (op MarkDescriptorAsDropped) Visit(ctx context.Context, v ImmediateMutation
 // Visit is part of the ImmediateMutationOp interface.
 func (op DrainDescriptorName) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.DrainDescriptorName(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddDescriptorName) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddDescriptorName(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -359,6 +368,11 @@ func (op RemoveUniqueWithoutIndexConstraint) Visit(ctx context.Context, v Immedi
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveSchemaParent) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveSchemaParent(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddSchemaParent) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddSchemaParent(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -604,4 +618,14 @@ func (op UpdateUserPrivileges) Visit(ctx context.Context, v ImmediateMutationVis
 // Visit is part of the ImmediateMutationOp interface.
 func (op UpdateOwner) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.UpdateOwner(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op CreateSchemaDescriptor) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.CreateSchemaDescriptor(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetSchemaName) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetSchemaName(ctx, op)
 }
