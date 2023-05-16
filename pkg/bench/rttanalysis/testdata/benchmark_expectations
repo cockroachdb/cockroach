@@ -65,8 +65,9 @@ exp,benchmark
 4,ORMQueries/django_column_introspection_1_table
 4,ORMQueries/django_column_introspection_4_tables
 4,ORMQueries/django_column_introspection_8_tables
-5,ORMQueries/django_table_introspection_1_table
-5,ORMQueries/django_table_introspection_8_tables
+6,ORMQueries/django_comment_introspection_with_comments
+6,ORMQueries/django_table_introspection_1_table
+6,ORMQueries/django_table_introspection_8_tables
 0,ORMQueries/has_column_privilege_using_attnum
 0,ORMQueries/has_column_privilege_using_column_name
 0,ORMQueries/has_schema_privilege
@@ -76,6 +77,7 @@ exp,benchmark
 12,ORMQueries/hasura_column_descriptions_8_tables
 5,ORMQueries/hasura_column_descriptions_modified
 4,ORMQueries/information_schema._pg_index_position
+132,ORMQueries/introspection_description_join
 4,ORMQueries/pg_attribute
 4,ORMQueries/pg_class
 6,ORMQueries/pg_is_other_temp_schema
