@@ -235,7 +235,9 @@ export class SessionsPage extends React.Component<
   onChangePage = (current: number): void => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
-    this.props.onPageChanged(current);
+    if (this.props.onPageChanged) {
+      this.props.onPageChanged(current);
+    }
   };
 
   onSubmitFilters = (filters: Filters): void => {
