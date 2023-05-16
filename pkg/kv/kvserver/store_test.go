@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -1754,8 +1753,6 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 }
 
-func setTxnAutoGC(to bool) func() { return batcheval.TestingSetTxnAutoGC(to) }
-
 // TestStoreReadInconsistent verifies that gets and scans with read
 // consistency set to INCONSISTENT or READ_UNCOMMITTED either push or
 // simply ignore extant intents (if they cannot be pushed), depending
@@ -1770,14 +1767,15 @@ func TestStoreReadInconsistent(t *testing.T) {
 		kvpb.INCONSISTENT,
 	} {
 		t.Run(rc.String(), func(t *testing.T) {
-			// The test relies on being able to commit a Txn without specifying the
-			// intent, while preserving the Txn record. Turn off
-			// automatic cleanup for this to work.
-			defer setTxnAutoGC(false)()
 			ctx := context.Background()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			store, _ := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
+			cfg := TestStoreConfig(nil)
+			// The test relies on being able to commit a Txn without specifying the
+			// intent, while preserving the Txn record. Turn off
+			// automatic cleanup for this to work.
+			cfg.TestingKnobs.EvalKnobs.DisableTxnAutoGC = true
+			store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 			for _, canPush := range []bool{true, false} {
 				keyA := roachpb.Key(fmt.Sprintf("%t-a", canPush))
