@@ -1451,8 +1451,24 @@ func (t *logicTest) newCluster(
 
 	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.NumNodes, params)
 	if cfg.UseFakeSpanResolver {
-		fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
-		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+		// We need to update the DistSQL span resolver with the fake resolver,
+		// but this can only be done while DistSQL is disabled. Note that this
+		// is needed since the internal queries could use DistSQL if it's not
+		// disabled.
+		for nodeIdx := 0; nodeIdx < cfg.NumNodes; nodeIdx++ {
+			// Update the cluster setting when connecting to each node
+			// explicitly in order to avoid potential lag with async propagation
+			// of the update to other nodes.
+			conn := t.cluster.ServerConn(nodeIdx)
+			if _, err := conn.Exec("SET CLUSTER SETTING sql.defaults.distsql = off;"); err != nil {
+				t.Fatal(err)
+			}
+			fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
+			t.cluster.Server(nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+			if _, err := conn.Exec("RESET CLUSTER SETTING sql.defaults.distsql;"); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
