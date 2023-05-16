@@ -41,7 +41,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 
 		expectedMetadataStrTemplate := `
 {
-  "stmtTyp":      "{{.String}}",
+  "stmtType":     "{{.String}}",
   "query":        "{{.String}}",
   "querySummary": "{{.String}}",
   "db":           "{{.String}}",
@@ -233,7 +233,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 
 		expectedMetadataStrTemplate := `
 			{
-				"stmtTyp":      "{{.String}}",
+				"stmtType":     "{{.String}}",
 				"query":        "{{.String}}",
 				"querySummary": "{{.String}}",
 				"db":           "{{.String}}",
