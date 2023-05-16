@@ -33,9 +33,9 @@ ORDER BY 1, 2
 ----
 setdatabase  setrole    datname      rolname        setconfig
 0            0          NULL         NULL           {application_name=d}
-0            265380634  NULL         test_set_role  {application_name=a,custom_option.setting=e}
+0            265480634  NULL         test_set_role  {application_name=a,custom_option.setting=e}
 106          0          test_set_db  NULL           {application_name=c}
-106          265380634  test_set_db  test_set_role  {application_name=b}
+106          265480634  test_set_db  test_set_role  {application_name=b}
 
 statement ok
 ALTER ROLE test_set_role SET backslash_quote = 'safe_encoding'

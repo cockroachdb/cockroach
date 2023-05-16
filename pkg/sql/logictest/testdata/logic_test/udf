@@ -171,9 +171,9 @@ query TTTTTBBBTITTTTTT
 SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prokind, prosrc
 FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2');
 ----
-100118  proc_f    105  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    f  SELECT 1;
-100119  proc_f    105  1546506610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  f  SELECT 'hello';
-100121  proc_f_2  120  1546506610  14  false  false  false  v  1  25  25     {i}    NULL    f  SELECT 'hello';
+100118  proc_f    105  1546606610  14  false  false  false  v  1  20  20     {i}    NULL    f  SELECT 1;
+100119  proc_f    105  1546606610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  f  SELECT 'hello';
+100121  proc_f_2  120  1546606610  14  false  false  false  v  1  25  25     {i}    NULL    f  SELECT 'hello';
 
 # Ensure that the pg_proc virtual index works properly.
 
@@ -3078,10 +3078,10 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100272  f_93314         105  1546506610  14  false  false  false  v  0  100271  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100274  f_93314_alias   105  1546506610  14  false  false  false  v  0  100273  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100278  f_93314_comp    105  1546506610  14  false  false  false  v  0  100275  ·  {}  NULL  SELECT (1, 2);
-100279  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100277  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100272  f_93314         105  1546606610  14  false  false  false  v  0  100271  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100274  f_93314_alias   105  1546606610  14  false  false  false  v  0  100273  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100278  f_93314_comp    105  1546606610  14  false  false  false  v  0  100275  ·  {}  NULL  SELECT (1, 2);
+100279  f_93314_comp_t  105  1546606610  14  false  false  false  v  0  100277  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
 
 # Regression test for #95240. Strict UDFs that are inlined should result in NULL
 # when presented with NULL arguments.

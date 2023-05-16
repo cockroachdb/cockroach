@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"math"
 	"strings"
 	"time"
 	"unicode"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1128,11 +1130,11 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					if err != nil {
 						if errors.Is(err, catalog.ErrDescriptorNotFound) ||
 							catalog.HasInactiveDescriptorError(err) {
-							// No table found, so no rows. In this case, we'll fall back to the
-							// full table scan if the index isn't complete - see the
-							// indexContainsNonTableDescriptorIDs parameter.
+							// No table found, so no rows. If know this value is
+							// not a hashed OID we can safely say the table was populated
+							// and skip an expensive step populating the full tables.
 							//nolint:returnerrcheck
-							return false, nil
+							return !IsMaybeHashedOid(oid.Oid(id)), nil
 						}
 						return false, err
 					}
@@ -4675,6 +4677,11 @@ type oidHasher struct {
 	h hash.Hash32
 }
 
+// IsMaybeHashedOid returns if the OID value is possibly a hashed value.
+func IsMaybeHashedOid(o oid.Oid) bool {
+	return o > oidext.CockroachPredefinedOIDMax
+}
+
 func makeOidHasher() oidHasher {
 	return oidHasher{h: fnv.New32()}
 }
@@ -4740,6 +4747,10 @@ func (h oidHasher) writeTypeTag(tag oidTypeTag) {
 
 func (h oidHasher) getOid() *tree.DOid {
 	i := h.h.Sum32()
+	// Ensure generated OID hashes are above the pre-defined max limit,
+	// this gives us a cheap filter.
+	i = i%(math.MaxUint32-oidext.CockroachPredefinedOIDMax) +
+		oidext.CockroachPredefinedOIDMax
 	h.h.Reset()
 	return tree.NewDOid(oid.Oid(i))
 }
