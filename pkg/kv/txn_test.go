@@ -780,3 +780,58 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 		}
 	})
 }
+
+// TestTxnCommitTriggers tests the behavior of invoking commit triggers, as part
+// of a Commit or a manual EndTxnRequest that includes a commit.
+func TestTxnCommitTriggers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	for _, test := range []struct {
+		name string
+		// A function that specifies how a transaction ends.
+		endTxnFn func(txn *Txn) error
+		// Assuming a trigger bool value starts off as false, expTrigger is the
+		// expected value of the trigger after the transaction ends.
+		expTrigger bool
+	}{
+		{
+			name:       "explicit commit",
+			endTxnFn:   func(txn *Txn) error { return txn.Commit(ctx) },
+			expTrigger: true,
+		},
+		{
+			name: "manual commit",
+			endTxnFn: func(txn *Txn) error {
+				b := txn.NewBatch()
+				b.AddRawRequest(&kvpb.EndTxnRequest{Commit: true})
+				return txn.Run(ctx, b)
+			},
+			expTrigger: true,
+		},
+		{
+			name: "manual abort",
+			endTxnFn: func(txn *Txn) error {
+				b := txn.NewBatch()
+				b.AddRawRequest(&kvpb.EndTxnRequest{Commit: false})
+				return txn.Run(ctx, b)
+			},
+			expTrigger: false,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			clock := hlc.NewClockForTesting(nil)
+			db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(nil), clock, stopper)
+			txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
+			triggerVal := false
+			triggerFn := func(ctx context.Context) { triggerVal = true }
+			txn.AddCommitTrigger(triggerFn)
+			err := test.endTxnFn(txn)
+			require.NoError(t, err)
+			require.Equal(t, test.expTrigger, triggerVal)
+		})
+	}
+}
