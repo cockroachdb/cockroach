@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cloud",
@@ -32,6 +32,18 @@ go_library(
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_prometheus_client_model//go",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "cloud_test",
+    srcs = ["cloud_io_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":cloud"],
+    deps = [
+        "//pkg/util/ioctx",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

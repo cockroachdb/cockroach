@@ -155,14 +155,14 @@ func (h *httpStorage) ReadFile(
 
 	canResume := stream.Header.Get("Accept-Ranges") == "bytes"
 	if canResume {
-		opener := func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+		opener := func(ctx context.Context, pos int64) (io.ReadCloser, int64, error) {
 			s, err := h.openStreamAt(ctx, basename, pos)
 			if err != nil {
-				return nil, err
+				return nil, 0, err
 			}
-			return s.Body, err
+			return s.Body, size, err
 		}
-		return cloud.NewResumingReader(ctx, opener, stream.Body, opts.Offset, basename,
+		return cloud.NewResumingReader(ctx, opener, stream.Body, opts.Offset, size, basename,
 			cloud.ResumingReaderRetryOnErrFnForSettings(ctx, h.settings), nil), size, nil
 	}
 	return ioctx.ReadCloserAdapter(stream.Body), size, nil
