@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -114,3 +115,14 @@ WHERE (r.start_key < x'%[2]s')
 		startKey, endKey, resName.CatalogName.String(), // note: CatalogName.String() != Catalog()
 	))
 }
+
+// showRangesDeprecatedBehaviorSetting is a cluster setting introduced in v23.1.
+// It is pre-defined in v22.2 to enable customizations prior to an upgrade to v23.1.
+var showRangesDeprecatedBehaviorSetting = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	`sql.show_ranges_deprecated_behavior.enabled`,
+	"defined for forward-compatibility",
+	false,
+)
+
+var _ = showRangesDeprecatedBehaviorSetting // silence unused warning
