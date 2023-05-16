@@ -20,7 +20,7 @@ import (
 )
 
 func PromptYesNo(msg string) bool {
-	fmt.Printf("%s (y[default]/n)", msg)
+	fmt.Printf("%s y[default]/n: ", msg)
 	var answer string
 	_, _ = fmt.Scanln(&answer)
 	answer = strings.TrimSpace(answer)
