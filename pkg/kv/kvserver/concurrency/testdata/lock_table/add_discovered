@@ -68,8 +68,8 @@ release txn=txn1 span=a
 ----
 num=1
  lock: "a"
-  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, seq: 0
    queued writers:
+    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 3
 
@@ -118,7 +118,8 @@ release txn=txn3 span=a
 ----
 num=1
  lock: "a"
-  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
 
 guard-state r=req2
 ----
