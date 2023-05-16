@@ -3084,6 +3084,10 @@ func (m *sessionDataMutator) SetDefaultTransactionPriority(val tree.UserPriority
 	m.data.DefaultTxnPriority = int64(val)
 }
 
+func (m *sessionDataMutator) SetDefaultTransactionIsolationLevel(val tree.IsolationLevel) {
+	m.data.DefaultTxnIsolationLevel = int64(val)
+}
+
 func (m *sessionDataMutator) SetDefaultTransactionReadOnly(val bool) {
 	m.data.DefaultTxnReadOnly = val
 }

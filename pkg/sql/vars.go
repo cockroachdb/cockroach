@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -401,19 +402,29 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-ISOLATION
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			switch strings.ToUpper(s) {
-			case `READ UNCOMMITTED`, `READ COMMITTED`, `SNAPSHOT`, `REPEATABLE READ`, `SERIALIZABLE`, `DEFAULT`:
-				// Do nothing. All transactions execute with serializable isolation.
-			default:
-				return newVarValueError(`default_transaction_isolation`, s, "serializable")
+			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
+			if !ok {
+				switch strings.ToUpper(s) {
+				case `READ UNCOMMITTED`, `SNAPSHOT`, `REPEATABLE READ`, `DEFAULT`:
+					// All other levels map to serializable.
+					level = tree.SerializableIsolation
+				default:
+					return newVarValueError(`default_transaction_isolation`, s, "serializable", "read committed")
+				}
 			}
-
+			m.SetDefaultTransactionIsolationLevel(level)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return "serializable", nil
+			level := tree.IsolationLevel(evalCtx.SessionData().DefaultTxnIsolationLevel)
+			if level == tree.UnspecifiedIsolation {
+				level = tree.SerializableIsolation
+			}
+			return strings.ToLower(level.String()), nil
 		},
-		GlobalDefault: func(sv *settings.Values) string { return "default" },
+		GlobalDefault: func(sv *settings.Values) string {
+			return strings.ToLower(tree.SerializableIsolation.String())
+		},
 	},
 
 	// CockroachDB extension.
@@ -421,7 +432,7 @@ var varGen = map[string]sessionVar{
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			pri, ok := tree.UserPriorityFromString(s)
 			if !ok {
-				return newVarValueError(`default_transaction_isolation`, s, "low", "normal", "high")
+				return newVarValueError(`default_transaction_priority`, s, "low", "normal", "high")
 			}
 			m.SetDefaultTransactionPriority(pri)
 			return nil
@@ -1463,20 +1474,35 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	// This is not directly documented in PG's docs but does indeed behave this way.
+	// This is not directly documented in PG's docs but does indeed behave this
+	// way. This variable shows the isolation level of the current transaction,
+	// and also allows the isolation level to change as long as queries have not
+	// been executed yet.
 	// See https://github.com/postgres/postgres/blob/REL_10_STABLE/src/backend/utils/misc/guc.c#L3401-L3409
 	`transaction_isolation`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return "serializable", nil
+			level := kvTxnIsolationLevelToTree(evalCtx.Txn.IsoLevel())
+			if level == tree.UnspecifiedIsolation {
+				level = tree.SerializableIsolation
+			}
+			return strings.ToLower(level.String()), nil
 		},
-		RuntimeSet: func(_ context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
-			_, ok := tree.IsolationLevelMap[s]
+		RuntimeSet: func(ctx context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
+			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
 			if !ok {
-				return newVarValueError(`transaction_isolation`, s, "serializable")
+				return newVarValueError(`transaction_isolation`, s, "serializable", "read committed")
+			}
+			modes := tree.TransactionModes{
+				Isolation: level,
+			}
+			if err := evalCtx.TxnModesSetter.setTransactionModes(ctx, modes, hlc.Timestamp{} /* asOfSystemTime */); err != nil {
+				return err
 			}
 			return nil
 		},
-		GlobalDefault: func(_ *settings.Values) string { return "serializable" },
+		GlobalDefault: func(_ *settings.Values) string {
+			return strings.ToLower(tree.SerializableIsolation.String())
+		},
 	},
 
 	// CockroachDB extension.

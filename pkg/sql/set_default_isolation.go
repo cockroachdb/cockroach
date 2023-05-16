@@ -23,15 +23,15 @@ import (
 func (p *planner) SetSessionCharacteristics(
 	ctx context.Context, n *tree.SetSessionCharacteristics,
 ) (planNode, error) {
-	// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
-	switch n.Modes.Isolation {
-	case tree.UnspecifiedIsolation:
-		// Nothing to do.
-	default:
-		// TODO(rafi): set the session variable once it is supported.
-	}
-
 	if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
+		// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
+		switch n.Modes.Isolation {
+		case tree.UnspecifiedIsolation:
+			// Nothing to do.
+		default:
+			m.SetDefaultTransactionIsolationLevel(n.Modes.Isolation)
+		}
+
 		// Note: We also support SET DEFAULT_TRANSACTION_PRIORITY TO ' .... '.
 		switch n.Modes.UserPriority {
 		case tree.UnspecifiedUserPriority:

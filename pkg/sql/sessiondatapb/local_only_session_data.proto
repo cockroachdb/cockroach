@@ -397,6 +397,11 @@ message LocalOnlySessionData {
   // column involved a single column and that column was equated with a single
   // constant value in a WHERE clause filter.
   bool optimizer_use_improved_computed_column_filters_derivation = 104;
+  // DefaultTxnIsolationLevel indicates the default isolation level of newly
+  // created transactions.
+  // NOTE: we'd prefer to use tree.IsolationLevel here, but doing so would
+  // introduce a package dependency cycle.
+  int64 default_txn_isolation_level = 105;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
