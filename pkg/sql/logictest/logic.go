@@ -1206,6 +1206,15 @@ func (t *logicTest) newCluster(
 		// disable stats collection on system tables in order to have
 		// deterministic tests.
 		stats.AutomaticStatisticsOnSystemTables.Override(context.Background(), &st.SV, false)
+		if t.cfg.UseFakeSpanResolver {
+			// We will need to update the DistSQL span resolver with the fake
+			// resolver, but this can only be done while DistSQL is disabled.
+			// Note that this is needed since the internal queries could use
+			// DistSQL if it's not disabled, and we have to disable it before
+			// the cluster started (so that we don't have any internal queries
+			// using DistSQL concurrently with updating the span resolver).
+			sql.DistSQLClusterExecMode.Override(context.Background(), &st.SV, int64(sessiondatapb.DistSQLOff))
+		}
 		return st
 	}
 	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
@@ -1371,8 +1380,14 @@ func (t *logicTest) newCluster(
 
 	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.NumNodes, params)
 	if cfg.UseFakeSpanResolver {
-		fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
-		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+		// We need to update the DistSQL span resolver with the fake resolver.
+		// Note that DistSQL was disabled in makeClusterSetting above, so we
+		// will reset the setting after updating the span resolver.
+		for nodeIdx := 0; nodeIdx < cfg.NumNodes; nodeIdx++ {
+			fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
+			t.cluster.Server(nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+		}
+		serverutils.SetClusterSetting(t.rootT, t.cluster, "sql.defaults.distsql", "auto")
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
