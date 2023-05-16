@@ -1278,22 +1278,26 @@ func (l *lockState) informActiveWaiters() {
 		queuedWriters: l.queuedWriters.Len(),
 		queuedReaders: l.waitingReaders.Len(),
 	}
-	findDistinguished := l.distinguishedWaiter == nil
-	if lockHolderTxn, _ := l.getLockHolder(); lockHolderTxn != nil {
-		waitForState.txn = lockHolderTxn
-		waitForState.held = true
-	} else {
-		waitForState.txn = l.reservation.txn
-		if !findDistinguished && l.distinguishedWaiter.isSameTxnAsReservation(waitForState) {
-			findDistinguished = true
-			l.distinguishedWaiter = nil
-		}
+	waitForState.txn, waitForState.held = l.waitingTxn()
+	findDistinguished := false
+	// We need to find a (possibly new) distinguished waiter if either:
+	//   There isn't one for this lock.
+	if l.distinguishedWaiter == nil ||
+		// OR it belongs to the same transaction that waiters in the lock wait queue
+		// are waiting on, because a transaction doesn't push itself (it just sits
+		// tight).
+		l.distinguishedWaiter.isSameTxn(waitForState.txn) {
+		findDistinguished = true
+		l.distinguishedWaiter = nil // we'll find a new one
 	}
 
 	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
-		// Since there are waiting readers we could not have transitioned out of
-		// or into a state with a reservation, since readers do not wait for
-		// reservations.
+		// Since there are waiting readers, we could not have transitioned out of
+		// or into a state where the lock is held. This is because readers only wait
+		// for held locks -- they race with other {,non-}transactional writers.
+		if !waitForState.held {
+			panic("waiting readers should be empty if lock isn't held")
+		}
 		g := e.Value.(*lockTableGuardImpl)
 		if findDistinguished {
 			l.distinguishedWaiter = g
@@ -1314,7 +1318,10 @@ func (l *lockState) informActiveWaiters() {
 		}
 		g := qg.guard
 		state := waitForState
-		if g.isSameTxnAsReservation(state) {
+		if g.isSameTxn(waitForState.txn) {
+			if waitForState.held {
+				panic("writer from the lock holder txn should not be waiting in a wait queue")
+			}
 			state.kind = waitSelf
 		} else {
 			if findDistinguished {
@@ -1330,6 +1337,20 @@ func (l *lockState) informActiveWaiters() {
 		g.notify()
 		g.mu.Unlock()
 	}
+}
+
+// waitingTxn returns the transaction that requests in the lock wait queue are
+// waiting on. The transaction may be the lock holder, in which case the return
+// value of held will be true, or it may be another request being sequenced
+// through the lockTable that waiters conflict with. Either way, this is the
+// transaction that should be pushed for {liveness,deadlock,etc.} detection.
+//
+// REQUIRES: l.mu to be locked.
+func (l *lockState) waitingTxn() (_ *enginepb.TxnMeta, held bool) {
+	if lockHolderTxn, _ := l.getLockHolder(); lockHolderTxn != nil {
+		return lockHolderTxn, true
+	}
+	return l.reservation.txn, false
 }
 
 // releaseWritersFromTxn removes all waiting writers for the lockState that are
@@ -1656,16 +1677,7 @@ func (l *lockState) tryActiveWait(
 		}
 	}
 
-	waitForState := waitingState{
-		kind:          waitFor,
-		key:           l.key,
-		queuedWriters: l.queuedWriters.Len(),
-		queuedReaders: l.waitingReaders.Len(),
-	}
-	if lockHolderTxn != nil {
-		waitForState.txn = lockHolderTxn
-		waitForState.held = true
-	} else {
+	if l.reservation != nil {
 		if l.reservation == g {
 			// Already reserved by this request.
 			return false, false
@@ -1679,7 +1691,6 @@ func (l *lockState) tryActiveWait(
 			// non-transactional request. Ignore the reservation.
 			return false, false
 		}
-		waitForState.txn = l.reservation.txn
 	}
 
 	// Incompatible with whoever is holding lock or reservation.
@@ -1695,6 +1706,14 @@ func (l *lockState) tryActiveWait(
 		l.informActiveWaiters()
 		return false, false
 	}
+
+	waitForState := waitingState{
+		kind:          waitFor,
+		key:           l.key,
+		queuedWriters: l.queuedWriters.Len(),
+		queuedReaders: l.waitingReaders.Len(),
+	}
+	waitForState.txn, waitForState.held = l.waitingTxn()
 
 	// May need to wait.
 	wait = true
