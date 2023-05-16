@@ -1719,8 +1719,7 @@ func replayTransactionalWrite(
 //
 // The returned boolean indicates whether the put replaced an existing live key
 // (including one written previously by the same transaction). This is evaluated
-// at the transaction's read timestamp, and may not be valid when
-// `WriteTooOldError` is returned having written at a higher timestamp.
+// at the transaction's read timestamp.
 // TODO(erikgrinaker): This return value exists solely because valueFn incurs an
 // additional seek via maybeGetValue(). In most cases we have already read the
 // value via other means, e.g. mvccGetMetadata(). We should restructure the code
@@ -1846,7 +1845,6 @@ func mvccPutInternal(
 		IntentHistory: buf.meta.IntentHistory,
 	}
 
-	var maybeTooOldErr error
 	var prevIsValue bool
 	var prevValSize int64
 	var exReplaced bool
@@ -2061,19 +2059,11 @@ func mvccPutInternal(
 				buf.newMeta.IntentHistory = nil
 			}
 		} else if readTimestamp.LessEq(metaTimestamp) {
-			// This is the case where we're trying to write under a committed
-			// value. Obviously we can't do that, but we can increment our
-			// timestamp to one logical tick past the existing value and go on
-			// to write, but then also return a write-too-old error indicating
-			// what the timestamp ended up being. This timestamp can then be
-			// used to increment the txn timestamp and be returned with the
-			// response.
-			//
-			// For this to work, this function needs to complete its mutation to
-			// the Writer even if it plans to return a write-too-old error. This
-			// allows logic that lives in evaluateBatch to determine what to do
-			// with the error and whether it should prevent the batch from being
-			// proposed or not.
+			// This is the case where we're trying to write under a committed value.
+			// Obviously we can't do that. We return a write-too-old error indicating
+			// the earliest valid timestamp that the writer would be able to perform
+			// such a write. This timestamp can then be used to increment the txn
+			// timestamp.
 			//
 			// NB: even if metaTimestamp is less than writeTimestamp, we can't
 			// avoid the WriteTooOld error if metaTimestamp is equal to or
@@ -2083,28 +2073,8 @@ func mvccPutInternal(
 			// instead of allowing their transactions to continue and be retried
 			// before committing.
 			writeTimestamp.Forward(metaTimestamp.Next())
-			maybeTooOldErr = kvpb.NewWriteTooOldError(readTimestamp, writeTimestamp, key)
-			// If we're in a transaction, always get the value at the orig
-			// timestamp. Outside of a transaction, the read timestamp advances
-			// to the the latest value's timestamp + 1 as well. The new
-			// timestamp is returned to the caller in maybeTooOldErr. Because
-			// we're outside of a transaction, we'll never actually commit this
-			// value, but that's a concern of evaluateBatch and not here.
-			if txn == nil {
-				readTimestamp = writeTimestamp
-			}
-			// Inject a function to inspect the existing value at readTimestamp and
-			// populate exReplaced.
-			exReplacedFn := func(exVal optionalValue) (roachpb.Value, error) {
-				exReplaced = exVal.IsPresent()
-				if valueFn != nil {
-					return valueFn(exVal)
-				}
-				return value, nil // pass through original value
-			}
-			if value, err = maybeGetValue(ctx, iter, key, value, ok, readTimestamp, exReplacedFn); err != nil {
-				return false, err
-			}
+			writeTooOldErr := kvpb.NewWriteTooOldError(readTimestamp, writeTimestamp, key)
+			return false, writeTooOldErr
 		} else {
 			if value, err = maybeGetValue(ctx, iter, key, value, ok, readTimestamp, valueFn); err != nil {
 				return false, err
@@ -2228,7 +2198,7 @@ func mvccPutInternal(
 	}
 	writer.LogLogicalOp(logicalOp, logicalOpDetails)
 
-	return exReplaced, maybeTooOldErr
+	return exReplaced, nil
 }
 
 // MVCCIncrement fetches the value for key, and assuming the value is

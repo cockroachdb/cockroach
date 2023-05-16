@@ -2589,9 +2589,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("put"))
 			},
+			// The transaction performs a server-side refresh due to the write-write
+			// conflict and then succeeds during its CPut.
 			allIsoLevels: &expect{
-				expClientAutoRetryAfterRefresh: false,              // fails on first attempt at cput
-				expFailure:                     "unexpected value", // the failure we get is a condition failed error
+				expServerRefresh: true,
 			},
 		},
 		{
@@ -2779,9 +2780,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put2", false)
 			},
-			// No txn coord retry as we get condition failed error.
+			// The transaction performs a server-side refresh due to the write-write
+			// conflict and then succeeds during its InitPut.
 			allIsoLevels: &expect{
-				expFailure: "unexpected value", // the failure we get is a condition failed error
+				expServerRefresh: true,
 			},
 		},
 		{
@@ -2796,8 +2798,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put2", true)
 			},
+			// The transaction performs a server-side refresh due to the write-write
+			// conflict and then succeeds during its InitPut.
 			allIsoLevels: &expect{
-				expFailure: "unexpected value", // condition failed error when failing on tombstones
+				expServerRefresh: true,
 			},
 		},
 		{

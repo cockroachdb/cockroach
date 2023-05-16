@@ -70,7 +70,6 @@ increment k=r ts=2
 >> at end:
 meta: "k"/0,0 -> txn={id=00000000 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/0,1 -> /INT/2
-data: "r"/3.000000000,1 -> /INT/3
 data: "r"/3.000000000,0 -> /INT/2
 data: "r"/1.000000000,0 -> /INT/1
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "r" at timestamp 2.000000000,0 too old; must write at or above 3.000000000,1
@@ -85,9 +84,6 @@ with t=r
 txn: "r" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
 meta: "k"/0,0 -> txn={id=00000000 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/0,1 -> /INT/2
-meta: "r"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,2 min=0,0 seq=0} ts=3.000000000,2 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "r"/3.000000000,2 -> /INT/2
-data: "r"/3.000000000,1 -> /INT/3
 data: "r"/3.000000000,0 -> /INT/2
 data: "r"/1.000000000,0 -> /INT/1
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "r" at timestamp 2.000000000,0 too old; must write at or above 3.000000000,2
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "r" at timestamp 2.000000000,0 too old; must write at or above 3.000000000,1
