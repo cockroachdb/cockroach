@@ -16,6 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -50,7 +51,7 @@ func NewInternalExecutorWriter(
 }
 
 func (s *InternalExecutorWriter) WriteRangeLogEvent(
-	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
+	ctx context.Context, runner kvserver.DBOrTxn, event kvserverpb.RangeLogEvent,
 ) error {
 	args := []interface{}{
 		event.Timestamp,
@@ -72,6 +73,10 @@ func (s *InternalExecutorWriter) WriteRangeLogEvent(
 		args[5] = string(infoBytes)
 	}
 
+	txn, ok := runner.(*kv.Txn)
+	if !ok {
+		return errors.Errorf("no transaction provided")
+	}
 	rows, err := s.ie.ExecEx(ctx, "log-range-event", txn,
 		sessiondata.RootUserSessionDataOverride,
 		s.insertQuery, args...)
