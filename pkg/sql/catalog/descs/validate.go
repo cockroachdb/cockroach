@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
+	"github.com/cockroachdb/errors"
 )
 
 // Validate returns any descriptor validation errors after validating using the
@@ -51,7 +52,14 @@ func (tc *Collection) Validate(
 // descriptor set. We purposefully avoid using leased descriptors as those may
 // be one version behind, in which case it's possible (and legitimate) that
 // those are missing back-references which would cause validation to fail.
-func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) (err error) {
+// Optionally, the zone config will be validated if validateZoneConfigs is
+// set to true.
+func (tc *Collection) ValidateUncommittedDescriptors(
+	ctx context.Context,
+	txn *kv.Txn,
+	validateZoneConfigs bool,
+	zoneConfigValidator ZoneConfigValidator,
+) (err error) {
 	if tc.skipValidationOnWrite || !tc.validationModeProvider.ValidateDescriptorsOnWrite() {
 		return nil
 	}
@@ -63,7 +71,27 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 	if len(descs) == 0 {
 		return nil
 	}
-	return tc.Validate(ctx, txn, catalog.ValidationWriteTelemetry, validate.Write, descs...)
+	if err := tc.Validate(ctx, txn, catalog.ValidationWriteTelemetry, validate.Write, descs...); err != nil {
+		return err
+	}
+	// Next validate any zone configs that may have been modified
+	// in the descriptor set, only if this type of validation is required.
+	// We only do this type of validation if region configs are modified.
+	if validateZoneConfigs {
+		if zoneConfigValidator == nil {
+			return errors.AssertionFailedf("zone config validator is required to " +
+				"validate zone configs")
+		}
+		for _, desc := range descs {
+			switch t := desc.(type) {
+			case catalog.DatabaseDescriptor:
+				if err = zoneConfigValidator.ValidateDbZoneConfig(ctx, t); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (tc *Collection) newValidationDereferencer(txn *kv.Txn) validate.ValidationDereferencer {
