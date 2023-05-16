@@ -19,7 +19,7 @@ import "server/serverpb/status.proto";
 import "storage/enginepb/mvcc.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/loqrecovery/loqrecoverypb/recovery.proto";
-import "kv/kvserver/kvserverpb/range_log.proto";
+import "kv/kvserver/rangelog/rangelogpb/range_log.proto";
 import "kv/kvpb/api.proto";
 import "roachpb/metadata.proto";
 import "roachpb/data.proto";
@@ -779,7 +779,7 @@ message RangeLogResponse {
     string details = 6;
   }
   message Event {
-    cockroach.kv.kvserver.storagepb.RangeLogEvent event = 1 [(gogoproto.nullable) = false];
+    kv.rangelog.rangelogpb.RangeLogEvent event = 1 [(gogoproto.nullable) = false];
     PrettyInfo pretty_info = 2 [(gogoproto.nullable) = false];
   }
   reserved 1; // Previously used.

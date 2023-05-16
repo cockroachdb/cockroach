@@ -7,7 +7,6 @@ go_library(
     name = "kvserverpb",
     srcs = [
         "lease_status.go",
-        "log.go",
         "proposer_kv.go",
         "raft.go",
         "state.go",
@@ -30,7 +29,6 @@ proto_library(
         "lease_status.proto",
         "proposer_kv.proto",
         "raft.proto",
-        "range_log.proto",
         "state.proto",
     ],
     strip_import_prefix = "/pkg",
@@ -46,7 +44,6 @@ proto_library(
         "//pkg/util/tracing/tracingpb:tracingpb_proto",
         "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-        "@com_google_protobuf//:timestamp_proto",
         "@io_etcd_go_raft_v3//raftpb:raftpb_proto",
     ],
 )

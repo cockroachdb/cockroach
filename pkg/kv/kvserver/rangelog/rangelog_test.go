@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/internal/rangelogtestpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -245,7 +245,7 @@ type teeWriter struct {
 }
 
 func (t teeWriter) WriteRangeLogEvent(
-	ctx context.Context, runner kvserver.DBOrTxn, event kvserverpb.RangeLogEvent,
+	ctx context.Context, runner kvserver.DBOrTxn, event rangelogpb.RangeLogEvent,
 ) error {
 	if err := t.a.WriteRangeLogEvent(ctx, runner, event); err != nil {
 		return err

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -470,7 +471,7 @@ func (rp ReplicaPlanner) addOrReplaceVoters(
 		Chgs:              ops,
 		Priority:          kvserverpb.SnapshotRequest_RECOVERY,
 		AllocatorPriority: allocatorPriority,
-		Reason:            kvserverpb.ReasonRangeUnderReplicated,
+		Reason:            rangelogpb.ReasonRangeUnderReplicated,
 		Details:           details,
 	}
 
@@ -521,7 +522,7 @@ func (rp ReplicaPlanner) addOrReplaceNonVoters(
 		Chgs:              ops,
 		Priority:          kvserverpb.SnapshotRequest_RECOVERY,
 		AllocatorPriority: allocatorPrio,
-		Reason:            kvserverpb.ReasonRangeUnderReplicated,
+		Reason:            rangelogpb.ReasonRangeUnderReplicated,
 		Details:           details,
 	}
 	return op, stats, nil
@@ -655,7 +656,7 @@ func (rp ReplicaPlanner) removeVoter(
 		Chgs:              kvpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, removeVoter),
 		Priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		AllocatorPriority: 0.0,                                // unused
-		Reason:            kvserverpb.ReasonRangeOverReplicated,
+		Reason:            rangelogpb.ReasonRangeOverReplicated,
 		Details:           details,
 	}
 	return op, stats, nil
@@ -694,7 +695,7 @@ func (rp ReplicaPlanner) removeNonVoter(
 		Chgs:              kvpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, target),
 		Priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		AllocatorPriority: 0.0,                                // unused
-		Reason:            kvserverpb.ReasonRangeOverReplicated,
+		Reason:            rangelogpb.ReasonRangeOverReplicated,
 		Details:           details,
 	}
 	return op, stats, nil
@@ -748,7 +749,7 @@ func (rp ReplicaPlanner) removeDecommissioning(
 		Chgs:              kvpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		Priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		AllocatorPriority: 0.0,                                // unused
-		Reason:            kvserverpb.ReasonStoreDecommissioning,
+		Reason:            rangelogpb.ReasonStoreDecommissioning,
 		Details:           "",
 	}
 	return op, stats, nil
@@ -786,7 +787,7 @@ func (rp ReplicaPlanner) removeDead(
 		Chgs:              kvpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		Priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		AllocatorPriority: 0.0,                                // unused
-		Reason:            kvserverpb.ReasonStoreDead,
+		Reason:            rangelogpb.ReasonStoreDead,
 		Details:           "",
 	}
 
@@ -910,7 +911,7 @@ func (rp ReplicaPlanner) considerRebalance(
 		Chgs:              chgs,
 		Priority:          kvserverpb.SnapshotRequest_REBALANCE,
 		AllocatorPriority: allocatorPrio,
-		Reason:            kvserverpb.ReasonRebalance,
+		Reason:            rangelogpb.ReasonRebalance,
 		Details:           details,
 	}
 	return op, stats, nil

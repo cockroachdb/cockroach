@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -1074,7 +1075,7 @@ func (rq *replicateQueue) changeReplicas(
 	desc *roachpb.RangeDescriptor,
 	priority kvserverpb.SnapshotRequest_Priority,
 	allocatorPriority float64,
-	reason kvserverpb.RangeLogEventReason,
+	reason rangelogpb.RangeLogEventReason,
 	details string,
 ) error {
 	// NB: this calls the impl rather than ChangeReplicas because

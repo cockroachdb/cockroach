@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -53,7 +53,7 @@ func newWriter(codec keys.SQLCodec, id IDGen, table catalog.TableDescriptor) *Wr
 // WriteRangeLogEvent implements kvserver.RangeLogWriter. It writes the event
 // to the system.rangelog table in the provided transaction.
 func (s *Writer) WriteRangeLogEvent(
-	ctx context.Context, runner kvserver.DBOrTxn, event kvserverpb.RangeLogEvent,
+	ctx context.Context, runner kvserver.DBOrTxn, event rangelogpb.RangeLogEvent,
 ) error {
 	ts, err := tree.MakeDTimestampTZ(event.Timestamp, time.Microsecond)
 	if err != nil {

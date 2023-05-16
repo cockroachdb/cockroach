@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -2647,7 +2648,7 @@ func TestDrainRangeRejection(t *testing.T) {
 	drainingIdx := 1
 	tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */, false /* verbose */)
 	chgs := kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(drainingIdx))
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, rangelogpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 }
@@ -2667,7 +2668,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 
 	oldGeneration := repl.Desc().Generation
 	chgs := kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1))
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, rangelogpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+2)
@@ -2675,7 +2676,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	oldGeneration = repl.Desc().Generation
 	oldDesc := repl.Desc()
 	chgs[0].ChangeType = roachpb.REMOVE_VOTER
-	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs)
+	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserverpb.SnapshotRequest_REBALANCE, rangelogpb.ReasonRangeOverReplicated, "", chgs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

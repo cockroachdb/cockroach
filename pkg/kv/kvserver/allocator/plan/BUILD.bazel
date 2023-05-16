@@ -18,6 +18,7 @@ go_library(
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/benignerror",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/rangelog/rangelogpb",
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/log",

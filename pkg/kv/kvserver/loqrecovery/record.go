@@ -15,8 +15,8 @@ import (
 	"encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -137,10 +137,10 @@ func UpdateRangeLogWithRecovery(
 		$1, $2, $3, $4, $5, $6
 	)
 	`
-	updateInfo := kvserverpb.RangeLogEvent_Info{
+	updateInfo := rangelogpb.RangeLogEvent_Info{
 		UpdatedDesc:  &event.RangeDescriptor,
 		AddedReplica: &event.NewReplica,
-		Reason:       kvserverpb.ReasonUnsafeRecovery,
+		Reason:       rangelogpb.ReasonUnsafeRecovery,
 		Details:      "Performed unsafe range loss of quorum recovery",
 	}
 	infoBytes, err := json.Marshal(updateInfo)
@@ -151,7 +151,7 @@ func UpdateRangeLogWithRecovery(
 		timeutil.Unix(0, event.Timestamp),
 		event.RangeID,
 		event.NewReplica.StoreID,
-		kvserverpb.RangeLogEventType_unsafe_quorum_recovery.String(),
+		rangelogpb.RangeLogEventType_unsafe_quorum_recovery.String(),
 		nil, // otherRangeID
 		string(infoBytes),
 	}

@@ -34,9 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1778,7 +1778,7 @@ func (s *adminServer) rangeLogHelper(
 	scanner := makeResultScanner(cols)
 	for ; ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
-		var event kvserverpb.RangeLogEvent
+		var event rangelogpb.RangeLogEvent
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
 			return nil, errors.Wrapf(err, "timestamp didn't parse correctly: %s", row[0].String())
@@ -1798,8 +1798,8 @@ func (s *adminServer) rangeLogHelper(
 		if err := scanner.ScanIndex(row, 3, &eventTypeString); err != nil {
 			return nil, errors.Wrapf(err, "EventType didn't parse correctly: %s", row[3].String())
 		}
-		if eventType, ok := kvserverpb.RangeLogEventType_value[eventTypeString]; ok {
-			event.EventType = kvserverpb.RangeLogEventType(eventType)
+		if eventType, ok := rangelogpb.RangeLogEventType_value[eventTypeString]; ok {
+			event.EventType = rangelogpb.RangeLogEventType(eventType)
 		} else {
 			return nil, errors.Errorf("EventType didn't parse correctly: %s", eventTypeString)
 		}

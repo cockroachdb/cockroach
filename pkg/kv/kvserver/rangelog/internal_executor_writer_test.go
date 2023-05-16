@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -51,7 +51,7 @@ func NewInternalExecutorWriter(
 }
 
 func (s *InternalExecutorWriter) WriteRangeLogEvent(
-	ctx context.Context, runner kvserver.DBOrTxn, event kvserverpb.RangeLogEvent,
+	ctx context.Context, runner kvserver.DBOrTxn, event rangelogpb.RangeLogEvent,
 ) error {
 	args := []interface{}{
 		event.Timestamp,

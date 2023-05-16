@@ -15,8 +15,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -94,7 +94,7 @@ func TestPublishRangeLogEvents(t *testing.T) {
 			require.Equal(t, td.rangeID, actualArgs[1], "RangeID query arg doesn't match event")
 			require.Equal(t, timeutil.Unix(0, td.time), actualArgs[0],
 				"timestamp query arg doesn't match event")
-			require.Equal(t, kvserverpb.RangeLogEventType_unsafe_quorum_recovery.String(), actualArgs[3],
+			require.Equal(t, rangelogpb.RangeLogEventType_unsafe_quorum_recovery.String(), actualArgs[3],
 				"incorrect RangeLog event type")
 		})
 	}

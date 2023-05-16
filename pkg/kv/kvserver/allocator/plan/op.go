@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -62,7 +63,7 @@ type AllocationChangeReplicasOp struct {
 	Chgs              kvpb.ReplicationChanges
 	Priority          kvserverpb.SnapshotRequest_Priority
 	AllocatorPriority float64
-	Reason            kvserverpb.RangeLogEventReason
+	Reason            rangelogpb.RangeLogEventReason
 	Details           string
 }
 

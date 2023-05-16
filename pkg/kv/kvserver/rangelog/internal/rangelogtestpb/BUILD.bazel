@@ -8,7 +8,7 @@ proto_library(
     srcs = ["rangelogtest.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//pkg/kv/kvserver/rangelog:__subpackages__"],
-    deps = ["//pkg/kv/kvserver/kvserverpb:kvserverpb_proto"],
+    deps = ["//pkg/kv/kvserver/rangelog/rangelogpb:rangelogpb_proto"],
 )
 
 go_proto_library(
@@ -20,7 +20,7 @@ go_proto_library(
         "//pkg/gen:__subpackages__",  # keep
         "//pkg/kv/kvserver/rangelog:__subpackages__",
     ],
-    deps = ["//pkg/kv/kvserver/kvserverpb"],
+    deps = ["//pkg/kv/kvserver/rangelog/rangelogpb"],
 )
 
 go_library(
@@ -30,7 +30,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/internal/rangelogtestpb",
     visibility = ["//pkg/kv/kvserver/rangelog:__subpackages__"],
     deps = [
-        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/rangelog/rangelogpb",
         "//pkg/roachpb",
         "//pkg/util/encoding/csv",
         "@com_github_cockroachdb_errors//:errors",

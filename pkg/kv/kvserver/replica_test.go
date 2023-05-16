@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -6716,7 +6717,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 				context.Background(),
 				tc.repl.Desc(),
 				kvserverpb.SnapshotRequest_REBALANCE,
-				kvserverpb.ReasonRebalance,
+				rangelogpb.ReasonRebalance,
 				"",
 				chgs,
 			); err == nil || !strings.Contains(err.Error(),

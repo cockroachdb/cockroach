@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -430,7 +431,7 @@ func TestReplicateQueueUpReplicateOddVoters(t *testing.T) {
 	})
 
 	infos, err := filterRangeLog(
-		tc.Conns[0], desc.RangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated,
+		tc.Conns[0], desc.RangeID, rangelogpb.RangeLogEventType_add_voter, rangelogpb.ReasonRangeUnderReplicated,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -500,7 +501,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 
 	desc := tc.LookupRangeOrFatal(t, testKey)
 	infos, err := filterRangeLog(
-		tc.Conns[0], desc.RangeID, kvserverpb.RangeLogEventType_remove_voter, kvserverpb.ReasonRangeOverReplicated,
+		tc.Conns[0], desc.RangeID, rangelogpb.RangeLogEventType_remove_voter, rangelogpb.ReasonRangeOverReplicated,
 	)
 	require.NoError(t, err)
 	require.Truef(t, len(infos) >= 1, "found no down replication due to over-replication in the range logs")
@@ -1682,11 +1683,11 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 // `SELECT info from system.rangelog ...`.
 func queryRangeLog(
 	conn *gosql.DB, query string, args ...interface{},
-) ([]kvserverpb.RangeLogEvent_Info, error) {
+) ([]rangelogpb.RangeLogEvent_Info, error) {
 
 	// The range log can get large and sees unpredictable writes, so run this in a
 	// proper txn to avoid spurious retries.
-	var events []kvserverpb.RangeLogEvent_Info
+	var events []rangelogpb.RangeLogEvent_Info
 	err := crdb.ExecuteTx(context.Background(), conn, nil, func(conn *gosql.Tx) error {
 		events = nil // reset in case of a retry
 
@@ -1703,7 +1704,7 @@ func queryRangeLog(
 			if err := rows.Scan(&infoStr); err != nil {
 				return err
 			}
-			var info kvserverpb.RangeLogEvent_Info
+			var info rangelogpb.RangeLogEvent_Info
 			if err := json.Unmarshal([]byte(infoStr), &info); err != nil {
 				return errors.Wrapf(err, "error unmarshaling info string %q", infoStr)
 			}
@@ -1721,9 +1722,9 @@ func queryRangeLog(
 func filterRangeLog(
 	conn *gosql.DB,
 	rangeID roachpb.RangeID,
-	eventType kvserverpb.RangeLogEventType,
-	reason kvserverpb.RangeLogEventReason,
-) ([]kvserverpb.RangeLogEvent_Info, error) {
+	eventType rangelogpb.RangeLogEventType,
+	reason rangelogpb.RangeLogEventReason,
+) ([]rangelogpb.RangeLogEvent_Info, error) {
 	return queryRangeLog(conn, `SELECT info FROM system.rangelog WHERE "rangeID" = $1 AND "eventType" = $2 AND info LIKE concat('%', $3, '%') ORDER BY timestamp ASC;`, rangeID, eventType.String(), reason)
 }
 
@@ -2346,7 +2347,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	err = db.QueryRow("SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID)
 	require.NoError(t, err)
 	addVoterEvents, err := filterRangeLog(tc.Conns[0],
-		rangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated)
+		rangeID, rangelogpb.RangeLogEventType_add_voter, rangelogpb.ReasonRangeUnderReplicated)
 	require.NoError(t, err)
 
 	// If there are more than 2 add voter events, it implies that we ran into an

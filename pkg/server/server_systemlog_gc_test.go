@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -65,7 +65,7 @@ func TestLogGC(t *testing.T) {
 				timestamp,
 				testRangeID,
 				1, // storeID
-				kvserverpb.RangeLogEventType_add_voter.String(),
+				rangelogpb.RangeLogEventType_add_voter.String(),
 			)
 			a.NoError(err)
 		}
@@ -207,7 +207,7 @@ func TestLogGCTrigger(t *testing.T) {
              cast(now() - interval '10s' as timestamp), -- cast from timestamptz
 						 100, 1, $1
           )`,
-		kvserverpb.RangeLogEventType_add_voter.String(),
+		rangelogpb.RangeLogEventType_add_voter.String(),
 	); err != nil {
 		t.Fatal(err)
 	}

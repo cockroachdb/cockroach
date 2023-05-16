@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -980,7 +981,7 @@ func (r *Replica) ChangeReplicas(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	priority kvserverpb.SnapshotRequest_Priority,
-	reason kvserverpb.RangeLogEventReason,
+	reason rangelogpb.RangeLogEventReason,
 	details string,
 	chgs kvpb.ReplicationChanges,
 ) (updatedDesc *roachpb.RangeDescriptor, _ error) {
@@ -1012,7 +1013,7 @@ func (r *Replica) changeReplicasImpl(
 	priority kvserverpb.SnapshotRequest_Priority,
 	senderName kvserverpb.SnapshotRequest_QueueName,
 	senderQueuePriority float64,
-	reason kvserverpb.RangeLogEventReason,
+	reason rangelogpb.RangeLogEventReason,
 	details string,
 	chgs kvpb.ReplicationChanges,
 ) (updatedDesc *roachpb.RangeDescriptor, _ error) {
@@ -1296,7 +1297,7 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 	// TODO(tbg): reconsider this.
 	s := r.store
 	return execChangeReplicasTxn(
-		ctx, s.cfg.Tracer(), desc, kvserverpb.ReasonUnknown /* unused */, "", nil, /* iChgs */
+		ctx, s.cfg.Tracer(), desc, rangelogpb.ReasonUnknown /* unused */, "", nil, /* iChgs */
 		changeReplicasTxnArgs{
 			db:                                   s.DB(),
 			liveAndDeadReplicas:                  s.cfg.StorePool.LiveAndDeadReplicas,
@@ -1311,7 +1312,7 @@ func (r *Replica) TestingRemoveLearner(
 	ctx context.Context, beforeDesc *roachpb.RangeDescriptor, target roachpb.ReplicationTarget,
 ) (*roachpb.RangeDescriptor, error) {
 	desc, err := execChangeReplicasTxn(
-		ctx, r.store.cfg.Tracer(), beforeDesc, kvserverpb.ReasonAbandonedLearner, "",
+		ctx, r.store.cfg.Tracer(), beforeDesc, rangelogpb.ReasonAbandonedLearner, "",
 		[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
 		changeReplicasTxnArgs{
 			db:                                   r.store.DB(),
@@ -1388,7 +1389,7 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	for _, target := range targets {
 		var err error
 		desc, err = execChangeReplicasTxn(
-			ctx, store.cfg.Tracer(), desc, kvserverpb.ReasonAbandonedLearner, "",
+			ctx, store.cfg.Tracer(), desc, rangelogpb.ReasonAbandonedLearner, "",
 			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
 			changeReplicasTxnArgs{db: store.DB(),
 				liveAndDeadReplicas:                  store.cfg.StorePool.LiveAndDeadReplicas,
@@ -1694,7 +1695,7 @@ func (r *Replica) initializeRaftLearners(
 	priority kvserverpb.SnapshotRequest_Priority,
 	senderName kvserverpb.SnapshotRequest_QueueName,
 	senderQueuePriority float64,
-	reason kvserverpb.RangeLogEventReason,
+	reason rangelogpb.RangeLogEventReason,
 	details string,
 	targets []roachpb.ReplicationTarget,
 	replicaType roachpb.ReplicaType,
@@ -1898,7 +1899,7 @@ func (r *Replica) lockLearnerSnapshot(
 func (r *Replica) execReplicationChangesForVoters(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	reason kvserverpb.RangeLogEventReason,
+	reason rangelogpb.RangeLogEventReason,
 	details string,
 	voterAdditions, voterRemovals []roachpb.ReplicationTarget,
 ) (rangeDesc *roachpb.RangeDescriptor, err error) {
@@ -1948,7 +1949,7 @@ func (r *Replica) tryRollbackRaftLearner(
 	ctx context.Context,
 	rangeDesc *roachpb.RangeDescriptor,
 	target roachpb.ReplicationTarget,
-	reason kvserverpb.RangeLogEventReason,
+	reason rangelogpb.RangeLogEventReason,
 	details string,
 ) {
 	repDesc, ok := rangeDesc.GetReplicaDescriptor(target.StoreID)
@@ -2256,7 +2257,7 @@ func execChangeReplicasTxn(
 	ctx context.Context,
 	tracer *tracing.Tracer,
 	referenceDesc *roachpb.RangeDescriptor,
-	reason kvserverpb.RangeLogEventReason,
+	reason rangelogpb.RangeLogEventReason,
 	details string,
 	chgs internalReplicationChanges,
 	args changeReplicasTxnArgs,
@@ -2496,7 +2497,7 @@ type logChangeFn func(
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
-	reason kvserverpb.RangeLogEventReason,
+	reason rangelogpb.RangeLogEventReason,
 	details string,
 	logAsync bool,
 ) error
@@ -2507,7 +2508,7 @@ func recordRangeEventsInLog(
 	added bool,
 	repDescs []roachpb.ReplicaDescriptor,
 	rangeDesc *roachpb.RangeDescriptor,
-	reason kvserverpb.RangeLogEventReason,
+	reason rangelogpb.RangeLogEventReason,
 	details string,
 	logAsync bool,
 	logChange logChangeFn,

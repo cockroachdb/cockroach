@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,7 +37,7 @@ type DBOrTxn interface {
 // RangeLogWriter is used to write range log events to the rangelog
 // table.
 type RangeLogWriter interface {
-	WriteRangeLogEvent(context.Context, DBOrTxn, kvserverpb.RangeLogEvent) error
+	WriteRangeLogEvent(context.Context, DBOrTxn, rangelogpb.RangeLogEvent) error
 }
 
 // wrappedRangeLogWriter implements RangeLogWriter, performing logging and
@@ -50,7 +50,7 @@ type wrappedRangeLogWriter struct {
 }
 
 type rangeLogEventTypeCounterFunc = func(
-	eventType kvserverpb.RangeLogEventType,
+	eventType rangelogpb.RangeLogEventType,
 ) *metric.Counter
 
 func newWrappedRangeLogWriter(
@@ -66,7 +66,7 @@ func newWrappedRangeLogWriter(
 var _ RangeLogWriter = (*wrappedRangeLogWriter)(nil)
 
 func (w *wrappedRangeLogWriter) WriteRangeLogEvent(
-	ctx context.Context, runner DBOrTxn, event kvserverpb.RangeLogEvent,
+	ctx context.Context, runner DBOrTxn, event rangelogpb.RangeLogEvent,
 ) error {
 	maybeLogRangeLogEvent(ctx, event)
 	if c := w.getCounter(event.EventType); c != nil {
@@ -78,7 +78,7 @@ func (w *wrappedRangeLogWriter) WriteRangeLogEvent(
 	return nil
 }
 
-func maybeLogRangeLogEvent(ctx context.Context, event kvserverpb.RangeLogEvent) {
+func maybeLogRangeLogEvent(ctx context.Context, event rangelogpb.RangeLogEvent) {
 	if !log.V(1) {
 		return
 	}
@@ -101,13 +101,13 @@ func (s *Store) logSplit(
 	reason string,
 	logAsync bool,
 ) error {
-	logEvent := kvserverpb.RangeLogEvent{
+	logEvent := rangelogpb.RangeLogEvent{
 		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedDesc.RangeID,
-		EventType:    kvserverpb.RangeLogEventType_split,
+		EventType:    rangelogpb.RangeLogEventType_split,
 		StoreID:      s.StoreID(),
 		OtherRangeID: newDesc.RangeID,
-		Info: &kvserverpb.RangeLogEvent_Info{
+		Info: &rangelogpb.RangeLogEvent_Info{
 			UpdatedDesc: &updatedDesc,
 			NewDesc:     &newDesc,
 			Details:     reason,
@@ -125,13 +125,13 @@ func (s *Store) logSplit(
 func (s *Store) logMerge(
 	ctx context.Context, txn *kv.Txn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor, logAsync bool,
 ) error {
-	logEvent := kvserverpb.RangeLogEvent{
+	logEvent := rangelogpb.RangeLogEvent{
 		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedLHSDesc.RangeID,
-		EventType:    kvserverpb.RangeLogEventType_merge,
+		EventType:    rangelogpb.RangeLogEventType_merge,
 		StoreID:      s.StoreID(),
 		OtherRangeID: rhsDesc.RangeID,
-		Info: &kvserverpb.RangeLogEvent_Info{
+		Info: &rangelogpb.RangeLogEvent_Info{
 			UpdatedDesc: &updatedLHSDesc,
 			RemovedDesc: &rhsDesc,
 		},
@@ -150,40 +150,40 @@ func (s *Store) logChange(
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
-	reason kvserverpb.RangeLogEventReason,
+	reason rangelogpb.RangeLogEventReason,
 	details string,
 	logAsync bool,
 ) error {
-	var logType kvserverpb.RangeLogEventType
-	var info kvserverpb.RangeLogEvent_Info
+	var logType rangelogpb.RangeLogEventType
+	var info rangelogpb.RangeLogEvent_Info
 	switch changeType {
 	case roachpb.ADD_VOTER:
-		logType = kvserverpb.RangeLogEventType_add_voter
-		info = kvserverpb.RangeLogEvent_Info{
+		logType = rangelogpb.RangeLogEventType_add_voter
+		info = rangelogpb.RangeLogEvent_Info{
 			AddedReplica: &replica,
 			UpdatedDesc:  &desc,
 			Reason:       reason,
 			Details:      details,
 		}
 	case roachpb.REMOVE_VOTER:
-		logType = kvserverpb.RangeLogEventType_remove_voter
-		info = kvserverpb.RangeLogEvent_Info{
+		logType = rangelogpb.RangeLogEventType_remove_voter
+		info = rangelogpb.RangeLogEvent_Info{
 			RemovedReplica: &replica,
 			UpdatedDesc:    &desc,
 			Reason:         reason,
 			Details:        details,
 		}
 	case roachpb.ADD_NON_VOTER:
-		logType = kvserverpb.RangeLogEventType_add_non_voter
-		info = kvserverpb.RangeLogEvent_Info{
+		logType = rangelogpb.RangeLogEventType_add_non_voter
+		info = rangelogpb.RangeLogEvent_Info{
 			AddedReplica: &replica,
 			UpdatedDesc:  &desc,
 			Reason:       reason,
 			Details:      details,
 		}
 	case roachpb.REMOVE_NON_VOTER:
-		logType = kvserverpb.RangeLogEventType_remove_non_voter
-		info = kvserverpb.RangeLogEvent_Info{
+		logType = rangelogpb.RangeLogEventType_remove_non_voter
+		info = rangelogpb.RangeLogEvent_Info{
 			RemovedReplica: &replica,
 			UpdatedDesc:    &desc,
 			Reason:         reason,
@@ -193,7 +193,7 @@ func (s *Store) logChange(
 		return errors.Errorf("unknown replica change type %s", changeType)
 	}
 
-	logEvent := kvserverpb.RangeLogEvent{
+	logEvent := rangelogpb.RangeLogEvent{
 		Timestamp: selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:   desc.RangeID,
 		EventType: logType,
@@ -225,7 +225,7 @@ func selectEventTimestamp(s *Store, input hlc.Timestamp) time.Time {
 // logging is done in an async task (with retries and timeouts), and that task is
 // added as a commit trigger to the given transaction.
 func writeToRangeLogTable(
-	ctx context.Context, s *Store, txn *kv.Txn, logEvent kvserverpb.RangeLogEvent, logAsync bool,
+	ctx context.Context, s *Store, txn *kv.Txn, logEvent rangelogpb.RangeLogEvent, logAsync bool,
 ) error {
 	if !logAsync {
 		return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn, logEvent)

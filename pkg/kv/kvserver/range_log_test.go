@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -38,7 +38,7 @@ import (
 )
 
 func countEvents(
-	ctx context.Context, db *gosql.DB, eventType kvserverpb.RangeLogEventType,
+	ctx context.Context, db *gosql.DB, eventType rangelogpb.RangeLogEventType,
 ) (int, error) {
 	var count int
 	err := db.QueryRowContext(ctx,
@@ -56,7 +56,7 @@ func TestLogSplits(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	// Count the number of split events.
-	initialSplits, err := countEvents(ctx, db, kvserverpb.RangeLogEventType_split)
+	initialSplits, err := countEvents(ctx, db, rangelogpb.RangeLogEventType_split)
 	require.NoError(t, err)
 
 	// Generate an explicit split event.
@@ -70,7 +70,7 @@ func TestLogSplits(t *testing.T) {
 
 	// Logging is done in an async task, so it may need some extra time to finish.
 	testutils.SucceedsSoon(t, func() error {
-		currentSplits, err := countEvents(ctx, db, kvserverpb.RangeLogEventType_split)
+		currentSplits, err := countEvents(ctx, db, rangelogpb.RangeLogEventType_split)
 		require.NoError(t, err)
 		// Verify that the count has increased by at least one. Realistically it's
 		// almost always by exactly one, but if there are any other splits they
@@ -85,7 +85,7 @@ func TestLogSplits(t *testing.T) {
 	// are logged correctly)
 	rows, err := db.QueryContext(ctx,
 		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		kvserverpb.RangeLogEventType_split.String(),
+		rangelogpb.RangeLogEventType_split.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestLogSplits(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for split of range %d", rangeID)
 		}
-		var info kvserverpb.RangeLogEvent_Info
+		var info rangelogpb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for split of range %d: %+v", rangeID, err)
 			continue
@@ -173,7 +173,7 @@ func TestLogMerges(t *testing.T) {
 	}
 
 	// No ranges should have merged immediately after startup.
-	initialMerges, err := countEvents(ctx, db, kvserverpb.RangeLogEventType_merge)
+	initialMerges, err := countEvents(ctx, db, rangelogpb.RangeLogEventType_merge)
 	require.NoError(t, err)
 	if initialMerges != 0 {
 		t.Fatalf("expected 0 initial merges, but got %d", initialMerges)
@@ -203,7 +203,7 @@ func TestLogMerges(t *testing.T) {
 
 	// Logging is done in an async task, so it may need some extra time to finish.
 	testutils.SucceedsSoon(t, func() error {
-		currentMerges, err := countEvents(ctx, db, kvserverpb.RangeLogEventType_merge)
+		currentMerges, err := countEvents(ctx, db, rangelogpb.RangeLogEventType_merge)
 		require.NoError(t, err)
 		if currentMerges != 1 {
 			return errors.Newf("expected 1 merge, but got %d", currentMerges)
@@ -216,7 +216,7 @@ func TestLogMerges(t *testing.T) {
 
 	rows, err := db.QueryContext(ctx,
 		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		kvserverpb.RangeLogEventType_merge.String(),
+		rangelogpb.RangeLogEventType_merge.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -238,7 +238,7 @@ func TestLogMerges(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for merge of range %d", rangeID)
 		}
-		var info kvserverpb.RangeLogEvent_Info
+		var info rangelogpb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for merge of range %d: %+v", rangeID, err)
 			continue
@@ -280,7 +280,7 @@ func TestLogRebalances(t *testing.T) {
 
 	// Log several fake events using the store.
 	const details = "test"
-	logEvent := func(changeType roachpb.ReplicaChangeType, reason kvserverpb.RangeLogEventReason) {
+	logEvent := func(changeType roachpb.ReplicaChangeType, reason rangelogpb.RangeLogEventReason) {
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Not logging async here because logging is the only part of this
 			// transaction. If we wanted to log async we would need to add another
@@ -299,11 +299,11 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("range removes %d != expected %d", a, e)
 		}
 	}
-	logEvent(roachpb.ADD_VOTER, kvserverpb.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_VOTER, rangelogpb.ReasonRangeUnderReplicated)
 	checkMetrics(1 /*add*/, 0 /*remove*/)
-	logEvent(roachpb.ADD_VOTER, kvserverpb.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_VOTER, rangelogpb.ReasonRangeUnderReplicated)
 	checkMetrics(2 /*adds*/, 0 /*remove*/)
-	logEvent(roachpb.REMOVE_VOTER, kvserverpb.ReasonRangeOverReplicated)
+	logEvent(roachpb.REMOVE_VOTER, rangelogpb.ReasonRangeOverReplicated)
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// Open a SQL connection to verify that the events have been logged.
@@ -319,7 +319,7 @@ func TestLogRebalances(t *testing.T) {
 	// verify that two add replica events have been logged.
 	rows, err := sqlDB.QueryContext(ctx,
 		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		kvserverpb.RangeLogEventType_add_voter.String(),
+		rangelogpb.RangeLogEventType_add_voter.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -340,7 +340,7 @@ func TestLogRebalances(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for add replica of range %d", rangeID)
 		}
-		var info kvserverpb.RangeLogEvent_Info
+		var info rangelogpb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for add replica %d: %+v", rangeID, err)
 			continue
@@ -352,7 +352,7 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("recorded wrong updated replica %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
-		if a, e := info.Reason, kvserverpb.ReasonRangeUnderReplicated; a != e {
+		if a, e := info.Reason, rangelogpb.ReasonRangeUnderReplicated; a != e {
 			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
@@ -371,7 +371,7 @@ func TestLogRebalances(t *testing.T) {
 	// verify that one remove replica event was logged.
 	rows, err = sqlDB.QueryContext(ctx,
 		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		kvserverpb.RangeLogEventType_remove_voter.String(),
+		rangelogpb.RangeLogEventType_remove_voter.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -392,7 +392,7 @@ func TestLogRebalances(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for remove replica of range %d", rangeID)
 		}
-		var info kvserverpb.RangeLogEvent_Info
+		var info rangelogpb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for remove replica %d: %+v", rangeID, err)
 			continue
@@ -404,7 +404,7 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("recorded wrong updated replica %s for remove replica of range %d, expected %s",
 				a, rangeID, e)
 		}
-		if a, e := info.Reason, kvserverpb.ReasonRangeOverReplicated; a != e {
+		if a, e := info.Reason, rangelogpb.ReasonRangeOverReplicated; a != e {
 			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
@@ -449,7 +449,7 @@ func TestAsyncLogging(t *testing.T) {
 
 	// A string used as the split reason; 100MB long.
 	longReason := strings.Repeat("r", 100*1024*1024)
-	initialSplits, err := countEvents(ctx, db, kvserverpb.RangeLogEventType_split)
+	initialSplits, err := countEvents(ctx, db, rangelogpb.RangeLogEventType_split)
 	require.NoError(t, err)
 
 	t.Run("failed-async-log", func(t *testing.T) {
@@ -462,7 +462,7 @@ func TestAsyncLogging(t *testing.T) {
 		// Logging errors are not returned here because logging runs as an async
 		// task.
 		require.NoError(t, err)
-		currentSplits, err := countEvents(ctx, db, kvserverpb.RangeLogEventType_split)
+		currentSplits, err := countEvents(ctx, db, rangelogpb.RangeLogEventType_split)
 		require.NoError(t, err)
 		// The current splits should be the same as the initial splits because
 		// writing to the rangelog table failed.
@@ -484,7 +484,7 @@ func TestAsyncLogging(t *testing.T) {
 		err = logEvent(longReason, false)
 		// Logging is not async, so we expect to see an error here.
 		require.Regexp(t, "command is too large: .*", err)
-		currentSplits, err := countEvents(ctx, db, kvserverpb.RangeLogEventType_split)
+		currentSplits, err := countEvents(ctx, db, rangelogpb.RangeLogEventType_split)
 		require.NoError(t, err)
 		// The current splits should be the same as the initial splits because
 		// writing to the rangelog table failed.
@@ -505,7 +505,7 @@ func TestAsyncLogging(t *testing.T) {
 			// Log a reasonable size event, no error expected.
 			err = logEvent("reason", logAsync)
 			require.NoError(t, err)
-			currentSplits, err := countEvents(ctx, db, kvserverpb.RangeLogEventType_split)
+			currentSplits, err := countEvents(ctx, db, rangelogpb.RangeLogEventType_split)
 			require.NoError(t, err)
 			// Writing to rangelog succeeded, so we expect to see more splits than
 			// initially.

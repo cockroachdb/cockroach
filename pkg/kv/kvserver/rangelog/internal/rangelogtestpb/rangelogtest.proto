@@ -12,10 +12,10 @@ syntax = "proto3";
 package cockroach.kv.kvserver.rangelog.rangelogtest;
 option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/internal/rangelogtestpb";
 
-import "kv/kvserver/kvserverpb/range_log.proto";
+import "kv/kvserver/rangelog/rangelogpb/range_log.proto";
 
 // RangeLogData is used to store a set of range log events.
 message RangeLogData {
-  repeated storagepb.RangeLogEvent events = 1;
+  repeated kv.rangelog.rangelogpb.RangeLogEvent events = 1;
   repeated int64 unique_ids = 2;
 }

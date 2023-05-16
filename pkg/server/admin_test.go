@@ -33,9 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -2080,7 +2080,7 @@ func TestAdminAPIRangeLogByRangeID(t *testing.T) {
           )`,
 			rangeID, otherRangeID,
 			1, // storeID
-			kvserverpb.RangeLogEventType_add_voter.String(),
+			rangelogpb.RangeLogEventType_add_voter.String(),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -2156,7 +2156,7 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
              timestamp, "rangeID", "storeID", "eventType"
            ) VALUES (now(), $1, 1, $2)`,
 			rangeID,
-			kvserverpb.RangeLogEventType_add_voter.String(),
+			rangelogpb.RangeLogEventType_add_voter.String(),
 		); err != nil {
 			t.Fatal(err)
 		}

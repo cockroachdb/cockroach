@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.kv.kvserver.storagepb;
-option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb";
+package cockroach.kv.rangelog.rangelogpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb";
 
 import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";

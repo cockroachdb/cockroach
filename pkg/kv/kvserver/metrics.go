@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -3110,16 +3110,16 @@ func storageLevelGaugeFloat64Slice(sl [7]metric.Metadata) [7]*metric.GaugeFloat6
 }
 
 func (sm *StoreMetrics) getCounterForRangeLogEventType(
-	eventType kvserverpb.RangeLogEventType,
+	eventType rangelogpb.RangeLogEventType,
 ) *metric.Counter {
 	switch eventType {
-	case kvserverpb.RangeLogEventType_split:
+	case rangelogpb.RangeLogEventType_split:
 		return sm.RangeSplits
-	case kvserverpb.RangeLogEventType_merge:
+	case rangelogpb.RangeLogEventType_merge:
 		return sm.RangeMerges
-	case kvserverpb.RangeLogEventType_add_voter:
+	case rangelogpb.RangeLogEventType_add_voter:
 		return sm.RangeAdds
-	case kvserverpb.RangeLogEventType_remove_voter:
+	case rangelogpb.RangeLogEventType_remove_voter:
 		return sm.RangeRemoves
 	default:
 		return nil

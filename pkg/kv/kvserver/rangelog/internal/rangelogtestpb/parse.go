@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/rangelogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/errors"
@@ -80,7 +80,7 @@ func ParseRows(rows [][]string) (*RangeLogData, error) {
 	return &ret, nil
 }
 
-func parseRangeLogRow(data []string) (*kvserverpb.RangeLogEvent, int64, error) {
+func parseRangeLogRow(data []string) (*rangelogpb.RangeLogEvent, int64, error) {
 	if len(data) != expLen {
 		return nil, 0, errors.Errorf("parseEventLogRow: expected %d entries, got %d", expLen, len(data))
 	}
@@ -115,14 +115,14 @@ func parseRangeLogRow(data []string) (*kvserverpb.RangeLogEvent, int64, error) {
 			id, err := parseInt(s)
 			return roachpb.StoreID(id), err
 		}
-		parseEventType = func(s string) (kvserverpb.RangeLogEventType, error) {
-			if v, ok := kvserverpb.RangeLogEventType_value[s]; ok {
-				return kvserverpb.RangeLogEventType(v), nil
+		parseEventType = func(s string) (rangelogpb.RangeLogEventType, error) {
+			if v, ok := rangelogpb.RangeLogEventType_value[s]; ok {
+				return rangelogpb.RangeLogEventType(v), nil
 			}
 			return 0, errors.Errorf("unknown event type %q", s)
 		}
 	)
-	var ev kvserverpb.RangeLogEvent
+	var ev rangelogpb.RangeLogEvent
 	var err error
 	if ev.Timestamp, err = parseTimestamp(data[TimestampIdx]); err != nil {
 		return nil, 0, errors.Wrap(err, "parseEventLogRow: parsing timestamp")
@@ -139,7 +139,7 @@ func parseRangeLogRow(data []string) (*kvserverpb.RangeLogEvent, int64, error) {
 	if ev.EventType, err = parseEventType(data[EventTypeIdx]); err != nil {
 		return nil, 0, errors.Wrap(err, "parseEventLogRow: parsing eventType")
 	}
-	ev.Info = new(kvserverpb.RangeLogEvent_Info)
+	ev.Info = new(rangelogpb.RangeLogEvent_Info)
 	if err := json.Unmarshal([]byte(data[InfoIdx]), ev.Info); err != nil {
 		return nil, 0, errors.Wrap(err, "parseEventLogRow: parsing info")
 
