@@ -402,5 +402,6 @@ set to "NONE" to disable buffering. Example configuration:
 | `max-staleness` | the maximum time a log message will sit in the buffer before a flush is triggered. |
 | `flush-trigger-size` | the number of bytes that will trigger the buffer to flush. |
 | `max-buffer-size` | the limit on the size of the messages that are buffered. If this limit is exceeded, messages are dropped. The limit is expected to be higher than FlushTriggerSize. A buffer is flushed as soon as FlushTriggerSize is reached, and a new buffer is created once the flushing is started. Only one flushing operation is active at a time. |
+| `format` | describes how the buffer output should be formatted. Currently 2 options: newline: default option - separates buffer entries with newline char json-array: separates entries with ',' and wraps buffer contents in square brackets |
 
 
