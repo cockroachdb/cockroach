@@ -191,6 +191,9 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
 
 statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED; COMMIT
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
 
 statement ok
@@ -198,6 +201,9 @@ BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
 
 statement ok
 BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
+
+statement ok
+BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; COMMIT
 
 # It is an error to change the isolation level of a running transaction.
 
@@ -253,8 +259,8 @@ COMMIT
 
 # We can't set isolation level to an unsupported one.
 
-statement error invalid value for parameter "transaction_isolation": "read committed"
-SET transaction_isolation = 'read committed'
+statement error invalid value for parameter "transaction_isolation": "read uncommitted"
+SET transaction_isolation = 'read uncommitted'
 
 # We can explicitly start a transaction with isolation level
 # specified.
@@ -577,6 +583,15 @@ serializable
 # SHOW without a transaction should create an auto-transaction with the default level
 query T
 SHOW TRANSACTION ISOLATION LEVEL
+----
+serializable
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# TODO(rafi): Once the session variable is supported, this should show read committed.
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 serializable
 

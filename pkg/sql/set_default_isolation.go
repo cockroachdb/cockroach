@@ -25,11 +25,10 @@ func (p *planner) SetSessionCharacteristics(
 ) (planNode, error) {
 	// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
 	switch n.Modes.Isolation {
-	case tree.SerializableIsolation, tree.UnspecifiedIsolation:
-		// Do nothing. All transactions execute with serializable isolation.
+	case tree.UnspecifiedIsolation:
+		// Nothing to do.
 	default:
-		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-			"unsupported default isolation level: %s", n.Modes.Isolation)
+		// TODO(rafi): set the session variable once it is supported.
 	}
 
 	if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
