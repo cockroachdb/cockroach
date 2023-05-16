@@ -2180,7 +2180,9 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				sqlTs,
 				historicalTs,
 				ex.transitionCtx,
-				ex.QualityOfService())
+				ex.QualityOfService(),
+				ex.txnIsolationLevelWithSessionDefault(s.Modes.Isolation),
+			)
 	case *tree.ShowCommitTimestamp:
 		return ex.execShowCommitTimestampInNoTxnState(ctx, s, res)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
@@ -2203,7 +2205,9 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				sqlTs,
 				historicalTs,
 				ex.transitionCtx,
-				ex.QualityOfService())
+				ex.QualityOfService(),
+				ex.txnIsolationLevelWithSessionDefault(tree.UnspecifiedIsolation),
+			)
 	}
 }
 
@@ -2234,6 +2238,7 @@ func (ex *connExecutor) beginImplicitTxn(
 			historicalTs,
 			ex.transitionCtx,
 			ex.QualityOfService(),
+			ex.txnIsolationLevelWithSessionDefault(tree.UnspecifiedIsolation),
 		)
 }
 
