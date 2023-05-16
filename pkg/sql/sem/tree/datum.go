@@ -847,6 +847,20 @@ func MustBeDFloat(e Expr) DFloat {
 	panic(errors.AssertionFailedf("expected *DFloat, found %T", e))
 }
 
+// AsDFloat attempts to retrieve a DFloat from an Expr, returning a DFloat and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DFloat wrapped by a
+// *DOidWrapper is possible.
+func AsDFloat(e Expr) (*DFloat, bool) {
+	switch t := e.(type) {
+	case *DFloat:
+		return t, true
+	case *DOidWrapper:
+		return AsDFloat(t.Wrapped)
+	}
+	return nil, false
+}
+
 // NewDFloat is a helper routine to create a *DFloat initialized from its
 // argument.
 func NewDFloat(d DFloat) *DFloat {
