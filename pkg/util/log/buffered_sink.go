@@ -53,6 +53,8 @@ type bufferedSink struct {
 	// on which the result of the flush is to be communicated.
 	flushC chan struct{}
 
+	format bufferFmtConfig
+
 	mu struct {
 		syncutil.Mutex
 		// buf buffers the messages that have yet to be flushed.
@@ -61,6 +63,17 @@ type bufferedSink struct {
 		// future.
 		timer *time.Timer
 	}
+}
+
+type bufferFmtConfig struct {
+	// delimiter is the string used to separate log entries
+	delimiter string
+
+	// prefix is the string that is prepended to the entire buffer output
+	prefix string
+
+	// suffix is the string that is appended to the entire buffer output
+	suffix string
 }
 
 // newBufferedSink creates a bufferedSink that wraps child.
@@ -100,6 +113,7 @@ func newBufferedSink(
 	triggerSize uint64,
 	maxBufferSize uint64,
 	crashOnAsyncFlushErr bool,
+	formatConfig *bufferFmtConfig,
 ) *bufferedSink {
 	if triggerSize != 0 && maxBufferSize != 0 {
 		// Validate triggerSize in relation to maxBufferSize. As explained above, we
@@ -110,6 +124,13 @@ func newBufferedSink(
 				triggerSize, maxBufferSize))
 		}
 	}
+
+	if formatConfig == nil {
+		formatConfig = &bufferFmtConfig{
+			delimiter: "\n",
+		}
+	}
+
 	sink := &bufferedSink{
 		child: child,
 		// flushC is a buffered channel, so that an async flush triggered while
@@ -118,6 +139,7 @@ func newBufferedSink(
 		triggerSize:              triggerSize,
 		maxStaleness:             maxStaleness,
 		crashOnAsyncFlushFailure: crashOnAsyncFlushErr,
+		format:                   *formatConfig,
 	}
 	sink.mu.buf.maxSizeBytes = maxBufferSize
 	return sink
@@ -248,7 +270,7 @@ func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 			done = true
 		}
 		bs.mu.Lock()
-		msg, errC := buf.flush()
+		msg, errC := buf.flush(&bs.format)
 		bs.mu.Unlock()
 		if msg == nil {
 			// Nothing to flush.
@@ -347,8 +369,12 @@ func (b *msgBuf) appendMsg(msg *buffer, errC chan<- error) error {
 
 // flush resets b, returning its contents in concatenated form. If b is empty, a
 // nil buffer is returned.
-func (b *msgBuf) flush() (*buffer, chan<- error) {
-	msg := b.concatMessages()
+func (b *msgBuf) flush(fmt *bufferFmtConfig) (*buffer, chan<- error) {
+	if fmt == nil {
+		fmt = &bufferFmtConfig{delimiter: "\n"}
+	}
+
+	msg := b.concatMessages(fmt.prefix, fmt.suffix, fmt.delimiter)
 	b.messages = nil
 	b.sizeBytes = 0
 	errC := b.errC
@@ -360,17 +386,28 @@ func (b *msgBuf) flush() (*buffer, chan<- error) {
 // which is returned.
 //
 // All buffers but the first one are released to the pool.
-func (b *msgBuf) concatMessages() *buffer {
+func (b *msgBuf) concatMessages(prefix string, suffix string, delimiter string) *buffer {
 	if len(b.messages) == 0 {
 		return nil
 	}
 	var totalSize int
-	for _, msg := range b.messages {
-		totalSize += msg.Len() + 1 // leave space for newLine
+	totalSize += len(prefix) + len(suffix)
+	for i, msg := range b.messages {
+		totalSize += msg.Len()
+		if i != 0 {
+			totalSize += len(delimiter)
+		}
 	}
-	// Append all the messages in the first buffer.
+	// Append all the messages in the first buffer, and prepend the prefix string if it exists.
 	buf := b.messages[0]
 	buf.Grow(totalSize - buf.Len())
+
+	if prefix != "" {
+		tmp := b.messages[0].String()
+		buf.Reset()
+		buf.WriteString(prefix + tmp)
+	}
+
 	for i, b := range b.messages {
 		if i == 0 {
 			// First buffer skips putBuffer --
@@ -378,11 +415,12 @@ func (b *msgBuf) concatMessages() *buffer {
 			// for reuse.
 			continue
 		}
-		buf.WriteByte('\n')
+		buf.WriteString(delimiter)
 		buf.Write(b.Bytes())
 		// Make b available for reuse.
 		putBuffer(b)
 	}
+	buf.WriteString(suffix)
 	return buf
 }
 

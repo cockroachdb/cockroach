@@ -84,6 +84,7 @@ sinks:
         address: "127.0.0.1:5170"
         channels: DEV
 ----
+----
 sinks:
   file-groups:
     default:
@@ -103,12 +104,18 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        delimiter: |2+
+
+        prefix: ""
+        suffix: ""
   stderr:
     filter: NONE
 capture-stray-errors:
   enable: true
   dir: /default-dir
   max-group-size: 100MiB
+----
+----
 
 # Check that it's possible to capture all channels.
 yaml
@@ -159,6 +166,7 @@ sinks:
       address: localhost:5170
       auditable: true
 ----
+----
 sinks:
   file-groups:
     default:
@@ -178,12 +186,18 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        delimiter: |2+
+
+        prefix: ""
+        suffix: ""
   stderr:
     filter: NONE
 capture-stray-errors:
   enable: true
   dir: /default-dir
   max-group-size: 100MiB
+----
+----
 
 # Check that "auditable" is transformed into other stderr
 yaml
@@ -453,6 +467,9 @@ fluent-defaults:
     max-staleness: 15s
     flush-trigger-size: 10KiB
     max-buffer-size: 2MiB
+    delimiter: ","
+    prefix: "["
+    suffix: "]"
 sinks:
   fluent-servers:
     a:
@@ -460,11 +477,13 @@ sinks:
       channels: STORAGE
       buffering:
         max-staleness: 10s
+        delimiter: ok
     b:
       address: b
       channels: OPS
       buffering:
         flush-trigger-size: 5.0KiB
+        suffix: "}"
     c:
       address: c
       channels: HEALTH
@@ -474,6 +493,7 @@ sinks:
       address: d
       channels: SESSIONS
       buffering: NONE
+----
 ----
 sinks:
   file-groups:
@@ -494,6 +514,9 @@ sinks:
         max-staleness: 10s
         flush-trigger-size: 10KiB
         max-buffer-size: 2.0MiB
+        delimiter: ok
+        prefix: '['
+        suffix: ']'
     b:
       channels: {INFO: [OPS]}
       net: tcp
@@ -507,6 +530,9 @@ sinks:
         max-staleness: 15s
         flush-trigger-size: 5.0KiB
         max-buffer-size: 2.0MiB
+        delimiter: ','
+        prefix: '['
+        suffix: '}'
     c:
       channels: {INFO: [HEALTH]}
       net: tcp
@@ -520,6 +546,9 @@ sinks:
         max-staleness: 15s
         flush-trigger-size: 10KiB
         max-buffer-size: 3.0MiB
+        delimiter: ','
+        prefix: '['
+        suffix: ']'
     d:
       channels: {INFO: [SESSIONS]}
       net: tcp
@@ -536,3 +565,5 @@ capture-stray-errors:
   enable: true
   dir: /default-dir
   max-group-size: 100MiB
+----
+----

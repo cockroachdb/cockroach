@@ -58,6 +58,7 @@ yaml
 sinks:
  fluent-servers: {local: {channels: SESSIONS, address: localhost:5170}}
 ----
+----
 sinks:
   file-groups:
     default:
@@ -83,6 +84,10 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        delimiter: |2+
+
+        prefix: ""
+        suffix: ""
   stderr:
     format: crdb-v2-tty
     redact: false
@@ -92,11 +97,14 @@ capture-stray-errors:
   enable: true
   dir: TMPDIR
   max-group-size: 100MiB
+----
+----
 
 # Test the default config with an http server.
 yaml
 sinks:
  http-servers: {local: {channels: SESSIONS, address: localhost:5170}}
+----
 ----
 sinks:
   file-groups:
@@ -128,6 +136,10 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        delimiter: |2+
+
+        prefix: ""
+        suffix: ""
   stderr:
     format: crdb-v2-tty
     redact: false
@@ -137,6 +149,8 @@ capture-stray-errors:
   enable: true
   dir: TMPDIR
   max-group-size: 100MiB
+----
+----
 
 
 # Test the default config with a catch-all auditable file.

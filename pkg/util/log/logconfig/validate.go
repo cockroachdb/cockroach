@@ -42,6 +42,9 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	defaultBufferedStaleness := 5 * time.Second
 	defaultFlushTriggerSize := ByteSize(1024 * 1024)   // 1mib
 	defaultMaxBufferSize := ByteSize(50 * 1024 * 1024) // 50mib
+	delimiter := "\n"
+	prefix := ""
+	suffix := ""
 
 	baseCommonSinkConfig := CommonSinkConfig{
 		Filter:      logpb.Severity_INFO,
@@ -56,6 +59,9 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 				MaxStaleness:     &zeroDuration,
 				FlushTriggerSize: &zeroByteSize,
 				MaxBufferSize:    &zeroByteSize,
+				Delimiter:        &delimiter,
+				Prefix:           &prefix,
+				Suffix:           &suffix,
 			},
 		},
 	}
@@ -76,6 +82,9 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 					MaxStaleness:     &zeroDuration,
 					FlushTriggerSize: &zeroByteSize,
 					MaxBufferSize:    &zeroByteSize,
+					Delimiter:        &delimiter,
+					Prefix:           &prefix,
+					Suffix:           &suffix,
 				},
 			},
 		},
@@ -88,6 +97,9 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 					MaxStaleness:     &defaultBufferedStaleness,
 					FlushTriggerSize: &defaultFlushTriggerSize,
 					MaxBufferSize:    &defaultMaxBufferSize,
+					Delimiter:        &delimiter,
+					Prefix:           &prefix,
+					Suffix:           &suffix,
 				},
 			},
 		},
@@ -100,6 +112,9 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 					MaxStaleness:     &defaultBufferedStaleness,
 					FlushTriggerSize: &defaultFlushTriggerSize,
 					MaxBufferSize:    &defaultMaxBufferSize,
+					Delimiter:        &delimiter,
+					Prefix:           &prefix,
+					Suffix:           &suffix,
 				},
 			},
 		},

@@ -188,6 +188,16 @@ type CommonBufferSinkConfig struct {
 	// FlushTriggerSize is reached, and a new buffer is created once the flushing
 	// is started. Only one flushing operation is active at a time.
 	MaxBufferSize *ByteSize `yaml:"max-buffer-size"`
+
+	// Delimiter is the string used to separate log entries in the buffer.
+	// Defaults to '\n'.
+	Delimiter *string
+
+	// Prefix is an optional string that is prepended to the buffer contents.
+	Prefix *string
+
+	// Suffix is an optional string that is appended to the buffer contents.
+	Suffix *string
 }
 
 // CommonBufferSinkConfigWrapper is a BufferSinkConfig with a special value represented in YAML by
@@ -1070,10 +1080,16 @@ func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error
 		if strings.ToUpper(v) == "NONE" {
 			d := time.Duration(0)
 			s := ByteSize(0)
+			delimiter := ""
+			prefix := ""
+			suffix := ""
 			w.CommonBufferSinkConfig = CommonBufferSinkConfig{
 				MaxStaleness:     &d,
 				FlushTriggerSize: &s,
 				MaxBufferSize:    &s,
+				Delimiter:        &delimiter,
+				Prefix:           &prefix,
+				Suffix:           &suffix,
 			}
 			return nil
 		}

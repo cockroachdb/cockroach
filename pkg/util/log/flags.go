@@ -420,7 +420,13 @@ func attachBufferWrapper(
 		*bufConfig.MaxStaleness,
 		uint64(*bufConfig.FlushTriggerSize),
 		uint64(*bufConfig.MaxBufferSize),
-		s.criticality /* crashOnAsyncFlushErr */)
+		s.criticality, /* crashOnAsyncFlushErr */
+		&bufferFmtConfig{
+			delimiter: *bufConfig.Delimiter,
+			prefix:    *bufConfig.Prefix,
+			suffix:    *bufConfig.Suffix,
+		},
+	)
 	bs.Start(closer)
 	s.sink = bs
 }
@@ -455,6 +461,9 @@ func (l *sinkInfo) describeAppliedConfig() (c logconfig.CommonSinkConfig) {
 		c.Buffering.MaxStaleness = &bufferedSink.maxStaleness
 		triggerSize := logconfig.ByteSize(bufferedSink.triggerSize)
 		c.Buffering.FlushTriggerSize = &triggerSize
+		c.Buffering.Delimiter = &bufferedSink.format.delimiter
+		c.Buffering.Prefix = &bufferedSink.format.prefix
+		c.Buffering.Suffix = &bufferedSink.format.suffix
 		bufferedSink.mu.Lock()
 		maxBufferSize := logconfig.ByteSize(bufferedSink.mu.buf.maxSizeBytes)
 		c.Buffering.MaxBufferSize = &maxBufferSize
