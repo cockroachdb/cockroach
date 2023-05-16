@@ -2552,17 +2552,21 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "timestamp", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts := float64(tree.MustBeDFloat(args[0]))
-				if math.IsNaN(ts) {
+				ts, ok := tree.AsDFloat(args[0])
+				if !ok {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected float argument for to_timestamp")
+				}
+				fts := float64(*ts)
+				if math.IsNaN(fts) {
 					return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "timestamp cannot be NaN")
 				}
-				if ts == math.Inf(1) {
+				if fts == math.Inf(1) {
 					return tree.MakeDTimestampTZ(pgdate.TimeInfinity, time.Microsecond)
 				}
-				if ts == math.Inf(-1) {
+				if fts == math.Inf(-1) {
 					return tree.MakeDTimestampTZ(pgdate.TimeNegativeInfinity, time.Microsecond)
 				}
-				return tree.MakeDTimestampTZ(timeutil.Unix(0, int64(ts*float64(time.Second))), time.Microsecond)
+				return tree.MakeDTimestampTZ(timeutil.Unix(0, int64(fts*float64(time.Second))), time.Microsecond)
 			},
 			Info:       "Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.",
 			Volatility: volatility.Immutable,
