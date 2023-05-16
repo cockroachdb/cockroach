@@ -67,6 +67,68 @@ const backendError = "Backend error!"
 // the test directory server.
 const notFoundTenantID = 99
 
+func TestProxyHandler_ValidateConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stop := stop.NewStopper()
+	defer stop.Stop(ctx)
+
+	// Create the directory server.
+	tds := tenantdirsvr.NewTestStaticDirectoryServer(stop, nil /* timeSource */)
+	invalidTenantID := roachpb.MustMakeTenantID(99)
+	tenantID := roachpb.MustMakeTenantID(10)
+	tds.CreateTenant(tenantID, &tenant.Tenant{
+		TenantID:    tenantID.ToUint64(),
+		ClusterName: "my-tenant",
+	})
+	tenantWithoutNameID := roachpb.MustMakeTenantID(20)
+	tds.CreateTenant(tenantWithoutNameID, &tenant.Tenant{
+		TenantID: tenantWithoutNameID.ToUint64(),
+	})
+	require.NoError(t, tds.Start(ctx))
+
+	options := &ProxyOptions{}
+	options.testingKnobs.directoryServer = tds
+	s, _, _ := newSecureProxyServer(ctx, t, stop, options)
+
+	t.Run("not found/no cluster name", func(t *testing.T) {
+		err := s.handler.validateConnection(ctx, invalidTenantID, "")
+		require.Regexp(t, "codeParamsRoutingFailed: cluster -99 not found", err.Error())
+	})
+	t.Run("not found", func(t *testing.T) {
+		err := s.handler.validateConnection(ctx, invalidTenantID, "foo-bar")
+		require.Regexp(t, "codeParamsRoutingFailed: cluster foo-bar-99 not found", err.Error())
+	})
+	t.Run("found/tenant without name", func(t *testing.T) {
+		err := s.handler.validateConnection(ctx, tenantWithoutNameID, "foo-bar")
+		require.NoError(t, err)
+	})
+	t.Run("found/tenant name matches", func(t *testing.T) {
+		err := s.handler.validateConnection(ctx, tenantID, "my-tenant")
+		require.NoError(t, err)
+	})
+	t.Run("found/connection without name", func(t *testing.T) {
+		err := s.handler.validateConnection(ctx, tenantID, "")
+		require.Regexp(t, "codeParamsRoutingFailed: cluster -10 not found", err.Error())
+	})
+	t.Run("found/tenant name mismatch", func(t *testing.T) {
+		err := s.handler.validateConnection(ctx, tenantID, "foo-bar")
+		require.Regexp(t, "codeParamsRoutingFailed: cluster foo-bar-10 not found", err.Error())
+	})
+
+	// Stop the directory server.
+	tds.Stop(ctx)
+
+	// Directory hasn't started
+	t.Run("directory error", func(t *testing.T) {
+		// Use a new tenant ID here to force GetTenant.
+		err := s.handler.validateConnection(ctx, roachpb.MustMakeTenantID(100), "")
+		require.Regexp(t, "directory server has not been started", err.Error())
+	})
+}
+
 func TestProxyProtocol(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

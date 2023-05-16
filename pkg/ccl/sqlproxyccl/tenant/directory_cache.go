@@ -34,11 +34,9 @@ type DirectoryCache interface {
 
 	// LookupTenantPods returns a list of SQL pods in the RUNNING and DRAINING
 	// states for the given tenant. This blocks until there is at least one
-	// running SQL pod.
-	//
-	// If no matching pods are found (e.g. cluster name mismatch, or tenant was
-	// deleted), this will return a GRPC NotFound error.
-	LookupTenantPods(ctx context.Context, tenantID roachpb.TenantID, clusterName string) ([]*Pod, error)
+	// running SQL pod. If the tenant cannot be found, this will return a GRPC
+	// NotFound error.
+	LookupTenantPods(ctx context.Context, tenantID roachpb.TenantID) ([]*Pod, error)
 
 	// TryLookupTenantPods returns a list of SQL pods in the RUNNING and
 	// DRAINING states for the given tenant. It returns a GRPC NotFound error
@@ -176,6 +174,10 @@ func NewDirectoryCache(
 // LookupTenant returns the tenant entry associated to the requested tenant
 // ID. If the tenant cannot be found, this will return a GRPC NotFound error.
 //
+// WARNING: Callers should never attempt to modify values returned by this
+// method, or else they may be a race. Other instances may be reading from the
+// same object.
+//
 // LookupTenant implements the DirectoryCache interface.
 func (d *directoryCache) LookupTenant(
 	ctx context.Context, tenantID roachpb.TenantID,
@@ -193,14 +195,8 @@ func (d *directoryCache) LookupTenant(
 // states for the given tenant. If the tenant was just created or is suspended,
 // such that there are no available RUNNING processes, then LookupTenantPods
 // will trigger resumption of a new instance (or a conversion of a DRAINING pod
-// to a RUNNING one) and block until that happens.
-//
-// If clusterName is non-empty, then a GRPC NotFound error is returned if no
-// pods match the cluster name. This can be used to ensure that the incoming SQL
-// connection "knows" some additional information about the tenant, such as the
-// name of the cluster, before being allowed to connect. Similarly, if the
-// tenant does not exist (e.g. because it was deleted), LookupTenantPods returns
-// a GRPC NotFound error.
+// to a RUNNING one) and block until that happens. If the tenant cannot be
+// found, this will return a GRPC NotFound error.
 //
 // WARNING: Callers should never attempt to modify values returned by this
 // method, or else they may be a race. Other instances may be reading from the
@@ -208,7 +204,7 @@ func (d *directoryCache) LookupTenant(
 //
 // LookupTenantPods implements the DirectoryCache interface.
 func (d *directoryCache) LookupTenantPods(
-	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
+	ctx context.Context, tenantID roachpb.TenantID,
 ) ([]*Pod, error) {
 	// Ensure that a directory entry has been created for this tenant.
 	entry, err := d.getEntry(ctx, tenantID, true /* allowCreate */)
@@ -216,18 +212,9 @@ func (d *directoryCache) LookupTenantPods(
 		return nil, err
 	}
 
-	// Check if the cluster name matches. This can be skipped if clusterName
-	// is empty, or the ClusterName returned by the directory server is empty.
-	tenant := entry.ToProto()
-	if clusterName != "" && tenant.ClusterName != "" && clusterName != tenant.ClusterName {
-		// Return a GRPC NotFound error.
-		log.Errorf(ctx, "cluster name %s doesn't match expected %s", clusterName, tenant.ClusterName)
-		return nil, status.Errorf(codes.NotFound,
-			"cluster name %s doesn't match expected %s", clusterName, tenant.ClusterName)
-	}
-
 	ctx, cancel := d.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
+
 	tenantPods := entry.GetPods()
 
 	// Trigger resumption if there are no RUNNING pods.
@@ -560,6 +547,19 @@ func (d *directoryCache) watchTenants(ctx context.Context, stopper *stop.Stopper
 				// (for a long time, or until the watcher catches up). Marking
 				// them as stale allows LookupTenant to fetch a new right away
 				// if needed.
+				//
+				// TODO(jaylim-crl): One optimization that could be done here is
+				// to build a new cache, while allowing the old one to work.
+				// Once the cache has been populated, we will swap the new and
+				// old caches. We can tell that the cache has been populated
+				// when events switch from ADDED to MODIFIED. Though, if we use
+				// this approach, it is possible that there aren't any MODIFIED
+				// events, and we're stuck waiting to switch the cache over.
+				// Perhaps a better idea would be to invoke GetTenant on the
+				// list of tenants which were previously valid individually.
+				// Note that it's unlikely for us to hit multiple cache misses
+				// during this short period unless we're getting thousands of
+				// connections with unique tenant IDs for the first time.
 				d.markAllEntriesInvalid()
 				// If stream ends, immediately try to establish a new one.
 				// Otherwise, wait for a second to avoid slamming server.
