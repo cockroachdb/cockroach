@@ -152,6 +152,9 @@ func TestRefresh(t *testing.T) {
 	}
 	s, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
+			// Disable span configs to avoid measuring protected timestamp lookups
+			// performed by the AUTO SPAN CONFIG RECONCILIATION job.
+			DisableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: st.requestFilter,
