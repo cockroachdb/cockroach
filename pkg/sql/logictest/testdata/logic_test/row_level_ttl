@@ -33,6 +33,17 @@ CREATE TABLE tbl (id INT PRIMARY KEY) WITH (ttl_expiration_expression = 'id')
 
 subtest end
 
+# timestamptz + interval is stable, not immutable
+subtest ttl_expiration_expression_volatility_stable
+
+statement ok
+CREATE TABLE tbl_ttl_expiration_expression_volatility_stable (
+  id INT PRIMARY KEY,
+  expire_at timestamptz
+) WITH (ttl_expiration_expression = $$expire_at + '10 minutes'$$)
+
+subtest end
+
 subtest ttl_expire_after_or_ttl_expiration_expression_must_be_set
 
 statement error "ttl_expire_after" and/or "ttl_expiration_expression" must be set
