@@ -1370,6 +1370,9 @@ type connExecutor struct {
 		// comprising statements.
 		numRows int
 
+		// validateDbZoneConfig should the DB zone config on commit.
+		validateDbZoneConfig bool
+
 		// txnCounter keeps track of how many SQL txns have been open since
 		// the start of the session. This is used for logging, to
 		// distinguish statements that belong to separate SQL transactions.
@@ -1927,6 +1930,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	} else {
 		ex.extraTxnState.descCollection.ReleaseAll(ctx)
 		ex.extraTxnState.jobs.reset()
+		ex.extraTxnState.validateDbZoneConfig = false
 		ex.extraTxnState.schemaChangerState.memAcc.Clear(ctx)
 		ex.extraTxnState.schemaChangerState = &SchemaChangerState{
 			mode:   ex.sessionData().NewSchemaChangerMode,
@@ -3415,14 +3419,15 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			DescIDGenerator:                ex.getDescIDGenerator(),
 			RangeStatsFetcher:              p.execCfg.RangeStatsFetcher,
 		},
-		Tracing:           &ex.sessionTracing,
-		MemMetrics:        &ex.memMetrics,
-		Descs:             ex.extraTxnState.descCollection,
-		TxnModesSetter:    ex,
-		jobs:              ex.extraTxnState.jobs,
-		statsProvider:     ex.server.sqlStats,
-		indexUsageStats:   ex.indexUsageStats,
-		statementPreparer: ex,
+		Tracing:              &ex.sessionTracing,
+		MemMetrics:           &ex.memMetrics,
+		Descs:                ex.extraTxnState.descCollection,
+		TxnModesSetter:       ex,
+		jobs:                 ex.extraTxnState.jobs,
+		validateDbZoneConfig: &ex.extraTxnState.validateDbZoneConfig,
+		statsProvider:        ex.server.sqlStats,
+		indexUsageStats:      ex.indexUsageStats,
+		statementPreparer:    ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }
