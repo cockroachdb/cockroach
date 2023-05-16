@@ -83,6 +83,7 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        format: newline
   stderr:
     format: crdb-v2-tty
     redact: false
@@ -128,6 +129,7 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        format: newline
   stderr:
     format: crdb-v2-tty
     redact: false

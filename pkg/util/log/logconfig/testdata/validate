@@ -103,6 +103,7 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        format: newline
   stderr:
     filter: NONE
 capture-stray-errors:
@@ -178,6 +179,7 @@ sinks:
         max-staleness: 5s
         flush-trigger-size: 1.0MiB
         max-buffer-size: 50MiB
+        format: newline
   stderr:
     filter: NONE
 capture-stray-errors:
@@ -453,6 +455,7 @@ fluent-defaults:
     max-staleness: 15s
     flush-trigger-size: 10KiB
     max-buffer-size: 2MiB
+    format: json-array
 sinks:
   fluent-servers:
     a:
@@ -460,6 +463,7 @@ sinks:
       channels: STORAGE
       buffering:
         max-staleness: 10s
+        format: newline
     b:
       address: b
       channels: OPS
@@ -494,6 +498,7 @@ sinks:
         max-staleness: 10s
         flush-trigger-size: 10KiB
         max-buffer-size: 2.0MiB
+        format: newline
     b:
       channels: {INFO: [OPS]}
       net: tcp
@@ -507,6 +512,7 @@ sinks:
         max-staleness: 15s
         flush-trigger-size: 5.0KiB
         max-buffer-size: 2.0MiB
+        format: json-array
     c:
       channels: {INFO: [HEALTH]}
       net: tcp
@@ -520,6 +526,7 @@ sinks:
         max-staleness: 15s
         flush-trigger-size: 10KiB
         max-buffer-size: 3.0MiB
+        format: json-array
     d:
       channels: {INFO: [SESSIONS]}
       net: tcp
