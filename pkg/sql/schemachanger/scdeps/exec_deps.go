@@ -265,7 +265,10 @@ func (b *catalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id descpb.I
 
 // ValidateAndRun implements the scexec.CatalogChangeBatcher interface.
 func (b *catalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
-	if err := b.descsCollection.ValidateUncommittedDescriptors(ctx, b.txn); err != nil {
+	if err := b.descsCollection.ValidateUncommittedDescriptors(
+		ctx, b.txn,
+		false, /*validateZoneConfigs*/
+		nil /*zoneConfigValidator*/); err != nil {
 		return err
 	}
 	if err := b.txn.Run(ctx, b.batch); err != nil {
