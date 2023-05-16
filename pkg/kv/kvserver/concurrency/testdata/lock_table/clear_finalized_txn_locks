@@ -215,7 +215,8 @@ num=5
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl [holder finalized: committed] epoch: 0, seqs: [0]
    queued writers:
@@ -239,15 +240,20 @@ print
 ----
 num=5
  lock: "a"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "d"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "e"
-  res: req: 1, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req1
 ----
@@ -343,9 +349,11 @@ print
 ----
 num=2
  lock: "a"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req3
 ----
@@ -441,8 +449,8 @@ release txn=txn2 span=a
 ----
 num=2
  lock: "a"
-  res: req: 5, txn: 00000000-0000-0000-0000-000000000001, ts: 12.000000000,1, seq: 0
    queued writers:
+    active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 6
  lock: "b"
@@ -464,18 +472,20 @@ print
 ----
 num=2
  lock: "a"
-  res: req: 5, txn: 00000000-0000-0000-0000-000000000001, ts: 12.000000000,1, seq: 0
    queued writers:
+    active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 6
  lock: "b"
-  res: req: 5, txn: 00000000-0000-0000-0000-000000000001, ts: 12.000000000,1, seq: 0
+   queued writers:
+    active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req5
 ----
 num=1
  lock: "a"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, seq: 0
+   queued writers:
+    active: false req: 6, txn: 00000000-0000-0000-0000-000000000003
 
 dequeue r=req6
 ----
@@ -564,9 +574,11 @@ print
 ----
 num=2
  lock: "a"
-  res: req: 7, txn: 00000000-0000-0000-0000-000000000001, ts: 12.000000000,1, seq: 0
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  res: req: 7, txn: 00000000-0000-0000-0000-000000000001, ts: 12.000000000,1, seq: 0
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req7
 ----

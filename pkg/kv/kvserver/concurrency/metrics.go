@@ -32,6 +32,8 @@ type LockTableMetrics struct {
 	// marked as held.
 	TotalLockHoldDurationNanos int64
 	// The number of locks not held, but with reservations.
+	// TODO(arul): this needs to be fixed now that we don't have reservations
+	// anymore. See https://github.com/cockroachdb/cockroach/issues/103894.
 	LocksWithReservation int64
 	// The number of locks with non-empty wait-queues.
 	LocksWithWaitQueues int64
@@ -62,9 +64,10 @@ type LockTableMetrics struct {
 type LockMetrics struct {
 	// The lock's key.
 	Key roachpb.Key
-	// Is the lock actively held by a transaction, or just a reservation?
+	// Is the lock actively held by a transaction, or has been just claimed.
 	Held bool
-	// The number of nanoseconds this lock has been in the lock table and marked as held.
+	// The number of nanoseconds this lock has been in the lock table and marked
+	// as held.
 	HoldDurationNanos int64
 	// The number of waiters in the lock's wait queue.
 	Waiters int64
@@ -72,9 +75,11 @@ type LockMetrics struct {
 	WaitingReaders int64
 	// The number of waiting writers in the lock's wait queue.
 	WaitingWriters int64
-	// The total number of nanoseconds all waiters have been in the lock's wait queue.
+	// The total number of nanoseconds all waiters have been in the lock's wait
+	// queue.
 	WaitDurationNanos int64
-	// The maximum number of nanoseconds a waiter has been in the lock's wait queue.
+	// The maximum number of nanoseconds a waiter has been in the lock's wait
+	// queue.
 	MaxWaitDurationNanos int64
 }
 

@@ -135,7 +135,8 @@ update txn=txn1 ts=11,1 epoch=1 span=b
 ----
 num=3
  lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "e"
@@ -156,9 +157,11 @@ update txn=txn1 ts=11,1 epoch=1 span=c,e
 ----
 num=3
  lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
@@ -188,9 +191,11 @@ num=4
    queued writers:
     active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
@@ -202,9 +207,11 @@ num=5
    queued writers:
     active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
@@ -252,9 +259,11 @@ num=5
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 4
  lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
@@ -274,11 +283,11 @@ locks: 5
 locksheld: 3
 totallockholddurationnanos: 11400000000
 lockswithreservation: 2
-lockswithwaitqueues: 1
-waiters: 1
+lockswithwaitqueues: 3
+waiters: 3
 waitingreaders: 0
-waitingwriters: 1
-totalwaitdurationnanos: 2000000000
+waitingwriters: 3
+totalwaitdurationnanos: 6000000000
 topklocksbywaiters:
 - key:
   - 97
@@ -289,22 +298,24 @@ topklocksbywaiters:
   waitingwriters: 1
   waitdurationnanos: 2000000000
   maxwaitdurationnanos: 2000000000
-- key: []
+- key:
+  - 98
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 1
   waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
-- key: []
+  waitingwriters: 1
+  waitdurationnanos: 2000000000
+  maxwaitdurationnanos: 2000000000
+- key:
+  - 99
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 1
   waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
+  waitingwriters: 1
+  waitdurationnanos: 2000000000
+  maxwaitdurationnanos: 2000000000
 topklocksbyholdduration:
 - key:
   - 101
@@ -343,22 +354,24 @@ topklocksbywaitduration:
   waitingwriters: 1
   waitdurationnanos: 2000000000
   maxwaitdurationnanos: 2000000000
-- key: []
+- key:
+  - 98
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 1
   waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
-- key: []
+  waitingwriters: 1
+  waitdurationnanos: 2000000000
+  maxwaitdurationnanos: 2000000000
+- key:
+  - 99
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 1
   waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
+  waitingwriters: 1
+  waitdurationnanos: 2000000000
+  maxwaitdurationnanos: 2000000000
 
 # 300ms passes before req5
 time-tick ms=300
@@ -384,9 +397,11 @@ num=5
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 4
  lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
@@ -430,12 +445,13 @@ num=5
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 4
  lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
  lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
@@ -447,12 +463,21 @@ locks: 5
 locksheld: 3
 totallockholddurationnanos: 12600000000
 lockswithreservation: 2
-lockswithwaitqueues: 2
-waiters: 2
+lockswithwaitqueues: 3
+waiters: 4
 waitingreaders: 0
-waitingwriters: 2
-totalwaitdurationnanos: 2400000000
+waitingwriters: 4
+totalwaitdurationnanos: 7200000000
 topklocksbywaiters:
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 2400000000
+  maxwaitdurationnanos: 2400000000
 - key:
   - 97
   held: true
@@ -463,22 +488,14 @@ topklocksbywaiters:
   waitdurationnanos: 2400000000
   maxwaitdurationnanos: 2400000000
 - key:
-  - 98
+  - 99
   held: false
   holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
-- key: []
-  held: false
-  holddurationnanos: 0
-  waiters: 0
-  waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
+  waitdurationnanos: 2400000000
+  maxwaitdurationnanos: 2400000000
 topklocksbyholdduration:
 - key:
   - 101
@@ -521,19 +538,20 @@ topklocksbywaitduration:
   - 98
   held: false
   holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 2400000000
+  maxwaitdurationnanos: 2400000000
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
-- key: []
-  held: false
-  holddurationnanos: 0
-  waiters: 0
-  waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
+  waitdurationnanos: 2400000000
+  maxwaitdurationnanos: 2400000000
 
 guard-state r=req6
 ----
@@ -582,13 +600,13 @@ num=5
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 4
  lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
  lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 7, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 7
  lock: "e"
@@ -603,11 +621,29 @@ locksheld: 3
 totallockholddurationnanos: 13350000000
 lockswithreservation: 2
 lockswithwaitqueues: 3
-waiters: 3
+waiters: 5
 waitingreaders: 0
-waitingwriters: 3
-totalwaitdurationnanos: 2900000000
+waitingwriters: 5
+totalwaitdurationnanos: 8200000000
 topklocksbywaiters:
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 2900000000
+  maxwaitdurationnanos: 2650000000
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 2650000000
+  maxwaitdurationnanos: 2650000000
 - key:
   - 97
   held: true
@@ -617,24 +653,6 @@ topklocksbywaiters:
   waitingwriters: 1
   waitdurationnanos: 2650000000
   maxwaitdurationnanos: 2650000000
-- key:
-  - 98
-  held: false
-  holddurationnanos: 0
-  waiters: 1
-  waitingreaders: 0
-  waitingwriters: 1
-  waitdurationnanos: 250000000
-  maxwaitdurationnanos: 250000000
-- key:
-  - 99
-  held: false
-  holddurationnanos: 0
-  waiters: 1
-  waitingreaders: 0
-  waitingwriters: 1
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
 topklocksbyholdduration:
 - key:
   - 101
@@ -677,20 +695,20 @@ topklocksbywaitduration:
   - 98
   held: false
   holddurationnanos: 0
-  waiters: 1
+  waiters: 2
   waitingreaders: 0
-  waitingwriters: 1
-  waitdurationnanos: 250000000
-  maxwaitdurationnanos: 250000000
+  waitingwriters: 2
+  waitdurationnanos: 2900000000
+  maxwaitdurationnanos: 2650000000
 - key:
   - 99
   held: false
   holddurationnanos: 0
-  waiters: 1
+  waiters: 2
   waitingreaders: 0
-  waitingwriters: 1
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
+  waitingwriters: 2
+  waitdurationnanos: 2650000000
+  maxwaitdurationnanos: 2650000000
 
 
 query
@@ -719,15 +737,16 @@ release txn=txn3 span=a
 ----
 num=5
  lock: "a"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
- lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
  lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 7, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 7
  lock: "e"
@@ -747,15 +766,16 @@ print
 ----
 num=5
  lock: "a"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
- lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
  lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 7, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 7
  lock: "e"
@@ -772,37 +792,37 @@ locks: 5
 locksheld: 2
 totallockholddurationnanos: 10900000000
 lockswithreservation: 3
-lockswithwaitqueues: 3
-waiters: 3
+lockswithwaitqueues: 4
+waiters: 6
 waitingreaders: 1
-waitingwriters: 2
+waitingwriters: 5
 totalwaitdurationnanos: 450000000
 topklocksbywaiters:
 - key:
   - 98
   held: false
   holddurationnanos: 0
-  waiters: 1
+  waiters: 2
   waitingreaders: 0
-  waitingwriters: 1
+  waitingwriters: 2
   waitdurationnanos: 350000000
   maxwaitdurationnanos: 350000000
 - key:
   - 99
   held: false
   holddurationnanos: 0
-  waiters: 1
+  waiters: 2
   waitingreaders: 0
-  waitingwriters: 1
+  waitingwriters: 2
   waitdurationnanos: 100000000
   maxwaitdurationnanos: 100000000
 - key:
-  - 102
-  held: true
-  holddurationnanos: 2750000000
+  - 97
+  held: false
+  holddurationnanos: 0
   waiters: 1
-  waitingreaders: 1
-  waitingwriters: 0
+  waitingreaders: 0
+  waitingwriters: 1
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 topklocksbyholdduration:
@@ -837,27 +857,27 @@ topklocksbywaitduration:
   - 98
   held: false
   holddurationnanos: 0
-  waiters: 1
+  waiters: 2
   waitingreaders: 0
-  waitingwriters: 1
+  waitingwriters: 2
   waitdurationnanos: 350000000
   maxwaitdurationnanos: 350000000
 - key:
   - 99
   held: false
   holddurationnanos: 0
-  waiters: 1
+  waiters: 2
   waitingreaders: 0
-  waitingwriters: 1
+  waitingwriters: 2
   waitdurationnanos: 100000000
   maxwaitdurationnanos: 100000000
 - key:
-  - 102
-  held: true
-  holddurationnanos: 2750000000
+  - 97
+  held: false
+  holddurationnanos: 0
   waiters: 1
-  waitingreaders: 1
-  waitingwriters: 0
+  waitingreaders: 0
+  waitingwriters: 1
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 
@@ -889,15 +909,16 @@ release txn=txn3 span=f
 ----
 num=4
  lock: "a"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
- lock: "b"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
+ lock: "b"
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
  lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 7, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 7
  lock: "e"
@@ -931,15 +952,16 @@ acquire r=req4 k=b durability=r
 ----
 num=4
  lock: "a"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
  lock: "c"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 7, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 7
  lock: "e"
@@ -949,7 +971,8 @@ acquire r=req4 k=c durability=r
 ----
 num=4
  lock: "a"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, info: repl epoch: 0, seqs: [0]
    queued writers:
@@ -975,7 +998,8 @@ print
 ----
 num=4
  lock: "a"
-  res: req: 4, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
+   queued writers:
+    active: false req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, info: repl epoch: 0, seqs: [0]
    queued writers:
@@ -995,12 +1019,21 @@ locks: 4
 locksheld: 3
 totallockholddurationnanos: 8650000000
 lockswithreservation: 1
-lockswithwaitqueues: 2
-waiters: 2
+lockswithwaitqueues: 3
+waiters: 3
 waitingreaders: 0
-waitingwriters: 2
-totalwaitdurationnanos: 1450000000
+waitingwriters: 3
+totalwaitdurationnanos: 1950000000
 topklocksbywaiters:
+- key:
+  - 97
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 500000000
+  maxwaitdurationnanos: 500000000
 - key:
   - 98
   held: true
@@ -1019,14 +1052,6 @@ topklocksbywaiters:
   waitingwriters: 1
   waitdurationnanos: 600000000
   maxwaitdurationnanos: 600000000
-- key: []
-  held: false
-  holddurationnanos: 0
-  waiters: 0
-  waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
 topklocksbyholdduration:
 - key:
   - 101
@@ -1074,14 +1099,15 @@ topklocksbywaitduration:
   waitingwriters: 1
   waitdurationnanos: 600000000
   maxwaitdurationnanos: 600000000
-- key: []
+- key:
+  - 97
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 1
   waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
+  waitingwriters: 1
+  waitdurationnanos: 500000000
+  maxwaitdurationnanos: 500000000
 
 dequeue r=req4
 ----
@@ -1128,7 +1154,8 @@ num=3
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
  lock: "c"
-  res: req: 7, txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, seq: 0
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000003
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
@@ -1149,7 +1176,8 @@ num=3
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
  lock: "c"
-  res: req: 7, txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, seq: 0
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000003
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
@@ -1159,11 +1187,11 @@ locks: 3
 locksheld: 2
 totallockholddurationnanos: 12650000000
 lockswithreservation: 1
-lockswithwaitqueues: 1
-waiters: 1
+lockswithwaitqueues: 2
+waiters: 2
 waitingreaders: 0
-waitingwriters: 1
-totalwaitdurationnanos: 2850000000
+waitingwriters: 2
+totalwaitdurationnanos: 5450000000
 topklocksbywaiters:
 - key:
   - 98
@@ -1174,14 +1202,15 @@ topklocksbywaiters:
   waitingwriters: 1
   waitdurationnanos: 2850000000
   maxwaitdurationnanos: 2850000000
-- key: []
+- key:
+  - 99
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 1
   waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
+  waitingwriters: 1
+  waitdurationnanos: 2600000000
+  maxwaitdurationnanos: 2600000000
 - key: []
   held: false
   holddurationnanos: 0
@@ -1227,14 +1256,15 @@ topklocksbywaitduration:
   waitingwriters: 1
   waitdurationnanos: 2850000000
   maxwaitdurationnanos: 2850000000
-- key: []
+- key:
+  - 99
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 1
   waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
+  waitingwriters: 1
+  waitdurationnanos: 2600000000
+  maxwaitdurationnanos: 2600000000
 - key: []
   held: false
   holddurationnanos: 0
@@ -1256,9 +1286,11 @@ release txn=txn2 span=b
 ----
 num=3
  lock: "b"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 11.000000000,1, seq: 0
+   queued writers:
+    active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  res: req: 7, txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, seq: 0
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000003
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
@@ -1290,10 +1322,11 @@ print
 ----
 num=3
  lock: "b"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 11.000000000,1, seq: 0
- lock: "c"
-  res: req: 6, txn: 00000000-0000-0000-0000-000000000001, ts: 11.000000000,1, seq: 0
    queued writers:
+    active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued writers:
+    active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
     active: false req: 7, txn: 00000000-0000-0000-0000-000000000003
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
@@ -1304,29 +1337,30 @@ locks: 3
 locksheld: 1
 totallockholddurationnanos: 10690000000
 lockswithreservation: 2
-lockswithwaitqueues: 1
-waiters: 1
+lockswithwaitqueues: 2
+waiters: 3
 waitingreaders: 0
-waitingwriters: 1
-totalwaitdurationnanos: 2640000000
+waitingwriters: 3
+totalwaitdurationnanos: 8420000000
 topklocksbywaiters:
 - key:
   - 99
   held: false
   holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 5530000000
+  maxwaitdurationnanos: 2890000000
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
-  waitdurationnanos: 2640000000
-  maxwaitdurationnanos: 2640000000
-- key: []
-  held: false
-  holddurationnanos: 0
-  waiters: 0
-  waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
+  waitdurationnanos: 2890000000
+  maxwaitdurationnanos: 2890000000
 - key: []
   held: false
   holddurationnanos: 0
@@ -1363,22 +1397,23 @@ topklocksbyholdduration:
   maxwaitdurationnanos: 0
 topklocksbywaitduration:
 - key:
-  - 99
+  - 98
   held: false
   holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
-  waitdurationnanos: 2640000000
-  maxwaitdurationnanos: 2640000000
-- key: []
+  waitdurationnanos: 2890000000
+  maxwaitdurationnanos: 2890000000
+- key:
+  - 99
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 2
   waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
+  waitingwriters: 2
+  waitdurationnanos: 5530000000
+  maxwaitdurationnanos: 2890000000
 - key: []
   held: false
   holddurationnanos: 0
@@ -1405,7 +1440,8 @@ dequeue r=req6
 ----
 num=2
  lock: "c"
-  res: req: 7, txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, seq: 0
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000003
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 
@@ -1801,8 +1837,8 @@ release txn=txn1 span=c
 ----
 num=1
  lock: "c"
-  res: req: 10, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 10, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 11, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 12, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 11
@@ -1827,8 +1863,8 @@ print
 ----
 num=1
  lock: "c"
-  res: req: 10, txn: 00000000-0000-0000-0000-000000000002, ts: 8.000000000,12, seq: 0
    queued writers:
+    active: false req: 10, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 11, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 12, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 11
@@ -1840,18 +1876,18 @@ locksheld: 0
 totallockholddurationnanos: 0
 lockswithreservation: 1
 lockswithwaitqueues: 1
-waiters: 2
+waiters: 3
 waitingreaders: 0
-waitingwriters: 2
+waitingwriters: 3
 totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key:
   - 99
   held: false
   holddurationnanos: 0
-  waiters: 2
+  waiters: 3
   waitingreaders: 0
-  waitingwriters: 2
+  waitingwriters: 3
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 - key: []
@@ -1900,9 +1936,9 @@ topklocksbywaitduration:
   - 99
   held: false
   holddurationnanos: 0
-  waiters: 2
+  waiters: 3
   waitingreaders: 0
-  waitingwriters: 2
+  waitingwriters: 3
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 - key: []
@@ -2074,7 +2110,8 @@ release txn=txn2 span=b,d
 ----
 num=1
  lock: "c"
-  res: req: 11, txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, seq: 0
+   queued writers:
+    active: false req: 11, txn: 00000000-0000-0000-0000-000000000003
 
 guard-state r=req11
 ----
@@ -2084,7 +2121,8 @@ print
 ----
 num=1
  lock: "c"
-  res: req: 11, txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, seq: 0
+   queued writers:
+    active: false req: 11, txn: 00000000-0000-0000-0000-000000000003
 
 metrics
 ----
@@ -2092,18 +2130,19 @@ locks: 1
 locksheld: 0
 totallockholddurationnanos: 0
 lockswithreservation: 1
-lockswithwaitqueues: 0
-waiters: 0
+lockswithwaitqueues: 1
+waiters: 1
 waitingreaders: 0
-waitingwriters: 0
+waitingwriters: 1
 totalwaitdurationnanos: 0
 topklocksbywaiters:
-- key: []
+- key:
+  - 99
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 1
   waitingreaders: 0
-  waitingwriters: 0
+  waitingwriters: 1
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 - key: []
@@ -2148,12 +2187,13 @@ topklocksbyholdduration:
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 topklocksbywaitduration:
-- key: []
+- key:
+  - 99
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 1
   waitingreaders: 0
-  waitingwriters: 0
+  waitingwriters: 1
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 - key: []
@@ -2211,13 +2251,15 @@ release txn=txn2 span=b,d
 ----
 num=1
  lock: "c"
-  res: req: 14, txn: 00000000-0000-0000-0000-000000000001, ts: 9.000000000,0, seq: 0
+   queued writers:
+    active: false req: 14, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req15
 ----
 num=1
  lock: "c"
-  res: req: 14, txn: 00000000-0000-0000-0000-000000000001, ts: 9.000000000,0, seq: 0
+   queued writers:
+    active: false req: 14, txn: 00000000-0000-0000-0000-000000000001
 
 new-request r=req16 txn=none ts=10,12 spans=none@c
 ----
@@ -2483,7 +2525,8 @@ release txn=txn1 span=c
 ----
 num=2
  lock: "c"
-  res: req: 18, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 18, txn: 00000000-0000-0000-0000-000000000002
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 9.000000000,0, info: unrepl epoch: 1, seqs: [0]
    queued writers:
@@ -2498,7 +2541,8 @@ print
 ----
 num=2
  lock: "c"
-  res: req: 18, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 18, txn: 00000000-0000-0000-0000-000000000002
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 9.000000000,0, info: unrepl epoch: 1, seqs: [0]
    queued writers:
@@ -2512,10 +2556,10 @@ locks: 2
 locksheld: 1
 totallockholddurationnanos: 0
 lockswithreservation: 1
-lockswithwaitqueues: 1
-waiters: 2
+lockswithwaitqueues: 2
+waiters: 3
 waitingreaders: 0
-waitingwriters: 2
+waitingwriters: 3
 totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key:
@@ -2527,12 +2571,13 @@ topklocksbywaiters:
   waitingwriters: 2
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
-- key: []
+- key:
+  - 99
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 1
   waitingreaders: 0
-  waitingwriters: 0
+  waitingwriters: 1
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 - key: []
@@ -2571,6 +2616,15 @@ topklocksbyholdduration:
   maxwaitdurationnanos: 0
 topklocksbywaitduration:
 - key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
   - 100
   held: true
   holddurationnanos: 0
@@ -2587,23 +2641,16 @@ topklocksbywaitduration:
   waitingwriters: 0
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
-- key: []
-  held: false
-  holddurationnanos: 0
-  waiters: 0
-  waitingreaders: 0
-  waitingwriters: 0
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
 
 release txn=txn1 span=d
 ----
 num=2
  lock: "c"
-  res: req: 18, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
- lock: "d"
-  res: req: 18, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
    queued writers:
+    active: false req: 18, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+   queued writers:
+    active: false req: 18, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 19, txn: 00000000-0000-0000-0000-000000000002
 
 scan r=req18
@@ -2614,7 +2661,8 @@ acquire r=req18 k=d durability=u
 ----
 num=2
  lock: "c"
-  res: req: 18, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 18, txn: 00000000-0000-0000-0000-000000000002
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
 
@@ -2812,7 +2860,8 @@ num=2
     active: true req: 22, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 22
  lock: "d"
-  res: req: 23, txn: 00000000-0000-0000-0000-000000000003, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 23, txn: 00000000-0000-0000-0000-000000000003
 
 guard-state r=req23
 ----
@@ -2831,9 +2880,11 @@ release txn=txn1 span=c
 ----
 num=2
  lock: "c"
-  res: req: 22, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 22, txn: 00000000-0000-0000-0000-000000000002
  lock: "d"
-  res: req: 23, txn: 00000000-0000-0000-0000-000000000003, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 23, txn: 00000000-0000-0000-0000-000000000003
 
 guard-state r=req22
 ----
@@ -2843,10 +2894,11 @@ print
 ----
 num=2
  lock: "c"
-  res: req: 22, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
- lock: "d"
-  res: req: 22, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
    queued writers:
+    active: false req: 22, txn: 00000000-0000-0000-0000-000000000002
+ lock: "d"
+   queued writers:
+    active: false req: 22, txn: 00000000-0000-0000-0000-000000000002
     active: false req: 23, txn: 00000000-0000-0000-0000-000000000003
 
 metrics
@@ -2855,27 +2907,28 @@ locks: 2
 locksheld: 0
 totallockholddurationnanos: 0
 lockswithreservation: 2
-lockswithwaitqueues: 1
-waiters: 1
+lockswithwaitqueues: 2
+waiters: 3
 waitingreaders: 0
-waitingwriters: 1
+waitingwriters: 3
 totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key:
   - 100
   held: false
   holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
-  waitdurationnanos: 0
-  maxwaitdurationnanos: 0
-- key: []
-  held: false
-  holddurationnanos: 0
-  waiters: 0
-  waitingreaders: 0
-  waitingwriters: 0
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 - key: []
@@ -2913,7 +2966,7 @@ topklocksbyholdduration:
   maxwaitdurationnanos: 0
 topklocksbywaitduration:
 - key:
-  - 100
+  - 99
   held: false
   holddurationnanos: 0
   waiters: 1
@@ -2921,12 +2974,13 @@ topklocksbywaitduration:
   waitingwriters: 1
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
-- key: []
+- key:
+  - 100
   held: false
   holddurationnanos: 0
-  waiters: 0
+  waiters: 2
   waitingreaders: 0
-  waitingwriters: 0
+  waitingwriters: 2
   waitdurationnanos: 0
   maxwaitdurationnanos: 0
 - key: []
@@ -2942,7 +2996,8 @@ acquire r=req23 k=d durability=u
 ----
 num=2
  lock: "c"
-  res: req: 22, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
+   queued writers:
+    active: false req: 22, txn: 00000000-0000-0000-0000-000000000002
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:

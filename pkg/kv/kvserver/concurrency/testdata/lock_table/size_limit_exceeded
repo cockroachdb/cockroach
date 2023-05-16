@@ -125,8 +125,8 @@ release txn=txn1 span=a
 ----
 num=3
  lock: "a"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
    queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
@@ -145,8 +145,8 @@ print
 ----
 num=3
  lock: "a"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
    queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
@@ -192,8 +192,8 @@ add-discovered r=req7 k=d txn=txn1
 ----
 num=4
  lock: "a"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
    queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
