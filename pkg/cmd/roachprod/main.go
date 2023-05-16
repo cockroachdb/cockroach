@@ -1186,7 +1186,7 @@ var updateCmd = &cobra.Command{
 
 		if revertUpdate {
 			if upgrade.PromptYesNo("Revert to previous version? Note: this will replace the" +
-				" current roachprod binary with a previous roachprod.bak binary") {
+				" current roachprod binary with a previous roachprod.bak binary.") {
 				if err := upgrade.SwapBinary(currentBinary, currentBinary+".bak"); err != nil {
 					return err
 				}
@@ -1195,18 +1195,17 @@ var updateCmd = &cobra.Command{
 			return nil
 		}
 
-		newBinary, err := upgrade.DownloadLatestRoadprod()
-		if err != nil {
+		newBinary := currentBinary + ".new"
+		if err := upgrade.DownloadLatestRoadprod(newBinary); err != nil {
 			return err
 		}
 
-		if upgrade.PromptYesNo("Download successful. Continue with update? Note: this will " +
-			"overwrite any existing roachprod.bak binary") {
+		if upgrade.PromptYesNo("Continue with update? This will overwrite any existing roachprod.bak binary.") {
 			if err := upgrade.SwapBinary(currentBinary, newBinary); err != nil {
 				return errors.WithDetail(err, "unable to update binary")
 			}
 
-			fmt.Println("roachprod successfully updated, run `roachprod -v` to confirm.")
+			fmt.Println("Update successful: run `roachprod -v` to confirm.")
 		}
 		return nil
 	}),
