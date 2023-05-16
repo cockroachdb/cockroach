@@ -24,6 +24,9 @@ import (
 	"strings"
 	_ "unsafe" // required to use go:linkname
 
+	_ "github.com/ProtonMail/gopenpgp/v2/armor"
+	_ "github.com/ProtonMail/gopenpgp/v2/constants"
+	_ "github.com/ProtonMail/gopenpgp/v2/helper"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"

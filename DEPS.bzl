@@ -1159,6 +1159,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_bwesterb_go_ristretto",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/bwesterb/go-ristretto",
+        sha256 = "459e9bcab4d3dbd23c25625e6c3c121d9cc18f3f683e13bb617400f687df7b72",
+        strip_prefix = "github.com/bwesterb/go-ristretto@v1.2.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/bwesterb/go-ristretto/com_github_bwesterb_go_ristretto-v1.2.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_c_bata_go_prompt",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/c-bata/go-prompt",
@@ -1386,6 +1396,16 @@ def go_deps():
         strip_prefix = "github.com/client9/misspell@v0.3.4",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/client9/misspell/com_github_client9_misspell-v0.3.4.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_cloudflare_circl",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/cloudflare/circl",
+        sha256 = "bc6220714333a566277440b47fa2a902b9534769db56f84fbc71ae2992df179a",
+        strip_prefix = "github.com/cloudflare/circl@v1.1.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cloudflare/circl/com_github_cloudflare_circl-v1.1.0.zip",
         ],
     )
     go_repository(
@@ -7394,6 +7414,36 @@ def go_deps():
         strip_prefix = "github.com/prometheus/tsdb@v0.7.1",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/prometheus/tsdb/com_github_prometheus_tsdb-v0.7.1.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_protonmail_go_crypto",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ProtonMail/go-crypto",
+        sha256 = "f7ebdd4ba0076cb025ba490a0f9049afce090d207c9a8955b14bb4936e5b950f",
+        strip_prefix = "github.com/ProtonMail/go-crypto@v0.0.0-20230321155629-9a39f2531310",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/ProtonMail/go-crypto/com_github_protonmail_go_crypto-v0.0.0-20230321155629-9a39f2531310.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_protonmail_go_mime",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ProtonMail/go-mime",
+        sha256 = "89bf28de3cc4549f6982eb8431f33185d6be88eb6e1f165f2bfb69888fdf4ce0",
+        strip_prefix = "github.com/ProtonMail/go-mime@v0.0.0-20230322103455-7d82a3887f2f",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/ProtonMail/go-mime/com_github_protonmail_go_mime-v0.0.0-20230322103455-7d82a3887f2f.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_protonmail_gopenpgp_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ProtonMail/gopenpgp/v2",
+        sha256 = "ef1710d882ce29c26ef1efb5e7d13e1f89d4cf83fabdbe5fa91e5988cac8fe46",
+        strip_prefix = "github.com/ProtonMail/gopenpgp/v2@v2.7.1",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/ProtonMail/gopenpgp/v2/com_github_protonmail_gopenpgp_v2-v2.7.1.zip",
         ],
     )
     go_repository(
