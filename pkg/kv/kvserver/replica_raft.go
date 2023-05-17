@@ -793,7 +793,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return false, err
 		}
 		if hasReady = raftGroup.HasReady(); hasReady {
+			// Since we are holding raftMu, only this Ready() call will use
+			// raftMu.bytesAccount. It tracks memory usage that this Ready incurs.
+			r.raftMu.bytesAccountUse = true
 			syncRd := raftGroup.Ready()
+			r.raftMu.bytesAccountUse = false
+			// We apply committed entries during this handleRaftReady, so it is ok to
+			// release the corresponding memory tokens at the end of this func. Next
+			// time we enter this function, the account will be empty again.
+			defer r.raftMu.bytesAccount.Clear(ctx)
+
 			logRaftReady(ctx, syncRd)
 			asyncRd := makeAsyncReady(syncRd)
 			softState = asyncRd.SoftState

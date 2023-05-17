@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -707,13 +708,19 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if rangeFeedBudgetFactory != nil {
 		nodeRegistry.AddMetricStruct(rangeFeedBudgetFactory.Metrics())
 	}
+
+	// Create an unlimited (for now) monitor for bytes used by raft entries. Use a
+	// 512 KiB allocation size, so that 96 raft scheduler workers would typically
+	// account as a 48 MiB baseline.
+	raftEntriesMonitor := mon.NewMonitorWithLimit("raft-entries", mon.MemoryResource,
+		math.MaxInt64 /* limit */, nil /* curCount */, nil /* maxHist */, 512<<10, /* increment */
+		math.MaxInt64 /* noteworthy */, st)
+	raftEntriesMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
+
 	// Closer order is important with BytesMonitor.
-	stopper.AddCloser(stop.CloserFn(func() {
-		rangeFeedBudgetFactory.Stop(ctx)
-	}))
-	stopper.AddCloser(stop.CloserFn(func() {
-		kvMemoryMonitor.Stop(ctx)
-	}))
+	stopper.AddCloser(stop.CloserFn(func() { raftEntriesMonitor.Stop(ctx) }))
+	stopper.AddCloser(stop.CloserFn(func() { rangeFeedBudgetFactory.Stop(ctx) }))
+	stopper.AddCloser(stop.CloserFn(func() { kvMemoryMonitor.Stop(ctx) }))
 
 	tsDB := ts.NewDB(db, cfg.Settings)
 	nodeRegistry.AddMetricStruct(tsDB.Metrics())
@@ -855,6 +862,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		EagerLeaseAcquisitionLimiter: eagerLeaseAcquisitionLimiter,
 		KVMemoryMonitor:              kvMemoryMonitor,
 		RangefeedBudgetFactory:       rangeFeedBudgetFactory,
+		RaftEntriesMonitor:           raftEntriesMonitor,
 		SharedStorageEnabled:         cfg.SharedStorage != "",
 		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,
