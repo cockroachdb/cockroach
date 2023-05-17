@@ -26,12 +26,14 @@ const (
 	UnspecifiedIsolation IsolationLevel = iota
 	SerializableIsolation
 	ReadCommittedIsolation
+	SnapshotIsolation
 )
 
 var isolationLevelNames = [...]string{
 	UnspecifiedIsolation:   "UNSPECIFIED",
 	SerializableIsolation:  "SERIALIZABLE",
 	ReadCommittedIsolation: "READ COMMITTED",
+	SnapshotIsolation:      "SNAPSHOT",
 }
 
 // IsolationLevelMap is a map from string isolation level name to isolation
@@ -39,6 +41,7 @@ var isolationLevelNames = [...]string{
 var IsolationLevelMap = map[string]IsolationLevel{
 	"serializable":   SerializableIsolation,
 	"read committed": ReadCommittedIsolation,
+	"snapshot":       SnapshotIsolation,
 }
 
 func (i IsolationLevel) String() string {
