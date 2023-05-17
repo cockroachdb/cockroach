@@ -401,12 +401,7 @@ func (s *drainServer) drainClients(
 	// issues a BACKUP or some other job-based statement before it
 	// disconnects, and encounters a job error as a result -- that the
 	// registry is now unavailable due to the drain.
-	drainJobRegistry := s.sqlServer.jobRegistry.DrainRequested()
-	if delay := jobRegistryWait.Get(&s.sqlServer.execCfg.Settings.SV); delay > 0 && shouldDelayDraining {
-		log.Ops.Infof(ctx, "waiting for %s for running jobs to notice that the node is draining", delay)
-		s.drainSleepFn(delay)
-	}
-	drainJobRegistry()
+	s.sqlServer.jobRegistry.DrainRequested(ctx, jobRegistryWait.Get(&s.sqlServer.execCfg.Settings.SV))
 
 	// Inform the auto-stats tasks that the node is draining.
 	s.sqlServer.statsRefresher.SetDraining()

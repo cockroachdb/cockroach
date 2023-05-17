@@ -1993,22 +1993,28 @@ func (r *Registry) WaitForRegistryShutdown(ctx context.Context) {
 }
 
 // DrainRequested informs the job system that this node is being drained.
-// Returns a function that, when invoked, will initiate drain process
-// by requesting all currently running jobs, as well as various job registry
-// processes terminate.
+// Blocks for up to maxJobWait period time to let the jobs detect cancellation request.
 // WaitForRegistryShutdown can then be used to wait for those tasks to complete.
-func (r *Registry) DrainRequested() func() {
+func (r *Registry) DrainRequested(ctx context.Context, maxJobWait time.Duration) {
 	r.mu.Lock()
 	alreadyDraining := r.mu.draining
 	r.mu.draining = true
+	shouldWait := maxJobWait > 0 && len(r.mu.adoptedJobs)+len(r.mu.ingestingJobs)+len(r.mu.waiting) > 0
 	r.mu.Unlock()
 
 	if alreadyDraining {
-		return func() {}
+		return
 	}
 
 	close(r.drainRequested)
-	return func() { close(r.drainJobs) }
+	if shouldWait {
+		log.Ops.Infof(ctx, "waiting for %s for running jobs to notice that the node is draining", maxJobWait)
+		select {
+		case <-ctx.Done():
+		case <-time.After(maxJobWait):
+		}
+	}
+	close(r.drainRequested)
 }
 
 // OnDrain returns a channel that can be selected on to detect when the job
