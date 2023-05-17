@@ -102,6 +102,7 @@ func TestWatchTenants(t *testing.T) {
 		Version:          "010",
 		TenantID:         tenantID.ToUint64(),
 		ClusterName:      "my-tenant",
+		PublicCIDRRanges: []string{"127.0.0.1/16"},
 		PrivateEndpoints: []string{"a"},
 	}
 	tds.CreateTenant(tenantID, baseTenant)
@@ -111,6 +112,7 @@ func TestWatchTenants(t *testing.T) {
 		Version:          "010",
 		TenantID:         20,
 		ClusterName:      "my-tenant",
+		PublicCIDRRanges: []string{"127.0.0.1/16"},
 		PrivateEndpoints: []string{"a"},
 	}, resp.Tenant)
 	_, err := dir.TryLookupTenantPods(ctx, tenantID)
@@ -123,6 +125,7 @@ func TestWatchTenants(t *testing.T) {
 		Version:          "010",
 		TenantID:         20,
 		ClusterName:      "my-tenant",
+		PublicCIDRRanges: []string{"127.0.0.1/16"},
 		PrivateEndpoints: []string{"a"},
 	}, tenantObj)
 
@@ -131,6 +134,7 @@ func TestWatchTenants(t *testing.T) {
 		Version:          "011",
 		TenantID:         20,
 		ClusterName:      "foo-bar",
+		PublicCIDRRanges: []string{"127.0.0.1/16", "0.0.0.0/0"},
 		PrivateEndpoints: []string{"a", "b"},
 	}
 	tds.UpdateTenant(tenantID, updatedTenant)
@@ -145,6 +149,7 @@ func TestWatchTenants(t *testing.T) {
 		Version:          "011",
 		TenantID:         20,
 		ClusterName:      "foo-bar",
+		PublicCIDRRanges: []string{"127.0.0.1/16", "0.0.0.0/0"},
 		PrivateEndpoints: []string{"a", "b"},
 	}, tenantObj)
 
@@ -166,6 +171,7 @@ func TestWatchTenants(t *testing.T) {
 		Version:          "011",
 		TenantID:         20,
 		ClusterName:      "foo-bar",
+		PublicCIDRRanges: []string{"127.0.0.1/16", "0.0.0.0/0"},
 		PrivateEndpoints: []string{"a", "b"},
 	}, tenantObj)
 
@@ -479,7 +485,11 @@ func TestDeleteTenant(t *testing.T) {
 	// LookupTenant should work.
 	ten, err := dir.LookupTenant(ctx, tenantID)
 	require.NoError(t, err)
-	require.Equal(t, &tenant.Tenant{TenantID: 50, ClusterName: "tenant-cluster"}, ten)
+	require.Equal(t, &tenant.Tenant{
+		TenantID:         50,
+		ClusterName:      "tenant-cluster",
+		PublicCIDRRanges: []string{"0.0.0.0/0"},
+	}, ten)
 
 	// Report failure even though tenant is healthy - refresh should do nothing.
 	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))

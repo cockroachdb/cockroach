@@ -56,8 +56,9 @@ func (p *PrivateEndpoints) CheckConnection(ctx context.Context, conn ConnectionT
 	// By default, connections are rejected if the cluster does not allow private
 	// connections, or there are no endpoints defined.
 	return errors.Newf(
-		"connection to '%s' denied: cluster does not allow this private connection",
+		"connection to '%s' denied: cluster does not allow private connections from endpoint '%s'",
 		conn.TenantID.String(),
+		conn.EndpointID,
 	)
 }
 

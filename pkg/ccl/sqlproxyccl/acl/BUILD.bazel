@@ -9,6 +9,7 @@ go_library(
         "denylist.go",
         "file.go",
         "private_endpoints.go",
+        "public_cidr_ranges.go",
         "watcher.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/acl",
@@ -33,6 +34,7 @@ go_test(
     srcs = [
         "file_test.go",
         "private_endpoints_test.go",
+        "public_cidr_ranges_test.go",
         "watcher_test.go",
     ],
     args = ["-test.timeout=295s"],

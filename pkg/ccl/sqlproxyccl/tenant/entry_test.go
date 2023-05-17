@@ -82,6 +82,7 @@ func TestTenantMetadataUpdate(t *testing.T) {
 	// Use an old version.
 	ten := &Tenant{
 		Version:          "002",
+		PublicCIDRRanges: []string{"0.0.0.0/0"},
 		PrivateEndpoints: []string{"a", "b"},
 	}
 	e.UpdateTenant(ten)

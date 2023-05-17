@@ -129,10 +129,14 @@ message Tenant {
   string cluster_name = 3;
   // ConnectivityType indicates the extent to which the tenant can be accessed.
   ConnectivityType connectivity_type = 4;
+  // PublicCIDRRanges corresponds to the list of source CIDR ranges that are
+  // allowed to access the tenant. This will only apply if the tenant allows
+  // public connections.
+  repeated string public_cidr_ranges = 5 [(gogoproto.customname) = "PublicCIDRRanges"];
   // PrivateEndpoints corresponds to the list of available endpoint identifiers
   // that could access the tenant. This will only apply if the tenant allows
   // private connections.
-  repeated string private_endpoints = 5;
+  repeated string private_endpoints = 6;
 }
 
 // GetTenantRequest is used by a client to request from the sever metadata
