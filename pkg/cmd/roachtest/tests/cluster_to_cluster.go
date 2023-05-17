@@ -490,7 +490,7 @@ func (rd *replicationDriver) preStreamingWorkload(ctx context.Context) {
 		rd.t.Status("populating source cluster before replication")
 		initStart := timeutil.Now()
 		rd.c.Run(ctx, rd.setup.workloadNode, initCmd)
-		rd.t.L().Printf("src cluster workload initialization took %s minutes",
+		rd.t.L().Printf("src cluster workload initialization took %.1f minutes",
 			timeutil.Since(initStart).Minutes())
 	}
 }

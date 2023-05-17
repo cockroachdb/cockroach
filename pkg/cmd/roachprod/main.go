@@ -277,6 +277,14 @@ hosts file.
 				return err
 			}
 		} else {
+			machineType := func(clusterVMs vm.List) string {
+				res := clusterVMs[0].MachineType
+				// Display CPU architecture, other than amd64 (default).
+				if arch := clusterVMs[0].Labels["arch"]; arch != string(vm.ArchAMD64) {
+					res += fmt.Sprintf(" [%s]", arch)
+				}
+				return res
+			}
 			// Align columns left and separate with at least two spaces.
 			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', tabwriter.AlignRight)
 			// N.B. colors use escape codes which don't play nice with tabwriter [1].
@@ -304,7 +312,7 @@ hosts file.
 					// N.B. Tabwriter doesn't support per-column alignment. It looks odd to have the cluster names right-aligned,
 					// so we make it left-aligned.
 					fmt.Fprintf(tw, "%s\t%s\t%d\t%s", name+strings.Repeat(" ", maxClusterName-len(name)), c.Clouds(),
-						len(c.VMs), c.VMs[0].MachineType)
+						len(c.VMs), machineType(c.VMs))
 					if !c.IsLocal() {
 						colorByCostBucket := func(cost float64) func(string, ...interface{}) string {
 							switch {
@@ -1159,14 +1167,14 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 
 	// Validate architecture flag, if set.
 	if archOpt := cmd.Flags().Lookup("arch"); archOpt != nil && archOpt.Changed {
-		arch := strings.ToLower(archOpt.Value.String())
+		arch := vm.CPUArch(strings.ToLower(archOpt.Value.String()))
 
-		if arch != "amd64" && arch != "arm64" && arch != "fips" {
+		if arch != vm.ArchAMD64 && arch != vm.ArchARM64 && arch != vm.ArchFIPS {
 			printErrAndExit(fmt.Errorf("unsupported architecture %q", arch))
 		}
-		if arch != archOpt.Value.String() {
+		if string(arch) != archOpt.Value.String() {
 			// Set the canonical value.
-			_ = cmd.Flags().Set("arch", arch)
+			_ = cmd.Flags().Set("arch", string(arch))
 		}
 	}
 }
