@@ -536,7 +536,7 @@ func Stage(
 		dir = stageDir
 	}
 
-	return install.StageApplication(ctx, l, c, applicationName, version, os, arch, dir)
+	return install.StageApplication(ctx, l, c, applicationName, version, os, vm.CPUArch(arch), dir)
 }
 
 // Reset resets all VMs in a cluster.
@@ -1400,7 +1400,7 @@ func StageURL(
 	if stageArch != "" {
 		arch = stageArch
 	}
-	urls, err := install.URLsForApplication(applicationName, version, os, arch)
+	urls, err := install.URLsForApplication(applicationName, version, os, vm.CPUArch(arch))
 	if err != nil {
 		return nil, err
 	}
@@ -1445,6 +1445,7 @@ func StartGrafana(
 	ctx context.Context,
 	l *logger.Logger,
 	clusterName string,
+	arch vm.CPUArch,
 	grafanaURL string,
 	grafanaJSON []string,
 	promCfg *prometheus.Config, // passed iff grafanaURL is empty
@@ -1486,7 +1487,7 @@ func StartGrafana(
 			promCfg.WithGrafanaDashboardJSON(str)
 		}
 	}
-	_, err = prometheus.Init(ctx, l, c, *promCfg)
+	_, err = prometheus.Init(ctx, l, c, arch, *promCfg)
 	if err != nil {
 		return err
 	}

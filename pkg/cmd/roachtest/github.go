@@ -162,7 +162,10 @@ func (g *githubIssues) createPostRequest(
 		roachtestPrefix("cpu"):   fmt.Sprintf("%d", spec.Cluster.CPUs),
 		roachtestPrefix("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
 	}
-
+	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
+	if spec.Cluster.Arch != "" {
+		clusterParams[roachtestPrefix("arch")] = string(spec.Cluster.Arch)
+	}
 	// These params can be probabilistically set, so we pass them here to
 	// show what their actual values are in the posted issue.
 	if g.vmCreateOpts != nil {
@@ -172,6 +175,11 @@ func (g *githubIssues) createPostRequest(
 
 	if g.cluster != nil {
 		clusterParams[roachtestPrefix("encrypted")] = fmt.Sprintf("%v", g.cluster.encAtRest)
+		if spec.Cluster.Arch == "" {
+			// N.B. when Arch is specified, it cannot differ from cluster's arch.
+			// Hence, we only emit when arch was unspecified.
+			clusterParams[roachtestPrefix("arch")] = string(g.cluster.arch)
+		}
 	}
 
 	return issues.PostRequest{
