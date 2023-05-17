@@ -214,7 +214,7 @@ func (c *VecToDatumConverter) ConvertBatch(batch coldata.Batch) {
 // Note that this method is equivalent to ConvertBatch with the only difference
 // being the fact that it takes in a "disassembled" batch and not coldata.Batch.
 // Consider whether you should be using ConvertBatch instead.
-func (c *VecToDatumConverter) ConvertVecs(vecs []coldata.Vec, inputLen int, sel []int) {
+func (c *VecToDatumConverter) ConvertVecs(vecs []*coldata.Vec, inputLen int, sel []int) {
 	if len(c.vecIdxsToConvert) == 0 || inputLen == 0 {
 		// No vectors were selected for conversion or there are no tuples to
 		// convert, so there is nothing to do.
@@ -259,7 +259,7 @@ func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 // selection vector. It doesn't account for the memory used by the newly
 // created tree.Datums, so it is up to the caller to do the memory accounting.
 func ColVecToDatumAndDeselect(
-	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *tree.DatumAlloc,
+	converted []tree.Datum, col *coldata.Vec, length int, sel []int, da *tree.DatumAlloc,
 ) {
 	if length == 0 {
 		return
@@ -281,7 +281,7 @@ func ColVecToDatumAndDeselect(
 // doesn't account for the memory used by the newly created tree.Datums, so it
 // is up to the caller to do the memory accounting.
 func ColVecToDatum(
-	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *tree.DatumAlloc,
+	converted []tree.Datum, col *coldata.Vec, length int, sel []int, da *tree.DatumAlloc,
 ) {
 	if length == 0 {
 		return
@@ -338,7 +338,7 @@ func setSrcIdx(srcIdx int, idx int, sel []int, hasSel bool) {
 // execgen:template<hasNulls, hasSel, deselect>
 func vecToDatum(
 	converted []tree.Datum,
-	col coldata.Vec,
+	col *coldata.Vec,
 	length int,
 	sel []int,
 	da *tree.DatumAlloc,

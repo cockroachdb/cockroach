@@ -42,7 +42,7 @@ func (d *defaultCmpRConstProjOp) Next() coldata.Batch {
 	}
 	sel := batch.Selection()
 	output := batch.ColVec(d.outputIdx)
-	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
+	d.allocator.PerformOperation([]*coldata.Vec{output}, func() {
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		nonConstColumn := d.toDatumConverter.GetDatumColumn(d.colIdx)
 		_ = nonConstColumn[n-1]

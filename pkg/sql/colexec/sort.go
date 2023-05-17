@@ -74,7 +74,7 @@ type spooler interface {
 	// spool performs the actual spooling.
 	spool()
 	// getValues returns ith Vec of the already spooled data.
-	getValues(i int) coldata.Vec
+	getValues(i int) *coldata.Vec
 	// getNumTuples returns the number of spooled tuples.
 	getNumTuples() int
 	// getPartitionsCol returns a partitions column vector in which every true
@@ -138,7 +138,7 @@ func (p *allSpooler) spool() {
 	}
 }
 
-func (p *allSpooler) getValues(i int) coldata.Vec {
+func (p *allSpooler) getValues(i int) *coldata.Vec {
 	if !p.spooled {
 		colexecerror.InternalError(errors.AssertionFailedf("getValues() is called before spool()"))
 	}
@@ -237,7 +237,7 @@ type colSorter interface {
 	// init prepares this sorter, given a particular Vec and an order vector,
 	// which must be the same size as the input Vec and will be permuted with
 	// the same swaps as the column.
-	init(ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int)
+	init(ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int)
 	// reset releases memory allocated by the colSorter. It should be called
 	// when the colSorter is no longer needed.
 	reset()

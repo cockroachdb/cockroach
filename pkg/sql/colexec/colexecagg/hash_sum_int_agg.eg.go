@@ -66,12 +66,12 @@ type sumIntInt16HashAgg struct {
 var _ AggregateFunc = &sumIntInt16HashAgg{}
 
 func (a *sumIntInt16HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		{
 			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
@@ -173,12 +173,12 @@ type sumIntInt32HashAgg struct {
 var _ AggregateFunc = &sumIntInt32HashAgg{}
 
 func (a *sumIntInt32HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		{
 			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {
@@ -280,12 +280,12 @@ type sumIntInt64HashAgg struct {
 var _ AggregateFunc = &sumIntInt64HashAgg{}
 
 func (a *sumIntInt64HashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		{
 			sel = sel[startIdx:endIdx]
 			if nulls.MaybeHasNulls() {

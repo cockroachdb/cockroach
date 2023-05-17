@@ -53,7 +53,7 @@ type count_COUNTKIND_AGGKINDAgg struct {
 var _ AggregateFunc = &count_COUNTKIND_AGGKINDAgg{}
 
 // {{if eq "_AGGKIND" "Ordered"}}
-func (a *count_COUNTKIND_AGGKINDAgg) SetOutput(vec coldata.Vec) {
+func (a *count_COUNTKIND_AGGKINDAgg) SetOutput(vec *coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Int64()
 }
@@ -61,7 +61,7 @@ func (a *count_COUNTKIND_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 // {{end}}
 
 func (a *count_COUNTKIND_AGGKINDAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// {{if not (eq .CountKind "Rows")}}
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
@@ -70,7 +70,7 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 	nulls := vecs[inputIdxs[0]].Nulls()
 	// {{end}}
 	// {{if not (eq "_AGGKIND" "Window")}}
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
 		// Capture groups to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
@@ -173,7 +173,7 @@ func (a *count_COUNTKIND_AGGKINDAgg) Reset() {
 // Remove implements the slidingWindowAggregateFunc interface (see
 // window_aggregator_tmpl.go).
 func (a *count_COUNTKIND_AGGKINDAgg) Remove(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
 ) {
 	nulls := vecs[inputIdxs[0]].Nulls()
 	if nulls.MaybeHasNulls() {

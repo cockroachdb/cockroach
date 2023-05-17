@@ -765,7 +765,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInt16) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -836,7 +836,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInt16) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -912,7 +912,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInt32) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -983,7 +983,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInt32) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -1059,7 +1059,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInt64) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -1130,7 +1130,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInt64) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -1206,7 +1206,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDecimal) getIdx(ctx context.Context,
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -1278,7 +1278,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDecimal) getIdx(ctx context.Context,
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -1343,7 +1343,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscFloat64) getIdx(ctx context.Context,
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -1411,7 +1411,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscFloat64) getIdx(ctx context.Context,
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -1495,7 +1495,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInterval) getIdx(ctx context.Context
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -1559,7 +1559,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInterval) getIdx(ctx context.Context
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -1624,7 +1624,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDate) getIdx(ctx context.Context, cu
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -1702,7 +1702,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDate) getIdx(ctx context.Context, cu
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -1783,7 +1783,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscTimestamp) getIdx(ctx context.Contex
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -1852,7 +1852,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscTimestamp) getIdx(ctx context.Contex
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -1927,7 +1927,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDatum) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -1996,7 +1996,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDatum) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -2063,7 +2063,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInt16) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -2102,7 +2102,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInt16) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -2183,7 +2183,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInt32) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -2222,7 +2222,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInt32) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -2303,7 +2303,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInt64) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -2342,7 +2342,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInt64) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -2423,7 +2423,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDecimal) getIdx(ctx context.Context
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -2463,7 +2463,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDecimal) getIdx(ctx context.Context
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -2533,7 +2533,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescFloat64) getIdx(ctx context.Context
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -2569,7 +2569,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescFloat64) getIdx(ctx context.Context
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -2658,7 +2658,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInterval) getIdx(ctx context.Contex
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -2690,7 +2690,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInterval) getIdx(ctx context.Contex
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -2760,7 +2760,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDate) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -2806,7 +2806,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDate) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -2892,7 +2892,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescTimestamp) getIdx(ctx context.Conte
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -2929,7 +2929,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescTimestamp) getIdx(ctx context.Conte
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -3009,7 +3009,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDatum) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -3046,7 +3046,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDatum) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -3118,7 +3118,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInt16) getIdx(ctx context.Context, cur
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -3206,7 +3206,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInt16) getIdx(ctx context.Context, cur
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -3282,7 +3282,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInt32) getIdx(ctx context.Context, cur
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -3370,7 +3370,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInt32) getIdx(ctx context.Context, cur
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -3446,7 +3446,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInt64) getIdx(ctx context.Context, cur
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -3534,7 +3534,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInt64) getIdx(ctx context.Context, cur
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -3610,7 +3610,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDecimal) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -3699,7 +3699,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDecimal) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -3764,7 +3764,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscFloat64) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -3849,7 +3849,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscFloat64) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -3933,7 +3933,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInterval) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -4014,7 +4014,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInterval) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -4079,7 +4079,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDate) getIdx(ctx context.Context, curr
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -4174,7 +4174,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDate) getIdx(ctx context.Context, curr
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -4255,7 +4255,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscTimestamp) getIdx(ctx context.Context,
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -4341,7 +4341,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscTimestamp) getIdx(ctx context.Context,
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -4416,7 +4416,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDatum) getIdx(ctx context.Context, cur
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -4502,7 +4502,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDatum) getIdx(ctx context.Context, cur
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -4569,7 +4569,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInt16) getIdx(ctx context.Context, cu
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -4625,7 +4625,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInt16) getIdx(ctx context.Context, cu
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -4706,7 +4706,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInt32) getIdx(ctx context.Context, cu
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -4762,7 +4762,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInt32) getIdx(ctx context.Context, cu
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -4843,7 +4843,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInt64) getIdx(ctx context.Context, cu
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -4899,7 +4899,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInt64) getIdx(ctx context.Context, cu
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -4980,7 +4980,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDecimal) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -5037,7 +5037,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDecimal) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -5107,7 +5107,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescFloat64) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -5160,7 +5160,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescFloat64) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -5249,7 +5249,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInterval) getIdx(ctx context.Context,
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -5298,7 +5298,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInterval) getIdx(ctx context.Context,
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -5368,7 +5368,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDate) getIdx(ctx context.Context, cur
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -5431,7 +5431,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDate) getIdx(ctx context.Context, cur
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -5517,7 +5517,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescTimestamp) getIdx(ctx context.Context
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -5571,7 +5571,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescTimestamp) getIdx(ctx context.Context
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -5651,7 +5651,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDatum) getIdx(ctx context.Context, cu
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -5705,7 +5705,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDatum) getIdx(ctx context.Context, cu
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -5777,7 +5777,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInt16) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -5848,7 +5848,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInt16) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -5924,7 +5924,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInt32) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -5995,7 +5995,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInt32) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -6071,7 +6071,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInt64) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -6142,7 +6142,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInt64) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -6218,7 +6218,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDecimal) getIdx(ctx context.Context,
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -6290,7 +6290,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDecimal) getIdx(ctx context.Context,
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -6355,7 +6355,7 @@ func (h *rangeHandlerOffsetFollowingStartAscFloat64) getIdx(ctx context.Context,
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -6423,7 +6423,7 @@ func (h *rangeHandlerOffsetFollowingStartAscFloat64) getIdx(ctx context.Context,
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -6507,7 +6507,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInterval) getIdx(ctx context.Context
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -6571,7 +6571,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInterval) getIdx(ctx context.Context
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -6636,7 +6636,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDate) getIdx(ctx context.Context, cu
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -6714,7 +6714,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDate) getIdx(ctx context.Context, cu
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -6795,7 +6795,7 @@ func (h *rangeHandlerOffsetFollowingStartAscTimestamp) getIdx(ctx context.Contex
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -6864,7 +6864,7 @@ func (h *rangeHandlerOffsetFollowingStartAscTimestamp) getIdx(ctx context.Contex
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -6939,7 +6939,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDatum) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -7008,7 +7008,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDatum) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -7075,7 +7075,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInt16) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -7114,7 +7114,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInt16) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -7195,7 +7195,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInt32) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -7234,7 +7234,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInt32) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -7315,7 +7315,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInt64) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -7354,7 +7354,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInt64) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -7435,7 +7435,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDecimal) getIdx(ctx context.Context
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -7475,7 +7475,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDecimal) getIdx(ctx context.Context
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -7545,7 +7545,7 @@ func (h *rangeHandlerOffsetFollowingStartDescFloat64) getIdx(ctx context.Context
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -7581,7 +7581,7 @@ func (h *rangeHandlerOffsetFollowingStartDescFloat64) getIdx(ctx context.Context
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -7670,7 +7670,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInterval) getIdx(ctx context.Contex
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -7702,7 +7702,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInterval) getIdx(ctx context.Contex
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -7772,7 +7772,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDate) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -7818,7 +7818,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDate) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -7904,7 +7904,7 @@ func (h *rangeHandlerOffsetFollowingStartDescTimestamp) getIdx(ctx context.Conte
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -7941,7 +7941,7 @@ func (h *rangeHandlerOffsetFollowingStartDescTimestamp) getIdx(ctx context.Conte
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -8021,7 +8021,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDatum) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -8058,7 +8058,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDatum) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -8130,7 +8130,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInt16) getIdx(ctx context.Context, cur
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -8218,7 +8218,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInt16) getIdx(ctx context.Context, cur
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -8294,7 +8294,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInt32) getIdx(ctx context.Context, cur
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -8382,7 +8382,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInt32) getIdx(ctx context.Context, cur
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -8458,7 +8458,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInt64) getIdx(ctx context.Context, cur
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -8546,7 +8546,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInt64) getIdx(ctx context.Context, cur
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -8622,7 +8622,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDecimal) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -8711,7 +8711,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDecimal) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -8776,7 +8776,7 @@ func (h *rangeHandlerOffsetFollowingEndAscFloat64) getIdx(ctx context.Context, c
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -8861,7 +8861,7 @@ func (h *rangeHandlerOffsetFollowingEndAscFloat64) getIdx(ctx context.Context, c
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -8945,7 +8945,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInterval) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -9026,7 +9026,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInterval) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -9091,7 +9091,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDate) getIdx(ctx context.Context, curr
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -9186,7 +9186,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDate) getIdx(ctx context.Context, curr
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -9267,7 +9267,7 @@ func (h *rangeHandlerOffsetFollowingEndAscTimestamp) getIdx(ctx context.Context,
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -9353,7 +9353,7 @@ func (h *rangeHandlerOffsetFollowingEndAscTimestamp) getIdx(ctx context.Context,
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -9428,7 +9428,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDatum) getIdx(ctx context.Context, cur
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -9514,7 +9514,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDatum) getIdx(ctx context.Context, cur
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -9581,7 +9581,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInt16) getIdx(ctx context.Context, cu
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -9637,7 +9637,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInt16) getIdx(ctx context.Context, cu
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -9718,7 +9718,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInt32) getIdx(ctx context.Context, cu
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -9774,7 +9774,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInt32) getIdx(ctx context.Context, cu
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -9855,7 +9855,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInt64) getIdx(ctx context.Context, cu
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -9911,7 +9911,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInt64) getIdx(ctx context.Context, cu
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -9992,7 +9992,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDecimal) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -10049,7 +10049,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDecimal) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -10119,7 +10119,7 @@ func (h *rangeHandlerOffsetFollowingEndDescFloat64) getIdx(ctx context.Context, 
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -10172,7 +10172,7 @@ func (h *rangeHandlerOffsetFollowingEndDescFloat64) getIdx(ctx context.Context, 
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -10261,7 +10261,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInterval) getIdx(ctx context.Context,
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -10310,7 +10310,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInterval) getIdx(ctx context.Context,
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -10380,7 +10380,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDate) getIdx(ctx context.Context, cur
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -10443,7 +10443,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDate) getIdx(ctx context.Context, cur
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -10529,7 +10529,7 @@ func (h *rangeHandlerOffsetFollowingEndDescTimestamp) getIdx(ctx context.Context
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -10583,7 +10583,7 @@ func (h *rangeHandlerOffsetFollowingEndDescTimestamp) getIdx(ctx context.Context
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break
@@ -10663,7 +10663,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDatum) getIdx(ctx context.Context, cu
 		return lastIdx
 	}
 
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	var vecIdx, n int
 	vec, vecIdx, _ = h.storedCols.GetVecWithTuple(ctx, h.ordColIdx, currRow)
 
@@ -10717,7 +10717,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDatum) getIdx(ctx context.Context, cu
 	// Scan to the next peer group and then compare to the value indicated by
 	// the offset. If the comparison fails, scan again to the next peer group
 	// and repeat.
-	var peersVec coldata.Vec
+	var peersVec *coldata.Vec
 	for {
 		if idx >= h.storedCols.Length() {
 			break

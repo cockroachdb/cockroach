@@ -35,7 +35,7 @@ type concatWindowAgg struct {
 }
 
 func (a *concatWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]

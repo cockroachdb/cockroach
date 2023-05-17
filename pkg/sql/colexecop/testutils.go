@@ -55,7 +55,7 @@ func (b *BatchBuffer) Next() coldata.Batch {
 type RepeatableBatchSource struct {
 	ZeroInputNode
 
-	colVecs  []coldata.Vec
+	colVecs  []*coldata.Vec
 	typs     []*types.T
 	sel      []int
 	batchLen int

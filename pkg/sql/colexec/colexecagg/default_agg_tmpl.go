@@ -58,12 +58,12 @@ type default_AGGKINDAgg struct {
 var _ AggregateFunc = &default_AGGKINDAgg{}
 
 func (a *default_AGGKINDAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// Note that we only need to account for the memory of the output vector
 	// and not for the intermediate results of aggregation since the aggregate
 	// function itself does the latter.
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
 		// Capture groups to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
