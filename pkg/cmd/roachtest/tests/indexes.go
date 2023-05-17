@@ -140,8 +140,3 @@ func registerIndexes(r registry.Registry) {
 	registerNIndexes(r, 2)
 }
 
-func registerIndexesBench(r registry.Registry) {
-	for i := 0; i <= 100; i++ {
-		registerNIndexes(r, i)
-	}
-}
