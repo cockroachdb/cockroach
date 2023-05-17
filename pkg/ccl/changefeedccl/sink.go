@@ -309,6 +309,9 @@ func validateSinkOptions(opts map[string]string, sinkSpecificOpts map[string]str
 		if _, ok := changefeedbase.CommonOptions[opt]; ok {
 			continue
 		}
+		if _, retired := changefeedbase.RetiredOptions[opt]; retired {
+			continue
+		}
 		if sinkSpecificOpts != nil {
 			if _, ok := sinkSpecificOpts[opt]; ok {
 				continue
