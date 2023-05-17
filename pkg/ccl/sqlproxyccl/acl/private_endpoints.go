@@ -44,7 +44,7 @@ func (p *PrivateEndpoints) CheckConnection(ctx context.Context, conn ConnectionT
 	}
 
 	// Cluster allows private connections, so we'll check allowed endpoints.
-	if (tenantObj.ConnectivityType & tenant.ALLOW_PRIVATE) != 0 {
+	if tenantObj.AllowPrivateConn() {
 		for _, endpoints := range tenantObj.PrivateEndpoints {
 			// A matching endpointID was found.
 			if endpoints == conn.EndpointID {

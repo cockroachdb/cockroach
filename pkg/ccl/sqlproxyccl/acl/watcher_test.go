@@ -75,7 +75,7 @@ func TestACLWatcher(t *testing.T) {
 		Version:          "001",
 		TenantID:         tenantID.ToUint64(),
 		ClusterName:      "my-tenant",
-		ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+		ConnectivityType: tenant.ALLOW_ALL,
 		PrivateEndpoints: []string{"foo-bar-baz", "cockroachdb"},
 	})
 
@@ -235,7 +235,7 @@ func TestACLWatcher(t *testing.T) {
 			Version:          "002",
 			TenantID:         tenantID.ToUint64(),
 			ClusterName:      "my-tenant",
-			ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+			ConnectivityType: tenant.ALLOW_ALL,
 			PrivateEndpoints: []string{"foo-bar-baz"},
 		})
 

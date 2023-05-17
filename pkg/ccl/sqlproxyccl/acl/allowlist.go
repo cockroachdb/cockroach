@@ -44,7 +44,8 @@ func (al *Allowlist) UnmarshalYAML(unmarshal func(interface{}) error) error {
 //
 // TODO(jaylim-crl): Call LookupTenant and return nil if the cluster has no
 // public connectivity. This ACL shouldn't be applied. We would need to do this
-// eventually once we move IP allowlist entries into the tenant object.
+// eventually once we move IP allowlist entries into the tenant object. Don't
+// need to do this now as we don't need anything from the tenant metadata.
 func (al *Allowlist) CheckConnection(ctx context.Context, connection ConnectionTags) error {
 	entry, ok := al.entries[connection.TenantID.String()]
 	if !ok {

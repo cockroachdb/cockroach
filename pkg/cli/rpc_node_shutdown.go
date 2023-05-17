@@ -68,6 +68,7 @@ func doDrain(
 			Keys: []string{
 				"server.shutdown.drain_wait",
 				"server.shutdown.connection_wait",
+				"server.shutdown.jobs_wait",
 				"server.shutdown.query_wait",
 				"server.shutdown.lease_transfer_wait",
 			},
@@ -76,8 +77,7 @@ func doDrain(
 		if err != nil {
 			return err
 		}
-		// Add an extra buffer of 10 seconds for the timeout.
-		minWait := 10 * time.Second
+		minWait := 0 * time.Second
 		for k, v := range shutdownSettings.KeyValues {
 			wait, err := time.ParseDuration(v.Value)
 			if err != nil {
@@ -90,7 +90,7 @@ func doDrain(
 			}
 		}
 		if minWait > drainCtx.drainWait {
-			fmt.Fprintf(stderr, "warning: --drain-wait is %s, but the server.shutdown.{drain,query,connection,lease_transfer}_wait "+
+			fmt.Fprintf(stderr, "warning: --drain-wait is %s, but the server.shutdown.{drain,query,jobs,connection,lease_transfer}_wait "+
 				"cluster settings require a value of at least %s; using the larger value\n",
 				drainCtx.drainWait, minWait)
 			drainCtx.drainWait = minWait

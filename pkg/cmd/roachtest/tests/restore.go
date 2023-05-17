@@ -338,6 +338,27 @@ func registerRestore(r registry.Registry) {
 			tags:    registry.Tags("weekly", "aws-weekly"),
 		},
 		{
+			// The weekly 32TB, 400 incremental layer Restore test.
+			//
+			// NB: Prior to 23.1, restore would OOM on backups that had many
+			// incremental layers and many import spans. This test disables span
+			// target size so restore can process the maximum number of import
+			// spans. Together with having a 400 incremental chain, this
+			// regression tests against the OOMs that we've seen in previous
+			// versions.
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000}),
+			backup: makeBackupSpecs(backupSpecs{
+				version:          "v22.2.4",
+				workload:         tpceRestore{customers: 2000000},
+				backupProperties: "inc-count=400",
+			}),
+			timeout: 30 * time.Hour,
+			tags:    registry.Tags("weekly", "aws-weekly"),
+			setUpStmts: []string{
+				`SET CLUSTER SETTING backup.restore_span.target_size = '0'`,
+			},
+		},
+		{
 			// A teeny weeny 15GB restore that could be used to bisect scale agnostic perf regressions.
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
 			backup: makeBackupSpecs(
@@ -378,6 +399,18 @@ func registerRestore(r registry.Registry) {
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
 					defer hc.Done()
+					t.Status(`running setup statements`)
+					db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
+					if err != nil {
+						return errors.Wrapf(err, "failure to run setup statements")
+					}
+					for _, stmt := range sp.setUpStmts {
+						_, err := db.Exec(stmt)
+						if err != nil {
+							return errors.Wrapf(err, "error executing setup stmt [%s]", stmt)
+						}
+					}
+
 					t.Status(`running restore`)
 					metricCollector := rd.initRestorePerfMetrics(ctx, durationGauge)
 					if err := rd.run(ctx, ""); err != nil {
@@ -636,7 +669,8 @@ type restoreSpecs struct {
 	// restored user space tables.
 	fingerprint int
 
-	testName string
+	testName   string
+	setUpStmts []string
 }
 
 func (sp *restoreSpecs) initTestName() {
