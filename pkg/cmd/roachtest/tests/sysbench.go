@@ -121,14 +121,20 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		c.Run(ctx, loadNode, opts.cmd(false /* haproxy */)+" prepare")
 
 		t.Status("running workload")
-		err := c.RunE(ctx, loadNode, opts.cmd(true /* haproxy */)+" run")
-		// Sysbench occasionally segfaults. When that happens, don't fail the
-		// test.
-		if err != nil && !strings.Contains(err.Error(), "Segmentation fault") {
+		cmd := opts.cmd(true /* haproxy */) + " run"
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode, cmd)
+		if err != nil {
 			return err
 		}
-		t.L().Printf("sysbench segfaulted; passing test anyway")
-		return nil
+
+		// Sysbench occasionally segfaults. When that happens, don't fail the
+		// test.
+		if strings.Contains(result.Stderr, "Segmentation fault") {
+			t.L().Printf("sysbench segfaulted; passing test anyway")
+			return nil
+		}
+
+		return result.Err
 	})
 	m.Wait()
 }
