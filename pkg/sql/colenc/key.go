@@ -48,7 +48,7 @@ func partialIndexAndNullCheck[T []byte | roachpb.Key](
 //
 // vec=nil indicates that all values are NULL.
 func encodeKeys[T []byte | roachpb.Key](
-	kys []T, dir encoding.Direction, vec coldata.Vec, start, end int,
+	kys []T, dir encoding.Direction, vec *coldata.Vec, start, end int,
 ) error {
 	count := end - start
 	if vec == nil {
@@ -234,7 +234,7 @@ func (b *BatchEncoder) encodeIndexKey(
 			return err
 		}
 		col, ok := b.colMap.Get(k.ColumnID)
-		var vec coldata.Vec
+		var vec *coldata.Vec
 		if ok {
 			vec = b.b.ColVec(col)
 		} else {

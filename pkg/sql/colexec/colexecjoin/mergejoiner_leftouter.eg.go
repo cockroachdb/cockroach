@@ -9922,7 +9922,7 @@ func (o *mergeJoinLeftOuterOp) buildLeftGroupsFromBatch(
 				lastSrcCol := colIdx == len(input.sourceTypes)-1
 				outStartIdx := destStartIdx
 				out := o.output.ColVec(colIdx)
-				var src coldata.Vec
+				var src *coldata.Vec
 				if batch.Length() > 0 {
 					src = batch.ColVec(colIdx)
 				}
@@ -11449,7 +11449,7 @@ func (o *mergeJoinLeftOuterOp) buildRightGroupsFromBatch(
 				lastSrcCol := colIdx == len(input.sourceTypes)-1
 				outStartIdx := destStartIdx
 				out := o.output.ColVec(colIdx + colOffset)
-				var src coldata.Vec
+				var src *coldata.Vec
 				if batch.Length() > 0 {
 					src = batch.ColVec(colIdx)
 				}

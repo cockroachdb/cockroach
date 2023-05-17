@@ -331,7 +331,7 @@ func (c *castIdentityOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	projVec := batch.ColVec(c.outputIdx)
-	c.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	c.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		srcVec := batch.ColVec(c.colIdx)
 		if sel := batch.Selection(); sel != nil {
 			// We don't want to perform the deselection during copying, so we
@@ -371,7 +371,7 @@ func (c *castBPCharIdentityOp) Next() coldata.Batch {
 	outputNulls := outputVec.Nulls()
 	// Note that the loops below are not as optimized as in other cast operators
 	// since this operator should only be planned in tests.
-	c.allocator.PerformOperation([]coldata.Vec{outputVec}, func() {
+	c.allocator.PerformOperation([]*coldata.Vec{outputVec}, func() {
 		if sel := batch.Selection(); sel != nil {
 			for _, i := range sel[:n] {
 				if inputNulls.NullAt(i) {
@@ -413,7 +413,7 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 	outputCol := outputVec.Datum()
 	outputNulls := outputVec.Nulls()
 	toType := outputVec.Type()
-	c.allocator.PerformOperation([]coldata.Vec{outputVec}, func() {
+	c.allocator.PerformOperation([]*coldata.Vec{outputVec}, func() {
 		if n > c.da.AllocSize {
 			c.da.AllocSize = n
 		}
@@ -518,7 +518,7 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 	// Remove unused warnings.
 	_ = toType
 	c.allocator.PerformOperation(
-		[]coldata.Vec{outputVec}, func() {
+		[]*coldata.Vec{outputVec}, func() {
 			inputCol := inputVec._FROM_TYPE()
 			inputNulls := inputVec.Nulls()
 			outputCol := outputVec._TO_TYPE()

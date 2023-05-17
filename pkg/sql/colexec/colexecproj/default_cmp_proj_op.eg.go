@@ -41,7 +41,7 @@ func (d *defaultCmpProjOp) Next() coldata.Batch {
 	}
 	sel := batch.Selection()
 	output := batch.ColVec(d.outputIdx)
-	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
+	d.allocator.PerformOperation([]*coldata.Vec{output}, func() {
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		leftColumn := d.toDatumConverter.GetDatumColumn(d.col1Idx)
 		rightColumn := d.toDatumConverter.GetDatumColumn(d.col2Idx)

@@ -215,7 +215,7 @@ func (c Float64s) CopySlice(src Float64s, destIdx, srcStartIdx, srcEndIdx int) {
 // destIdx.
 //
 // Note that this method is usually inlined, but it isn't in case of the
-// memColumn.Copy generated code (probably because of the size of that
+// Vec.Copy generated code (probably because of the size of that
 // function), so we don't assert the inlining with the GCAssert linter.
 func (c Decimals) CopySlice(src Decimals, destIdx, srcStartIdx, srcEndIdx int) {
 	srcSlice := src[srcStartIdx:srcEndIdx]

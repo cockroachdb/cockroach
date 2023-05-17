@@ -137,18 +137,18 @@ type avgInt16OrderedAgg struct {
 
 var _ AggregateFunc = &avgInt16OrderedAgg{}
 
-func (a *avgInt16OrderedAgg) SetOutput(vec coldata.Vec) {
+func (a *avgInt16OrderedAgg) SetOutput(vec *coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
 func (a *avgInt16OrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups
@@ -395,18 +395,18 @@ type avgInt32OrderedAgg struct {
 
 var _ AggregateFunc = &avgInt32OrderedAgg{}
 
-func (a *avgInt32OrderedAgg) SetOutput(vec coldata.Vec) {
+func (a *avgInt32OrderedAgg) SetOutput(vec *coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
 func (a *avgInt32OrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups
@@ -653,18 +653,18 @@ type avgInt64OrderedAgg struct {
 
 var _ AggregateFunc = &avgInt64OrderedAgg{}
 
-func (a *avgInt64OrderedAgg) SetOutput(vec coldata.Vec) {
+func (a *avgInt64OrderedAgg) SetOutput(vec *coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
 func (a *avgInt64OrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups
@@ -911,18 +911,18 @@ type avgDecimalOrderedAgg struct {
 
 var _ AggregateFunc = &avgDecimalOrderedAgg{}
 
-func (a *avgDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
+func (a *avgDecimalOrderedAgg) SetOutput(vec *coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Decimal()
 }
 
 func (a *avgDecimalOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups
@@ -1169,18 +1169,18 @@ type avgFloat64OrderedAgg struct {
 
 var _ AggregateFunc = &avgFloat64OrderedAgg{}
 
-func (a *avgFloat64OrderedAgg) SetOutput(vec coldata.Vec) {
+func (a *avgFloat64OrderedAgg) SetOutput(vec *coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Float64()
 }
 
 func (a *avgFloat64OrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurSumSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups
@@ -1391,18 +1391,18 @@ type avgIntervalOrderedAgg struct {
 
 var _ AggregateFunc = &avgIntervalOrderedAgg{}
 
-func (a *avgIntervalOrderedAgg) SetOutput(vec coldata.Vec) {
+func (a *avgIntervalOrderedAgg) SetOutput(vec *coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Interval()
 }
 
 func (a *avgIntervalOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurSumSize uintptr
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups
