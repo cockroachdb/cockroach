@@ -1,0 +1,189 @@
+subtest on_conflict_do_nothing
+
+statement ok
+CREATE TABLE t_ocdn (a INT PRIMARY KEY, b INT UNIQUE, c INT);
+
+statement ok
+CREATE FUNCTION f_ocdn(i INT, j INT, k INT) RETURNS RECORD AS
+$$
+  INSERT INTO t_ocdn VALUES (i, j, k) ON CONFLICT DO NOTHING RETURNING *;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_ocdn(1,1,1);
+----
+(1,1,1)
+
+query T
+SELECT f_ocdn(1,1,1);
+----
+NULL
+
+query T
+SELECT f_ocdn(2,1,1);
+----
+NULL
+
+query T
+SELECT f_ocdn(1,2,1);
+----
+NULL
+
+statement error pq: multiple modification subqueries of the same table \"t_ocdn\" are not supported
+SELECT f_ocdn(1,1,1), f_ocdn(3,2,2), f_ocdn(6,6,2), f_ocdn(2,1,1);
+
+statement ok
+CREATE FUNCTION f_ocdn_2vals(i INT, j INT, k INT, m INT, n INT, o INT) RETURNS RECORD AS
+$$
+  INSERT INTO t_ocdn VALUES (i, j, k), (m,n,o) ON CONFLICT DO NOTHING RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+SELECT f_ocdn_2vals(5,5,5,5,5,5);
+
+query III rowsort
+SELECT * FROM t_ocdn;
+----
+1 1 1
+5 5 5
+
+statement error pq: multiple modification subqueries of the same table \"t_ocdn\" are not supported
+CREATE FUNCTION f_err(i INT, j INT, k INT, m INT, n INT, o INT) RETURNS RECORD AS
+$$
+  INSERT INTO t_ocdn VALUES (i, j, k) ON CONFLICT DO NOTHING;
+  INSERT INTO t_ocdn VALUES (m, n, o) ON CONFLICT DO NOTHING;
+  SELECT * FROM t_ocdn WHERE t.a=i OR t.a=m;
+$$ LANGUAGE SQL;
+
+subtest on_conflict_do_update
+
+statement ok
+CREATE TABLE t_ocdu (a INT PRIMARY KEY, b INT UNIQUE, c INT);
+
+statement ok
+CREATE FUNCTION f_ocdu(i INT, j INT, k INT) RETURNS RECORD AS
+$$
+  INSERT INTO t_ocdu VALUES (i, j, k) ON CONFLICT (a) DO UPDATE SET b = j, c = t_ocdu.c + 1 RETURNING *;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_ocdu(1,1,1);
+----
+(1,1,1)
+
+query T
+SELECT f_ocdu(1,1,8);
+----
+(1,1,2)
+
+query T
+SELECT f_ocdu(1,4,6);
+----
+(1,4,3)
+
+statement error pq: duplicate key value violates unique constraint \"t_ocdu_b_key\"
+SELECT f_ocdu(2,4,6);
+
+
+subtest upsert
+
+statement ok
+CREATE TABLE t_upsert (a INT PRIMARY KEY, b INT);
+
+
+statement ok
+CREATE FUNCTION f_upsert(i INT, j INT) RETURNS RECORD AS
+$$
+  UPSERT INTO t_upsert VALUES (i, j) RETURNING *;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_upsert(1,1);
+----
+(1,1)
+
+query T
+SELECT f_upsert(1,4);
+----
+(1,4)
+
+statement ok
+CREATE FUNCTION f_upsert_2vals(i INT, j INT, m INT, n INT) RETURNS SETOF RECORD AS
+$$
+  UPSERT INTO t_upsert VALUES (i, j), (m, n) RETURNING *;
+$$ LANGUAGE SQL;
+
+query T rowsort
+SELECT f_upsert_2vals(1,9,2,8);
+----
+(1,9)
+(2,8)
+
+
+subtest constraints
+
+statement ok
+CREATE TABLE t_check1(a INT NULL CHECK(a IS NOT NULL), b CHAR(4) CHECK(length(b) < 4));
+
+statement ok
+CREATE FUNCTION f_check_null() RETURNS RECORD AS
+$$
+  UPSERT INTO t_check1(a) VALUES (NULL) RETURNING *;
+$$ LANGUAGE SQL;
+
+statement error failed to satisfy CHECK constraint
+SELECT f_check_null();
+
+statement ok
+CREATE FUNCTION f_check_len() RETURNS RECORD AS
+$$
+  UPSERT INTO t_check1(b) VALUES ('abcd') RETURNING *;
+$$ LANGUAGE SQL;
+
+statement error failed to satisfy CHECK constraint
+SELECT f_check_len()
+
+statement ok
+CREATE FUNCTION f_check_vals(i INT, j CHAR(4)) RETURNS RECORD AS
+$$
+  UPSERT INTO t_check1(b,a) VALUES (j,i) RETURNING *;
+$$ LANGUAGE SQL;
+
+statement error failed to satisfy CHECK constraint
+SELECT f_check_vals(NULL, 'ab');
+
+statement error failed to satisfy CHECK constraint
+SELECT f_check_vals(3, 'abcd');
+
+statement ok
+CREATE TABLE t_check2(a INT NOT NULL CHECK(a IS NOT NULL), b CHAR(3) CHECK(length(b) < 4));
+
+statement ok
+CREATE FUNCTION f_check_colerr_null() RETURNS RECORD AS
+$$
+  UPSERT INTO t_check2(a) VALUES (NULL) RETURNING *;
+$$ LANGUAGE SQL;
+
+statement error null value in column "a" violates not-null constraint
+SELECT f_check_colerr_null();
+
+statement ok
+CREATE FUNCTION f_check_colerr_len() RETURNS RECORD AS
+$$
+  UPSERT INTO t_check2(b) VALUES ('abcd') RETURNING *;
+$$ LANGUAGE SQL;
+
+statement error value too long for type CHAR\(3\)
+SELECT f_check_colerr_len()
+
+statement ok
+CREATE FUNCTION f_check_colerr_vals(i INT, j CHAR(4)) RETURNS RECORD AS
+$$
+  UPSERT INTO t_check2(a,b) VALUES (i,j) RETURNING *;
+$$ LANGUAGE SQL;
+
+statement error null value in column "a" violates not-null constraint
+SELECT f_check_colerr_vals(NULL, 'ab')
+
+statement error value too long for type CHAR\(3\)
+SELECT f_check_colerr_vals(NULL, 'abcd')

@@ -2103,6 +2103,13 @@ func TestTenantLogic_udf_in_constraints(
 	runLogicTest(t, "udf_in_constraints")
 }
 
+func TestTenantLogic_udf_insert(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_insert")
+}
+
 func TestTenantLogic_udf_oid_ref(
 	t *testing.T,
 ) {
@@ -2129,6 +2136,20 @@ func TestTenantLogic_udf_star(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_star")
+}
+
+func TestTenantLogic_udf_update(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_update")
+}
+
+func TestTenantLogic_udf_upsert(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_upsert")
 }
 
 func TestTenantLogic_udf_volatility_check(
