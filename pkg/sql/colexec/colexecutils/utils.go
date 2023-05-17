@@ -104,7 +104,7 @@ type AppendOnlyBufferedBatch struct {
 
 	allocator   *colmem.Allocator
 	length      int
-	colVecs     []coldata.Vec
+	colVecs     []*coldata.Vec
 	colsToStore []int
 	// sel is the selection vector on this batch. Note that it is stored
 	// separately from embedded coldata.Batch because we need to be able to
@@ -139,12 +139,12 @@ func (b *AppendOnlyBufferedBatch) Width() int {
 }
 
 // ColVec implements the coldata.Batch interface.
-func (b *AppendOnlyBufferedBatch) ColVec(i int) coldata.Vec {
+func (b *AppendOnlyBufferedBatch) ColVec(i int) *coldata.Vec {
 	return b.colVecs[i]
 }
 
 // ColVecs implements the coldata.Batch interface.
-func (b *AppendOnlyBufferedBatch) ColVecs() []coldata.Vec {
+func (b *AppendOnlyBufferedBatch) ColVecs() []*coldata.Vec {
 	return b.colVecs
 }
 
@@ -170,12 +170,12 @@ func (b *AppendOnlyBufferedBatch) SetSelection(useSel bool) {
 }
 
 // AppendCol implements the coldata.Batch interface.
-func (b *AppendOnlyBufferedBatch) AppendCol(coldata.Vec) {
+func (b *AppendOnlyBufferedBatch) AppendCol(*coldata.Vec) {
 	colexecerror.InternalError(errors.AssertionFailedf("AppendCol is prohibited on AppendOnlyBufferedBatch"))
 }
 
 // ReplaceCol implements the coldata.Batch interface.
-func (b *AppendOnlyBufferedBatch) ReplaceCol(coldata.Vec, int) {
+func (b *AppendOnlyBufferedBatch) ReplaceCol(*coldata.Vec, int) {
 	colexecerror.InternalError(errors.AssertionFailedf("ReplaceCol is prohibited on AppendOnlyBufferedBatch"))
 }
 

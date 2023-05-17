@@ -131,7 +131,7 @@ func TestSpillingBuffer(t *testing.T) {
 		testBatch := coldata.NewMemBatchNoCols(typesToStore, 0 /* capacity */)
 		oracleBatch := coldata.NewMemBatchNoCols(typesToStore, 0 /* capacity */)
 		checkWindowAtIndex := func(startIdx int) (nextIdx int) {
-			var vec coldata.Vec
+			var vec *coldata.Vec
 			var idx, length int
 			for i, colIdx := range colsToStore {
 				vec, idx, length = buf.GetVecWithTuple(ctx, i, startIdx)

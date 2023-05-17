@@ -36,18 +36,18 @@ type concatOrderedAgg struct {
 	foundNonNullForCurrentGroup bool
 }
 
-func (a *concatOrderedAgg) SetOutput(vec coldata.Vec) {
+func (a *concatOrderedAgg) SetOutput(vec *coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec.Bytes()
 }
 
 func (a *concatOrderedAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// Capture groups to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		groups := a.groups

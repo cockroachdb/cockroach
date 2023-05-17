@@ -27,7 +27,7 @@ import (
 )
 
 // MakeVecHandler makes a tree.ValueHandler that stores values to a coldata.Vec.
-func MakeVecHandler(vec coldata.Vec) tree.ValueHandler {
+func MakeVecHandler(vec *coldata.Vec) tree.ValueHandler {
 	v := vecHandler{nulls: vec.Nulls()}
 	switch vec.CanonicalTypeFamily() {
 	case types.BoolFamily:

@@ -43,7 +43,7 @@ var (
 // transformation to the existing hash.
 func rehash(
 	buckets []uint32,
-	col coldata.Vec,
+	col *coldata.Vec,
 	nKeys int,
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,
@@ -1103,7 +1103,7 @@ func rehash(
 // then we should remove the code duplication here.
 func rehash64(
 	buckets []uint64,
-	col coldata.Vec,
+	col *coldata.Vec,
 	nKeys int,
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,

@@ -70,7 +70,7 @@ func makeDatumFromColOffset(
 	hint *types.T,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
-	col coldata.Vec,
+	col *coldata.Vec,
 	rowIdx int,
 ) (tree.Datum, error) {
 	if col.Nulls().NullAt(rowIdx) {

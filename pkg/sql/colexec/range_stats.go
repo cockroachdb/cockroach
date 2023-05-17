@@ -89,7 +89,7 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 	output := batch.ColVec(r.outputIdx)
 	jsonOutput := output.JSON()
 	r.allocator.PerformOperation(
-		[]coldata.Vec{output},
+		[]*coldata.Vec{output},
 		func() {
 			// TODO(yuzefovich): consider reusing these slices across
 			// iterations.

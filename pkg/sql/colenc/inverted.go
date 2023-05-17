@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func invertedColToDatum(vec coldata.Vec, row int) tree.Datum {
+func invertedColToDatum(vec *coldata.Vec, row int) tree.Datum {
 	if vec.Nulls().NullAt(row) {
 		return tree.DNull
 	}
@@ -52,7 +52,7 @@ func (b *BatchEncoder) encodeInvertedSecondaryIndex(
 	if kys, err = b.encodeInvertedIndexPrefixKeys(kys, index); err != nil {
 		return err
 	}
-	var vec coldata.Vec
+	var vec *coldata.Vec
 	if i, ok := b.colMap.Get(index.InvertedColumnID()); ok {
 		vec = b.b.ColVecs()[i]
 	}
@@ -127,7 +127,7 @@ func (b *BatchEncoder) encodeInvertedIndexPrefixKeys(
 func writeColumnValueOneRow(
 	value []byte,
 	colMap catalog.TableColMap,
-	vecs []coldata.Vec,
+	vecs []*coldata.Vec,
 	cols []rowenc.ValueEncodedColumn,
 	row int,
 ) ([]byte, error) {

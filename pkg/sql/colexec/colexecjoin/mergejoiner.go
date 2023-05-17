@@ -233,7 +233,7 @@ type mjBuilderCrossProductState struct {
 type mjBufferedGroupState struct {
 	// leftFirstTuple is the first tuple of the left buffered group. It is set
 	// only in case the left buffered group spans more than one input batch.
-	leftFirstTuple []coldata.Vec
+	leftFirstTuple []*coldata.Vec
 	// leftGroupStartIdx is the position within the current left batch where the
 	// left buffered group starts. If the group spans multiple batches, this
 	// will be set to 0 on all consecutive batches.
@@ -246,7 +246,7 @@ type mjBufferedGroupState struct {
 	leftBatchDone bool
 	// rightFirstTuple is the first tuple of the right buffered group. It is set
 	// only in case the right buffered group spans more than one input batch.
-	rightFirstTuple []coldata.Vec
+	rightFirstTuple []*coldata.Vec
 	// scratchSel is a scratch selection vector initialized only when needed.
 	scratchSel []int
 

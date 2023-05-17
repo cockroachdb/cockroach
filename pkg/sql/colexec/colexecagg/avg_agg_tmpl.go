@@ -125,7 +125,7 @@ type avg_TYPE_AGGKINDAgg struct {
 var _ AggregateFunc = &avg_TYPE_AGGKINDAgg{}
 
 // {{if eq "_AGGKIND" "Ordered"}}
-func (a *avg_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
+func (a *avg_TYPE_AGGKINDAgg) SetOutput(vec *coldata.Vec) {
 	a.orderedAggregateFuncBase.SetOutput(vec)
 	a.col = vec._RET_TYPE()
 }
@@ -133,13 +133,13 @@ func (a *avg_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 // {{end}}
 
 func (a *avg_TYPE_AGGKINDAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	execgen.SETVARIABLESIZE(oldCurSumSize, a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	// {{if not (eq "_AGGKIND" "Window")}}
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
 		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
@@ -252,7 +252,9 @@ func (a *avg_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 
 // Remove implements the slidingWindowAggregateFunc interface (see
 // window_aggregator_tmpl.go).
-func (a *avg_TYPE_AGGKINDAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
+func (a *avg_TYPE_AGGKINDAgg) Remove(
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
 	execgen.SETVARIABLESIZE(oldCurSumSize, a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()

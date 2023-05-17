@@ -1740,8 +1740,8 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	typs := []*types.T{types.Int}
-	colsLeft := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
-	colsRight := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
+	colsLeft := []*coldata.Vec{testAllocator.NewVec(typs[0], nTuples)}
+	colsRight := []*coldata.Vec{testAllocator.NewVec(typs[0], nTuples)}
 	groupsLeft := colsLeft[0].Int64()
 	groupsRight := colsRight[0].Int64()
 	for i := range groupsLeft {
@@ -1813,7 +1813,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 			func(t *testing.T) {
 				nTuples := coldata.BatchSize() * numInputBatches
 				typs := []*types.T{types.Int}
-				cols := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
+				cols := []*coldata.Vec{testAllocator.NewVec(typs[0], nTuples)}
 				groups := cols[0].Int64()
 				for i := range groups {
 					groups[i] = int64(i)
@@ -1885,9 +1885,9 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					lastGroupSize := nTuples % groupSize
 					expCount := nTuples/groupSize*(groupSize*groupSize) + lastGroupSize*lastGroupSize
 					typs := []*types.T{types.Int, types.Int}
-					cols := []coldata.Vec{
-						testAllocator.NewMemColumn(typs[0], nTuples),
-						testAllocator.NewMemColumn(typs[1], nTuples),
+					cols := []*coldata.Vec{
+						testAllocator.NewVec(typs[0], nTuples),
+						testAllocator.NewVec(typs[1], nTuples),
 					}
 					for i := range cols[0].Int64() {
 						cols[0].Int64()[i] = int64(i / groupSize)
@@ -1939,11 +1939,11 @@ type expectedGroup struct {
 
 func newBatchesOfRandIntRows(
 	nTuples int, maxRunLength int64, skipValues bool, randomIncrement int64,
-) ([]coldata.Vec, []coldata.Vec, []expectedGroup) {
+) ([]*coldata.Vec, []*coldata.Vec, []expectedGroup) {
 	rng, _ := randutil.NewTestRand()
-	lCols := []coldata.Vec{testAllocator.NewMemColumn(types.Int, nTuples)}
+	lCols := []*coldata.Vec{testAllocator.NewVec(types.Int, nTuples)}
 	lCol := lCols[0].Int64()
-	rCols := []coldata.Vec{testAllocator.NewMemColumn(types.Int, nTuples)}
+	rCols := []*coldata.Vec{testAllocator.NewVec(types.Int, nTuples)}
 	rCol := rCols[0].Int64()
 	exp := make([]expectedGroup, nTuples)
 	val := int64(0)

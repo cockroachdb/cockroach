@@ -43,7 +43,7 @@ type boolAndWindowAgg struct {
 var _ AggregateFunc = &boolAndWindowAgg{}
 
 func (a *boolAndWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -124,7 +124,7 @@ func (a *boolAndWindowAggAlloc) newAggFunc() AggregateFunc {
 // used when the window frame only grows. For the case when the window frame can
 // shrink, the default quadratic-scaling implementation is necessary.
 func (*boolAndWindowAgg) Remove(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
 ) {
 	colexecerror.InternalError(
 		errors.AssertionFailedf("Remove called on boolAndWindowAgg"),
@@ -151,7 +151,7 @@ type boolOrWindowAgg struct {
 var _ AggregateFunc = &boolOrWindowAgg{}
 
 func (a *boolOrWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -232,7 +232,7 @@ func (a *boolOrWindowAggAlloc) newAggFunc() AggregateFunc {
 // used when the window frame only grows. For the case when the window frame can
 // shrink, the default quadratic-scaling implementation is necessary.
 func (*boolOrWindowAgg) Remove(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
 ) {
 	colexecerror.InternalError(
 		errors.AssertionFailedf("Remove called on boolOrWindowAgg"),

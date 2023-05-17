@@ -92,7 +92,7 @@ func (a *countRowsWindowAggregator) processBatch(batch coldata.Batch, startIdx, 
 		return
 	}
 	outVec := batch.ColVec(a.outputColIdx)
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		outCol := outVec.Int64()
 		_, _ = outCol[startIdx], outCol[endIdx-1]
 		for i := startIdx; i < endIdx; i++ {

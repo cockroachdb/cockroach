@@ -22,7 +22,7 @@ import (
 func TestVecsToStringWithRowPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	vec := coldata.NewMemColumn(types.String, coldata.BatchSize(), coldata.StandardColumnFactory)
+	vec := coldata.NewVec(types.String, coldata.BatchSize(), coldata.StandardColumnFactory)
 	input := []string{"one", "two", "three"}
 	for i := range input {
 		vec.Bytes().Set(i, []byte(input[i]))
@@ -48,6 +48,6 @@ func TestVecsToStringWithRowPrefix(t *testing.T) {
 		{length: 3, prefix: "row: "},
 		{length: 2, sel: []int{0, 2}, prefix: "row: "},
 	} {
-		require.Equal(t, getExpected(tc.length, tc.sel, tc.prefix), vecsToStringWithRowPrefix([]coldata.Vec{vec}, tc.length, tc.sel, tc.prefix))
+		require.Equal(t, getExpected(tc.length, tc.sel, tc.prefix), vecsToStringWithRowPrefix([]*coldata.Vec{vec}, tc.length, tc.sel, tc.prefix))
 	}
 }

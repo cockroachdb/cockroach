@@ -646,7 +646,7 @@ func (b *Bytes) Deserialize(data []byte, offsets []int32) {
 
 // ProportionalSize calls the method of the same name on bytes-like vectors,
 // panicking if not bytes-like.
-func ProportionalSize(v Vec, length int64) int64 {
+func ProportionalSize(v *Vec, length int64) int64 {
 	family := v.CanonicalTypeFamily()
 	switch family {
 	case types.BytesFamily:
@@ -660,7 +660,7 @@ func ProportionalSize(v Vec, length int64) int64 {
 }
 
 // ResetIfBytesLike calls Reset on v if it is bytes-like, noop otherwise.
-func ResetIfBytesLike(v Vec) {
+func ResetIfBytesLike(v *Vec) {
 	switch v.CanonicalTypeFamily() {
 	case types.BytesFamily:
 		v.Bytes().Reset()

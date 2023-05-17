@@ -52,7 +52,7 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 	sel := batch.Selection()
 	output := batch.ColVec(b.outputIdx)
 	b.allocator.PerformOperation(
-		[]coldata.Vec{output},
+		[]*coldata.Vec{output},
 		func() {
 			b.toDatumConverter.ConvertBatchAndDeselect(batch)
 			for i := 0; i < n; i++ {
