@@ -132,6 +132,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	})
 
 	t.Run("tenant_span_stats", func(t *testing.T) {
+		skip.UnderDeadlockWithIssue(t, 99770)
 		testTenantSpanStats(ctx, t, testHelper)
 	})
 
