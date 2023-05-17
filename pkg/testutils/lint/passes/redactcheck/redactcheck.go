@@ -133,6 +133,10 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase": {
 						"FormatCode": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/sql/privilege": {
+						"Kind":       {},
+						"ObjectType": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants": {
 						"ConstraintType": {},
 					},
