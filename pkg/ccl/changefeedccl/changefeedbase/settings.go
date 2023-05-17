@@ -211,6 +211,15 @@ var ProtectTimestampInterval = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+// MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
+var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.protect_timestamp.max_age",
+	"fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration",
+	4*24*time.Hour,
+	settings.NonNegativeDuration,
+).WithPublic()
+
 // BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
 var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
