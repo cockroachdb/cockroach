@@ -1821,6 +1821,11 @@ func (ts *TestServer) BinaryVersionOverride() roachpb.Version {
 	return knobs.(*TestingKnobs).BinaryVersionOverride
 }
 
+// Drain is part of the TestServerInterface.
+func (ts *TestServer) Drain(ctx context.Context) {
+	CallDrainServerSide(ctx, ts.Server.Drain)
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory

@@ -310,6 +310,9 @@ type TestServerInterface interface {
 	// BinaryVersionOverride returns the value of an override if set using
 	// TestingKnobs.
 	BinaryVersionOverride() roachpb.Version
+
+	// Drain starts draining the server.
+	Drain(context.Context)
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
