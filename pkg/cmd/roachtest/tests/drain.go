@@ -364,6 +364,7 @@ func prepareCluster(
 	defer db.Close()
 
 	waitPhasesSettingStmts := []string{
+		"SET CLUSTER SETTING server.shutdown.jobs_wait = '0s';",
 		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.drain_wait = '%fs';", drainWait.Seconds()),
 		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.query_wait = '%fs'", queryWait.Seconds()),
 		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.connection_wait = '%fs'", connectionWait.Seconds()),
