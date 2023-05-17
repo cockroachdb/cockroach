@@ -29,6 +29,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var rangeLeaseRenewalDuration = func() time.Duration {
+	var raftCfg base.RaftConfig
+	raftCfg.SetDefaults()
+	return raftCfg.RangeLeaseRenewalDuration()
+}()
+
 func registerFailover(r registry.Registry) {
 	for _, leases := range []registry.LeaseType{registry.EpochLeases, registry.ExpirationLeases} {
 		var suffix string
@@ -144,6 +150,7 @@ func registerFailover(r registry.Registry) {
 func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readOnly bool) {
 	require.Equal(t, 10, c.Spec().NodeCount)
 
+	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster, and set up failers for all failure modes.
@@ -198,35 +205,30 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	// Wait for upreplication of the new ranges.
 	require.NoError(t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */))
 
-	// Start workload on n10 using n1-n2 as gateways.
+	// Run workload on n10 via n1-n2 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	m.Go(func(ctx context.Context) error {
 		readPercent := 50
 		if readOnly {
 			readPercent = 100
 		}
-		c.Run(ctx, c.Node(10), fmt.Sprintf(
+		err := c.RunE(ctx, c.Node(10), fmt.Sprintf(
 			`./cockroach workload run kv --read-percent %d --write-seq R%d `+
-				`--duration 45m --concurrency 256 --max-rate 8192 --timeout 1m --tolerate-errors `+
-				`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
-				`{pgurl:1-2}`, readPercent, insertCount))
-		return nil
+				`--concurrency 256 --max-rate 8192 --timeout 1m --tolerate-errors `+
+				`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-2}`,
+			readPercent, insertCount))
+		if ctx.Err() != nil {
+			return nil // test requested workload shutdown
+		}
+		return err
 	})
 
 	// Start a worker to randomly fail random nodes for 1 minute, with 20 cycles.
 	m.Go(func(ctx context.Context) error {
-		var raftCfg base.RaftConfig
-		raftCfg.SetDefaults()
-
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
+		defer cancel() // stop workload when done
 
 		for i := 0; i < 20; i++ {
-			select {
-			case <-ticker.C:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+			sleepFor(ctx, t, time.Minute)
 
 			// Pick 1 or 2 random nodes and failure modes.
 			nodeFailers := map[int]Failer{}
@@ -253,19 +255,13 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 				nodeFailers[node] = failer
 			}
 
-			randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
-
 			// Ranges may occasionally escape their constraints. Move them to where
 			// they should be.
 			relocateRanges(t, ctx, conn, `true`, []int{1, 2}, []int{3, 4, 5, 6, 7, 8, 9})
 
 			// Randomly sleep up to the lease renewal interval, to vary the time
-			// between the last lease renewal and the failure. We start the timer
-			// before the range relocation above to run them concurrently.
-			select {
-			case <-randTimer:
-			case <-ctx.Done():
-			}
+			// between the last lease renewal and the failure.
+			sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
 
 			for node, failer := range nodeFailers {
 				// If the failer supports partial failures (e.g. partial partitions), do
@@ -284,11 +280,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 				}
 			}
 
-			select {
-			case <-ticker.C:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+			sleepFor(ctx, t, time.Minute)
 
 			for node, failer := range nodeFailers {
 				t.L().Printf("recovering n%d (%s)", node, failer)
@@ -333,6 +325,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.Equal(t, 8, c.Spec().NodeCount)
 
+	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
@@ -377,25 +370,23 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{4, 5, 6, 7}, []int{1, 2, 3})
 	relocateLeases(t, ctx, conn, `database_name = 'kv'`, 4)
 
-	// Start workload on n8 using n6-n7 as gateways.
+	// Run workload on n8 via n6-n7 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
-			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
-			`{pgurl:6-7}`)
-		return nil
+		err := c.RunE(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
+			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:6-7}`)
+		if ctx.Err() != nil {
+			return nil // test requested workload shutdown
+		}
+		return err
 	})
 
 	// Start a worker to fail and recover partial partitions between n4,n5
 	// (leases) and n6,n7 (gateways), both fully and individually, for 3 cycles.
 	// Leases are only placed on n4.
 	m.Go(func(ctx context.Context) error {
-		var raftCfg base.RaftConfig
-		raftCfg.SetDefaults()
-
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
+		defer cancel() // stop workload when done
 
 		for i := 0; i < 3; i++ {
 			testcases := []struct {
@@ -413,15 +404,9 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 				{[]int{7}, []int{4}},
 			}
 			for _, tc := range testcases {
-				select {
-				case <-ticker.C:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+				sleepFor(ctx, t, time.Minute)
 
 				failer.Ready(ctx, m)
-
-				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
 				// Ranges and leases may occasionally escape their constraints. Move
 				// them to where they should be.
@@ -430,23 +415,15 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 				relocateLeases(t, ctx, conn, `database_name = 'kv'`, 4)
 
 				// Randomly sleep up to the lease renewal interval, to vary the time
-				// between the last lease renewal and the failure. We start the timer
-				// before the range relocation above to run them concurrently.
-				select {
-				case <-randTimer:
-				case <-ctx.Done():
-				}
+				// between the last lease renewal and the failure.
+				sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
 
 				for _, node := range tc.nodes {
 					t.L().Printf("failing n%d to n%v (%s lease/gateway)", node, tc.peers, failer)
 					failer.FailPartial(ctx, node, tc.peers)
 				}
 
-				select {
-				case <-ticker.C:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+				sleepFor(ctx, t, time.Minute)
 
 				for _, node := range tc.nodes {
 					t.L().Printf("recovering n%d to n%v (%s lease/gateway)", node, tc.peers, failer)
@@ -478,6 +455,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
+	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster, disabling leader/leaseholder colocation. We only start
@@ -542,36 +520,28 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 		time.Sleep(time.Second)
 	}
 
-	// Start workload on n7 using n1-n3 as gateways.
+	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
+		err := c.RunE(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
 			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
-			`{pgurl:1-3}`)
-		return nil
+			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
+		if ctx.Err() != nil {
+			return nil // test requested workload shutdown
+		}
+		return err
 	})
 
 	// Start a worker to fail and recover partial partitions between each pair of
 	// n4-n6 for 3 cycles (9 failures total).
 	m.Go(func(ctx context.Context) error {
-		var raftCfg base.RaftConfig
-		raftCfg.SetDefaults()
-
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
+		defer cancel() // stop workload when done
 
 		for i := 0; i < 3; i++ {
 			for _, node := range []int{4, 5, 6} {
-				select {
-				case <-ticker.C:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+				sleepFor(ctx, t, time.Minute)
 
 				failer.Ready(ctx, m)
-
-				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
 				// Ranges may occasionally escape their constraints. Move them to where
 				// they should be.
@@ -579,12 +549,8 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 				relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{4, 5, 6}, []int{1, 2, 3})
 
 				// Randomly sleep up to the lease renewal interval, to vary the time
-				// between the last lease renewal and the failure. We start the timer
-				// before the range relocation above to run them concurrently.
-				select {
-				case <-randTimer:
-				case <-ctx.Done():
-				}
+				// between the last lease renewal and the failure.
+				sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
 
 				peer := node + 1
 				if peer > 6 {
@@ -593,11 +559,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 				t.L().Printf("failing n%d to n%d (%s lease/leader)", node, peer, failer)
 				failer.FailPartial(ctx, node, []int{peer})
 
-				select {
-				case <-ticker.C:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+				sleepFor(ctx, t, time.Minute)
 
 				t.L().Printf("recovering n%d to n%d (%s lease/leader)", node, peer, failer)
 				failer.Recover(ctx, node)
@@ -629,6 +591,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.Equal(t, 8, c.Spec().NodeCount)
 
+	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
@@ -671,37 +634,30 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{5, 6, 7}, []int{1, 2, 3, 4})
 	relocateRanges(t, ctx, conn, `range_id != 2`, []int{4}, []int{1, 2, 3})
 
-	// Start workload on n8 using n1-n3 as gateways (not partitioned).
+	// Run workload on n8 using n1-n3 as gateways (not partitioned) until test
+	// ends (context cancels).
 	t.L().Printf("running workload")
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
-			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
-			`{pgurl:1-3}`)
-		return nil
+		err := c.RunE(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
+			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
+		if ctx.Err() != nil {
+			return nil // test requested workload shutdown
+		}
+		return err
 	})
 
 	// Start a worker to fail and recover partial partitions between n4 (liveness)
 	// and workload leaseholders n5-n7 for 1 minute each, 3 times per node for 9
 	// times total.
 	m.Go(func(ctx context.Context) error {
-		var raftCfg base.RaftConfig
-		raftCfg.SetDefaults()
-
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
+		defer cancel() // stop workload when done
 
 		for i := 0; i < 3; i++ {
 			for _, node := range []int{5, 6, 7} {
-				select {
-				case <-ticker.C:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+				sleepFor(ctx, t, time.Minute)
 
 				failer.Ready(ctx, m)
-
-				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
 				// Ranges and leases may occasionally escape their constraints. Move
 				// them to where they should be.
@@ -711,22 +667,14 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 				relocateLeases(t, ctx, conn, `range_id = 2`, 4)
 
 				// Randomly sleep up to the lease renewal interval, to vary the time
-				// between the last lease renewal and the failure. We start the timer
-				// before the range relocation above to run them concurrently.
-				select {
-				case <-randTimer:
-				case <-ctx.Done():
-				}
+				// between the last lease renewal and the failure.
+				sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
 
 				peer := 4
 				t.L().Printf("failing n%d to n%d (%s lease/liveness)", node, peer, failer)
 				failer.FailPartial(ctx, node, []int{peer})
 
-				select {
-				case <-ticker.C:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+				sleepFor(ctx, t, time.Minute)
 
 				t.L().Printf("recovering n%d to n%d (%s lease/liveness)", node, peer, failer)
 				failer.Recover(ctx, node)
@@ -768,6 +716,7 @@ func runFailoverNonSystem(
 ) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
+	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
@@ -807,37 +756,27 @@ func runFailoverNonSystem(
 	// the ranges across all nodes regardless.
 	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
 
-	// Start workload on n7, using n1-n3 as gateways. Run it for 20
-	// minutes, since we take ~2 minutes to fail and recover each node, and
-	// we do 3 cycles of each of the 3 nodes in order.
+	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
-			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
-			`{pgurl:1-3}`)
-		return nil
+		err := c.RunE(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
+			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
+		if ctx.Err() != nil {
+			return nil // test requested workload shutdown
+		}
+		return err
 	})
 
 	// Start a worker to fail and recover n4-n6 in order.
 	m.Go(func(ctx context.Context) error {
-		var raftCfg base.RaftConfig
-		raftCfg.SetDefaults()
-
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
+		defer cancel() // stop workload when done
 
 		for i := 0; i < 3; i++ {
 			for _, node := range []int{4, 5, 6} {
-				select {
-				case <-ticker.C:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+				sleepFor(ctx, t, time.Minute)
 
 				failer.Ready(ctx, m)
-
-				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
 				// Ranges may occasionally escape their constraints. Move them
 				// to where they should be.
@@ -845,21 +784,13 @@ func runFailoverNonSystem(
 				relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{node}, []int{1, 2, 3})
 
 				// Randomly sleep up to the lease renewal interval, to vary the time
-				// between the last lease renewal and the failure. We start the timer
-				// before the range relocation above to run them concurrently.
-				select {
-				case <-randTimer:
-				case <-ctx.Done():
-				}
+				// between the last lease renewal and the failure.
+				sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
 
 				t.L().Printf("failing n%d (%s)", node, failer)
 				failer.Fail(ctx, node)
 
-				select {
-				case <-ticker.C:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+				sleepFor(ctx, t, time.Minute)
 
 				t.L().Printf("recovering n%d (%s)", node, failer)
 				failer.Recover(ctx, node)
@@ -902,6 +833,7 @@ func runFailoverLiveness(
 ) {
 	require.Equal(t, 5, c.Spec().NodeCount)
 
+	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster. Don't schedule a backup as this roachtest reports to roachperf.
@@ -947,35 +879,26 @@ func runFailoverLiveness(
 	// We also make sure the lease is located on n4.
 	relocateLeases(t, ctx, conn, `range_id = 2`, 4)
 
-	// Start workload on n7, using n1-n3 as gateways. Run it for 20 minutes, since
-	// we take ~2 minutes to fail and recover the node, and we do 9 cycles.
+	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, c.Node(5), `./cockroach workload run kv --read-percent 50 `+
-			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
-			`{pgurl:1-3}`)
-		return nil
+		err := c.RunE(ctx, c.Node(5), `./cockroach workload run kv --read-percent 50 `+
+			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
+		if ctx.Err() != nil {
+			return nil // test requested workload shutdown
+		}
+		return err
 	})
 
 	// Start a worker to fail and recover n4.
 	m.Go(func(ctx context.Context) error {
-		var raftCfg base.RaftConfig
-		raftCfg.SetDefaults()
-
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
+		defer cancel() // stop workload when done
 
 		for i := 0; i < 9; i++ {
-			select {
-			case <-ticker.C:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+			sleepFor(ctx, t, time.Minute)
 
 			failer.Ready(ctx, m)
-
-			randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
 			// Ranges and leases may occasionally escape their constraints. Move them
 			// to where they should be.
@@ -983,21 +906,13 @@ func runFailoverLiveness(
 			relocateLeases(t, ctx, conn, `range_id = 2`, 4)
 
 			// Randomly sleep up to the lease renewal interval, to vary the time
-			// between the last lease renewal and the failure. We start the timer
-			// before the range relocation above to run them concurrently.
-			select {
-			case <-randTimer:
-			case <-ctx.Done():
-			}
+			// between the last lease renewal and the failure.
+			sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
 
 			t.L().Printf("failing n%d (%s)", 4, failer)
 			failer.Fail(ctx, 4)
 
-			select {
-			case <-ticker.C:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+			sleepFor(ctx, t, time.Minute)
 
 			t.L().Printf("recovering n%d (%s)", 4, failer)
 			failer.Recover(ctx, 4)
@@ -1039,6 +954,7 @@ func runFailoverSystemNonLiveness(
 ) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
+	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
@@ -1083,37 +999,27 @@ func runFailoverSystemNonLiveness(
 	relocateRanges(t, ctx, conn, `database_name != 'kv' AND range_id != 2`,
 		[]int{1, 2, 3}, []int{4, 5, 6})
 
-	// Start workload on n7, using n1-n3 as gateways. Run it for 20 minutes, since
-	// we take ~2 minutes to fail and recover each node, and we do 3 cycles of each
-	// of the 3 nodes in order.
+	// Run workload on n7 via n1-n3 as gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
-			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
-			`{pgurl:1-3}`)
-		return nil
+		err := c.RunE(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
+			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
+		if ctx.Err() != nil {
+			return nil // test requested workload shutdown
+		}
+		return err
 	})
 
 	// Start a worker to fail and recover n4-n6 in order.
 	m.Go(func(ctx context.Context) error {
-		var raftCfg base.RaftConfig
-		raftCfg.SetDefaults()
-
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
+		defer cancel() // stop workload when done
 
 		for i := 0; i < 3; i++ {
 			for _, node := range []int{4, 5, 6} {
-				select {
-				case <-ticker.C:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+				sleepFor(ctx, t, time.Minute)
 
 				failer.Ready(ctx, m)
-
-				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
 				// Ranges may occasionally escape their constraints. Move them
 				// to where they should be.
@@ -1123,21 +1029,13 @@ func runFailoverSystemNonLiveness(
 					[]int{4, 5, 6}, []int{1, 2, 3})
 
 				// Randomly sleep up to the lease renewal interval, to vary the time
-				// between the last lease renewal and the failure. We start the timer
-				// before the range relocation above to run them concurrently.
-				select {
-				case <-randTimer:
-				case <-ctx.Done():
-				}
+				// between the last lease renewal and the failure.
+				sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
 
 				t.L().Printf("failing n%d (%s)", node, failer)
 				failer.Fail(ctx, node)
 
-				select {
-				case <-ticker.C:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+				sleepFor(ctx, t, time.Minute)
 
 				t.L().Printf("recovering n%d (%s)", node, failer)
 				failer.Recover(ctx, node)
@@ -1769,4 +1667,13 @@ func nodeMetric(
 		ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = $1`, metric).Scan(&value)
 	require.NoError(t, err)
 	return value
+}
+
+// sleepFor sleeps for the given duration. The test fails on context cancellation.
+func sleepFor(ctx context.Context, t test.Test, duration time.Duration) {
+	select {
+	case <-time.After(duration):
+	case <-ctx.Done():
+		t.Fatalf("sleep failed: %s", ctx.Err())
+	}
 }
