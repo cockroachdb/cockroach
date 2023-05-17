@@ -43,7 +43,7 @@ var (
 // transformation to the existing hash.
 func rehash(
 	buckets []uint32,
-	col coldata.Vec,
+	col *coldata.Vec,
 	nKeys int,
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,
@@ -1101,9 +1101,10 @@ func rehash(
 // interface.
 // TODO(yuzefovich): if / when we make coldata.Vec to no longer be an interface,
 // then we should remove the code duplication here.
+// TODO(XXX)
 func rehash64(
 	buckets []uint64,
-	col coldata.Vec,
+	col *coldata.Vec,
 	nKeys int,
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,

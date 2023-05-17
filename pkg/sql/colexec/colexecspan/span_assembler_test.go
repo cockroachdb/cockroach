@@ -95,9 +95,9 @@ func TestSpanAssembler(t *testing.T) {
 									}
 									neededColumns := intsets.MakeFast(1, 2, 3, 4)
 
-									cols := make([]coldata.Vec, len(typs))
+									cols := make([]*coldata.Vec, len(typs))
 									for i, typ := range typs {
-										cols[i] = testAllocator.NewMemColumn(typ, nTuples)
+										cols[i] = testAllocator.NewVec(typ, nTuples)
 									}
 									for i := range typs {
 										coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{

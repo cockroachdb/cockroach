@@ -62,11 +62,11 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	defer cleanup()
 	rng, _ := randutil.NewTestRand()
 	typs := []*types.T{types.Int, types.Bytes, types.Decimal}
-	colsLeft := make([]coldata.Vec, len(typs))
-	colsRight := make([]coldata.Vec, len(typs))
+	colsLeft := make([]*coldata.Vec, len(typs))
+	colsRight := make([]*coldata.Vec, len(typs))
 	for i, typ := range typs {
-		colsLeft[i] = testAllocator.NewMemColumn(typ, nTuples)
-		colsRight[i] = testAllocator.NewMemColumn(typ, nTuples)
+		colsLeft[i] = testAllocator.NewVec(typ, nTuples)
+		colsRight[i] = testAllocator.NewVec(typ, nTuples)
 	}
 	groupsLeft := colsLeft[0].Int64()
 	groupsRight := colsRight[0].Int64()
@@ -82,7 +82,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 		groupsRight[i] = int64(rightGroupIdx)
 	}
 	for i := range typs[1:] {
-		for _, vecs := range [][]coldata.Vec{colsLeft, colsRight} {
+		for _, vecs := range [][]*coldata.Vec{colsLeft, colsRight} {
 			coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
 				Rand:            rng,
 				Vec:             vecs[i+1],

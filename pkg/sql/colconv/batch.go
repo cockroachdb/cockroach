@@ -23,7 +23,7 @@ func init() {
 
 // vecsToStringWithRowPrefix returns a pretty representation of the vectors with
 // each row being in a separate string.
-func vecsToStringWithRowPrefix(vecs []coldata.Vec, length int, sel []int, prefix string) []string {
+func vecsToStringWithRowPrefix(vecs []*coldata.Vec, length int, sel []int, prefix string) []string {
 	var builder strings.Builder
 	converter := NewAllVecToDatumConverter(len(vecs))
 	defer converter.Release()

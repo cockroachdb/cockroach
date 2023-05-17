@@ -617,13 +617,13 @@ func encodeColumns[T []byte | roachpb.Key](
 	directions rowenc.Directions,
 	colMap catalog.TableColMap,
 	start, end int,
-	vecs []coldata.Vec,
+	vecs []*coldata.Vec,
 	keys []T,
 ) (*coldata.Nulls, error) {
 	var nulls coldata.Nulls
 	var err error
 	for colIdx, id := range columnIDs {
-		var vec coldata.Vec
+		var vec *coldata.Vec
 		var typ *types.T
 		i, ok := colMap.Get(id)
 		if ok {
@@ -708,7 +708,7 @@ func (b *BatchEncoder) checkMemory() error {
 }
 
 func (b *BatchEncoder) skipColumnNotInPrimaryIndexValue(
-	colID catid.ColumnID, vec coldata.Vec, row int,
+	colID catid.ColumnID, vec *coldata.Vec, row int,
 ) bool {
 	// Reuse this function but fake out the value and handle composites here.
 	if skip := b.rh.SkipColumnNotInPrimaryIndexValue(colID, tree.DNull); skip {
@@ -720,7 +720,7 @@ func (b *BatchEncoder) skipColumnNotInPrimaryIndexValue(
 	return false
 }
 
-func isComposite(vec coldata.Vec, row int) bool {
+func isComposite(vec *coldata.Vec, row int) bool {
 	switch vec.CanonicalTypeFamily() {
 	case types.FloatFamily:
 		f := tree.DFloat(vec.Float64()[row])

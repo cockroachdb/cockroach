@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func vecRow(v coldata.Vec, i int) any {
+func vecRow(v *coldata.Vec, i int) any {
 	switch v.CanonicalTypeFamily() {
 	case types.BoolFamily:
 		return v.Bool()[i]

@@ -22,7 +22,7 @@ import (
 
 // valuesideEncodeCol is the vector version of valueside.Encode.
 func valuesideEncodeCol(
-	appendTo []byte, typ *types.T, colID valueside.ColumnIDDelta, vec coldata.Vec, row int,
+	appendTo []byte, typ *types.T, colID valueside.ColumnIDDelta, vec *coldata.Vec, row int,
 ) ([]byte, error) {
 	if vec.Nulls().NullAt(row) {
 		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil

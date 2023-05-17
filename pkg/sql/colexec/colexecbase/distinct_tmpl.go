@@ -101,7 +101,7 @@ func newSingleDistinct(
 type partitioner interface {
 	// partition partitions the input colVec of size n, writing true to the
 	// outputCol for every value that differs from the previous one.
-	partition(colVec coldata.Vec, outputCol []bool, n int)
+	partition(colVec *coldata.Vec, outputCol []bool, n int)
 
 	// partitionWithOrder is like partition, except it performs the partitioning
 	// on the input Vec as if it were ordered via the input order vector, which is
@@ -110,7 +110,7 @@ type partitioner interface {
 	// implies a reordered input vector [b,b,a], the resultant outputCol would be
 	// [true, false, true], indicating a distinct value at the 0th and 2nd
 	// elements.
-	partitionWithOrder(colVec coldata.Vec, order []int, outputCol []bool, n int)
+	partitionWithOrder(colVec *coldata.Vec, order []int, outputCol []bool, n int)
 }
 
 // newPartitioner returns a new partitioner on type t.
@@ -255,7 +255,7 @@ type partitioner_TYPE struct {
 }
 
 func (p partitioner_TYPE) partitionWithOrder(
-	colVec coldata.Vec, order []int, outputCol []bool, n int,
+	colVec *coldata.Vec, order []int, outputCol []bool, n int,
 ) {
 	var lastVal _GOTYPE
 	var lastValNull bool
@@ -284,7 +284,7 @@ func (p partitioner_TYPE) partitionWithOrder(
 	}
 }
 
-func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int) {
+func (p partitioner_TYPE) partition(colVec *coldata.Vec, outputCol []bool, n int) {
 	var (
 		lastVal     _GOTYPE
 		lastValNull bool

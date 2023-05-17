@@ -196,7 +196,7 @@ func (a *minBoolAggregator) processBatch(batch coldata.Batch, startIdx, endIdx i
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Bool()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -367,7 +367,7 @@ func (a *minBytesAggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Bytes()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
 			toAdd, toRemove := a.framer.slidingWindowIntervals()
@@ -520,7 +520,7 @@ func (a *minDecimalAggregator) processBatch(batch coldata.Batch, startIdx, endId
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Decimal()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -675,7 +675,7 @@ func (a *minInt16Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Int16()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -852,7 +852,7 @@ func (a *minInt32Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Int32()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -1029,7 +1029,7 @@ func (a *minInt64Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Int64()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -1206,7 +1206,7 @@ func (a *minFloat64Aggregator) processBatch(batch coldata.Batch, startIdx, endId
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Float64()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -1399,7 +1399,7 @@ func (a *minTimestampAggregator) processBatch(batch coldata.Batch, startIdx, end
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Timestamp()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -1568,7 +1568,7 @@ func (a *minIntervalAggregator) processBatch(batch coldata.Batch, startIdx, endI
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Interval()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -1723,7 +1723,7 @@ func (a *minJSONAggregator) processBatch(batch coldata.Batch, startIdx, endIdx i
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.JSON()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
 			toAdd, toRemove := a.framer.slidingWindowIntervals()
@@ -1921,7 +1921,7 @@ func (a *minDatumAggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Datum()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -2163,7 +2163,7 @@ func (a *maxBoolAggregator) processBatch(batch coldata.Batch, startIdx, endIdx i
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Bool()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -2334,7 +2334,7 @@ func (a *maxBytesAggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Bytes()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
 			toAdd, toRemove := a.framer.slidingWindowIntervals()
@@ -2487,7 +2487,7 @@ func (a *maxDecimalAggregator) processBatch(batch coldata.Batch, startIdx, endId
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Decimal()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -2642,7 +2642,7 @@ func (a *maxInt16Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Int16()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -2819,7 +2819,7 @@ func (a *maxInt32Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Int32()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -2996,7 +2996,7 @@ func (a *maxInt64Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Int64()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -3173,7 +3173,7 @@ func (a *maxFloat64Aggregator) processBatch(batch coldata.Batch, startIdx, endId
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Float64()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -3366,7 +3366,7 @@ func (a *maxTimestampAggregator) processBatch(batch coldata.Batch, startIdx, end
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Timestamp()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -3535,7 +3535,7 @@ func (a *maxIntervalAggregator) processBatch(batch coldata.Batch, startIdx, endI
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Interval()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
@@ -3690,7 +3690,7 @@ func (a *maxJSONAggregator) processBatch(batch coldata.Batch, startIdx, endIdx i
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.JSON()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)
 			toAdd, toRemove := a.framer.slidingWindowIntervals()
@@ -3888,7 +3888,7 @@ func (a *maxDatumAggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 	outVec := batch.ColVec(a.outputColIdx)
 	outNulls := outVec.Nulls()
 	outCol := outVec.Datum()
-	a.allocator.PerformOperation([]coldata.Vec{outVec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{outVec}, func() {
 		_, _ = outCol.Get(startIdx), outCol.Get(endIdx-1)
 		for i := startIdx; i < endIdx; i++ {
 			a.framer.next(a.Ctx)

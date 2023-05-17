@@ -235,7 +235,7 @@ type HashTable struct {
 
 	// Keys is a scratch space that stores the equality columns of the tuples
 	// currently being probed.
-	Keys []coldata.Vec
+	Keys []*coldata.Vec
 
 	// Same is a densely-packed list that stores the keyID of the next key in
 	// the hash table that has the same value as the current key. The HeadID of
@@ -359,7 +359,7 @@ func NewHashTable(
 		BuildScratch: hashChains{
 			First: make([]keyID, initialNumHashBuckets),
 		},
-		Keys:              make([]coldata.Vec, len(keyCols)),
+		Keys:              make([]*coldata.Vec, len(keyCols)),
 		Vals:              colexecutils.NewAppendOnlyBufferedBatch(allocator, sourceTypes, colsToStore),
 		keyCols:           keyCols,
 		numBuckets:        initialNumHashBuckets,
@@ -686,9 +686,9 @@ func (ht *HashTable) ComputeHashAndBuildChains(batch coldata.Batch) {
 // NOTE: *first* and *next* vectors should be properly populated.
 func (ht *HashTable) RemoveDuplicates(
 	batch coldata.Batch,
-	keyCols []coldata.Vec,
+	keyCols []*coldata.Vec,
 	first, next []keyID,
-	duplicatesChecker func([]coldata.Vec, uint32, []int) uint32,
+	duplicatesChecker func([]*coldata.Vec, uint32, []int) uint32,
 	probingAgainstItself bool,
 ) {
 	ht.FindBuckets(
@@ -727,7 +727,7 @@ func (ht *HashTable) RepairAfterDistinctBuild() {
 }
 
 // checkCols performs a column by column checkCol on the key columns.
-func (ht *HashTable) checkCols(probeVecs []coldata.Vec, nToCheck uint32, probeSel []int) {
+func (ht *HashTable) checkCols(probeVecs []*coldata.Vec, nToCheck uint32, probeSel []int) {
 	switch ht.probeMode {
 	case HashTableDefaultProbeMode:
 		for i, keyCol := range ht.keyCols {
@@ -746,7 +746,7 @@ func (ht *HashTable) checkCols(probeVecs []coldata.Vec, nToCheck uint32, probeSe
 // tuples in the probe table that are not present in the build table.
 // NOTE: It assumes that probeSel has already been populated and it is not nil.
 func (ht *HashTable) checkColsForDistinctTuples(
-	probeVecs []coldata.Vec, nToCheck uint32, probeSel []int,
+	probeVecs []*coldata.Vec, nToCheck uint32, probeSel []int,
 ) {
 	buildVecs := ht.Vals.ColVecs()
 	for i := range ht.keyCols {
@@ -759,7 +759,7 @@ func (ht *HashTable) checkColsForDistinctTuples(
 
 // ComputeBuckets computes the hash value of each key and stores the result in
 // buckets.
-func (ht *HashTable) ComputeBuckets(buckets []uint32, keys []coldata.Vec, nKeys int, sel []int) {
+func (ht *HashTable) ComputeBuckets(buckets []uint32, keys []*coldata.Vec, nKeys int, sel []int) {
 	if nKeys == 0 {
 		// No work to do - avoid doing the loops below.
 		return
@@ -842,7 +842,7 @@ func (p *hashTableProbeBuffer) SetupLimitedSlices(length int) {
 // NOTE: It assumes that probeSel has already been populated and it is not nil.
 // NOTE: It assumes that nToCheck is positive.
 func (ht *HashTable) CheckBuildForDistinct(
-	probeVecs []coldata.Vec, nToCheck uint32, probeSel []int,
+	probeVecs []*coldata.Vec, nToCheck uint32, probeSel []int,
 ) uint32 {
 	if probeSel == nil {
 		colexecerror.InternalError(errors.AssertionFailedf("invalid selection vector"))
@@ -879,7 +879,7 @@ func (ht *HashTable) CheckBuildForDistinct(
 // NOTE: It assumes that probeSel has already been populated and it is not nil.
 // NOTE: It assumes that nToCheck is positive.
 func (ht *HashTable) CheckBuildForAggregation(
-	probeVecs []coldata.Vec, nToCheck uint32, probeSel []int,
+	probeVecs []*coldata.Vec, nToCheck uint32, probeSel []int,
 ) uint32 {
 	if probeSel == nil {
 		colexecerror.InternalError(errors.AssertionFailedf("invalid selection vector"))

@@ -432,7 +432,7 @@ func (s *chunker) spool() {
 	s.readFrom = s.prepareNextChunks()
 }
 
-func (s *chunker) getValues(i int) coldata.Vec {
+func (s *chunker) getValues(i int) *coldata.Vec {
 	switch s.readFrom {
 	case chunkerReadFromBuffer:
 		return s.bufferedTuples.ColVec(i).Window(0 /* start */, s.bufferedTuples.Length())

@@ -754,7 +754,7 @@ func stringToDatum(val string, typ *types.T, evalCtx *eval.Context) tree.Datum {
 
 // setColVal is a test helper function to set the given value at the equivalent
 // col[idx]. This function is slow due to reflection.
-func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *eval.Context) {
+func setColVal(vec *coldata.Vec, idx int, val interface{}, evalCtx *eval.Context) {
 	switch vec.CanonicalTypeFamily() {
 	case types.BytesFamily:
 		var (
@@ -1651,7 +1651,7 @@ type chunkingBatchSource struct {
 	colexecop.ZeroInputNode
 	allocator *colmem.Allocator
 	typs      []*types.T
-	cols      []coldata.Vec
+	cols      []*coldata.Vec
 	len       int
 
 	curIdx int
@@ -1663,7 +1663,7 @@ var _ colexecop.ResettableOperator = &chunkingBatchSource{}
 // NewChunkingBatchSource returns a new chunkingBatchSource with the given
 // column types, columns, and length.
 func NewChunkingBatchSource(
-	allocator *colmem.Allocator, typs []*types.T, cols []coldata.Vec, len int,
+	allocator *colmem.Allocator, typs []*types.T, cols []*coldata.Vec, len int,
 ) colexecop.ResettableOperator {
 	return &chunkingBatchSource{
 		allocator: allocator,

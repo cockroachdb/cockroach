@@ -40,9 +40,9 @@ type Batch interface {
 	// Width returns the number of columns in the batch.
 	Width() int
 	// ColVec returns the ith Vec in this batch.
-	ColVec(i int) Vec
+	ColVec(i int) *Vec
 	// ColVecs returns all of the underlying Vecs in this batch.
-	ColVecs() []Vec
+	ColVecs() []*Vec
 	// Selection, if not nil, returns the selection vector on this batch: a
 	// densely-packed list of the *increasing* indices in each column that have
 	// not been filtered out by a previous step.
@@ -52,11 +52,11 @@ type Batch interface {
 	// SetSelection sets whether this batch is using its selection vector or not.
 	SetSelection(bool)
 	// AppendCol appends the given Vec to this batch.
-	AppendCol(Vec)
+	AppendCol(*Vec)
 	// ReplaceCol replaces the current Vec at the provided index with the
 	// provided Vec. The original and the replacement vectors *must* be of the
 	// same type.
-	ReplaceCol(Vec, int)
+	ReplaceCol(*Vec, int)
 	// Reset modifies the caller in-place to have the given length and columns
 	// with the given types. If it's possible, Reset will reuse the existing
 	// columns and allocations, invalidating existing references to the Batch or
@@ -124,11 +124,11 @@ func NewMemBatch(typs []*types.T, factory ColumnFactory) Batch {
 // column size. Use for operators that have a precisely-sized output batch.
 func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactory) Batch {
 	b := NewMemBatchNoCols(typs, capacity).(*MemBatch)
-	cols := make([]memColumn, len(typs))
+	b.b = make([]*Vec, len(typs))
+	vecs := make([]Vec, len(typs))
 	for i, t := range typs {
-		col := &cols[i]
-		col.init(t, capacity, factory)
-		b.b[i] = col
+		b.b[i] = &vecs[i]
+		b.b[i].init(t, capacity, factory)
 	}
 	return b
 }
@@ -142,7 +142,7 @@ func NewMemBatchNoCols(typs []*types.T, capacity int) Batch {
 	}
 	b := &MemBatch{}
 	b.capacity = capacity
-	b.b = make([]Vec, len(typs))
+	b.b = make([]*Vec, len(typs))
 	b.sel = make([]int, capacity)
 	return b
 }
@@ -178,11 +178,11 @@ func (b *zeroBatch) SetSelection(bool) {
 	panic("selection should not be changed on zero batch")
 }
 
-func (b *zeroBatch) AppendCol(Vec) {
+func (b *zeroBatch) AppendCol(*Vec) {
 	panic("no columns should be appended to zero batch")
 }
 
-func (b *zeroBatch) ReplaceCol(Vec, int) {
+func (b *zeroBatch) ReplaceCol(*Vec, int) {
 	panic("no columns should be replaced in zero batch")
 }
 
@@ -198,7 +198,7 @@ type MemBatch struct {
 	// MemBatch.
 	capacity int
 	// b is the slice of columns in this batch.
-	b      []Vec
+	b      []*Vec
 	useSel bool
 	// sel is - if useSel is true - a selection vector from upstream. A
 	// selection vector is a list of selected tuple indices in this memBatch's
@@ -223,12 +223,12 @@ func (m *MemBatch) Width() int {
 }
 
 // ColVec implements the Batch interface.
-func (m *MemBatch) ColVec(i int) Vec {
+func (m *MemBatch) ColVec(i int) *Vec {
 	return m.b[i]
 }
 
 // ColVecs implements the Batch interface.
-func (m *MemBatch) ColVecs() []Vec {
+func (m *MemBatch) ColVecs() []*Vec {
 	return m.b
 }
 
@@ -251,13 +251,13 @@ func (m *MemBatch) SetLength(length int) {
 }
 
 // AppendCol implements the Batch interface.
-func (m *MemBatch) AppendCol(col Vec) {
+func (m *MemBatch) AppendCol(col *Vec) {
 	m.b = append(m.b, col)
 }
 
 // ReplaceCol implements the Batch interface.
-func (m *MemBatch) ReplaceCol(col Vec, colIdx int) {
-	if m.b[colIdx] != nil && !m.b[colIdx].Type().Identical(col.Type()) {
+func (m *MemBatch) ReplaceCol(col *Vec, colIdx int) {
+	if m.b[colIdx] != nil && m.b[colIdx].t != nil && !m.b[colIdx].Type().Identical(col.Type()) {
 		panic(fmt.Sprintf("unexpected replacement: original vector is %s "+
 			"whereas the replacement is %s", m.b[colIdx].Type(), col.Type()))
 	}
@@ -272,7 +272,7 @@ func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 		// TODO(yuzefovich): requiring that types are "identical" might be an
 		// overkill - the vectors could have the same physical representation
 		// but non-identical types. Think through this more.
-		if !m.ColVec(i).Type().Identical(typs[i]) {
+		if v := m.ColVec(i); !v.Type().Identical(typs[i]) {
 			cannotReuse = true
 			break
 		}
@@ -324,7 +324,7 @@ func (m *MemBatch) String() string {
 //
 // The implementation lives in colconv package and is injected during the
 // initialization.
-var VecsToStringWithRowPrefix func(vecs []Vec, length int, sel []int, prefix string) []string
+var VecsToStringWithRowPrefix func(vecs []*Vec, length int, sel []int, prefix string) []string
 
 // GetBatchMemSize returns the total memory footprint of the batch.
 //

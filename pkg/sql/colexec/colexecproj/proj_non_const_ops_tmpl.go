@@ -112,7 +112,7 @@ func (p _OP_NAME) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		projCol := projVec._RET_TYP()
 		vec1 := batch.ColVec(p.col1Idx)
 		vec2 := batch.ColVec(p.col2Idx)
