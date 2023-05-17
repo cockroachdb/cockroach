@@ -60,6 +60,7 @@ func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 	db.Exec(t, `SET CLUSTER SETTING sql.log.user_audit = '
 		all_stmt_types ALL
 		no_stmt_types NONE
+		root ALL
 	'`)
 
 	allStmtTypesRole := "all_stmt_types"
@@ -82,27 +83,34 @@ func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 		role            string
 		queries         []string
 		expectedNumLogs int
-		includesDCL     bool
 	}{
 		{
 			name:            "test-all-stmt-types",
 			role:            allStmtTypesRole,
 			queries:         testQueries,
-			expectedNumLogs: 3,
-			includesDCL:     true,
+			expectedNumLogs: 4,
 		},
 		{
 			name:            "test-no-stmt-types",
 			role:            noStmtTypeRole,
 			queries:         testQueries,
 			expectedNumLogs: 0,
-			includesDCL:     false,
+		},
+		// Test match on username
+		{
+			name:    "test-username",
+			role:    "root",
+			queries: testQueries,
+			// 1 set cluster setting, 2 create roles, 3 test queries, 3 revoke queries
+			expectedNumLogs: 9,
 		},
 	}
 
 	for _, td := range testData {
 		// Grant the audit role
-		db.Exec(t, fmt.Sprintf("GRANT %s to root", td.role))
+		if td.role != "root" {
+			db.Exec(t, fmt.Sprintf("GRANT %s to root", td.role))
+		}
 		// Run queries
 		for idx := range td.queries {
 			db.Exec(t, td.queries[idx])
@@ -132,7 +140,7 @@ func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 	roleToLogs := make(map[string]int)
 	for _, entry := range entries {
 		for _, td := range testData {
-			if strings.Contains(entry.Message, td.role) {
+			if strings.Contains(entry.Message, `"Role":"‹`+td.role+`›"`) {
 				roleToLogs[td.role]++
 			}
 		}
@@ -142,14 +150,7 @@ func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 		if !exists && td.expectedNumLogs != 0 {
 			t.Errorf("found no entries for role: %s", td.role)
 		}
-		expectedNumLogs := td.expectedNumLogs
-		if td.includesDCL {
-			// Add another log for roles that log DCL as the query granting the audit role gets logged.
-			// The revoke query does not get logged (as the user does not have the corresponding audit role
-			// anymore).
-			expectedNumLogs++
-		}
-		require.Equal(t, expectedNumLogs, numLogs)
+		require.Equal(t, td.expectedNumLogs, numLogs, "incorrect number of entries for role : %s", td.role)
 	}
 }
 

@@ -57,7 +57,7 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(
 	}
 
 	// Get matching audit setting.
-	auditSetting := p.AuditConfig().GetMatchingAuditSetting(userRoles)
+	auditSetting := p.AuditConfig().GetMatchingAuditSetting(userRoles, p.User())
 	// No matching setting, return early.
 	if auditSetting == nil {
 		return
