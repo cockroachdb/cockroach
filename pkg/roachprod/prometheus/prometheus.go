@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
@@ -241,20 +242,25 @@ type Prometheus struct {
 
 // Init creates a prometheus instance on the given cluster.
 func Init(
-	ctx context.Context, l *logger.Logger, c *install.SyncedCluster, cfg Config,
+	ctx context.Context, l *logger.Logger, c *install.SyncedCluster, arch vm.CPUArch, cfg Config,
 ) (_ *Prometheus, _ error) {
+	binArch := "amd64"
+	if arch == vm.ArchARM64 {
+		binArch = "arm64"
+	}
+
 	if len(cfg.NodeExporter) > 0 {
 		// NB: when upgrading here, make sure to target a version that picks up this PR:
 		// https://github.com/prometheus/node_exporter/pull/2311
 		// At time of writing, there hasn't been a release in over half a year.
 		if err := c.RepeatRun(ctx, l, l.Stdout, l.Stderr, cfg.NodeExporter,
 			"download node exporter",
-			`
+			fmt.Sprintf(`
 (sudo systemctl stop node_exporter || true) &&
 rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
-  https://github.com/prometheus/node_exporter/releases/download/v1.2.2/node_exporter-1.2.2.linux-amd64.tar.gz |
+  https://storage.googleapis.com/cockroach-fixtures/prometheus/node_exporter-1.2.2.linux-%s.tar.gz |
   tar zxv --strip-components 1 -C node_exporter
-`); err != nil {
+`, binArch)); err != nil {
 			return nil, err
 		}
 
@@ -287,9 +293,9 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		l.Stderr,
 		cfg.PrometheusNode,
 		"download prometheus",
-		`sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
-			curl -fsSL https://storage.googleapis.com/cockroach-fixtures/prometheus/prometheus-2.27.1.linux-amd64.tar.gz | tar zxv --strip-components=1`,
-	); err != nil {
+		fmt.Sprintf(`sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
+			curl -fsSL https://storage.googleapis.com/cockroach-fixtures/prometheus/prometheus-2.27.1.linux-%s.tar.gz | tar zxv --strip-components=1`,
+			binArch)); err != nil {
 		return nil, err
 	}
 	// create and upload prom config
@@ -333,14 +339,14 @@ sudo systemd-run --unit prometheus --same-dir \
 		if err := c.RepeatRun(ctx, l,
 			l.Stdout,
 			l.Stderr, cfg.PrometheusNode, "install grafana",
-			`
+			fmt.Sprintf(`
 sudo apt-get install -qqy apt-transport-https &&
 sudo apt-get install -qqy software-properties-common wget &&
 sudo apt-get install -y adduser libfontconfig1 &&
-wget https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_amd64.deb -O grafana-enterprise_9.2.3_amd64.deb &&
-sudo dpkg -i grafana-enterprise_9.2.3_amd64.deb &&
+wget https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_%s.deb -O grafana-enterprise_9.2.3_%s.deb &&
+sudo dpkg -i grafana-enterprise_9.2.3_%s.deb &&
 sudo mkdir -p /var/lib/grafana/dashboards`,
-		); err != nil {
+				binArch, binArch, binArch)); err != nil {
 			return nil, err
 		}
 

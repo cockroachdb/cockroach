@@ -258,7 +258,7 @@ func NewTest(
 		t.Fatal(err)
 	}
 
-	prng, seed := randutil.NewPseudoRand()
+	prng, seed := randutil.NewLockedPseudoRand()
 	testLogger.Printf("mixed-version random seed: %d", seed)
 
 	testCtx, cancel := context.WithCancel(ctx)
