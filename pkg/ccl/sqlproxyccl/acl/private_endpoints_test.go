@@ -50,7 +50,7 @@ func TestPrivateEndpoints(t *testing.T) {
 		p := &acl.PrivateEndpoints{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_PRIVATE,
+					ConnectivityType: tenant.ALLOW_PRIVATE_ONLY,
 				}, nil
 			},
 		}
@@ -63,7 +63,7 @@ func TestPrivateEndpoints(t *testing.T) {
 		p := &acl.PrivateEndpoints{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+					ConnectivityType: tenant.ALLOW_ALL,
 					PrivateEndpoints: []string{"foo", "baz"},
 				}, nil
 			},
@@ -76,7 +76,7 @@ func TestPrivateEndpoints(t *testing.T) {
 		p := &acl.PrivateEndpoints{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+					ConnectivityType: tenant.ALLOW_ALL,
 					PrivateEndpoints: []string{"foo"},
 				}, nil
 			},
@@ -85,12 +85,11 @@ func TestPrivateEndpoints(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	// Does not have tenant.ALLOW_PRIVATE.
 	t.Run("disallow private connections", func(t *testing.T) {
 		p := &acl.PrivateEndpoints{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_PUBLIC,
+					ConnectivityType: tenant.ALLOW_PUBLIC_ONLY,
 					PrivateEndpoints: []string{"foo"},
 				}, nil
 			},
