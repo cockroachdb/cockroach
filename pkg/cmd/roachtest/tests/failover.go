@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -154,6 +155,8 @@ func runFailoverChaos(
 	// Create cluster, and set up failers for all failure modes.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
+	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failers := []Failer{}
 	for _, failureMode := range allFailureModes {
@@ -173,10 +176,6 @@ func runFailoverChaos(
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
 
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
-		expLeases)
-	require.NoError(t, err)
-
 	// Place all ranges on n3-n9, keeping n1-n2 as SQL gateways.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{3, 4, 5, 6, 7, 8, 9}})
 
@@ -190,7 +189,7 @@ func runFailoverChaos(
 		insertCount = 100000
 	}
 	t.L().Printf("creating workload database")
-	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	c.Run(ctx, c.Node(10), fmt.Sprintf(
 		`./cockroach workload init kv --splits 1000 --insert-count %d {pgurl:1}`, insertCount))
@@ -327,6 +326,8 @@ func runFailoverPartialLeaseGateway(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
+	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
@@ -338,10 +339,6 @@ func runFailoverPartialLeaseGateway(
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
 
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
-		expLeases)
-	require.NoError(t, err)
-
 	// Place all ranges on n1-n3 to start with.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 
@@ -350,7 +347,7 @@ func runFailoverPartialLeaseGateway(
 
 	// Create the kv database with 5 replicas on n2-n6, and leases on n4.
 	t.L().Printf("creating workload database")
-	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{
 		replicas: 5, onlyNodes: []int{2, 3, 4, 5, 6}, leaseNode: 4})
@@ -479,6 +476,8 @@ func runFailoverPartialLeaseLeader(
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
+	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
+	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
@@ -490,10 +489,6 @@ func runFailoverPartialLeaseLeader(
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
 
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
-		expLeases)
-	require.NoError(t, err)
-
 	// Place all ranges on n1-n3 to start with, and wait for upreplication.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
@@ -501,7 +496,7 @@ func runFailoverPartialLeaseLeader(
 	// Disable the replicate queue. It can otherwise end up with stuck
 	// overreplicated ranges during rebalancing, because downreplication requires
 	// the Raft leader to be colocated with the leaseholder.
-	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING kv.replicate_queue.enabled = false`)
+	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.replicate_queue.enabled = false`)
 	require.NoError(t, err)
 
 	// Now that system ranges are properly placed on n1-n3, start n4-n6.
@@ -631,6 +626,8 @@ func runFailoverPartialLeaseLiveness(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
+	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
@@ -642,10 +639,6 @@ func runFailoverPartialLeaseLiveness(
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
 
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
-		expLeases)
-	require.NoError(t, err)
-
 	// Place all ranges on n1-n3, and an extra liveness leaseholder replica on n4.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{
@@ -656,7 +649,7 @@ func runFailoverPartialLeaseLiveness(
 
 	// Create the kv database on n5-n7.
 	t.L().Printf("creating workload database")
-	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{5, 6, 7}})
 
@@ -772,6 +765,8 @@ func runFailoverNonSystem(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
+	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
@@ -783,14 +778,6 @@ func runFailoverNonSystem(
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
 
-	// Configure cluster. This test controls the ranges manually.
-	t.L().Printf("configuring cluster")
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'`)
-	require.NoError(t, err)
-	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
-		expLeases)
-	require.NoError(t, err)
-
 	// Constrain all existing zone configs to n1-n3.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 
@@ -800,7 +787,7 @@ func runFailoverNonSystem(
 	// Create the kv database, constrained to n4-n6. Despite the zone config, the
 	// ranges will initially be distributed across all cluster nodes.
 	t.L().Printf("creating workload database")
-	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{4, 5, 6}})
 	c.Run(ctx, c.Node(7), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
@@ -911,6 +898,8 @@ func runFailoverLiveness(
 	// Create cluster. Don't schedule a backup as this roachtest reports to roachperf.
 	opts := option.DefaultStartOptsNoBackups()
 	settings := install.MakeClusterSettings()
+	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
+	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
@@ -922,20 +911,11 @@ func runFailoverLiveness(
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
 
-	// Configure cluster. This test controls the ranges manually.
-	t.L().Printf("configuring cluster")
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'`)
-	require.NoError(t, err)
-	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
-		expLeases)
-	require.NoError(t, err)
-
 	// Constrain all existing zone configs to n1-n3.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 
 	// Constrain the liveness range to n1-n4, with leaseholder preference on n4.
 	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{replicas: 4, leaseNode: 4})
-	require.NoError(t, err)
 
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
@@ -943,7 +923,7 @@ func runFailoverLiveness(
 	// Create the kv database, constrained to n1-n3. Despite the zone config, the
 	// ranges will initially be distributed across all cluster nodes.
 	t.L().Printf("creating workload database")
-	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 	c.Run(ctx, c.Node(5), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
@@ -1054,6 +1034,8 @@ func runFailoverSystemNonLiveness(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
+	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
@@ -1065,19 +1047,10 @@ func runFailoverSystemNonLiveness(
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
 
-	// Configure cluster. This test controls the ranges manually.
-	t.L().Printf("configuring cluster")
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'`)
-	require.NoError(t, err)
-	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
-		expLeases)
-	require.NoError(t, err)
-
 	// Constrain all existing zone configs to n4-n6, except liveness which is
 	// constrained to n1-n3.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{4, 5, 6}})
 	configureZone(t, ctx, conn, `RANGE liveness`, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
-	require.NoError(t, err)
 
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
@@ -1085,7 +1058,7 @@ func runFailoverSystemNonLiveness(
 	// Create the kv database, constrained to n1-n3. Despite the zone config, the
 	// ranges will initially be distributed across all cluster nodes.
 	t.L().Printf("creating workload database")
-	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 	c.Run(ctx, c.Node(7), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
