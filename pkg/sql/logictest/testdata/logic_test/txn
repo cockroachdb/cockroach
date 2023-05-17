@@ -263,6 +263,29 @@ serializable
 statement ok
 COMMIT
 
+# SNAPSHOT can be used with a hidden cluster setting
+statement ok
+SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
+
+statement ok
+BEGIN
+
+statement ok
+SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+snapshot
+
+query T
+SHOW transaction_isolation
+----
+snapshot
+
+statement ok
+COMMIT
+
 # We can't set isolation level to an unsupported one.
 
 statement error invalid value for parameter "transaction_isolation": "read uncommitted"
@@ -276,7 +299,7 @@ BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-serializable
+snapshot
 
 statement ok
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
@@ -288,6 +311,9 @@ serializable
 
 statement ok
 COMMIT
+
+statement ok
+SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
@@ -609,6 +635,41 @@ normal
 
 statement ok
 COMMIT
+
+statement ok
+SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+snapshot
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+low
+
+statement ok
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+serializable
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+high
+
+statement ok
+COMMIT
+
+statement ok
+SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SNAPSHOT

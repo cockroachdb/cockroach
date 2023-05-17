@@ -6894,7 +6894,7 @@ iso_level:
   }
 | SNAPSHOT
   {
-    $$.val = tree.SerializableIsolation
+    $$.val = tree.SnapshotIsolation
   }
 | REPEATABLE READ
   {

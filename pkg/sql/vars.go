@@ -402,15 +402,25 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-ISOLATION
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			allowSnapshot := allowSnapshotIsolation.Get(&m.settings.SV)
+			var allowedValues []string
+			if allowSnapshot {
+				allowedValues = []string{"serializable", "snapshot", "read committed"}
+			} else {
+				allowedValues = []string{"serializable", "read committed"}
+			}
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
 			if !ok {
 				switch strings.ToUpper(s) {
-				case `READ UNCOMMITTED`, `SNAPSHOT`, `REPEATABLE READ`, `DEFAULT`:
+				case `READ UNCOMMITTED`, `REPEATABLE READ`, `DEFAULT`:
 					// All other levels map to serializable.
 					level = tree.SerializableIsolation
 				default:
-					return newVarValueError(`default_transaction_isolation`, s, "serializable", "read committed")
+					return newVarValueError(`default_transaction_isolation`, s, allowedValues...)
 				}
+			}
+			if level == tree.SnapshotIsolation && !allowSnapshotIsolation.Get(&m.settings.SV) {
+				level = tree.SerializableIsolation
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
 			return nil
@@ -1490,7 +1500,13 @@ var varGen = map[string]sessionVar{
 		RuntimeSet: func(ctx context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
 			if !ok {
-				return newVarValueError(`transaction_isolation`, s, "serializable", "read committed")
+				var allowedValues []string
+				if allowSnapshotIsolation.Get(&evalCtx.ExecCfg.Settings.SV) {
+					allowedValues = []string{"serializable", "snapshot", "read committed"}
+				} else {
+					allowedValues = []string{"serializable", "read committed"}
+				}
+				return newVarValueError(`transaction_isolation`, s, allowedValues...)
 			}
 			modes := tree.TransactionModes{
 				Isolation: level,

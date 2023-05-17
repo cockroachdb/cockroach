@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -3296,7 +3297,7 @@ func (ex *connExecutor) setTransactionModes(
 		}
 	}
 	if modes.Isolation != tree.UnspecifiedIsolation {
-		level := txnIsolationLevelToKV(modes.Isolation)
+		level := ex.txnIsolationLevelToKV(modes.Isolation)
 		if err := ex.state.setIsolationLevel(level); err != nil {
 			return pgerror.WithCandidateCode(err, pgcode.ActiveSQLTransaction)
 		}
@@ -3319,7 +3320,17 @@ func (ex *connExecutor) setTransactionModes(
 	return ex.state.setReadOnlyMode(rwMode)
 }
 
-func txnIsolationLevelToKV(level tree.IsolationLevel) isolation.Level {
+var allowSnapshotIsolation = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.txn.snapshot_isolation.enabled",
+	"set to true to allow transactions to use the SNAPSHOT isolation level. At "+
+		"the time of writing, this setting is intended only for usage by "+
+		"CockroachDB developers.",
+	false,
+)
+
+func (ex *connExecutor) txnIsolationLevelToKV(level tree.IsolationLevel) isolation.Level {
+	allowSnapshot := allowSnapshotIsolation.Get(&ex.server.cfg.Settings.SV)
 	var ret isolation.Level
 	switch level {
 	case tree.UnspecifiedIsolation:
@@ -3328,6 +3339,12 @@ func txnIsolationLevelToKV(level tree.IsolationLevel) isolation.Level {
 		ret = isolation.Serializable
 	case tree.ReadCommittedIsolation:
 		ret = isolation.ReadCommitted
+	case tree.SnapshotIsolation:
+		if allowSnapshot {
+			ret = isolation.Snapshot
+		} else {
+			ret = isolation.Serializable
+		}
 	default:
 		log.Fatalf(context.Background(), "unknown isolation level: %s", level)
 	}
@@ -3342,7 +3359,7 @@ func kvTxnIsolationLevelToTree(level isolation.Level) tree.IsolationLevel {
 	case isolation.ReadCommitted:
 		ret = tree.ReadCommittedIsolation
 	case isolation.Snapshot:
-		// TODO(rafi): handle SNAPSHOT isolation.
+		ret = tree.SnapshotIsolation
 	default:
 		log.Fatalf(context.Background(), "unknown isolation level: %s", level)
 	}
@@ -3355,7 +3372,7 @@ func (ex *connExecutor) txnIsolationLevelWithSessionDefault(
 	if level == tree.UnspecifiedIsolation {
 		level = tree.IsolationLevel(ex.sessionData().DefaultTxnIsolationLevel)
 	}
-	return txnIsolationLevelToKV(level)
+	return ex.txnIsolationLevelToKV(level)
 }
 
 func txnPriorityToProto(mode tree.UserPriority) roachpb.UserPriority {
