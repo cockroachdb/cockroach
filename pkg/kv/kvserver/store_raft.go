@@ -750,9 +750,6 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	ticker := time.NewTicker(s.cfg.RaftTickInterval)
 	defer ticker.Stop()
 
-	batch := s.scheduler.NewEnqueueBatch()
-	defer batch.Close() // reuse the same batch until done
-
 	for {
 		select {
 		case <-ticker.C:
@@ -768,13 +765,14 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			// then a single bad/slow Replica can disrupt tick processing for every
 			// Replica on the store which cascades into Raft elections and more
 			// disruption.
-			batch.Reset()
+			batch := s.scheduler.NewEnqueueBatch()
 			for rangeID := range s.unquiescedReplicas.m {
 				batch.Add(rangeID)
 			}
 			s.unquiescedReplicas.Unlock()
 
 			s.scheduler.EnqueueRaftTicks(batch)
+			batch.Close()
 			s.metrics.RaftTicks.Inc(1)
 
 		case <-s.stopper.ShouldQuiesce():

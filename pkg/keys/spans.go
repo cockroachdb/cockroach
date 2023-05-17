@@ -19,6 +19,9 @@ var (
 	// Meta1Span holds all first level addressing records.
 	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
 
+	// MetaSpan holds all first- and second-level addressing records.
+	MetaSpan = roachpb.Span{Key: MetaMin, EndKey: MetaMax}
+
 	// Meta2MaxSpan begins at key Meta2KeyMax with the last entry in the second
 	// level addressing keyspace. The rest of the span is always empty. We cannot
 	// split at this starting key or between it and MetaMax.

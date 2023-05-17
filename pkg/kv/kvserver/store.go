@@ -135,6 +135,13 @@ var defaultRaftSchedulerConcurrency = envutil.EnvOrDefaultInt(
 // counts, while also avoiding starvation by excessive sharding.
 var defaultRaftSchedulerShardSize = envutil.EnvOrDefaultInt("COCKROACH_SCHEDULER_SHARD_SIZE", 16)
 
+// defaultRaftSchedulerPriorityShardSize specifies the default size of the Raft
+// scheduler priority shard, used for certain system ranges. This shard is
+// always fully populated with workers that don't count towards the concurrency
+// limit, and is thus effectively the number of priority workers per store.
+var defaultRaftSchedulerPriorityShardSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_SCHEDULER_PRIORITY_SHARD_SIZE", 2)
+
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
 
@@ -1080,6 +1087,10 @@ type StoreConfig struct {
 	// for this store. Values < 1 imply 1.
 	RaftSchedulerConcurrency int
 
+	// RaftSchedulerConcurrentPriority specifies the number of Raft scheduler
+	// workers for this store's dedicated priority shard. Values < 1 imply 1.
+	RaftSchedulerConcurrencyPriority int
+
 	// RaftSchedulerShardSize specifies the maximum number of Raft scheduler
 	// workers per mutex shard. Values < 1 imply 1.
 	RaftSchedulerShardSize int
@@ -1185,8 +1196,8 @@ func (sc *StoreConfig) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.RaftReproposalTimeoutTicks > 0 &&
-		sc.RaftSchedulerConcurrency > 0 && sc.RaftSchedulerShardSize > 0 &&
-		sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil
+		sc.RaftSchedulerConcurrency > 0 && sc.RaftSchedulerConcurrencyPriority > 0 &&
+		sc.RaftSchedulerShardSize > 0 && sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil
 }
 
 // SetDefaults initializes unset fields in StoreConfig to values
@@ -1206,6 +1217,9 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 		if numStores > 1 && sc.RaftSchedulerConcurrency > 1 {
 			sc.RaftSchedulerConcurrency = (sc.RaftSchedulerConcurrency-1)/numStores + 1 // ceil division
 		}
+	}
+	if sc.RaftSchedulerConcurrencyPriority == 0 {
+		sc.RaftSchedulerConcurrencyPriority = defaultRaftSchedulerPriorityShardSize
 	}
 	if sc.RaftSchedulerShardSize == 0 {
 		sc.RaftSchedulerShardSize = defaultRaftSchedulerShardSize
@@ -1333,7 +1347,8 @@ func NewStore(
 	// NB: buffer up to RaftElectionTimeoutTicks in Raft scheduler to avoid
 	// unnecessary elections when ticks are temporarily delayed and piled up.
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s,
-		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftElectionTimeoutTicks)
+		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftSchedulerConcurrencyPriority,
+		cfg.RaftElectionTimeoutTicks)
 
 	s.syncWaiter = logstore.NewSyncWaiterLoop()
 
