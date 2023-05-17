@@ -1850,74 +1850,88 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, str lock.Strengt
 	return false
 }
 
-// Acquires this lock. Returns the list of guards that are done actively
-// waiting at this key -- these will be requests from the same transaction
-// that is acquiring the lock.
+// Acquires this lock. Any requests that are waiting in the lock's wait queues
+// from the transaction acquiring the lock are also released.
+//
 // Acquires l.mu.
-func (l *lockState) acquireLock(
-	_ lock.Strength,
-	durability lock.Durability,
-	txn *enginepb.TxnMeta,
-	ts hlc.Timestamp,
-	clock *hlc.Clock,
-) error {
+func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.holder.locked {
 		// Already held.
 		beforeTxn, beforeTs := l.getLockHolder()
-		if txn.ID != beforeTxn.ID {
+		if acq.Txn.ID != beforeTxn.ID {
 			return errors.AssertionFailedf("existing lock cannot be acquired by different transaction")
 		}
-		if durability == lock.Unreplicated &&
+		if acq.Durability == lock.Unreplicated &&
 			l.holder.holder[lock.Unreplicated].txn != nil &&
-			l.holder.holder[lock.Unreplicated].txn.Epoch > txn.Epoch {
+			l.holder.holder[lock.Unreplicated].txn.Epoch > acq.Txn.Epoch {
 			// If the lock is being re-acquired as an unreplicated lock, and the
 			// request trying to do so belongs to a prior epoch, we reject the
 			// request. This parallels the logic mvccPutInternal has for intents.
 			return errors.Errorf(
 				"locking request with epoch %d came after lock(unreplicated) had already been acquired at epoch %d in txn %s",
-				txn.Epoch, l.holder.holder[durability].txn.Epoch, txn.ID,
+				acq.Txn.Epoch, l.holder.holder[acq.Durability].txn.Epoch, acq.Txn.ID,
 			)
 		}
 		// TODO(arul): Once we stop storing sequence numbers/transaction protos
 		// associated with replicated locks, the following logic can be deleted.
-		if durability == lock.Replicated &&
+		if acq.Durability == lock.Replicated &&
 			l.holder.holder[lock.Replicated].txn != nil &&
-			l.holder.holder[lock.Replicated].txn.Epoch > txn.Epoch {
+			l.holder.holder[lock.Replicated].txn.Epoch > acq.Txn.Epoch {
 			// If we're dealing with a replicated lock (intent), and the transaction
 			// acquiring this lock belongs to a prior epoch, we expect mvccPutInternal
 			// to return an error. As such, the request should never call into
 			// AcquireLock and reach this point.
 			return errors.AssertionFailedf(
 				"locking request with epoch %d came after lock(replicated) had already been acquired at epoch %d in txn %s",
-				txn.Epoch, l.holder.holder[durability].txn.Epoch, txn.ID,
+				acq.Txn.Epoch, l.holder.holder[acq.Durability].txn.Epoch, acq.Txn.ID,
 			)
 		}
-		seqs := l.holder.holder[durability].seqs
-		if l.holder.holder[durability].txn != nil && l.holder.holder[durability].txn.Epoch < txn.Epoch {
+		seqs := l.holder.holder[acq.Durability].seqs
+		// Lock is being re-acquired...
+		if l.holder.holder[acq.Durability].txn != nil &&
+			// ...at a higher epoch.
+			l.holder.holder[acq.Durability].txn.Epoch < acq.Txn.Epoch {
 			// Clear the sequences for the older epoch.
 			seqs = seqs[:0]
 		}
-		if len(seqs) > 0 && seqs[len(seqs)-1] >= txn.Sequence {
+		// Lock is being re-acquired with durability Unreplicated...
+		if acq.Durability == lock.Unreplicated && l.holder.holder[lock.Unreplicated].txn != nil &&
+			// ... at the same epoch.
+			l.holder.holder[lock.Unreplicated].txn.Epoch == acq.Txn.Epoch {
+			// Prune the list of sequence numbers tracked for this lock by removing
+			// any sequence numbers that are considered ignored by virtue of a
+			// savepoint rollback.
+			//
+			// Note that the in-memory lock table is the source of truth for just
+			// unreplicated locks, so we only do this pruning for unreplicated lock
+			// acquisition. On the other hand, for replicated locks, the source of
+			// truth is what's written in MVCC. We could try and mimic that logic
+			// here, but we choose not to, as doing so is error-prone/difficult to
+			// maintain.
+			seqs = removeIgnored(seqs, acq.IgnoredSeqNums)
+		}
+
+		if len(seqs) > 0 && seqs[len(seqs)-1] >= acq.Txn.Sequence {
 			// Idempotent lock acquisition. In this case, we simply ignore the lock
 			// acquisition as long as it corresponds to an existing sequence number.
 			// If the sequence number is not being tracked yet, insert it into the
 			// sequence history. The validity of such a lock re-acquisition should
 			// have already been determined at the MVCC level.
 			if i := sort.Search(len(seqs), func(i int) bool {
-				return seqs[i] >= txn.Sequence
+				return seqs[i] >= acq.Txn.Sequence
 			}); i == len(seqs) {
 				panic("lockTable bug - search value <= last element")
-			} else if seqs[i] != txn.Sequence {
+			} else if seqs[i] != acq.Txn.Sequence {
 				seqs = append(seqs, 0)
 				copy(seqs[i+1:], seqs[i:])
-				seqs[i] = txn.Sequence
-				l.holder.holder[durability].seqs = seqs
+				seqs[i] = acq.Txn.Sequence
+				l.holder.holder[acq.Durability].seqs = seqs
 			}
 			return nil
 		}
-		l.holder.holder[durability].txn = txn
+		l.holder.holder[acq.Durability].txn = &acq.Txn
 		// Forward the lock's timestamp instead of assigning to it blindly.
 		// While lock acquisition uses monotonically increasing timestamps
 		// from the perspective of the transaction's coordinator, this does
@@ -1956,8 +1970,8 @@ func (l *lockState) acquireLock(
 		// timestamp at that point, which may cause them to conflict with the
 		// lock even if they had not conflicted before. In a sense, it is no
 		// different than the first time a lock is added to the lockTable.
-		l.holder.holder[durability].ts.Forward(ts)
-		l.holder.holder[durability].seqs = append(seqs, txn.Sequence)
+		l.holder.holder[acq.Durability].ts.Forward(acq.Txn.WriteTimestamp)
+		l.holder.holder[acq.Durability].seqs = append(seqs, acq.Txn.Sequence)
 
 		_, afterTs := l.getLockHolder()
 		if beforeTs.Less(afterTs) {
@@ -1970,7 +1984,7 @@ func (l *lockState) acquireLock(
 	// of a concurrent release but that is harmless since this request is
 	// holding latches and has proceeded to evaluation.
 	if l.reservation != nil {
-		if l.reservation.txn.ID != txn.ID {
+		if l.reservation.txn.ID != acq.Txn.ID {
 			// Reservation is broken.
 			qg := &queuedGuard{
 				guard:  l.reservation,
@@ -1998,13 +2012,13 @@ func (l *lockState) acquireLock(
 	}
 	l.reservation = nil
 	l.holder.locked = true
-	l.holder.holder[durability].txn = txn
-	l.holder.holder[durability].ts = ts
-	l.holder.holder[durability].seqs = append([]enginepb.TxnSeq(nil), txn.Sequence)
+	l.holder.holder[acq.Durability].txn = &acq.Txn
+	l.holder.holder[acq.Durability].ts = acq.Txn.WriteTimestamp
+	l.holder.holder[acq.Durability].seqs = append([]enginepb.TxnSeq(nil), acq.Txn.Sequence)
 	l.holder.startTime = clock.PhysicalTime()
 
 	// If there are waiting requests from the same txn, they no longer need to wait.
-	l.releaseWritersFromTxn(txn)
+	l.releaseWritersFromTxn(&acq.Txn)
 
 	// Inform active waiters since lock has transitioned to held.
 	l.informActiveWaiters()
@@ -2788,7 +2802,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 			return nil
 		}
 	}
-	err := l.acquireLock(acq.Strength, acq.Durability, &acq.Txn, acq.Txn.WriteTimestamp, t.clock)
+	err := l.acquireLock(acq, t.clock)
 	t.locks.mu.Unlock()
 
 	if checkMaxLocks {
