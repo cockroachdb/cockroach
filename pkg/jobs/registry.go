@@ -2014,7 +2014,7 @@ func (r *Registry) DrainRequested(ctx context.Context, maxJobWait time.Duration)
 		case <-time.After(maxJobWait):
 		}
 	}
-	close(r.drainRequested)
+	close(r.drainJobs)
 }
 
 // OnDrain returns a channel that can be selected on to detect when the job
