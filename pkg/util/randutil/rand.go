@@ -98,6 +98,12 @@ func NewPseudoRand() (*rand.Rand, int64) {
 	return rand.New(rand.NewSource(seed)), seed
 }
 
+// Same as NewPseudoRand, but the returned Rand is using thread safe underlying source.
+func NewLockedPseudoRand() (*rand.Rand, int64) {
+	seed := envutil.EnvOrDefaultInt64("COCKROACH_RANDOM_SEED", NewPseudoSeed())
+	return rand.New(NewLockedSource(seed)), seed
+}
+
 // NewTestRand returns an instance of math/rand.Rand seeded from rng, which is
 // seeded with the global seed. If the caller is a test with a different
 // path-qualified name than the previous caller, rng is reseeded from the global

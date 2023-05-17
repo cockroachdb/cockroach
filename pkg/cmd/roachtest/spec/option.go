@@ -10,11 +10,26 @@
 
 package spec
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+)
 
 // Option is the interface satisfied by options to MakeClusterSpec.
 type Option interface {
 	apply(spec *ClusterSpec)
+}
+
+type archOption string
+
+func (o archOption) apply(spec *ClusterSpec) {
+	spec.Arch = vm.CPUArch(o)
+}
+
+// Request specific CPU architecture.
+func Arch(arch vm.CPUArch) Option {
+	return archOption(arch)
 }
 
 type nodeCPUOption int

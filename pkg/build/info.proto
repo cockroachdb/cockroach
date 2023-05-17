@@ -40,6 +40,8 @@ message Info {
   optional string channel = 9 [(gogoproto.nullable) = false];
   // env_channel identifies the product channel as overridden by the COCKROACH_CHANNEL environment variable.
   optional string env_channel = 11 [(gogoproto.nullable) = false];
+  // enabled_assertions returns the value of 'CrdbTestBuild' (true iff compiled with 'crdb_test' tag)
+  optional bool enabled_assertions = 12 [(gogoproto.nullable) = false];
 
   // dependencies exists to allow tests that run against old clusters
   // to unmarshal JSON containing this field. The tag is unimportant,
