@@ -359,7 +359,7 @@ type AuthConn interface {
 	// An error is returned if the client connection dropped or if the client
 	// didn't respect the protocol. After an error has been returned, GetPwdData()
 	// cannot be called any more.
-	GetPwdData() ([]byte, error)
+	GetPwdData(context.Context) ([]byte, error)
 	// AuthOK declares that authentication succeeded and provides a
 	// unqualifiedIntSizer, to be returned by authenticator.authResult(). Future
 	// authenticator.sendPwdData() calls fail.
@@ -451,8 +451,10 @@ func (p *authPipe) noMorePwdData() {
 }
 
 // GetPwdData is part of the AuthConn interface.
-func (p *authPipe) GetPwdData() ([]byte, error) {
+func (p *authPipe) GetPwdData(ctx context.Context) ([]byte, error) {
 	select {
+	case <-ctx.Done():
+		return nil, errors.Wrap(ctx.Err(), "GetPwdData context done")
 	case data := <-p.ch:
 		return data, nil
 	case <-p.writerDone:

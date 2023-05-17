@@ -1513,6 +1513,12 @@ func (ts *TestServer) SystemConfigProvider() config.SystemConfigProvider {
 	return ts.node.storeCfg.SystemConfigProvider
 }
 
+// Drain is part of the TestServerInterface.
+func (ts *TestServer) Drain(ctx context.Context) {
+	_, _, err := ts.Server.Drain(ctx, true)
+	panic(err)
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory

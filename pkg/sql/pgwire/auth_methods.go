@@ -154,7 +154,7 @@ func passwordAuthenticator(
 	expired, hashedPassword, pwRetrievalErr := pwRetrieveFn(ctx)
 
 	// Wait for the password response from the client.
-	pwdData, err := c.GetPwdData()
+	pwdData, err := c.GetPwdData(ctx)
 	if err != nil {
 		c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 		if pwRetrievalErr != nil {
@@ -316,7 +316,7 @@ func scramAuthenticator(
 		}
 
 		// Receive a response from the client.
-		resp, err := c.GetPwdData()
+		resp, err := c.GetPwdData(ctx)
 		if err != nil {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 			if pwRetrievalErr != nil {
@@ -732,7 +732,7 @@ func authJwtToken(
 			return err
 		}
 		// Wait for the password response from the client.
-		pwdData, err := c.GetPwdData()
+		pwdData, err := c.GetPwdData(ctx)
 		if err != nil {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 			return err

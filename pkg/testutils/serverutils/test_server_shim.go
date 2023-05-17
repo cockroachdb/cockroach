@@ -289,6 +289,9 @@ type TestServerInterface interface {
 	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
 	// the server.
 	SpanConfigKVSubscriber() interface{}
+
+	// Drain starts draining the server.
+	Drain(context.Context)
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
