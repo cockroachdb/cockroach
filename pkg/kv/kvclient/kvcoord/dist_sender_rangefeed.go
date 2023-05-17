@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sort"
 	"sync"
 	"time"
 	"unsafe"
@@ -233,6 +234,20 @@ func (ds *DistSender) RangeFeedSpans(
 func divideAllSpansOnRangeBoundaries(
 	spans []SpanTimePair, onRange onRangeFn, ds *DistSender, g *ctxgroup.Group,
 ) {
+	// Sort input spans based on their start time -- older spans first.
+	// Starting rangefeed over large number of spans is an expensive proposition,
+	// since this involves initiating catch-up scan operation for each span. These
+	// operations are throttled (both on the client and on the server). Thus, it
+	// is possible that only some portion of the spans  will make it past catch-up
+	// phase.  If the caller maintains checkpoint, and then restarts rangefeed
+	// (for any reason), then we will restart against the same list of spans --
+	// but this time, we'll begin with the spans that might be substantially ahead
+	// of the rest of the spans. We simply sort input spans so that the oldest
+	// spans get a chance to complete their catch-up scan.
+	sort.Slice(spans, func(i, j int) bool {
+		return spans[i].StartAfter.Less(spans[j].StartAfter)
+	})
+
 	for _, s := range spans {
 		func(stp SpanTimePair) {
 			g.GoCtx(func(ctx context.Context) error {
