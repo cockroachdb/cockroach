@@ -23,7 +23,7 @@ import (
 func registerSchemaChangeMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:  "schemachange/mixed-versions",
-		Owner: registry.OwnerSQLSchema,
+		Owner: registry.OwnerSQLFoundations,
 		// This tests the work done for 20.1 that made schema changes jobs and in
 		// addition prevented making any new schema changes on a mixed cluster in
 		// order to prevent bugs during upgrades.

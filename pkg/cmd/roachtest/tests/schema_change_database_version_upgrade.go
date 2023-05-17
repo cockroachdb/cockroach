@@ -38,7 +38,7 @@ func registerSchemaChangeDatabaseVersionUpgrade(r registry.Registry) {
 	// TODO (lucy): Remove this test in 21.1.
 	r.Add(registry.TestSpec{
 		Name:    "schemachange/database-version-upgrade",
-		Owner:   registry.OwnerSQLSchema,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeDatabaseVersionUpgrade(ctx, t, c, *t.BuildVersion())

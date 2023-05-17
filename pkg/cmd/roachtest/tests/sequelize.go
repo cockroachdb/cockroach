@@ -154,7 +154,7 @@ func registerSequelize(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "sequelize",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

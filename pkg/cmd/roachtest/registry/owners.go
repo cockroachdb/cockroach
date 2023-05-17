@@ -16,7 +16,7 @@ type Owner string
 
 // The allowable values of Owner.
 const (
-	OwnerSQLExperience    Owner = `sql-sessions`
+	OwnerSQLFoundations   Owner = `sql-foundations`
 	OwnerDisasterRecovery Owner = `disaster-recovery`
 	OwnerCDC              Owner = `cdc`
 	OwnerKV               Owner = `kv`
@@ -25,7 +25,6 @@ const (
 	OwnerObsInf           Owner = `obs-inf-prs`
 	OwnerServer           Owner = `server`
 	OwnerSQLQueries       Owner = `sql-queries`
-	OwnerSQLSchema        Owner = `sql-schema`
 	OwnerStorage          Owner = `storage`
 	OwnerTestEng          Owner = `test-eng`
 	OwnerDevInf           Owner = `dev-inf`
