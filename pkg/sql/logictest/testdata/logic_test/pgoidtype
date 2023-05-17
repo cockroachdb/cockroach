@@ -141,7 +141,7 @@ public  105
 query OO
 SELECT 'root'::REGROLE, 'root'::REGROLE::OID
 ----
-root  1546606610
+root  1546506610
 
 query OO
 SELECT 'bool'::REGTYPE, 'bool'::REGTYPE::OID

@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
-	"math"
 	"strings"
 	"time"
 	"unicode"
@@ -4747,10 +4746,10 @@ func (h oidHasher) writeTypeTag(tag oidTypeTag) {
 
 func (h oidHasher) getOid() *tree.DOid {
 	i := h.h.Sum32()
-	// Ensure generated OID hashes are above the pre-defined max limit,
-	// this gives us a cheap filter.
-	i = i%(math.MaxUint32-oidext.CockroachPredefinedOIDMax) +
-		oidext.CockroachPredefinedOIDMax
+	// Ensure generated OID hashes are above the pre-defined max limit.
+	if i <= oidext.CockroachPredefinedOIDMax {
+		i += oidext.CockroachPredefinedOIDMax
+	}
 	h.h.Reset()
 	return tree.NewDOid(oid.Oid(i))
 }
