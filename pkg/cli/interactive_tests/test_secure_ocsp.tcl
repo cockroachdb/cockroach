@@ -13,14 +13,6 @@ proc start_secure_server {argv certs_dir extra} {
     report "END START SECURE SERVER"
 }
 
-proc expect_exit_status {expected} {
-    set status [lindex [wait] 3]
-    if {$status != $expected} {
-        report "unexpected exit status $status"
-        exit 1
-    }
-}
-
 # Create an openssl CA for client certs.
 file copy [file join [file dirname $argv0] "ocsp_ca.cnf"] "ca.cnf"
 

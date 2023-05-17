@@ -80,6 +80,15 @@ proc eexpect_re {text} {
   }
 }
 
+# Validates process exit code against an expected value.
+proc expect_exit_status {expected} {
+    set status [lindex [wait] 3]
+    if {$status != $expected} {
+        report "unexpected exit status $status"
+        exit 1
+    }
+}
+
 # Convenience function that sends Ctrl+C to the monitored process.
 proc interrupt {} {
     report "INTERRUPT TO FOREGROUND PROCESS"

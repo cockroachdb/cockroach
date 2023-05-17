@@ -88,6 +88,13 @@ func TestDockerCLI_test_copy(t *testing.T) {
 	runTestDockerCLI(t, "test_copy", "../cli/interactive_tests/test_copy.tcl")
 }
 
+func TestDockerCLI_test_decommission(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_decommission", "../cli/interactive_tests/test_decommission.tcl")
+}
+
 func TestDockerCLI_test_demo_changefeeds(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
