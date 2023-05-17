@@ -11,7 +11,6 @@
 package kvserver
 
 import (
-	"bytes"
 	"context"
 	"time"
 
@@ -397,9 +396,15 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
 
-	// Prioritize the NodeLiveness Range in the Raft scheduler above all other
-	// Ranges to ensure that liveness never sees high Raft scheduler latency.
-	if bytes.HasPrefix(desc.StartKey, keys.NodeLivenessPrefix) {
-		r.store.scheduler.SetPriorityID(desc.RangeID)
+	// Give the liveness and meta ranges high priority in the Raft scheduler, to
+	// avoid head-of-line blocking and high scheduling latency.
+	for _, span := range []roachpb.Span{keys.NodeLivenessSpan, keys.MetaSpan} {
+		rspan, err := keys.SpanAddr(span)
+		if err != nil {
+			log.Fatalf(ctx, "can't resolve system span %s: %s", span, err)
+		}
+		if _, err := desc.RSpan().Intersect(rspan); err == nil {
+			r.store.scheduler.AddPriorityID(desc.RangeID)
+		}
 	}
 }
