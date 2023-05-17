@@ -10202,9 +10202,9 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						LeadTransferee: 0,
 					},
 					Progress: map[uint64]tracker.Progress{
-						1: {Match: logIndex},
-						2: {Match: logIndex},
-						3: {Match: logIndex},
+						1: {Match: logIndex, State: tracker.StateReplicate},
+						2: {Match: logIndex, State: tracker.StateReplicate},
+						3: {Match: logIndex, State: tracker.StateReplicate},
 					},
 				},
 				lastIndex:      logIndex,
@@ -10296,6 +10296,12 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
 		q.raftReady = true
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		pr := q.status.Progress[2]
+		pr.State = tracker.StateProbe
+		q.status.Progress[2] = pr
 		return q
 	})
 	// Create a mismatch between the raft progress replica IDs and the
