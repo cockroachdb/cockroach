@@ -168,8 +168,8 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 9))
 
+	m := c.NewMonitor(ctx, c.Range(1, 9))
 	conn := c.Conn(ctx, t.L(), 1)
-	defer conn.Close()
 
 	// Place 5 replicas of all ranges on n3-n9, keeping n1-n2 as SQL gateways.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 5, onlyNodes: []int{3, 4, 5, 6, 7, 8, 9}})
@@ -200,7 +200,6 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	// Start workload on n10 using n1-n2 as gateways.
 	t.L().Printf("running workload")
-	m := c.NewMonitor(ctx, c.Range(1, 9))
 	m.Go(func(ctx context.Context) error {
 		readPercent := 50
 		if readOnly {
@@ -348,8 +347,8 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
 
+	m := c.NewMonitor(ctx, c.Range(1, 7))
 	conn := c.Conn(ctx, t.L(), 1)
-	defer conn.Close()
 
 	// Place all ranges on n1-n3 to start with.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -379,7 +378,6 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 
 	// Start workload on n8 using n6-n7 as gateways.
 	t.L().Printf("running workload")
-	m := c.NewMonitor(ctx, c.Range(1, 7))
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
 			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
@@ -497,7 +495,6 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 3))
 
 	conn := c.Conn(ctx, t.L(), 1)
-	defer conn.Close()
 
 	// Place all ranges on n1-n3 to start with, and wait for upreplication.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -511,6 +508,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	// Now that system ranges are properly placed on n1-n3, start n4-n6.
 	c.Start(ctx, t.L(), opts, settings, c.Range(4, 6))
+	m := c.NewMonitor(ctx, c.Range(1, 6))
 
 	// Create the kv database on n4-n6.
 	t.L().Printf("creating workload database")
@@ -544,7 +542,6 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	// Start workload on n7 using n1-n3 as gateways.
 	t.L().Printf("running workload")
-	m := c.NewMonitor(ctx, c.Range(1, 6))
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
 			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
@@ -644,8 +641,8 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
 
+	m := c.NewMonitor(ctx, c.Range(1, 7))
 	conn := c.Conn(ctx, t.L(), 1)
-	defer conn.Close()
 
 	// Place all ranges on n1-n3, and an extra liveness leaseholder replica on n4.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -673,7 +670,6 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 
 	// Start workload on n8 using n1-n3 as gateways (not partitioned).
 	t.L().Printf("running workload")
-	m := c.NewMonitor(ctx, c.Range(1, 7))
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
 			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
@@ -784,8 +780,8 @@ func runFailoverNonSystem(
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
+	m := c.NewMonitor(ctx, c.Range(1, 6))
 	conn := c.Conn(ctx, t.L(), 1)
-	defer conn.Close()
 
 	// Constrain all existing zone configs to n1-n3.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -811,7 +807,6 @@ func runFailoverNonSystem(
 	// minutes, since we take ~2 minutes to fail and recover each node, and
 	// we do 3 cycles of each of the 3 nodes in order.
 	t.L().Printf("running workload")
-	m := c.NewMonitor(ctx, c.Range(1, 6))
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
 			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
@@ -918,8 +913,8 @@ func runFailoverLiveness(
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 4))
 
+	m := c.NewMonitor(ctx, c.Range(1, 4))
 	conn := c.Conn(ctx, t.L(), 1)
-	defer conn.Close()
 
 	// Constrain all existing zone configs to n1-n3.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -950,7 +945,6 @@ func runFailoverLiveness(
 	// Start workload on n7, using n1-n3 as gateways. Run it for 20 minutes, since
 	// we take ~2 minutes to fail and recover the node, and we do 9 cycles.
 	t.L().Printf("running workload")
-	m := c.NewMonitor(ctx, c.Range(1, 4))
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(5), `./cockroach workload run kv --read-percent 50 `+
 			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
@@ -1055,8 +1049,8 @@ func runFailoverSystemNonLiveness(
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
+	m := c.NewMonitor(ctx, c.Range(1, 6))
 	conn := c.Conn(ctx, t.L(), 1)
-	defer conn.Close()
 
 	// Constrain all existing zone configs to n4-n6, except liveness which is
 	// constrained to n1-n3.
@@ -1087,7 +1081,6 @@ func runFailoverSystemNonLiveness(
 	// we take ~2 minutes to fail and recover each node, and we do 3 cycles of each
 	// of the 3 nodes in order.
 	t.L().Printf("running workload")
-	m := c.NewMonitor(ctx, c.Range(1, 6))
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
 			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
