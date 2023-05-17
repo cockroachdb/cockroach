@@ -58,10 +58,12 @@ const (
 	SchemaCommentType CommentType = 4
 	// ConstraintCommentType comment on a constraint.
 	ConstraintCommentType CommentType = 5
+	// FunctionCommentType comment on a function.
+	FunctionCommentType CommentType = 6
 
 	// MaxCommentTypeValue is the max possible integer of CommentType type.
 	// Update this whenever a new comment type is added.
-	MaxCommentTypeValue = ConstraintCommentType
+	MaxCommentTypeValue = FunctionCommentType
 )
 
 // AllCommentTypes is a slice of all valid schema comment types.
@@ -72,6 +74,7 @@ var AllCommentTypes = []CommentType{
 	IndexCommentType,
 	SchemaCommentType,
 	ConstraintCommentType,
+	FunctionCommentType,
 }
 
 // IsValidCommentType checks if a given comment type is in the valid value
