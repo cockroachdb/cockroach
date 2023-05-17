@@ -65,6 +65,8 @@ var (
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
 	// https://grafana.testeng.crdb.io/prometheus/config
 	prometheusScrapeInterval = time.Second * 15
+
+	prng, _ = randutil.NewPseudoRand()
 )
 
 // testRunner runs tests.
@@ -163,8 +165,7 @@ type clustersOpt struct {
 	cpuQuota int
 
 	// Controls whether the cluster is cleaned up at the end of the test.
-	debugMode  debugMode
-	enableFIPS bool
+	debugMode debugMode
 }
 
 type debugMode int
@@ -395,6 +396,7 @@ func defaultClusterAllocator(
 	allocateCluster := func(
 		ctx context.Context,
 		t registry.TestSpec,
+		arch string,
 		alloc *quotapool.IntAlloc,
 		artifactsDir string,
 		wStatus *workerStatus,
@@ -416,6 +418,9 @@ func defaultClusterAllocator(
 				skipStop:       r.config.skipClusterStopOnAttach,
 				skipWipe:       r.config.skipClusterWipeOnAttach,
 			}
+			// TODO(srosenberg): we need to think about validation here. Attaching to an incompatible cluster, e.g.,
+			// using arm64 AMI with amd64 binary, would result in obscure errors. The test runner ensures compatibility
+			// during cluster reuse, whereas attachment via CLI (e.g., via roachprod) does not.
 			lopt.l.PrintfCtx(ctx, "Attaching to existing cluster %s for test %s", existingClusterName, t.Name)
 			c, err := attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
 			if err == nil {
@@ -440,7 +445,7 @@ func defaultClusterAllocator(
 			username:     clustersOpt.user,
 			localCluster: clustersOpt.typ == localCluster,
 			alloc:        alloc,
-			enableFIPS:   clustersOpt.enableFIPS,
+			arch:         arch,
 		}
 		return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
 	}
@@ -450,6 +455,7 @@ func defaultClusterAllocator(
 type clusterAllocatorFn func(
 	ctx context.Context,
 	t registry.TestSpec,
+	arch string,
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,
@@ -530,8 +536,6 @@ func (r *testRunner) runWorker(
 		}
 	}()
 
-	prng, _ := randutil.NewPseudoRand()
-
 	// Loop until there's no more work in the pool, we get interrupted, or an
 	// error occurs.
 	for {
@@ -605,9 +609,18 @@ func (r *testRunner) runWorker(
 				testToRun.canReuseCluster = false
 			}
 		}
-
+		// Choose cluster architecture according to probability distribution.
+		arch := vm.ArchAMD64
+		if prng.Float64() < arm64Probability {
+			arch = vm.ArchARM64
+			l.PrintfCtx(ctx, "Using 'arm64' for %s", testToRun.spec.Name)
+		} else if prng.Float64() < fipsProbability {
+			// N.B. FIPS is only supported on 'amd64' at this time.
+			arch = vm.ArchFIPS
+			l.PrintfCtx(ctx, "Using 'FIPS' for %s", testToRun.spec.Name)
+		}
 		// Verify that required native libraries are available.
-		if err = VerifyLibraries(testToRun.spec.NativeLibs); err != nil {
+		if err = VerifyLibraries(testToRun.spec.NativeLibs, arch); err != nil {
 			shout(ctx, l, stdout, "Library verification failed: %s", err)
 			return err
 		}
@@ -619,8 +632,8 @@ func (r *testRunner) runWorker(
 			// Create a new cluster if can't reuse or reuse attempt failed.
 			// N.B. non-reusable cluster would have been destroyed above.
 			wStatus.SetTest(nil /* test */, testToRun)
-			wStatus.SetStatus("creating cluster")
-			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, testToRun.alloc, artifactsRootDir, wStatus)
+			wStatus.SetStatus(fmt.Sprintf("creating cluster (arch=%q)", arch))
+			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, arch, testToRun.alloc, artifactsRootDir, wStatus)
 			if clusterCreateErr != nil {
 				clusterCreateErr = errors.Mark(clusterCreateErr, errClusterProvisioningFailed)
 				atomic.AddInt32(&r.numClusterErrs, 1)
@@ -655,9 +668,9 @@ func (r *testRunner) runWorker(
 		}
 		t := &testImpl{
 			spec:                   &testToRun.spec,
-			cockroach:              cockroach,
-			cockroachShort:         cockroachShort,
-			deprecatedWorkload:     workload,
+			cockroach:              cockroach[arch],
+			cockroachShort:         cockroachShort[arch],
+			deprecatedWorkload:     workload[arch],
 			buildVersion:           binaryVersion,
 			artifactsDir:           artifactsDir,
 			artifactsSpec:          artifactsSpec,

@@ -94,7 +94,6 @@ func main() {
 	var clusterID string
 	var count = 1
 	var versionsBinaryOverride map[string]string
-	var enableFIPS bool
 
 	cobra.EnableCommandSorting = false
 
@@ -128,7 +127,25 @@ func main() {
 			}
 			switch cmd.Name() {
 			case "run", "bench", "store-gen":
+				if arm64Probability == 1 && fipsProbability != 0 {
+					return fmt.Errorf("'metamorphic-fips-probability' must be 0 when 'metamorphic-arm64-probability' is 1")
+				}
+				if fipsProbability == 1 && arm64Probability != 0 {
+					return fmt.Errorf("'metamorphic-arm64-probability' must be 0 when 'metamorphic-fips-probability' is 1")
+				}
+				// Find and validate all required binaries and libraries.
 				initBinariesAndLibraries()
+
+				if arm64Probability > 0 {
+					fmt.Printf("ARM64 clusters will be provisioned with probability %.2f\n", arm64Probability)
+				}
+				amd64Probability := 1 - arm64Probability
+				if amd64Probability > 0 {
+					fmt.Printf("AMD64 clusters will be provisioned with probability %.2f\n", amd64Probability)
+				}
+				if fipsProbability > 0 {
+					fmt.Printf("FIPS clusters will be provisioned with probability %.2f\n", fipsProbability*amd64Probability)
+				}
 			}
 			return nil
 		},
@@ -147,15 +164,23 @@ func main() {
 		"Username to use as a cluster name prefix. "+
 			"If blank, the current OS user is detected and specified.")
 	rootCmd.PersistentFlags().StringVar(
-		&cockroach, "cockroach", "", "path to cockroach binary to use")
+		&cockroachPath, "cockroach", "", "path to cockroach binary to use")
 	rootCmd.PersistentFlags().StringVar(
-		&cockroachShort, "cockroach-short", "", "path to cockroach-short binary (compiled with crdb_test build tag) to use")
+		&cockroachShortPath, "cockroach-short", "", "path to cockroach-short binary (compiled with crdb_test build tag) to use")
 	rootCmd.PersistentFlags().StringVar(
-		&workload, "workload", "", "path to workload binary to use")
+		&workloadPath, "workload", "", "path to workload binary to use")
 	rootCmd.PersistentFlags().Float64Var(
 		&encryptionProbability, "metamorphic-encryption-probability", defaultEncryptionProbability,
 		"probability that clusters will be created with encryption-at-rest enabled "+
 			"for tests that support metamorphic encryption (default 1.0)")
+	rootCmd.PersistentFlags().Float64Var(
+		&fipsProbability, "metamorphic-fips-probability", defaultFIPSProbability,
+		"conditional probability that _remaining_ amd64 clusters will be created with FIPS "+
+			"for tests that support FIPS and whose CPU architecture is 'amd64' (default 0)")
+	rootCmd.PersistentFlags().Float64Var(
+		&arm64Probability, "metamorphic-arm64-probability", defaultARM64Probability,
+		"probability that clusters will be created with 'arm64' CPU architecture "+
+			"for tests that support 'arm64' (default 0)")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   `version`,
@@ -257,7 +282,6 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
-				enableFIPS:             enableFIPS,
 			})
 		},
 	}
@@ -295,7 +319,6 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
-				enableFIPS:             enableFIPS,
 			})
 		},
 	}
@@ -348,8 +371,6 @@ runner itself.
 				"is present in the list,"+"the respective binary will be used when a "+
 				"multi-version test asks for the respective binary, instead of "+
 				"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
-		cmd.Flags().BoolVar(
-			&enableFIPS, "fips", false, "Run tests in enableFIPS mode")
 	}
 
 	parseCreateOpts(runCmd.Flags(), &overrideOpts)
@@ -401,7 +422,6 @@ type cliCfg struct {
 	user                   string
 	clusterID              string
 	versionsBinaryOverride map[string]string
-	enableFIPS             bool
 }
 
 func runTests(register func(registry.Registry), cfg cliCfg) error {
@@ -442,7 +462,6 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		cpuQuota:    cfg.cpuQuota,
 		debugMode:   cfg.debugMode,
 		clusterID:   cfg.clusterID,
-		enableFIPS:  cfg.enableFIPS,
 	}
 	if err := runner.runHTTPServer(cfg.httpPort, os.Stdout, bindTo); err != nil {
 		return err

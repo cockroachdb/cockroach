@@ -303,7 +303,10 @@ func (tr *testRunner) stepError(err error, step singleStep, l *logger.Logger) er
 func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
 	clusterVersionsBefore := tr.clusterVersions
 	var clusterVersionsAfter atomic.Value
-	if err := tr.refreshClusterVersions(); err != nil {
+	// N.B. `maybeInitConnections` isn't invoked until after first step has succeeded.
+	if len(tr.connCache) == 0 {
+		tr.logger.Printf("first step has not fully initialized, unable to fetch cluster versions")
+	} else if err := tr.refreshClusterVersions(); err != nil {
 		tr.logger.Printf("failed to fetch cluster versions after failure: %s", err)
 	} else {
 		clusterVersionsAfter = tr.clusterVersions

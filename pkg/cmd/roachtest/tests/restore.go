@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -474,7 +475,7 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 		// https://github.com/cockroachdb/cockroach/issues/98783.
 		//
 		// TODO(srosenberg): Remove this workaround when 98783 is addressed.
-		s.InstanceType = spec.AWSMachineType(s.CPUs, s.Mem)
+		s.InstanceType, _ = spec.AWSMachineType(s.CPUs, s.Mem, vm.ArchARM64)
 		s.InstanceType = strings.Replace(s.InstanceType, "d.", ".", 1)
 	}
 	return s
