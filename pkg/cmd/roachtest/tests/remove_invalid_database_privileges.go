@@ -24,7 +24,7 @@ import (
 func registerRemoveInvalidDatabasePrivileges(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "remove-invalid-database-privileges",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRemoveInvalidDatabasePrivileges(ctx, t, c, *t.BuildVersion())

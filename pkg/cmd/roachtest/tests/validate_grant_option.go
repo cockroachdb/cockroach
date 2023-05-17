@@ -23,7 +23,7 @@ import (
 func registerValidateGrantOption(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "validate-grant-option",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRegisterValidateGrantOption(ctx, t, c, *t.BuildVersion())

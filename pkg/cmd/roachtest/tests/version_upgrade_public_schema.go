@@ -27,7 +27,7 @@ import (
 func registerVersionUpgradePublicSchema(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "versionupgrade/publicschema",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runVersionUpgradePublicSchema(ctx, t, c, *t.BuildVersion())
