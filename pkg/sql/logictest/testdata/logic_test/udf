@@ -70,6 +70,9 @@ CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT j'
 statement error pgcode 42703 column \"j\" does not exist
 CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT a FROM ab WHERE a = j'
 
+statement error pgcode 42P01 pq: relation "dne" does not exist
+CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM dne'
+
 statement ok
 CREATE FUNCTION d(i INT2) RETURNS INT4 LANGUAGE SQL AS 'SELECT i'
 
@@ -2669,16 +2672,7 @@ CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'DROP TABLE t'
 
 subtest mutation
 
-# Mutations are not currently supported in UDF bodies.
-statement error pgcode 0A000 unimplemented: INSERT usage inside a function definition
-CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'INSERT INTO t VALUES (1)'
-
-statement error pgcode 0A000 unimplemented: INSERT usage inside a function definition
-CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'UPSERT INTO t VALUES (1)'
-
-statement error pgcode 0A000 unimplemented: UPDATE usage inside a function definition
-CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'UPDATE t SET a = 1'
-
+# Not all mutations are currently supported in UDF bodies.
 statement error pgcode 0A000 unimplemented: DELETE usage inside a function definition
 CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'DELETE FROM t WHERE a = 1'
 

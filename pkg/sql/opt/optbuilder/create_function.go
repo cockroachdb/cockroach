@@ -239,10 +239,6 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 	if expected.Equivalent(types.Void) {
 		return nil
 	}
-	// If return type is RECORD, any column types are valid.
-	if types.IsRecordType(expected) {
-		return nil
-	}
 
 	if len(cols) == 0 {
 		return pgerror.WithCandidateCode(
@@ -252,6 +248,11 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 			),
 			pgcode.InvalidFunctionDefinition,
 		)
+	}
+
+	// If return type is RECORD, any column types are valid.
+	if types.IsRecordType(expected) {
+		return nil
 	}
 
 	if len(cols) == 1 {
