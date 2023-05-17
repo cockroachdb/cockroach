@@ -61,11 +61,13 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 	st := cluster.MakeTestingClusterSettings()
 	enableNonBlockingRaftLogSync.Override(ctx, &st.SV, false)
 	s := LogStore{
-		RangeID:     rangeID,
-		Engine:      eng,
-		StateLoader: NewStateLoader(rangeID),
-		EntryCache:  ec,
-		Settings:    st,
+		ReadOnly: ReadOnly{
+			RangeID:     rangeID,
+			Engine:      eng,
+			StateLoader: NewStateLoader(rangeID),
+			EntryCache:  ec,
+		},
+		Settings: st,
 		Metrics: Metrics{
 			RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:     metric.HistogramModePrometheus,

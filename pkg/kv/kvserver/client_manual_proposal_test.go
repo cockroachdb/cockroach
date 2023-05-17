@@ -223,13 +223,15 @@ LIMIT
 		defer stopper.Stop(ctx)
 		swl.Start(ctx, stopper)
 		ls := logstore.LogStore{
-			RangeID:     rangeID,
-			Engine:      eng,
-			Sideload:    nil,
-			StateLoader: rsl,
-			SyncWaiter:  swl,
-			EntryCache:  raftentry.NewCache(1024),
-			Settings:    st,
+			ReadOnly: logstore.ReadOnly{
+				RangeID:     rangeID,
+				Engine:      eng,
+				Sideload:    nil,
+				StateLoader: rsl,
+				EntryCache:  raftentry.NewCache(1024),
+			},
+			SyncWaiter: swl,
+			Settings:   st,
 			Metrics: logstore.Metrics{
 				RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 					Mode:     metric.HistogramModePrometheus,

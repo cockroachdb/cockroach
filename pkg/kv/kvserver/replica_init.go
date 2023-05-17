@@ -146,6 +146,7 @@ func newUninitializedReplica(
 		store.limiters.BulkIOWriteRate,
 		store.TODOEngine(),
 	)
+	r.raftMu.bytesAccount.Init(context.Background(), store.cfg.RaftMonitor)
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
 	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)

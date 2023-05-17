@@ -30,6 +30,7 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/timeutil",

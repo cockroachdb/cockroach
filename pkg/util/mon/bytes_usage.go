@@ -833,7 +833,7 @@ func (b *BoundAccount) Init(ctx context.Context, mon *BytesMonitor) {
 // Reserve requests an allocation of some amount from the monitor just like Grow
 // but does not mark it as used immediately, instead keeping it in the local
 // reservation by use by future Grow() calls, and configuring the account to
-// consider that amount "earmarked" for this account, meaning that that Shrink()
+// consider that amount "earmarked" for this account, meaning that Shrink()
 // calls will not release it back to the parent monitor.
 func (b *BoundAccount) Reserve(ctx context.Context, x int64) error {
 	if b == nil {

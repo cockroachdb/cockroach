@@ -1138,6 +1138,7 @@ type StoreConfig struct {
 	// tests.
 	KVMemoryMonitor        *mon.BytesMonitor
 	RangefeedBudgetFactory *rangefeed.BudgetFactory
+	RaftMonitor            *mon.BytesMonitor
 
 	// SpanConfigsDisabled determines whether we're able to use the span configs
 	// infrastructure or not.

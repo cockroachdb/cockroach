@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3"
@@ -102,16 +103,22 @@ type Metrics struct {
 	RaftLogCommitLatency metric.IHistogram
 }
 
-// LogStore is a stub of a separated Raft log storage.
-type LogStore struct {
+// ReadOnly represents a read-only log storage.
+type ReadOnly struct {
 	RangeID     roachpb.RangeID
 	Engine      storage.Engine
 	Sideload    SideloadStorage
 	StateLoader StateLoader
-	SyncWaiter  *SyncWaiterLoop
 	EntryCache  *raftentry.Cache
-	Settings    *cluster.Settings
-	Metrics     Metrics
+}
+
+// LogStore is a stub of a separated Raft log storage.
+type LogStore struct {
+	ReadOnly
+
+	SyncWaiter *SyncWaiterLoop
+	Settings   *cluster.Settings
+	Metrics    Metrics
 }
 
 // SyncCallback is a callback that is notified when a raft log write has been
@@ -499,15 +506,8 @@ func LoadTerm(
 //
 // TODO(pavelkalinnikov): return all entries we've read, consider maxSize a
 // target size. Currently we may read one extra entry and drop it.
-func LoadEntries(
-	ctx context.Context,
-	rsl StateLoader,
-	eng storage.Engine,
-	rangeID roachpb.RangeID,
-	eCache *raftentry.Cache,
-	sideloaded SideloadStorage,
-	lo, hi kvpb.RaftIndex,
-	maxBytes uint64,
+func (ro ReadOnly) LoadEntries(
+	ctx context.Context, account *mon.BoundAccount, lo, hi kvpb.RaftIndex, maxBytes uint64,
 ) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -519,7 +519,21 @@ func LoadEntries(
 	}
 	ents := make([]raftpb.Entry, 0, n)
 
-	ents, cachedSize, hitIndex, exceededMaxBytes := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
+	ents, cachedSize, hitIndex, exceededMaxBytes := ro.EntryCache.Scan(
+		ents, ro.RangeID, lo, hi, maxBytes)
+
+	budgetFor := func(size int64) bool {
+		if account == nil {
+			return true
+		}
+		if err := account.Grow(ctx, size); err != nil {
+			return false
+		}
+		return true
+	}
+	// TODO(pavelkalinnikov): Do not bother if we exceed the limit here. The
+	// entries are already in memory.
+	budgetFor(int64(cachedSize))
 
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
@@ -546,7 +560,7 @@ func LoadEntries(
 		}
 		if typ.IsSideloaded() {
 			newEnt, err := MaybeInlineSideloadedRaftCommand(
-				ctx, rangeID, ent, sideloaded, eCache,
+				ctx, ro.RangeID, ent, ro.Sideload, ro.EntryCache,
 			)
 			if err != nil {
 				return err
@@ -556,8 +570,9 @@ func LoadEntries(
 			}
 		}
 
+		size := ent.Size()
 		// Note that we track the size of proposals with payloads inlined.
-		combinedSize += uint64(ent.Size())
+		combinedSize += uint64(size)
 		if combinedSize > maxBytes {
 			exceededMaxBytes = true
 			if len(ents) == 0 { // make sure to return at least one entry
@@ -566,16 +581,21 @@ func LoadEntries(
 			return iterutil.StopIteration()
 		}
 
+		if !budgetFor(int64(size)) {
+			exceededMaxBytes = true
+			return iterutil.StopIteration()
+		}
+
 		ents = append(ents, ent)
 		return nil
 	}
 
-	reader := eng.NewReadOnly(storage.StandardDurability)
+	reader := ro.Engine.NewReadOnly(storage.StandardDurability)
 	defer reader.Close()
-	if err := raftlog.Visit(reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
+	if err := raftlog.Visit(reader, ro.RangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, 0, 0, err
 	}
-	eCache.Add(rangeID, ents, false /* truncate */)
+	ro.EntryCache.Add(ro.RangeID, ents, false /* truncate */)
 
 	// Did the correct number of results come back? If so, we're all good.
 	if kvpb.RaftIndex(len(ents)) == hi-lo {
@@ -590,7 +610,7 @@ func LoadEntries(
 	// Did we get any results at all? Because something went wrong.
 	if len(ents) > 0 {
 		// Was the missing index after the last index?
-		lastIndex, err := rsl.LoadLastIndex(ctx, reader)
+		lastIndex, err := ro.StateLoader.LoadLastIndex(ctx, reader)
 		if err != nil {
 			return nil, 0, 0, err
 		}
@@ -603,7 +623,7 @@ func LoadEntries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
+	ts, err := ro.StateLoader.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
 		return nil, 0, 0, err
 	}

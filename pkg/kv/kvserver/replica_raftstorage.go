@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -90,8 +91,20 @@ func (r *replicaRaftStorage) TypedEntries(
 	if r.raftMu.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
-	ents, _, loadedSize, err := logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
+	// TODO(pavelkalinnikov): use r.raftMu.stateLoad instead, to align with other
+	// raftMu protected fields used here.
+	store := logstore.ReadOnly{
+		RangeID:     r.RangeID,
+		Engine:      r.store.TODOEngine(),
+		Sideload:    r.raftMu.sideloaded,
+		StateLoader: r.mu.stateLoader.StateLoader,
+		EntryCache:  r.store.raftEntryCache,
+	}
+	var account *mon.BoundAccount
+	if r.raftMu.bytesAccountUse {
+		account = &r.raftMu.bytesAccount
+	}
+	ents, _, loadedSize, err := store.LoadEntries(ctx, account, lo, hi, maxBytes)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
 	return ents, err
 }
