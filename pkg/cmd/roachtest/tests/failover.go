@@ -33,6 +33,29 @@ var rangeLeaseRenewalDuration = func() time.Duration {
 	return raftCfg.RangeLeaseRenewalDuration()
 }()
 
+// registerFailover registers a set of failover benchmarks. These tests
+// benchmark the maximum unavailability experienced by clients during various
+// node failures, and exports them for roachperf graphing. They do not make any
+// assertions on recovery time, similarly to other performance benchmarks.
+//
+// The tests run a kv workload against a cluster while subjecting individual
+// nodes to various failures. The workload uses dedicated SQL gateway nodes that
+// don't fail, relying on these for error handling and retries. The pMax latency
+// seen by any client is exported and graphed. Since recovery times are
+// probabilistic, each test performs multiple failures (typically 9) in order to
+// find the worst-case recovery time following a failure.
+//
+// Failures last for 60 seconds before the node is recovered. Thus, the maximum
+// measured unavailability is 60 seconds, which in practice means permanent
+// unavailability (for some or all clients).
+//
+// No attempt is made to find the distribution of recovery times (e.g. the
+// minimum and median), since this requires more sophisticated data recording
+// and analysis. Simply taking the median across all requests is not sufficient,
+// since requests are also executed against a healthy cluster between failures,
+// and against healthy replicas during failures, thus the vast majority of
+// requests are successful with nominal latencies. See also:
+// https://github.com/cockroachdb/cockroach/issues/103654
 func registerFailover(r registry.Registry) {
 	for _, leases := range []registry.LeaseType{registry.EpochLeases, registry.ExpirationLeases} {
 		var suffix string
@@ -439,9 +462,9 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	m.Wait()
 }
 
-// runFailoverLeaseLeader tests a partial network partition between leaseholders
-// and Raft leaders. These will prevent the leaseholder from making Raft
-// proposals, but it can still hold onto leases as long as it can heartbeat
+// runFailoverPartialLeaseLeader tests a partial network partition between
+// leaseholders and Raft leaders. This will prevent the leaseholder from making
+// Raft proposals, but it can still hold onto leases as long as it can heartbeat
 // liveness.
 //
 // Cluster topology:
@@ -697,23 +720,14 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 //
 //   - The workload consists of individual point reads and writes.
 //
-// Since the lease unavailability is probabilistic, depending e.g. on the time
-// since the last heartbeat and other variables, we run 9 failures and record
-// the pMax latency to find the upper bound on unavailability. We expect this
-// worst-case latency to be slightly larger than the lease interval (9s), to
-// account for lease acquisition and retry latencies. We do not assert this, but
-// instead export latency histograms for graphing.
-//
 // The cluster layout is as follows:
 //
 // n1-n3: System ranges and SQL gateways.
 // n4-n6: Workload ranges.
 // n7:    Workload runner.
 //
-// The test runs a kv50 workload with batch size 1, using 256 concurrent workers
-// directed at n1-n3 with a rate of 2048 reqs/s. n4-n6 fail and recover in
-// order, with 1 minute between each operation, for 3 cycles totaling 9
-// failures.
+// The test runs a kv50 workload via gateways on n1-n3, measuring the pMax
+// latency for graphing.
 func runFailoverNonSystem(
 	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
 ) {
@@ -815,21 +829,14 @@ func runFailoverNonSystem(
 //
 //   - The workload consists of individual point reads and writes.
 //
-// Since the range unavailability is probabilistic, depending e.g. on the time
-// since the last heartbeat and other variables, we run 9 failures and record
-// the number of expired leases on n1-n3 as well as the pMax latency to find the
-// upper bound on unavailability. We do not assert anything, but instead export
-// metrics for graphing.
-//
 // The cluster layout is as follows:
 //
 // n1-n3: All ranges, including liveness.
 // n4:    Liveness range leaseholder.
 // n5:    Workload runner.
 //
-// The test runs a kv50 workload with batch size 1, using 256 concurrent workers
-// directed at n1-n3 with a rate of 2048 reqs/s. n4 fails and recovers, with 1
-// minute between each operation, for 9 cycles.
+// The test runs a kv50 workload via gateways on n1-n3, measuring the pMax
+// latency for graphing.
 func runFailoverLiveness(
 	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
 ) {
@@ -935,21 +942,14 @@ func runFailoverLiveness(
 //
 //   - The workload consists of individual point reads and writes.
 //
-// Since the lease unavailability is probabilistic, depending e.g. on the time
-// since the last heartbeat and other variables, we run 9 failures and record
-// the pMax latency to find the upper bound on unavailability. Ideally, losing
-// the lease on these ranges should have no impact on the user traffic.
-//
 // The cluster layout is as follows:
 //
 // n1-n3: Workload ranges, liveness range, and SQL gateways.
 // n4-n6: System ranges excluding liveness.
 // n7:    Workload runner.
 //
-// The test runs a kv50 workload with batch size 1, using 256 concurrent workers
-// directed at n1-n3 with a rate of 2048 reqs/s. n4-n6 fail and recover in
-// order, with 1 minute between each operation, for 3 cycles totaling 9
-// failures.
+// The test runs a kv50 workload via gateways on n1-n3, measuring the pMax
+// latency for graphing.
 func runFailoverSystemNonLiveness(
 	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
 ) {
@@ -1441,6 +1441,20 @@ func waitForUpreplication(
 // relocateRanges relocates all ranges matching the given predicate from a set
 // of nodes to a different set of nodes. Moves are attempted sequentially from
 // each source onto each target, and errors are retried indefinitely.
+//
+// TODO(erikgrinaker): It would be really neat if the replicate queue could
+// deal with this for us. For that to happen, we need three things:
+//
+//  1. The replicate queue must do this ~immediately. It should take ~10 seconds
+//     for 1000 ranges, not 10 minutes.
+//
+//  2. We need to know when the replicate queue is done placing both replicas and
+//     leases in accordance with the zone configurations, so that we can wait for
+//     it. SpanConfigConformance should provide this, but current doesn't have a
+//     public API, and doesn't handle lease preferences.
+//
+//  3. The replicate queue must guarantee that replicas and leases won't escape
+//     their constraints after the initial setup. We see them do so currently.
 func relocateRanges(
 	t test.Test, ctx context.Context, conn *gosql.DB, predicate string, from, to []int,
 ) {
