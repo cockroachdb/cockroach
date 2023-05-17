@@ -38,7 +38,15 @@ const (
 	// TagUsage indicates where a certain resource is used. "roachtest" is used
 	// as the key for roachtest created resources.
 	TagUsage = "usage"
+	// TagArch is the CPU architecture tag const.
+	TagArch = "arch"
+
+	ArchARM64 = CPUArch("arm64")
+	ArchAMD64 = CPUArch("amd64")
+	ArchFIPS  = CPUArch("fips")
 )
+
+type CPUArch string
 
 // GetDefaultLabelMap returns a label map for a common set of labels.
 func GetDefaultLabelMap(opts CreateOpts) map[string]string {
@@ -46,6 +54,7 @@ func GetDefaultLabelMap(opts CreateOpts) map[string]string {
 		TagCluster:   opts.ClusterName,
 		TagLifetime:  opts.Lifetime.String(),
 		TagRoachprod: "true",
+		TagArch:      opts.Arch,
 	}
 }
 
@@ -230,7 +239,7 @@ type CreateOpts struct {
 	CustomLabels map[string]string
 
 	GeoDistributed bool
-	EnableFIPS     bool
+	Arch           string
 	VMProviders    []string
 	SSDOpts        struct {
 		UseLocalSSD bool
@@ -251,7 +260,8 @@ func DefaultCreateOpts() CreateOpts {
 		GeoDistributed: false,
 		VMProviders:    []string{},
 		OsVolumeSize:   10,
-		CustomLabels:   map[string]string{"roachtest": "true"},
+		// N.B. When roachprod is used via CLI, this will be overridden by {"roachprod":"true"}.
+		CustomLabels: map[string]string{"roachtest": "true"},
 	}
 	defaultCreateOpts.SSDOpts.UseLocalSSD = true
 	defaultCreateOpts.SSDOpts.NoExt4Barrier = true
