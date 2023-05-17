@@ -338,7 +338,7 @@ func registerRestore(r registry.Registry) {
 			tags:    registry.Tags("weekly", "aws-weekly"),
 		},
 		{
-			// The weekly 32TB, 400 incremental layer Restore test.
+			// The weekly 32TB, 400 incremental layer Restore test on AWS.
 			//
 			// NB: Prior to 23.1, restore would OOM on backups that had many
 			// incremental layers and many import spans. This test disables span
@@ -354,6 +354,21 @@ func registerRestore(r registry.Registry) {
 			}),
 			timeout: 30 * time.Hour,
 			tags:    registry.Tags("weekly", "aws-weekly"),
+			setUpStmts: []string{
+				`SET CLUSTER SETTING backup.restore_span.target_size = '0'`,
+			},
+		},
+		{
+			// The weekly 32TB, 400 incremental layer Restore test on GCP.
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000}),
+			backup: makeBackupSpecs(backupSpecs{
+				version:          "v22.2.4",
+				workload:         tpceRestore{customers: 2000000},
+				backupProperties: "inc-count=400",
+				cloud:            spec.GCE,
+			}),
+			timeout: 30 * time.Hour,
+			tags:    registry.Tags("weekly"),
 			setUpStmts: []string{
 				`SET CLUSTER SETTING backup.restore_span.target_size = '0'`,
 			},
