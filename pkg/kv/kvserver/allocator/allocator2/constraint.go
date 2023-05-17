@@ -245,17 +245,28 @@ func makeNormalizedSpanConfig(
 ) (*normalizedSpanConfig, error) {
 	var normalizedConstraints, normalizedVoterConstraints []internedConstraintsConjunction
 	var err error
-	if conf.Constraints != nil {
-		normalizedConstraints, err = normalizeConstraints(conf.Constraints, conf.NumReplicas, interner)
-		if err != nil {
-			return nil, err
-		}
-	}
 	if conf.VoterConstraints != nil {
 		normalizedVoterConstraints, err = normalizeConstraints(
 			conf.VoterConstraints, conf.NumVoters, interner)
 		if err != nil {
 			return nil, err
+		}
+	}
+	if conf.Constraints != nil {
+		normalizedConstraints, err = normalizeConstraints(conf.Constraints, conf.NumReplicas, interner)
+		if err != nil {
+			return nil, err
+		}
+	} else if (conf.NumReplicas-conf.NumVoters > 0) || len(normalizedVoterConstraints) == 0 {
+		// - No constraints, but have some non-voters.
+		// - No voter constraints either.
+		// Need an empty constraints conjunction so that non-voters or voters have
+		// some constraint they can satisfy.
+		normalizedConstraints = []internedConstraintsConjunction{
+			{
+				numReplicas: conf.NumReplicas,
+				constraints: nil,
+			},
 		}
 	}
 	var lps []internedLeasePreference

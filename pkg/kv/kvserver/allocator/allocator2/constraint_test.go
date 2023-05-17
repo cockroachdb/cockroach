@@ -106,6 +106,9 @@ func TestNormalizedSpanConfig(t *testing.T) {
 				conf.NumVoters = int32(numVoters)
 				for _, line := range strings.Split(d.Input, "\n") {
 					parts := strings.Fields(line)
+					if len(parts) == 0 {
+						continue
+					}
 					switch parts[0] {
 					case "constraint":
 						cc := parseConstraintsConj(parts[1:])
