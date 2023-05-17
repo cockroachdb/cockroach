@@ -14,6 +14,7 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"runtime/pprof"
 	"sync/atomic"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -692,7 +694,17 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	// it may not be and shouldQueue will be passed a nil realRepl. These tests
 	// know what they're getting into so that's fine.
 	realRepl, _ := repl.(*Replica)
-	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, confReader)
+
+	labels := pprof.Labels("queue name", bq.name)
+	var should bool
+	var priority float64
+	pprof.Do(ctx, labels, func(ctx context.Context) {
+		if fn := bq.store.TestingKnobs().MaybeAddInterceptor; fn != nil {
+			fn(pprof.Label(ctx, "queue name"))
+		}
+		should, priority = bq.impl.shouldQueue(ctx, now, realRepl, confReader)
+	})
+
 	if !should {
 		return
 	}
@@ -824,6 +836,9 @@ func (bq *baseQueue) MaybeRemove(rangeID roachpb.RangeID) {
 // stopper signals exit.
 func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 	ctx := bq.AnnotateCtx(context.Background())
+	ctx, undo := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+	defer undo()
+
 	done := func() {
 		bq.mu.Lock()
 		bq.mu.stopped = true
