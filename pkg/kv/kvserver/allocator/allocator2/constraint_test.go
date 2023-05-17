@@ -12,6 +12,7 @@ package allocator2
 
 import (
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,7 +23,6 @@ import (
 )
 
 // TODO: tests for
-// - storeIDPostingList
 // - localityTierInterner
 // - localityTiers.diversityScore
 // - rangeAnalyzedConstraints initialization: pool and release; stateForInit, finishInit
@@ -134,6 +134,102 @@ func TestNormalizedSpanConfig(t *testing.T) {
 					printSpanConf(&b, nConf.uninternedConfig())
 				}
 				return b.String()
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
+
+func TestStoreIDPostingList(t *testing.T) {
+	pls := map[string]storeIDPostingList{}
+	printPL := func(b *strings.Builder, pl storeIDPostingList) {
+		for i := range pl {
+			prefix := ""
+			if i > 0 {
+				prefix = ", "
+			}
+			fmt.Fprintf(b, "%s%d", prefix, pl[i])
+		}
+	}
+	forceAllocation := rand.Intn(2) == 1
+
+	datadriven.RunTest(t, "testdata/posting_list",
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "pl":
+				var name string
+				d.ScanArgs(t, "name", &name)
+				var storeIDs []roachpb.StoreID
+				for _, line := range strings.Split(d.Input, "\n") {
+					parts := strings.Fields(line)
+					for _, part := range parts {
+						storeID, err := strconv.Atoi(part)
+						require.NoError(t, err)
+						storeIDs = append(storeIDs, roachpb.StoreID(storeID))
+					}
+				}
+				pl := makeStoreIDPostingList(storeIDs)
+				if forceAllocation {
+					pl = pl[:len(pl):len(pl)]
+				}
+				pls[name] = pl
+				var b strings.Builder
+				printPL(&b, pl)
+				return b.String()
+
+			case "intersect", "union", "is-equal":
+				var x, y string
+				d.ScanArgs(t, "x", &x)
+				d.ScanArgs(t, "y", &y)
+				plX := pls[x]
+				if d.Cmd == "is-equal" {
+					return fmt.Sprintf("%t", plX.isEqual(pls[y]))
+				} else {
+					if d.Cmd == "union" {
+						plX.union(pls[y])
+					} else if d.Cmd == "intersect" {
+						plX.intersect(pls[y])
+					}
+					if forceAllocation {
+						plX = plX[:len(plX):len(plX)]
+					}
+					pls[x] = plX
+					var b strings.Builder
+					printPL(&b, plX)
+					return b.String()
+				}
+
+			case "insert", "contains", "remove":
+				var name string
+				d.ScanArgs(t, "name", &name)
+				pl := pls[name]
+				var storeID int
+				d.ScanArgs(t, "store-id", &storeID)
+				if d.Cmd == "contains" {
+					return fmt.Sprintf("%t", pl.contains(roachpb.StoreID(storeID)))
+				} else {
+					var rv bool
+					if d.Cmd == "insert" {
+						rv = pl.insert(roachpb.StoreID(storeID))
+					} else {
+						rv = pl.remove(roachpb.StoreID(storeID))
+					}
+					if forceAllocation {
+						pl = pl[:len(pl):len(pl)]
+					}
+					pls[name] = pl
+					var b strings.Builder
+					fmt.Fprintf(&b, "%t: ", rv)
+					printPL(&b, pl)
+					return b.String()
+				}
+
+			case "hash":
+				var name string
+				d.ScanArgs(t, "name", &name)
+				pl := pls[name]
+				return fmt.Sprintf("%d", pl.hash())
 
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
