@@ -1869,6 +1869,31 @@ func (l *lockState) acquireLock(
 		if txn.ID != beforeTxn.ID {
 			return errors.AssertionFailedf("existing lock cannot be acquired by different transaction")
 		}
+		if durability == lock.Unreplicated &&
+			l.holder.holder[lock.Unreplicated].txn != nil &&
+			l.holder.holder[lock.Unreplicated].txn.Epoch > txn.Epoch {
+			// If the lock is being re-acquired as an unreplicated lock, and the
+			// request trying to do so belongs to a prior epoch, we reject the
+			// request. This parallels the logic mvccPutInternal has for intents.
+			return errors.Errorf(
+				"locking request with epoch %d came after lock(unreplicated) had already been acquired at epoch %d in txn %s",
+				txn.Epoch, l.holder.holder[durability].txn.Epoch, txn.ID,
+			)
+		}
+		// TODO(arul): Once we stop storing sequence numbers/transaction protos
+		// associated with replicated locks, the following logic can be deleted.
+		if durability == lock.Replicated &&
+			l.holder.holder[lock.Replicated].txn != nil &&
+			l.holder.holder[lock.Replicated].txn.Epoch > txn.Epoch {
+			// If we're dealing with a replicated lock (intent), and the transaction
+			// acquiring this lock belongs to a prior epoch, we expect mvccPutInternal
+			// to return an error. As such, the request should never call into
+			// AcquireLock and reach this point.
+			return errors.AssertionFailedf(
+				"locking request with epoch %d came after lock(replicated) had already been acquired at epoch %d in txn %s",
+				txn.Epoch, l.holder.holder[durability].txn.Epoch, txn.ID,
+			)
+		}
 		seqs := l.holder.holder[durability].seqs
 		if l.holder.holder[durability].txn != nil && l.holder.holder[durability].txn.Epoch < txn.Epoch {
 			// Clear the sequences for the older epoch.
