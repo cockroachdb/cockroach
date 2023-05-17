@@ -3,7 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "liveness",
-    srcs = ["liveness.go"],
+    srcs = [
+        "liveness.go",
+        "liveness_storage.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness",
     visibility = ["//visibility:public"],
     deps = [
