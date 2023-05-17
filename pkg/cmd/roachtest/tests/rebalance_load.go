@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"runtime"
 	"strings"
 	"time"
 
@@ -193,9 +192,6 @@ func registerRebalanceLoad(r registry.Registry) {
 			Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
 			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.IsLocal() && runtime.GOARCH == "arm64" {
-					t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
-				}
 				if c.IsLocal() {
 					concurrency = 32
 					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)

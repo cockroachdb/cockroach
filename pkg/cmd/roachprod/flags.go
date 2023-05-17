@@ -107,8 +107,9 @@ func initFlags() {
 			vm.AllProviderNames()))
 	createCmd.Flags().BoolVar(&createVMOpts.GeoDistributed,
 		"geo", false, "Create geo-distributed cluster")
-	createCmd.Flags().BoolVar(&createVMOpts.EnableFIPS,
-		"fips", false, "Enable FIPS mode (uses custom AMI)")
+	createCmd.Flags().StringVar(&createVMOpts.Arch, "arch", "",
+		"architecture override for VM [amd64, arm64, fips]; N.B. fips implies amd64 with openssl")
+
 	// N.B. We set "usage=roachprod" as the default, custom label for billing tracking.
 	createCmd.Flags().StringToStringVar(&createVMOpts.CustomLabels,
 		"label", map[string]string{"usage": "roachprod"},

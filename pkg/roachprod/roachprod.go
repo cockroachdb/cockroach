@@ -538,7 +538,7 @@ func Stage(
 		dir = stageDir
 	}
 
-	return install.StageApplication(ctx, l, c, applicationName, version, os, arch, dir)
+	return install.StageApplication(ctx, l, c, applicationName, version, os, vm.CPUArch(arch), dir)
 }
 
 // Reset resets all VMs in a cluster.
@@ -1413,7 +1413,7 @@ func StageURL(
 	if stageArch != "" {
 		arch = stageArch
 	}
-	urls, err := install.URLsForApplication(applicationName, version, os, arch)
+	urls, err := install.URLsForApplication(applicationName, version, os, vm.CPUArch(arch))
 	if err != nil {
 		return nil, err
 	}

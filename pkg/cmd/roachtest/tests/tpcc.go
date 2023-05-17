@@ -17,7 +17,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
@@ -317,6 +317,7 @@ var tpccSupportedWarehouses = []struct {
 	// TODO(tbg): this number is copied from gce-n4cpu16. The real number should be a
 	// little higher, find out what it is.
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1300},
+	{hardware: "aws-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 2100},
 	// Ditto.
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
 }
@@ -357,9 +358,6 @@ func maxSupportedTPCCWarehouses(
 func runTPCCMixedHeadroom(
 	ctx context.Context, t test.Test, c cluster.Cluster, cloud string, versionsToUpgrade int,
 ) {
-	if c.IsLocal() && runtime.GOARCH == "arm64" {
-		t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
-	}
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 
@@ -525,13 +523,17 @@ func registerTPCC(r registry.Registry) {
 			runTPCCMixedHeadroom(ctx, t, c, cloud, 1)
 		},
 	})
+
+	// N.B. Multiple upgrades may require a released version < 22.2.x, which wasn't built for ARM64.
+	mixedHeadroomMultiUpgradesSpec := r.MakeClusterSpec(5, spec.CPU(16), spec.RandomlyUseZfs(), spec.Arch(vm.ArchAMD64))
+
 	r.Add(registry.TestSpec{
 		// run the same mixed-headroom test, but going back two versions
-		Name:              "tpcc/mixed-headroom/multiple-upgrades/" + mixedHeadroomSpec.String(),
+		Name:              "tpcc/mixed-headroom/multiple-upgrades/" + mixedHeadroomMultiUpgradesSpec.String(),
 		Timeout:           5 * time.Hour,
 		Owner:             registry.OwnerTestEng,
 		Tags:              registry.Tags(`default`),
-		Cluster:           mixedHeadroomSpec,
+		Cluster:           mixedHeadroomMultiUpgradesSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCMixedHeadroom(ctx, t, c, cloud, 2)
