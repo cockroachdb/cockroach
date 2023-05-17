@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -102,34 +103,39 @@ func (c MembershipStatus) String() string {
 //	Active           => Decommissioning
 //	Decommissioning  => Decommissioned
 //
-// See diagram above the Membership type for more details.
-func ValidateTransition(old, new Liveness) error {
-	if old.Membership == new.Membership {
-		// No-op.
-		return nil
+// This returns an error if the transition is invalid, and false if the
+// transition is unnecessary (since it would be a no-op).
+func ValidateTransition(old Liveness, newStatus MembershipStatus) (bool, error) {
+	if (old == Liveness{}) {
+		return false, errors.AssertionFailedf("invalid old liveness record; found to be empty")
 	}
 
-	if old.Membership.Decommissioned() && new.Membership.Decommissioning() {
+	if old.Membership == newStatus {
 		// No-op.
-		return nil
+		return false, nil
 	}
 
-	if new.Membership.Active() && !old.Membership.Decommissioning() {
+	if old.Membership.Decommissioned() && newStatus.Decommissioning() {
+		// No-op as it would just move directly back to decommissioned.
+		return false, nil
+	}
+
+	if newStatus.Active() && !old.Membership.Decommissioning() {
 		err := fmt.Sprintf("can only recommission a decommissioning node; n%d found to be %s",
-			new.NodeID, old.Membership.String())
-		return status.Error(codes.FailedPrecondition, err)
+			old.NodeID, old.Membership.String())
+		return false, status.Error(codes.FailedPrecondition, err)
 	}
 
 	// We don't assert on the new membership being "decommissioning" as all
 	// previous states are valid (again, consider no-ops).
 
-	if new.Membership.Decommissioned() && !old.Membership.Decommissioning() {
+	if newStatus.Decommissioned() && !old.Membership.Decommissioning() {
 		err := fmt.Sprintf("can only fully decommission an already decommissioning node; n%d found to be %s",
-			new.NodeID, old.Membership.String())
-		return status.Error(codes.FailedPrecondition, err)
+			old.NodeID, old.Membership.String())
+		return false, status.Error(codes.FailedPrecondition, err)
 	}
 
-	return nil
+	return true, nil
 }
 
 // IsLiveMapEntry encapsulates data about current liveness for a
