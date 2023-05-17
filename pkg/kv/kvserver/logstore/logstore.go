@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sync"
 	"time"
 
@@ -530,6 +531,7 @@ func LoadEntries(
 	sideloaded SideloadStorage,
 	lo, hi kvpb.RaftIndex,
 	maxBytes uint64,
+	account *BytesAccount,
 ) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -540,16 +542,28 @@ func LoadEntries(
 		n = 100
 	}
 	ents := make([]raftpb.Entry, 0, n)
+	ents, _, hitIndex, _ := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
 
-	ents, cachedSize, hitIndex, exceededMaxBytes := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
-
-	// Return results if the correct number of results came back or if
-	// we ran into the max bytes limit.
-	if kvpb.RaftIndex(len(ents)) == hi-lo || exceededMaxBytes {
+	// TODO(pav-kv): pass the sizeHelper to eCache.Scan above, to avoid scanning
+	// the same entries twice, and computing their sizes.
+	sh := sizeHelper{maxBytes: maxBytes, account: account}
+	for i, entry := range ents {
+		if sh.done || !sh.add(uint64(entry.Size())) {
+			// Remove the remaining entries, and dereference the memory they hold.
+			ents = slices.Delete(ents, i, len(ents))
+			break
+		}
+	}
+	// NB: if we couldn't get quota for all cached entries, return only a prefix
+	// for which we got it. Even though all the cached entries are already in
+	// memory, returning all of them would increase their lifetime, incur size
+	// amplification when processing them, and risk reaching out-of-memory state.
+	cachedSize := sh.bytes
+	// Return results if the correct number of results came back, or we ran into
+	// the max bytes limit, or reached the memory budget limit.
+	if len(ents) == int(hi-lo) || sh.done {
 		return ents, cachedSize, 0, nil
 	}
-
-	combinedSize := cachedSize // size tracks total size of ents.
 
 	// Scan over the log to find the requested entries in the range [lo, hi),
 	// stopping once we have enough.
@@ -578,17 +592,12 @@ func LoadEntries(
 			}
 		}
 
-		// Note that we track the size of proposals with payloads inlined.
-		combinedSize += uint64(ent.Size())
-		if combinedSize > maxBytes {
-			exceededMaxBytes = true
-			if len(ents) == 0 { // make sure to return at least one entry
-				ents = append(ents, ent)
-			}
+		if sh.add(uint64(ent.Size())) {
+			ents = append(ents, ent)
+		}
+		if sh.done {
 			return iterutil.StopIteration()
 		}
-
-		ents = append(ents, ent)
 		return nil
 	}
 
@@ -600,13 +609,9 @@ func LoadEntries(
 	eCache.Add(rangeID, ents, false /* truncate */)
 
 	// Did the correct number of results come back? If so, we're all good.
-	if kvpb.RaftIndex(len(ents)) == hi-lo {
-		return ents, cachedSize, combinedSize - cachedSize, nil
-	}
-
-	// Did we hit the size limit? If so, return what we have.
-	if exceededMaxBytes {
-		return ents, cachedSize, combinedSize - cachedSize, nil
+	// Did we hit the size limits? If so, return what we have.
+	if len(ents) == int(hi-lo) || sh.done {
+		return ents, cachedSize, sh.bytes - cachedSize, nil
 	}
 
 	// Did we get any results at all? Because something went wrong.

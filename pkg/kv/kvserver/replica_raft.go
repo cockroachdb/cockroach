@@ -750,6 +750,19 @@ func (r *Replica) handleRaftReady(
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 }
 
+func (r *Replica) attachRaftEntriesMonitorRaftMuLocked() {
+	// TODO(pav-kv): add a per-store metric.
+	r.raftMu.bytesAccount = r.store.cfg.RaftEntriesMonitor.NewAccount(nil)
+}
+
+func (r *Replica) detachRaftEntriesMonitorRaftMuLocked() {
+	// Return all the used bytes back to the limiter.
+	r.raftMu.bytesAccount.Clear()
+	// De-initialize the account so that log storage Entries() calls don't track
+	// the entries anymore.
+	r.raftMu.bytesAccount = logstore.BytesAccount{}
+}
+
 // handleRaftReadyRaftMuLocked is the same as handleRaftReady but requires that
 // the replica's raftMu be held.
 //
@@ -799,7 +812,20 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return false, err
 		}
 		if hasReady = raftGroup.HasReady(); hasReady {
+			// Since we are holding raftMu, only this Ready() call will use
+			// raftMu.bytesAccount. It tracks memory usage that this Ready incurs.
+			r.attachRaftEntriesMonitorRaftMuLocked()
+			// TODO(pav-kv): currently, Ready() only accounts for entry bytes loaded
+			// from log storage, and ignores the in-memory unstable entries. Pass a
+			// flow control struct down the stack, and do a more complete accounting
+			// in raft. This will also eliminate the "side channel" plumbing hack with
+			// this bytesAccount.
 			syncRd := raftGroup.Ready()
+			// We apply committed entries during this handleRaftReady, so it is ok to
+			// release the corresponding memory tokens at the end of this func. Next
+			// time we enter this function, the account will be empty again.
+			defer r.detachRaftEntriesMonitorRaftMuLocked()
+
 			logRaftReady(ctx, syncRd)
 			asyncRd := makeAsyncReady(syncRd)
 			softState = asyncRd.SoftState
