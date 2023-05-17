@@ -90,19 +90,21 @@ func TestWatchTenants(t *testing.T) {
 	// it before.
 	tenantID := roachpb.MustMakeTenantID(20)
 	baseTenant := &tenant.Tenant{
-		Version:          "010",
-		TenantID:         tenantID.ToUint64(),
-		ClusterName:      "my-tenant",
-		PrivateEndpoints: []string{"a"},
+		Version:           "010",
+		TenantID:          tenantID.ToUint64(),
+		ClusterName:       "my-tenant",
+		AllowedCIDRRanges: []string{"127.0.0.1/16"},
+		PrivateEndpoints:  []string{"a"},
 	}
 	tds.CreateTenant(tenantID, baseTenant)
 	resp := <-tenantWatcher
 	require.Equal(t, tenant.EVENT_ADDED, resp.Type)
 	require.Equal(t, &tenant.Tenant{
-		Version:          "010",
-		TenantID:         20,
-		ClusterName:      "my-tenant",
-		PrivateEndpoints: []string{"a"},
+		Version:           "010",
+		TenantID:          20,
+		ClusterName:       "my-tenant",
+		AllowedCIDRRanges: []string{"127.0.0.1/16"},
+		PrivateEndpoints:  []string{"a"},
 	}, resp.Tenant)
 	_, err := dir.TryLookupTenantPods(ctx, tenantID)
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 20 not in directory cache")
@@ -111,18 +113,20 @@ func TestWatchTenants(t *testing.T) {
 	tenantObj, err := dir.LookupTenant(ctx, tenantID)
 	require.NoError(t, err)
 	require.Equal(t, &tenant.Tenant{
-		Version:          "010",
-		TenantID:         20,
-		ClusterName:      "my-tenant",
-		PrivateEndpoints: []string{"a"},
+		Version:           "010",
+		TenantID:          20,
+		ClusterName:       "my-tenant",
+		AllowedCIDRRanges: []string{"127.0.0.1/16"},
+		PrivateEndpoints:  []string{"a"},
 	}, tenantObj)
 
 	// Update the tenant object.
 	updatedTenant := &tenant.Tenant{
-		Version:          "011",
-		TenantID:         20,
-		ClusterName:      "foo-bar",
-		PrivateEndpoints: []string{"a", "b"},
+		Version:           "011",
+		TenantID:          20,
+		ClusterName:       "foo-bar",
+		AllowedCIDRRanges: []string{"127.0.0.1/16", "0.0.0.0/0"},
+		PrivateEndpoints:  []string{"a", "b"},
 	}
 	tds.UpdateTenant(tenantID, updatedTenant)
 	resp = <-tenantWatcher
@@ -133,10 +137,11 @@ func TestWatchTenants(t *testing.T) {
 	tenantObj, err = dir.LookupTenant(ctx, tenantID)
 	require.NoError(t, err)
 	require.Equal(t, &tenant.Tenant{
-		Version:          "011",
-		TenantID:         20,
-		ClusterName:      "foo-bar",
-		PrivateEndpoints: []string{"a", "b"},
+		Version:           "011",
+		TenantID:          20,
+		ClusterName:       "foo-bar",
+		AllowedCIDRRanges: []string{"127.0.0.1/16", "0.0.0.0/0"},
+		PrivateEndpoints:  []string{"a", "b"},
 	}, tenantObj)
 
 	// Update the tenant object with an old version.
@@ -154,10 +159,11 @@ func TestWatchTenants(t *testing.T) {
 	tenantObj, err = dir.LookupTenant(ctx, tenantID)
 	require.NoError(t, err)
 	require.Equal(t, &tenant.Tenant{
-		Version:          "011",
-		TenantID:         20,
-		ClusterName:      "foo-bar",
-		PrivateEndpoints: []string{"a", "b"},
+		Version:           "011",
+		TenantID:          20,
+		ClusterName:       "foo-bar",
+		AllowedCIDRRanges: []string{"127.0.0.1/16", "0.0.0.0/0"},
+		PrivateEndpoints:  []string{"a", "b"},
 	}, tenantObj)
 
 	// Finally, delete the tenant.
@@ -470,7 +476,11 @@ func TestDeleteTenant(t *testing.T) {
 	// LookupTenant should work.
 	ten, err := dir.LookupTenant(ctx, tenantID)
 	require.NoError(t, err)
-	require.Equal(t, &tenant.Tenant{TenantID: 50, ClusterName: "tenant-cluster"}, ten)
+	require.Equal(t, &tenant.Tenant{
+		TenantID:          50,
+		ClusterName:       "tenant-cluster",
+		AllowedCIDRRanges: []string{"0.0.0.0/0"},
+	}, ten)
 
 	// Report failure even though tenant is healthy - refresh should do nothing.
 	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
