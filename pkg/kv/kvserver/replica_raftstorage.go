@@ -115,7 +115,7 @@ func (r *replicaRaftStorage) TypedEntries(
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
 	ents, _, loadedSize, err := logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
+		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes, &r.raftMu.bytesAccount)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
 	return ents, err
 }

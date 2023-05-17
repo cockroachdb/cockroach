@@ -324,6 +324,11 @@ type Replica struct {
 		stateMachine replicaStateMachine
 		// decoder is used to decode committed raft entries.
 		decoder replicaDecoder
+
+		// bytesAccount accounts bytes used by various Raft components, like entries
+		// to be applied. Currently, it only tracks bytes used by committed entries
+		// being applied to the state machine.
+		bytesAccount logstore.BytesAccount
 	}
 
 	// localMsgs contains a collection of raftpb.Message that target the local
