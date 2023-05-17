@@ -405,12 +405,15 @@ var varGen = map[string]sessionVar{
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
 			if !ok {
 				switch strings.ToUpper(s) {
-				case `READ UNCOMMITTED`, `SNAPSHOT`, `REPEATABLE READ`, `DEFAULT`:
+				case `READ UNCOMMITTED`, `REPEATABLE READ`, `DEFAULT`:
 					// All other levels map to serializable.
 					level = tree.SerializableIsolation
 				default:
-					return newVarValueError(`default_transaction_isolation`, s, "serializable", "read committed")
+					return newVarValueError(`default_transaction_isolation`, s, "serializable", "snapshot", "read committed")
 				}
+			}
+			if level == tree.SnapshotIsolation && !allowSnapshotIsolation.Get(&m.settings.SV) {
+				level = tree.SerializableIsolation
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
 			return nil
@@ -1490,7 +1493,7 @@ var varGen = map[string]sessionVar{
 		RuntimeSet: func(ctx context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
 			if !ok {
-				return newVarValueError(`transaction_isolation`, s, "serializable", "read committed")
+				return newVarValueError(`transaction_isolation`, s, "serializable", "snapshot", "read committed")
 			}
 			modes := tree.TransactionModes{
 				Isolation: level,
