@@ -83,7 +83,7 @@ ALTER DATABASE d OWNER TO testuser
 query TT
 SELECT datname, datdba FROM pg_database WHERE datname='d'
 ----
-d  2265019399
+d  2264919399
 
 # Switch to database d so it can reassign from current db
 statement ok
@@ -96,7 +96,7 @@ REASSIGN OWNED BY testuser TO testuser2
 query TT
 SELECT datname, datdba FROM pg_database WHERE datname='d'
 ----
-d  3957604279
+d  3957504279
 
 user testuser2
 
@@ -132,8 +132,8 @@ CREATE SCHEMA s2
 query TT
 SELECT nspname, nspowner FROM pg_namespace WHERE nspname='s1' OR nspname='s2'
 ----
-s1  2265019399
-s2  1546606610
+s1  2264919399
+s2  1546506610
 
 # root / superusers can always perform REASSIGN OWNED BY.
 user root
@@ -147,8 +147,8 @@ user testuser2
 query TT
 SELECT nspname, nspowner FROM pg_namespace WHERE nspname='s1' OR nspname='s2'
 ----
-s1  3957604279
-s2  3957604279
+s1  3957504279
+s2  3957504279
 
 # Ensure testuser2 is new owner by dropping.
 statement ok
@@ -196,7 +196,7 @@ ALTER TYPE s.typ OWNER to testuser
 query TT
 SELECT nspname, nspowner FROM pg_namespace WHERE nspname='s'
 ----
-s  2265019399
+s  2264919399
 
 query TT
 SELECT tablename, tableowner FROM pg_tables WHERE tablename='t'
@@ -206,8 +206,8 @@ t  testuser
 query TT
 SELECT typname, typowner FROM pg_type WHERE typname='_typ' OR typname='typ'
 ----
-typ   2265019399
-_typ  2265019399
+typ   2264919399
+_typ  2264919399
 
 statement ok
 REASSIGN OWNED BY testuser TO testuser2
@@ -216,7 +216,7 @@ REASSIGN OWNED BY testuser TO testuser2
 query TT
 SELECT nspname, nspowner FROM pg_namespace WHERE nspname='s'
 ----
-s  3957604279
+s  3957504279
 
 query TT
 SELECT tablename, tableowner FROM pg_tables WHERE tablename='t'
@@ -226,8 +226,8 @@ t  testuser2
 query TT
 SELECT typname, typowner FROM pg_type WHERE typname='_typ' OR typname='typ'
 ----
-typ   3957604279
-_typ  3957604279
+typ   3957504279
+_typ  3957504279
 
 # Ensure testuser2 is owner by dropping as member of testuser2.
 user testuser2
@@ -272,8 +272,8 @@ ALTER TABLE d.t2 OWNER TO testuser
 query TT
 SELECT datname, datdba FROM pg_database WHERE datname='d' OR datname='test'
 ----
-d     2265019399
-test  1546606610
+d     2264919399
+test  1546506610
 
 query TT
 SELECT tablename, tableowner FROM pg_tables WHERE tablename='t1'
@@ -303,8 +303,8 @@ REASSIGN OWNED BY testuser TO testuser2
 query TT
 SELECT datname, datdba FROM pg_database WHERE datname='d' OR datname='test'
 ----
-d     2265019399
-test  1546606610
+d     2264919399
+test  1546506610
 
 query TT
 SELECT tablename, tableowner FROM pg_tables WHERE tablename='t1'
