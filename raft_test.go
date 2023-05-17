@@ -2608,7 +2608,12 @@ func TestLeaderAppResp(t *testing.T) {
 		{3, true, 0, 3, 0, 0, 0},  // stale resp; no replies
 		{2, true, 0, 2, 1, 1, 0},  // denied resp; leader does not commit; decrease next and send probing msg
 		{2, false, 2, 4, 2, 2, 2}, // accept resp; leader commits; broadcast with commit index
-		{0, false, 0, 3, 0, 0, 0}, // ignore heartbeat replies
+		// Follower is StateProbing at 0, it sends MsgAppResp for 0 (which
+		// matches the pr.Match) so it is moved to StateReplicate and as many
+		// entries as possible are sent to it (1, 2, and 3). Correspondingly the
+		// Next is then 4 (an Entry at 4 does not exist, indicating the follower
+		// will be up to date should it process the emitted MsgApp).
+		{0, false, 0, 4, 1, 0, 0},
 	}
 
 	for _, tt := range tests {
