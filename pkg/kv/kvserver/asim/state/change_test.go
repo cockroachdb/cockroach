@@ -15,19 +15,30 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
 
 const testingDelay = 5 * time.Second
 
-func testMakeReplicaChange(add, remove StoreID, rangeKey Key) func(s State) Change {
+func testRC(storeID StoreID, changeType roachpb.ReplicaChangeType) kvpb.ReplicationChange {
+	return kvpb.ReplicationChange{
+		ChangeType: changeType,
+		Target: roachpb.ReplicationTarget{
+			NodeID:  roachpb.NodeID(storeID),
+			StoreID: roachpb.StoreID(storeID),
+		},
+	}
+}
+
+func testMakeReplicaChange(rangeKey Key, chgs ...kvpb.ReplicationChange) func(s State) Change {
 	return func(s State) Change {
 		rng := s.RangeFor(rangeKey)
 		change := ReplicaChange{}
 		change.Wait = testingDelay
-		change.Add = add
-		change.Remove = remove
+		change.Changes = chgs
 		change.RangeID = rng.RangeID()
 		change.Author = 1
 		return &change
@@ -56,65 +67,64 @@ func testMakeLeaseTransferChange(rangeKey Key, target StoreID) func(s State) Cha
 	}
 }
 
-func testMakeReplicaState(replCounts map[StoreID]int) (State, Range) {
+func testMakeRangeState(stores int, voters, nonVoters []StoreID) State {
 	settings := config.DefaultSimulationSettings()
-	numReplicas := 0
-	for _, count := range replCounts {
-		numReplicas += count
-	}
-	state := NewStateWithReplCounts(replCounts, numReplicas, 50 /* keyspace */, settings)
-	rng, _ := state.Range(RangeID(1))
-	return state, rng
+	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode */)
+	s := LoadClusterInfo(clusterInfo, settings)
+	LoadRangeInfo(s, RangeInfoWithReplicas(
+		MinKey, voters, nonVoters, 1 /* leaseholder */, &defaultSpanConfig))
+	return s
 }
 
-func testGetAllReplLocations(
-	state State, excludedRanges map[RangeID]bool,
-) (map[int64][]int, map[int64][]int) {
-	rmapView := make(map[int64][]int)
-	storeView := make(map[int64][]int)
+func testGetLHLocations(state State) map[int64]StoreID {
+	leases := make(map[int64]StoreID)
 	for _, rng := range state.Ranges() {
 		rangeID := rng.RangeID()
-		if _, ok := excludedRanges[rangeID]; ok {
-			continue
-		}
-		rmap, stores := testGetReplLocations(state, rng)
-		start, _, _ := state.RangeSpan(rangeID)
-		rmapView[int64(start)] = rmap
-		storeView[int64(start)] = stores
-	}
-	return rmapView, storeView
-}
-
-func testGetLHLocations(state State, excludedRanges map[RangeID]bool) map[int64]int {
-	leases := make(map[int64]int)
-	for _, rng := range state.Ranges() {
-		rangeID := rng.RangeID()
-		if _, ok := excludedRanges[rangeID]; ok {
-			continue
-		}
 		startKey, _, _ := state.RangeSpan(rangeID)
 		lh, _ := state.LeaseholderStore(rangeID)
-		leases[int64(startKey)] = int(lh.StoreID())
+		leases[int64(startKey)] = lh.StoreID()
 	}
 	return leases
 }
 
-func testGetReplLocations(state State, r Range) ([]int, []int) {
-	storeView := []int{}
-	for _, store := range state.Stores() {
-		if _, ok := store.Replica(r.RangeID()); ok {
-			storeView = append(storeView, int(store.StoreID()))
+func stores(s ...StoreID) []StoreID {
+	if len(s) == 0 {
+		return []StoreID{}
+	}
+	return s
+}
+
+func testGetAllReplLocations(state State, replicaType roachpb.ReplicaType) map[int64][]StoreID {
+	view := make(map[int64][]StoreID)
+	for _, rng := range state.Ranges() {
+		locations := testGetReplLocations(state, rng, replicaType)
+		start, _, _ := state.RangeSpan(rng.RangeID())
+		view[int64(start)] = locations
+	}
+	return view
+}
+
+func testGetReplLocations(state State, r Range, replicaType roachpb.ReplicaType) []StoreID {
+	view := []StoreID{}
+	desc := r.Descriptor()
+
+	switch replicaType {
+	case roachpb.VOTER_FULL:
+		for _, voter := range desc.Replicas().VoterDescriptors() {
+			view = append(view, StoreID(voter.StoreID))
 		}
+	case roachpb.NON_VOTER:
+		for _, nonVoter := range desc.Replicas().NonVoterDescriptors() {
+			view = append(view, StoreID(nonVoter.StoreID))
+		}
+	default:
+		panic("Unsupported replica type for getting replica locations.")
 	}
 
-	rmapView := []int{}
-	for _, replica := range r.Replicas() {
-		rmapView = append(rmapView, int(replica.StoreID()))
-	}
-
-	sort.Ints(rmapView)
-	sort.Ints(storeView)
-	return rmapView, storeView
+	sort.Slice(view, func(i, j int) bool {
+		return view[i] < view[j]
+	})
+	return view
 }
 
 // TestReplicaChange asserts that:
@@ -127,78 +137,214 @@ func testGetReplLocations(state State, r Range) ([]int, []int) {
 // (4) In (3) the lease transfers when to the newly added store when possible.
 func TestReplicaChange(t *testing.T) {
 	testCases := []struct {
-		desc                string
-		initRepls           map[StoreID]int
-		initLease           int
-		change              func(s State) Change
-		expectedReplicas    []int
-		expectedLeaseholder int
+		desc                              string
+		initRepls                         map[StoreID]int
+		stores                            int
+		initVoters, initNonVoters         []StoreID
+		change                            func(s State) Change
+		expectedVoters, expectedNonVoters []StoreID
+		expectedLeaseholder               StoreID
 	}{
 		{
-			desc:                "add replica",
-			initRepls:           map[StoreID]int{1: 1, 2: 0},
-			initLease:           1,
-			change:              testMakeReplicaChange(2, 0, 2),
-			expectedReplicas:    []int{1, 2},
+			desc:       "add replica",
+			stores:     2,
+			initVoters: stores(1),
+			change: testMakeReplicaChange(2,
+				testRC(2, roachpb.ADD_VOTER)),
+			expectedVoters:      stores(1, 2),
+			expectedNonVoters:   stores(),
 			expectedLeaseholder: 1,
 		},
 		{
-			desc:                "remove replica",
-			initRepls:           map[StoreID]int{1: 1, 2: 1},
-			initLease:           1,
-			change:              testMakeReplicaChange(0, 2, 2),
-			expectedReplicas:    []int{1},
+			desc:       "remove replica",
+			stores:     2,
+			initVoters: stores(1, 2),
+			change: testMakeReplicaChange(2,
+				testRC(2, roachpb.REMOVE_VOTER)),
+			expectedVoters:      stores(1),
+			expectedNonVoters:   stores(),
 			expectedLeaseholder: 1,
 		},
 		{
-			desc:                "move replica s2 -> s3",
-			initRepls:           map[StoreID]int{1: 1, 2: 1, 3: 0},
-			initLease:           1,
-			change:              testMakeReplicaChange(3, 2, 2),
-			expectedReplicas:    []int{1, 3},
-			expectedLeaseholder: 1,
-		},
-		{
-			desc:                "move replica s1 -> s2, moves lease",
-			initRepls:           map[StoreID]int{1: 1, 2: 0},
-			initLease:           1,
-			change:              testMakeReplicaChange(2, 1, 2),
-			expectedReplicas:    []int{2},
+			desc:       "move replica s1 -> s2, moves lease",
+			stores:     2,
+			initVoters: stores(1),
+			change: testMakeReplicaChange(2,
+				testRC(1, roachpb.REMOVE_VOTER),
+				testRC(2, roachpb.ADD_VOTER)),
+			expectedVoters:      stores(2),
+			expectedNonVoters:   stores(),
 			expectedLeaseholder: 2,
 		},
 		{
-			desc:                "fails remove leaseholder",
-			initRepls:           map[StoreID]int{1: 1},
-			initLease:           1,
-			change:              testMakeReplicaChange(0, 1, 2),
-			expectedReplicas:    []int{1},
+			desc:       "fails remove leaseholder",
+			stores:     1,
+			initVoters: stores(1),
+			change: testMakeReplicaChange(2,
+				testRC(1, roachpb.REMOVE_VOTER)),
+			expectedVoters:      stores(1),
+			expectedNonVoters:   stores(),
 			expectedLeaseholder: 1,
 		},
 		{
-			desc:                "fails remove no such store",
-			initRepls:           map[StoreID]int{1: 1, 2: 1},
-			initLease:           1,
-			change:              testMakeReplicaChange(0, 5, 2),
-			expectedReplicas:    []int{1, 2},
+			desc:       "fails remove no such store",
+			stores:     2,
+			initVoters: stores(1, 2),
+			change: testMakeReplicaChange(2,
+				testRC(5, roachpb.REMOVE_VOTER)),
+			expectedVoters:      stores(1, 2),
+			expectedNonVoters:   stores(),
+			expectedLeaseholder: 1,
+		},
+		{
+			desc:       "add non-voter s2",
+			stores:     2,
+			initVoters: stores(1),
+			change: testMakeReplicaChange(2,
+				testRC(2, roachpb.ADD_NON_VOTER)),
+			expectedVoters:      stores(1),
+			expectedNonVoters:   stores(2),
+			expectedLeaseholder: 1,
+		},
+		{
+			desc:          "remove non-voter",
+			stores:        2,
+			initVoters:    stores(1),
+			initNonVoters: stores(2),
+			change: testMakeReplicaChange(2,
+				testRC(2, roachpb.REMOVE_NON_VOTER)),
+			expectedVoters:      stores(1),
+			expectedNonVoters:   stores(),
+			expectedLeaseholder: 1,
+		},
+		{
+			desc:          "promote non-voter s2",
+			stores:        2,
+			initVoters:    stores(1),
+			initNonVoters: stores(2),
+			change: testMakeReplicaChange(2,
+				testRC(2, roachpb.REMOVE_NON_VOTER),
+				testRC(2, roachpb.ADD_VOTER)),
+			expectedVoters:      stores(1, 2),
+			expectedNonVoters:   stores(),
+			expectedLeaseholder: 1,
+		},
+		{
+			desc:       "swap add s2 demote s1",
+			stores:     2,
+			initVoters: stores(1),
+			change: testMakeReplicaChange(2,
+				testRC(1, roachpb.REMOVE_VOTER),
+				testRC(1, roachpb.ADD_NON_VOTER),
+				testRC(2, roachpb.ADD_VOTER)),
+			expectedVoters:      stores(2),
+			expectedNonVoters:   stores(1),
+			expectedLeaseholder: 2,
+		},
+		{
+			desc:       "demote s2",
+			stores:     2,
+			initVoters: stores(1, 2),
+			change: testMakeReplicaChange(2,
+				testRC(2, roachpb.REMOVE_VOTER),
+				testRC(2, roachpb.ADD_NON_VOTER)),
+			expectedVoters:      stores(1),
+			expectedNonVoters:   stores(2),
+			expectedLeaseholder: 1,
+		},
+		{
+			desc:       "demote s1 fails, no lh added",
+			stores:     2,
+			initVoters: stores(1, 2),
+			change: testMakeReplicaChange(2,
+				testRC(1, roachpb.REMOVE_VOTER),
+				testRC(1, roachpb.ADD_NON_VOTER)),
+			expectedVoters:      stores(1, 2),
+			expectedNonVoters:   stores(),
+			expectedLeaseholder: 1,
+		},
+		{
+			desc:          "swap promote s2 demote s1",
+			stores:        2,
+			initVoters:    stores(1),
+			initNonVoters: stores(2),
+			change: testMakeReplicaChange(2,
+				testRC(2, roachpb.REMOVE_NON_VOTER),
+				testRC(2, roachpb.ADD_VOTER),
+				testRC(1, roachpb.REMOVE_VOTER),
+				testRC(1, roachpb.ADD_NON_VOTER)),
+			expectedVoters:      stores(2),
+			expectedNonVoters:   stores(1),
+			expectedLeaseholder: 2,
+		},
+		{
+			desc:       "remove non-voter fails when actually voter",
+			stores:     2,
+			initVoters: stores(1, 2),
+			change: testMakeReplicaChange(2,
+				testRC(2, roachpb.REMOVE_NON_VOTER),
+				testRC(1, roachpb.REMOVE_VOTER),
+				testRC(1, roachpb.ADD_NON_VOTER)),
+			expectedVoters:      stores(1, 2),
+			expectedNonVoters:   stores(),
+			expectedLeaseholder: 1,
+		},
+		{
+			desc:          "changes roll back - add non voter",
+			stores:        3,
+			initVoters:    stores(1),
+			initNonVoters: stores(2),
+			change: testMakeReplicaChange(2,
+				testRC(3, roachpb.REMOVE_VOTER),
+				testRC(1, roachpb.REMOVE_VOTER),
+				testRC(1, roachpb.ADD_NON_VOTER)),
+			expectedVoters:      stores(1),
+			expectedNonVoters:   stores(2),
+			expectedLeaseholder: 1,
+		},
+		{
+			desc:          "changes roll back - complex",
+			stores:        4,
+			initVoters:    stores(1),
+			initNonVoters: stores(2),
+			change: testMakeReplicaChange(2,
+				// In this change, we are:
+				//  - Promoting non-voter on s2
+				//  - Rebalancing the voter from s1 to s2, including lease transfer.
+				//  - Removing non-voter on s4, which doesn't exist.
+				// The changes should succeed until removing the non-voter, which is
+				// checked last in ReplicaChange.Apply(). The changes should then be
+				// rolled back fully.
+				testRC(1, roachpb.REMOVE_VOTER),
+				testRC(2, roachpb.ADD_VOTER),
+				testRC(4, roachpb.REMOVE_NON_VOTER)),
+			expectedVoters:      stores(1),
+			expectedNonVoters:   stores(2),
 			expectedLeaseholder: 1,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			state, r := testMakeReplicaState(tc.initRepls)
-			state.TransferLease(r.RangeID(), StoreID(tc.initLease))
+			state := testMakeRangeState(tc.stores, tc.initVoters, tc.initNonVoters)
+			r, _ := state.Range(1)
+			state.TransferLease(r.RangeID(), StoreID(1))
 			change := tc.change(state)
 			change.Apply(state)
-			replLocations, _ := testGetReplLocations(state, r)
-			leaseholder := -1
+			voters := testGetReplLocations(state, r, roachpb.VOTER_FULL)
+			nonVoters := testGetReplLocations(state, r, roachpb.NON_VOTER)
+			leaseholder := StoreID(-1)
 			for _, repl := range r.Replicas() {
 				if repl.HoldsLease() {
-					leaseholder = int(repl.StoreID())
+					leaseholder = repl.StoreID()
 				}
 			}
-			require.Equal(t, tc.expectedReplicas, replLocations)
-			require.Equal(t, tc.expectedLeaseholder, leaseholder)
+			require.Equal(t, tc.expectedVoters, voters,
+				"voter locations don't match expected")
+			require.Equal(t, tc.expectedNonVoters, nonVoters,
+				"non-voter locations don't match expected")
+			require.Equal(t, tc.expectedLeaseholder, leaseholder,
+				"leaseholder location doesn't match expected")
 		})
 	}
 }
@@ -211,45 +357,54 @@ func TestReplicaStateChanger(t *testing.T) {
 	start := TestingStartTime()
 
 	testCases := []struct {
-		desc                string
-		initRepls           map[StoreID]int
-		ticks               []int64
-		pushes              map[int64]func(s State) Change
-		expected            map[int64]map[int64][]int
-		expectedLeaseholder map[int64]map[int64]int
-		expectedTimestamps  []int64
+		desc                              string
+		stores                            int
+		initVoters, initNonVoters         []StoreID
+		ticks                             []int64
+		pushes                            map[int64]func(s State) Change
+		expectedVoters, expectedNonVoters map[int64]map[int64][]StoreID
+		expectedLeaseholder               map[int64]map[int64]StoreID
+		expectedTimestamps                []int64
 	}{
 		{
-			desc:      "move s1 -> s2",
-			initRepls: map[StoreID]int{1: 1, 2: 0},
-			ticks:     []int64{5, 10},
+			desc:       "move s1 -> s2",
+			stores:     2,
+			initVoters: stores(1),
+			ticks:      []int64{5, 10},
 			pushes: map[int64]func(s State) Change{
-				5: testMakeReplicaChange(2, 1, 2),
+				5: testMakeReplicaChange(2,
+					testRC(1, roachpb.REMOVE_VOTER),
+					testRC(2, roachpb.ADD_VOTER)),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1}},
 				10: {0: {2}},
 			},
-			expectedLeaseholder: map[int64]map[int64]int{
+			expectedLeaseholder: map[int64]map[int64]StoreID{
 				5:  {0: 1},
 				10: {0: 2},
 			},
 			expectedTimestamps: []int64{10},
 		},
 		{
-			desc:      "move s1 -> s2 -> s3",
-			initRepls: map[StoreID]int{1: 1, 2: 0, 3: 0},
-			ticks:     []int64{5, 10, 15},
+			desc:       "move s1 -> s2 -> s3",
+			stores:     3,
+			initVoters: stores(1),
+			ticks:      []int64{5, 10, 15},
 			pushes: map[int64]func(s State) Change{
-				5:  testMakeReplicaChange(2, 1, 2),
-				10: testMakeReplicaChange(3, 2, 2),
+				5: testMakeReplicaChange(2,
+					testRC(1, roachpb.REMOVE_VOTER),
+					testRC(2, roachpb.ADD_VOTER)),
+				10: testMakeReplicaChange(2,
+					testRC(2, roachpb.REMOVE_VOTER),
+					testRC(3, roachpb.ADD_VOTER)),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1}},
 				10: {0: {2}},
 				15: {0: {3}},
 			},
-			expectedLeaseholder: map[int64]map[int64]int{
+			expectedLeaseholder: map[int64]map[int64]StoreID{
 				5:  {0: 1},
 				10: {0: 2},
 				15: {0: 3},
@@ -257,21 +412,28 @@ func TestReplicaStateChanger(t *testing.T) {
 			expectedTimestamps: []int64{10, 15},
 		},
 		{
-			desc:      "move (complex) (1,2,3) -> (4,5,6)",
-			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1, 4: 0, 5: 0, 6: 0},
-			ticks:     []int64{5, 10, 15, 20},
+			desc:       "move (complex) (1,2,3) -> (4,5,6)",
+			stores:     6,
+			initVoters: stores(1, 2, 3),
+			ticks:      []int64{5, 10, 15, 20},
 			pushes: map[int64]func(s State) Change{
-				5:  testMakeReplicaChange(6, 1, 2),
-				10: testMakeReplicaChange(5, 2, 2),
-				15: testMakeReplicaChange(4, 3, 2),
+				5: testMakeReplicaChange(2,
+					testRC(1, roachpb.REMOVE_VOTER),
+					testRC(6, roachpb.ADD_VOTER)),
+				10: testMakeReplicaChange(2,
+					testRC(2, roachpb.REMOVE_VOTER),
+					testRC(5, roachpb.ADD_VOTER)),
+				15: testMakeReplicaChange(2,
+					testRC(3, roachpb.REMOVE_VOTER),
+					testRC(4, roachpb.ADD_VOTER)),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1, 2, 3}},
 				10: {0: {2, 3, 6}},
 				15: {0: {3, 5, 6}},
 				20: {0: {4, 5, 6}},
 			},
-			expectedLeaseholder: map[int64]map[int64]int{
+			expectedLeaseholder: map[int64]map[int64]StoreID{
 				5:  {0: 1},
 				10: {0: 6},
 				15: {0: 6},
@@ -280,16 +442,21 @@ func TestReplicaStateChanger(t *testing.T) {
 			expectedTimestamps: []int64{10, 15, 20},
 		},
 		{
-			desc:      "non-allowed change during pending",
-			initRepls: map[StoreID]int{1: 1, 2: 0, 3: 0},
-			ticks:     []int64{5, 6, 15},
+			desc:       "non-allowed change during pending",
+			stores:     3,
+			initVoters: stores(1),
+			ticks:      []int64{5, 6, 15},
 			pushes: map[int64]func(s State) Change{
 				// NB: change at tick 6 will be ignored as there is already a
 				// pending change (1->2).
-				5: testMakeReplicaChange(2, 1, 2),
-				6: testMakeReplicaChange(3, 1, 2),
+				5: testMakeReplicaChange(2,
+					testRC(1, roachpb.REMOVE_VOTER),
+					testRC(2, roachpb.ADD_VOTER)),
+				6: testMakeReplicaChange(2,
+					testRC(1, roachpb.REMOVE_VOTER),
+					testRC(3, roachpb.ADD_VOTER)),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1}},
 				6:  {0: {1}},
 				15: {0: {2}},
@@ -297,27 +464,29 @@ func TestReplicaStateChanger(t *testing.T) {
 			expectedTimestamps: []int64{10},
 		},
 		{
-			desc:      "split range  [1] -> [1,100)[100,+)",
-			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
-			ticks:     []int64{5, 10},
+			desc:       "split range  [1] -> [1,100)[100,+)",
+			stores:     3,
+			initVoters: stores(1, 2, 3),
+			ticks:      []int64{5, 10},
 			pushes: map[int64]func(s State) Change{
 				5: testMakeRangeSplitChange(100),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1, 2, 3}},
 				10: {0: {1, 2, 3}, 100: {1, 2, 3}},
 			},
 			expectedTimestamps: []int64{10},
 		},
 		{
-			desc:      "split range  [1] -> [1,100)[100,+) -> [1,50)[50,100)[100,+)",
-			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
-			ticks:     []int64{5, 10, 15},
+			desc:       "split range  [1] -> [1,100)[100,+) -> [1,50)[50,100)[100,+)",
+			stores:     3,
+			initVoters: stores(1, 2, 3),
+			ticks:      []int64{5, 10, 15},
 			pushes: map[int64]func(s State) Change{
 				5:  testMakeRangeSplitChange(100),
 				10: testMakeRangeSplitChange(50),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1, 2, 3}},
 				10: {0: {1, 2, 3}, 100: {1, 2, 3}},
 				15: {0: {1, 2, 3}, 50: {1, 2, 3}, 100: {1, 2, 3}},
@@ -325,14 +494,17 @@ func TestReplicaStateChanger(t *testing.T) {
 			expectedTimestamps: []int64{10, 15},
 		},
 		{
-			desc:      "split range  [1] -> [1,100)[100,+), move replica [100,+):s1 -> s4",
-			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1, 4: 0},
-			ticks:     []int64{5, 10, 15},
+			desc:       "split range  [1] -> [1,100)[100,+), move replica [100,+):s1 -> s4",
+			stores:     4,
+			initVoters: stores(1, 2, 3),
+			ticks:      []int64{5, 10, 15},
 			pushes: map[int64]func(s State) Change{
-				5:  testMakeRangeSplitChange(100),
-				10: testMakeReplicaChange(4, 1, 100),
+				5: testMakeRangeSplitChange(100),
+				10: testMakeReplicaChange(100,
+					testRC(1, roachpb.REMOVE_VOTER),
+					testRC(4, roachpb.ADD_VOTER)),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1, 2, 3}},
 				10: {0: {1, 2, 3}, 100: {1, 2, 3}},
 				15: {0: {1, 2, 3}, 100: {2, 3, 4}},
@@ -340,16 +512,19 @@ func TestReplicaStateChanger(t *testing.T) {
 			expectedTimestamps: []int64{10, 15},
 		},
 		{
-			desc:      "overlapping split -> replica changes are blocked",
-			initRepls: map[StoreID]int{1: 1, 2: 0},
-			ticks:     []int64{5, 6, 15},
+			desc:       "overlapping split -> replica changes are blocked",
+			stores:     2,
+			initVoters: stores(1),
+			ticks:      []int64{5, 6, 15},
 			pushes: map[int64]func(s State) Change{
 				// NB: Two changes affect the same range (move & split), only
 				// one concurrent change per range may be enqueued at any time.
 				5: testMakeRangeSplitChange(100),
-				6: testMakeReplicaChange(2, 1, 100),
+				6: testMakeReplicaChange(100,
+					testRC(1, roachpb.REMOVE_VOTER),
+					testRC(2, roachpb.ADD_VOTER)),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1}},
 				6:  {0: {1}},
 				15: {0: {1}, 100: {1}},
@@ -357,16 +532,19 @@ func TestReplicaStateChanger(t *testing.T) {
 			expectedTimestamps: []int64{10},
 		},
 		{
-			desc:      "overlapping replica -> split changes are blocked",
-			initRepls: map[StoreID]int{1: 1, 2: 0},
-			ticks:     []int64{5, 6, 15},
+			desc:       "overlapping replica -> split changes are blocked",
+			stores:     2,
+			initVoters: stores(1),
+			ticks:      []int64{5, 6, 15},
 			pushes: map[int64]func(s State) Change{
 				// NB: Two changes affect the same range (move & split), only
 				// one concurrent change per range may be enqueued at any time.
-				5: testMakeReplicaChange(2, 1, 100),
+				5: testMakeReplicaChange(100,
+					testRC(1, roachpb.REMOVE_VOTER),
+					testRC(2, roachpb.ADD_VOTER)),
 				6: testMakeRangeSplitChange(100),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1}},
 				6:  {0: {1}},
 				15: {0: {2}},
@@ -374,18 +552,21 @@ func TestReplicaStateChanger(t *testing.T) {
 			expectedTimestamps: []int64{10},
 		},
 		{
-			desc:      "range splits don't block on the leaseholder store's other changes",
-			initRepls: map[StoreID]int{1: 1, 2: 0},
-			ticks:     []int64{5, 10, 11, 20},
+			desc:       "range splits don't block on the leaseholder store's other changes",
+			stores:     2,
+			initVoters: stores(1),
+			ticks:      []int64{5, 10, 11, 20},
 			pushes: map[int64]func(s State) Change{
 				// NB: The change at tick 10 and 11 overlap in their "delay"
 				// but on the same leaseholder store. Splits do not block
 				// on replica changes, so it can go through.
-				5:  testMakeRangeSplitChange(100),
-				10: testMakeReplicaChange(2, 1, 0),
+				5: testMakeRangeSplitChange(100),
+				10: testMakeReplicaChange(0,
+					testRC(1, roachpb.REMOVE_VOTER),
+					testRC(2, roachpb.ADD_VOTER)),
 				11: testMakeRangeSplitChange(200),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1}},
 				10: {0: {1}, 100: {1}},
 				11: {0: {1}, 100: {1}},
@@ -394,36 +575,38 @@ func TestReplicaStateChanger(t *testing.T) {
 			expectedTimestamps: []int64{10, 15, 16},
 		},
 		{
-			desc:      "transfer lease (1,2,3) 1 -> 3",
-			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
-			ticks:     []int64{5, 10},
+			desc:       "transfer lease (1,2,3) 1 -> 3",
+			stores:     3,
+			initVoters: stores(1, 2, 3),
+			ticks:      []int64{5, 10},
 			pushes: map[int64]func(s State) Change{
 				5: testMakeLeaseTransferChange(100, 3),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1, 2, 3}},
 				10: {0: {1, 2, 3}},
 			},
-			expectedLeaseholder: map[int64]map[int64]int{
+			expectedLeaseholder: map[int64]map[int64]StoreID{
 				5:  {0: 1},
 				10: {0: 3},
 			},
 			expectedTimestamps: []int64{10},
 		},
 		{
-			desc:      "transfer lease (1,2,3) 1 -> 2 -> 3",
-			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
-			ticks:     []int64{5, 10, 15},
+			desc:       "transfer lease (1,2,3) 1 -> 2 -> 3",
+			stores:     3,
+			initVoters: stores(1, 2, 3),
+			ticks:      []int64{5, 10, 15},
 			pushes: map[int64]func(s State) Change{
 				5:  testMakeLeaseTransferChange(100, 2),
 				10: testMakeLeaseTransferChange(100, 3),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1, 2, 3}},
 				10: {0: {1, 2, 3}},
 				15: {0: {1, 2, 3}},
 			},
-			expectedLeaseholder: map[int64]map[int64]int{
+			expectedLeaseholder: map[int64]map[int64]StoreID{
 				5:  {0: 1},
 				10: {0: 2},
 				15: {0: 3},
@@ -431,19 +614,20 @@ func TestReplicaStateChanger(t *testing.T) {
 			expectedTimestamps: []int64{10, 15},
 		},
 		{
-			desc:      "",
-			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
-			ticks:     []int64{5, 10, 15},
+			desc:       "",
+			stores:     3,
+			initVoters: stores(1, 2, 3),
+			ticks:      []int64{5, 10, 15},
 			pushes: map[int64]func(s State) Change{
 				5:  testMakeLeaseTransferChange(100, 2),
 				10: testMakeLeaseTransferChange(100, 3),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1, 2, 3}},
 				10: {0: {1, 2, 3}},
 				15: {0: {1, 2, 3}},
 			},
-			expectedLeaseholder: map[int64]map[int64]int{
+			expectedLeaseholder: map[int64]map[int64]StoreID{
 				5:  {0: 1},
 				10: {0: 2},
 				15: {0: 3},
@@ -451,21 +635,45 @@ func TestReplicaStateChanger(t *testing.T) {
 			expectedTimestamps: []int64{10, 15},
 		},
 		{
-			desc:      "overlapping lh and split changes are blocked",
-			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
-			ticks:     []int64{5, 6, 15},
+			desc:       "overlapping lh and split changes are blocked",
+			stores:     3,
+			initVoters: stores(1, 2, 3),
+			ticks:      []int64{5, 6, 15},
 			pushes: map[int64]func(s State) Change{
 				// NB: Two changes affect the same range (move & transfer), only
 				// one concurrent change per range may be enqueued at any time.
 				5: testMakeLeaseTransferChange(100, 2),
 				6: testMakeRangeSplitChange(100),
 			},
-			expected: map[int64]map[int64][]int{
+			expectedVoters: map[int64]map[int64][]StoreID{
 				5:  {0: {1, 2, 3}},
 				6:  {0: {1, 2, 3}},
 				15: {0: {1, 2, 3}},
 			},
-			expectedLeaseholder: map[int64]map[int64]int{
+			expectedLeaseholder: map[int64]map[int64]StoreID{
+				5:  {0: 1},
+				6:  {0: 1},
+				15: {0: 2},
+			},
+			expectedTimestamps: []int64{10},
+		},
+		{
+			desc:       "overlapping lh and split changes are blocked",
+			stores:     3,
+			initVoters: stores(1, 2, 3),
+			ticks:      []int64{5, 6, 15},
+			pushes: map[int64]func(s State) Change{
+				// NB: Two changes affect the same range (move & transfer), only
+				// one concurrent change per range may be enqueued at any time.
+				5: testMakeLeaseTransferChange(100, 2),
+				6: testMakeRangeSplitChange(100),
+			},
+			expectedVoters: map[int64]map[int64][]StoreID{
+				5:  {0: {1, 2, 3}},
+				6:  {0: {1, 2, 3}},
+				15: {0: {1, 2, 3}},
+			},
+			expectedLeaseholder: map[int64]map[int64]StoreID{
 				5:  {0: 1},
 				6:  {0: 1},
 				15: {0: 2},
@@ -477,10 +685,11 @@ func TestReplicaStateChanger(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			changer := NewReplicaChanger()
-			state, _ := testMakeReplicaState(tc.initRepls)
-			results := make(map[int64]map[int64][]int)
+			state := testMakeRangeState(tc.stores, tc.initVoters, tc.initNonVoters)
+			resultsVoters := make(map[int64]map[int64][]StoreID)
+			resultsNonVoters := make(map[int64]map[int64][]StoreID)
 			tsResults := make([]int64, 0, 1)
-			resultLeaseholders := make(map[int64]map[int64]int)
+			resultLeaseholders := make(map[int64]map[int64]StoreID)
 
 			for _, tick := range tc.ticks {
 				changer.Tick(OffsetTick(start, tick), state)
@@ -489,16 +698,20 @@ func TestReplicaStateChanger(t *testing.T) {
 						tsResults = append(tsResults, ReverseOffsetTick(start, ts))
 					}
 				}
-				rmapView, storeView := testGetAllReplLocations(state, map[RangeID]bool{})
-				require.Equal(t, rmapView, storeView, "RangeMap state and the Store state have different values")
-				results[tick] = rmapView
-				resultLeaseholders[tick] = testGetLHLocations(state, map[RangeID]bool{})
+				voters := testGetAllReplLocations(state, roachpb.VOTER_FULL)
+				nonVoters := testGetAllReplLocations(state, roachpb.NON_VOTER)
+				resultsVoters[tick] = voters
+				resultsNonVoters[tick] = nonVoters
+				resultLeaseholders[tick] = testGetLHLocations(state)
 			}
 
-			require.Equal(t, tc.expected, results)
+			require.Equal(t, tc.expectedVoters, resultsVoters)
 			require.Equal(t, tc.expectedTimestamps, tsResults)
 			if tc.expectedLeaseholder != nil {
 				require.Equal(t, tc.expectedLeaseholder, resultLeaseholders)
+			}
+			if tc.expectedNonVoters != nil {
+				require.Equal(t, tc.expectedNonVoters, resultsNonVoters)
 			}
 		})
 	}

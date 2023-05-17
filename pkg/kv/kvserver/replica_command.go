@@ -1008,7 +1008,7 @@ func (r *Replica) changeReplicasImpl(
 	if err := validateReplicationChanges(desc, chgs); err != nil {
 		return nil, errors.Mark(err, errMarkInvalidReplicationChange)
 	}
-	targets := synthesizeTargetsByChangeType(chgs)
+	targets := SynthesizeTargetsByChangeType(chgs)
 
 	// NB: As of the time of this writing,`AdminRelocateRange` will only execute
 	// replication changes one by one. Thus, the order in which we execute the
@@ -1036,7 +1036,7 @@ func (r *Replica) changeReplicasImpl(
 	// NB: Promotions and demotions of LEARNER replicas are handled implicitly
 	// during the addition or removal of voting replicas and are not handled
 	// here.
-	swaps := getInternalChangesForExplicitPromotionsAndDemotions(targets.voterDemotions, targets.nonVoterPromotions)
+	swaps := getInternalChangesForExplicitPromotionsAndDemotions(targets.VoterDemotions, targets.NonVoterPromotions)
 	if len(swaps) > 0 {
 		desc, err = execChangeReplicasTxn(ctx, r.store.cfg.Tracer(), desc, reason, details, swaps, changeReplicasTxnArgs{
 			db:                                   r.store.DB(),
@@ -1050,7 +1050,7 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	if adds := targets.voterAdditions; len(adds) > 0 {
+	if adds := targets.VoterAdditions; len(adds) > 0 {
 		// For all newly added voters, first add LEARNER replicas. They accept raft
 		// traffic (so they can catch up) but don't get to vote (so they don't
 		// affect quorum and thus don't introduce fragility into the system). For
@@ -1069,10 +1069,10 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	if len(targets.voterAdditions)+len(targets.voterRemovals) > 0 {
+	if len(targets.VoterAdditions)+len(targets.VoterRemovals) > 0 {
 		desc, err = r.execReplicationChangesForVoters(
 			ctx, desc, reason, details,
-			targets.voterAdditions, targets.voterRemovals,
+			targets.VoterAdditions, targets.VoterRemovals,
 		)
 		if err != nil {
 			// If the error occurred while transitioning out of an atomic replication
@@ -1085,7 +1085,7 @@ func (r *Replica) changeReplicasImpl(
 			}
 			// Don't leave a learner replica lying around if we didn't succeed in
 			// promoting it to a voter.
-			if adds := targets.voterAdditions; len(adds) > 0 {
+			if adds := targets.VoterAdditions; len(adds) > 0 {
 				log.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
 				for _, target := range adds {
 					r.tryRollbackRaftLearner(ctx, r.Desc(), target, reason, details)
@@ -1095,7 +1095,7 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	if adds := targets.nonVoterAdditions; len(adds) > 0 {
+	if adds := targets.NonVoterAdditions; len(adds) > 0 {
 		// Add all non-voters and send them initial snapshots since some callers of
 		// `AdminChangeReplicas` (notably the mergeQueue, via `AdminRelocateRange`)
 		// care about only dealing with replicas that are mostly caught up with the
@@ -1114,7 +1114,7 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	if removals := targets.nonVoterRemovals; len(removals) > 0 {
+	if removals := targets.NonVoterRemovals; len(removals) > 0 {
 		for _, rem := range removals {
 			iChgs := []internalReplicationChange{{target: rem, typ: internalChangeTypeRemoveNonVoter}}
 			var err error
@@ -1132,7 +1132,7 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	if len(targets.voterDemotions) > 0 {
+	if len(targets.VoterDemotions) > 0 {
 		// If we demoted or swapped any voters with non-voters, we likely are in a
 		// joint config or have learners on the range. Let's exit the joint config
 		// and remove the learners.
@@ -1142,13 +1142,15 @@ func (r *Replica) changeReplicasImpl(
 	return desc, nil
 }
 
-type targetsForReplicationChanges struct {
-	voterDemotions, nonVoterPromotions  []roachpb.ReplicationTarget
-	voterAdditions, voterRemovals       []roachpb.ReplicationTarget
-	nonVoterAdditions, nonVoterRemovals []roachpb.ReplicationTarget
+// TargetsForReplicationChanges is a grouped representation of a replication
+// change.
+type TargetsForReplicationChanges struct {
+	VoterDemotions, NonVoterPromotions  []roachpb.ReplicationTarget
+	VoterAdditions, VoterRemovals       []roachpb.ReplicationTarget
+	NonVoterAdditions, NonVoterRemovals []roachpb.ReplicationTarget
 }
 
-// synthesizeTargetsByChangeType groups replication changes in the
+// SynthesizeTargetsByChangeType groups replication changes in the
 // manner they are intended to be executed by AdminChangeReplicas.
 //
 // In particular, it coalesces ReplicationChanges of types ADD_VOTER and
@@ -1156,21 +1158,21 @@ type targetsForReplicationChanges struct {
 // and likewise, ADD_NON_VOTER and REMOVE_VOTER changes for a given target as
 // demotions of voters into non-voters. The rest of the changes are handled
 // distinctly and are thus segregated in the return result.
-func synthesizeTargetsByChangeType(
+func SynthesizeTargetsByChangeType(
 	chgs kvpb.ReplicationChanges,
-) (result targetsForReplicationChanges) {
+) (result TargetsForReplicationChanges) {
 	// Isolate the promotions to voters and the demotions to non-voters from the
 	// rest of the changes, since we want to handle these together and execute
 	// atomic swaps of voters <-> non-voters if possible.
-	result.voterDemotions = intersectTargets(chgs.VoterRemovals(), chgs.NonVoterAdditions())
-	result.nonVoterPromotions = intersectTargets(chgs.NonVoterRemovals(), chgs.VoterAdditions())
+	result.VoterDemotions = intersectTargets(chgs.VoterRemovals(), chgs.NonVoterAdditions())
+	result.NonVoterPromotions = intersectTargets(chgs.NonVoterRemovals(), chgs.VoterAdditions())
 
 	// Synthesize the additions and removals that shouldn't get executed as
 	// promotions of non-voters or demotions of voters.
-	result.voterAdditions = subtractTargets(chgs.VoterAdditions(), chgs.NonVoterRemovals())
-	result.voterRemovals = subtractTargets(chgs.VoterRemovals(), chgs.NonVoterAdditions())
-	result.nonVoterAdditions = subtractTargets(chgs.NonVoterAdditions(), chgs.VoterRemovals())
-	result.nonVoterRemovals = subtractTargets(chgs.NonVoterRemovals(), chgs.VoterAdditions())
+	result.VoterAdditions = subtractTargets(chgs.VoterAdditions(), chgs.NonVoterRemovals())
+	result.VoterRemovals = subtractTargets(chgs.VoterRemovals(), chgs.NonVoterAdditions())
+	result.NonVoterAdditions = subtractTargets(chgs.NonVoterAdditions(), chgs.VoterRemovals())
+	result.NonVoterRemovals = subtractTargets(chgs.NonVoterRemovals(), chgs.VoterAdditions())
 
 	return result
 }

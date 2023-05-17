@@ -598,13 +598,13 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result := synthesizeTargetsByChangeType(test.changes)
-			require.Equal(t, result.nonVoterPromotions, mkTargetList(test.expPromotions))
-			require.Equal(t, result.voterDemotions, mkTargetList(test.expDemotions))
-			require.Equal(t, result.voterAdditions, mkTargetList(test.expVoterAdditions))
-			require.Equal(t, result.voterRemovals, mkTargetList(test.expVoterRemovals))
-			require.Equal(t, result.nonVoterAdditions, mkTargetList(test.expNonVoterAdditions))
-			require.Equal(t, result.nonVoterRemovals, mkTargetList(test.expNonVoterRemovals))
+			result := SynthesizeTargetsByChangeType(test.changes)
+			require.Equal(t, result.NonVoterPromotions, mkTargetList(test.expPromotions))
+			require.Equal(t, result.VoterDemotions, mkTargetList(test.expDemotions))
+			require.Equal(t, result.VoterAdditions, mkTargetList(test.expVoterAdditions))
+			require.Equal(t, result.VoterRemovals, mkTargetList(test.expVoterRemovals))
+			require.Equal(t, result.NonVoterAdditions, mkTargetList(test.expNonVoterAdditions))
+			require.Equal(t, result.NonVoterRemovals, mkTargetList(test.expNonVoterRemovals))
 		})
 	}
 }
