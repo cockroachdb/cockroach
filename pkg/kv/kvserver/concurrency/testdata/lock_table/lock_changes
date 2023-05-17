@@ -135,7 +135,7 @@ num=1
     req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
 
-new-txn txn=txn1 ts=14 epoch=1 seq=1
+new-txn txn=txn1 ts=14 epoch=2 seq=1
 ----
 
 new-request r=req6 txn=txn1 ts=14 spans=intent@a
@@ -145,7 +145,7 @@ acquire r=req6 k=a durability=r
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 2, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 2, seqs: [1], unrepl epoch: 2, seqs: [0]
    waiting readers:
     req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
@@ -158,7 +158,7 @@ acquire r=req6 k=a durability=u
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 2, seqs: [1], unrepl epoch: 2, seqs: [0, 1]
 
 guard-state r=req5
 ----
@@ -186,7 +186,7 @@ add-discovered r=req7 k=a txn=txn1
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 2, seqs: [1], unrepl epoch: 2, seqs: [0, 1]
    waiting readers:
     req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
@@ -194,3 +194,43 @@ num=1
 guard-state r=req7
 ----
 new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
+
+# ------------------------------------------------------------------------------
+# Try to re-acquire an unreplicated lock that is already held at a higher epoch.
+# This should result in an error, similar to how mvccPutInternal handles this
+# case for intents, as the in-memory lock table is the source of truth for
+# unreplicated locks.
+#
+# We also test the same scenario for replicated locks. The only difference here
+# being that this time, we get an AssertionFailed error -- this is because we
+# expect mvccPutInternal to return an error, and never actually call into the
+# lock table to try and acquire this lock.
+# ------------------------------------------------------------------------------
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 2, seqs: [1], unrepl epoch: 2, seqs: [0, 1]
+   waiting readers:
+    req: 3, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 3
+
+new-txn txn=txn1 ts=14 epoch=1 seq=1
+----
+
+new-request r=req8 txn=txn1 ts=14 spans=none@a
+----
+
+scan r=req8
+----
+start-waiting: false
+
+acquire r=req8 k=a durability=u
+----
+locking request with epoch 1 came after lock(unreplicated) had already been acquired at epoch 2 in txn 00000000-0000-0000-0000-000000000001
+
+
+acquire r=req8 k=a durability=r
+----
+locking request with epoch 1 came after lock(replicated) had already been acquired at epoch 2 in txn 00000000-0000-0000-0000-000000000001
