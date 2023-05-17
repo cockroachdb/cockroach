@@ -1005,7 +1005,7 @@ func (p *Provider) runInstance(
 			extraMountOpts = "nobarrier"
 		}
 	}
-	filename, err := writeStartupScript(name, extraMountOpts, providerOpts.UseMultipleDisks, opts.EnableFIPS)
+	filename, err := writeStartupScript(name, extraMountOpts, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
 	if err != nil {
 		return errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}
@@ -1021,12 +1021,15 @@ func (p *Provider) runInstance(
 	}
 	imageID := withFlagOverride(az.region.AMI_X86_64, &providerOpts.ImageAMI)
 	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "7g.") == 1
+	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
+		return errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
+	}
 	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 	if useArmAMI {
 		imageID = withFlagOverride(az.region.AMI_ARM64, &providerOpts.ImageAMI)
 		l.Printf("Using ARM64 AMI: %s for machine type: %s", imageID, machineType)
 	}
-	if !useArmAMI && opts.EnableFIPS {
+	if opts.Arch == string(vm.ArchFIPS) {
 		imageID = withFlagOverride(az.region.AMI_FIPS, &providerOpts.ImageAMI)
 		l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", imageID, machineType)
 	}

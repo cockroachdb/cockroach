@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -228,8 +229,8 @@ func TestVerifyLibraries(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			libraryFilePaths = tc.libraryFilePaths
-			actualError := VerifyLibraries(tc.verifyLibs)
+			libraryFilePaths = map[vm.CPUArch][]string{vm.ArchAMD64: tc.libraryFilePaths}
+			actualError := VerifyLibraries(tc.verifyLibs, vm.ArchAMD64)
 			if tc.expectedError == nil {
 				require.NoError(t, actualError)
 			} else {

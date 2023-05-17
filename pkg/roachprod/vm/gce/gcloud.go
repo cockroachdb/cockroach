@@ -39,6 +39,7 @@ const (
 	// ProviderName is gce.
 	ProviderName        = "gce"
 	DefaultImage        = "ubuntu-2004-focal-v20210603"
+	ARM64Image          = "ubuntu-2004-focal-arm64-v20230302"
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230302"
 	defaultImageProject = "ubuntu-os-cloud"
 	FIPSImageProject    = "ubuntu-os-pro-cloud"
@@ -722,10 +723,34 @@ func (p *Provider) Create(
 	// Fixed args.
 	image := providerOpts.Image
 	imageProject := defaultImageProject
-	if opts.EnableFIPS {
+	useArmAMI := strings.HasPrefix(strings.ToLower(providerOpts.MachineType), "t2a-")
+	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
+		return errors.Errorf("machine type %s is arm64, but requested arch is %s", providerOpts.MachineType, opts.Arch)
+	}
+	if useArmAMI && opts.SSDOpts.UseLocalSSD {
+		return errors.New("local SSDs are not supported with T2A instances, use --local-ssd=false")
+	}
+	if useArmAMI {
+		if len(providerOpts.Zones) == 0 {
+			zones = []string{"us-central1-a"}
+		} else {
+			for _, zone := range providerOpts.Zones {
+				if !strings.HasPrefix(zone, "us-central1-") {
+					return errors.New("T2A instances are not supported outside of us-central1")
+				}
+			}
+		}
+	}
+	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
+	if useArmAMI {
+		image = ARM64Image
+		l.Printf("Using ARM64 AMI: %s for machine type: %s", image, providerOpts.MachineType)
+	}
+	if opts.Arch == string(vm.ArchFIPS) {
 		// NB: if FIPS is enabled, it overrides the image passed via CLI (--gce-image)
 		image = FIPSImage
 		imageProject = FIPSImageProject
+		l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", image, providerOpts.MachineType)
 	}
 	args := []string{
 		"compute", "instances", "create",
@@ -796,7 +821,7 @@ func (p *Provider) Create(
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.EnableFIPS)
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}

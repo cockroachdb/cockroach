@@ -60,13 +60,20 @@ func init() {
 }
 
 var (
-	// TODO(tbg): this is redundant with --cloud==local. Make the --local flag an
-	// alias for `--cloud=local` and remove this variable.
-	local bool
-
-	cockroach        string
-	cockroachShort   string
-	libraryFilePaths []string
+	// user-specified path to crdb binary
+	cockroachPath string
+	// maps cpuArch to the corresponding crdb binary's absolute path
+	cockroach = make(map[vm.CPUArch]string)
+	// user-specified path to short crdb binary
+	cockroachShortPath string
+	// maps cpuArch to the corresponding short crdb (i.e., without UI) binary's absolute path
+	cockroachShort = make(map[vm.CPUArch]string)
+	// user-specified path to workload binary
+	workloadPath string
+	// maps cpuArch to the corresponding workload binary's absolute path
+	workload = make(map[vm.CPUArch]string)
+	// maps cpuArch to the corresponding dynamically-linked libraries' absolute paths
+	libraryFilePaths = make(map[vm.CPUArch][]string)
 	cloud            = spec.GCE
 	// encryptionProbability controls when encryption-at-rest is enabled
 	// in a cluster for tests that have opted-in to metamorphic
@@ -76,10 +83,15 @@ var (
 	// encryption enabled by default (probability 1). In order to run
 	// them with encryption disabled (perhaps to reproduce a test
 	// failure), roachtest can be invoked with --metamorphic-encryption-probability=0
-	encryptionProbability     float64
+	encryptionProbability float64
+	// Total probability with which new ARM64 clusters are provisioned, modulo test specs. which are incompatible.
+	arm64Probability float64
+	// Conditional probability with which new FIPS clusters are provisioned, modulo test specs. The total probability
+	// is the product of this and 1-arm64Probability.
+	fipsProbability float64
+
 	instanceType              string
 	localSSDArg               bool
-	workload                  string
 	deprecatedRoachprodBinary string
 	// overrideOpts contains vm.CreateOpts override values passed from the cli.
 	overrideOpts vm.CreateOpts
@@ -99,6 +111,8 @@ var (
 
 const (
 	defaultEncryptionProbability = 1
+	defaultFIPSProbability       = 0
+	defaultARM64Probability      = 0
 	defaultCockroachPath         = "./cockroach-default"
 )
 
@@ -110,29 +124,60 @@ func (e errBinaryOrLibraryNotFound) Error() string {
 	return fmt.Sprintf("binary or library %q not found (or was not executable)", e.binary)
 }
 
-func filepathAbs(path string) (string, error) {
-	path, err := filepath.Abs(path)
+func validateBinaryFormat(path string, arch vm.CPUArch, checkEA bool) (string, error) {
+	abspath, err := filepath.Abs(path)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
-	return path, nil
-}
-
-func findBinary(binary, defValue string) (abspath string, err error) {
-	if binary == "" {
-		binary = defValue
+	// Check that the binary ELF format matches the expected architecture.
+	cmd := exec.Command("file", "-b", abspath)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return "", errors.Wrapf(err, "error executing 'file %s'", abspath)
+	}
+	fileFormat := strings.ToLower(out.String())
+	if arch == vm.ArchARM64 {
+		if !strings.Contains(fileFormat, "arm64") &&
+			!strings.Contains(fileFormat, "aarch64") {
+			return "", errors.Newf("%s has incompatible architecture; want: %q, got: %q", abspath, arch, fileFormat)
+		}
+	} else if arch == vm.ArchAMD64 && !strings.Contains(fileFormat, "x86-64") {
+		// Otherwise, we expect a binary that was built for amd64.
+		return "", errors.Newf("%s has incompatible architecture; want: %q, got: %q", abspath, arch, fileFormat)
+	}
+	if arch == vm.ArchFIPS && strings.HasSuffix(abspath, "cockroach") {
+		// Check that the binary is patched to use OpenSSL FIPS.
+		// N.B. only the cockroach binary is patched, so we exclude this check for dynamically-linked libraries.
+		cmd = exec.Command("bash", "-c", fmt.Sprintf("nm %s | grep golang-fips |head -1", abspath))
+		if err := cmd.Run(); err != nil {
+			return "", errors.Newf("%s is not compiled with FIPS", abspath)
+		}
+	}
+	if checkEA {
+		// Check that the binary was compiled with assertions _enabled_.
+		cmd = exec.Command("bash", "-c", fmt.Sprintf("%s version |grep \"Enabled Assertions\" |grep true", abspath))
+		if err := cmd.Run(); err != nil {
+			return "", errors.Newf("%s is not compiled with assertions enabled", abspath)
+		}
 	}
 
+	return abspath, nil
+}
+
+func findBinary(
+	name string, osName string, arch vm.CPUArch, checkEA bool,
+) (abspath string, err error) {
 	// Check to see if binary exists and is a regular file and executable.
-	if fi, err := os.Stat(binary); err == nil && fi.Mode().IsRegular() && (fi.Mode()&0111) != 0 {
-		return filepathAbs(binary)
+	if fi, err := os.Stat(name); err == nil && fi.Mode().IsRegular() && (fi.Mode()&0111) != 0 {
+		return validateBinaryFormat(name, arch, checkEA)
 	}
-	return findBinaryOrLibrary("bin", binary)
+	return findBinaryOrLibrary("bin", name, osName, arch, checkEA)
 }
 
-func findLibrary(libraryName string) (string, error) {
+func findLibrary(libraryName string, os string, arch vm.CPUArch) (string, error) {
 	suffix := ".so"
-	if local {
+	if cloud == spec.Local {
 		switch runtime.GOOS {
 		case "linux":
 		case "freebsd":
@@ -146,54 +191,73 @@ func findLibrary(libraryName string) (string, error) {
 			return "", errors.Newf("failed to find suffix for runtime %s", runtime.GOOS)
 		}
 	}
-	return findBinaryOrLibrary("lib", libraryName+suffix)
+
+	return findBinaryOrLibrary("lib", libraryName+suffix, os, arch, false)
 }
 
-func findBinaryOrLibrary(binOrLib string, name string) (string, error) {
+func findBinaryOrLibrary(
+	binOrLib string, name string, osName string, arch vm.CPUArch, checkEA bool,
+) (string, error) {
 	// Find the binary to run and translate it to an absolute path. First, look
 	// for the binary in PATH.
-	path, err := exec.LookPath(name)
+	pathFromEnv, err := exec.LookPath(name)
+	if err == nil {
+		// Found it in PATH, validate and return absolute path.
+		return validateBinaryFormat(pathFromEnv, arch, checkEA)
+	}
+	if strings.HasPrefix(name, "/") {
+		// Specified name is an absolute path, but we couldn't find it; bail out.
+		return "", errors.WithStack(err)
+	}
+	// We're unable to find the name in PATH and "name" is a relative path:
+	// look in the cockroach repo.
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		gopath = filepath.Join(os.Getenv("HOME"), "go")
+	}
+
+	dirs := []string{
+		filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/"),
+		filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/artifacts/"),
+		filepath.Join(os.ExpandEnv("$PWD"), binOrLib),
+		filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach", binOrLib),
+	}
+
+	archInfo, err := install.ArchInfoForOS(osName, arch)
 	if err != nil {
-		if strings.HasPrefix(name, "/") {
-			return "", errors.WithStack(err)
+		return "", err
+	}
+	nameSuffixes := []string{archInfo.DebugArchitecture, archInfo.ReleaseArchitecture}
+	find := func(dir, name string) string {
+		if path, err := exec.LookPath(filepath.Join(dir, name)); err == nil {
+			return path
+		} else {
+			return ""
 		}
+	}
 
-		// We're unable to find the name in PATH and "name" is a relative path:
-		// look in the cockroach repo.
-		gopath := os.Getenv("GOPATH")
-		if gopath == "" {
-			gopath = filepath.Join(os.Getenv("HOME"), "go")
-		}
+	for _, dir := range dirs {
+		var path string
 
-		var suffix string
-		if !local {
-			suffix = ".docker_amd64"
+		if path = find(dir, name); path != "" {
+			return validateBinaryFormat(path, arch, checkEA)
 		}
-		dirs := []string{
-			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/"),
-			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/artifacts/"),
-			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach", binOrLib+suffix),
-			filepath.Join(os.ExpandEnv("$PWD"), binOrLib+suffix),
-			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach", binOrLib),
-		}
-		for _, dir := range dirs {
-			path = filepath.Join(dir, name)
-			var err2 error
-			path, err2 = exec.LookPath(path)
-			if err2 == nil {
-				return filepathAbs(path)
+		for _, suffix := range nameSuffixes {
+			if path = find(dir, name+"."+suffix); path != "" {
+				return validateBinaryFormat(path, arch, checkEA)
 			}
 		}
-		return "", errBinaryOrLibraryNotFound{name}
 	}
-	return filepathAbs(path)
+	return "", errBinaryOrLibraryNotFound{name}
 }
 
 // VerifyLibraries verifies that the required libraries, specified by name, are
 // available for the target environment.
-func VerifyLibraries(requiredLibs []string) error {
+func VerifyLibraries(requiredLibs []string, arch vm.CPUArch) error {
+	foundLibraryPaths := libraryFilePaths[arch]
+
 	for _, requiredLib := range requiredLibs {
-		if !contains(libraryFilePaths, libraryNameFromPath, requiredLib) {
+		if !contains(foundLibraryPaths, libraryNameFromPath, requiredLib) {
 			return errors.Wrap(errors.Errorf("missing required library %s", requiredLib), "cluster.VerifyLibraries")
 		}
 	}
@@ -220,50 +284,118 @@ func contains(list []string, transformString func(s string) string, str string) 
 }
 
 func initBinariesAndLibraries() {
-	// If we're running against an existing "local" cluster, force the local flag
-	// to true in order to get the "local" test configurations.
-	if clusterName == "local" {
-		local = true
-	}
-	if local {
-		cloud = spec.Local
-	}
-
-	cockroachDefault := "cockroach"
-	if !local {
-		cockroachDefault = "cockroach-linux-2.6.32-gnu-amd64"
-	}
-	var err error
-	cockroach, err = findBinary(cockroach, cockroachDefault)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%+v\n", err)
-		os.Exit(1)
-	}
-
-	if cockroachShort != "" {
-		// defValue doesn't matter since cockroachShort is a non-empty string.
-		cockroachShort, err = findBinary(cockroachShort, "" /* defValue */)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%+v\n", err)
-			os.Exit(1)
+	//TODO(srosenberg): enable metamorphic local clusters; currently, local==true means run all tests locally.
+	defaultOsName := "linux"
+	defaultArch := vm.ArchAMD64
+	if cloud == spec.Local {
+		defaultOsName = runtime.GOOS
+		if arm64Probability == 1 {
+			// N.B. if arm64Probability != 1, then we're running a metamorphic local cluster where amd64 is still default.
+			defaultArch = vm.CPUArch(runtime.GOARCH)
 		}
 	}
+	fmt.Printf("Locating and verifying binaries for os=%q, arch=%q\n", defaultOsName, defaultArch)
 
-	workload, err = findBinary(workload, "workload")
-	if errors.As(err, &errBinaryOrLibraryNotFound{}) {
-		fmt.Fprintln(os.Stderr, "workload binary not provided, proceeding anyway")
-	} else if err != nil {
-		fmt.Fprintf(os.Stderr, "%+v\n", err)
-		os.Exit(1)
+	// Finds a binary. If the binary 'isRequired', but not found, exit and print the error.
+	findDefaultBinary := func(binName string, userSpecified string, arch vm.CPUArch, isRequired bool, checkEA bool) (string, error) {
+		path := binName
+		if userSpecified != "" {
+			path = userSpecified
+		}
+		abspath, err := findBinary(path, defaultOsName, arch, checkEA)
+		if err != nil {
+			if !isRequired {
+				return "", err
+			} else {
+				fmt.Fprintf(os.Stderr, "ERROR: unable to find required binary %q for %q: %s\n", binName, arch, err)
+				os.Exit(1)
+			}
+		}
+		// Bail out if a binary other than the user-specified was found.
+		userPath, err := filepath.Abs(userSpecified)
+		if userSpecified != "" && (err != nil || userPath != abspath) {
+			if !isRequired {
+				return "", errors.Newf("ERROR: found %q at: %s instead of the user-specified path: %s\n", binName, abspath, userSpecified)
+			} else {
+				fmt.Fprintf(os.Stderr, "ERROR: found %q at: %s instead of the user-specified path: %s\n", binName, abspath, userSpecified)
+				os.Exit(1)
+			}
+		}
+		return abspath, nil
+	}
+	// We need to verify we have at least both the cockroach and the workload binaries.
+	var err error
+
+	cockroach[defaultArch], _ = findDefaultBinary("cockroach", cockroachPath, defaultArch, true, false)
+	workload[defaultArch], _ = findDefaultBinary("workload", workloadPath, defaultArch, true, false)
+	cockroachShort[defaultArch], err = findDefaultBinary("cockroach-short", cockroachShortPath, defaultArch, false, true)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-short", defaultArch, err)
+	}
+
+	if arm64Probability > 0 {
+		fmt.Printf("Locating and verifying binaries for os=%q, arch=%q\n", defaultOsName, vm.ArchARM64)
+		// We need to verify we have all the required binaries for arm64.
+		cockroach[vm.ArchARM64], _ = findDefaultBinary("cockroach", cockroachPath, vm.ArchARM64, true, false)
+		workload[vm.ArchARM64], _ = findDefaultBinary("workload", workloadPath, vm.ArchARM64, true, false)
+		cockroachShort[vm.ArchARM64], err = findDefaultBinary("cockroach-short", cockroachShortPath, vm.ArchARM64, false, true)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-short", vm.ArchARM64, err)
+		}
+	}
+	if fipsProbability > 0 {
+		fmt.Printf("Locating and verifying binaries for os=%q, arch=%q\n", defaultOsName, vm.ArchFIPS)
+		// We need to verify we have all the required binaries for fips.
+		cockroach[vm.ArchFIPS], _ = findDefaultBinary("cockroach", cockroachPath, vm.ArchFIPS, true, false)
+		workload[vm.ArchFIPS], _ = findDefaultBinary("workload", workloadPath, vm.ArchFIPS, true, false)
+		cockroachShort[vm.ArchFIPS], err = findDefaultBinary("cockroach-short", cockroachShortPath, vm.ArchFIPS, false, true)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-short", vm.ArchFIPS, err)
+		}
 	}
 
 	// In v20.2 or higher, optionally expect certain library files to exist.
 	// Since they may not be found in older versions, do not hard error if they are not found.
-	for _, libraryName := range []string{"libgeos", "libgeos_c"} {
-		if libraryFilePath, err := findLibrary(libraryName); err != nil {
-			fmt.Fprintf(os.Stderr, "error finding library %s, ignoring: %+v\n", libraryName, err)
-		} else {
-			libraryFilePaths = append(libraryFilePaths, libraryFilePath)
+	for _, arch := range []vm.CPUArch{vm.ArchAMD64, vm.ArchARM64, vm.ArchFIPS} {
+		if arm64Probability == 0 && defaultArch != vm.ArchARM64 && arch == vm.ArchARM64 {
+			// arm64 isn't used, skip finding libs for it.
+			continue
+		}
+		if fipsProbability == 0 && arch == vm.ArchFIPS {
+			// fips isn't used, skip finding libs for it.
+			continue
+		}
+		paths := []string(nil)
+
+		for _, libraryName := range []string{"libgeos", "libgeos_c"} {
+			if libraryFilePath, err := findLibrary(libraryName, defaultOsName, arch); err != nil {
+				fmt.Fprintf(os.Stderr, "WARN: unable to find library %s, ignoring: %s\n", libraryName, err)
+			} else {
+				paths = append(paths, libraryFilePath)
+			}
+		}
+		libraryFilePaths[arch] = paths
+	}
+	// Looks like we have all the binaries we'll need. Let's print them out.
+	fmt.Printf("\nFound the following binaries:\n")
+	for arch, path := range cockroach {
+		if path != "" {
+			fmt.Printf("\tcockroach %q at: %s\n", arch, path)
+		}
+	}
+	for arch, path := range workload {
+		if path != "" {
+			fmt.Printf("\tworkload %q at: %s\n", arch, path)
+		}
+	}
+	for arch, path := range cockroachShort {
+		if path != "" {
+			fmt.Printf("\tcockroach-short %q at: %s\n", arch, path)
+		}
+	}
+	for arch, paths := range libraryFilePaths {
+		if len(paths) > 0 {
+			fmt.Printf("\tlibraries %q at: %s\n", arch, strings.Join(paths, ", "))
 		}
 	}
 }
@@ -664,6 +796,8 @@ type clusterImpl struct {
 	// clusterSettings are additional cluster settings set on cluster startup.
 	clusterSettings map[string]string
 
+	os   string     // OS of the cluster
+	arch vm.CPUArch // CPU architecture of the cluster
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
 }
@@ -747,7 +881,8 @@ type clusterConfig struct {
 	localCluster bool
 	useIOBarrier bool
 	alloc        *quotapool.IntAlloc
-	enableFIPS   bool
+	// Specifies CPU architecture which may require a custom AMI and cockroach binary.
+	arch vm.CPUArch
 }
 
 // clusterFactory is a creator of clusters.
@@ -884,7 +1019,7 @@ func (f *clusterFactory) newCluster(
 	providerOptsContainer := vm.CreateProviderOptionsContainer()
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.
-	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts("", cfg.useIOBarrier, cfg.enableFIPS)
+	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts("", cfg.useIOBarrier, cfg.arch)
 	if err != nil {
 		// We must release the allocation because cluster creation is not possible at this point.
 		cfg.alloc.Release()
@@ -1740,7 +1875,8 @@ func (c *clusterImpl) PutLibraries(
 	if err := c.RunE(ctx, c.All(), "mkdir", "-p", libraryDir); err != nil {
 		return err
 	}
-	for _, libraryFilePath := range libraryFilePaths {
+
+	for _, libraryFilePath := range libraryFilePaths[c.arch] {
 		if !contains(libraries, nil, libraryNameFromPath(libraryFilePath)) {
 			continue
 		}
@@ -1770,7 +1906,7 @@ func (c *clusterImpl) Stage(
 	c.status("staging binary")
 	defer c.status("")
 	return errors.Wrap(roachprod.Stage(ctx, l, c.MakeNodes(opts...),
-		"" /* stageOS */, "" /* stageArch */, dir, application, versionOrSHA), "cluster.Stage")
+		c.os, string(c.arch), dir, application, versionOrSHA), "cluster.Stage")
 }
 
 // Get gets files from remote hosts.
@@ -2486,6 +2622,10 @@ func (c *clusterImpl) IsLocal() bool {
 
 func (c *clusterImpl) IsSecure() bool {
 	return c.localCertsDir != ""
+}
+
+func (c *clusterImpl) Architecture() vm.CPUArch {
+	return c.arch
 }
 
 // Extend extends the cluster's expiration by d.
