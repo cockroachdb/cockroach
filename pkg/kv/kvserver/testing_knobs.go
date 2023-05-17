@@ -213,7 +213,8 @@ type StoreTestingKnobs struct {
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
 	// DisableLeaderFollowsLeaseholder disables attempts to transfer raft
-	// leadership when it diverges from the range's leaseholder.
+	// leadership when it diverges from the range's leaseholder. This can
+	// also be set via COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER.
 	DisableLeaderFollowsLeaseholder bool
 	// DisableRefreshReasonNewLeader disables refreshing pending commands when a new
 	// leader is discovered.

@@ -892,6 +892,10 @@ func (r *Replica) requestLeaseLocked(
 func (r *Replica) AdminTransferLease(
 	ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool,
 ) error {
+	if r.store.cfg.TestingKnobs.DisableLeaderFollowsLeaseholder {
+		// Ensure lease transfers still work when we don't colocate leaders and leases.
+		bypassSafetyChecks = true
+	}
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
