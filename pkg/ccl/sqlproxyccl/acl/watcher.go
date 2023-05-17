@@ -136,6 +136,7 @@ func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 		controllers: make([]AccessController, 0),
 	}
 
+	// TODO(jaylim-crl): Deprecate allowlistFile.
 	if options.allowlistFile != "" {
 		c, next, err := newAccessControllerFromFile[*Allowlist](
 			ctx,
@@ -167,7 +168,7 @@ func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 		w.addAccessController(ctx, c, next)
 	}
 	if w.options.lookupTenantFn != nil {
-		controller := &PrivateEndpoints{
+		privateEndpointsController := &PrivateEndpoints{
 			LookupTenantFn: w.options.lookupTenantFn,
 		}
 		// We use a normal polling interval to determine when we should check
@@ -186,13 +187,23 @@ func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 		// same time, the current AccessController design is poor because we
 		// iterate through all the connections for each ACL update (i.e. 1 for
 		// allowlist, 1 for denylist, and another for private endpoints).
-		next := pollAndUpdateChan(
+		w.addAccessController(ctx, privateEndpointsController, pollAndUpdateChan(
 			ctx,
 			w.options.timeSource,
 			w.options.pollingInterval,
-			controller,
-		)
-		w.addAccessController(ctx, controller, next)
+			privateEndpointsController,
+		))
+
+		if options.allowlistFile == "" {
+			cidrRangesController := &CIDRRanges{
+				LookupTenantFn: w.options.lookupTenantFn,
+			}
+			// HACK(jaylim-crl): Note that the endpoints controller is already
+			// polling once every few seconds, and checking on every connection.
+			// Since these two controllers don't store state, we can just rely
+			// on that until we get a better access controller.
+			w.addAccessController(ctx, cidrRangesController, nil)
+		}
 	}
 	return w, nil
 }

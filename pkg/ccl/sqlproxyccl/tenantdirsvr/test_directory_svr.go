@@ -169,8 +169,9 @@ func (s *TestDirectoryServer) GetTenant(
 ) (*tenant.GetTenantResponse, error) {
 	return &tenant.GetTenantResponse{
 		Tenant: &tenant.Tenant{
-			TenantID:    req.TenantID,
-			ClusterName: "tenant-cluster",
+			TenantID:          req.TenantID,
+			ClusterName:       "tenant-cluster",
+			AllowedCIDRRanges: []string{"0.0.0.0/0"},
 		},
 	}, nil
 }
