@@ -845,6 +845,8 @@ func (ie *InternalExecutor) execInternal(
 	// Note that if a context cancellation error has occurred, we still return
 	// the iterator and nil retErr so that the iterator is properly closed by
 	// the caller which will clean up the connExecutor goroutine.
+	// TODO(yuzefovich): reconsider this and return an error explicitly if
+	// r.lastErr is non-nil.
 	return r, nil
 }
 
