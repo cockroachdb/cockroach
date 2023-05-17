@@ -27,7 +27,7 @@ then
 fi
 
 GOTESTTIMEOUTSECS=$(($TESTTIMEOUTSECS - 5))
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci "$TARGET" \
+COCKROACH_NIGHTLY_STRESS=true $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci "$TARGET" \
                                         --test_env=COCKROACH_NIGHTLY_STRESS=true \
                                         --test_env=GOTRACEBACK=all \
                                         --test_timeout="$TESTTIMEOUTSECS" \
