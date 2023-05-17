@@ -265,7 +265,9 @@ var defaultConfig = func() (cfg *awsConfig) {
 // cluster creation. If the geo flag is specified, nodes are distributed between
 // zones.
 var defaultCreateZones = []string{
-	"us-east-2b",
+	// N.B. us-east-2a is the default zone for non-geo distributed clusters. It appears to have a higher on-demand
+	// capacity of c7g.8xlarge (graviton3) than us-east-2b.
+	"us-east-2a",
 	"us-west-2b",
 	"eu-west-2b",
 }
@@ -434,12 +436,13 @@ func (p *Provider) Create(
 	var g errgroup.Group
 	limiter := rate.NewLimiter(rate.Limit(providerOpts.CreateRateLimit), 2 /* buckets */)
 	for i := range names {
+		index := i
 		capName := names[i]
 		placement := zones[i]
 		res := limiter.Reserve()
 		g.Go(func() error {
 			time.Sleep(res.Delay())
-			return p.runInstance(l, capName, placement, opts, providerOpts)
+			return p.runInstance(l, capName, index, placement, opts, providerOpts)
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -797,7 +800,12 @@ func (p *Provider) listRegion(region string, opts ProviderOpts) (vm.List, error)
 // we need to do a bit of work to look up all of the various ids that
 // we need in order to actually allocate an instance.
 func (p *Provider) runInstance(
-	l *logger.Logger, name string, zone string, opts vm.CreateOpts, providerOpts *ProviderOpts,
+	l *logger.Logger,
+	name string,
+	instanceIdx int,
+	zone string,
+	opts vm.CreateOpts,
+	providerOpts *ProviderOpts,
 ) error {
 	// There exist different flags to control the machine type when ssd is true.
 	// This enables sane defaults for either setting but the behavior can be
@@ -850,7 +858,10 @@ func (p *Provider) runInstance(
 
 	var labelPairs []string
 	addLabel := func(key, value string) {
-		labelPairs = append(labelPairs, fmt.Sprintf("{Key=%s,Value=%s}", key, value))
+		// N.B. AWS does not allow empty values.
+		if value != "" {
+			labelPairs = append(labelPairs, fmt.Sprintf("{Key=%s,Value=%s}", key, value))
+		}
 	}
 
 	for key, value := range opts.CustomLabels {
@@ -888,7 +899,8 @@ func (p *Provider) runInstance(
 			extraMountOpts = "nobarrier"
 		}
 	}
-	filename, err := writeStartupScript(extraMountOpts, providerOpts.UseMultipleDisks, opts.EnableFIPS)
+	filename, err := writeStartupScript(extraMountOpts, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
+
 	if err != nil {
 		return errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}
@@ -904,14 +916,22 @@ func (p *Provider) runInstance(
 	}
 	imageID := withFlagOverride(az.region.AMI_X86_64, &providerOpts.ImageAMI)
 	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "7g.") == 1
+	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
+		return errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
+	}
 	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 	if useArmAMI {
 		imageID = withFlagOverride(az.region.AMI_ARM64, &providerOpts.ImageAMI)
-		l.Printf("Using ARM64 AMI: %s for machine type: %s", imageID, machineType)
+		// N.B. use arbitrary instanceIdx to suppress the same info for every other instance being created.
+		if instanceIdx == 0 {
+			l.Printf("Using ARM64 AMI: %s for machine type: %s", imageID, machineType)
+		}
 	}
-	if !useArmAMI && opts.EnableFIPS {
+	if opts.Arch == string(vm.ArchFIPS) {
 		imageID = withFlagOverride(az.region.AMI_FIPS, &providerOpts.ImageAMI)
-		l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", imageID, machineType)
+		if instanceIdx == 0 {
+			l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", imageID, machineType)
+		}
 	}
 	args := []string{
 		"ec2", "run-instances",

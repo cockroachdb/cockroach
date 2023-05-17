@@ -359,6 +359,7 @@ func registerImportMixedVersion(r registry.Registry) {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
 			predV, err := PredecessorVersion(*t.BuildVersion())
+
 			if err != nil {
 				t.Fatal(err)
 			}

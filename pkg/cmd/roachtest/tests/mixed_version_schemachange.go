@@ -34,6 +34,7 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 			if runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
+
 			maxOps := 100
 			concurrency := 5
 			if c.IsLocal() {

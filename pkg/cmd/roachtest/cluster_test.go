@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -199,14 +200,14 @@ func TestVerifyLibraries(t *testing.T) {
 			name:             "no match",
 			verifyLibs:       []string{"required_c"},
 			libraryFilePaths: []string{"/some/path/lib.so"},
-			expectedError: errors.Wrap(errors.Errorf("missing required library %s",
+			expectedError: errors.Wrap(errors.Errorf("missing required library %s (arch=\"amd64\")",
 				"required_c"), "cluster.VerifyLibraries"),
 		},
 		{
 			name:             "no match on nil libs",
 			verifyLibs:       []string{"required_b"},
 			libraryFilePaths: nil,
-			expectedError: errors.Wrap(errors.Errorf("missing required library %s",
+			expectedError: errors.Wrap(errors.Errorf("missing required library %s (arch=\"amd64\")",
 				"required_b"), "cluster.VerifyLibraries"),
 		},
 		{
@@ -216,16 +217,28 @@ func TestVerifyLibraries(t *testing.T) {
 			expectedError:    nil,
 		},
 		{
+			name:             "single match, multiple extensions",
+			verifyLibs:       []string{"geos"},
+			libraryFilePaths: []string{"/lib/geos.linux-amd.so"},
+			expectedError:    nil,
+		},
+		{
 			name:             "multiple matches",
 			verifyLibs:       []string{"lib", "ltwo", "geos"},
 			libraryFilePaths: []string{"ltwo.so", "a/geos.so", "/some/path/to/lib.so"},
 			expectedError:    nil,
 		},
+		{
+			name:             "multiple matches, multiple extensions",
+			verifyLibs:       []string{"lib", "ltwo", "geos"},
+			libraryFilePaths: []string{"ltwo.linux-arm64.so", "a/geos.linux-amd64.fips.so", "/some/path/to/lib.darwin-arm64.so"},
+			expectedError:    nil,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			libraryFilePaths = tc.libraryFilePaths
-			actualError := VerifyLibraries(tc.verifyLibs)
+			libraryFilePaths = map[vm.CPUArch][]string{vm.ArchAMD64: tc.libraryFilePaths}
+			actualError := VerifyLibraries(tc.verifyLibs, vm.ArchAMD64)
 			if tc.expectedError == nil {
 				require.NoError(t, actualError)
 			} else {

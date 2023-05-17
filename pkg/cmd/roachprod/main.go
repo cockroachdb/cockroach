@@ -273,6 +273,7 @@ hosts file.
 					c.PrintDetails(roachprodLibraryLogger)
 				} else {
 					fmt.Fprintf(tw, "%s\t%s\t%d", c.Name, c.Clouds(), len(c.VMs))
+
 					if !c.IsLocal() {
 						fmt.Fprintf(tw, "\t(%s)", c.LifetimeRemaining().Round(time.Second))
 					} else {
@@ -904,10 +905,14 @@ var grafanaStartCmd = &cobra.Command{
 	Use:   `grafana-start <cluster>`,
 	Short: `spins up a prometheus and grafana instances on the last node in the cluster`,
 	Long: `spins up a prometheus and grafana instances on the highest numbered node in the cluster
-and will scrape from all nodes in the cluster`,
+and will scrape from all nodes in the cluster; NOTE: for arm64 clusters, use --arch arm64`,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.StartGrafana(context.Background(), roachprodLibraryLogger, args[0],
+		arch := vm.ArchAMD64
+		if grafanaArch == "arm64" {
+			arch = vm.ArchARM64
+		}
+		return roachprod.StartGrafana(context.Background(), roachprodLibraryLogger, args[0], arch,
 			grafanaConfig, nil)
 	}),
 }
@@ -954,14 +959,14 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 
 	// Validate architecture flag, if set.
 	if archOpt := cmd.Flags().Lookup("arch"); archOpt != nil && archOpt.Changed {
-		arch := strings.ToLower(archOpt.Value.String())
+		arch := vm.CPUArch(strings.ToLower(archOpt.Value.String()))
 
-		if arch != "amd64" && arch != "arm64" && arch != "fips" {
+		if arch != vm.ArchAMD64 && arch != vm.ArchARM64 && arch != vm.ArchFIPS {
 			printErrAndExit(fmt.Errorf("unsupported architecture %q", arch))
 		}
-		if arch != archOpt.Value.String() {
+		if string(arch) != archOpt.Value.String() {
 			// Set the canonical value.
-			_ = cmd.Flags().Set("arch", arch)
+			_ = cmd.Flags().Set("arch", string(arch))
 		}
 	}
 }

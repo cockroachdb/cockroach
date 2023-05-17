@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
         "@com_github_prometheus_common//model",

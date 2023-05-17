@@ -98,6 +98,7 @@ func nilLogger() *logger.Logger {
 func alwaysFailingClusterAllocator(
 	ctx context.Context,
 	t registry.TestSpec,
+	arch vm.CPUArch,
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,
