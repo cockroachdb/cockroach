@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3"
@@ -530,6 +531,7 @@ func LoadEntries(
 	sideloaded SideloadStorage,
 	lo, hi kvpb.RaftIndex,
 	maxBytes uint64,
+	account *mon.BoundAccount,
 ) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
@@ -540,16 +542,57 @@ func LoadEntries(
 		n = 100
 	}
 	ents := make([]raftpb.Entry, 0, n)
+	// TODO(pav-kv): make all the entry getting limits soft. In most cases we
+	// already paid the cost of fetching an extra entry, so we should rather
+	// return it. This would also simplify the code below that takes both the
+	// dynamic memory budgeting and the static limit into account.
+	//
+	// TODO(pav-kv): encapsulate the maxBytes + dynamic limit in a type.
+	ents, _, hitIndex, _ := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
 
-	ents, cachedSize, hitIndex, exceededMaxBytes := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
-
-	// Return results if the correct number of results came back or if
-	// we ran into the max bytes limit.
-	if kvpb.RaftIndex(len(ents)) == hi-lo || exceededMaxBytes {
-		return ents, cachedSize, 0, nil
+	var totalSize uint64 // tracks total size of the returned entries
+	// exceededMaxBytes is set to true when the last or next-to-last entry brings
+	// the total size over maxBytes, or the memory budget limit is reached. Entry
+	// iteration stops when this is true.
+	exceededMaxBytes := false
+	// budgetFor is called sequentially on each entry. We return a prefix of
+	// entries for which budgetFor() returned true.
+	budgetFor := func(size uint64) (take bool) {
+		defer func() {
+			if take {
+				totalSize += size
+			}
+		}()
+		if totalSize+size > maxBytes {
+			exceededMaxBytes = true
+			// Make sure to return at least one entry if the budget allows for it.
+			return len(ents) == 0 && account.Grow(ctx, int64(size)) == nil
+		}
+		if account.Grow(ctx, int64(size)) != nil {
+			exceededMaxBytes = true
+			return false
+		}
+		return true
 	}
 
-	combinedSize := cachedSize // size tracks total size of ents.
+	cachedTaken := 0
+	for l := len(ents); cachedTaken < l && !exceededMaxBytes; cachedTaken++ {
+		budgetFor(uint64(ents[cachedTaken].Size()))
+	}
+	// Return results if the correct number of results came back, or we ran into
+	// the max bytes limit, or reached the memory budget limit.
+	//
+	// If we couldn't get quota for all cached entries, return only a prefix. Even
+	// though all these entries are already in memory, returning all of them now
+	// increases their lifetime, and risks getting the server out of memory.
+	if kvpb.RaftIndex(len(ents)) == hi-lo || exceededMaxBytes {
+		// Dereference the memory held by all cached entries we are skipping.
+		for i, l := cachedTaken, len(ents); i < l; i++ {
+			ents[i] = raftpb.Entry{}
+		}
+		return ents[:cachedTaken], totalSize, 0, nil
+	}
+	cachedSize := totalSize
 
 	// Scan over the log to find the requested entries in the range [lo, hi),
 	// stopping once we have enough.
@@ -578,17 +621,12 @@ func LoadEntries(
 			}
 		}
 
-		// Note that we track the size of proposals with payloads inlined.
-		combinedSize += uint64(ent.Size())
-		if combinedSize > maxBytes {
-			exceededMaxBytes = true
-			if len(ents) == 0 { // make sure to return at least one entry
-				ents = append(ents, ent)
-			}
+		if budgetFor(uint64(ent.Size())) {
+			ents = append(ents, ent)
+		}
+		if exceededMaxBytes {
 			return iterutil.StopIteration()
 		}
-
-		ents = append(ents, ent)
 		return nil
 	}
 
@@ -601,12 +639,11 @@ func LoadEntries(
 
 	// Did the correct number of results come back? If so, we're all good.
 	if kvpb.RaftIndex(len(ents)) == hi-lo {
-		return ents, cachedSize, combinedSize - cachedSize, nil
+		return ents, cachedSize, totalSize - cachedSize, nil
 	}
-
-	// Did we hit the size limit? If so, return what we have.
+	// Did we hit the size limits? If so, return what we have.
 	if exceededMaxBytes {
-		return ents, cachedSize, combinedSize - cachedSize, nil
+		return ents, cachedSize, totalSize - cachedSize, nil
 	}
 
 	// Did we get any results at all? Because something went wrong.
