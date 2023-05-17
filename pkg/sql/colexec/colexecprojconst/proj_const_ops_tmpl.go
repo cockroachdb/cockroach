@@ -141,7 +141,7 @@ func (p _OP_CONST_NAME) Next() coldata.Batch {
 	col = vec._L_TYP()
 	// {{end}}
 	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col

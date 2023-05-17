@@ -864,13 +864,13 @@ func TestAggregatorRandom(t *testing.T) {
 					log.Infof(context.Background(), "%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls)
 					nTuples := coldata.BatchSize() * numInputBatches
 					typs := []*types.T{types.Int, types.Float}
-					cols := []coldata.Vec{
-						testAllocator.NewMemColumn(typs[0], nTuples),
-						testAllocator.NewMemColumn(typs[1], nTuples),
+					cols := []*coldata.Vec{
+						testAllocator.NewVec(typs[0], nTuples),
+						testAllocator.NewVec(typs[1], nTuples),
 					}
 					if agg.order == partial {
 						typs = append(typs, types.Int)
-						cols = append(cols, testAllocator.NewMemColumn(typs[2], nTuples))
+						cols = append(cols, testAllocator.NewVec(typs[2], nTuples))
 					}
 					groups, aggCol, aggColNulls := cols[0].Int64(), cols[1].Float64(), cols[1].Nulls()
 					expectedTuples := colexectestutils.Tuples{}
@@ -1042,9 +1042,9 @@ func benchmarkAggregateFunction(
 		groupCols = append(groupCols, uint32(g))
 	}
 	typs = append(typs, aggInputTypes...)
-	cols := make([]coldata.Vec, len(typs))
+	cols := make([]*coldata.Vec, len(typs))
 	for i := range typs {
-		cols[i] = testAllocator.NewMemColumn(typs[i], numInputRows)
+		cols[i] = testAllocator.NewVec(typs[i], numInputRows)
 	}
 	groups := cols[0].Int64()
 	if agg.order == ordered {
