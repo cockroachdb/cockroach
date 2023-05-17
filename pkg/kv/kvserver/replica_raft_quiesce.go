@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/tracker"
 )
 
 // quiesceAfterTicks is the number of ticks without proposals after which ranges
@@ -420,7 +421,7 @@ func shouldReplicaQuiesce(
 					rep.ReplicaID, progress)
 			}
 			return nil, nil, false
-		} else if progress.Match != status.Applied {
+		} else if progress.Match != status.Applied || progress.State != tracker.StateReplicate {
 			// Skip any node in the descriptor which is not live. Instead, add
 			// the node to the set of replicas lagging the quiescence index.
 			if l, ok := livenessMap[rep.NodeID]; ok && !l.IsLive {
@@ -432,8 +433,8 @@ func shouldReplicaQuiesce(
 				continue
 			}
 			if log.V(4) {
-				log.Infof(ctx, "not quiescing: replica %d match (%d) != applied (%d)",
-					rep.ReplicaID, progress.Match, status.Applied)
+				log.Infof(ctx, "not quiescing: replica %d match (%d) != applied (%d) or state %s not admissible",
+					rep.ReplicaID, progress.Match, status.Applied, progress.State)
 			}
 			return nil, nil, false
 		}
