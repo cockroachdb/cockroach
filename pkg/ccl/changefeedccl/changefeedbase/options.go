@@ -73,34 +73,34 @@ const (
 
 // Constants for the options.
 const (
-	OptAvroSchemaPrefix         = `avro_schema_prefix`
-	OptConfluentSchemaRegistry  = `confluent_schema_registry`
-	OptCursor                   = `cursor`
-	OptCustomKeyColumn          = `key_column`
-	OptEndTime                  = `end_time`
-	OptEnvelope                 = `envelope`
-	OptFormat                   = `format`
-	OptFullTableName            = `full_table_name`
-	OptKeyInValue               = `key_in_value`
-	OptTopicInValue             = `topic_in_value`
-	OptResolvedTimestamps       = `resolved`
-	OptMinCheckpointFrequency   = `min_checkpoint_frequency`
-	OptUpdatedTimestamps        = `updated`
-	OptMVCCTimestamps           = `mvcc_timestamp`
-	OptDiff                     = `diff`
-	OptCompression              = `compression`
-	OptSchemaChangeEvents       = `schema_change_events`
-	OptSchemaChangePolicy       = `schema_change_policy`
-	OptSplitColumnFamilies      = `split_column_families`
-	OptProtectDataFromGCOnPause = `protect_data_from_gc_on_pause`
-	OptExpirePTSAfter           = `gc_protect_expires_after`
-	OptWebhookAuthHeader        = `webhook_auth_header`
-	OptWebhookClientTimeout     = `webhook_client_timeout`
-	OptOnError                  = `on_error`
-	OptMetricsScope             = `metrics_label`
-	OptUnordered                = `unordered`
-	OptVirtualColumns           = `virtual_columns`
-	OptExecutionLocality        = `execution_locality`
+	OptAvroSchemaPrefix                   = `avro_schema_prefix`
+	OptConfluentSchemaRegistry            = `confluent_schema_registry`
+	OptCursor                             = `cursor`
+	OptCustomKeyColumn                    = `key_column`
+	OptEndTime                            = `end_time`
+	OptEnvelope                           = `envelope`
+	OptFormat                             = `format`
+	OptFullTableName                      = `full_table_name`
+	OptKeyInValue                         = `key_in_value`
+	OptTopicInValue                       = `topic_in_value`
+	OptResolvedTimestamps                 = `resolved`
+	OptMinCheckpointFrequency             = `min_checkpoint_frequency`
+	OptUpdatedTimestamps                  = `updated`
+	OptMVCCTimestamps                     = `mvcc_timestamp`
+	OptDiff                               = `diff`
+	OptCompression                        = `compression`
+	OptSchemaChangeEvents                 = `schema_change_events`
+	OptSchemaChangePolicy                 = `schema_change_policy`
+	OptSplitColumnFamilies                = `split_column_families`
+	DeprecatedOptProtectDataFromGCOnPause = `protect_data_from_gc_on_pause`
+	OptExpirePTSAfter                     = `gc_protect_expires_after`
+	OptWebhookAuthHeader                  = `webhook_auth_header`
+	OptWebhookClientTimeout               = `webhook_client_timeout`
+	OptOnError                            = `on_error`
+	OptMetricsScope                       = `metrics_label`
+	OptUnordered                          = `unordered`
+	OptVirtualColumns                     = `virtual_columns`
+	OptExecutionLocality                  = `execution_locality`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -309,40 +309,40 @@ var jsonOption = OptionPermittedValues{Type: OptionTypeJSON}
 // ChangefeedOptionExpectValues is used to parse changefeed options using
 // PlanHookState.TypeAsStringOpts().
 var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
-	OptAvroSchemaPrefix:         stringOption,
-	OptConfluentSchemaRegistry:  stringOption,
-	OptCursor:                   timestampOption,
-	OptCustomKeyColumn:          stringOption,
-	OptEndTime:                  timestampOption,
-	OptEnvelope:                 enum("row", "key_only", "wrapped", "deprecated_row", "bare"),
-	OptFormat:                   enum("json", "avro", "csv", "experimental_avro", "parquet"),
-	OptFullTableName:            flagOption,
-	OptKeyInValue:               flagOption,
-	OptTopicInValue:             flagOption,
-	OptResolvedTimestamps:       durationOption.thatCanBeZero().orEmptyMeans("0"),
-	OptMinCheckpointFrequency:   durationOption.thatCanBeZero(),
-	OptUpdatedTimestamps:        flagOption,
-	OptMVCCTimestamps:           flagOption,
-	OptDiff:                     flagOption,
-	OptCompression:              enum("gzip", "zstd"),
-	OptSchemaChangeEvents:       enum("column_changes", "default"),
-	OptSchemaChangePolicy:       enum("backfill", "nobackfill", "stop", "ignore"),
-	OptSplitColumnFamilies:      flagOption,
-	OptInitialScan:              enum("yes", "no", "only").orEmptyMeans("yes"),
-	OptNoInitialScan:            flagOption,
-	OptInitialScanOnly:          flagOption,
-	OptProtectDataFromGCOnPause: flagOption,
-	OptExpirePTSAfter:           durationOption.thatCanBeZero(),
-	OptKafkaSinkConfig:          jsonOption,
-	OptPubsubSinkConfig:         jsonOption,
-	OptWebhookSinkConfig:        jsonOption,
-	OptWebhookAuthHeader:        stringOption,
-	OptWebhookClientTimeout:     durationOption,
-	OptOnError:                  enum("pause", "fail"),
-	OptMetricsScope:             stringOption,
-	OptUnordered:                flagOption,
-	OptVirtualColumns:           enum("omitted", "null"),
-	OptExecutionLocality:        stringOption,
+	OptAvroSchemaPrefix:                   stringOption,
+	OptConfluentSchemaRegistry:            stringOption,
+	OptCursor:                             timestampOption,
+	OptCustomKeyColumn:                    stringOption,
+	OptEndTime:                            timestampOption,
+	OptEnvelope:                           enum("row", "key_only", "wrapped", "deprecated_row", "bare"),
+	OptFormat:                             enum("json", "avro", "csv", "experimental_avro", "parquet"),
+	OptFullTableName:                      flagOption,
+	OptKeyInValue:                         flagOption,
+	OptTopicInValue:                       flagOption,
+	OptResolvedTimestamps:                 durationOption.thatCanBeZero().orEmptyMeans("0"),
+	OptMinCheckpointFrequency:             durationOption.thatCanBeZero(),
+	OptUpdatedTimestamps:                  flagOption,
+	OptMVCCTimestamps:                     flagOption,
+	OptDiff:                               flagOption,
+	OptCompression:                        enum("gzip", "zstd"),
+	OptSchemaChangeEvents:                 enum("column_changes", "default"),
+	OptSchemaChangePolicy:                 enum("backfill", "nobackfill", "stop", "ignore"),
+	OptSplitColumnFamilies:                flagOption,
+	OptInitialScan:                        enum("yes", "no", "only").orEmptyMeans("yes"),
+	OptNoInitialScan:                      flagOption,
+	OptInitialScanOnly:                    flagOption,
+	DeprecatedOptProtectDataFromGCOnPause: flagOption,
+	OptExpirePTSAfter:                     durationOption.thatCanBeZero(),
+	OptKafkaSinkConfig:                    jsonOption,
+	OptPubsubSinkConfig:                   jsonOption,
+	OptWebhookSinkConfig:                  jsonOption,
+	OptWebhookAuthHeader:                  stringOption,
+	OptWebhookClientTimeout:               durationOption,
+	OptOnError:                            enum("pause", "fail"),
+	OptMetricsScope:                       stringOption,
+	OptUnordered:                          flagOption,
+	OptVirtualColumns:                     enum("omitted", "null"),
+	OptExecutionLocality:                  stringOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -352,7 +352,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptResolvedTimestamps, OptUpdatedTimestamps,
 	OptMVCCTimestamps, OptDiff, OptSplitColumnFamilies,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
-	OptProtectDataFromGCOnPause, OptOnError,
+	OptOnError,
 	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptUnordered, OptCustomKeyColumn,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
 	OptExecutionLocality,
@@ -384,6 +384,9 @@ var ExternalConnectionValidOptions = unionStringSets(SQLValidOptions, KafkaValid
 // CaseInsensitiveOpts options which supports case Insensitive value
 var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptSchemaChangeEvents,
 	OptSchemaChangePolicy, OptOnError, OptInitialScan)
+
+// RetiredOptions are the options which are no longer active.
+var RetiredOptions = makeStringSet(DeprecatedOptProtectDataFromGCOnPause)
 
 // redactionFunc is a function applied to a string option which returns its redacted value.
 type redactionFunc func(string) (string, error)
@@ -529,11 +532,16 @@ func (s StatementOptions) IsSet(key string) bool {
 }
 
 // DeprecationWarnings checks for options in forms we still support and serialize,
-// but should be replaced with a new form. Currently hardcoded to just check format.
+// but should be replaced with a new form.
 func (s StatementOptions) DeprecationWarnings() []string {
 	if newFormat, ok := NoLongerExperimental[s.m[OptFormat]]; ok {
 		return []string{fmt.Sprintf(`%[1]s is no longer experimental, use %[2]s=%[1]s`,
 			newFormat, OptFormat)}
+	}
+	for retiredOpt := range RetiredOptions {
+		if _, isSet := s.m[retiredOpt]; isSet {
+			return []string{fmt.Sprintf("%s option is no longer needed", retiredOpt)}
+		}
 	}
 
 	return []string{}

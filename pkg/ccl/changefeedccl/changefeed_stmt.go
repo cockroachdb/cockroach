@@ -714,6 +714,10 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
+	if ptsExpiration == 0 {
+		ptsExpiration = changefeedbase.MaxProtectedTimestampAge.Get(&p.ExecCfg().Settings.SV)
+	}
+
 	if ptsExpiration > 0 && ptsExpiration < time.Hour {
 		// This threshold is rather arbitrary.  But we want to warn users about
 		// the potential impact of keeping this setting too low.
@@ -1164,10 +1168,6 @@ func (b *changefeedResumer) handleChangefeedError(
 			changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
 		return b.job.NoTxn().PauseRequestedWithFunc(ctx, func(ctx context.Context,
 			planHookState interface{}, txn isql.Txn, progress *jobspb.Progress) error {
-			err := b.OnPauseRequest(ctx, jobExec, txn, progress)
-			if err != nil {
-				return err
-			}
 			// directly update running status to avoid the running/reverted job status check
 			progress.RunningStatus = errorMessage
 			log.Warningf(ctx, errorFmt, changefeedErr, changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
@@ -1407,47 +1407,6 @@ func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
 		// Log and move on.
 		log.Warningf(ctx, "failed to remove protected timestamp record %v: %v", ptsID, err)
 	}
-}
-
-var _ jobs.PauseRequester = (*changefeedResumer)(nil)
-
-// OnPauseRequest implements jobs.PauseRequester. If this changefeed is being
-// paused, we may want to clear the protected timestamp record.
-func (b *changefeedResumer) OnPauseRequest(
-	ctx context.Context, jobExec interface{}, txn isql.Txn, progress *jobspb.Progress,
-) error {
-	details := b.job.Details().(jobspb.ChangefeedDetails)
-
-	cp := progress.GetChangefeed()
-	execCfg := jobExec.(sql.JobExecContext).ExecCfg()
-
-	if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; !shouldProtect {
-		// Release existing pts record to avoid a single changefeed left on pause
-		// resulting in storage issues
-		if cp.ProtectedTimestampRecord != uuid.Nil {
-			pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
-			if err := pts.Release(ctx, cp.ProtectedTimestampRecord); err != nil {
-				log.Warningf(ctx, "failed to release protected timestamp %v: %v", cp.ProtectedTimestampRecord, err)
-			} else {
-				cp.ProtectedTimestampRecord = uuid.Nil
-			}
-		}
-		return nil
-	}
-
-	if cp.ProtectedTimestampRecord == uuid.Nil {
-		resolved := progress.GetHighWater()
-		if resolved == nil {
-			return nil
-		}
-		pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
-		ptr := createProtectedTimestampRecord(
-			ctx, execCfg.Codec, b.job.ID(), AllTargets(details), *resolved, cp,
-		)
-		return pts.Protect(ctx, ptr)
-	}
-
-	return nil
 }
 
 // getQualifiedTableName returns the database-qualified name of the table
