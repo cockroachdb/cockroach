@@ -107,8 +107,8 @@ func TestDataDriven(t *testing.T) {
 				var minKey, maxKey = int64(1), int64(defaultKeyspace)
 				var accessSkew bool
 
-				scanIfExists(t, d, "rw_ratio", &rate)
-				scanIfExists(t, d, "rate", &rwRatio)
+				scanIfExists(t, d, "rate", &rate)
+				scanIfExists(t, d, "rw_ratio", &rwRatio)
 				scanIfExists(t, d, "access_skew", &accessSkew)
 				scanIfExists(t, d, "min_block", &minBlock)
 				scanIfExists(t, d, "max_block", &maxBlock)
@@ -221,6 +221,7 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
 				scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
 				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
+				scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective)
 				return ""
 			case "plot":
 				var stat string

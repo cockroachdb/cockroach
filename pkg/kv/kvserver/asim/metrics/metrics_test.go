@@ -110,7 +110,7 @@ func Example_rebalance() {
 	s.ApplyLoad(le)
 
 	// Do the rebalance.
-	c := &state.ReplicaChange{RangeID: 1, Add: 2, Remove: 1, Author: 1}
+	c := &state.ReplicaChange{RangeID: 1, Add: 4, Remove: 1, Author: 1}
 	c.Apply(s)
 
 	m.Tick(ctx, start, s)

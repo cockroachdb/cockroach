@@ -121,6 +121,11 @@ func newStoreRebalancerControl(
 	}
 }
 
+// TODO(kvoli):
+// (1) split out bug fixes
+// (2) split out cpu accounting
+// (3) init cpu rebalance objective option
+
 // simRebalanceObjectiveProvider implements the
 // kvserver.RebalanceObjectiveProvider interface.
 type simRebalanceObjectiveProvider struct {
@@ -133,14 +138,18 @@ func (s simRebalanceObjectiveProvider) Objective() kvserver.LBRebalancingObjecti
 }
 
 func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.LoadScorerOptions {
+	dim := src.sr.RebalanceObjective().ToDimension()
+	settings := src.settings
+	loadThresholds := load.Vector{settings.LBRebalanceQPSThreshold, settings.LBRebalancingCPUThreshold}
+	loadMinRequiredDiffs := load.Vector{settings.LBMinRequiredQPSDiff, settings.LBMinRequiredCPUDiff}
 	return &allocatorimpl.LoadScorerOptions{
 		IOOverloadOptions:            src.allocator.IOOverloadOptions(),
 		DiskOptions:                  src.allocator.DiskOptions(),
 		Deterministic:                true,
-		LoadDims:                     []load.Dimension{load.Queries},
-		LoadThreshold:                allocatorimpl.MakeQPSOnlyDim(src.settings.LBRebalanceQPSThreshold),
-		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(load.Queries),
-		MinRequiredRebalanceLoadDiff: allocatorimpl.MakeQPSOnlyDim(src.settings.LBMinRequiredQPSDiff),
+		LoadDims:                     []load.Dimension{dim},
+		LoadThreshold:                loadThresholds,
+		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(dim),
+		MinRequiredRebalanceLoadDiff: loadMinRequiredDiffs,
 	}
 }
 
@@ -159,6 +168,7 @@ func (src *storeRebalancerControl) checkPendingTicket() (done bool, next time.Ti
 
 func (src *storeRebalancerControl) Tick(ctx context.Context, tick time.Time, state state.State) {
 	src.sr.AddLogTag("tick", tick)
+	src.sr.AddLogTag("obj", src.sr.RebalanceObjective().ToDimension().String())
 	ctx = src.sr.ResetAndAnnotateCtx(ctx)
 	switch src.rebalancerState.phase {
 	case rebalancerSleeping:

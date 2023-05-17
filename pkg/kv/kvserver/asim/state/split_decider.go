@@ -82,6 +82,7 @@ func NewSplitDecider(settings *config.SimulationSettings) *SplitDecider {
 	}
 }
 
+// TODO(kvoli): rationalize this.
 func (s *SplitDecider) newDecider() *split.Decider {
 	decider := &split.Decider{}
 	split.Init(decider, s.splitConfig, &split.LoadSplitterMetrics{

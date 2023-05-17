@@ -44,7 +44,11 @@ func TestRangeSplit(t *testing.T) {
 
 	// Set the replica load of the existing replica to 100 write keys, to assert
 	// on the post split 50/50 load distribution.
-	s.load[r1.rangeID].ApplyLoad(workload.LoadEvent{Writes: 100, Reads: 100, WriteSize: 100, ReadSize: 100})
+	s.load[r1.rangeID].ApplyLoad(
+		s1.StoreID(), workload.LoadEvent{
+			Writes: 100, Reads: 100, WriteSize: 100, ReadSize: 100,
+		}, s.settings.ResourceCost,
+	)
 
 	k2 := Key(1)
 	lhs, rhs, ok := s.SplitRange(k2)
@@ -64,8 +68,8 @@ func TestRangeSplit(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, repl1.HoldsLease(), newRepl.HoldsLease())
 	// Assert that the lhs now has half the previous load counters.
-	lhsLoad := s.load[lhs.RangeID()].(*ReplicaLoadCounter)
-	rhsLoad := s.load[rhs.RangeID()].(*ReplicaLoadCounter)
+	lhsLoad := s.load[lhs.RangeID()].ReplicaLoad(s1.StoreID()).(*ReplicaLoadCounter)
+	rhsLoad := s.load[rhs.RangeID()].ReplicaLoad(s1.StoreID()).(*ReplicaLoadCounter)
 	lhsQPS := lhsLoad.loadStats.TestingGetSum(load.Queries)
 	rhsQPS := rhsLoad.loadStats.TestingGetSum(load.Queries)
 	require.Equal(t, int64(50), lhsLoad.ReadKeys)

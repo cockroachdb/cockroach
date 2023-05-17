@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -125,6 +126,10 @@ type State interface {
 	// likewise modified to reflect this in it's Capacity, held in the
 	// StoreDescriptor.
 	ApplyLoad(workload.LoadBatch)
+  // SetLHLoad sets the load for the range with ID rangeID. This will show on
+  // the current leaseholder replica load for this range and persist between
+  // transfers.
+	SetLHLoad(RangeID, allocator.RangeUsageInfo)
 	// ReplicaLoad returns the usage information for the Range with ID
 	// RangeID on the store with ID StoreID.
 	ReplicaLoad(RangeID, StoreID) ReplicaLoad

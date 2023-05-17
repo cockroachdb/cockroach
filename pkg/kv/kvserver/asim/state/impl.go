@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -35,7 +36,8 @@ import (
 type state struct {
 	nodes                   map[NodeID]*node
 	stores                  map[StoreID]*store
-	load                    map[RangeID]ReplicaLoad
+	load                    map[RangeID]RangeLoad
+	setLHLoad               map[RangeID]ReplicaLoad
 	loadsplits              map[StoreID]LoadSplitter
 	capacityChangeListeners []CapacityChangeListener
 	newCapacityListeners    []NewCapacityListener
@@ -61,12 +63,13 @@ func newState(settings *config.SimulationSettings) *state {
 		nodes:      make(map[NodeID]*node),
 		stores:     make(map[StoreID]*store),
 		loadsplits: make(map[StoreID]LoadSplitter),
+		setLHLoad:  make(map[RangeID]ReplicaLoad),
 		clock:      &ManualSimClock{nanos: settings.StartTime.UnixNano()},
 		ranges:     newRMap(),
 		usageInfo:  newClusterUsageInfo(),
 		settings:   settings,
 	}
-	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
+	s.load = map[RangeID]RangeLoad{FirstRangeID: newRangeLoad()}
 	return s
 }
 
@@ -345,14 +348,15 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 // Range with ID RangeID, placed on the Store with ID StoreID. This fails
 // if a Replica for the Range already exists the Store.
 func (s *state) AddReplica(rangeID RangeID, storeID StoreID) (Replica, bool) {
-	return s.addReplica(rangeID, storeID)
-
-}
-func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
 	// Check whether it is possible to add the replica.
 	if !s.CanAddReplica(rangeID, storeID) {
 		return nil, false
 	}
+	s.load[rangeID].AddReplica(storeID, s.clock)
+	return s.addReplica(rangeID, storeID)
+
+}
+func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
 
 	store := s.stores[storeID]
 	nodeID := store.nodeID
@@ -448,6 +452,7 @@ func (s *state) removeReplica(rangeID RangeID, storeID StoreID) bool {
 
 	delete(store.replicas, rangeID)
 	delete(rng.replicas, storeID)
+	s.load[rangeID].RemoveReplica(storeID)
 	s.publishCapacityChangeEvent(kvserver.RangeRemoveEvent, storeID)
 
 	return true
@@ -555,7 +560,10 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	// create replicas on the same stores for the RHS.
 	for _, replica := range predecessorRange.Replicas() {
 		storeID := replica.StoreID()
-		s.AddReplica(rangeID, storeID)
+		// We call addReplica instead of AddReplica because AddReplica will also
+		// create load tracking for the new replica, however we just crated replica
+		// load tracking above with half of the LHS replica's range load stats.
+		s.addReplica(rangeID, storeID)
 		if replica.HoldsLease() {
 			// The successor range's leaseholder was on this store, copy the
 			// leaseholder store over for the new split range.
@@ -597,7 +605,8 @@ func (s *state) TransferLease(rangeID RangeID, storeID StoreID) bool {
 	// leaseholder store.
 	s.loadsplits[oldStore.StoreID()].ResetRange(rangeID)
 	s.loadsplits[storeID].ResetRange(rangeID)
-	s.load[rangeID].ResetLoad()
+	s.load[rangeID].ResetReplica(oldStore.StoreID())
+	s.load[rangeID].ResetReplica(storeID)
 
 	// Apply the lease transfer to state.
 	s.replaceLeaseHolder(rangeID, storeID, oldStore.StoreID())
@@ -689,7 +698,12 @@ func (s *state) ApplyLoad(lb workload.LoadBatch) {
 }
 
 func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
-	s.load[rng.rangeID].ApplyLoad(le)
+	leaseholder, ok := s.LeaseholderStore(rng.rangeID)
+	if !ok {
+		return
+	}
+
+	s.load[rng.rangeID].ApplyLoad(leaseholder.StoreID(), le, s.settings.ResourceCost)
 	s.usageInfo.ApplyLoad(rng, le)
 
 	// Note that deletes are not supported currently, we are also assuming data
@@ -698,34 +712,32 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 
 	// Record the load against the splitter for the store which holds a lease
 	// for this range, if one exists.
-	store, ok := s.LeaseholderStore(rng.rangeID)
-	if !ok {
-		return
-	}
-	s.loadsplits[store.StoreID()].Record(s.clock.Now(), rng.rangeID, le)
+	s.loadsplits[leaseholder.StoreID()].Record(s.clock.Now(), rng.rangeID, le)
 }
 
 // ReplicaLoad returns the usage information for the Range with ID
 // RangeID on the store with ID StoreID.
 func (s *state) ReplicaLoad(rangeID RangeID, storeID StoreID) ReplicaLoad {
-	// NB: we only return the actual replica load, if the range leaseholder is
-	// currently on the store given. Otherwise, return an empty, zero counter
-	// value.
-	store, ok := s.LeaseholderStore(rangeID)
-	if !ok {
-		panic(fmt.Sprintf("no leaseholder store found for range %d", storeID))
+	if _, ok := s.load[rangeID]; !ok {
+		panic(fmt.Sprintf("programming error: range with ID %d doesn't exist in "+
+			"the load tracker", rangeID))
 	}
 
-	// TODO(kvoli): The requested storeID is not the leaseholder. Non
-	// leaseholder load tracking is not currently supported but is checked by
-	// other components such as hot ranges. In this case, ignore it but we
-	// should also track non leaseholder load. See load.go for more. Return an
-	// empty initialized load counter here.
-	if store.StoreID() != storeID {
-		return NewReplicaLoadCounter(s.clock)
+	if lhStore, _ := s.LeaseholderStore(rangeID); lhStore.StoreID() == storeID {
+		if replicaLoad, ok := s.setLHLoad[rangeID]; ok {
+			return replicaLoad
+		}
 	}
 
-	return s.load[rangeID]
+	return s.load[rangeID].ReplicaLoad(storeID)
+}
+
+func (s *state) SetLHLoad(rangeID RangeID, usage allocator.RangeUsageInfo) {
+	replicaLoad := NewReplicaLoadCounter(s.clock)
+	replicaLoad.loadStats.TestingSetStat(load.Queries, usage.QueriesPerSecond)
+	replicaLoad.loadStats.TestingSetStat(load.ReqCPUNanos, usage.RequestCPUNanosPerSecond)
+	replicaLoad.loadStats.TestingSetStat(load.RaftCPUNanos, usage.RaftCPUNanosPerSecond)
+	s.setLHLoad[rangeID] = replicaLoad
 }
 
 // ClusterUsageInfo returns the usage information for the Range with ID
