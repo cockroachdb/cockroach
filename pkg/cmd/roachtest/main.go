@@ -19,10 +19,12 @@ import (
 	"os/signal"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -94,7 +96,6 @@ func main() {
 	var clusterID string
 	var count = 1
 	var versionsBinaryOverride map[string]string
-	var enableFIPS bool
 
 	cobra.EnableCommandSorting = false
 
@@ -119,16 +120,50 @@ func main() {
 			if cmd.Name() == "help" {
 				return nil
 			}
-
-			if clusterName != "" && local {
-				return fmt.Errorf(
-					"cannot specify both an existing cluster (%s) and --local. However, if a local cluster "+
-						"already exists, --clusters=local will use it",
-					clusterName)
+			local := cmd.Flags().Lookup("local").Value.String() == "true"
+			if local {
+				if clusterName != "" {
+					return fmt.Errorf(
+						"cannot specify both an existing cluster (%s) and --local. However, if a local cluster "+
+							"already exists, --clusters=local will use it",
+						clusterName)
+				}
+				cloud = spec.Local
 			}
 			switch cmd.Name() {
 			case "run", "bench", "store-gen":
+				if !(0 <= arm64Probability && arm64Probability <= 1) {
+					return fmt.Errorf("'metamorphic-arm64-probability' must be in [0,1]")
+				}
+				if !(0 <= fipsProbability && fipsProbability <= 1) {
+					return fmt.Errorf("'metamorphic-fips-probability' must be in [0,1]")
+				}
+				if arm64Probability == 1 && fipsProbability != 0 {
+					return fmt.Errorf("'metamorphic-fips-probability' must be 0 when 'metamorphic-arm64-probability' is 1")
+				}
+				if fipsProbability == 1 && arm64Probability != 0 {
+					return fmt.Errorf("'metamorphic-arm64-probability' must be 0 when 'metamorphic-fips-probability' is 1")
+				}
+				arm64Opt := cmd.Flags().Lookup("metamorphic-arm64-probability")
+				if !arm64Opt.Changed && runtime.GOARCH == "arm64" && cloud == spec.Local {
+					fmt.Printf("Detected 'arm64' in 'local mode', setting 'metamorphic-arm64-probability' to 1; use --metamorphic-arm64-probability to run (emulated) with other binaries\n")
+					arm64Probability = 1
+				}
+				// Find and validate all required binaries and libraries.
 				initBinariesAndLibraries()
+
+				if arm64Probability > 0 {
+					fmt.Printf("ARM64 clusters will be provisioned with probability %.2f\n", arm64Probability)
+				}
+				amd64Probability := 1 - arm64Probability
+				if amd64Probability > 0 {
+					fmt.Printf("AMD64 clusters will be provisioned with probability %.2f\n", amd64Probability)
+				}
+				if fipsProbability > 0 {
+					// N.B. arm64Probability < 1, otherwise fipsProbability == 0, as per above check.
+					// Hence, amd64Probability > 0 is implied.
+					fmt.Printf("FIPS clusters will be provisioned with probability %.2f\n", fipsProbability*amd64Probability)
+				}
 			}
 			return nil
 		},
@@ -140,6 +175,7 @@ func main() {
 			"If fewer than --parallelism names are specified, then the parallelism "+
 			"is capped to the number of clusters specified. When a cluster does not exist "+
 			"yet, it is created according to the spec.")
+	var local bool
 	rootCmd.PersistentFlags().BoolVarP(
 		&local, "local", "l", local, "run tests locally")
 	rootCmd.PersistentFlags().StringVarP(
@@ -147,15 +183,25 @@ func main() {
 		"Username to use as a cluster name prefix. "+
 			"If blank, the current OS user is detected and specified.")
 	rootCmd.PersistentFlags().StringVar(
-		&cockroach, "cockroach", "", "path to cockroach binary to use")
+		&cockroachPath, "cockroach", "", "path to cockroach binary to use")
 	rootCmd.PersistentFlags().StringVar(
-		&cockroachShort, "cockroach-short", "", "path to cockroach-short binary (compiled with crdb_test build tag) to use")
+		&cockroachShortPath, "cockroach-short", "", "path to cockroach-short binary (compiled with crdb_test build tag) to use")
 	rootCmd.PersistentFlags().StringVar(
-		&workload, "workload", "", "path to workload binary to use")
+		&workloadPath, "workload", "", "path to workload binary to use")
 	rootCmd.PersistentFlags().Float64Var(
 		&encryptionProbability, "metamorphic-encryption-probability", defaultEncryptionProbability,
 		"probability that clusters will be created with encryption-at-rest enabled "+
 			"for tests that support metamorphic encryption (default 1.0)")
+	rootCmd.PersistentFlags().Float64Var(
+		&fipsProbability, "metamorphic-fips-probability", defaultFIPSProbability,
+		"conditional probability that amd64 clusters will be created with FIPS, i.e., P(fips | amd64), "+
+			"for tests that support FIPS and whose CPU architecture is 'amd64' (default 0) "+
+			"NOTE: amd64 clusters are created with probability 1-P(arm64), where P(arm64) is 'metamorphic-arm64-probability'. "+
+			"Hence, P(fips | amd64) = P(fips) * (1 - P(arm64))")
+	rootCmd.PersistentFlags().Float64Var(
+		&arm64Probability, "metamorphic-arm64-probability", defaultARM64Probability,
+		"probability that clusters will be created with 'arm64' CPU architecture "+
+			"for tests that support 'arm64' (default 0)")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   `version`,
@@ -253,7 +299,6 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
-				enableFIPS:             enableFIPS,
 			}, false /* benchOnly */)
 		},
 	}
@@ -291,7 +336,6 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
-				enableFIPS:             enableFIPS,
 			}, true /* benchOnly */)
 		},
 	}
@@ -344,8 +388,6 @@ runner itself.
 				"is present in the list,"+"the respective binary will be used when a "+
 				"multi-version test asks for the respective binary, instead of "+
 				"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
-		cmd.Flags().BoolVar(
-			&enableFIPS, "fips", false, "Run tests in enableFIPS mode")
 	}
 
 	parseCreateOpts(runCmd.Flags(), &overrideOpts)
@@ -397,7 +439,6 @@ type cliCfg struct {
 	user                   string
 	clusterID              string
 	versionsBinaryOverride map[string]string
-	enableFIPS             bool
 }
 
 func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) error {
@@ -417,7 +458,7 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 	filter := registry.NewTestFilter(cfg.args, cfg.runSkipped)
 	clusterType := roachprodCluster
 	bindTo := ""
-	if local {
+	if cloud == spec.Local {
 		clusterType = localCluster
 
 		// This will suppress the annoying "Allow incoming network connections" popup from
@@ -438,7 +479,6 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 		cpuQuota:    cfg.cpuQuota,
 		debugMode:   cfg.debugMode,
 		clusterID:   cfg.clusterID,
-		enableFIPS:  cfg.enableFIPS,
 	}
 	if err := runner.runHTTPServer(cfg.httpPort, os.Stdout, bindTo); err != nil {
 		return err

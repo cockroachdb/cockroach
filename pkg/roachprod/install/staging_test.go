@@ -13,6 +13,7 @@ package install
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -322,7 +323,7 @@ func TestURLsForApplication(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := URLsForApplication(tt.args.application, tt.args.version, tt.args.os, tt.args.arch)
+			got, err := URLsForApplication(tt.args.application, tt.args.version, tt.args.os, vm.CPUArch(tt.args.arch))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("URLsForApplication() error = %v, wantErr %v", err, tt.wantErr)
 				return
