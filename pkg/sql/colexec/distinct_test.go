@@ -395,7 +395,7 @@ func TestDistinct(t *testing.T) {
 			ud := NewUnorderedDistinct(
 				testAllocator, input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup,
 			)
-			ud.(*UnorderedDistinct).hashTableNumBuckets = uint64(1 + rng.Intn(7))
+			ud.(*UnorderedDistinct).hashTableNumBuckets = uint32(1 + rng.Intn(7))
 			return ud, nil
 		})
 		if tc.isOrderedOnDistinctCols {
@@ -445,7 +445,7 @@ func TestUnorderedDistinctRandom(t *testing.T) {
 	colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tups}, [][]*types.T{typs}, expected, colexectestutils.UnorderedVerifier,
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			ud := NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */)
-			ud.(*UnorderedDistinct).hashTableNumBuckets = uint64(1 + rng.Intn(7))
+			ud.(*UnorderedDistinct).hashTableNumBuckets = uint32(1 + rng.Intn(7))
 			return ud, nil
 		},
 	)

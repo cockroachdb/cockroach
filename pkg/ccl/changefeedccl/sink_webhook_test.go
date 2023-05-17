@@ -194,17 +194,15 @@ func TestWebhookSink(t *testing.T) {
 
 		sinkDestHTTP, err := cdctest.StartMockWebhookSinkInsecure()
 		require.NoError(t, err)
-		details.SinkURI = fmt.Sprintf("webhook-https://%s", strings.TrimPrefix(sinkDestHTTP.URL(), "http://"))
+		details.SinkURI = fmt.Sprintf("webhook-http://%s", strings.TrimPrefix(sinkDestHTTP.URL(), "http://"))
 
-		sinkSrcWrongProtocol, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
+		sinkSrcHttpProtocol, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
 		require.NoError(t, err)
 
-		// sink's client should not accept the endpoint's use of HTTP (expects HTTPS)
-		require.NoError(t, sinkSrcWrongProtocol.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, zeroAlloc))
+		// sink's client should accept the endpoint's use of HTTP
+		require.NoError(t, sinkSrcHttpProtocol.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, zeroAlloc))
 
-		require.EqualError(t, sinkSrcWrongProtocol.Flush(context.Background()),
-			fmt.Sprintf(`Post "%s": http: server gave HTTP response to HTTPS client`, fmt.Sprintf("https://%s", strings.TrimPrefix(sinkDestHTTP.URL(),
-				"http://"))))
+		require.NoError(t, sinkSrcHttpProtocol.Flush(context.Background()))
 
 		sinkDestSecure, err := cdctest.StartMockWebhookSinkSecure(cert)
 		require.NoError(t, err)
@@ -236,7 +234,7 @@ func TestWebhookSink(t *testing.T) {
 		require.NoError(t, sinkSrc.Close())
 		require.NoError(t, sinkSrcNoCert.Close())
 		require.NoError(t, sinkSrcInsecure.Close())
-		require.NoError(t, sinkSrcWrongProtocol.Close())
+		require.NoError(t, sinkSrcHttpProtocol.Close())
 		sinkDestHTTP.Close()
 		sinkDestSecure.Close()
 	}

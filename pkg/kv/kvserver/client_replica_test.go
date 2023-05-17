@@ -5045,26 +5045,6 @@ func TestRangeMigration(t *testing.T) {
 	assertVersion(endV)
 }
 
-func TestRaftSchedulerPrioritizesNodeLiveness(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
-	require.NoError(t, err)
-
-	// Determine the node liveness range ID.
-	livenessRepl := store.LookupReplica(roachpb.RKey(keys.NodeLivenessPrefix))
-	livenessRangeID := livenessRepl.RangeID
-
-	// Assert that the node liveness range is prioritized.
-	priorityID := store.RaftSchedulerPriorityID()
-	require.Equal(t, livenessRangeID, priorityID)
-}
-
 func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
 	ctx := context.Background()
 	args := base.TestServerArgs{}

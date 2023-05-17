@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -104,6 +105,9 @@ func getIssueFilerForFormatter(formatterName string) func(ctx context.Context, f
 		l, err := logger.RootLogger("", false)
 		if err != nil {
 			return err
+		}
+		if stress := envutil.EnvOrDefaultBool("COCKROACH_NIGHTLY_STRESS", false); stress {
+			req.ExtraParams["stress"] = "true"
 		}
 		return issues.Post(ctx, l, fmter, req)
 	}

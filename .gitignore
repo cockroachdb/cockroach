@@ -55,6 +55,7 @@ build/Railroad.jar
 *.pb.gw.go
 pkg/roachprod/vm/aws/embedded.go
 pkg/security/securitytest/embedded.go
+pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/generated_test.go
 
 # Temporary directories during gomock generate
 **/gomock_reflect_*

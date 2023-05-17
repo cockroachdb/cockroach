@@ -107,8 +107,8 @@ func TestDataDriven(t *testing.T) {
 				var minKey, maxKey = int64(1), int64(defaultKeyspace)
 				var accessSkew bool
 
-				scanIfExists(t, d, "rw_ratio", &rate)
-				scanIfExists(t, d, "rate", &rwRatio)
+				scanIfExists(t, d, "rw_ratio", &rwRatio)
+				scanIfExists(t, d, "rate", &rate)
 				scanIfExists(t, d, "access_skew", &accessSkew)
 				scanIfExists(t, d, "min_block", &minBlock)
 				scanIfExists(t, d, "max_block", &maxBlock)
