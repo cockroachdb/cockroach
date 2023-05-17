@@ -18,7 +18,6 @@ import (
 	"io"
 	"io/fs"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -1369,45 +1368,62 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 	return nil
 }
 
-// ConnectToLiveNode returns a connection to a live node in the cluster. If no
-// live node is found, it returns nil and -1. If a live node is found it returns
-// a connection to it and the node's index.
-func (c *clusterImpl) ConnectToLiveNode(ctx context.Context, t *testImpl) (*gosql.DB, int) {
-	if c.spec.NodeCount < 1 {
-		return nil, -1 // unit tests
+type HealthStatusResult struct {
+	Node   int
+	Status int
+	Body   []byte
+	Err    error
+}
+
+func newHealthStatusResult(node int, status int, body []byte, err error) *HealthStatusResult {
+	return &HealthStatusResult{
+		Node:   node,
+		Status: status,
+		Body:   body,
+		Err:    err,
 	}
+}
 
-	checkReady := func(ctx context.Context, node int) bool {
-		adminAddr, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(node))
-		if err != nil {
-			t.L().Printf("n%d not ready/live: %s", node, err)
-			return false
-		}
-
-		url := fmt.Sprintf(`http://%s/health?ready=1`, adminAddr[0])
+// HealthStatus returns the result of the /health?ready=1 endpoint for each node.
+func (c *clusterImpl) HealthStatus(
+	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+) ([]*HealthStatusResult, error) {
+	if len(node) < 1 {
+		return nil, nil // unit tests
+	}
+	adminAddrs, err := c.ExternalAdminUIAddr(ctx, l, node)
+	if err != nil {
+		return nil, errors.WithDetail(err, "Unable to get admin UI address(es)")
+	}
+	getStatus := func(ctx context.Context, node int) *HealthStatusResult {
+		url := fmt.Sprintf(`http://%s/health?ready=1`, adminAddrs[node-1])
 		resp, err := httputil.Get(ctx, url)
 		if err != nil {
-			t.L().Printf("n%d not ready/live: %s", node, err)
-			return false
+			return newHealthStatusResult(node, 0, nil, err)
 		}
 
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
-		if err != nil || resp.StatusCode != http.StatusOK {
-			t.L().Printf("n%d not ready/live: HTTP %d \n%s", node, resp.StatusCode, body)
-			return false
-		}
 
-		return true
+		return newHealthStatusResult(node, resp.StatusCode, body, err)
 	}
 
-	// Find a live node to run against, if one exists.
-	for i := 1; i <= c.spec.NodeCount; i++ {
-		if checkReady(ctx, i) {
-			return c.Conn(ctx, t.L(), i), i
+	results := make([]*HealthStatusResult, c.spec.NodeCount)
+
+	_ = contextutil.RunWithTimeout(ctx, "health status", 15*time.Second, func(ctx context.Context) error {
+		var wg sync.WaitGroup
+		wg.Add(c.spec.NodeCount)
+		for i := 1; i <= c.spec.NodeCount; i++ {
+			go func(node int) {
+				defer wg.Done()
+				results[node-1] = getStatus(ctx, node)
+			}(i)
 		}
-	}
-	return nil, -1
+		wg.Wait()
+		return nil
+	})
+
+	return results, nil
 }
 
 // FailOnInvalidDescriptors fails the test if there exists any descriptors in
@@ -2304,7 +2320,7 @@ func (c *clusterImpl) InternalAdminUIAddr(
 	return addrs, nil
 }
 
-// ExternalAdminUIAddr returns the internal Admin UI address in the form host:port
+// ExternalAdminUIAddr returns the external Admin UI address in the form host:port
 // for the specified node.
 func (c *clusterImpl) ExternalAdminUIAddr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption,
