@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
     ],
