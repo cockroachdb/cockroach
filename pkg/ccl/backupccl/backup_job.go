@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -237,11 +238,29 @@ func backup(
 		}
 	}
 
+	// Create a channel that is large enough that it does not block.
+	perNodeProgressCh := make(chan map[execinfrapb.ComponentID]float32, numTotalSpans)
+	storePerNodeProgressLoop := func(ctx context.Context) error {
+		for {
+			select {
+			case prog, ok := <-perNodeProgressCh:
+				if !ok {
+					return nil
+				}
+				jobsprofiler.StorePerNodeProcessorProgressFraction(
+					ctx, execCtx.ExecCfg().InternalDB, job.ID(), prog)
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	checkpointLoop := func(ctx context.Context) error {
 		// When a processor is done exporting a span, it will send a progress update
 		// to progCh.
 		defer close(requestFinishedCh)
+		defer close(perNodeProgressCh)
 		var numBackedUpFiles int64
 		for progress := range progCh {
 			var progDetails backuppb.BackupManifest_Progress
@@ -262,6 +281,26 @@ func backup(
 				requestFinishedCh <- struct{}{}
 			}
 
+			// Update the per-component progress maintained by the job profiler.
+			perComponentProgress := make(map[execinfrapb.ComponentID]float32)
+			component := execinfrapb.ComponentID{
+				SQLInstanceID: progress.NodeID,
+				FlowID:        progress.FlowID,
+				Type:          execinfrapb.ComponentID_PROCESSOR,
+			}
+			for processorID, fraction := range progress.CompletedFraction {
+				component.ID = processorID
+				perComponentProgress[component] = fraction
+			}
+			select {
+			// This send to a buffered channel should never block but incase it does
+			// we will fallthrough to the default case.
+			case perNodeProgressCh <- perComponentProgress:
+			default:
+				log.Warningf(ctx, "skipping persisting per component progress as buffered channel was full")
+			}
+
+			// Check if we should persist a checkpoint backup manifest.
 			interval := BackupCheckpointInterval.Get(&execCtx.ExecCfg().Settings.SV)
 			if timeutil.Since(lastCheckpoint) > interval {
 				resumerSpan.RecordStructured(&backuppb.BackupProgressTraceEvent{
@@ -297,7 +336,7 @@ func backup(
 		)
 	}
 
-	if err := ctxgroup.GoAndWait(ctx, jobProgressLoop, checkpointLoop, runBackup); err != nil {
+	if err := ctxgroup.GoAndWait(ctx, jobProgressLoop, checkpointLoop, storePerNodeProgressLoop, runBackup); err != nil {
 		return roachpb.RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 
