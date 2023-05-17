@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -81,6 +82,9 @@ func backupRestoreTestSetupWithParams(
 	dir, dirCleanupFn := testutils.TempDir(t)
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.UseDatabase = "data"
+	if params.ServerArgs.Knobs.JobsTestingKnobs == nil {
+		params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	}
 	if len(params.ServerArgsPerNode) > 0 {
 		for i := range params.ServerArgsPerNode {
 			param := params.ServerArgsPerNode[i]
@@ -177,6 +181,9 @@ func backupRestoreTestSetupEmptyWithParams(
 	ctx := logtags.AddTag(context.Background(), "backup-restore-test-setup-empty", nil)
 
 	params.ServerArgs.ExternalIODir = dir
+	if params.ServerArgs.Knobs.JobsTestingKnobs == nil {
+		params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	}
 	if len(params.ServerArgsPerNode) > 0 {
 		for i := range params.ServerArgsPerNode {
 			param := params.ServerArgsPerNode[i]

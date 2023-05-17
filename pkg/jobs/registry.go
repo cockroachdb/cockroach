@@ -613,7 +613,6 @@ func (r *Registry) CreateJobWithTxn(
 
 		cols := []string{"id", "created", "status", "payload", "progress", "claim_session_id", "claim_instance_id", "job_type"}
 		vals := []interface{}{jobID, created, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
-		log.Infof(ctx, "active version is %s", r.settings.Version.ActiveVersion(ctx))
 		if r.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
 			cols = []string{"id", "created", "status", "claim_session_id", "claim_instance_id", "job_type"}
 			vals = []interface{}{jobID, created, StatusRunning, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
