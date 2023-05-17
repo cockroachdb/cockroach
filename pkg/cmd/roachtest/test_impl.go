@@ -123,6 +123,7 @@ func (t *testImpl) BuildVersion() *version.Version {
 	return t.buildVersion
 }
 
+// Cockroach returns the path to the cockroach binary.
 func (t *testImpl) Cockroach() string {
 	return t.cockroach
 }

@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 )
 
@@ -98,30 +99,30 @@ var (
 )
 
 // ArchInfoForOS returns an ArchInfo for the given OS and Architecture if currently supported.
-func ArchInfoForOS(os string, arch string) (archInfo, error) {
-	if arch != "" && arch != "amd64" && arch != "arm64" && arch != "fips" {
+func ArchInfoForOS(os string, arch vm.CPUArch) (archInfo, error) {
+	if arch != "" && arch != vm.ArchAMD64 && arch != vm.ArchARM64 && arch != vm.ArchFIPS {
 		return archInfo{}, errors.Errorf("unsupported architecture %q", arch)
 	}
 
 	switch os {
 	case "linux":
-		if arch == "arm64" {
+		if arch == vm.ArchARM64 {
 			return linux_arm64_ArchInfo, nil
 		}
-		if arch == "fips" {
+		if arch == vm.ArchFIPS {
 			return linux_x86_64_fips_ArchInfo, nil
 		}
 		return linux_x86_64_ArchInfo, nil
 	case "darwin":
-		if arch == "arm64" {
+		if arch == vm.ArchARM64 {
 			return darwin_arm64_ArchInfo, nil
 		}
-		if arch == "fips" {
+		if arch == vm.ArchFIPS {
 			return archInfo{}, errors.Errorf("%q is not supported on %q", arch, os)
 		}
 		return darwin_x86_64_ArchInfo, nil
 	case "windows":
-		if arch == "fips" || arch == "arm64" {
+		if arch == vm.ArchFIPS || arch == vm.ArchARM64 {
 			return archInfo{}, errors.Errorf("%q is not supported on %q", arch, os)
 		}
 		return windowsArchInfo, nil
@@ -176,7 +177,7 @@ func StageApplication(
 	applicationName string,
 	version string,
 	os string,
-	arch string,
+	arch vm.CPUArch,
 	destDir string,
 ) error {
 	archInfo, err := ArchInfoForOS(os, arch)
@@ -226,7 +227,7 @@ func StageApplication(
 // URLsForApplication returns a slice of URLs that should be
 // downloaded for the given application.
 func URLsForApplication(
-	application string, version string, os string, arch string,
+	application string, version string, os string, arch vm.CPUArch,
 ) ([]*url.URL, error) {
 	archInfo, err := ArchInfoForOS(os, arch)
 	if err != nil {

@@ -16,11 +16,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -31,8 +31,8 @@ func registerDeclSchemaChangeCompatMixedVersions(r registry.Registry) {
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
+			if c.Spec().Cloud != spec.GCE {
+				t.Skip("uses gsutil with gs://cockroach-corpus, available only in GCE")
 			}
 			runDeclSchemaChangeCompatMixedVersions(ctx, t, c, *t.BuildVersion())
 		},

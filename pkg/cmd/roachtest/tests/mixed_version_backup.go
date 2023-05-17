@@ -19,7 +19,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"runtime"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -2033,8 +2033,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		RequiresLicense:   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
+			if c.Spec().Cloud != spec.GCE {
+				t.Skip("uses gs://cockroachdb-backup-testing, available only in GCE")
 			}
 
 			roachNodes := c.Range(1, c.Spec().NodeCount-1)

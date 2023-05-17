@@ -57,6 +57,7 @@ go_test(
     embed = [":install"],
     deps = [
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
         "//pkg/testutils/datapathutils",
         "//pkg/util/retry",
         "@com_github_cockroachdb_datadriven//:datadriven",
