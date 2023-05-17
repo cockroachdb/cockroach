@@ -41,7 +41,7 @@ func newSimulatorReplica(repl state.Replica, s state.State) *simulatorReplica {
 	sr := &simulatorReplica{
 		rng:   rng,
 		repl:  repl,
-		usage: s.ReplicaLoad(repl.Range(), repl.StoreID()).Load(),
+		usage: s.RangeUsageInfo(repl.Range(), repl.StoreID()),
 		state: s,
 	}
 	return sr

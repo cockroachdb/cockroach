@@ -42,7 +42,7 @@ func TestStoreRebalancer(t *testing.T) {
 	testSettings.ReplicaChangeBaseDelay = 5 * time.Second
 	testSettings.StateExchangeDelay = 0
 
-	clusterInfo := state.ClusterInfoWithStoreCount(6)
+	clusterInfo := state.ClusterInfoWithStoreCount(6, 1 /* storesPerNode */)
 
 	// NB: We trigger lease rebalancing in this test, where the end result
 	// should be a perfectly balanced QPS of 500 per store. We only simulate
@@ -63,12 +63,12 @@ func TestStoreRebalancer(t *testing.T) {
 	//     transfer r5(1->5),  1000
 	//     transfer r6(1->6),  500
 	leaseRangesInfo := state.RangesInfo{
-		state.RangeInfoWithReplicas(100, []state.StoreID{1, 2, 3}, 1, nil),
-		state.RangeInfoWithReplicas(200, []state.StoreID{1, 3, 4}, 1, nil),
-		state.RangeInfoWithReplicas(300, []state.StoreID{1, 4, 5}, 1, nil),
-		state.RangeInfoWithReplicas(400, []state.StoreID{1, 5, 6}, 1, nil),
-		state.RangeInfoWithReplicas(500, []state.StoreID{1, 6, 2}, 1, nil),
-		state.RangeInfoWithReplicas(600, []state.StoreID{1, 2, 3}, 1, nil),
+		state.RangeInfoWithReplicas(100, []state.StoreID{1, 2, 3}, []state.StoreID{}, 1, nil),
+		state.RangeInfoWithReplicas(200, []state.StoreID{1, 3, 4}, []state.StoreID{}, 1, nil),
+		state.RangeInfoWithReplicas(300, []state.StoreID{1, 4, 5}, []state.StoreID{}, 1, nil),
+		state.RangeInfoWithReplicas(400, []state.StoreID{1, 5, 6}, []state.StoreID{}, 1, nil),
+		state.RangeInfoWithReplicas(500, []state.StoreID{1, 6, 2}, []state.StoreID{}, 1, nil),
+		state.RangeInfoWithReplicas(600, []state.StoreID{1, 2, 3}, []state.StoreID{}, 1, nil),
 	}
 	leaseState := state.LoadConfig(clusterInfo, leaseRangesInfo, testSettings)
 	for i := 2; i < 8; i++ {
@@ -89,12 +89,12 @@ func TestStoreRebalancer(t *testing.T) {
 	//     relocate r2([1,2,3]->[4,5,6]), 2400
 	//     relocate r3([1,2,3]->[4,5,6]), 1600
 	rangeRangesinfo := state.RangesInfo{
-		state.RangeInfoWithReplicas(100, []state.StoreID{1, 2, 3}, 1, nil),
-		state.RangeInfoWithReplicas(200, []state.StoreID{1, 2, 3}, 1, nil),
-		state.RangeInfoWithReplicas(300, []state.StoreID{1, 2, 3}, 1, nil),
-		state.RangeInfoWithReplicas(400, []state.StoreID{1, 2, 3}, 1, nil),
-		state.RangeInfoWithReplicas(500, []state.StoreID{1, 2, 3}, 2, nil),
-		state.RangeInfoWithReplicas(600, []state.StoreID{1, 2, 3}, 3, nil),
+		state.RangeInfoWithReplicas(100, []state.StoreID{1, 2, 3}, []state.StoreID{}, 1, nil),
+		state.RangeInfoWithReplicas(200, []state.StoreID{1, 2, 3}, []state.StoreID{}, 1, nil),
+		state.RangeInfoWithReplicas(300, []state.StoreID{1, 2, 3}, []state.StoreID{}, 1, nil),
+		state.RangeInfoWithReplicas(400, []state.StoreID{1, 2, 3}, []state.StoreID{}, 1, nil),
+		state.RangeInfoWithReplicas(500, []state.StoreID{1, 2, 3}, []state.StoreID{}, 2, nil),
+		state.RangeInfoWithReplicas(600, []state.StoreID{1, 2, 3}, []state.StoreID{}, 3, nil),
 	}
 	rangeState := state.LoadConfig(clusterInfo, rangeRangesinfo, testSettings)
 	for i := 2; i < 6; i++ {
@@ -149,11 +149,11 @@ func TestStoreRebalancer(t *testing.T) {
 			expectedStoreQPS: []map[state.StoreID]float64{
 				{1: 3200, 2: 3000, 3: 3000, 4: 0, 5: 0, 6: 0},
 				{1: 3200, 2: 3000, 3: 3000, 4: 0, 5: 0, 6: 0},
-				{1: 3200, 2: 3000, 3: 3000, 4: 0, 5: 0, 6: 0},
 				{1: 2400, 2: 3000, 3: 3000, 4: 0, 5: 0, 6: 800},
-				{1: 1600, 2: 3000, 3: 3000, 4: 0, 5: 800, 6: 800},
-				{1: 1600, 2: 3000, 3: 3000, 4: 0, 5: 800, 6: 800},
-				{1: 1600, 2: 3000, 3: 3000, 4: 0, 5: 800, 6: 800},
+				{1: 2400, 2: 3000, 3: 3000, 4: 0, 5: 0, 6: 800},
+				{1: 1600, 2: 3000, 3: 3000, 4: 800, 5: 0, 6: 800},
+				{1: 1600, 2: 3000, 3: 3000, 4: 800, 5: 0, 6: 800},
+				{1: 1600, 2: 3000, 3: 3000, 4: 800, 5: 0, 6: 800},
 			},
 		},
 	}

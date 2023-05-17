@@ -11,9 +11,11 @@
 package state
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +39,7 @@ type state struct {
 	stores                  map[StoreID]*store
 	load                    map[RangeID]ReplicaLoad
 	loadsplits              map[StoreID]LoadSplitter
+	quickLivenessMap        map[NodeID]livenesspb.NodeLivenessStatus
 	capacityChangeListeners []CapacityChangeListener
 	newCapacityListeners    []NewCapacityListener
 	ranges                  *rmap
@@ -51,6 +54,8 @@ type state struct {
 	storeSeqGen StoreID
 }
 
+var _ State = &state{}
+
 // NewState returns an implementation of the State interface.
 func NewState(settings *config.SimulationSettings) State {
 	return newState(settings)
@@ -58,13 +63,14 @@ func NewState(settings *config.SimulationSettings) State {
 
 func newState(settings *config.SimulationSettings) *state {
 	s := &state{
-		nodes:      make(map[NodeID]*node),
-		stores:     make(map[StoreID]*store),
-		loadsplits: make(map[StoreID]LoadSplitter),
-		clock:      &ManualSimClock{nanos: settings.StartTime.UnixNano()},
-		ranges:     newRMap(),
-		usageInfo:  newClusterUsageInfo(),
-		settings:   settings,
+		nodes:            make(map[NodeID]*node),
+		stores:           make(map[StoreID]*store),
+		loadsplits:       make(map[StoreID]LoadSplitter),
+		quickLivenessMap: make(map[NodeID]livenesspb.NodeLivenessStatus),
+		clock:            &ManualSimClock{nanos: settings.StartTime.UnixNano()},
+		ranges:           newRMap(),
+		usageInfo:        newClusterUsageInfo(),
+		settings:         settings,
 	}
 	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
 	return s
@@ -113,7 +119,7 @@ func (rm *rmap) initFirstRange() {
 		desc:        desc,
 		config:      defaultSpanConfig,
 		replicas:    make(map[StoreID]*replica),
-		leaseholder: 0,
+		leaseholder: -1,
 	}
 
 	rm.rangeTree.ReplaceOrInsert(rng)
@@ -305,7 +311,92 @@ func (s *state) AddNode() Node {
 		stores: []StoreID{},
 	}
 	s.nodes[nodeID] = node
+	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
 	return node
+}
+func (s *state) SetNodeLocality(nodeID NodeID, locality roachpb.Locality) {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		panic(fmt.Sprintf(
+			"programming error: attempt to set locality for node which doesn't "+
+				"exist (NodeID=%d, Nodes=%s)", nodeID, s))
+	}
+	node.desc.Locality = locality
+	for _, storeID := range node.stores {
+		s.stores[storeID].desc.Node = node.desc
+	}
+}
+
+// Topology represents the locality hierarchy information for a cluster.
+type Topology struct {
+	children map[string]*Topology
+	nodes    []int
+}
+
+// Topology returns the locality hierarchy information for a cluster.
+func (s *state) Topology() Topology {
+	nodes := s.Nodes()
+	root := Topology{children: map[string]*Topology{}}
+	for _, node := range nodes {
+		current := &root
+		for _, tier := range node.Descriptor().Locality.Tiers {
+			_, ok := current.children[tier.Value]
+			if !ok {
+				current.children[tier.Value] = &Topology{children: map[string]*Topology{}}
+			}
+			current = current.children[tier.Value]
+		}
+		current.nodes = append(current.nodes, int(node.NodeID()))
+	}
+	return root
+}
+
+// String returns a compact string representing the locality hierarchy of the
+// Topology.
+func (t *Topology) String() string {
+	var buf bytes.Buffer
+	t.stringHelper(&buf, "", true)
+	return buf.String()
+}
+
+func (t *Topology) stringHelper(buf *bytes.Buffer, prefix string, isLast bool) {
+	if len(t.children) > 0 {
+		childPrefix := prefix
+		if isLast {
+			childPrefix += "  "
+		} else {
+			childPrefix += "│ "
+		}
+
+		keys := make([]string, 0, len(t.children))
+		for key := range t.children {
+			keys = append(keys, key)
+		}
+
+		sort.Strings(keys)
+		for i, key := range keys {
+			buf.WriteString(fmt.Sprintf("%s%s\n", prefix, t.formatKey(key)))
+			child := t.children[key]
+			if i == len(keys)-1 {
+				child.stringHelper(buf, childPrefix, true)
+			} else {
+				child.stringHelper(buf, childPrefix, false)
+			}
+
+		}
+	}
+
+	if len(t.nodes) > 0 {
+		buf.WriteString(fmt.Sprintf("%s└── %v\n", prefix, t.nodes))
+	}
+}
+
+func (t *Topology) formatKey(key string) string {
+	if _, err := strconv.Atoi(key); err == nil {
+		return fmt.Sprintf("[%s]", key)
+	}
+
+	return key
 }
 
 // AddStore modifies the state to include one additional store on the Node
@@ -341,14 +432,27 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	return store, true
 }
 
+func (s *state) SetStoreCapacity(storeID StoreID, capacity int64) {
+	store, ok := s.stores[storeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: store with ID %d doesn't exist", storeID))
+	}
+	// TODO(kvoli): deal with overwriting this.
+	store.desc.Capacity.Capacity = capacity
+}
+
 // AddReplica modifies the state to include one additional range for the
 // Range with ID RangeID, placed on the Store with ID StoreID. This fails
 // if a Replica for the Range already exists the Store.
-func (s *state) AddReplica(rangeID RangeID, storeID StoreID) (Replica, bool) {
-	return s.addReplica(rangeID, storeID)
-
+func (s *state) AddReplica(
+	rangeID RangeID, storeID StoreID, rtype roachpb.ReplicaType,
+) (Replica, bool) {
+	return s.addReplica(rangeID, storeID, rtype)
 }
-func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
+
+func (s *state) addReplica(
+	rangeID RangeID, storeID StoreID, rtype roachpb.ReplicaType,
+) (*replica, bool) {
 	// Check whether it is possible to add the replica.
 	if !s.CanAddReplica(rangeID, storeID) {
 		return nil, false
@@ -356,14 +460,9 @@ func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
 
 	store := s.stores[storeID]
 	nodeID := store.nodeID
-	rng, ok := s.rng(rangeID)
-	if !ok {
-		panic(
-			fmt.Sprintf("programming error: attemtpted to add replica for a range=%d that doesn't exist",
-				rangeID))
-	}
+	rng, _ := s.rng(rangeID)
 
-	desc := rng.desc.AddReplica(roachpb.NodeID(nodeID), roachpb.StoreID(storeID), roachpb.VOTER_FULL)
+	desc := rng.desc.AddReplica(roachpb.NodeID(nodeID), roachpb.StoreID(storeID), rtype)
 	replica := &replica{
 		replicaID: ReplicaID(desc.ReplicaID),
 		storeID:   storeID,
@@ -379,7 +478,7 @@ func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
 	// leaseholder as a placeholder. The caller can update the lease, however
 	// we want to ensure that for any range that has replicas, a leaseholder
 	// exists at all times.
-	if len(rng.replicas) == 1 {
+	if rng.leaseholder == -1 && rtype == roachpb.VOTER_FULL {
 		s.setLeaseholder(rangeID, storeID)
 	}
 
@@ -453,13 +552,99 @@ func (s *state) removeReplica(rangeID RangeID, storeID StoreID) bool {
 	return true
 }
 
-// SetSpanConfig set the span config for the Range with ID RangeID.
-func (s *state) SetSpanConfig(rangeID RangeID, spanConfig roachpb.SpanConfig) bool {
+// SetSpanConfigForRange set the span config for the Range with ID RangeID.
+func (s *state) SetSpanConfigForRange(rangeID RangeID, spanConfig roachpb.SpanConfig) bool {
 	if rng, ok := s.ranges.rangeMap[rangeID]; ok {
 		rng.config = spanConfig
 		return true
 	}
 	return false
+}
+
+// SetSpanConfig sets the span config for all ranges represented by the span,
+// splitting if necessary.
+func (s *state) SetSpanConfig(span roachpb.Span, config roachpb.SpanConfig) {
+	startKey := ToKey(span.Key)
+	endKey := ToKey(span.EndKey)
+
+	// Decide whether we need to split due to the config intersecting an existing
+	// range boundary. Split if necessary. Then apply the span config to all the
+	// ranges contained within the span. e.g.
+	//   ranges r1: [a, c) r2: [c, z)
+	//   span: [b, f)
+	// resulting ranges:
+	//   [a, b)         - keeps old span config from [a,c)
+	//   [b, c) [c, f)  - gets the new span config passed in
+	//   [f, z)         - keeps old span config from [c,z)
+
+	splitsRequired := []Key{}
+	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: startKey}, func(i btree.Item) bool {
+		cur, _ := i.(*rng)
+		rStart := cur.startKey
+		// There are two cases we handle:
+		// (1) rStart == startKey: We don't need to split.
+		// (2) rStart < startKey:  We need to split into lhs [rStart, startKey) and
+		//     rhs [startKey, ...). Where the lhs does not have the span config
+		//     applied and the rhs does.
+		if rStart < startKey {
+			splitsRequired = append(splitsRequired, startKey)
+		}
+		return false
+	})
+
+	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: endKey}, func(i btree.Item) bool {
+		cur, _ := i.(*rng)
+		rEnd := cur.endKey
+		rStart := cur.startKey
+		if rStart == endKey {
+			return false
+		}
+		// There are two cases we handle:
+		// (1) rEnd == endKey: We don't need to split.
+		// (2) rEnd >  endKey: We need to split into lhs [..., endKey) and rhs
+		//     [endKey, rEnd). Where the lhs has the span config applied and the rhs
+		//     does not.
+		// Split required if its the last range we will hit.
+		if rEnd > endKey {
+			splitsRequired = append(splitsRequired, endKey)
+		}
+		return false
+	})
+
+	for _, splitKey := range splitsRequired {
+		// We panic here as we don't have any way to roll back the split if one
+		// succeeds and another doesn't
+		if _, _, ok := s.SplitRange(splitKey); !ok {
+			panic(fmt.Sprintf(
+				"programming error: unable to split range (key=%d) for set span "+
+					"config=%s, state=%s", splitKey, config.String(), s))
+		}
+	}
+
+	// Apply the span config to all the ranges affected.
+	s.ranges.rangeTree.AscendGreaterOrEqual(&rng{startKey: startKey}, func(i btree.Item) bool {
+		cur, _ := i.(*rng)
+		if cur.startKey == endKey {
+			return false
+		}
+		if cur.startKey > endKey {
+			panic("programming error: unexpected range found with start key > end key")
+		}
+		if !s.SetSpanConfigForRange(cur.rangeID, config) {
+			panic("programming error: unable to set span config for range")
+		}
+		return true
+	})
+}
+
+// SetRangeBytes sets the size of the range with ID RangeID to be equal to
+// the bytes given.
+func (s *state) SetRangeBytes(rangeID RangeID, bytes int64) {
+	rng, ok := s.ranges.rangeMap[rangeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: no range with with ID %d", rangeID))
+	}
+	rng.size = bytes
 }
 
 // SplitRange splits the Range which contains Key in [StartKey, EndKey).
@@ -555,11 +740,19 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	// create replicas on the same stores for the RHS.
 	for _, replica := range predecessorRange.Replicas() {
 		storeID := replica.StoreID()
-		s.AddReplica(rangeID, storeID)
+		if _, ok := s.AddReplica(rangeID, storeID, replica.Descriptor().Type); !ok {
+			panic(
+				fmt.Sprintf("programming error: unable to add replica for range=%d to store=%d",
+					r.rangeID, storeID))
+		}
 		if replica.HoldsLease() {
 			// The successor range's leaseholder was on this store, copy the
 			// leaseholder store over for the new split range.
-			leaseholderStore, _ := s.LeaseholderStore(r.rangeID)
+			leaseholderStore, ok := s.LeaseholderStore(r.rangeID)
+			if !ok {
+				panic(fmt.Sprintf("programming error: expected leaseholder store to "+
+					"exist for RangeID %d", r.rangeID))
+			}
 			// NB: This operation cannot fail.
 			s.replaceLeaseHolder(r.rangeID, storeID, leaseholderStore.StoreID())
 			// Reset the recorded load split statistics on the predecessor
@@ -707,7 +900,7 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 
 // ReplicaLoad returns the usage information for the Range with ID
 // RangeID on the store with ID StoreID.
-func (s *state) ReplicaLoad(rangeID RangeID, storeID StoreID) ReplicaLoad {
+func (s *state) RangeUsageInfo(rangeID RangeID, storeID StoreID) allocator.RangeUsageInfo {
 	// NB: we only return the actual replica load, if the range leaseholder is
 	// currently on the store given. Otherwise, return an empty, zero counter
 	// value.
@@ -716,16 +909,19 @@ func (s *state) ReplicaLoad(rangeID RangeID, storeID StoreID) ReplicaLoad {
 		panic(fmt.Sprintf("no leaseholder store found for range %d", storeID))
 	}
 
+	r, _ := s.Range(rangeID)
 	// TODO(kvoli): The requested storeID is not the leaseholder. Non
 	// leaseholder load tracking is not currently supported but is checked by
 	// other components such as hot ranges. In this case, ignore it but we
 	// should also track non leaseholder load. See load.go for more. Return an
 	// empty initialized load counter here.
 	if store.StoreID() != storeID {
-		return NewReplicaLoadCounter(s.clock)
+		return allocator.RangeUsageInfo{LogicalBytes: r.Size()}
 	}
 
-	return s.load[rangeID]
+	usage := s.load[rangeID].Load()
+	usage.LogicalBytes = r.Size()
+	return usage
 }
 
 // ClusterUsageInfo returns the usage information for the Range with ID
@@ -762,26 +958,34 @@ func (s *state) NextReplicasFn(storeID StoreID) func() []Replica {
 	return nextReplFn
 }
 
+// SetNodeLiveness sets the liveness status of the node with ID NodeID to be
+// the status given.
+func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessStatus) {
+	s.quickLivenessMap[nodeID] = status
+}
+
 // NodeLivenessFn returns a function, that when called will return the
 // liveness of the Node with ID NodeID.
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeLivenessFn() storepool.NodeLivenessFunc {
-	nodeLivenessFn := func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
-		// TODO(kvoli): Implement liveness records for nodes, that signal they
-		// are dead when simulating partitions, crashes etc.
-		return livenesspb.NodeLivenessStatus_LIVE
+	return func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+		return s.quickLivenessMap[NodeID(nid)]
 	}
-	return nodeLivenessFn
 }
 
 // NodeCountFn returns a function, that when called will return the current
 // number of nodes that exist in this state.
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeCountFn() storepool.NodeCountFunc {
-	nodeCountFn := func() int {
-		return len(s.Nodes())
+	return func() int {
+		count := 0
+		for _, status := range s.quickLivenessMap {
+			if status != livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+				count++
+			}
+		}
+		return count
 	}
-	return nodeCountFn
 }
 
 // MakeAllocator returns an allocator for the Store with ID StoreID, it
