@@ -10,6 +10,24 @@
 
 package profilerconstants
 
-// DSPDiagramInfoKeyPrefix is the prefix of the info key used for rows that
-// store the DistSQL plan diagram for a job.
-const DSPDiagramInfoKeyPrefix = "dsp-diag-url-"
+import "fmt"
+
+const DSPDiagramInfoKeyPrefix = "~dsp-diag-url-"
+
+// MakeDSPDiagramInfoKey constructs an ephemeral DSP diagram info key.
+func MakeDSPDiagramInfoKey(timestampInNanos int64) (string, error) {
+	return fmt.Sprintf("%s%d", DSPDiagramInfoKeyPrefix, timestampInNanos), nil
+}
+
+// NodeProcessorProgressInfoKeyPrefix is the prefix of the info key used for
+// rows that store the per node, per processor progress for a job.
+const NodeProcessorProgressInfoKeyPrefix = "~node-processor-progress-"
+
+// MakeNodeProcessorProgressInfoKey returns the info_key used for rows that
+// store the per node, per processor progress for a job.
+func MakeNodeProcessorProgressInfoKey(
+	flowID string, instanceID string, processorID int32,
+) (string, error) {
+	// The info key is of the form: <prefix>-<flowID>,<instanceID>,<processorID>.
+	return fmt.Sprintf("%s%s,%s,%d", NodeProcessorProgressInfoKeyPrefix, flowID, instanceID, processorID), nil
+}

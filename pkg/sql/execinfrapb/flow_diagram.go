@@ -346,7 +346,7 @@ func (bf *BackfillerSpec) summary() (string, []string) {
 func (m *BackupDataSpec) summary() (string, []string) {
 	var spanStr strings.Builder
 	if len(m.Spans) > 0 {
-		spanStr.WriteString(fmt.Sprintf("Spans [%d]: ", len(m.Spans)))
+		spanStr.WriteString(fmt.Sprintf("Spans [%d]: ", len(m.Spans)+len(m.IntroducedSpans)))
 		const limit = 3
 		for i := 0; i < len(m.Spans) && i < limit; i++ {
 			if i > 0 {
@@ -616,7 +616,7 @@ func (s *HashGroupJoinerSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (g *GenerativeSplitAndScatterSpec) summary() (string, []string) {
-	detail := fmt.Sprintf("%d import spans", g.NumEntries)
+	detail := fmt.Sprintf("%d import spans, %d checkpointed spans", g.NumEntries, len(g.CheckpointedSpans))
 	return "GenerativeSplitAndScatterSpec", []string{detail}
 }
 

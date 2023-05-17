@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 var backupOutputTypes = []*types.T{}
@@ -129,6 +130,10 @@ type backupDataProcessor struct {
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// backupDataProcessors' trace recording.
 	agg *bulk.TracingAggregator
+
+	// completedSpans tracks how many spans have been successfully backed up by
+	// the backup processor.
+	completedSpans int32
 }
 
 var (
@@ -208,10 +213,29 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 		return nil, bp.DrainHelper()
 	}
 
-	for prog := range bp.progCh {
+	prog, ok := <-bp.progCh
+	if ok {
 		// Take a copy so that we can send the progress address to the output
 		// processor.
 		p := prog
+		p.NodeID = bp.flowCtx.NodeID.SQLInstanceID()
+		p.FlowID = bp.flowCtx.ID
+
+		// Annotate the progress with the fraction completed by this backupDataProcessor.
+		progDetails := backuppb.BackupManifest_Progress{}
+		if err := gogotypes.UnmarshalAny(&prog.ProgressDetails, &progDetails); err != nil {
+			log.Warningf(bp.Ctx(), "failed to unmarshal progress details %v", err)
+		} else {
+			totalSpans := int32(len(bp.spec.Spans) + len(bp.spec.IntroducedSpans))
+			bp.completedSpans += progDetails.CompletedSpans
+			if totalSpans != 0 {
+				if p.CompletedFraction == nil {
+					p.CompletedFraction = make(map[int32]float32)
+				}
+				p.CompletedFraction[bp.ProcessorID] = float32(bp.completedSpans) / float32(totalSpans)
+			}
+		}
+
 		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p}
 	}
 
@@ -535,6 +559,11 @@ func runBackupProcessor(
 						log.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
 					}
 
+					// Even if the ExportRequest did not export any data we want to report
+					// the span as completed for accurate progress tracking.
+					if len(resp.Files) == 0 {
+						sink.writeWithNoData(exportedSpan{completedSpans: completedSpans})
+					}
 					for i, file := range resp.Files {
 						entryCounts := countRows(file.Exported, spec.PKIDs)
 

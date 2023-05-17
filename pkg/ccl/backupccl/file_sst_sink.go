@@ -85,6 +85,27 @@ func (s *fileSSTSink) flush(ctx context.Context) error {
 
 func (s *fileSSTSink) flushFile(ctx context.Context) error {
 	if s.out == nil {
+		// If the writer was not initialized but the sink has reported completed
+		// spans then there were empty ExportRequests that were processed by the
+		// owner of this sink. These still need to reported to the coordinator as
+		// progress updates.
+		if s.completedSpans != 0 {
+			progDetails := backuppb.BackupManifest_Progress{
+				CompletedSpans: s.completedSpans,
+			}
+			var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+			details, err := gogotypes.MarshalAny(&progDetails)
+			if err != nil {
+				return err
+			}
+			prog.ProgressDetails = *details
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case s.conf.progCh <- prog:
+			}
+			s.completedSpans = 0
+		}
 		return nil
 	}
 	s.stats.flushes++
@@ -144,6 +165,10 @@ func (s *fileSSTSink) open(ctx context.Context) error {
 	s.sst = storage.MakeBackupSSTWriter(ctx, s.dest.Settings(), s.out)
 
 	return nil
+}
+
+func (s *fileSSTSink) writeWithNoData(resp exportedSpan) {
+	s.completedSpans += resp.completedSpans
 }
 
 func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {

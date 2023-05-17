@@ -323,6 +323,16 @@ message RemoteProducerMetadata {
     optional google.protobuf.Any progress_details = 4 [(gogoproto.nullable) = false];
     optional roachpb.BulkOpSummary bulk_summary = 5 [(gogoproto.nullable) = false];
     repeated int32 completed_span_idx = 6;
+    // NodeID is the node from which the progress is being pushed to the
+    // coordinator of a bulk job.
+    optional int32 node_id = 7 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
+    // FlowID is the unique identifier of the physical plan shared by all remote
+    // flows.
+    optional bytes flow_id = 8 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "FlowID",
+      (gogoproto.customtype) = "FlowID"];
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {

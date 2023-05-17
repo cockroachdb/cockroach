@@ -37,7 +37,7 @@ func (j *Job) InfoStorage(txn isql.Txn) InfoStorage {
 	return InfoStorage{j: j, txn: txn}
 }
 
-// InfoStorageForJobID returns a new InfoStorage with the passed in
+// InfoStorageForJob returns a new InfoStorage with the passed in
 // job ID and txn. It avoids loading the job record. The resulting
 // job_info writes will not check the job session ID.
 func InfoStorageForJob(txn isql.Txn, jobID jobspb.JobID) InfoStorage {
