@@ -70,11 +70,11 @@ func processGroupsInBatch(
 func processBatch(
 	t *topKSorter, groupId int, sel []int, partialOrder bool, useSel bool,
 ) (groupDone bool) {
-	for i := t.firstUnprocessedTupleIdx; i < t.inputBatch.Length(); i++ {
+	for ; t.firstUnprocessedTupleIdx < t.inputBatch.Length(); t.firstUnprocessedTupleIdx++ {
 		if useSel {
-			idx := sel[i]
+			idx := sel[t.firstUnprocessedTupleIdx]
 		} else {
-			idx := i
+			idx := t.firstUnprocessedTupleIdx
 		}
 		if partialOrder {
 			// If this is a distinct group, we have already found the top K input,
@@ -98,7 +98,6 @@ func processBatch(
 			heap.Fix(t.heaper, 0)
 		}
 	}
-	t.firstUnprocessedTupleIdx = t.inputBatch.Length()
 	return false
 }
 
@@ -141,6 +140,9 @@ func spool(t *topKSorter, partialOrder bool) {
 				groupId = processGroupsInBatch(t, fromLength, groupId, sel, false)
 			}
 		}
+		// Importantly, the memory limit can only be reached _after_ the tuples
+		// are appended to topK, so all fromLength tuples are considered
+		// "processed".
 		t.firstUnprocessedTupleIdx = fromLength
 		t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
 		remainingRows -= uint64(fromLength)

@@ -173,6 +173,9 @@ func spool_true(t *topKSorter) {
 				groupId = __retval_groupId
 			}
 		}
+		// Importantly, the memory limit can only be reached _after_ the tuples
+		// are appended to topK, so all fromLength tuples are considered
+		// "processed".
 		t.firstUnprocessedTupleIdx = fromLength
 		t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
 		remainingRows -= uint64(fromLength)
@@ -211,8 +214,8 @@ func spool_true(t *topKSorter) {
 					{
 						var __retval_groupDone bool
 						{
-							for i := t.firstUnprocessedTupleIdx; i < t.inputBatch.Length(); i++ {
-								idx := sel[i]
+							for ; t.firstUnprocessedTupleIdx < t.inputBatch.Length(); t.firstUnprocessedTupleIdx++ {
+								idx := sel[t.firstUnprocessedTupleIdx]
 								// If this is a distinct group, we have already found the top K input,
 								// so we can stop comparing the rest of this and subsequent batches.
 								if t.orderState.distinctOutput[idx] {
@@ -232,7 +235,6 @@ func spool_true(t *topKSorter) {
 									heap.Fix(t.heaper, 0)
 								}
 							}
-							t.firstUnprocessedTupleIdx = t.inputBatch.Length()
 							{
 								__retval_groupDone = false
 							}
@@ -244,8 +246,8 @@ func spool_true(t *topKSorter) {
 					{
 						var __retval_groupDone bool
 						{
-							for i := t.firstUnprocessedTupleIdx; i < t.inputBatch.Length(); i++ {
-								idx := i
+							for ; t.firstUnprocessedTupleIdx < t.inputBatch.Length(); t.firstUnprocessedTupleIdx++ {
+								idx := t.firstUnprocessedTupleIdx
 								// If this is a distinct group, we have already found the top K input,
 								// so we can stop comparing the rest of this and subsequent batches.
 								if t.orderState.distinctOutput[idx] {
@@ -265,7 +267,6 @@ func spool_true(t *topKSorter) {
 									heap.Fix(t.heaper, 0)
 								}
 							}
-							t.firstUnprocessedTupleIdx = t.inputBatch.Length()
 							{
 								__retval_groupDone = false
 							}
@@ -328,6 +329,9 @@ func spool_false(t *topKSorter) {
 			// t.topK will be full after this batch.
 			fromLength = int(remainingRows)
 		}
+		// Importantly, the memory limit can only be reached _after_ the tuples
+		// are appended to topK, so all fromLength tuples are considered
+		// "processed".
 		t.firstUnprocessedTupleIdx = fromLength
 		t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
 		remainingRows -= uint64(fromLength)
@@ -361,8 +365,8 @@ func spool_false(t *topKSorter) {
 			func() {
 				if sel != nil {
 					{
-						for i := t.firstUnprocessedTupleIdx; i < t.inputBatch.Length(); i++ {
-							idx := sel[i]
+						for ; t.firstUnprocessedTupleIdx < t.inputBatch.Length(); t.firstUnprocessedTupleIdx++ {
+							idx := sel[t.firstUnprocessedTupleIdx]
 							maxIdx := t.heap[0]
 							groupMaxIdx := 0
 							if compareRow_false(t, inputVecIdx, topKVecIdx, idx, maxIdx, groupId, groupMaxIdx) < 0 {
@@ -372,12 +376,11 @@ func spool_false(t *topKSorter) {
 								heap.Fix(t.heaper, 0)
 							}
 						}
-						t.firstUnprocessedTupleIdx = t.inputBatch.Length()
 					}
 				} else {
 					{
-						for i := t.firstUnprocessedTupleIdx; i < t.inputBatch.Length(); i++ {
-							idx := i
+						for ; t.firstUnprocessedTupleIdx < t.inputBatch.Length(); t.firstUnprocessedTupleIdx++ {
+							idx := t.firstUnprocessedTupleIdx
 							maxIdx := t.heap[0]
 							groupMaxIdx := 0
 							if compareRow_false(t, inputVecIdx, topKVecIdx, idx, maxIdx, groupId, groupMaxIdx) < 0 {
@@ -387,7 +390,6 @@ func spool_false(t *topKSorter) {
 								heap.Fix(t.heaper, 0)
 							}
 						}
-						t.firstUnprocessedTupleIdx = t.inputBatch.Length()
 					}
 				}
 			},
