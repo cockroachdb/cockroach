@@ -112,7 +112,7 @@ type hashAggregator struct {
 	// ht stores tuples that are "heads" of the corresponding aggregation
 	// groups ("head" here means the tuple that was first seen from the group).
 	ht                  *colexechash.HashTable
-	hashTableNumBuckets uint64
+	hashTableNumBuckets uint32
 
 	// state stores the current state of hashAggregator.
 	state hashAggregatorState
@@ -207,7 +207,7 @@ func NewHashAggregator(
 	}
 	// This number was chosen after running the micro-benchmarks and relevant
 	// TPCH queries using tpchvec/bench.
-	hashTableNumBuckets := uint64(256)
+	hashTableNumBuckets := uint32(256)
 	if args.TestingKnobs.HashTableNumBuckets != 0 {
 		hashTableNumBuckets = args.TestingKnobs.HashTableNumBuckets
 	}

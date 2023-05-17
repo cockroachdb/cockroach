@@ -443,7 +443,7 @@ func TestHashAggregator(t *testing.T) {
 					ConstArguments: constArguments,
 					OutputTypes:    outputTypes,
 				}
-				args.TestingKnobs.HashTableNumBuckets = uint64(1 + rng.Intn(7))
+				args.TestingKnobs.HashTableNumBuckets = uint32(1 + rng.Intn(7))
 				return NewHashAggregator(
 					context.Background(),
 					&colexecagg.NewHashAggregatorArgs{

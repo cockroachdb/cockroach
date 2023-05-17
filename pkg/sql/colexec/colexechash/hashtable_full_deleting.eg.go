@@ -38,7 +38,7 @@ var (
 // bucket has reached the end, the key is rejected. If the HashTable disallows
 // null equality, then if any element in the key is null, there is no match.
 func (ht *HashTable) checkColDeleting(
-	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int,
+	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint32, probeSel []int,
 ) {
 	switch probeVec.CanonicalTypeFamily() {
 	case types.BoolFamily:
@@ -6337,15 +6337,15 @@ func (ht *HashTable) checkColDeleting(
 // We also have fully visited all tuples in the hash table, so all future
 // probing batches will be handled more efficiently (namely, once we find a
 // match, we stop probing for the corresponding tuple).
-func (ht *HashTable) Check(nToCheck uint64, probeSel []int) uint64 {
+func (ht *HashTable) Check(nToCheck uint32, probeSel []int) uint32 {
 	ht.checkCols(ht.Keys, nToCheck, probeSel)
-	nDiffers := uint64(0)
+	nDiffers := uint32(0)
 	switch ht.probeMode {
 	case HashTableDefaultProbeMode:
 		if ht.Same != nil {
 			toCheckSlice := ht.ProbeScratch.ToCheck
 			_ = toCheckSlice[nToCheck-1]
-			for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+			for toCheckPos := uint32(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 				//gcassert:bce
 				toCheck := toCheckSlice[toCheckPos]
 				if ht.ProbeScratch.foundNull[toCheck] {
@@ -6378,7 +6378,7 @@ func (ht *HashTable) Check(nToCheck uint64, probeSel []int) uint64 {
 		} else {
 			toCheckSlice := ht.ProbeScratch.ToCheck
 			_ = toCheckSlice[nToCheck-1]
-			for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+			for toCheckPos := uint32(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 				//gcassert:bce
 				toCheck := toCheckSlice[toCheckPos]
 				if ht.ProbeScratch.foundNull[toCheck] {
@@ -6401,7 +6401,7 @@ func (ht *HashTable) Check(nToCheck uint64, probeSel []int) uint64 {
 	case HashTableDeletingProbeMode:
 		toCheckSlice := ht.ProbeScratch.ToCheck
 		_ = toCheckSlice[nToCheck-1]
-		for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		for toCheckPos := uint32(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 			//gcassert:bce
 			toCheck := toCheckSlice[toCheckPos]
 			if !ht.ProbeScratch.differs[toCheck] {
@@ -6464,3 +6464,9 @@ const _ = "inlined_handleNextToCheckID_false_false_true"
 
 // execgen:inline
 const _ = "inlined_handleNextToCheckID_false_false_false"
+
+// execgen:inline
+const _ = "inlined_includeTupleToCheck_true"
+
+// execgen:inline
+const _ = "inlined_includeTupleToCheck_false"
