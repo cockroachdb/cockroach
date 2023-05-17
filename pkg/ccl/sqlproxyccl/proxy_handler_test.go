@@ -300,21 +300,21 @@ func TestPrivateEndpointsACL(t *testing.T) {
 		Version:          "001",
 		TenantID:         tenant10.ToUint64(),
 		ClusterName:      "my-tenant",
-		ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+		ConnectivityType: tenant.ALLOW_ALL,
 		PrivateEndpoints: []string{"vpce-abc123"},
 	})
 	tds.CreateTenant(tenant20, &tenant.Tenant{
 		Version:          "002",
 		TenantID:         tenant20.ToUint64(),
 		ClusterName:      "other-tenant",
-		ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+		ConnectivityType: tenant.ALLOW_ALL,
 		PrivateEndpoints: []string{"vpce-some-other-vpc"},
 	})
 	tds.CreateTenant(tenant30, &tenant.Tenant{
 		Version:          "003",
 		TenantID:         tenant30.ToUint64(),
 		ClusterName:      "public-tenant",
-		ConnectivityType: tenant.ALLOW_PUBLIC,
+		ConnectivityType: tenant.ALLOW_PUBLIC_ONLY,
 		PrivateEndpoints: []string{},
 	})
 	// All tenants map to the same pod.
@@ -387,7 +387,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 					Version:          "010",
 					TenantID:         tenant10.ToUint64(),
 					ClusterName:      "my-tenant",
-					ConnectivityType: tenant.ALLOW_PUBLIC | tenant.ALLOW_PRIVATE,
+					ConnectivityType: tenant.ALLOW_ALL,
 					PrivateEndpoints: []string{},
 				})
 
