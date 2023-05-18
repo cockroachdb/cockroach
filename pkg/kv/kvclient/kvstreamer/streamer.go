@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bitmap"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -599,14 +600,20 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 			}
 		}
 
+		var isResumeScan *bitmap.Bitmap
+		if numScansInReqs > 0 {
+			isResumeScan = bitmap.NewBitmap(len(reqs))
+		}
 		numGetsInReqs := int64(len(singleRangeReqs)) - numScansInReqs
 		overheadAccountedFor := requestUnionSliceOverhead + requestUnionOverhead*int64(cap(singleRangeReqs)) + // reqs
 			intSliceOverhead + intSize*int64(cap(positions)) + // positions
-			subRequestIdxOverhead // subRequestIdx
+			subRequestIdxOverhead + // subRequestIdx
+			isResumeScan.MemUsage() // isResumeScan
 		r := singleRangeBatch{
 			reqs:                 singleRangeReqs,
 			positions:            positions,
 			subRequestIdx:        subRequestIdx,
+			isResumeScan:         isResumeScan,
 			numGetsInReqs:        numGetsInReqs,
 			reqsReservedBytes:    requestsMemUsage(singleRangeReqs),
 			overheadAccountedFor: overheadAccountedFor,
@@ -1371,6 +1378,11 @@ type singleRangeBatchResponseFootprint struct {
 	// need to be created for Get and Scan responses, respectively.
 	numGetResults, numScanResults         int
 	numIncompleteGets, numIncompleteScans int
+	// numNonResumeScans indicates how many "non-resume" Scan responses are
+	// received. If a Scan response was received due to a Scan request that was
+	// the "resume" request (i.e. the pagination of the previous request), it's
+	// not included in this number.
+	numNonResumeScans int
 }
 
 func (fp singleRangeBatchResponseFootprint) hasResults() bool {
@@ -1424,6 +1436,16 @@ func calculateFootprint(
 			if len(scan.BatchResponses) > 0 || scan.ResumeSpan == nil {
 				fp.responsesOverhead += scanResponseOverhead
 				fp.numScanResults++
+				if pos := req.positions[i]; !req.isResumeScan.IsSet(pos) {
+					// This is the first response to the enqueuedReqs[pos]
+					// request. As such, we consider it a "non-resume" response,
+					// and then mark 'pos' in the isResumeScan bitmap so that
+					// all consequent Scan responses (if there will be any) are
+					// considered "resume" responses. This will allow us to have
+					// more precise response size estimation.
+					fp.numNonResumeScans++
+					req.isResumeScan.Set(pos)
+				}
 			}
 			if scan.ResumeSpan != nil {
 				// This Scan wasn't completed.
@@ -1484,12 +1506,10 @@ func processSingleRangeResults(
 	defer s.budget.mu.Unlock()
 	s.mu.Lock()
 
-	// TODO(yuzefovich): some of the responses might be partial, yet the
-	// estimator doesn't distinguish the footprint of the full response vs
-	// the partial one. Think more about this.
-	s.mu.avgResponseEstimator.update(
-		fp.memoryFootprintBytes, int64(fp.numGetResults+fp.numScanResults),
-	)
+	// Gets cannot be resumed, so we include all of them here, but Scans can be
+	// resumed, so we only include "non-resume" Scans.
+	numNonResumeResponses := fp.numGetResults + fp.numNonResumeScans
+	s.mu.avgResponseEstimator.update(fp.memoryFootprintBytes, numNonResumeResponses)
 
 	// If we have any Scan results to create and the Scan requests can return
 	// multiple rows, we'll need to consult s.mu.numRangesPerScanRequest, so
@@ -1619,11 +1639,13 @@ func buildResumeSingleRangeBatch(
 	s *Streamer, req singleRangeBatch, br *kvpb.BatchResponse, fp singleRangeBatchResponseFootprint,
 ) (resumeReq singleRangeBatch) {
 	numIncompleteRequests := fp.numIncompleteGets + fp.numIncompleteScans
-	// We have to allocate the new Get and Scan requests, but we can reuse the
-	// reqs and the positions slices.
+	// We have to allocate the new Get and Scan requests, but we can reuse reqs,
+	// positions, and subRequestIdx slices.
 	resumeReq.reqs = req.reqs[:numIncompleteRequests]
 	resumeReq.positions = req.positions[:0]
 	resumeReq.subRequestIdx = req.subRequestIdx[:0]
+	// isResumeScan actually needs to be preserved between singleRangeBatches.
+	resumeReq.isResumeScan = req.isResumeScan
 	resumeReq.numGetsInReqs = int64(fp.numIncompleteGets)
 	// We've already reconciled the budget with the actual reservation for the
 	// requests with the ResumeSpans.
