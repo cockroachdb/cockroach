@@ -204,12 +204,13 @@ func TestWatchTenants(t *testing.T) {
 		if tds.WatchTenantsListenersCount() != 0 {
 			return errors.New("watchers have not been removed yet")
 		}
+
+		// Make sure watcher has attempted to restart, and invalidates entries.
+		if _, err := dir.LookupTenant(ctx, tenant10); err == nil {
+			return errors.New("entries have not been invalidated")
+		}
 		return nil
 	})
-
-	// Entry was invalidated.
-	_, err = dir.LookupTenant(ctx, tenant10)
-	require.Regexp(t, "directory server has not been started", err.Error())
 
 	// Trigger events, which will be missed by the tenant watcher.
 	tds.DeleteTenant(tenant10)
