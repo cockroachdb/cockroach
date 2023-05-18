@@ -514,6 +514,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 			decomNodeMap.onNodeDecommissioned(liveness.NodeID)
 		},
+		Engines: engines,
 	})
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 
@@ -1835,17 +1836,15 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Begin the node liveness heartbeat. Add a callback which records the local
 	// store "last up" timestamp for every store whenever the liveness record is
 	// updated.
-	s.nodeLiveness.Start(workersCtx, liveness.NodeLivenessStartOptions{
-		Engines: s.engines,
-		OnSelfLive: func(ctx context.Context) {
+	s.nodeLiveness.Start(workersCtx,
+		func(ctx context.Context) {
 			now := s.clock.Now()
 			if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
 				return s.WriteLastUpTimestamp(ctx, now)
 			}); err != nil {
 				log.Ops.Warningf(ctx, "writing last up timestamp: %v", err)
 			}
-		},
-	})
+		})
 
 	// Begin recording status summaries.
 	if err := s.node.startWriteNodeStatus(base.DefaultMetricsSampleInterval); err != nil {

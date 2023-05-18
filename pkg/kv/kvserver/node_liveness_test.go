@@ -307,6 +307,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 	// Verify liveness of all nodes for all nodes.
 	verifyLiveness(t, tc)
 	pauseNodeLivenessHeartbeatLoops(tc)
+	tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).TestingStart(false)
 
 	var cbMu syncutil.Mutex
 	cbs := map[roachpb.NodeID]struct{}{}
@@ -315,6 +316,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 		defer cbMu.Unlock()
 		cbs[l.NodeID] = struct{}{}
 	})
+	tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).TestingStart(true)
 
 	// Advance clock past the liveness threshold.
 	manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).GetLivenessThreshold().Nanoseconds() + 1)
