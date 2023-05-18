@@ -1,34 +1,39 @@
-load("@build_bazel_rules_nodejs//:index.bzl", "js_library", "npm_package_bin", "nodejs_binary")
+load("@aspect_rules_js//js:defs.bzl", "js_run_binary")
 
-def yarn_lock_to_json(name, yarn_lock, **kwargs):
+def _filename_from_label(label):
+    """Given a label representing a filename like //foo/bar:baz,
+       return the filename (`baz` in this case). This is a simple
+       helper function that simply returns the text after the last colon.
+    """
+    return label[label.rfind(":")+1:]
+
+def yarn_lock_to_json(name, yarn_lock):
     """Runs ./parse.js on the provided yarn_lock file,
        storing the produced output in "__${name}".
     """
-    npm_package_bin(
+    js_run_binary(
         name = name,
         tool = ":yarn-lock-parse",
+        chdir = native.package_name(),
         stdout = "__" + name,
-        data = [
-            yarn_lock,
-        ],
+        srcs = [yarn_lock],
         args = [
-            "$(execpath {})".format(yarn_lock),
+            _filename_from_label(yarn_lock),
         ],
     )
 
-def json_to_yarn_lock(name, json, **kwargs):
+def json_to_yarn_lock(name, json):
     """Runs ./stringify.js on the provided json file, storing
        the produced output in "__${name}"
     """
-    npm_package_bin(
+    js_run_binary(
         name = name,
         tool = ":yarn-lock-stringify",
+        chdir = native.package_name(),
         stdout = "__" + name,
-        data = [
-            json,
-        ],
+        srcs = [json],
         args = [
-            "$(execpath {})".format(json)
+            _filename_from_label(json),
         ]
     )
 
