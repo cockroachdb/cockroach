@@ -128,6 +128,16 @@ func TestBackup_base_alter_table_validate_constraint(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_validate_constraint", sctest.SingleNodeCluster)
 }
+func TestBackup_base_create_database(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_database", sctest.SingleNodeCluster)
+}
+func TestBackup_base_create_database_drop_database_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_database_drop_database_separate_statements", sctest.SingleNodeCluster)
+}
 func TestBackup_base_create_function(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -142,6 +152,11 @@ func TestBackup_base_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index", sctest.SingleNodeCluster)
+}
+func TestBackup_base_create_index_create_database_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index_create_database_separate_statements", sctest.SingleNodeCluster)
 }
 func TestBackup_base_create_index_create_schema_separate_statements(t *testing.T) {
 	defer leaktest.AfterTest(t)()

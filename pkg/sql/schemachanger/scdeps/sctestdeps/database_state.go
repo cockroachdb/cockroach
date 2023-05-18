@@ -74,9 +74,6 @@ ORDER BY id`)
 			t.Fatal(err)
 		}
 		desc := b.BuildCreatedMutable()
-		if desc.GetID() == keys.SystemDatabaseID || desc.GetParentID() == keys.SystemDatabaseID {
-			continue
-		}
 
 		// Redact time-dependent fields.
 		switch t := desc.(type) {

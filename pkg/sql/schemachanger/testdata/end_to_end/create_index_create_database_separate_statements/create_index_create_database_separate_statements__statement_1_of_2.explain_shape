@@ -1,0 +1,17 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+INSERT INTO t SELECT val, val+1 FROM generate_series(1,10) AS temp(val);
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE UNIQUE INDEX idx ON t(j) WHERE (i > 0);
+----
+Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹j›) WHERE (‹i› > ‹0›);
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey in relation t
+ │    └── into idx+ (j: i)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into idx+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index idx+ in relation t
+ └── execute 1 system table mutations transaction

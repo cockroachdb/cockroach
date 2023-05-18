@@ -11,6 +11,7 @@
 package scbuild
 
 import (
+	"context"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -296,6 +298,9 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 	if b.hasAdmin {
 		return true
 	}
+	if b.evalCtx.SessionData().User() == role {
+		return true
+	}
 	memberships, err := b.auth.MemberOfWithAdminOption(b.ctx, role)
 	if err != nil {
 		panic(err)
@@ -306,6 +311,16 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 
 func (b *builderState) CurrentUser() username.SQLUsername {
 	return b.evalCtx.SessionData().User()
+}
+
+func (b *builderState) HasRoleOption(
+	ctx context.Context, roleOption roleoption.Option,
+) (bool, error) {
+	return b.auth.HasRoleOption(ctx, roleOption)
+}
+
+func (b *builderState) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
+	return b.auth.RoleExists(ctx, role)
 }
 
 var _ scbuildstmt.TableHelpers = (*builderState)(nil)

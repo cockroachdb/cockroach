@@ -842,3 +842,8 @@ type InitSequence struct {
 	RestartWith    int64
 	UseRestartWith bool
 }
+
+type CreateDatabaseDescriptor struct {
+	immediateMutationOp
+	DatabaseID descpb.ID
+}
