@@ -1284,11 +1284,9 @@ func runWriteSkewTest(t *testing.T, iso isolation.Level) {
 		return nil
 	}
 	checks[isolation.Snapshot] = func(env map[string]int64) error {
-		// TODO(nvanbenschoten): re-enable this exception when we permit write skew
-		// under Snapshot isolation.
-		//if env["A"] == 1 && env["B"] == 1 {
-		//	return nil
-		//}
+		if env["A"] == 1 && env["B"] == 1 {
+			return nil
+		}
 		return checks[isolation.Serializable](env)
 	}
 
