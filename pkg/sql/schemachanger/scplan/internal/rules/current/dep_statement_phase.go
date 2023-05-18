@@ -15,6 +15,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
 	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
@@ -22,9 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
-// These rules ensure that changes to properties of descriptors which need to
-// be sequenced in order to safely enact online schema changes are sequenced
-// in separate transactions.
 func init() {
 
 	findNoopSourceStatuses := func(
@@ -53,7 +51,9 @@ func init() {
 		}
 		return statusMap
 	}
-	clausesForTwoVersionEdge := func(
+	// Ensures that a descriptor is at most allowed a single transition,
+	// if it is in an adding state (and the state is revertible).
+	clausesForStatementPhaseSingleTransitionForDesc := func(
 		from, to NodeVars,
 		el scpb.Element,
 		targetStatus scpb.TargetStatus,
@@ -69,7 +69,12 @@ func init() {
 			from.Target.AttrEq(screl.TargetStatus, targetStatus.Status()),
 			from.Node.AttrEq(screl.CurrentStatus, t.From()),
 			to.Node.AttrEq(screl.CurrentStatus, t.To()),
-			descriptorIsNotBeingAddedOrDropped(from.El),
+		}
+		// If the stage is revertible and we are in an added state, the statement
+		// phase can have multiple transitions.
+		if t.Revertible() {
+			clauses = append(clauses,
+				from.Target.AttrNeq(screl.CurrentStatus, scpb.Status_DESCRIPTOR_ADDED))
 		}
 		if len(prePrevStatuses) > 0 {
 			clauses = append(clauses,
@@ -78,6 +83,40 @@ func init() {
 		}
 		return clauses
 	}
+	// Ensures that a descriptor dependent is at most allowed a single transition,
+	// if the parent descriptor is in an adding state.
+	clausesForStatementPhaseSingleTransitionForDep := func(
+		from, to NodeVars,
+		el scpb.Element,
+		targetStatus scpb.TargetStatus,
+		t opgen.Transition,
+		prePrevStatuses []scpb.Status,
+	) rel.Clauses {
+		targetDesc := MkNodeVars("target-desc")
+		var descIDVar rel.Var = "desc-id"
+		clauses := rel.Clauses{
+			targetDesc.TypeFilter(rulesVersionKey, isDescriptor),
+			from.Type(el),
+			to.Type(el),
+			targetDesc.JoinTargetNode(),
+			from.DescIDEq(descIDVar),
+			from.El.AttrEqVar(rel.Self, to.El),
+			from.Target.AttrEqVar(rel.Self, to.Target),
+			from.Target.AttrEq(screl.TargetStatus, targetStatus.Status()),
+			from.Node.AttrEq(screl.CurrentStatus, t.From()),
+			to.Node.AttrEq(screl.CurrentStatus, t.To()),
+			targetDesc.DescIDEq(descIDVar),
+			targetDesc.Target.AttrNeq(screl.CurrentStatus, scpb.Status_DESCRIPTOR_ADDED),
+		}
+		if len(prePrevStatuses) > 0 {
+			clauses = append(clauses,
+				GetNotJoinOnNodeWithStatusIn(prePrevStatuses)(from.Target),
+			)
+		}
+
+		return clauses
+	}
+
 	addRules := func(el scpb.Element, targetStatus scpb.TargetStatus) {
 		statusMap := findNoopSourceStatuses(el, targetStatus)
 		if err := opgen.IterateTransitions(el, targetStatus, func(
@@ -85,15 +124,16 @@ func init() {
 		) error {
 			elemName := reflect.TypeOf(el).Elem().Name()
 			ruleName := scgraph.RuleName(fmt.Sprintf(
-				"%s transitions to %s uphold 2-version invariant: %s->%s",
+				"%s transitions to %s uphold only single transition in statement phase: %s->%s",
 				elemName, targetStatus.Status(), t.From(), t.To(),
 			))
-			registerDepRule(
+			registerDepRuleWithMaxPhase(
 				ruleName,
 				scgraph.PreviousStagePrecedence,
+				scop.StatementPhase,
 				"prev", "next",
 				func(from, to NodeVars) rel.Clauses {
-					return clausesForTwoVersionEdge(
+					return clausesForStatementPhaseSingleTransitionForDesc(
 						from, to, el, targetStatus, t, statusMap[t.From()],
 					)
 				},
@@ -103,17 +143,52 @@ func init() {
 			panic(err)
 		}
 	}
-	_ = scpb.ForEachElementType(func(el scpb.Element) error {
-		if !isSubjectTo2VersionInvariant(el) {
+
+	addRulesForDep := func(el scpb.Element, targetStatus scpb.TargetStatus) {
+		statusMap := findNoopSourceStatuses(el, targetStatus)
+		if err := opgen.IterateTransitions(el, targetStatus, func(
+			t opgen.Transition,
+		) error {
+			elemName := reflect.TypeOf(el).Elem().Name()
+			ruleName := scgraph.RuleName(fmt.Sprintf(
+				"%s transitions to %s uphold only single transition in statement phase: %s->%s",
+				elemName, targetStatus.Status(), t.From(), t.To(),
+			))
+			registerDepRuleWithMaxPhase(
+				ruleName,
+				scgraph.PreviousStagePrecedence,
+				scop.StatementPhase,
+				"prev", "next",
+				func(from, to NodeVars) rel.Clauses {
+					return clausesForStatementPhaseSingleTransitionForDep(
+						from, to, el, targetStatus, t, statusMap[t.From()],
+					)
+				},
+			)
 			return nil
+		}); err != nil {
+			panic(err)
 		}
-		if opgen.HasPublic(el) {
-			addRules(el, scpb.ToPublic)
+	}
+
+	_ = scpb.ForEachElementType(func(el scpb.Element) error {
+		if IsDescriptor(el) {
+			if opgen.HasPublic(el) {
+				addRules(el, scpb.ToPublic)
+			}
+			if opgen.HasTransient(el) {
+				addRules(el, scpb.Transient)
+			}
+			addRules(el, scpb.ToAbsent) // every element has ToAbsent
+		} else {
+			if opgen.HasPublic(el) {
+				addRulesForDep(el, scpb.ToPublic)
+			}
+			if opgen.HasTransient(el) {
+				addRules(el, scpb.Transient)
+			}
+			addRules(el, scpb.ToAbsent) // every element has ToAbsent
 		}
-		if opgen.HasTransient(el) {
-			addRules(el, scpb.Transient)
-		}
-		addRules(el, scpb.ToAbsent) // every element has ToAbsent
 		return nil
 	})
 }

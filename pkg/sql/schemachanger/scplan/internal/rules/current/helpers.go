@@ -44,6 +44,23 @@ var descriptorIsNotBeingDropped = screl.Schema.DefNotJoin1(
 	},
 )
 
+// descriptorIsNotBeingAdded creates a clause which leads to the outer clause
+// failing to unify if the passed element is part of a descriptor and
+// that descriptor is being added.
+var descriptorIsNotBeingAddedOrDropped = screl.Schema.DefNotJoin1(
+	"descriptorIsNotBeingAddedOrDropped"+rulesVersion, "element", func(
+		element rel.Var,
+	) rel.Clauses {
+		descriptor := rules.MkNodeVars("descriptor")
+		return rel.Clauses{
+			descriptor.TypeFilter(rulesVersionKey, isDescriptor),
+			descriptor.JoinTarget(),
+			rules.JoinOnDescIDUntyped(descriptor.El, element, "id"),
+			descriptor.TargetStatus(scpb.ToPublic, scpb.ToAbsent),
+		}
+	},
+)
+
 // isDescriptor returns true for a descriptor-element, i.e. an element which
 // owns its corresponding descriptor.
 func isDescriptor(e scpb.Element) bool {

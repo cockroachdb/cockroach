@@ -20,6 +20,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   │ BACKFILL_ONLY → ABSENT
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
+        │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold only single transition in statement phase: BACKFILL_ONLY->DELETE_ONLY"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
         │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 104 (t1), IndexID: 2 (id1-)}
@@ -43,11 +46,17 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • IndexColumn:{DescID: 104 (t1), ColumnID: 1 (id), IndexID: 2 (id1-)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t1), ColumnID: 1 (id), IndexID: 2 (id1-)}
+        │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+        │   │   │
         │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
         │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   ├── • IndexColumn:{DescID: 104 (t1), ColumnID: 2 (name), IndexID: 2 (id1-)}
         │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t1), ColumnID: 2 (name), IndexID: 2 (id1-)}
+        │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
         │   │   │
         │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
         │   │         rule: "index drop mutation visible before cleaning up index columns"
@@ -55,14 +64,23 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • IndexColumn:{DescID: 104 (t1), ColumnID: 3 (money), IndexID: 2 (id1-)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t1), ColumnID: 3 (money), IndexID: 2 (id1-)}
+        │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+        │   │   │
         │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
         │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   ├── • IndexData:{DescID: 104 (t1), IndexID: 2 (id1-)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
-        │   │         rule: "index removed before garbage collection"
+        │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexData:{DescID: 104 (t1), IndexID: 2 (id1-)}
+        │   │   │     rule: "IndexData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
+        │   │   │     rule: "index removed before garbage collection"
+        │   │   │
+        │   │   └── • PreviousStagePrecedence dependency from DROPPED IndexData:{DescID: 104 (t1), IndexID: 2 (id1-)}
+        │   │         rule: "IndexData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │   │
         │   ├── • IndexName:{DescID: 104 (t1), Name: "id1", IndexID: 2 (id1-)}
         │   │   │ PUBLIC → ABSENT
@@ -72,6 +90,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │
         │   ├── • TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
         │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
+        │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
         │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
@@ -94,17 +115,26 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • IndexColumn:{DescID: 104 (t1), ColumnID: 1 (id), IndexID: 3}
         │   │   │ PUBLIC → ABSENT
         │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t1), ColumnID: 1 (id), IndexID: 3}
+        │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+        │   │   │
         │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
         │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   ├── • IndexColumn:{DescID: 104 (t1), ColumnID: 2 (name), IndexID: 3}
         │   │   │ PUBLIC → ABSENT
         │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t1), ColumnID: 2 (name), IndexID: 3}
+        │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+        │   │   │
         │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
         │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   └── • IndexColumn:{DescID: 104 (t1), ColumnID: 3 (money), IndexID: 3}
         │       │ PUBLIC → ABSENT
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t1), ColumnID: 3 (money), IndexID: 3}
+        │       │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
         │       │
         │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
         │             rule: "index drop mutation visible before cleaning up index columns"

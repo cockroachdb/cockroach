@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -324,21 +325,21 @@ func RegisterDepRuleForDrop(
 		panic(errors.AssertionFailedf("Invalid 'from' status %s", toStatus))
 	}
 
-	r.RegisterDepRule(ruleName, kind, from, to, func(from, to NodeVars) rel.Clauses {
+	r.RegisterDepRule(ruleName, kind, scop.LatestPhase, from, to, func(from, to NodeVars) rel.Clauses {
 		return append(
 			fn(from, to),
 			StatusesToAbsent(from, fromStatus, to, toStatus),
 		)
 	})
 
-	r.RegisterDepRule(ruleName, kind, from, to, func(from, to NodeVars) rel.Clauses {
+	r.RegisterDepRule(ruleName, kind, scop.LatestPhase, from, to, func(from, to NodeVars) rel.Clauses {
 		return append(
 			fn(from, to),
 			StatusesTransient(from, transientFromStatus, to, transientToStatus),
 		)
 	})
 
-	r.RegisterDepRule(ruleName, kind, from, to, func(from, to NodeVars) rel.Clauses {
+	r.RegisterDepRule(ruleName, kind, scop.LatestPhase, from, to, func(from, to NodeVars) rel.Clauses {
 		return append(
 			fn(from, to),
 			from.TargetStatus(scpb.Transient),
@@ -348,7 +349,7 @@ func RegisterDepRuleForDrop(
 		)
 	})
 
-	r.RegisterDepRule(ruleName, kind, from, to, func(from, to NodeVars) rel.Clauses {
+	r.RegisterDepRule(ruleName, kind, scop.LatestPhase, from, to, func(from, to NodeVars) rel.Clauses {
 		return append(
 			fn(from, to),
 			from.TargetStatus(scpb.ToAbsent),

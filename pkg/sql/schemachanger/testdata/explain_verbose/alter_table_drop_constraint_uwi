@@ -108,6 +108,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT unique_j;
         │       │ VALIDATED → ABSENT
         │       │
         │       ├── • PreviousStagePrecedence dependency from VALIDATED UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-)}
+        │       │     rule: "UniqueWithoutIndexConstraint transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT"
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from VALIDATED UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-)}
         │       │     rule: "UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
         │       │
         │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "unique_j", ConstraintID: 2 (unique_j-)}

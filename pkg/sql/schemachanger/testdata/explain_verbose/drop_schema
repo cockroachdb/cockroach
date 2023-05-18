@@ -16,11 +16,17 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │   ├── • Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106 (sc-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Owner:{DescID: 106 (sc-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 106 (sc-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106 (sc-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -28,20 +34,32 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │   ├── • UserPrivileges:{DescID: 106 (sc-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 106 (sc-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106 (sc-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106 (sc-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 106 (sc-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106 (sc-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Schema:{DescID: 106 (sc-)}
-│       │   │     PUBLIC → DROPPED
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC Schema:{DescID: 106 (sc-)}
+│       │   │         rule: "Schema transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │
 │       │   └── • SchemaParent:{DescID: 106 (sc-), ReferencedDescID: 104 (db)}
 │       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       ├── • PreviousStagePrecedence dependency from PUBLIC SchemaParent:{DescID: 106 (sc-), ReferencedDescID: 104 (db)}
+│       │       │     rule: "SchemaParent transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │       │
 │       │       └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 106 (sc-)}
 │       │             rule: "descriptor dropped before dependent element removal"
@@ -111,11 +129,17 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │   ├── • Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106 (sc-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Owner:{DescID: 106 (sc-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 106 (sc-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106 (sc-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -123,20 +147,32 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │   ├── • UserPrivileges:{DescID: 106 (sc-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 106 (sc-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106 (sc-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106 (sc-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 106 (sc-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106 (sc-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Schema:{DescID: 106 (sc-)}
-│       │   │     PUBLIC → DROPPED
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC Schema:{DescID: 106 (sc-)}
+│       │   │         rule: "Schema transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │
 │       │   └── • SchemaParent:{DescID: 106 (sc-), ReferencedDescID: 104 (db)}
 │       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       ├── • PreviousStagePrecedence dependency from PUBLIC SchemaParent:{DescID: 106 (sc-), ReferencedDescID: 104 (db)}
+│       │       │     rule: "SchemaParent transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │       │
 │       │       └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 106 (sc-)}
 │       │             rule: "descriptor dropped before dependent element removal"
@@ -200,6 +236,9 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
         │   │
         │   └── • Schema:{DescID: 106 (sc-)}
         │       │ DROPPED → ABSENT
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from DROPPED Schema:{DescID: 106 (sc-)}
+        │       │     rule: "Schema transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │       │
         │       ├── • Precedence dependency from ABSENT Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db)}
         │       │     rule: "non-data dependents removed before descriptor"

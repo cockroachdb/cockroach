@@ -44,6 +44,7 @@ type Transition interface {
 	From() scpb.Status
 	To() scpb.Status
 	OpType() scop.Type
+	Revertible() bool
 }
 
 // HasTransient returns true if the element of this type has

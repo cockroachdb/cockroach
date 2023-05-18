@@ -772,11 +772,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │   │   ├── • TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
     │   │   │   │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
     │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+    │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
+    │   │   │   │
     │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
     │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3}
     │   │   │   │ PUBLIC → TRANSIENT_ABSENT
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3}
+    │   │   │   │     rule: "IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT"
     │   │   │   │
     │   │   │   └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
@@ -784,11 +790,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
     │   │   │   │ PUBLIC → TRANSIENT_ABSENT
     │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
+    │   │   │   │     rule: "IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT"
+    │   │   │   │
     │   │   │   └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   └── • TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 1 (t_pkey-)}
     │   │       │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
+    │   │       │
+    │   │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 1 (t_pkey-)}
+    │   │       │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
     │   │       │
     │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 1 (t_pkey-)}
     │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
@@ -869,6 +881,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │   │   │   │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
     │   │   │   │
     │   │   │   ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+    │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
     │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3}
@@ -880,6 +895,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │   │   └── • TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 1 (t_pkey-)}
     │   │       │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
     │   │       │
+    │   │       ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 1 (t_pkey-)}
+    │   │       │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
+    │   │       │
     │   │       └── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 1 (t_pkey-)}
     │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
     │   │
@@ -888,17 +906,26 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 1 (t_pkey-)}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 1 (t_pkey-)}
+    │   │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+    │   │   │   │
     │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 1 (t_pkey-)}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 1 (t_pkey-)}
+    │   │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+    │   │   │   │
     │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   └── • PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
     │   │       │ VALIDATED → DELETE_ONLY
+    │   │       │
+    │   │       ├── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
+    │   │       │     rule: "PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: VALIDATED->WRITE_ONLY"
     │   │       │
     │   │       └── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
     │   │             rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
@@ -946,8 +973,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
         │   │   ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
         │   │   │     rule: "schedule all GC jobs for a descriptor in the same stage"
         │   │   │
-        │   │   └── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
-        │   │         rule: "index removed before garbage collection"
+        │   │   ├── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+        │   │   │     rule: "index removed before garbage collection"
+        │   │   │
+        │   │   └── • PreviousStagePrecedence dependency from TRANSIENT_DROPPED IndexData:{DescID: 104 (t), IndexID: 3}
+        │   │         rule: "IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DROPPED->TRANSIENT_ABSENT"
         │   │
         │   └── • IndexData:{DescID: 104 (t), IndexID: 5}
         │       │ PUBLIC → TRANSIENT_ABSENT
@@ -958,13 +988,19 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
         │       ├── • SameStagePrecedence dependency from TRANSIENT_DROPPED IndexData:{DescID: 104 (t), IndexID: 3}
         │       │     rule: "schedule all GC jobs for a descriptor in the same stage"
         │       │
-        │       └── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 1 (t_pkey-)}
-        │             rule: "index removed before garbage collection"
+        │       ├── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 1 (t_pkey-)}
+        │       │     rule: "index removed before garbage collection"
+        │       │
+        │       └── • PreviousStagePrecedence dependency from TRANSIENT_DROPPED IndexData:{DescID: 104 (t), IndexID: 5}
+        │             rule: "IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DROPPED->TRANSIENT_ABSENT"
         │
         ├── • 2 elements transitioning toward ABSENT
         │   │
         │   ├── • PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
         │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
+        │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 1 (t_pkey-)}
         │   │   │     rule: "dependents removed before index"
@@ -981,8 +1017,14 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
         │   └── • IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
-        │             rule: "index removed before garbage collection"
+        │       ├── • PreviousStagePrecedence dependency from PUBLIC IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
+        │       │     rule: "IndexData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+        │       │
+        │       ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
+        │       │     rule: "index removed before garbage collection"
+        │       │
+        │       └── • PreviousStagePrecedence dependency from DROPPED IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
+        │             rule: "IndexData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │
         └── • 6 Mutation operations
             │

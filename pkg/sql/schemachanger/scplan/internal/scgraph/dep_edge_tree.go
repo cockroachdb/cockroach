@@ -13,6 +13,7 @@ package scgraph
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -60,16 +61,19 @@ func makeDepEdges(getTargetIdx getTargetIdxFunc) depEdges {
 // PreviousStagePrecedence and also SameStagePrecedence; that would be
 // impossible to fulfill. Precedence is compatible with other kind of
 // edge, but other kinds of edges are not compatible with each other.
-func (et *depEdges) insertOrUpdate(rule Rule, kind DepEdgeKind, from, to *screl.Node) error {
-	k := makeEdgeKey(et.getTargetIdx, from, to)
+func (et *depEdges) insertOrUpdate(
+	rule Rule, kind DepEdgeKind, maxPhase scop.Phase, from, to *screl.Node,
+) error {
+	k := makeEdgeKey(et.getTargetIdx, from, to, maxPhase)
 	if got, ok := et.get(k); ok {
 		return updateExistingDepEdge(rule, kind, got)
 	}
 	de := et.edgeAlloc.new(DepEdge{
-		kind:  kind,
-		from:  from,
-		to:    to,
-		rules: []Rule{rule},
+		kind:     kind,
+		from:     from,
+		to:       to,
+		maxPhase: maxPhase,
+		rules:    []Rule{rule},
 	})
 	et.fromTo.ReplaceOrInsert(et.entryAlloc.new(k, fromTo, de))
 	et.toFrom.ReplaceOrInsert(et.entryAlloc.new(k, toFrom, de))
@@ -121,13 +125,16 @@ func iterateDepEdges(
 		idx = 1
 	}
 	var qk edgeKey
+	var qkEnd edgeKey
 	qk.targets[idx] = target
 	qk.statuses[idx] = uint8(status)
+	qkEnd = qk
+	qkEnd.maxPhase = scop.LatestPhase
 	k1, k2 := getDepEdgeTreeEntry(), getDepEdgeTreeEntry()
 	defer putDepEdgeTreeEntry(k1)
 	defer putDepEdgeTreeEntry(k2)
 	*k1 = depEdgeTreeEntry{edgeKey: qk, order: order, kind: queryStart}
-	*k2 = depEdgeTreeEntry{edgeKey: qk, order: order, kind: queryEnd}
+	*k2 = depEdgeTreeEntry{edgeKey: qkEnd, order: order, kind: queryEnd}
 	t.AscendRange(k1, k2, func(i btree.Item) (wantMore bool) {
 		err = it(i.(*depEdgeTreeEntry).edge)
 		return err == nil
@@ -173,10 +180,11 @@ const (
 type edgeKey struct {
 	targets  [numEdgeKeyOrdinals]targetIdx
 	statuses [numEdgeKeyOrdinals]uint8
+	maxPhase scop.Phase
 }
 
 // makeEdgeKey constructs an edgeKey for two nodes.
-func makeEdgeKey(getTargetIdx getTargetIdxFunc, from, to *screl.Node) edgeKey {
+func makeEdgeKey(getTargetIdx getTargetIdxFunc, from, to *screl.Node, maxPhase scop.Phase) edgeKey {
 	return edgeKey{
 		targets: [numEdgeKeyOrdinals]targetIdx{
 			fromOrdinal: getTargetIdx(from),
@@ -185,6 +193,7 @@ func makeEdgeKey(getTargetIdx getTargetIdxFunc, from, to *screl.Node) edgeKey {
 			fromOrdinal: uint8(from.CurrentStatus),
 			toOrdinal:   uint8(to.CurrentStatus),
 		},
+		maxPhase: maxPhase,
 	}
 }
 
@@ -231,6 +240,10 @@ func cmpEdgeTreeEntry(a, b *depEdgeTreeEntry, first bool) (less, eq bool) {
 	}
 	if sa, sb := a.statuses[ord], b.statuses[ord]; sa != sb {
 		return sa < sb, false
+	}
+
+	if a.maxPhase != b.maxPhase {
+		return a.maxPhase < b.maxPhase, false
 	}
 	if a.kind != b.kind {
 		return a.kind == queryStart || b.kind == queryEnd, false

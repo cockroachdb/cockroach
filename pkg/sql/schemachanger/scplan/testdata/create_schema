@@ -116,6 +116,10 @@ CREATE SCHEMA sc;
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [Schema:{DescID: 105}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: Schema transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC
+- from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
   to:   [SchemaName:{DescID: 105}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents

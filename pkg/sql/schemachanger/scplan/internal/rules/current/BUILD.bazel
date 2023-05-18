@@ -17,6 +17,7 @@ go_library(
         "dep_drop_index_and_column.go",
         "dep_drop_object.go",
         "dep_garbage_collection.go",
+        "dep_statement_phase.go",
         "dep_swap_index.go",
         "dep_two_version.go",
         "helpers.go",
@@ -27,6 +28,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/sql/schemachanger/rel",
+        "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan/internal/opgen",
         "//pkg/sql/schemachanger/scplan/internal/rules",

@@ -519,17 +519,26 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
     │   │   ├── • TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
     │   │   │   │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
     │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
+    │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
+    │   │   │   │
     │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
     │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 3}
     │   │   │   │ PUBLIC → TRANSIENT_ABSENT
     │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 3}
+    │   │   │   │     rule: "IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT"
+    │   │   │   │
     │   │   │   └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   └── • IndexColumn:{DescID: 106 (t), ColumnID: 1 (k), IndexID: 3}
     │   │       │ PUBLIC → TRANSIENT_ABSENT
+    │   │       │
+    │   │       ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 106 (t), ColumnID: 1 (k), IndexID: 3}
+    │   │       │     rule: "IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT"
     │   │       │
     │   │       └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
     │   │             rule: "index drop mutation visible before cleaning up index columns"
@@ -580,6 +589,9 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
         │   │   │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
+        │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
         │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 3}
@@ -591,8 +603,11 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
         │   └── • IndexData:{DescID: 106 (t), IndexID: 3}
         │       │ PUBLIC → TRANSIENT_ABSENT
         │       │
-        │       └── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
-        │             rule: "index removed before garbage collection"
+        │       ├── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
+        │       │     rule: "index removed before garbage collection"
+        │       │
+        │       └── • PreviousStagePrecedence dependency from TRANSIENT_DROPPED IndexData:{DescID: 106 (t), IndexID: 3}
+        │             rule: "IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DROPPED->TRANSIENT_ABSENT"
         │
         └── • 6 Mutation operations
             │

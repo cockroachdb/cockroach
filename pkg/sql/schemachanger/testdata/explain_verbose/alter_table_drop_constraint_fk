@@ -112,6 +112,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
         │       │ VALIDATED → ABSENT
         │       │
         │       ├── • PreviousStagePrecedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedDescID: 104 (#104)}
+        │       │     rule: "ForeignKeyConstraint transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT"
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedDescID: 104 (#104)}
         │       │     rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
         │       │
         │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 105 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey-)}
