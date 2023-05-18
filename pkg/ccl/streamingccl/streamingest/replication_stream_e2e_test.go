@@ -78,7 +78,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	// The ingestion job will stop retrying as this is a permanent job error.
 	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	require.Regexp(t, "ingestion job failed .* but is being paused",
+	require.Regexp(t, "stream ingestion encountered error and is to be paused",
 		replicationtestutils.RunningStatus(t, c.DestSysSQL, ingestionJobID))
 
 	ts := c.DestCluster.Server(0).Clock().Now()
@@ -328,7 +328,7 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 
 		c.DestSysSQL.Exec(t, fmt.Sprintf("CANCEL JOB %d", ingestionJobID))
 		jobutils.WaitForJobToCancel(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-		jobutils.WaitForJobToCancel(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+		jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 
 		// Check if the producer job has released protected timestamp.
 		stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
@@ -398,7 +398,7 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 		c.DestSysSQL.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		c.DestSysSQL.Exec(t, fmt.Sprintf("DROP TENANT %s", c.Args.DestTenantName))
 		jobutils.WaitForJobToCancel(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-		jobutils.WaitForJobToCancel(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+		jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 
 		// Check if the producer job has released protected timestamp.
 		stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
@@ -807,7 +807,7 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 
 		if !completeReplication {
 			jobutils.WaitForJobToCancel(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
-			jobutils.WaitForJobToCancel(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+			jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 		}
 
 		// Check if the producer job has released protected timestamp.
