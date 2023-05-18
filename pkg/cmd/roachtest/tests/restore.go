@@ -278,10 +278,20 @@ func registerRestore(r registry.Registry) {
 			backup:   makeBackupSpecs(backupSpecs{cloud: spec.GCE}),
 			timeout:  1 * time.Hour,
 		},
+		// Benchmarks using a low memory per core ratio - we don't expect ideal
+		// performance but nodes should not OOM.
 		{
-			// Benchmarks using a low memory per core ratio - we don't expect ideal
-			// performance but nodes should not OOM.
 			hardware: makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
+			backup:   makeBackupSpecs(backupSpecs{cloud: spec.GCE}),
+			timeout:  1 * time.Hour,
+		},
+		{
+			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16, mem: spec.Low}),
+			backup:   makeBackupSpecs(backupSpecs{cloud: spec.GCE}),
+			timeout:  1 * time.Hour,
+		},
+		{
+			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 32, mem: spec.Low}),
 			backup:   makeBackupSpecs(backupSpecs{cloud: spec.GCE}),
 			timeout:  1 * time.Hour,
 		},
@@ -675,7 +685,7 @@ func (rd *restoreDriver) prepareCluster(ctx context.Context) {
 
 	if rd.c.Spec().Cloud != rd.sp.backup.cloud {
 		// For now, only run the test on the cloud provider that also stores the backup.
-		rd.t.Skip("test configured to run on %s", rd.sp.backup.cloud)
+		rd.t.Skip("test configured to run on " + rd.sp.backup.cloud)
 	}
 
 	rd.c.Put(ctx, rd.t.Cockroach(), "./cockroach")
