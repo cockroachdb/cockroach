@@ -1,0 +1,305 @@
+ops
+CREATE DATABASE db;
+----
+StatementPhase stage 1 of 1 with 17 MutationType ops
+  transitions:
+    [[Database:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: db, ReferencedDescID: 0}, PUBLIC], ABSENT] -> PUBLIC
+    [[DatabaseData:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 104, Name: public}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+    [[Schema:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: public}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.CreateDatabaseDescriptor
+      DatabaseID: 104
+    *scop.SetNameInDescriptor
+      DescriptorID: 104
+      Name: db
+    *scop.AddDescriptorName
+      Namespace:
+        DescriptorID: 104
+        Name: db
+    *scop.UpdateOwner
+      Owner:
+        DescriptorID: 104
+        Owner: root
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 104
+        Privileges: 2
+        UserName: admin
+        WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 104
+        Privileges: 2048
+        UserName: public
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 104
+        Privileges: 2
+        UserName: root
+        WithGrantOption: 2
+    *scop.CreateSchemaDescriptor
+      SchemaID: 105
+    *scop.SetNameInDescriptor
+      DescriptorID: 105
+      Name: public
+    *scop.AddDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 105
+        Name: public
+    *scop.AddSchemaParent
+      Parent:
+        ParentDatabaseID: 104
+        SchemaID: 105
+    *scop.UpdateOwner
+      Owner:
+        DescriptorID: 105
+        Owner: admin
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 105
+        Privileges: 2
+        UserName: admin
+        WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 105
+        Privileges: 516
+        UserName: public
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 105
+        Privileges: 2
+        UserName: root
+        WithGrantOption: 2
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 104
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[Database:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: db, ReferencedDescID: 0}, PUBLIC], PUBLIC] -> ABSENT
+    [[DatabaseData:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
+    [[DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}, PUBLIC], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: public}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], PUBLIC] -> ABSENT
+    [[Schema:{DescID: 105}, PUBLIC], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, PUBLIC], PUBLIC] -> ABSENT
+    [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, PUBLIC], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 105}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Name: public}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Name: root}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 17 MutationType ops
+  transitions:
+    [[Database:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: db, ReferencedDescID: 0}, PUBLIC], ABSENT] -> PUBLIC
+    [[DatabaseData:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 104, Name: public}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+    [[Schema:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: public}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.CreateDatabaseDescriptor
+      DatabaseID: 104
+    *scop.SetNameInDescriptor
+      DescriptorID: 104
+      Name: db
+    *scop.AddDescriptorName
+      Namespace:
+        DescriptorID: 104
+        Name: db
+    *scop.UpdateOwner
+      Owner:
+        DescriptorID: 104
+        Owner: root
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 104
+        Privileges: 2
+        UserName: admin
+        WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 104
+        Privileges: 2048
+        UserName: public
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 104
+        Privileges: 2
+        UserName: root
+        WithGrantOption: 2
+    *scop.CreateSchemaDescriptor
+      SchemaID: 105
+    *scop.SetNameInDescriptor
+      DescriptorID: 105
+      Name: public
+    *scop.AddDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 105
+        Name: public
+    *scop.AddSchemaParent
+      Parent:
+        ParentDatabaseID: 104
+        SchemaID: 105
+    *scop.UpdateOwner
+      Owner:
+        DescriptorID: 105
+        Owner: admin
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 105
+        Privileges: 2
+        UserName: admin
+        WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 105
+        Privileges: 516
+        UserName: public
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 105
+        Privileges: 2
+        UserName: root
+        WithGrantOption: 2
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 104
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 105
+
+deps
+CREATE DATABASE db;
+----
+- from: [Database:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [DatabaseData:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Database:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [DatabaseRoleSetting:{DescID: 106, Name: __placeholder_role_name__}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Database:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [Namespace:{DescID: 106, Name: db, ReferencedDescID: 0}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Database:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [Owner:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Database:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 106, Name: admin}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Database:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 106, Name: public}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Database:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 106, Name: root}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [DatabaseData:{DescID: 106}, PUBLIC]
+  to:   [Database:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [DatabaseRoleSetting:{DescID: 106, Name: __placeholder_role_name__}, PUBLIC]
+  to:   [Database:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Namespace:{DescID: 106, Name: db, ReferencedDescID: 0}, PUBLIC]
+  to:   [Database:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Namespace:{DescID: 107, Name: public, ReferencedDescID: 106}, PUBLIC]
+  to:   [Schema:{DescID: 107}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Owner:{DescID: 106}, PUBLIC]
+  to:   [Database:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Owner:{DescID: 107}, PUBLIC]
+  to:   [Schema:{DescID: 107}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Schema:{DescID: 107}, DESCRIPTOR_ADDED]
+  to:   [Namespace:{DescID: 107, Name: public, ReferencedDescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Schema:{DescID: 107}, DESCRIPTOR_ADDED]
+  to:   [Owner:{DescID: 107}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Schema:{DescID: 107}, DESCRIPTOR_ADDED]
+  to:   [SchemaParent:{DescID: 107, ReferencedDescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Schema:{DescID: 107}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 107, Name: admin}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Schema:{DescID: 107}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 107, Name: public}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Schema:{DescID: 107}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 107, Name: root}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [SchemaParent:{DescID: 107, ReferencedDescID: 106}, PUBLIC]
+  to:   [Schema:{DescID: 107}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 106, Name: admin}, PUBLIC]
+  to:   [Database:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 106, Name: public}, PUBLIC]
+  to:   [Database:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 106, Name: root}, PUBLIC]
+  to:   [Database:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 107, Name: admin}, PUBLIC]
+  to:   [Schema:{DescID: 107}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 107, Name: public}, PUBLIC]
+  to:   [Schema:{DescID: 107}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 107, Name: root}, PUBLIC]
+  to:   [Schema:{DescID: 107}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
