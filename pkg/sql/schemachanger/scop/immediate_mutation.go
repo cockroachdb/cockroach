@@ -805,3 +805,8 @@ type CreateSchemaDescriptor struct {
 	immediateMutationOp
 	SchemaID descpb.ID
 }
+
+type CreateDatabaseDescriptor struct {
+	immediateMutationOp
+	DatabaseID descpb.ID
+}

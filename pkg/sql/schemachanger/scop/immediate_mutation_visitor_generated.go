@@ -123,6 +123,7 @@ type ImmediateMutationVisitor interface {
 	UpdateUserPrivileges(context.Context, UpdateUserPrivileges) error
 	UpdateOwner(context.Context, UpdateOwner) error
 	CreateSchemaDescriptor(context.Context, CreateSchemaDescriptor) error
+	CreateDatabaseDescriptor(context.Context, CreateDatabaseDescriptor) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -628,4 +629,9 @@ func (op UpdateOwner) Visit(ctx context.Context, v ImmediateMutationVisitor) err
 // Visit is part of the ImmediateMutationOp interface.
 func (op CreateSchemaDescriptor) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.CreateSchemaDescriptor(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op CreateDatabaseDescriptor) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.CreateDatabaseDescriptor(ctx, op)
 }

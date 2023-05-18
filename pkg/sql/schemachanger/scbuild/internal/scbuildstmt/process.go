@@ -63,6 +63,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.DropFunction)(nil)):        {fn: DropFunction, on: true, checks: isV231Active},
 	reflect.TypeOf((*tree.CreateFunction)(nil)):      {fn: CreateFunction, on: true, checks: isV231Active},
 	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, on: true, checks: isV232Active},
+	reflect.TypeOf((*tree.CreateDatabase)(nil)):      {fn: CreateDatabase, on: true, checks: isV232Active},
 }
 
 func init() {

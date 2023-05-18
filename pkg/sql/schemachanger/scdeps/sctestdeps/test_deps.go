@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
@@ -204,6 +205,15 @@ func (s *TestState) MemberOfWithAdminOption(
 	ctx context.Context, member username.SQLUsername,
 ) (map[username.SQLUsername]bool, error) {
 	return nil, nil
+}
+
+// HasRoleOption implements the scbuild.AuthorizationAccessor interface.
+func (s *TestState) HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error) {
+	return true, nil
+}
+
+func (s *TestState) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
+	return true, nil
 }
 
 // IndexPartitioningCCLCallback implements the scbuild.Dependencies interface.

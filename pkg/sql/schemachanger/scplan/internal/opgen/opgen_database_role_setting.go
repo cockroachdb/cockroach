@@ -21,6 +21,9 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.DatabaseRoleSetting) *scop.NotImplemented {
+					if this.RoleName == scpb.PlaceHolderRoleName {
+						return nil
+					}
 					return notImplemented(this)
 				}),
 			),

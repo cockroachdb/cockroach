@@ -36,6 +36,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
+        "//pkg/sql/roleoption",
         "//pkg/sql/schemachanger/scbuild/internal/scbuildstmt",
         "//pkg/sql/schemachanger/scdecomp",
         "//pkg/sql/schemachanger/scerrors",
