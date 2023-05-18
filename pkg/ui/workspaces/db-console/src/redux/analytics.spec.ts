@@ -9,11 +9,11 @@
 // licenses/APL.txt.
 
 import Analytics from "analytics-node";
-import { Location, createLocation, createHashHistory } from "history";
+import { Location, createLocation } from "history";
 import _ from "lodash";
 import { Store } from "redux";
 
-import { history } from "src/redux/history";
+import { createHashHistory, history } from "./history";
 import { AnalyticsSync, defaultRedactions } from "./analytics";
 import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
 import { AdminUIState, createAdminUIStore } from "./state";
