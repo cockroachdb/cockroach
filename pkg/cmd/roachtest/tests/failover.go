@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -37,10 +36,9 @@ var rangeLeaseRenewalDuration = func() time.Duration {
 }()
 
 func registerFailover(r registry.Registry) {
-	for _, expirationLeases := range []bool{false, true} {
-		expirationLeases := expirationLeases // pin loop variable
+	for _, leases := range []registry.LeaseType{registry.EpochLeases, registry.ExpirationLeases} {
 		var suffix string
-		if expirationLeases {
+		if leases == registry.ExpirationLeases {
 			suffix = "/lease=expiration"
 		}
 
@@ -57,8 +55,9 @@ func registerFailover(r registry.Registry) {
 				Owner:   registry.OwnerKV,
 				Timeout: 60 * time.Minute,
 				Cluster: r.MakeClusterSpec(10, spec.CPU(4)),
+				Leases:  leases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runFailoverChaos(ctx, t, c, readOnly, expirationLeases)
+					runFailoverChaos(ctx, t, c, readOnly)
 				},
 			})
 		}
@@ -68,9 +67,8 @@ func registerFailover(r registry.Registry) {
 			Owner:   registry.OwnerKV,
 			Timeout: 30 * time.Minute,
 			Cluster: r.MakeClusterSpec(8, spec.CPU(4)),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runFailoverPartialLeaseGateway(ctx, t, c, expirationLeases)
-			},
+			Leases:  leases,
+			Run:     runFailoverPartialLeaseGateway,
 		})
 
 		r.Add(registry.TestSpec{
@@ -78,9 +76,8 @@ func registerFailover(r registry.Registry) {
 			Owner:   registry.OwnerKV,
 			Timeout: 30 * time.Minute,
 			Cluster: r.MakeClusterSpec(7, spec.CPU(4)),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runFailoverPartialLeaseLeader(ctx, t, c, expirationLeases)
-			},
+			Leases:  leases,
+			Run:     runFailoverPartialLeaseLeader,
 		})
 
 		r.Add(registry.TestSpec{
@@ -88,9 +85,8 @@ func registerFailover(r registry.Registry) {
 			Owner:   registry.OwnerKV,
 			Timeout: 30 * time.Minute,
 			Cluster: r.MakeClusterSpec(8, spec.CPU(4)),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runFailoverPartialLeaseLiveness(ctx, t, c, expirationLeases)
-			},
+			Leases:  leases,
+			Run:     runFailoverPartialLeaseLiveness,
 		})
 
 		for _, failureMode := range allFailureModes {
@@ -114,8 +110,9 @@ func registerFailover(r registry.Registry) {
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
 				Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
+				Leases:              leases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runFailoverNonSystem(ctx, t, c, failureMode, expirationLeases)
+					runFailoverNonSystem(ctx, t, c, failureMode)
 				},
 			})
 			r.Add(registry.TestSpec{
@@ -124,8 +121,9 @@ func registerFailover(r registry.Registry) {
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
 				Cluster:             makeSpec(5 /* nodes */, 4 /* cpus */),
+				Leases:              leases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runFailoverLiveness(ctx, t, c, failureMode, expirationLeases)
+					runFailoverLiveness(ctx, t, c, failureMode)
 				},
 			})
 			r.Add(registry.TestSpec{
@@ -134,8 +132,9 @@ func registerFailover(r registry.Registry) {
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
 				Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
+				Leases:              leases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runFailoverSystemNonLiveness(ctx, t, c, failureMode, expirationLeases)
+					runFailoverSystemNonLiveness(ctx, t, c, failureMode)
 				},
 			})
 		}
@@ -151,9 +150,7 @@ func registerFailover(r registry.Registry) {
 // unavailability for graphing. The read-only workload is useful to test e.g.
 // recovering nodes stealing Raft leadership away, since this requires the
 // replica to still be up-to-date on the log.
-func runFailoverChaos(
-	ctx context.Context, t test.Test, c cluster.Cluster, readOnly, expLeases bool,
-) {
+func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readOnly bool) {
 	require.Equal(t, 10, c.Spec().NodeCount)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -163,7 +160,6 @@ func runFailoverChaos(
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
-	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failers := []Failer{}
 	for _, failureMode := range allFailureModes {
@@ -307,9 +303,7 @@ func runFailoverChaos(
 // - Skips follower replica in B that's unreachable (n5).
 //
 // We run a kv50 workload on SQL gateways and collect pMax latency for graphing.
-func runFailoverPartialLeaseGateway(
-	ctx context.Context, t test.Test, c cluster.Cluster, expLeases bool,
-) {
+func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.Equal(t, 8, c.Spec().NodeCount)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -319,7 +313,6 @@ func runFailoverPartialLeaseGateway(
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
-	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
@@ -438,9 +431,7 @@ func runFailoverPartialLeaseGateway(
 // and simply create partial partitions between each of n4-n6 in sequence.
 //
 // We run a kv50 workload on SQL gateways and collect pMax latency for graphing.
-func runFailoverPartialLeaseLeader(
-	ctx context.Context, t test.Test, c cluster.Cluster, expLeases bool,
-) {
+func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -453,7 +444,6 @@ func runFailoverPartialLeaseLeader(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
 	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
-	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
@@ -575,9 +565,7 @@ func runFailoverPartialLeaseLeader(
 // n5-n7 sequentially, 3 times per node for a total of 9 times. A kv50 workload
 // is running against SQL gateways on n1-n3, and we collect the pMax latency for
 // graphing.
-func runFailoverPartialLeaseLiveness(
-	ctx context.Context, t test.Test, c cluster.Cluster, expLeases bool,
-) {
+func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.Equal(t, 8, c.Spec().NodeCount)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -587,7 +575,6 @@ func runFailoverPartialLeaseLiveness(
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
-	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
@@ -700,7 +687,7 @@ func runFailoverPartialLeaseLiveness(
 // order, with 1 minute between each operation, for 3 cycles totaling 9
 // failures.
 func runFailoverNonSystem(
-	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode, expLeases bool,
+	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
 ) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
@@ -711,7 +698,6 @@ func runFailoverNonSystem(
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
-	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
@@ -815,7 +801,7 @@ func runFailoverNonSystem(
 // directed at n1-n3 with a rate of 2048 reqs/s. n4 fails and recovers, with 1
 // minute between each operation, for 9 cycles.
 func runFailoverLiveness(
-	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode, expLeases bool,
+	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
 ) {
 	require.Equal(t, 5, c.Spec().NodeCount)
 
@@ -826,7 +812,6 @@ func runFailoverLiveness(
 	opts := option.DefaultStartOptsNoBackups()
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
-	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
@@ -934,7 +919,7 @@ func runFailoverLiveness(
 // order, with 1 minute between each operation, for 3 cycles totaling 9
 // failures.
 func runFailoverSystemNonLiveness(
-	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode, expLeases bool,
+	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
 ) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
@@ -945,7 +930,6 @@ func runFailoverSystemNonLiveness(
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
-	settings.ClusterSettings["kv.expiration_leases_only.enabled"] = strconv.FormatBool(expLeases)
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
