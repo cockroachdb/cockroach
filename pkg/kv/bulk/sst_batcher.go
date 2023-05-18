@@ -101,7 +101,7 @@ type SSTBatcher struct {
 	db       *kv.DB
 	rc       *rangecache.RangeCache
 	settings *cluster.Settings
-	mem      mon.BoundAccount
+	mem      *mon.ConcurrentBoundAccount
 	limiter  limit.ConcurrentRequestLimiter
 
 	// disallowShadowingBelow is described on kvpb.AddSSTableRequest.
@@ -217,7 +217,7 @@ func MakeSSTBatcher(
 	disallowShadowingBelow hlc.Timestamp,
 	writeAtBatchTs bool,
 	scatterSplitRanges bool,
-	mem mon.BoundAccount,
+	mem *mon.ConcurrentBoundAccount,
 	sendLimiter limit.ConcurrentRequestLimiter,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
@@ -242,7 +242,7 @@ func MakeStreamSSTBatcher(
 	ctx context.Context,
 	db *kv.DB,
 	settings *cluster.Settings,
-	mem mon.BoundAccount,
+	mem *mon.ConcurrentBoundAccount,
 	sendLimiter limit.ConcurrentRequestLimiter,
 	onFlush func(summary kvpb.BulkOpSummary),
 ) (*SSTBatcher, error) {
@@ -260,7 +260,7 @@ func MakeTestingSSTBatcher(
 	settings *cluster.Settings,
 	skipDuplicates bool,
 	ingestAll bool,
-	mem mon.BoundAccount,
+	mem *mon.ConcurrentBoundAccount,
 	sendLimiter limit.ConcurrentRequestLimiter,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
