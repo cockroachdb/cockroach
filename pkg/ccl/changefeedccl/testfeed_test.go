@@ -1232,29 +1232,23 @@ func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []b
 func (c *cloudFeed) appendParquetTestFeedMessages(
 	path string, topic string, envelopeType changefeedbase.EnvelopeType,
 ) (err error) {
-	meta, datums, closeReader, err := parquet.ReadFile(path)
+	meta, datums, err := parquet.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		closeErr := closeReader()
-		if closeErr != nil {
-			err = errors.CombineErrors(err, closeErr)
-		}
-	}()
 
-	primaryKeyColumnsString := meta.KeyValueMetadata().FindValue("keyCols")
-	if primaryKeyColumnsString == nil {
+	primaryKeyColumnsString, ok := meta.MetaFields["keyCols"]
+	if !ok {
 		return errors.Errorf("could not find primary key column names in parquet metadata")
 	}
 
-	columnsNamesString := meta.KeyValueMetadata().FindValue("allCols")
-	if columnsNamesString == nil {
+	columnsNamesString, ok := meta.MetaFields["allCols"]
+	if !ok {
 		return errors.Errorf("could not find column names in parquet metadata")
 	}
 
-	primaryKeys := strings.Split(*primaryKeyColumnsString, ",")
-	columns := strings.Split(*columnsNamesString, ",")
+	primaryKeys := strings.Split(primaryKeyColumnsString, ",")
+	columns := strings.Split(columnsNamesString, ",")
 
 	columnNameSet := make(map[string]struct{})
 	primaryKeyColumnSet := make(map[string]struct{})
