@@ -1,0 +1,167 @@
+store store-id=2 attrs=ssd locality-tiers=region=b,zone=b1 node-id=1
+----
+
+span-config name=multi-region1 num-replicas=5 num-voters=3
+constraint num-replicas=1 +region=d +zone=d2
+constraint num-replicas=1 +region=c +zone=c2
+voter-constraint num-replicas=1 +region=b +zone=b1 +=ssd
+voter-constraint num-replicas=1 +region=a -zone=a1
+----
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=d,+zone=d2:1
+   +region=c,+zone=c2:1
+   :3
+ voter-constraints:
+   +ssd,+region=b,+zone=b1:1
+   +region=a,-zone=a1:1
+   :1
+
+# TODO(sumeer): check the diversity score values in this file.
+
+analyze-constraints config-name=multi-region1
+store-id=2 type=VOTER_FULL
+----
+needed: voters 3 non-voters 2
+voters: 2(=b,=b1,=1)
+non-voters:
+constraints:
+  +region=d,+zone=d2:1
+    voters:
+    non-voters:
+  +region=c,+zone=c2:1
+    voters:
+    non-voters:
+  :3
+    voters: 2
+    non-voters:
+voter-constraints:
+  +ssd,+region=b,+zone=b1:1
+    voters: 2
+    non-voters:
+  +region=a,-zone=a1:1
+    voters:
+    non-voters:
+  :1
+    voters:
+    non-voters:
+diversity: voter 1.000000, all 1.000000
+
+store store-id=3 attrs=disk locality-tiers=region=b,zone=b1 node-id=1
+----
+
+analyze-constraints config-name=multi-region1
+store-id=2 type=VOTER_FULL
+store-id=3 type=VOTER_FULL
+----
+needed: voters 3 non-voters 2
+voters: 2(=b,=b1,=1) 3(=b,=b1,=1)
+non-voters:
+constraints:
+  +region=d,+zone=d2:1
+    voters:
+    non-voters:
+  +region=c,+zone=c2:1
+    voters:
+    non-voters:
+  :3
+    voters: 2 3
+    non-voters:
+voter-constraints:
+  +ssd,+region=b,+zone=b1:1
+    voters: 2
+    non-voters:
+  +region=a,-zone=a1:1
+    voters:
+    non-voters:
+  :1
+    voters: 3
+    non-voters:
+diversity: voter 0.000000, all 0.000000
+
+store store-id=5 attrs=ssd locality-tiers=region=d,zone=d2 node-id=2
+----
+
+store store-id=6 attrs=disk locality-tiers=region=a,zone=a1 node-id=3
+----
+
+store store-id=7 attrs=disk locality-tiers=region=a,zone=a1 node-id=4
+----
+
+# Stores 3, 6, 7 are not ssd.
+analyze-constraints config-name=multi-region1
+store-id=2 type=VOTER_FULL
+store-id=3 type=VOTER_FULL
+store-id=5 type=NON_VOTER
+store-id=6 type=VOTER_DEMOTING_NON_VOTER
+store-id=7 type=LEARNER
+----
+needed: voters 3 non-voters 2
+voters: 2(=b,=b1,=1) 3(=b,=b1,=1)
+non-voters: 5(=d,=d2,=2) 6(=a,=a1,=3)
+constraints:
+  +region=d,+zone=d2:1
+    voters:
+    non-voters: 5
+  +region=c,+zone=c2:1
+    voters:
+    non-voters:
+  :3
+    voters: 2 3
+    non-voters: 6
+voter-constraints:
+  +ssd,+region=b,+zone=b1:1
+    voters: 2
+    non-voters:
+  +region=a,-zone=a1:1
+    voters:
+    non-voters:
+  :1
+    voters: 3
+    non-voters: 5 6
+diversity: voter 0.000000, all 0.833333
+
+store store-id=8 attrs=tape locality-tiers=region=d,zone=d2 node-id=5
+----
+
+store store-id=9 attrs=tape locality-tiers=region=d node-id=6
+----
+
+store store-id=10 attrs=tape locality-tiers=region=a,zone=a3 node-id=7
+----
+
+# Stores 3, 6, 7, 8, 9, 10 are not ssd.
+analyze-constraints config-name=multi-region1
+store-id=2 type=VOTER_FULL
+store-id=3 type=VOTER_FULL
+store-id=5 type=NON_VOTER
+store-id=6 type=VOTER_DEMOTING_NON_VOTER
+store-id=7 type=LEARNER
+store-id=8 type=VOTER_DEMOTING_NON_VOTER
+store-id=9 type=VOTER_INCOMING
+store-id=10 type=VOTER_INCOMING
+----
+needed: voters 3 non-voters 2
+voters: 2(=b,=b1,=1) 3(=b,=b1,=1) 9(=d,=6) 10(=a,=a3,=7)
+non-voters: 5(=d,=d2,=2) 6(=a,=a1,=3) 8(=d,=d2,=5)
+constraints:
+  +region=d,+zone=d2:1
+    voters:
+    non-voters: 5 8
+  +region=c,+zone=c2:1
+    voters:
+    non-voters:
+  :3
+    voters: 2 3 9 10
+    non-voters: 6
+voter-constraints:
+  +ssd,+region=b,+zone=b1:1
+    voters: 2
+    non-voters:
+  +region=a,-zone=a1:1
+    voters: 10
+    non-voters:
+  :1
+    voters: 3 9
+    non-voters: 5 6 8
+diversity: voter 0.833333, all 0.857143
