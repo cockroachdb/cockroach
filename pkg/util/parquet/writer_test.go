@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -49,14 +50,25 @@ func newColSchema(numCols int) *colSchema {
 // that are not supported by the writer.
 func typSupported(typ *types.T) bool {
 	switch typ.Family() {
-	case types.AnyFamily, types.TSQueryFamily, types.TSVectorFamily,
-		types.TupleFamily, types.VoidFamily:
+	case types.AnyFamily, types.TSQueryFamily, types.TSVectorFamily, types.VoidFamily:
 		return false
 	case types.ArrayFamily:
 		if typ.ArrayContents().Family() == types.ArrayFamily || typ.ArrayContents().Family() == types.TupleFamily {
 			return false
 		}
 		return typSupported(typ.ArrayContents())
+	case types.TupleFamily:
+		supported := true
+		if len(typ.TupleContents()) == 0 {
+			return false
+		}
+		for _, typleFieldTyp := range typ.TupleContents() {
+			if typleFieldTyp.Family() == types.ArrayFamily || typleFieldTyp.Family() == types.TupleFamily {
+				return false
+			}
+			supported = supported && typSupported(typleFieldTyp)
+		}
+		return supported
 	default:
 		// It is better to let an unexpected type pass the filter and fail the test
 		// because we can observe and document such failures.
@@ -450,6 +462,30 @@ func TestBasicDatums(t *testing.T) {
 				}, nil
 			},
 		},
+		{
+			name: "tuple",
+			sch: &colSchema{
+				columnTypes: []*types.T{
+					types.Int,
+					types.MakeTuple([]*types.T{types.Int, types.Int, types.Int, types.Int}),
+					types.Int,
+					types.MakeTuple([]*types.T{types.Int}),
+					types.Int,
+					types.MakeTuple([]*types.T{types.Int, types.Int}),
+					types.Int,
+					types.MakeTuple([]*types.T{types.Int, types.Int}),
+				},
+				columnNames: []string{"a", "b", "c", "d", "e", "f", "g", "h"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				dt1 := tree.MakeDTuple(types.MakeTuple([]*types.T{types.Int, types.Int, types.Int, types.Int}), tree.NewDInt(2), tree.NewDInt(3), tree.NewDInt(4), tree.NewDInt(5))
+				dt2 := tree.MakeDTuple(types.MakeTuple([]*types.T{types.Int}), tree.NewDInt(7))
+				dt3 := tree.MakeDTuple(types.MakeTuple([]*types.T{types.Int, types.Int}), tree.DNull, tree.DNull)
+				return [][]tree.Datum{
+					{tree.NewDInt(1), &dt1, tree.NewDInt(6), &dt2, tree.NewDInt(8), tree.DNull, tree.NewDInt(9), &dt3},
+				}, nil
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			datums, err := tc.datums()
@@ -459,7 +495,7 @@ func TestBasicDatums(t *testing.T) {
 			maxRowGroupSize := int64(2)
 
 			fileName := "TestBasicDatums.parquet"
-			f, err := os.CreateTemp("", fileName)
+			f, err := os.Create(fileName)
 			require.NoError(t, err)
 
 			schemaDef, err := NewSchema(tc.sch.columnNames, tc.sch.columnTypes)
@@ -586,4 +622,41 @@ func optionsTest(t *testing.T, opt Option, testFn func(t *testing.T, reader *fil
 
 	err = reader.Close()
 	require.NoError(t, err)
+}
+func TestSquashTuples(t *testing.T) {
+	datums := []tree.Datum{
+		tree.NewDInt(1),
+		tree.NewDString("string"),
+		tree.NewDBytes("bytes"),
+		tree.NewDUuid(tree.DUuid{UUID: uuid.FromStringOrNil("52fdfc07-2182-454f-963f-5f0f9a621d72")}),
+		tree.NewDJSON(json.FromInt(1)),
+		tree.NewDFloat(0.1),
+		tree.NewDJSON(json.FromBool(false)),
+		tree.NewDInt(0),
+	}
+
+	for _, tc := range []struct {
+		tupleIntervals [][]uint32
+		tupleOutput    string
+	}{
+		{
+			tupleIntervals: [][]uint32{},
+			tupleOutput:    "[1 'string' '\\x6279746573' '52fdfc07-2182-454f-963f-5f0f9a621d72' '1' 0.1 'false' 0]",
+		},
+		{
+			tupleIntervals: [][]uint32{{0, 1}, {2, 4}},
+			tupleOutput:    "[(1, 'string') ('\\x6279746573', '52fdfc07-2182-454f-963f-5f0f9a621d72', '1') 0.1 'false' 0]",
+		},
+		{
+			tupleIntervals: [][]uint32{{0, 2}, {3, 3}},
+			tupleOutput:    "[(1, 'string', '\\x6279746573') ('52fdfc07-2182-454f-963f-5f0f9a621d72',) '1' 0.1 'false' 0]",
+		},
+		{
+			tupleIntervals: [][]uint32{{0, 7}},
+			tupleOutput:    "[(1, 'string', '\\x6279746573', '52fdfc07-2182-454f-963f-5f0f9a621d72', '1', 0.1, 'false', 0)]",
+		},
+	} {
+		squashedDatums := squashTuples(datums, tc.tupleIntervals)
+		require.Equal(t, tc.tupleOutput, fmt.Sprint(squashedDatums))
+	}
 }
