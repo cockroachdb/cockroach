@@ -146,8 +146,8 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 	return &createDatabaseNode{n: n}, nil
 }
 
-// CanCreateDatabase verifies that the current user has the CREATEDB
-// role option.
+// CanCreateDatabase returns nil if current user has CREATEDB system privilege
+// or the equivalent, legacy role options.
 func (p *planner) CanCreateDatabase(ctx context.Context) error {
 	hasCreateDB, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEDB)
 	if err != nil {
