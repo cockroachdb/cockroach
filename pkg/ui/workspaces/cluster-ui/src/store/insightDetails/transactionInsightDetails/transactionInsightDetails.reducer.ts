@@ -18,6 +18,7 @@ import {
 } from "src/api/txnInsightsApi";
 import { TxnInsightDetails } from "src/insights";
 import { SqlApiResponse, TxnInsightDetailsReqErrs } from "src/api";
+import "immer";
 
 export type TxnInsightDetailsState = {
   data: TxnInsightDetails | null;

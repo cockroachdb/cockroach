@@ -17,6 +17,7 @@ import {
   TableIndexStatsResponse,
   TableIndexStatsResponseWithKey,
 } from "../../api/indexDetailsApi";
+import "immer";
 
 export type IndexStatsState = {
   data: TableIndexStatsResponse;

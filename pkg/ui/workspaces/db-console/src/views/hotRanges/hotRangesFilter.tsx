@@ -13,6 +13,7 @@ import ReactDOM from "react-dom";
 import {
   Button,
   FilterCheckboxOption,
+  FilterCheckboxOptionItem,
   FilterCheckboxOptionsType,
   FilterDropdown,
   FilterSearchOption,
@@ -135,7 +136,8 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
 
       if (!isEmpty(nodeIds)) {
         filtered = filtered.filter(r =>
-          nodeIds.some(f => f.value === r.node_id?.toString()),
+          nodeIds.some(
+            (f: FilterCheckboxOptionItem) => f.value === r.node_id?.toString()),
         );
       }
 
@@ -147,7 +149,8 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
 
       if (!isEmpty(dbNames)) {
         filtered = filtered.filter(r =>
-          dbNames.some(f => f.value === r.database_name),
+          dbNames.some(
+            (f: FilterCheckboxOptionItem) => f.value === r.database_name),
         );
       }
 
@@ -162,7 +165,8 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
       if (!isEmpty(localities)) {
         filtered = filtered.filter(r => {
           const locality = nodeIdToLocalityMap.get(r.node_id);
-          return localities.some(f => f.value === locality);
+          return localities.some(
+            (f: FilterCheckboxOptionItem) => f.value === locality);
         });
       }
       return filtered;
@@ -331,8 +335,8 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
           options={nodeIdsOptions}
           placeholder="Select"
           value={filterNodeIds}
-          onSelectionChanged={options => {
-            setFilterNodeIds(options as any);
+          onSelectionChanged={(options: any) => {
+            setFilterNodeIds(options);
           }}
         />
         <FilterSearchOption
@@ -345,8 +349,8 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
           options={databaseOptions}
           value={filterDbNames}
           placeholder="Select"
-          onSelectionChanged={options => {
-            setFilterDbNames(options as any);
+          onSelectionChanged={(options: any) => {
+            setFilterDbNames(options);
           }}
         />
         <FilterSearchOption
@@ -363,7 +367,7 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
           label="Locality"
           options={localitiesOptions}
           placeholder="Select"
-          onSelectionChanged={o => setFilterLocalities(o as any)}
+          onSelectionChanged={(o: any) => setFilterLocalities(o)}
           value={filterLocalities}
         />
       </FilterDropdown>

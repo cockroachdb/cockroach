@@ -11,6 +11,7 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME, noopReducer } from "../utils";
 import { ClusterLocksResponse, SqlApiResponse } from "src/api";
+import "immer";
 
 export type ClusterLocksReqState = {
   data: SqlApiResponse<ClusterLocksResponse>;

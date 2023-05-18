@@ -18,6 +18,7 @@ import {
 import { DOMAIN_NAME } from "../utils";
 import { RequestState } from "../../api";
 import moment from "moment-timezone";
+import "immer";
 
 export type JobState = RequestState<JobResponse>;
 

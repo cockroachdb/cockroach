@@ -13,6 +13,7 @@ import { DOMAIN_NAME } from "../../utils";
 import { StmtInsightEvent } from "src/insights";
 import { SqlApiResponse, StmtInsightsReq } from "src/api";
 import moment from "moment-timezone";
+import "immer";
 
 export type StmtInsightsState = {
   data: SqlApiResponse<StmtInsightEvent[]>;

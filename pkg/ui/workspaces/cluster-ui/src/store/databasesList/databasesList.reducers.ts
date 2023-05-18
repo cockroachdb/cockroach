@@ -13,6 +13,7 @@ import { DatabasesListResponse } from "src/api";
 import { DOMAIN_NAME } from "../utils";
 
 import { SqlExecutionRequest } from "../../api/sqlApi";
+import "immer";
 
 export type DatabasesListState = {
   data: DatabasesListResponse;

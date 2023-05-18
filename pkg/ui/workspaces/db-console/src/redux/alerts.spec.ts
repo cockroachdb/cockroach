@@ -10,7 +10,7 @@
 
 import { Store } from "redux";
 import moment from "moment-timezone";
-import { createHashHistory } from "history";
+import { createHashHistory } from "./history";
 
 import * as protos from "src/js/protos";
 import { cockroach } from "src/js/protos";

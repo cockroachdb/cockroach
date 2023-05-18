@@ -13,6 +13,7 @@ import { DOMAIN_NAME, noopReducer } from "../utils";
 import moment, { Moment } from "moment-timezone";
 import { InsightRecommendation } from "../../insights";
 import { SqlApiResponse } from "src/api";
+import "immer";
 
 export type SchemaInsightsState = {
   data: SqlApiResponse<InsightRecommendation[]>;

@@ -1,16 +1,6 @@
 # Define the top level namespace. This lets everything be addressable using
 # `@com_github_cockroachdb_cockroach//...`.
-workspace(
-    name = "com_github_cockroachdb_cockroach",
-    managed_directories = {
-        "@npm_eslint_plugin_crdb": ["pkg/ui/workspaces/eslint-plugin-crdb/node_modules"],
-        "@npm_protos": ["pkg/ui/workspaces/db-console/src/js/node_modules"],
-        "@npm_cluster_ui": ["pkg/ui/workspaces/cluster_ui/node_modules"],
-        "@npm_db_console": ["pkg/ui/workspaces/db-console/node_modules"],
-        "@npm_e2e_tests": ["pkg/ui/workspaces/e2e-tests/node_modules"],
-        "@npm_mirror_npm": ["pkg/cmd/mirror/npm/node_modules"],
-    },
-)
+workspace(name = "com_github_cockroachdb_cockroach")
 
 # Load the things that let us load other things.
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
@@ -27,23 +17,25 @@ http_archive(
     ],
 )
 
-# Like the above, but for nodeJS.
+# Like the above, but for JS.
 http_archive(
-    name = "build_bazel_rules_nodejs",
-    sha256 = "7f3f747db3f924547b9ffdf86da6c604335ad95e09d4e5a69fdcfdb505099421",
-    strip_prefix = "cockroachdb-rules_nodejs-59a92cc",
-    # As of 59a92ccbcd2f5c40cf2368bbb9f7b102491f537b, crl-5.5.0 in our
-    # rules_nodejs fork.
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_nodejs-5.5.0-1-g59a92cc.tar.gz"],
+    name = "aspect_rules_js",
+    sha256 = "08061ba5e5e7f4b1074538323576dac819f9337a0c7d75aee43afc8ae7cb6e18",
+    strip_prefix = "rules_js-1.26.1",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v1.26.1.tar.gz",
 )
-
-# The rules_nodejs "core" module. We use the same source archive as the non-core
-# module above, because otherwise it'll pull from upstream.
 http_archive(
-    name = "rules_nodejs",
-    sha256 = "7f3f747db3f924547b9ffdf86da6c604335ad95e09d4e5a69fdcfdb505099421",
-    strip_prefix = "cockroachdb-rules_nodejs-59a92cc",
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_nodejs-5.5.0-1-g59a92cc.tar.gz"],
+    name = "aspect_rules_ts",
+    sha256 = "ace5b609603d9b5b875d56c9c07182357c4ee495030f40dcefb10d443ba8c208",
+    strip_prefix = "rules_ts-1.4.0",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_ts-v1.4.0.tar.gz",
+)
+# NOTE: aspect_rules_webpack exists for webpack, but it's incompatible with webpack v4.
+http_archive(
+    name = "aspect_rules_jest",
+    sha256 = "d3bb833f74b8ad054e6bff5e41606ff10a62880cc99e4d480f4bdfa70add1ba7",
+    strip_prefix = "rules_jest-0.18.4",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_jest-v0.18.4.tar.gz",
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
@@ -68,7 +60,7 @@ go_deps()
 
 ####### THIRD-PARTY DEPENDENCIES #######
 # Below we need to call into various helper macros to pull dependencies for
-# helper libraries like rules_go, rules_nodejs, and rules_foreign_cc. However,
+# helper libraries like rules_go, rules_js, and rules_foreign_cc. However,
 # calling into those helper macros can cause the build to pull from sources not
 # under CRDB's control. To avoid this, we pre-emptively declare each repository
 # as an http_archive/go_repository *before* calling into the macro where it
@@ -205,134 +197,133 @@ go_register_toolchains(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 ###############################
 
 ###################################
-# begin rules_nodejs dependencies #
+# begin rules_js dependencies #
 ###################################
 
-# Install rules_nodejs dependencies
+# Install rules_js dependencies
 
 # bazel_skylib handled above.
-# rules_nodejs handled above.
-load("@build_bazel_rules_nodejs//:repositories.bzl", "build_bazel_rules_nodejs_dependencies")
 
-build_bazel_rules_nodejs_dependencies()
+# The rules_nodejs "core" module. We use the same source archive as the non-core
+# module above, because otherwise it'll pull from upstream.
+http_archive(
+    name = "rules_nodejs",
+    sha256 = "764a3b3757bb8c3c6a02ba3344731a3d71e558220adcb0cf7e43c9bba2c37ba8",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/js/rules_nodejs-core-5.8.2.tar.gz"],
+)
+
+http_archive(
+    name = "aspect_bazel_lib",
+    sha256 = "0da75299c5a52737b2ac39458398b3f256e41a1a6748e5457ceb3a6225269485",
+    strip_prefix = "bazel-lib-1.31.2",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v1.31.2.tar.gz",
+)
+
+# NOTE: The version is expected to match up to what version we use in cluster-ui.
+# TODO(ricky): We should add a lint check to ensure it does match.
+load("@aspect_rules_ts//ts/private:npm_repositories.bzl", ts_http_archive = "http_archive_version")
+ts_http_archive(
+    name = "npm_typescript",
+    build_file = "@aspect_rules_ts//ts:BUILD.typescript",
+    urls = ["https://storage.googleapis.com/cockroach-npm-deps/typescript/-/typescript-{}.tgz"],
+    version = "4.2.4",
+)
+# NOTE: The version is expected to match up to what version we use in db-console.
+# TODO(ricky): We should add a lint check to ensure it does match.
+load("@aspect_rules_js//npm:repositories.bzl", "npm_import")
+npm_import(
+    name = "pnpm",
+    integrity = "sha512-W6elL7Nww0a/MCICkzpkbxW6f99TQuX4DuJoDjWp39X08PKDkEpg4cgj3d6EtgYADcdQWl/eM8NdlLJVE3RgpA==",
+    package = "pnpm",
+    url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-8.5.1.tgz",
+    version = "8.5.1",
+)
 
 # Configure nodeJS.
-load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "yarn_install")
-load("@build_bazel_rules_nodejs//nodejs:yarn_repositories.bzl", "yarn_repositories")
+load("//build:nodejs.bzl", "declare_nodejs_repos")
+declare_nodejs_repos()
 
-node_repositories(
-    node_repositories = {
-        "16.13.0-darwin_arm64": ("node-v16.13.0-darwin-arm64.tar.gz", "node-v16.13.0-darwin-arm64", "46d83fc0bd971db5050ef1b15afc44a6665dee40bd6c1cbaec23e1b40fa49e6d"),
-        "16.13.0-darwin_amd64": ("node-v16.13.0-darwin-x64.tar.gz", "node-v16.13.0-darwin-x64", "37e09a8cf2352f340d1204c6154058d81362fef4ec488b0197b2ce36b3f0367a"),
-        "16.13.0-linux_arm64": ("node-v16.13.0-linux-arm64.tar.xz", "node-v16.13.0-linux-arm64", "93a0d03f9f802353cb7052bc97a02cd9642b49fa985671cdc16c99936c86d7d2"),
-        "16.13.0-linux_amd64": ("node-v16.13.0-linux-x64.tar.xz", "node-v16.13.0-linux-x64", "a876ce787133149abd1696afa54b0b5bc5ce3d5ae359081d407ff776e39b7ba8"),
-        "16.13.0-windows_amd64": ("node-v16.13.0-win-x64.zip", "node-v16.13.0-win-x64", "5a39ec5d4786c2814a6c04488bebac6423c2aaa12832b24f0882456f2e4674e1"),
-    },
-    node_urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/js/node/v{version}/{filename}",
-    ],
-    node_version = "16.13.0",
-)
+load("@aspect_rules_js//js:repositories.bzl", "rules_js_dependencies")
 
-yarn_repositories(
-    name = "yarn",
-    yarn_releases = {
-        "1.22.11": ("yarn-v1.22.11.tar.gz", "yarn-v1.22.11", "2c320de14a6014f62d29c34fec78fdbb0bc71c9ccba48ed0668de452c1f5fe6c"),
-    },
-    yarn_urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/js/yarn/v{version}/{filename}",
-    ],
-    yarn_version = "1.22.11",
-)
+rules_js_dependencies()
 
-yarn_install(
+load("@aspect_rules_js//npm:repositories.bzl", "npm_translate_lock")
+
+npm_translate_lock(
     name = "npm_mirror_npm",
-    args = [
-        "--pure-lockfile",
-    ],
-    package_json = "//pkg/cmd/mirror/npm:package.json",
-    strict_visibility = False,
-    symlink_node_modules = True,
+    data = ["//pkg/cmd/mirror/npm:package.json"],
+    pnpm_lock = "//pkg/cmd/mirror/npm:pnpm-lock.yaml",
+    update_pnpm_lock = True,
+    verify_node_modules_ignored = "//:.bazelignore",
     yarn_lock = "//pkg/cmd/mirror/npm:yarn.lock",
 )
+load("@npm_mirror_npm//:repositories.bzl", npm_mirror_npm_repositories = "npm_repositories")
+npm_mirror_npm_repositories()
 
-# Install external dependencies for NPM packages in pkg/ui/ as separate bazel
-# repositories, to avoid version conflicts between those packages.
-# Unfortunately Bazel's rules_nodejs does not support yarn workspaces, so
-# packages have isolated dependencies and must be installed as isolated
-# Bazel repositories.
-yarn_install(
-    name = "npm_eslint_plugin_crdb",
-    args = [
-        "--pure-lockfile",
-        "--ignore-optional",
-    ],
-    package_json = "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
-    strict_visibility = False,
-    symlink_node_modules = True,
-    yarn_lock = "//pkg/ui/workspaces/eslint-plugin-crdb:yarn.lock",
-)
-
-yarn_install(
+npm_translate_lock(
     name = "npm_e2e_tests",
-    args = [
-        "--pure-lockfile",
-    ],
-    environment = {
-        # Don't automatically install the native Cypress binary, since not all
-        # platforms that build CRDB have Cypress binaries to install:
-        # https://docs.cypress.io/guides/getting-started/installing-cypress#System-requirements
-        #
-        # The native binary will be installed by `./dev ui e2e` just-in-time.
-        # While unsupported platforms will still encounter errors at that
-        # point, UI end-to-end tests aren't part of the core build or test
-        # flows and are intended for regression testing by CRDB developers.
-        "CYPRESS_INSTALL_BINARY": "0",
-    },
-    package_json = "//pkg/ui/workspaces/e2e-tests:package.json",
-    strict_visibility = False,
-    symlink_node_modules = True,
+    data = ["//pkg/ui/workspaces/e2e-tests:package.json"],
+    no_optional = True,
+    pnpm_lock = "//pkg/ui/workspaces/e2e-tests:pnpm-lock.yaml",
+    update_pnpm_lock = True,
+    verify_node_modules_ignored = "//:.bazelignore",
     yarn_lock = "//pkg/ui/workspaces/e2e-tests:yarn.lock",
 )
+load("@npm_e2e_tests//:repositories.bzl", npm_e2e_tests_repositories = "npm_repositories")
+npm_e2e_tests_repositories()
 
-yarn_install(
+npm_translate_lock(
     name = "npm_protos",
-    args = [
-        "--pure-lockfile",
-        "--ignore-optional",
-    ],
-    package_json = "//pkg/ui/workspaces/db-console/src/js:package.json",
-    package_path = "/",
-    strict_visibility = False,
+    data = ["//pkg/ui/workspaces/db-console/src/js:package.json"],
+    no_optional = True,
+    pnpm_lock = "//pkg/ui/workspaces/db-console/src/js:pnpm-lock.yaml",
+    update_pnpm_lock = True,
+    verify_node_modules_ignored = "//:.bazelignore",
     yarn_lock = "//pkg/ui/workspaces/db-console/src/js:yarn.lock",
 )
+load("@npm_protos//:repositories.bzl", npm_protos_repositories = "npm_repositories")
+npm_protos_repositories()
 
-yarn_install(
+npm_translate_lock(
     name = "npm_db_console",
-    args = [
-        "--pure-lockfile",
-        "--ignore-optional",
-    ],
-    package_json = "//pkg/ui/workspaces/db-console:package.json",
-    strict_visibility = False,
-    symlink_node_modules = True,
+    data = ["//pkg/ui/workspaces/db-console:package.json"],
+    no_optional = True,
+    pnpm_lock = "//pkg/ui/workspaces/db-console:pnpm-lock.yaml",
+    update_pnpm_lock = True,
+    verify_node_modules_ignored = "//:.bazelignore",
     yarn_lock = "//pkg/ui/workspaces/db-console:yarn.lock",
 )
+load("@npm_db_console//:repositories.bzl", npm_db_console_repositories = "npm_repositories")
+npm_db_console_repositories()
 
-yarn_install(
+npm_translate_lock(
     name = "npm_cluster_ui",
-    args = [
-        "--pure-lockfile",
-        "--ignore-optional",
-    ],
-    package_json = "//pkg/ui/workspaces/cluster-ui:package.json",
-    strict_visibility = False,
-    symlink_node_modules = True,
+    data = ["//pkg/ui/workspaces/cluster-ui:package.json"],
+    no_optional = True,
+    npmrc = "//pkg/ui/workspaces/cluster-ui:.npmrc",
+    pnpm_lock = "//pkg/ui/workspaces/cluster-ui:pnpm-lock.yaml",
+    update_pnpm_lock = True,
+    verify_node_modules_ignored = "//:.bazelignore",
     yarn_lock = "//pkg/ui/workspaces/cluster-ui:yarn.lock",
 )
+load("@npm_cluster_ui//:repositories.bzl", npm_cluster_ui_repositories = "npm_repositories")
+npm_cluster_ui_repositories()
+
+npm_translate_lock(
+    name = "npm_eslint_plugin_crdb",
+    data = ["//pkg/ui/workspaces/eslint-plugin-crdb:package.json"],
+    no_optional = True,
+    pnpm_lock = "//pkg/ui/workspaces/eslint-plugin-crdb:pnpm-lock.yaml",
+    update_pnpm_lock = True,
+    verify_node_modules_ignored = "//:.bazelignore",
+    yarn_lock = "//pkg/ui/workspaces/eslint-plugin-crdb:yarn.lock",
+)
+load("@npm_eslint_plugin_crdb//:repositories.bzl", npm_eslint_plugin_crdb_repositories = "npm_repositories")
+npm_eslint_plugin_crdb_repositories()
+
 
 #################################
-# end rules_nodejs dependencies #
+# end rules_js dependencies #
 #################################
 
 ##############################
@@ -598,6 +589,11 @@ register_toolchains(
     "//build/toolchains:cross_arm64_macos_toolchain",
     "//build/toolchains:cross_arm64_macos_arm_toolchain",
     "//build/toolchains:node_freebsd_toolchain",
+    "@nodejs_toolchains//:darwin_amd64_toolchain",
+    "@nodejs_toolchains//:darwin_arm64_toolchain",
+    "@nodejs_toolchains//:linux_amd64_toolchain",
+    "@nodejs_toolchains//:linux_arm64_toolchain",
+    "@nodejs_toolchains//:windows_amd64_toolchain",
 )
 
 http_archive(
@@ -636,13 +632,6 @@ http_archive(
 load("//build/bazelutil:repositories.bzl", "distdir_repositories")
 
 distdir_repositories()
-
-# This is used only by rules_nodejs to find the local version of node.
-new_local_repository(
-    name = "nodejs_freebsd_amd64",
-    build_file_content = """exports_files[("bin/node")]""",
-    path = "/usr/local",
-)
 
 # Download and register the FIPS enabled Go toolchain at the end to avoid toolchain conflicts for gazelle.
 go_download_sdk(

@@ -115,9 +115,7 @@ module.exports = (env, argv) => {
             {
               loader: "less-loader",
               options: {
-                lessOptions: {
-                  javascriptEnabled: true
-                }
+                javascriptEnabled: true
               }
             },
           ],

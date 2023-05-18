@@ -13,6 +13,7 @@ import { JobsRequest, JobsResponse } from "src/api/jobsApi";
 import { DOMAIN_NAME } from "../utils";
 import moment from "moment-timezone";
 import { createInitialState, RequestState } from "src/api/types";
+import "immer";
 
 export type JobsState = RequestState<JobsResponse>;
 

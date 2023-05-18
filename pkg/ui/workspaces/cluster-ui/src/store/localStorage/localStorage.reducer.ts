@@ -17,6 +17,7 @@ import {
   SqlStatsSortType,
   DEFAULT_STATS_REQ_OPTIONS,
 } from "src/api/statementsApi";
+import "immer";
 
 type SortSetting = {
   ascending: boolean;
