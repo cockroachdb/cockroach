@@ -26,10 +26,17 @@ then
     EXTRA_TARGETS="$EXTRA_TARGETS //pkg/cmd/roachprod"
 fi
 
+EXTRA_ARGS=
+
+if [ "$CONFIG" == "crosswindows" ]
+then
+   EXTRA_ARGS=--enable_runfiles
+fi
+
 bazel build //pkg/cmd/bazci --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 "$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci" -- build -c opt \
-		       --config "$CONFIG" --config ci --config with_ui \
+		       --config "$CONFIG" --config ci --config with_ui $EXTRA_ARGS \
 		       //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
 		       //pkg/cmd/cockroach-sql \
 		       //pkg/cmd/cockroach-oss //c-deps:libgeos $EXTRA_TARGETS
