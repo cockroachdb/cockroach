@@ -53,8 +53,9 @@ describe("SQLDetailsStats sagas", () => {
     }),
     type: "request",
   };
+  // Don't include /start and /end, since they're not included in the above payload.
   const key =
-    "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0";
+    "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname";
   const SQLDetailsStatsResponse =
     new cockroach.server.serverpb.StatementDetailsResponse({
       statement: {
@@ -673,7 +674,7 @@ describe("SQLDetailsStats sagas", () => {
         .withReducer(reducer)
         .hasFinalState<SQLDetailsStatsReducerState>({
           cachedData: {
-            "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0":
+            "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname":
               {
                 data: SQLDetailsStatsResponse,
                 lastError: null,
@@ -699,7 +700,7 @@ describe("SQLDetailsStats sagas", () => {
         .withReducer(reducer)
         .hasFinalState<SQLDetailsStatsReducerState>({
           cachedData: {
-            "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname/0/0":
+            "SELECT * FROM crdb_internal.node_build_info/$ cockroach sql,newname":
               {
                 data: null,
                 lastError: error,

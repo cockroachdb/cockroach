@@ -80,9 +80,10 @@ export class TimeScaleState {
         sampleSize: val.sampleSize && moment.duration(val.sampleSize),
         fixedWindowEnd: val.fixedWindowEnd && moment(val.fixedWindowEnd),
       };
-    } catch {
+    } catch (e) {
       console.warn(
         `Couldn't retrieve or parse TimeScale options from SessionStorage`,
+        e,
       );
     }
     this.scale = timeScale || {
