@@ -1339,3 +1339,57 @@ query T
 SELECT crdb_internal.pretty_value('\x170995790a3609616d7374657264616d1cc28f5c28f5c2400080000000000000261cbbbbbbbbbbbb4800800000000000000b161b32313030312053636f747420537175617265205375697465203337161b313537333120477265676f7279205669657773204170742e20373818cabca3c10b0018ea97a9c10b001504348a2260')
 ----
 /TUPLE/3:3:Bytes/amsterdam/1:4:UUID/c28f5c28-f5c2-4000-8000-000000000026/1:5:UUID/bbbbbbbb-bbbb-4800-8000-00000000000b/1:6:Bytes/21001 Scott Square Suite 37/1:7:Bytes/15731 Gregory Views Apt. 78/1:8:Time/2018-12-15T03:04:05Z/1:9:Time/2018-12-15T16:04:05Z/1:10:Decimal/88.00
+
+# test privileges/roles for contention related tables
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_contention_events
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.transaction_contention_events
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.cluster_locks
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
+
+user testuser
+
+query T
+SELECT key::STRING FROM crdb_internal.node_contention_events LIMIT 1
+----
+\x
+
+statement ok
+SELECT * FROM crdb_internal.transaction_contention_events
+
+statement ok
+SELECT * FROM crdb_internal.cluster_locks
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.node_contention_events
+
+statement ok
+SELECT * FROM crdb_internal.transaction_contention_events
+
+statement ok
+SELECT * FROM crdb_internal.cluster_locks
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITY FROM testuser

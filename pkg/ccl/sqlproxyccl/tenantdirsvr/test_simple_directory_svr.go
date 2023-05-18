@@ -119,13 +119,21 @@ func (d *TestSimpleDirectoryServer) GetTenant(
 	if _, ok := d.mu.deleted[roachpb.MustMakeTenantID(req.TenantID)]; ok {
 		return nil, status.Errorf(codes.NotFound, "tenant has been deleted")
 	}
-	// Note that we do not return a ClusterName field here. Doing this skips
-	// the clusterName validation in the directory cache which makes testing
-	// easier. If we hardcoded a cluster name here, all connection strings will
-	// need to be updated to use that cluster name, including the one used by
-	// the ORM tests, which is currently hardcoded to "prancing-pony":
-	// https://github.com/cockroachdb/cockroach-go/blob/e1659d1d/testserver/tenant.go#L244.
-	return &tenant.GetTenantResponse{}, nil
+	return &tenant.GetTenantResponse{
+		Tenant: &tenant.Tenant{
+			TenantID: req.TenantID,
+			// Note that we do not return a ClusterName field here. Doing this
+			// skips the clusterName validation in the directory cache which
+			// makes testing easier.
+			//
+			// If we hardcoded a cluster name here, all connection strings will
+			// need to be updated to use that cluster name, including the one
+			// used by the ORM tests, which is currently hardcoded to
+			// "prancing-pony": https://github.com/cockroachdb/cockroach-go/blob/e1659d1d/testserver/tenant.go#L244
+			ClusterName:       "",
+			AllowedCIDRRanges: []string{"0.0.0.0/0"},
+		},
+	}, nil
 }
 
 // WatchTenants is a no-op for the simple directory.

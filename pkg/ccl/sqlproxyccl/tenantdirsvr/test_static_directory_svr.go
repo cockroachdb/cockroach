@@ -544,8 +544,10 @@ func (d *TestStaticDirectoryServer) notifyTenantUpdateLocked(
 ) {
 	// Make a copy of the tenant to prevent race issues.
 	copyTenant := *t
-	copyTenant.PrivateEndpoints = make([]string, len(t.PrivateEndpoints))
-	copy(copyTenant.PrivateEndpoints, t.PrivateEndpoints)
+	copyTenant.AllowedCIDRRanges = make([]string, len(t.AllowedCIDRRanges))
+	copy(copyTenant.AllowedCIDRRanges, t.AllowedCIDRRanges)
+	copyTenant.AllowedPrivateEndpoints = make([]string, len(t.AllowedPrivateEndpoints))
+	copy(copyTenant.AllowedPrivateEndpoints, t.AllowedPrivateEndpoints)
 	res := &tenant.WatchTenantsResponse{Type: typ, Tenant: &copyTenant}
 
 	for e := d.mu.tenantEventListeners.Front(); e != nil; {

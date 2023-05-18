@@ -24,7 +24,11 @@ type lookupTenantFunc func(ctx context.Context, tenantID roachpb.TenantID) (*ten
 
 // PrivateEndpoints represents the controller used to manage ACL rules for
 // private connections. A connection is assumed to be private if it includes
-// the EndpointID field, which gets populated through the PROXY headers.
+// the EndpointID field, which gets populated through the PROXY headers. The
+// controller rejects connections if:
+//  1. the cluster does not allow private connections, or
+//  2. none of the allowed_private_endpoints entries match the incoming
+//     connection's endpoint identifier.
 type PrivateEndpoints struct {
 	LookupTenantFn lookupTenantFunc
 }
@@ -45,7 +49,7 @@ func (p *PrivateEndpoints) CheckConnection(ctx context.Context, conn ConnectionT
 
 	// Cluster allows private connections, so we'll check allowed endpoints.
 	if tenantObj.AllowPrivateConn() {
-		for _, endpoints := range tenantObj.PrivateEndpoints {
+		for _, endpoints := range tenantObj.AllowedPrivateEndpoints {
 			// A matching endpointID was found.
 			if endpoints == conn.EndpointID {
 				return nil
@@ -53,11 +57,13 @@ func (p *PrivateEndpoints) CheckConnection(ctx context.Context, conn ConnectionT
 		}
 	}
 
-	// By default, connections are rejected if the cluster does not allow private
-	// connections, or there are no endpoints defined.
+	// By default, connections are rejected if the cluster does not allow
+	// private connections, or if no endpoints match the connection's endpoint
+	// ID.
 	return errors.Newf(
-		"connection to '%s' denied: cluster does not allow this private connection",
+		"connection to '%s' denied: cluster does not allow private connections from endpoint '%s'",
 		conn.TenantID.String(),
+		conn.EndpointID,
 	)
 }
 
