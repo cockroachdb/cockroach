@@ -9,7 +9,10 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { LocalStorageKeys } from "src/store/localStorage/localStorage.reducer";
+import {
+  LocalStorageKeys,
+  LocalStorageState,
+} from "src/store/localStorage/localStorage.reducer";
 import { AppState } from "../reducers";
 
 export const adminUISelector = createSelector(
@@ -19,7 +22,12 @@ export const adminUISelector = createSelector(
 
 export const localStorageSelector = createSelector(
   adminUISelector,
-  adminUiState => adminUiState?.localStorage,
+  adminUiState => {
+    if (adminUiState) {
+      return adminUiState.localStorage;
+    }
+    return {} as LocalStorageState;
+  },
 );
 
 export const selectTimeScale = createSelector(
