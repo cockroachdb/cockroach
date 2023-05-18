@@ -24,6 +24,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/bitmap",
         "//pkg/util/buildutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
