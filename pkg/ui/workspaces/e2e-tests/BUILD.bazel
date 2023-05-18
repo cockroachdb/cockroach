@@ -1,4 +1,5 @@
-load("@npm_e2e_tests//eslint:index.bzl", "eslint_test")
+load("@npm_e2e_tests//:defs.bzl", "npm_link_all_packages")
+load("@npm_e2e_tests//pkg/ui/workspaces/e2e-tests:eslint/package_json.bzl", eslint_bin = "bin")
 
 exports_files(
     [
@@ -7,26 +8,30 @@ exports_files(
     visibility = ["//visibility:public"],
 )
 
-eslint_test(
+npm_link_all_packages(name = "node_modules")
+
+eslint_bin.eslint_test(
     name = "lint",
+    args = [
+        "--ext .ts",
+        "-c",
+        "$(rootpath .eslintrc.json)",
+        "$(rootpath cypress)",
+        "$(rootpath cypress.config.ts)",
+    ],
+    copy_data_to_bin = False,
     data = [
         ".eslintrc.json",
         "cypress",
         "cypress.config.ts",
+        ":node_modules/@cockroachlabs/eslint-config",
+        ":node_modules/@typescript-eslint/eslint-plugin",
+        ":node_modules/@typescript-eslint/parser",
+        ":node_modules/eslint-config-prettier",
+        ":node_modules/eslint-plugin-prettier",
+        ":node_modules/eslint-plugin-react",
+        ":node_modules/eslint-plugin-react-hooks",
+        ":node_modules/prettier",
         "//pkg/ui/workspaces/eslint-plugin-crdb",
-        "@npm_e2e_tests//@cockroachlabs/eslint-config",
-        "@npm_e2e_tests//@typescript-eslint/eslint-plugin",
-        "@npm_e2e_tests//@typescript-eslint/parser",
-        "@npm_e2e_tests//eslint-plugin-prettier",
-        "@npm_e2e_tests//eslint-plugin-react",
-        "@npm_e2e_tests//eslint-plugin-react-hooks",
-        "@npm_e2e_tests//prettier",
-    ],
-    templated_args = [
-        "--ext .ts",
-        "-c",
-        "$$(rlocation $(rootpath .eslintrc.json))",
-        "$$(rlocation $(rootpath cypress))",
-        "$$(rlocation $(rootpath cypress.config.ts))",
     ],
 )
