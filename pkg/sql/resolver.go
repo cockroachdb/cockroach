@@ -304,7 +304,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 	const required = true
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
-			return nil, errNoDatabase
+			return nil, sqlerrors.ErrNoDatabase
 		}
 		descs := make([]DescriptorWithObjectType, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
@@ -318,14 +318,14 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			})
 		}
 		if len(descs) == 0 {
-			return nil, errNoMatch
+			return nil, sqlerrors.ErrNoMatch
 		}
 		return descs, nil
 	}
 
 	if targets.Types != nil {
 		if len(targets.Types) == 0 {
-			return nil, errNoType
+			return nil, sqlerrors.ErrNoType
 		}
 		descs := make([]DescriptorWithObjectType, 0, len(targets.Types))
 		for _, typ := range targets.Types {
@@ -341,7 +341,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		}
 
 		if len(descs) == 0 {
-			return nil, errNoMatch
+			return nil, sqlerrors.ErrNoMatch
 		}
 		return descs, nil
 	}
@@ -356,7 +356,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			routineType = tree.ProcedureRoutine
 		}
 		if len(targetRoutines) == 0 {
-			return nil, errNoFunction
+			return nil, sqlerrors.ErrNoFunction
 		}
 		descs := make([]DescriptorWithObjectType, 0, len(targetRoutines))
 		fnResolved := catalog.DescriptorIDSet{}
@@ -392,7 +392,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 
 	if targets.Schemas != nil {
 		if len(targets.Schemas) == 0 {
-			return nil, errNoSchema
+			return nil, sqlerrors.ErrNoSchema
 		}
 		if targets.AllTablesInSchema || targets.AllSequencesInSchema {
 			// Get all the descriptors for the tables in the specified schemas.
@@ -540,7 +540,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 	}
 
 	if len(targets.Tables.TablePatterns) == 0 {
-		return nil, errNoTable
+		return nil, sqlerrors.ErrNoTable
 	}
 	descs := make([]DescriptorWithObjectType, 0, len(targets.Tables.TablePatterns))
 	for _, tableTarget := range targets.Tables.TablePatterns {
@@ -583,7 +583,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		}
 	}
 	if len(descs) == 0 {
-		return nil, errNoMatch
+		return nil, sqlerrors.ErrNoMatch
 	}
 	return descs, nil
 }
