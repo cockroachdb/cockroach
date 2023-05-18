@@ -1034,7 +1034,8 @@ confusion, but has not been a correctness concern to date because Serializable
 transactions never rely on these locks to ensure isolation guarantees.
 
 With the introduction of Read Committed, best-effort row-level locks are no
-longer sufficient. We will need these locks to provide stronger guarantees.
+longer sufficient for `SELECT FOR UPDATE`. We will need these locks to provide
+stronger guarantees.
 
 #### Properties of Reliability
 
@@ -1277,18 +1278,17 @@ changes must be made to query planning and execution around lock acquisition.
 
 ### Read-Only Queries (`SELECT`)
 
-Query planning and execution for unlocked read-only queries (i.e. `SELECT`
-statements) does not change for Read Committed transactions, despite the use of
-[per-statement read snapshots](#per-statement-read-snapshots).
+Query planning and execution for read-only queries (i.e. `SELECT` statements)
+will not change for Read Committed transactions, despite the use of
+[per-statement read snapshots](#per-statement-read-snapshots). These queries
+will continue to operate on a consistent snapshot of the system, so all planning
+optimizations derived from SQL constraints remain valid.
 
-These queries continue to operate on a consistent snapshot of the system, so all
-planning optimizations derived from SQL constraints remain valid.
+### Explicit Locking Queries (`SELECT FOR UPDATE`)
 
-### Explicit Row-Level Locking Queries (`SELECT FOR UPDATE`)
-
-Under our Serializable isolation, locking is not needed for correctness. Knowing
-this, we've taken some shortcuts in our current implementation of `SELECT FOR
-UPDATE` to provide better performance.
+Under our Serializable isolation, locking is not needed for correctness. Because
+of this, our current implementation of `SELECT FOR UPDATE` takes some liberties
+for better performance.
 
 - Locks are currently [only placed on the indexes scanned by the
   query](https://github.com/cockroachdb/cockroach/issues/57031). If the `SELECT
@@ -1303,100 +1303,132 @@ UPDATE` to provide better performance.
 - To avoid this artificial contention, locks are sometimes [not
 acquired](https://github.com/cockroachdb/cockroach/blob/48ef0d89e6179c0d348a5236ad308d81fa392f7c/pkg/sql/opt/exec/execbuilder/mutation.go#L987-L1009)
   at all. This could prevent `SELECT FOR UPDATE` from working in some cases.
-- As described above, locks are unreplicated and may not persist until commit
-  for various reasons.
+- As described in [Reliability and Enforcement](#reliability-and-enforcement),
+  locks are best-effort, and may not persist until commit for various reasons.
 
-Under Read Committed these shortcuts would cause incorrect query execution. To
+Under Read Committed these shortcuts could cause incorrect query execution. To
 fix them, when necessary we will add an extra locking join to the top of the
 query plan instead of locking during the initial row fetch. This will typically
-be an index join to the primary index of the table to lock (or multiple index
-joins in the case of multiple tables to lock).
+be an index join or a lookup join to the primary index of the table to lock (or
+multiple joins in the case of multiple tables to lock).
 
 This locking join will acquire fully-replicated locks to ensure the locks
-persist until commit. The locking join will return a `WriteTooOld` error if
-there have been any new versions committed to locked rows after the statement
-read snapshot.
+persist until commit, as described in [Reliability for Preview
+Release](#reliability-for-preview-release). The locking join will return a
+`WriteTooOld` error if there have been any new versions committed to locked rows
+after the statement read snapshot.
 
-There are several alternatives for generating this extra locking join in the optimizer:
+#### Optimizer Locking Alternatives
+
+There are several alternative methods the optimizer could use to produce this
+extra locking join for `SELECT FOR UPDATE`:
 1. Add a new `Lock` operator.
 2. Add a locking property to the exsting `Select` operator.
 3. Add a new `LockedSelect` operator.
 4. Use a physical property enforcer.
 
-#### Lock Operator
+##### Alternative: Lock Operator
 
 TODO(michae2): describe lock operator alternative
 
-#### Locking Property in Select
+##### Alternative: Locking Property in Select
 
 TODO(michae2): describe locking property in select alternative
 
-#### LockedSelect Operator
+##### Alternative: LockedSelect Operator
 
 TODO(michae2): describe lockedselect operator alternative
 
-#### Physical Property Enforcer
+##### Alternative: Physical Property Enforcer
 
 TODO(michae2): describe physical property enforcer alternative
 
+#### Optimizer Change for Preview Release
+
+For the initial version of Read Committed 
+
+#### Locking Individual Column families
+
+Narrowing lock scope to an individual column family of a row can help ensure
+that the performance benefits of multiple column families are realized in
+workloads with contention. For very simple `SELECT FOR UPDATE` queries, our
+current implementation is able to lock an individual column family of a row,
+rather than every column family, depending on how the initial row fetch of the
+`SELECT FOR UPDATE` is constrained.
+
+With the changes for Read Committed, we expect that `SELECT FOR UPDATE` will be
+able to lock only the necessary individual column families in more cases. This
+is because the extra locking join will be able to use column-family-tight spans
+in cases where the initial row fetch cannot.
+
 #### Write-Write Version Conflicts
 
-`SELECT FOR UPDATE` statements can experience write-write version conflicts if,
-while acquiring locks, new versions of rows committed after the read snapshot
-are discovered. PostgreSQL uses a special `EvalPlanQual` mode to handle these
-write-write version conflicts, which re-evaluates some of the query logic on the
-new version of each locked row. We will not implement an EPQ mode. Instead, on
-discovering new committed versions, the locking join will fail with a
-`WriteTooOld` error which will cause the statement to retry.
+As discussed in [Write-Write Conflict
+Handling](#write-write-conflict-handling-or-lost-update-intolerance), `SELECT
+FOR UPDATE` statements can experience write-write version conflicts if new
+versions of rows are discovered after acquiring locks. PostgreSQL uses a special
+`EvalPlanQual` mode to handle these write-write version conflicts, which
+re-evaluates some of the query logic on the new version of each locked row. We
+will not implement an EPQ mode. Instead, on discovering new committed versions,
+the locking join will fail with a `WriteTooOld` error which will cause the
+statement to retry.
 
 ### Reading Mutation Statements (`INSERT ON CONFLICT`, `UPDATE`, `DELETE`, etc.)
 
-Surprisingly, query planning and execution for mutation statements does not need
-to change for Read Committed transactions, despite their potential to incur
+"Reading mutation statements" are DML statements that both read from and write
+to the database, such as most `UPDATE` statements. Under Serializable isolation
+the read sets of these statements are validated at transaction commit time, to
+avoid write skew. In our current implementation, reading mutation statements
+sometimes acquire implicit row locks to try and avoid retries, but as mentioned
+previously these locks are not needed for correctness.
+
+Surprisingly, query planning and execution for reading mutation statements do
+not need to change for Read Committed, despite their potential to incur
 write-write conflicts. This is because write-write version conflicts will be
-detected when the mutation goes to write intents as new versions of each row.
-Any committed version newer than the mutation statement's read snapshot will
-generate a `WriteTooOld` error, causing at least one of the conflicting
-statements to retry, so mutation statement execution can remain unaware of
-write-write conflict handling.
+detected when these statements write new versions of each row (lay down
+intents). Any committed version newer than the mutation statement's read
+snapshot will generate a `WriteTooOld` error, causing at least one of the
+conflicting statements to retry, so mutation statement execution can remain
+unaware of write-write conflict handling.
 
 This means that, as for `SELECT FOR UPDATE`, we will not implement EPQ mode for
 mutation statements. Instead we will rely on statement retries to handle
 write-write conflicts.
 
-Mutation statements can continue to use unreplicated locks during their initial
-row fetch, because the initial unreplicated locks do not need to persist until
-commit time for correctness. Instead, we can rely on the intents written by the
-mutation to persist until commit time. (Another way of putting this is that
-implicit row locking remains a performance optimization rather than a matter of
-correctness for mutation statements under Read Committed.)
+And as described in [Reliability for Preview
+Release](#reliability-for-preview-release), mutation statements can continue to
+use unreplicated locks during their initial row fetch, because the initial
+unreplicated locks do not need to persist until commit time for
+correctness.
 
-FK checks will have to use replicated locks, however, to ensure we maintain FK
-constraints. (See [system-level SQL constraints](#system-level-sql-constraints)
-below.)
+FK checks performed at the end of mutation statements, however, will have to use
+replicated locks to ensure we maintain FK constraints. (See [system-level SQL
+constraints](#system-level-sql-constraints) below.)
 
 ### Blind Mutation Statements (`INSERT`, `UPSERT`, `DELETE`, etc.)
 
-For blind mutations which do not read, it would be unfortunate to have to retry
-the statement unnecessarily due to `WriteTooOld` errors. Fortunately, these
-statements can benefit from use of server-side read refreshes, [as outlined
+"Blind mutation statements" are DML statements that write to the database
+without reading, such as most `UPSERT` statements. These statements cannot incur
+lost updates, so it should almost never be necessary to retry these statements
+at the conn_executor level. Fortunately, these statements can benefit from use
+of server-side read refreshes, [as outlined
 previously](#retry-avoidance-through-read-refreshes).
 
 ### Common Table Expressions and User-Defined Functions
 
 Planning and execution for CTEs and UDFs does not need to change for Read
-Committed transactions.
+Committed isolation.
 
-CTEs and both `STABLE` and `IMMUTABLE` UDFs will perform their reads at the same
-read snapshot as the main statement. Any locking or mutation statements they
-contain will perform in the same manner as described above. If a CTE or a UDF
+CTEs, and both `STABLE` and `IMMUTABLE` UDFs will perform their reads at the
+same read snapshot as the main statement. Any locking or mutation statements
+they contain will perform in the manner described above. If a CTE or a UDF
 encounters a `WriteTooOld` error due to a write-write conflict, the entire main
 statement will retry.
 
 `VOLATILE` UDFs will perform their reads at the same read snapshot as the main
 statement, but with [a later sequence
 number](https://github.com/cockroachdb/cockroach/blob/08ac8fde23e42cf26677a3dfd1c3a0fb60e40f65/pkg/sql/routine.go#L44-L59),
-allowing them to see writes performed by the main statement, but not writes
+allowing them to read writes performed by the main statement, but not writes
 committed from later transactions. If a `VOLATILE` UDF encounters a
 `WriteTooOld` error it will also cause the main statement to retry.
 
