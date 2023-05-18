@@ -18,18 +18,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/stretchr/testify/require"
 )
 
 func benchmarkImportFixture(b *testing.B, gen workload.Generator) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	var bytes int64
 	b.StopTimer()
 	for i := 0; i < b.N; i++ {
-		s, db, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: `d`})
+		s, db, _ := serverutils.StartServer(
+			b,
+			base.TestServerArgs{
+				UseDatabase:       `d`,
+				SQLMemoryPoolSize: 1 << 30, /* 1GiB */ // default 128MiB might be insufficient
+			},
+		)
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(b, `CREATE DATABASE d`)
 
