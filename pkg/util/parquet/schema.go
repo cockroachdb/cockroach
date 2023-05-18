@@ -71,6 +71,9 @@ func NewSchema(columnNames []string, columnTypes []*types.T) (*SchemaDefinition,
 	fields := make([]schema.Node, 0)
 
 	for i := 0; i < len(columnNames); i++ {
+		if columnTypes[i] == nil {
+			return nil, errors.AssertionFailedf("column %s missing type information", columnNames[i])
+		}
 		parquetCol, err := makeColumn(columnNames[i], columnTypes[i], defaultRepetitions)
 		if err != nil {
 			return nil, err
@@ -341,6 +344,10 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 		// and [] when encoding.
 		// There is more info about encoding arrays here:
 		// https://arrow.apache.org/blog/2022/10/08/arrow-parquet-encoding-part-2/
+		if typ.ArrayContents().Family() == types.ArrayFamily {
+			return result, pgerror.Newf(pgcode.FeatureNotSupported,
+				"parquet writer does not support nested arrays")
+		}
 		elementCol, err := makeColumn("element", typ.ArrayContents(),
 			parquet.Repetitions.Optional)
 		if err != nil {

@@ -9,26 +9,15 @@
 package changefeedccl
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	pqexporter "github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/errors"
-	goparquet "github.com/fraugster/parquet-go"
-	"github.com/fraugster/parquet-go/parquet"
-	"github.com/fraugster/parquet-go/parquetschema"
 )
-
-// This variable controls whether we add primary keys of the table to the
-// metadata of the parquet file. Currently, this will be true only under
-// testing.
-// TODO(cdc): We should consider including this metadata during production also
-var includeParquetTestMetadata = false
 
 // This is an extra column that will be added to every parquet file which tells
 // us about the type of event that generated a particular row. The types are
@@ -54,8 +43,8 @@ func (e parquetEventType) DString() *tree.DString {
 }
 
 // We need a separate sink for parquet format because the parquet encoder has to
-// write metadata to the parquet file (buffer) after each flush. This means that the
-// parquet encoder should have access to the buffer object inside
+// write metadata to the parquet file (buffer) after each flush. This means that
+// the parquet encoder should have access to the buffer object inside
 // cloudStorageSinkFile file. This means that the parquet writer has to be
 // embedded in the cloudStorageSinkFile file. If we wanted to maintain the
 // existing separation between encoder and the sync, then we would need to
@@ -75,24 +64,26 @@ type parquetCloudStorageSink struct {
 	compression parquet.CompressionCodec
 }
 
-type parquetFileWriter struct {
-	parquetWriter  *goparquet.FileWriter
-	schema         *parquetschema.SchemaDefinition
-	parquetColumns []pqexporter.ParquetColumn
-	numCols        int
-}
-
 func makeParquetCloudStorageSink(
 	baseCloudStorageSink *cloudStorageSink,
 ) (*parquetCloudStorageSink, error) {
-	parquetSink := &parquetCloudStorageSink{wrapped: baseCloudStorageSink}
-	if !baseCloudStorageSink.compression.enabled() {
-		parquetSink.compression = parquet.CompressionCodec_UNCOMPRESSED
-	} else if baseCloudStorageSink.compression == sinkCompressionGzip {
-		parquetSink.compression = parquet.CompressionCodec_GZIP
-	} else {
-		return nil, errors.AssertionFailedf("Specified compression not supported with parquet")
+	parquetSink := &parquetCloudStorageSink{
+		wrapped:     baseCloudStorageSink,
+		compression: parquet.CompressionNone,
 	}
+	if baseCloudStorageSink.compression.enabled() {
+		switch baseCloudStorageSink.compression {
+		case sinkCompressionGzip:
+			parquetSink.compression = parquet.CompressionGZIP
+		case sinkCompressionZstd:
+			parquetSink.compression = parquet.CompressionZSTD
+		default:
+			return nil, errors.AssertionFailedf(
+				"unexpected compression codec %s", baseCloudStorageSink.compression,
+			)
+		}
+	}
+
 	return parquetSink, nil
 }
 
@@ -110,7 +101,7 @@ func (parquetSink *parquetCloudStorageSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	return errors.AssertionFailedf("Emit Row should not be called for parquet format")
+	return errors.AssertionFailedf("EmitRow unimplemented by the parquet cloud storage sink")
 }
 
 // Close implements the Sink interface.
@@ -157,50 +148,22 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 
 	if file.parquetCodec == nil {
 		var err error
-		file.parquetCodec, err = makeParquetWriterWrapper(ctx, updatedRow, &file.buf, parquetSink.compression)
+		file.parquetCodec, err = newParquetWriterFromRow(
+			updatedRow, &file.buf, parquetSink.wrapped.testingKnobs,
+			parquet.WithCompressionCodec(parquetSink.compression))
 		if err != nil {
 			return err
 		}
 	}
 
-	colOrd := -1
-	// TODO (ganeshb): Avoid map allocation on every call to emit row
-	parquetRow := make(map[string]interface{}, file.parquetCodec.numCols)
-	if err := updatedRow.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		colOrd++
-		// Omit NULL columns from parquet row
-		if d == tree.DNull {
-			parquetRow[col.Name] = nil
-			return nil
-		}
-		encodeFn, err := file.parquetCodec.parquetColumns[colOrd].GetEncoder()
-		if err != nil {
-			return err
-		}
-		edNative, err := encodeFn(d)
-		if err != nil {
-			return err
-		}
-
-		parquetRow[col.Name] = edNative
-
-		return nil
-
-	}); err != nil {
+	if err := file.parquetCodec.addData(updatedRow, prevRow); err != nil {
 		return err
 	}
 
-	et := getEventTypeDatum(updatedRow, prevRow)
-	parquetRow[parquetCrdbEventTypeColName] = []byte(et.DString().String())
-
-	if err = file.parquetCodec.parquetWriter.AddData(parquetRow); err != nil {
-		return err
-	}
-
-	if file.parquetCodec.parquetWriter.CurrentRowGroupSize() > s.targetMaxFileSize {
+	if int64(file.buf.Len()) > s.targetMaxFileSize {
 		s.metrics.recordSizeBasedFlush()
 
-		if err = file.parquetCodec.parquetWriter.Close(); err != nil {
+		if err = file.parquetCodec.close(); err != nil {
 			return err
 		}
 		if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
@@ -218,107 +181,4 @@ func getEventTypeDatum(updatedRow cdcevent.Row, prevRow cdcevent.Row) parquetEve
 		return parquetEventUpdate
 	}
 	return parquetEventInsert
-}
-
-func makeParquetWriterWrapper(
-	ctx context.Context, row cdcevent.Row, buf *bytes.Buffer, compression parquet.CompressionCodec,
-) (*parquetFileWriter, error) {
-	parquetColumns, err := getParquetColumnTypes(ctx, row)
-	if err != nil {
-		return nil, err
-	}
-
-	schema := pqexporter.NewParquetSchema(parquetColumns)
-
-	parquetWriterOptions := make([]goparquet.FileWriterOption, 0)
-
-	// TODO(cdc): We really should revisit if we should include any metadata in
-	// parquet files. There are plenty things we can include there, including crdb
-	// native column types, OIDs for those column types, etc
-	if includeParquetTestMetadata {
-		metadata, err := getMetadataForParquetFile(ctx, row)
-		if err != nil {
-			return nil, err
-		}
-		parquetWriterOptions = append(parquetWriterOptions, goparquet.WithMetaData(metadata))
-	}
-
-	// TODO(cdc): Determine if we should parquet's builtin compressor or rely on
-	// sinks compressing. Currently using not parquets builtin compressor, relying
-	// on sinks compression
-	parquetWriterOptions = append(parquetWriterOptions, goparquet.WithSchemaDefinition(schema))
-	parquetWriterOptions = append(parquetWriterOptions, goparquet.WithCompressionCodec(compression))
-	pqw := goparquet.NewFileWriter(buf,
-		parquetWriterOptions...,
-	)
-
-	pqww := &parquetFileWriter{
-		pqw,
-		schema,
-		parquetColumns,
-		len(parquetColumns),
-	}
-	return pqww, nil
-}
-
-func getMetadataForParquetFile(ctx context.Context, row cdcevent.Row) (map[string]string, error) {
-	metadata := make(map[string]string)
-	primaryKeyColNames := ""
-	columnNames := ""
-	if err := row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		primaryKeyColNames += col.Name + ","
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	metadata["primaryKeyNames"] = primaryKeyColNames
-	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		columnNames += col.Name + ","
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	metadata["columnNames"] = columnNames
-	return metadata, nil
-}
-
-func getParquetColumnTypes(
-	ctx context.Context, row cdcevent.Row,
-) ([]pqexporter.ParquetColumn, error) {
-	typs := make([]*types.T, 0)
-	names := make([]string, 0)
-
-	if err := row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		typs = append(typs, col.Typ)
-		names = append(names, col.Name)
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	parquetColumns := make([]pqexporter.ParquetColumn, len(typs)+1)
-	const nullable = true
-
-	for i := 0; i < len(typs); i++ {
-		// Make every field optional, so that all schema evolutions for a table are
-		// considered "backward compatible" by parquet. This means that the parquet
-		// type doesn't mirror the column's nullability, but it makes it much easier
-		// to work with long histories of table data afterward, especially for
-		// things like loading into analytics databases.
-		parquetCol, err := pqexporter.NewParquetColumn(typs[i], names[i], nullable)
-		if err != nil {
-			return nil, err
-		}
-		parquetColumns[i] = parquetCol
-	}
-
-	// Add the extra column which will store the type of event that generated that
-	// particular row.
-	var err error
-	parquetColumns[len(typs)], err = pqexporter.NewParquetColumn(types.String, parquetCrdbEventTypeColName, false)
-	if err != nil {
-		return nil, err
-	}
-
-	return parquetColumns, nil
 }

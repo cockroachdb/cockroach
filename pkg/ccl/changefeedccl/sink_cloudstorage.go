@@ -72,7 +72,7 @@ type cloudStorageSinkFile struct {
 	buf          bytes.Buffer
 	alloc        kvevent.Alloc
 	oldestMVCC   hlc.Timestamp
-	parquetCodec *parquetFileWriter
+	parquetCodec *parquetWriter
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -280,8 +280,10 @@ func (f *cloudStorageSinkFile) Write(p []byte) (int, error) {
 // job (call it P). Now, we're back to the case where k = 2 with jobs P and Q. Thus, by
 // induction we have the required proof.
 type cloudStorageSink struct {
-	srcID             base.SQLInstanceID
-	sinkID            int64
+	srcID  base.SQLInstanceID
+	sinkID int64
+
+	// targetMaxFileSize is the max target file size in bytes.
 	targetMaxFileSize int64
 	settings          *cluster.Settings
 	partitionFormat   string
@@ -314,6 +316,9 @@ type cloudStorageSink struct {
 	asyncFlushCh     chan flushRequest // channel for submitting flush requests.
 	asyncFlushTermCh chan struct{}     // channel closed by async flusher to indicate an error
 	asyncFlushErr    error             // set by async flusher, prior to closing asyncFlushTermCh
+
+	// testingKnobs may be nil if no knobs are set.
+	testingKnobs *TestingKnobs
 }
 
 type flushRequest struct {
@@ -359,6 +364,7 @@ func makeCloudStorageSink(
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user username.SQLUsername,
 	mb metricsRecorderBuilder,
+	testingKnobs *TestingKnobs,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
 	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
@@ -399,6 +405,7 @@ func makeCloudStorageSink(
 		flushGroup:       ctxgroup.WithContext(ctx),
 		asyncFlushCh:     make(chan flushRequest, flushQueueDepth),
 		asyncFlushTermCh: make(chan struct{}),
+		testingKnobs:     testingKnobs,
 	}
 	s.flushGroup.GoCtx(s.asyncFlusher)
 
@@ -688,11 +695,13 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	}
 	s.asyncFlushActive = asyncFlushEnabled
 
+	// If using parquet, we need to finish off writing the entire file.
+	// Closing the parquet codec will append some metadata to the file.
 	if file.parquetCodec != nil {
-		if err := file.parquetCodec.parquetWriter.Close(); err != nil {
+		if err := file.parquetCodec.close(); err != nil {
 			return err
 		}
-		file.rawSize = len(file.buf.Bytes())
+		file.rawSize = file.buf.Len()
 	}
 	// We use this monotonically increasing fileID to ensure correct ordering
 	// among files emitted at the same timestamp during the same job session.
