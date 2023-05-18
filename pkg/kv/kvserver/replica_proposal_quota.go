@@ -114,6 +114,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Descriptors(), timeutil.Now())
+			r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
 			// We unblock all ongoing and subsequent quota acquisition goroutines

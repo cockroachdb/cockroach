@@ -9958,17 +9958,18 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 }
 
 type testQuiescer struct {
-	st              *cluster.Settings
-	storeID         roachpb.StoreID
-	desc            roachpb.RangeDescriptor
-	numProposals    int
-	pendingQuota    bool
-	status          *raftSparseStatus
-	lastIndex       kvpb.RaftIndex
-	raftReady       bool
-	leaseStatus     kvserverpb.LeaseStatus
-	mergeInProgress bool
-	isDestroyed     bool
+	st                     *cluster.Settings
+	storeID                roachpb.StoreID
+	desc                   roachpb.RangeDescriptor
+	numProposals           int
+	pendingQuota           bool
+	ticksSinceLastProposal int
+	status                 *raftSparseStatus
+	lastIndex              kvpb.RaftIndex
+	raftReady              bool
+	leaseStatus            kvserverpb.LeaseStatus
+	mergeInProgress        bool
+	isDestroyed            bool
 
 	// Not used to implement quiescer, but used by tests.
 	livenessMap livenesspb.IsLiveMap
@@ -10013,6 +10014,10 @@ func (q *testQuiescer) hasPendingProposalsRLocked() bool {
 
 func (q *testQuiescer) hasPendingProposalQuotaRLocked() bool {
 	return q.pendingQuota
+}
+
+func (q *testQuiescer) ticksSinceLastProposalRLocked() int {
+	return q.ticksSinceLastProposal
 }
 
 func (q *testQuiescer) mergeInProgressRLocked() bool {
@@ -10065,8 +10070,9 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						3: {Match: logIndex},
 					},
 				},
-				lastIndex: logIndex,
-				raftReady: false,
+				lastIndex:              logIndex,
+				raftReady:              false,
+				ticksSinceLastProposal: quiesceAfterTicks,
 				leaseStatus: kvserverpb.LeaseStatus{
 					State: kvserverpb.LeaseState_VALID,
 					Lease: roachpb.Lease{
@@ -10111,6 +10117,26 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
 		q.pendingQuota = true
+		return q
+	})
+	test(true, func(q *testQuiescer) *testQuiescer {
+		q.ticksSinceLastProposal = quiesceAfterTicks // quiesce on quiesceAfterTicks
+		return q
+	})
+	test(true, func(q *testQuiescer) *testQuiescer {
+		q.ticksSinceLastProposal = quiesceAfterTicks + 1 // quiesce above quiesceAfterTicks
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.ticksSinceLastProposal = quiesceAfterTicks - 1 // don't quiesce below quiesceAfterTicks
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.ticksSinceLastProposal = 0 // don't quiesce on 0
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.ticksSinceLastProposal = -1 // don't quiesce on negative (shouldn't happen)
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
