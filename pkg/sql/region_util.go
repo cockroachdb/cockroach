@@ -2590,3 +2590,48 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 
 	return nil
 }
+
+// zoneConfigValidator implements descs.ZoneConfigValidator
+type zoneConfigValidator struct {
+	txn            *kv.Txn
+	descs          *descs.Collection
+	regionProvider descs.RegionProvider
+	execCfg        *ExecutorConfig
+}
+
+// newZoneConfigValidator creates a new zone config validator.
+func newZoneConfigValidator(
+	txn *kv.Txn,
+	descs *descs.Collection,
+	regionProvider descs.RegionProvider,
+	execCfg *ExecutorConfig,
+) descs.ZoneConfigValidator {
+	return &zoneConfigValidator{
+		txn:            txn,
+		descs:          descs,
+		regionProvider: regionProvider,
+		execCfg:        execCfg,
+	}
+}
+
+// ValidateDbZoneConfig implements descs.ZoneConfigValidator.
+func (zv *zoneConfigValidator) ValidateDbZoneConfig(
+	ctx context.Context, db catalog.DatabaseDescriptor,
+) error {
+	regionConfig, err := SynthesizeRegionConfig(
+		ctx, zv.txn, db.GetID(), zv.descs,
+	)
+	if err != nil {
+		return err
+	}
+	_, err = generateAndValidateZoneConfigForMultiRegionDatabase(ctx,
+		zv.regionProvider,
+		zv.execCfg,
+		regionConfig,
+		true, /*validateLocalities*/
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
