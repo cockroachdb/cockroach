@@ -63,8 +63,8 @@ func TestPrivateEndpoints(t *testing.T) {
 		p := &acl.PrivateEndpoints{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_ALL,
-					PrivateEndpoints: []string{"foo", "baz"},
+					ConnectivityType:        tenant.ALLOW_ALL,
+					AllowedPrivateEndpoints: []string{"foo", "baz"},
 				}, nil
 			},
 		}
@@ -76,8 +76,8 @@ func TestPrivateEndpoints(t *testing.T) {
 		p := &acl.PrivateEndpoints{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_ALL,
-					PrivateEndpoints: []string{},
+					ConnectivityType:        tenant.ALLOW_ALL,
+					AllowedPrivateEndpoints: []string{},
 				}, nil
 			},
 		}
@@ -89,8 +89,8 @@ func TestPrivateEndpoints(t *testing.T) {
 		p := &acl.PrivateEndpoints{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_ALL,
-					PrivateEndpoints: []string{"foo"},
+					ConnectivityType:        tenant.ALLOW_ALL,
+					AllowedPrivateEndpoints: []string{"foo"},
 				}, nil
 			},
 		}
@@ -102,8 +102,8 @@ func TestPrivateEndpoints(t *testing.T) {
 		p := &acl.PrivateEndpoints{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_PUBLIC_ONLY,
-					PrivateEndpoints: []string{"foo"},
+					ConnectivityType:        tenant.ALLOW_PUBLIC_ONLY,
+					AllowedPrivateEndpoints: []string{"foo"},
 				}, nil
 			},
 		}
