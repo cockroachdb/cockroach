@@ -24,7 +24,7 @@ import (
 //
 // - Match using:
 //   - cm.storeMatches(...): when we have a store and are checking whether it
-//     matches a constraint
+//     matches a constraint conjunction.
 //   - cm.constrainStoresForConjunction(...): set of stores matching a
 //     conjunction
 //   - cm.constrainStoresForExpr(...): set of stores matching a
@@ -42,7 +42,8 @@ type constraintMatcher struct {
 }
 
 type matchedConstraints struct {
-	matched map[internedConstraint]struct{}
+	matched    map[internedConstraint]struct{}
+	descriptor roachpb.StoreDescriptor
 }
 
 type matchedSet struct {
@@ -66,11 +67,10 @@ func (cm *constraintMatcher) setStore(store roachpb.StoreDescriptor) {
 		}
 		cm.stores[store.StoreID] = mc
 	}
+	mc.descriptor = store
+	// Update the matching info for the existing constraints.
 	for c, matchedSet := range cm.constraints {
 		matches := cm.storeMatchesConstraint(store, c)
-		if c.typ == roachpb.Constraint_PROHIBITED {
-			matches = !matches
-		}
 		_, existingMatch := mc.matched[c]
 		if matches == existingMatch {
 			continue
@@ -119,22 +119,47 @@ func (cm *constraintMatcher) removeStore(storeID roachpb.StoreID) {
 func (cm *constraintMatcher) storeMatchesConstraint(
 	store roachpb.StoreDescriptor, c internedConstraint,
 ) bool {
+	matches := false
 	if c.key == emptyStringCode {
 		for _, attrs := range []roachpb.Attributes{store.Attrs, store.Node.Attrs} {
 			for _, attr := range attrs.Attrs {
 				if cm.interner.toCode(attr) == c.value {
-					return true
+					matches = true
+					break
 				}
 			}
+			if matches {
+				break
+			}
 		}
-		return false
-	}
-	for _, tier := range store.Node.Locality.Tiers {
-		if c.key == cm.interner.toCode(tier.Key) && c.value == cm.interner.toCode(tier.Value) {
-			return true
+	} else {
+		for _, tier := range store.Node.Locality.Tiers {
+			if c.key == cm.interner.toCode(tier.Key) && c.value == cm.interner.toCode(tier.Value) {
+				matches = true
+				break
+			}
 		}
 	}
-	return false
+	if c.typ == roachpb.Constraint_PROHIBITED {
+		matches = !matches
+	}
+	return matches
+}
+
+func (cm *constraintMatcher) getMatchedSetForConstraint(c internedConstraint) *matchedSet {
+	ms, ok := cm.constraints[c]
+	if !ok {
+		// New constraint.
+		ms = &matchedSet{}
+		cm.constraints[c] = ms
+		for storeID, mc := range cm.stores {
+			if cm.storeMatchesConstraint(mc.descriptor, c) {
+				ms.insert(storeID)
+				mc.matched[c] = struct{}{}
+			}
+		}
+	}
+	return ms
 }
 
 // constrainStoresForConjunction populates storeSet with the stores matching
@@ -146,8 +171,8 @@ func (cm *constraintMatcher) constrainStoresForConjunction(
 ) {
 	*storeSet = (*storeSet)[:0]
 	for i := range constraints {
-		matchedSet := cm.constraints[constraints[i]]
-		if matchedSet == nil || len(matchedSet.storeIDPostingList) == 0 {
+		matchedSet := cm.getMatchedSetForConstraint(constraints[i])
+		if len(matchedSet.storeIDPostingList) == 0 {
 			*storeSet = (*storeSet)[:0]
 			return
 		}
@@ -174,6 +199,8 @@ func (cm *constraintMatcher) storeMatches(
 		return false
 	}
 	for _, c := range constraints {
+		// Ensure the constraint is known.
+		cm.getMatchedSetForConstraint(c)
 		_, ok := mc.matched[c]
 		if !ok {
 			return false
@@ -192,7 +219,7 @@ func (cm *constraintMatcher) constrainStoresForExpr(
 	var scratch storeIDPostingList
 	scratchPtr := storeSet
 	for i := range expr {
-		cm.constrainStoresForConjunction(expr[i].constraints, scratchPtr)
+		cm.constrainStoresForConjunction(expr[i], scratchPtr)
 		if len(*scratchPtr) == 0 {
 			continue
 		}
@@ -206,7 +233,35 @@ func (cm *constraintMatcher) constrainStoresForExpr(
 	}
 }
 
+func (cm *constraintMatcher) checkConsistency() error {
+	for storeID, mc := range cm.stores {
+		for c := range mc.matched {
+			pl, ok := cm.constraints[c]
+			if !ok {
+				return errors.AssertionFailedf("constraint not found")
+			}
+			if !pl.contains(storeID) {
+				return errors.AssertionFailedf("constraint set does not include storeID %d", storeID)
+			}
+		}
+	}
+	for c, pl := range cm.constraints {
+		for _, storeID := range pl.storeIDPostingList {
+			store, ok := cm.stores[storeID]
+			if !ok {
+				return errors.AssertionFailedf("constraint set mentions unknown storeID %d", storeID)
+			}
+			_, ok = store.matched[c]
+			if !ok {
+				return errors.AssertionFailedf("stores and constraints map are out of sync")
+			}
+		}
+	}
+	return nil
+}
+
 // Avoid unused lint errors.
 
 var _ = (&constraintMatcher{}).setStore
 var _ = (&constraintMatcher{}).removeStore
+var _ = (&constraintMatcher{}).checkConsistency
