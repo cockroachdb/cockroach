@@ -414,6 +414,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 					time.Second, 5*time.Millisecond,
 					"Expected the connection to eventually fail",
 				)
+				require.Error(t, err)
 				require.Regexp(t, "connection reset by peer|unexpected EOF", err.Error())
 				require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
 			},
@@ -1286,6 +1287,7 @@ func TestDenylistUpdate(t *testing.T) {
 		time.Second, 5*time.Millisecond,
 		"Expected the connection to eventually fail",
 	)
+	require.Error(t, err)
 	require.Regexp(t, "closed|bad connection", err.Error())
 	require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
 }
