@@ -346,6 +346,8 @@ func (c *CustomFuncs) GetOptionalFiltersAndFilterColumns(
 	optionalFilters = c.checkConstraintFilters(scanPrivate.Table)
 	computedColFilters := c.computedColFilters(scanPrivate, explicitFilters, optionalFilters)
 	optionalFilters = append(optionalFilters, computedColFilters...)
+	combinedFilters := c.combineComputedColFilters(scanPrivate, explicitFilters, optionalFilters)
+	optionalFilters = append(optionalFilters, combinedFilters...)
 
 	filterColumns = c.FilterOuterCols(explicitFilters)
 	filterColumns.UnionWith(c.FilterOuterCols(optionalFilters))

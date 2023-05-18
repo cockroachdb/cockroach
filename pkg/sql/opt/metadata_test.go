@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -82,7 +83,9 @@ func TestMetadata(t *testing.T) {
 	}
 	tabMeta := md.TableMeta(tabID)
 	tabMeta.SetConstraints(scalar)
-	tabMeta.AddComputedCol(cmpID, scalar)
+	var sharedProps props.Shared
+	memo.BuildSharedProps(scalar, &sharedProps, &evalCtx)
+	tabMeta.AddComputedCol(cmpID, scalar, sharedProps.OuterCols)
 	tabMeta.AddPartialIndexPredicate(0, scalar)
 	if md.AddSequence(&testcat.Sequence{SeqID: 100}) != seqID {
 		t.Fatalf("unexpected sequence id")
@@ -141,6 +144,10 @@ func TestMetadata(t *testing.T) {
 
 	if tabMetaNew.ComputedCols[cmpID] == scalar {
 		t.Fatalf("expected computed column expression to be copied")
+	}
+
+	if !tabMeta.ColsInComputedColsExpressions.Equals(tabMetaNew.ColsInComputedColsExpressions) {
+		t.Fatalf("expected computed column expression referenced columns to be copied")
 	}
 
 	partialIdxPredPtr := reflect.ValueOf(tabMeta.PartialIndexPredicatesUnsafe()).Pointer()
@@ -382,13 +389,16 @@ func TestIndexColumns(t *testing.T) {
 
 // TestDuplicateTable tests that we can extract a set of columns from an index ordinal.
 func TestDuplicateTable(t *testing.T) {
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var f norm.Factory
+	f.Init(context.Background(), &evalCtx, nil /* catalog */)
+	md := f.Metadata()
 	cat := testcat.New()
 	_, err := cat.ExecuteDDL("CREATE TABLE a (b BOOL, b2 BOOL, INDEX (b2) WHERE b)")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var md opt.Metadata
 	tn := tree.NewUnqualifiedTableName("a")
 	a := md.AddTable(cat.Table(tn), tn)
 	b := a.ColumnID(0)
@@ -396,7 +406,10 @@ func TestDuplicateTable(t *testing.T) {
 
 	tabMeta := md.TableMeta(a)
 	tabMeta.SetConstraints(&memo.VariableExpr{Col: b})
-	tabMeta.AddComputedCol(b2, &memo.VariableExpr{Col: b})
+	scalar := &memo.VariableExpr{Col: b}
+	var sharedProps props.Shared
+	memo.BuildSharedProps(scalar, &sharedProps, &evalCtx)
+	tabMeta.AddComputedCol(b2, scalar, sharedProps.OuterCols)
 	tabMeta.AddPartialIndexPredicate(1, &memo.VariableExpr{Col: b})
 
 	// remap is a simple function that can only remap column IDs in a
@@ -432,6 +445,18 @@ func TestDuplicateTable(t *testing.T) {
 	col = dupTabMeta.ComputedCols[dupB2].(*memo.VariableExpr).Col
 	if col == b {
 		t.Errorf("expected computed column to reference new column ID %d, got %d", dupB, col)
+	}
+
+	if tabMeta.ColsInComputedColsExpressions.Equals(dupTabMeta.ColsInComputedColsExpressions) {
+		t.Fatalf("expected computed column expression referenced columns to hold new column ids")
+	}
+
+	if dupTabMeta.ColsInComputedColsExpressions.Empty() {
+		t.Fatalf("expected computed column expression referenced columns to not be empty")
+	}
+
+	if tabMeta.ColsInComputedColsExpressions.Len() != dupTabMeta.ColsInComputedColsExpressions.Len() {
+		t.Fatalf("expected same number of computed column expression referenced columns")
 	}
 
 	pred, isPartialIndex := dupTabMeta.PartialIndexPredicate(1)
