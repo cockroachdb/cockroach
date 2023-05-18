@@ -107,14 +107,14 @@ type internedConstraint struct {
 }
 
 func (ic internedConstraint) less(b internedConstraint) bool {
-	if ic.typ < b.typ {
-		return true
+	if ic.typ != b.typ {
+		return ic.typ < b.typ
 	}
-	if ic.key < b.key {
-		return true
+	if ic.key != b.key {
+		return ic.key < b.key
 	}
-	if ic.value < b.value {
-		return true
+	if ic.value != b.value {
+		return ic.value < b.value
 	}
 	return false
 }
@@ -846,15 +846,13 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 }
 
 // Disjunction of conjunctions.
-type constraintsDisj []internedConstraintsConjunction
+type constraintsDisj []constraintsConj
 
 // FNV-1a hash algorithm.
 func (cd constraintsDisj) hash() uint64 {
 	h := uint64(offset64)
 	for i := range cd {
-		h ^= uint64(cd[i].numReplicas)
-		h *= prime64
-		for _, c := range cd[i].constraints {
+		for _, c := range cd[i] {
 			h ^= uint64(c.typ)
 			h *= prime64
 			h ^= uint64(c.key)
@@ -862,6 +860,7 @@ func (cd constraintsDisj) hash() uint64 {
 			h ^= uint64(c.value)
 			h *= prime64
 		}
+		// Separator between conjunctions.
 		h *= prime64
 	}
 	return h
@@ -873,11 +872,8 @@ func (cd constraintsDisj) isEqual(b mapKey) bool {
 		return false
 	}
 	for i := range cd {
-		if cd[i].numReplicas != other[i].numReplicas {
-			return false
-		}
-		c1 := cd[i].constraints
-		c2 := other[i].constraints
+		c1 := cd[i]
+		c2 := other[i]
 		if len(c1) != len(c2) {
 			return false
 		}
@@ -996,7 +992,7 @@ func (rac *rangeAnalyzedConstraints) constraintsForAddingVoter() (constraintsDis
 		for i, c := range rac.constraints.constraints {
 			if int(c.numReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i])+
 				len(rac.constraints.satisfiedByReplica[nonVoterIndex][i]) {
-				constrDisj = append(constrDisj, c)
+				constrDisj = append(constrDisj, c.constraints)
 			}
 		}
 		if len(constrDisj) == 0 {
@@ -1009,7 +1005,7 @@ func (rac *rangeAnalyzedConstraints) constraintsForAddingVoter() (constraintsDis
 		for i, c := range rac.voterConstraints.constraints {
 			if int(c.numReplicas) > len(rac.voterConstraints.satisfiedByReplica[voterIndex][i]) {
 				// Unsatisfied.
-				constrDisj = append(constrDisj, c)
+				constrDisj = append(constrDisj, c.constraints)
 			}
 		}
 		if len(constrDisj) == 0 {
@@ -1111,7 +1107,7 @@ func (rac *rangeAnalyzedConstraints) constraintsForAddingNonVoter() (constraints
 		for i, c := range rac.constraints.constraints {
 			if int(c.numReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i])+
 				len(rac.constraints.satisfiedByReplica[nonVoterIndex][i]) {
-				constrDisj = append(constrDisj, c)
+				constrDisj = append(constrDisj, c.constraints)
 			}
 		}
 		if len(constrDisj) == 0 {
@@ -1263,7 +1259,7 @@ func (rac *rangeAnalyzedConstraints) candidatesVoterConstraintsUnsatisfied() (
 			actualVoterReplicas := len(rac.constraints.satisfiedByReplica[voterIndex][i])
 			actualNonVoterReplicas := len(rac.constraints.satisfiedByReplica[nonVoterIndex][i])
 			if neededReplicas > actualVoterReplicas+actualNonVoterReplicas {
-				toAdd = append(toAdd, c)
+				toAdd = append(toAdd, c.constraints)
 			} else if neededReplicas < actualVoterReplicas {
 				toRemoveVoters = append(
 					toRemoveVoters, rac.constraints.satisfiedByReplica[voterIndex][i]...)
@@ -1276,7 +1272,7 @@ func (rac *rangeAnalyzedConstraints) candidatesVoterConstraintsUnsatisfied() (
 			neededReplicas := int(c.numReplicas)
 			actualVoterReplicas := len(rac.voterConstraints.satisfiedByReplica[voterIndex][i])
 			if neededReplicas > actualVoterReplicas {
-				toAdd = append(toAdd, c)
+				toAdd = append(toAdd, c.constraints)
 			} else if neededReplicas < actualVoterReplicas {
 				toRemoveVoters = append(
 					toRemoveVoters, rac.voterConstraints.satisfiedByReplica[voterIndex][i]...)
