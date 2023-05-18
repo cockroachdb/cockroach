@@ -6411,6 +6411,16 @@ func mvccExportToWriter(
 	}
 
 	elasticCPUHandle := admission.ElasticCPUWorkHandleFromContext(ctx)
+	// NB: StartTimer is used to denote that we're just starting to do
+	// the actual on-CPU work we acquired CPU tokens for. We've seen that before
+	// hitting his code path, we may have already used up our allotted CPU slice
+	// resolving intents or doing conflict resolution. The effect was that
+	// OverLimit() below is immediately true, and we exported just a single key
+	// for the entire request, making for extremely inefficient backups. By
+	// starting the timer here we guarantee that our allotted CPU slice is spent
+	// actually doing the backup work.
+	elasticCPUHandle.StartTimer()
+
 	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
 		StartKey:             opts.StartKey.Key,
