@@ -12,7 +12,8 @@ build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev
 
 # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
 release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
-is_custom_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo "")"
+is_customized_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo "")"
+is_release_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^(release-[0-9][0-9]\.[0-9](\.0)?)$|master$" || echo "")"
 
 if [[ -z "${DRY_RUN}" ]] ; then
   gcs_bucket="cockroach-builds-artifacts-prod"
@@ -22,6 +23,12 @@ if [[ -z "${DRY_RUN}" ]] ; then
   gcr_hostname="us-docker.pkg.dev"
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_PROD"
+  # Customized builds are published to a separate bucket and docket repository
+  # The credentials set on customized builds won't allow publishing to other locations.
+  if [[ -z "${is_release_build}" ]] ; then
+    gcs_bucket="cockroach-customized-builds-artifacts-prod"
+    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/cockroach-customized"
+  fi
 else
   gcs_bucket="cockroach-builds-artifacts-dryrun"
   google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
@@ -31,15 +38,15 @@ else
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_DEV"
 fi
-download_prefix="https://storage.googleapis.com/$gcs_bucket"
 
 cat << EOF
 
-  build_name:      $build_name
-  release_branch:  $release_branch
-  is_custom_build: $is_custom_build
-  gcs_bucket:      $gcs_bucket
-  gcr_repository:  $gcr_repository
+  build_name:          $build_name
+  release_branch:      $release_branch
+  is_customized_build: $is_customized_build
+  gcs_bucket:          $gcs_bucket
+  gcr_repository:      $gcr_repository
+  is_release_build:    $is_release_build
 
 EOF
 tc_end_block "Variable Setup"
@@ -64,7 +71,6 @@ EOF
 tc_end_block "Compile and publish artifacts"
 
 tc_start_block "Make and push multiarch docker images"
-configure_docker_creds
 docker_login_with_google
 
 gcr_tag="${gcr_repository}:${build_name}"
