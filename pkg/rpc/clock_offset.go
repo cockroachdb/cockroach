@@ -29,7 +29,7 @@ import (
 type RemoteClockMetrics struct {
 	ClockOffsetMeanNanos   *metric.Gauge
 	ClockOffsetStdDevNanos *metric.Gauge
-	LatencyHistogramNanos  metric.IHistogram
+	RoundTripLatency       metric.IHistogram
 }
 
 // avgLatencyMeasurementAge determines how to exponentially weight the
@@ -52,10 +52,22 @@ var (
 		Measurement: "Clock Offset",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	metaLatencyHistogramNanos = metric.Metadata{
-		Name:        "round-trip-latency",
-		Help:        "Distribution of round-trip latencies with other nodes",
-		Measurement: "Roundtrip Latency",
+
+	metaConnectionRoundTripLatency = metric.Metadata{
+		// NB: the name is legacy and should not be changed since customers
+		// rely on it.
+		Name: "round-trip-latency",
+		Help: `Distribution of round-trip latencies with other nodes.
+
+This only reflects successful heartbeats and measures gRPC overhead as well as
+possible head-of-line blocking. Elevated values in this metric may hint at
+network issues and/or saturation, but they are no proof of them. CPU overload
+can similarly elevate this metric. The operator should look towards OS-level
+metrics such as packet loss, retransmits, etc, to conclusively diagnose network
+issues. Heartbeats are not very frequent (~seconds), so they may not capture
+rare or short-lived degradations.
+`,
+		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 )
@@ -138,11 +150,14 @@ func newRemoteClockMonitor(
 	r.metrics = RemoteClockMetrics{
 		ClockOffsetMeanNanos:   metric.NewGauge(metaClockOffsetMeanNanos),
 		ClockOffsetStdDevNanos: metric.NewGauge(metaClockOffsetStdDevNanos),
-		LatencyHistogramNanos: metric.NewHistogram(metric.HistogramOptions{
+		RoundTripLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
-			Metadata: metaLatencyHistogramNanos,
+			Metadata: metaConnectionRoundTripLatency,
 			Duration: histogramWindowInterval,
-			Buckets:  metric.IOLatencyBuckets,
+			// NB: the choice of IO over Network buckets is somewhat debatable, but
+			// it's fine. Heartbeats can take >1s which the IO buckets can represent,
+			// but the Network buckets top out at 1s.
+			Buckets: metric.IOLatencyBuckets,
 		}),
 	}
 	return &r
@@ -262,7 +277,7 @@ func (r *RemoteClockMonitor) UpdateOffset(
 		newLatencyf := float64(roundTripLatency.Nanoseconds())
 		prevAvg := info.avgNanos.Value()
 		info.avgNanos.Add(newLatencyf)
-		r.metrics.LatencyHistogramNanos.RecordValue(roundTripLatency.Nanoseconds())
+		r.metrics.RoundTripLatency.RecordValue(roundTripLatency.Nanoseconds())
 
 		// See: https://github.com/cockroachdb/cockroach/issues/96262
 		// See: https://github.com/cockroachdb/cockroach/issues/98066
