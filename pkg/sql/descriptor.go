@@ -40,23 +40,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-//
 // This file contains routines for low-level access to stored
 // descriptors.
 //
 // For higher levels in the SQL layer, these interface are likely not
 // suitable; consider instead schema_accessors.go and resolver.go.
 //
-
-var (
-	errEmptyDatabaseName = pgerror.New(pgcode.Syntax, "empty database name")
-	errNoDatabase        = pgerror.New(pgcode.InvalidName, "no database specified")
-	errNoSchema          = pgerror.Newf(pgcode.InvalidName, "no schema specified")
-	errNoTable           = pgerror.New(pgcode.InvalidName, "no table specified")
-	errNoType            = pgerror.New(pgcode.InvalidName, "no type specified")
-	errNoFunction        = pgerror.New(pgcode.InvalidName, "no function specified")
-	errNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
-)
 
 // PublicSchemaCreatePrivilegeEnabled is the cluster setting that determines
 // whether the CREATE privilege is given to the `public` role on the `public`
