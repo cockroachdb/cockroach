@@ -417,3 +417,13 @@ func errHasCode(err error, code ...pgcode.Code) bool {
 	}
 	return false
 }
+
+var (
+	ErrEmptyDatabaseName = pgerror.New(pgcode.Syntax, "empty database name")
+	ErrNoDatabase        = pgerror.New(pgcode.InvalidName, "no database specified")
+	ErrNoSchema          = pgerror.Newf(pgcode.InvalidName, "no schema specified")
+	ErrNoTable           = pgerror.New(pgcode.InvalidName, "no table specified")
+	ErrNoType            = pgerror.New(pgcode.InvalidName, "no type specified")
+	ErrNoFunction        = pgerror.New(pgcode.InvalidName, "no function specified")
+	ErrNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
+)
