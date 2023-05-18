@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -97,6 +98,7 @@ func TestDepEdgeTree(t *testing.T) {
 			require.NoError(t, tcs.depEdges.insertOrUpdate(
 				Rule{Name: "test", Kind: Precedence},
 				Precedence,
+				scop.LatestPhase,
 				getNode(e[0]),
 				getNode(e[1]),
 			))

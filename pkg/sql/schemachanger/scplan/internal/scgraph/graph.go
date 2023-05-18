@@ -283,6 +283,7 @@ func (g *Graph) GetOpEdgeFromOp(op scop.Op) *OpEdge {
 func (g *Graph) AddDepEdge(
 	ruleName RuleName,
 	kind DepEdgeKind,
+	maxPhase scop.Phase,
 	fromTarget *scpb.Target,
 	fromStatus scpb.Status,
 	toTarget *scpb.Target,
@@ -297,7 +298,7 @@ func (g *Graph) AddDepEdge(
 	if err != nil {
 		return err
 	}
-	return g.depEdges.insertOrUpdate(rule, kind, from, to)
+	return g.depEdges.insertOrUpdate(rule, kind, maxPhase, from, to)
 
 }
 

@@ -99,14 +99,26 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
 deps
 CREATE SCHEMA sc;
 ----
+- from: [Namespace:{DescID: 105, Name: sc, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 105, Name: sc, ReferencedDescID: 100}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: Namespace transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [Namespace:{DescID: 105, Name: sc, ReferencedDescID: 100}, PUBLIC]
   to:   [Schema:{DescID: 105}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [Owner:{DescID: 105}, ABSENT]
+  to:   [Owner:{DescID: 105}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: Owner transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [Owner:{DescID: 105}, PUBLIC]
   to:   [Schema:{DescID: 105}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [Schema:{DescID: 105}, ABSENT]
+  to:   [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
+  kind: PreviousStagePrecedence
+  rule: Schema transitions to PUBLIC uphold only single transition in statement phase: ABSENT->DESCRIPTOR_ADDED
 - from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
   to:   [Namespace:{DescID: 105, Name: sc, ReferencedDescID: 100}, PUBLIC]
   kind: Precedence
@@ -115,6 +127,10 @@ CREATE SCHEMA sc;
   to:   [Owner:{DescID: 105}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
+- from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [Schema:{DescID: 105}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: Schema transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC
 - from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
   to:   [SchemaName:{DescID: 105}, PUBLIC]
   kind: Precedence
@@ -131,18 +147,34 @@ CREATE SCHEMA sc;
   to:   [UserPrivileges:{DescID: 105, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
+- from: [SchemaName:{DescID: 105}, ABSENT]
+  to:   [SchemaName:{DescID: 105}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: SchemaName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [SchemaName:{DescID: 105}, PUBLIC]
   to:   [Schema:{DescID: 105}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [SchemaParent:{DescID: 105, ReferencedDescID: 100}, ABSENT]
+  to:   [SchemaParent:{DescID: 105, ReferencedDescID: 100}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: SchemaParent transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [SchemaParent:{DescID: 105, ReferencedDescID: 100}, PUBLIC]
   to:   [Schema:{DescID: 105}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
+  to:   [UserPrivileges:{DescID: 105, Name: admin}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: UserPrivileges transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [UserPrivileges:{DescID: 105, Name: admin}, PUBLIC]
   to:   [Schema:{DescID: 105}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
+  to:   [UserPrivileges:{DescID: 105, Name: root}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: UserPrivileges transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [UserPrivileges:{DescID: 105, Name: root}, PUBLIC]
   to:   [Schema:{DescID: 105}, PUBLIC]
   kind: Precedence

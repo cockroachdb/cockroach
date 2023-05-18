@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -37,6 +38,7 @@ func BuildStages(
 	phase scop.Phase,
 	g *scgraph.Graph,
 	scJobIDSupplier func() jobspb.JobID,
+	activeVersion clusterversion.ClusterVersion,
 	withSanityChecks bool,
 ) []Stage {
 	// Initialize the build context.
@@ -58,6 +60,7 @@ func BuildStages(
 		current:          init.Current,
 		startingPhase:    phase,
 		descIDs:          screl.AllTargetDescIDs(init.TargetState),
+		activeVersion:    activeVersion,
 		withSanityChecks: withSanityChecks,
 	}
 	// Build stages for all remaining phases.
@@ -101,6 +104,7 @@ type buildContext struct {
 	startingPhase    scop.Phase
 	descIDs          catalog.DescriptorIDSet
 	withSanityChecks bool
+	activeVersion    clusterversion.ClusterVersion
 }
 
 // buildStages builds all stages according to the starting parameters
@@ -430,24 +434,32 @@ func (sb stageBuilder) isOutgoingOpEdgeAllowed(e *scgraph.OpEdge) bool {
 	// phase, whether the edge is revertible, and other information.
 	switch sb.bs.currentPhase {
 	case scop.StatementPhase:
-		// We ignore revertibility in the statement phase. This ensures that
-		// the side effects of a schema change become immediately visible
-		// to the transaction. For example, dropping a table in an explicit
-		// transaction should make it impossible to query that table later
-		// in the transaction.
-		//
-		// That being said, we can't simply allow any op-edge, or the targets from
-		// previous statements in the same transaction will make progress, which is
-		// undesirable: in the statement phase we only allow up to one transition
-		// per target in the whole transaction. This is somewhat arbitrary but it's
-		// usually enough to ensure the desired in-transaction side effects.
-		//
-		// We enforce this at-most-one-transition constraint by checking whether
-		// the op-edge's origin node status is a potential target status: iff so
-		// then that node is the source node of the target transition path.
-		// Otherwise, it means that at least one transition has already occurred
-		// therefore no further transitions are allowed.
-		return scpb.AsTargetStatus(e.From().CurrentStatus) != scpb.InvalidTarget
+		// Before 23.2 this logic would be used to ensure that a statement phase,
+		// only had one transition.
+		if !sb.bc.activeVersion.IsActive(clusterversion.V23_2) {
+			// We ignore revertibility in the statement phase. This ensures that
+			// the side effects of a schema change become immediately visible
+			// to the transaction. For example, dropping a table in an explicit
+			// transaction should make it impossible to query that table later
+			// in the transaction.
+			//
+			// That being said, we can't simply allow any op-edge, or the targets from
+			// previous statements in the same transaction will make progress, which is
+			// undesirable: in the statement phase we only allow up to one transition
+			// per target in the whole transaction. This is somewhat arbitrary but it's
+			// usually enough to ensure the desired in-transaction side effects.
+			//
+			// We enforce this at-most-one-transition constraint by checking whether
+			// the op-edge's origin node status is a potential target status: iff so
+			// then that node is the source node of the target transition path.
+			// Otherwise, it means that at least one transition has already occurred
+			// therefore no further transitions are allowed.
+			return scpb.AsTargetStatus(e.From().CurrentStatus) != scpb.InvalidTarget
+		}
+		// In 23.2 we have a new rule under dep rule for the statement phase, which
+		// ensure only one transition exists. i.e. "uphold only single transition in
+		// statement phase"
+		return true
 	case scop.PreCommitPhase, scop.PostCommitPhase:
 		// We allow non-revertible ops to be included in stages in these phases
 		// only if none of the remaining schema change operations can fail.
@@ -499,6 +511,10 @@ func (sb stageBuilder) hasUnmetInboundDeps(n *screl.Node) (ret bool) {
 }
 
 func (sb stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
+	// Dependency does not apply anymore.
+	if sb.bs.currentPhase > de.MinPhase() {
+		return false
+	}
 	_, fromIsFulfilled := sb.bs.fulfilled[de.From()]
 	_, fromIsCandidate := sb.fulfilling[de.From()]
 	switch de.Kind() {

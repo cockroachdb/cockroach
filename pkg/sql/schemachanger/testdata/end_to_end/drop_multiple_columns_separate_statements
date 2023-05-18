@@ -261,7 +261,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -285,12 +285,29 @@ upsert descriptor #104
        name: primary
      formatVersion: 3
   ...
+       direction: DROP
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: DROP
+       index:
+  ...
          keyColumnNames:
          - crdb_internal_column_4_name_placeholder
   -      - k
   +      - crdb_internal_column_3_name_placeholder
          keySuffixColumnIds:
          - 1
+  -      name: t_expr_k_idx
+  +      name: crdb_internal_index_2_name_placeholder
+         partitioning: {}
+         sharded: {}
+         version: 3
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
   ...
          - 3
          storeColumnNames:
@@ -305,9 +322,16 @@ upsert descriptor #104
   +      - crdb_internal_column_3_name_placeholder
          unique: true
          useDeletePreservingEncoding: true
-  ...
+         version: 4
        mutationId: 1
-       state: WRITE_ONLY
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     - column:
+         computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  ...
+       direction: DROP
+       mutationId: 1
+  +    state: DELETE_ONLY
   +  - column:
   +      defaultExpr: 32:::INT8
   +      id: 3
@@ -320,9 +344,8 @@ upsert descriptor #104
   +        width: 64
   +    direction: DROP
   +    mutationId: 1
-  +    state: WRITE_ONLY
+       state: WRITE_ONLY
      name: t
-     nextColumnId: 5
   ...
        storeColumnNames:
        - crdb_internal_column_2_name_placeholder

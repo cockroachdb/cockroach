@@ -15,11 +15,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT check_i;
 │       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   │     rule: "CheckConstraint transitions to ABSENT uphold only single transition in statement phase: PUBLIC->VALIDATED"
+│       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │         rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
 │       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       ├── • PreviousStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+│       │       │     rule: "ConstraintWithoutIndexName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │       │
 │       │       └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │             rule: "Constraint should be hidden before name"
@@ -59,11 +65,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT check_i;
 │       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   │     rule: "CheckConstraint transitions to ABSENT uphold only single transition in statement phase: PUBLIC->VALIDATED"
+│       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │         rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
 │       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       ├── • PreviousStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+│       │       │     rule: "ConstraintWithoutIndexName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │       │
 │       │       └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │             rule: "Constraint should be hidden before name"
@@ -104,6 +116,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT check_i;
         │   │
         │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
         │       │ VALIDATED → ABSENT
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │       │     rule: "CheckConstraint transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT"
         │       │
         │       ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
         │       │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"

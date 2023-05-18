@@ -20,6 +20,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 2;
         │   │   │ WRITE_ONLY → ABSENT
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+        │   │   │     rule: "ForeignKeyConstraint transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->VALIDATED"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
         │   │   │     rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
         │   │   │
         │   │   └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
@@ -27,6 +30,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 2;
         │   │
         │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
         │       │ PUBLIC → ABSENT
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
+        │       │     rule: "ConstraintWithoutIndexName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
         │       │
         │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
         │             rule: "Constraint should be hidden before name"

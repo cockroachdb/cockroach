@@ -291,6 +291,14 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT nextval('sq1');
 $$;
 ----
+- from: [Function:{DescID: 110}, ABSENT]
+  to:   [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  kind: PreviousStagePrecedence
+  rule: Function transitions to PUBLIC uphold only single transition in statement phase: ABSENT->DESCRIPTOR_ADDED
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: Function transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
   to:   [FunctionBody:{DescID: 110}, PUBLIC]
   kind: Precedence
@@ -319,10 +327,18 @@ $$;
   to:   [UserPrivileges:{DescID: 110, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
+- from: [FunctionBody:{DescID: 110}, ABSENT]
+  to:   [FunctionBody:{DescID: 110}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: FunctionBody transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [FunctionBody:{DescID: 110}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [FunctionName:{DescID: 110}, ABSENT]
+  to:   [FunctionName:{DescID: 110}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: FunctionName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [FunctionName:{DescID: 110}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
@@ -331,22 +347,42 @@ $$;
   to:   [SchemaChild:{DescID: 110, ReferencedDescID: 101}, PUBLIC]
   kind: Precedence
   rule: function name should be set before parent ids
+- from: [FunctionVolatility:{DescID: 110}, ABSENT]
+  to:   [FunctionVolatility:{DescID: 110}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: FunctionVolatility transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [FunctionVolatility:{DescID: 110}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [Owner:{DescID: 110}, ABSENT]
+  to:   [Owner:{DescID: 110}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: Owner transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [Owner:{DescID: 110}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [SchemaChild:{DescID: 110, ReferencedDescID: 101}, ABSENT]
+  to:   [SchemaChild:{DescID: 110, ReferencedDescID: 101}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: SchemaChild transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [SchemaChild:{DescID: 110, ReferencedDescID: 101}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 110, Name: admin}, ABSENT]
+  to:   [UserPrivileges:{DescID: 110, Name: admin}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: UserPrivileges transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [UserPrivileges:{DescID: 110, Name: admin}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 110, Name: root}, ABSENT]
+  to:   [UserPrivileges:{DescID: 110, Name: root}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: UserPrivileges transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [UserPrivileges:{DescID: 110, Name: root}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence

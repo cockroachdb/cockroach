@@ -279,18 +279,38 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
 deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
+- from: [ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, PUBLIC]
+  to:   [ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: ColumnDefaultExpression transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
+- from: [ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [104]}, PUBLIC]
+  to:   [ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: ColumnDefaultExpression transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
+- from: [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC]
+  to:   [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Owner:{DescID: 104}, ABSENT]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 104}, PUBLIC]
+  to:   [Owner:{DescID: 104}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 104, ReferencedDescID: 101}, PUBLIC]
+  to:   [SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Sequence:{DescID: 104}, ABSENT]
   to:   [TableData:{DescID: 104, ReferencedDescID: 100}, DROPPED]
   kind: SameStagePrecedence
@@ -318,6 +338,10 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: PreviousStagePrecedence
+  rule: Sequence transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
+- from: [Sequence:{DescID: 104}, DROPPED]
+  to:   [Sequence:{DescID: 104}, ABSENT]
+  kind: PreviousStagePrecedence
   rule: descriptor dropped in transaction before removal
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
@@ -327,11 +351,31 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [Sequence:{DescID: 104}, PUBLIC]
+  to:   [Sequence:{DescID: 104}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: Sequence transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
+- from: [TableData:{DescID: 104, ReferencedDescID: 100}, DROPPED]
+  to:   [TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: TableData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
+- from: [TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC]
+  to:   [TableData:{DescID: 104, ReferencedDescID: 100}, DROPPED]
+  kind: PreviousStagePrecedence
+  rule: TableData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 104, Name: admin}, PUBLIC]
+  to:   [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 104, Name: root}, PUBLIC]
+  to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT

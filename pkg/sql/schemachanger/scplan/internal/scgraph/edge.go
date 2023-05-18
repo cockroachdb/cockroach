@@ -113,8 +113,8 @@ const (
 type DepEdge struct {
 	from, to *screl.Node
 	kind     DepEdgeKind
-
-	rules []Rule
+	maxPhase scop.Phase
+	rules    []Rule
 }
 
 // Rule describes a reason for a DepEdge to exist.
@@ -149,6 +149,8 @@ func (de *DepEdge) From() *screl.Node { return de.from }
 
 // To implements the Edge interface.
 func (de *DepEdge) To() *screl.Node { return de.to }
+
+func (de *DepEdge) MinPhase() scop.Phase { return de.maxPhase }
 
 // RuleNames returns the names of the rules which generated this edge.
 func (de *DepEdge) RuleNames() RuleNames {

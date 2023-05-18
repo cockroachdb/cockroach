@@ -16,11 +16,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │   ├── • Column:{DescID: 106, ColumnID: 2}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │   │     rule: "Column transitions to PUBLIC uphold only single transition in statement phase: ABSENT->DELETE_ONLY"
+│       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   │   │     rule: "ColumnName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "column existence precedes column dependents"
@@ -29,12 +35,18 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   │     rule: "ColumnType transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
+│       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │         rule: "column name and type set right after column existence"
 │       │   │
 │       │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
 │       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       ├── • PreviousStagePrecedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+│       │       │     rule: "IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │       │
 │       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │             rule: "column existence precedes column dependents"
@@ -100,11 +112,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │   ├── • Column:{DescID: 106, ColumnID: 2}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │   │     rule: "Column transitions to PUBLIC uphold only single transition in statement phase: ABSENT->DELETE_ONLY"
+│       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   │   │     rule: "ColumnName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "column existence precedes column dependents"
@@ -113,12 +131,18 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   │     rule: "ColumnType transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
+│       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │         rule: "column name and type set right after column existence"
 │       │   │
 │       │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
 │       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       ├── • PreviousStagePrecedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+│       │       │     rule: "IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │       │
 │       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │             rule: "column existence precedes column dependents"
@@ -179,6 +203,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │   └── • Column:{DescID: 106, ColumnID: 2}
 │       │       │ DELETE_ONLY → WRITE_ONLY
 │       │       │
+│       │       ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │       │     rule: "Column transitions to PUBLIC uphold only single transition in statement phase: DELETE_ONLY->WRITE_ONLY"
+│       │       │
 │       │       └── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │             rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │       │
@@ -204,6 +231,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
         │   │
         │   └── • Column:{DescID: 106, ColumnID: 2}
         │       │ WRITE_ONLY → PUBLIC
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+        │       │     rule: "Column transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->PUBLIC"
         │       │
         │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
         │       │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"

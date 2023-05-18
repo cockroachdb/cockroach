@@ -11,17 +11,19 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
 	AS $$SELECT ‹1›;$$;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 5 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
- │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
- │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
- │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104, IndexID: 2}
- │         │    └── ABSENT → PUBLIC        IndexName:{DescID: 104, Name: idx, IndexID: 2}
+ │         ├── 6 elements transitioning toward PUBLIC
+ │         │    ├── DESCRIPTOR_ADDED → PUBLIC        Function:{DescID: 105}
+ │         │    ├── ABSENT           → BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+ │         │    ├── ABSENT           → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+ │         │    ├── ABSENT           → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+ │         │    ├── ABSENT           → PUBLIC        IndexData:{DescID: 104, IndexID: 2}
+ │         │    └── ABSENT           → PUBLIC        IndexName:{DescID: 104, Name: idx, IndexID: 2}
  │         ├── 3 elements transitioning toward TRANSIENT_ABSENT
- │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
- │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
- │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
- │         └── 7 Mutation operations
+ │         │    ├── ABSENT           → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+ │         │    ├── ABSENT           → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+ │         │    └── ABSENT           → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+ │         └── 8 Mutation operations
+ │              ├── MarkDescriptorAsPublic {"DescriptorID":105}
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
@@ -32,22 +34,22 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 12 elements transitioning toward PUBLIC
- │    │    │    ├── PUBLIC           → ABSENT Owner:{DescID: 105}
- │    │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID: 105, Name: admin}
- │    │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID: 105, Name: root}
- │    │    │    ├── DESCRIPTOR_ADDED → ABSENT Function:{DescID: 105}
- │    │    │    ├── PUBLIC           → ABSENT SchemaChild:{DescID: 105, ReferencedDescID: 101}
- │    │    │    ├── PUBLIC           → ABSENT FunctionName:{DescID: 105}
- │    │    │    ├── PUBLIC           → ABSENT FunctionBody:{DescID: 105}
- │    │    │    ├── BACKFILL_ONLY    → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
- │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
- │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
- │    │    │    ├── PUBLIC           → ABSENT IndexData:{DescID: 104, IndexID: 2}
- │    │    │    └── PUBLIC           → ABSENT IndexName:{DescID: 104, Name: idx, IndexID: 2}
+ │    │    │    ├── PUBLIC        → ABSENT Owner:{DescID: 105}
+ │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105, Name: admin}
+ │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105, Name: root}
+ │    │    │    ├── PUBLIC        → ABSENT Function:{DescID: 105}
+ │    │    │    ├── PUBLIC        → ABSENT SchemaChild:{DescID: 105, ReferencedDescID: 101}
+ │    │    │    ├── PUBLIC        → ABSENT FunctionName:{DescID: 105}
+ │    │    │    ├── PUBLIC        → ABSENT FunctionBody:{DescID: 105}
+ │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+ │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104, IndexID: 2}
+ │    │    │    └── PUBLIC        → ABSENT IndexName:{DescID: 104, Name: idx, IndexID: 2}
  │    │    ├── 3 elements transitioning toward TRANSIENT_ABSENT
- │    │    │    ├── DELETE_ONLY      → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
- │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
- │    │    │    └── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+ │    │    │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+ │    │    │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase

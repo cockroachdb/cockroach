@@ -18,6 +18,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 1;
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+        │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
         │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 106, Name: j, ColumnID: 2}
@@ -31,13 +34,22 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 1;
         │   │         rule: "dependents removed before column"
         │   │
         │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
-        │   │     PUBLIC → ABSENT
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • PreviousStagePrecedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+        │   │         rule: "ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
         │   │
         │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
-        │   │     PUBLIC → ABSENT
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+        │   │         rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
         │   │
         │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
-        │         PUBLIC → ABSENT
+        │       │ PUBLIC → ABSENT
+        │       │
+        │       └── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+        │             rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
         │
         └── • 5 Mutation operations
             │

@@ -16,11 +16,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 │       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │   │ ABSENT → WRITE_ONLY
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold only single transition in statement phase: ABSENT->WRITE_ONLY"
+│       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
 │       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       ├── • PreviousStagePrecedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
+│       │       │     rule: "ConstraintWithoutIndexName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │       │
 │       │       └── • Precedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │             rule: "simple constraint visible before name"
@@ -70,11 +76,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 │       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │   │ ABSENT → WRITE_ONLY
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold only single transition in statement phase: ABSENT->WRITE_ONLY"
+│       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
 │       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       ├── • PreviousStagePrecedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
+│       │       │     rule: "ConstraintWithoutIndexName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │       │
 │       │       └── • Precedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │             rule: "simple constraint visible before name"
@@ -131,6 +143,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
     │   │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
     │   │       │ WRITE_ONLY → VALIDATED
     │   │       │
+    │   │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+    │   │       │     rule: "CheckConstraint transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED"
+    │   │       │
     │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
     │   │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │
@@ -146,6 +161,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
         │   │
         │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
         │       │ VALIDATED → PUBLIC
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │       │     rule: "CheckConstraint transitions to PUBLIC uphold only single transition in statement phase: VALIDATED->PUBLIC"
         │       │
         │       └── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
         │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"

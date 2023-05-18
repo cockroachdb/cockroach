@@ -12,6 +12,7 @@ package release_23_1
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
@@ -27,6 +28,7 @@ func registerDepRule(
 ) {
 	registry.RegisterDepRule(ruleName,
 		kind,
+		scop.LatestPhase,
 		fromEl, toEl,
 		def)
 }

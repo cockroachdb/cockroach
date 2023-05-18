@@ -14,10 +14,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
 │       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
-│       │   │     ABSENT → PUBLIC
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+│       │   │         rule: "CheckConstraintUnvalidated transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
-│       │         ABSENT → PUBLIC
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • PreviousStagePrecedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+│       │             rule: "ConstraintWithoutIndexName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │
 │       └── • 2 Mutation operations
 │           │
@@ -56,10 +62,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
         ├── • 2 elements transitioning toward PUBLIC
         │   │
         │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
-        │   │     ABSENT → PUBLIC
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+        │   │         rule: "CheckConstraintUnvalidated transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
         │   │
         │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
-        │         ABSENT → PUBLIC
+        │       │ ABSENT → PUBLIC
+        │       │
+        │       └── • PreviousStagePrecedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+        │             rule: "ConstraintWithoutIndexName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
         │
         └── • 2 Mutation operations
             │

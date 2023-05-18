@@ -15,6 +15,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER COLUMN j SET NOT NULL;
 │       │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │       │ ABSENT → WRITE_ONLY
 │       │       │
+│       │       ├── • PreviousStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+│       │       │     rule: "ColumnNotNull transitions to PUBLIC uphold only single transition in statement phase: ABSENT->WRITE_ONLY"
+│       │       │
 │       │       └── • PreviousStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │
@@ -44,6 +47,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER COLUMN j SET NOT NULL;
 │       │   │
 │       │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │       │ ABSENT → WRITE_ONLY
+│       │       │
+│       │       ├── • PreviousStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+│       │       │     rule: "ColumnNotNull transitions to PUBLIC uphold only single transition in statement phase: ABSENT->WRITE_ONLY"
 │       │       │
 │       │       └── • PreviousStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
@@ -80,6 +86,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER COLUMN j SET NOT NULL;
     │   │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
     │   │       │ WRITE_ONLY → VALIDATED
     │   │       │
+    │   │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+    │   │       │     rule: "ColumnNotNull transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED"
+    │   │       │
     │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
     │   │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │
@@ -95,6 +104,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER COLUMN j SET NOT NULL;
         │   │
         │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
         │       │ VALIDATED → PUBLIC
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+        │       │     rule: "ColumnNotNull transitions to PUBLIC uphold only single transition in statement phase: VALIDATED->PUBLIC"
         │       │
         │       └── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
         │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
