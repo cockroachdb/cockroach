@@ -549,12 +549,18 @@ func ValidateTTLExpirationExpression(
 		return nil
 	}
 
-	expr, err := parser.ParseExpr(string(ttl.ExpirationExpr))
+	exprs, err := parser.ParseExprs([]string{string(ttl.ExpirationExpr)})
 	if err != nil {
 		return pgerror.Wrapf(
 			err,
 			pgcode.InvalidParameterValue,
 			`ttl_expiration_expression %q must be a valid expression`,
+			ttl.ExpirationExpr,
+		)
+	} else if len(exprs) != 1 {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`ttl_expiration_expression %q must be a single expression`,
 			ttl.ExpirationExpr,
 		)
 	}
@@ -569,7 +575,7 @@ func ValidateTTLExpirationExpression(
 	if _, _, _, err := DequalifyAndValidateExpr(
 		ctx,
 		tableDesc,
-		expr,
+		exprs[0],
 		types.TimestampTZ,
 		tree.TTLExpirationExpr,
 		semaCtx,

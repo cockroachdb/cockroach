@@ -24,6 +24,9 @@ subtest ttl_expiration_expression_must_be_valid_expression
 statement error ttl_expiration_expression "; DROP DATABASE defaultdb" must be a valid expression: at or near "EOF": syntax error
 CREATE TABLE tbl (id INT PRIMARY KEY) WITH (ttl_expiration_expression = '; DROP DATABASE defaultdb')
 
+statement error ttl_expiration_expression "now\(\), now\(\)" must be a single expression
+CREATE TABLE tbl (id INT PRIMARY KEY) WITH (ttl_expiration_expression = 'now(), now()')
+
 subtest end
 
 subtest ttl_expiration_expression_must_be_timestamptz
