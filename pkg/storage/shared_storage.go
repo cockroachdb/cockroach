@@ -16,37 +16,46 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/objstorage/shared"
 )
 
-// externalStorageReader wraps an ioctx.ReadCloserCtx returned by
-// externalStorageWrapper and conforms to the io.ReadCloser interface expected
-// by Pebble's shared.Storage.
+// externalStorageReader implements shared.ObjectReader on top of
+// cloud.ExternalStorage..
 type externalStorageReader struct {
 	// Store a reference to the parent Pebble instance. Metrics around shared
 	// storage reads/writes are stored there.
 	//
 	// TODO(bilal): Refactor the metrics out of Pebble, and store a reference
 	// to just the Metrics struct.
-	p   *Pebble
-	r   ioctx.ReadCloserCtx
-	ctx context.Context
+	p       *Pebble
+	es      cloud.ExternalStorage
+	objName string
 }
 
-var _ io.ReadCloser = &externalStorageReader{}
+var _ shared.ObjectReader = (*externalStorageReader)(nil)
 
-// Read implements the io.ReadCloser interface.
-func (e *externalStorageReader) Read(p []byte) (n int, err error) {
-	n, err = e.r.Read(e.ctx, p)
-	atomic.AddInt64(&e.p.sharedBytesRead, int64(n))
-	return n, err
+func (r *externalStorageReader) ReadAt(ctx context.Context, p []byte, offset int64) error {
+	reader, _, err := r.es.ReadFileAt(ctx, r.objName, offset)
+	if err != nil {
+		return err
+	}
+	defer reader.Close(ctx)
+	for n := 0; n < len(p); {
+		nn, err := reader.Read(ctx, p[n:])
+		if err != nil {
+			return err
+		}
+		n += nn
+	}
+	atomic.AddInt64(&r.p.sharedBytesRead, int64(len(p)))
+	return nil
 }
 
-// Close implements the io.ReadCloser interface.
+// Close is part of the shared.ObjectReader interface.
 func (e *externalStorageReader) Close() error {
-	return e.r.Close(e.ctx)
+	*e = externalStorageReader{}
+	return nil
 }
 
 // externalStorageWriter wraps an io.WriteCloser returned by
@@ -93,17 +102,24 @@ func (e *externalStorageWrapper) Close() error {
 	return e.es.Close()
 }
 
-// ReadObjectAt implements the shared.Storage interface.
-func (e *externalStorageWrapper) ReadObjectAt(
-	basename string, offset int64,
-) (io.ReadCloser, int64, error) {
-	reader, n, err := e.es.ReadFileAt(e.ctx, basename, offset)
-	return &externalStorageReader{p: e.p, r: reader, ctx: e.ctx}, n, err
+// ReadObject implements the shared.Storage interface.
+func (e *externalStorageWrapper) ReadObject(
+	ctx context.Context, objName string,
+) (_ shared.ObjectReader, objSize int64, _ error) {
+	objSize, err := e.es.Size(ctx, objName)
+	if err != nil {
+		return nil, 0, err
+	}
+	return &externalStorageReader{
+		p:       e.p,
+		es:      e.es,
+		objName: objName,
+	}, objSize, nil
 }
 
 // CreateObject implements the shared.Storage interface.
-func (e *externalStorageWrapper) CreateObject(basename string) (io.WriteCloser, error) {
-	writer, err := e.es.Writer(e.ctx, basename)
+func (e *externalStorageWrapper) CreateObject(objName string) (io.WriteCloser, error) {
+	writer, err := e.es.Writer(e.ctx, objName)
 	return &externalStorageWriter{WriteCloser: writer, p: e.p}, err
 }
 
@@ -121,13 +137,13 @@ func (e *externalStorageWrapper) List(prefix, delimiter string) ([]string, error
 }
 
 // Delete implements the shared.Storage interface.
-func (e *externalStorageWrapper) Delete(basename string) error {
-	return e.es.Delete(e.ctx, basename)
+func (e *externalStorageWrapper) Delete(objName string) error {
+	return e.es.Delete(e.ctx, objName)
 }
 
 // Size implements the shared.Storage interface.
-func (e *externalStorageWrapper) Size(basename string) (int64, error) {
-	return e.es.Size(e.ctx, basename)
+func (e *externalStorageWrapper) Size(objName string) (int64, error) {
+	return e.es.Size(e.ctx, objName)
 }
 
 func (e *externalStorageWrapper) IsNotExistError(err error) bool {
