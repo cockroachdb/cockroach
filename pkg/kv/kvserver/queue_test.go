@@ -14,6 +14,7 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"runtime/pprof"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -559,6 +560,43 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	if pc := testQueue.getProcessed(); pc > 0 {
 		t.Errorf("expected processed count of 0; got %d", pc)
 	}
+}
+
+// BaseQueueLabel verifies that the queue name tag exists during maybeAdd but
+// does not exist before and after maybeAdd.
+func TestBaseQueueLabel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testQueue := &testQueueImpl{
+		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, _ float64) {
+			shouldQueue = true
+			return
+		},
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
+		acceptsUnsplitRanges: true,
+	})
+
+	bq.store.TestingKnobs().BaseQueueInterceptor = func(ctx context.Context, bq *baseQueue) {
+		_, labelDoesExist := pprof.Label(ctx, bq.name)
+		require.True(t, labelDoesExist)
+	}
+	bq.Start(stopper)
+	bq.maybeAdd(ctx, r, hlc.ClockTimestamp{})
+
+	_, labelDoesExist := pprof.Label(ctx, bq.name)
+	require.False(t, labelDoesExist)
 }
 
 // TestNeedsSystemConfig verifies that queues that don't need the system config
