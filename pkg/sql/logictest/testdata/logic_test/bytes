@@ -148,7 +148,12 @@ DROP TABLE t
 subtest Regression_4312
 
 statement ok
-PREPARE r1(bytes) AS SELECT descriptor::STRING FROM system.descriptor WHERE descriptor != $1 ORDER BY descriptor DESC LIMIT 1
+PREPARE r1(bytes) AS
+	SELECT descriptor::STRING
+	FROM system.descriptor
+	WHERE id = (
+		SELECT id FROM system.namespace WHERE name = 'defaultdb'
+	);
 
 query T
 EXECUTE r1('abc')

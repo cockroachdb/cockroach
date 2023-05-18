@@ -1,0 +1,120 @@
+/* setup */
+----
+
+
+/* test */
+CREATE DATABASE db;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE DATABASE
+checking current user "root" has system privilege "CREATEDB" or the corresponding legacy role option
+increment telemetry for sql.schema.create_database
+checking role/user "root" exists
+write *eventpb.CreateDatabase to event log:
+  databaseName: db
+  sql:
+    descriptorId: 104
+    statement: CREATE DATABASE ‹db›
+    tag: CREATE DATABASE
+    user: root
+## StatementPhase stage 1 of 1 with 17 MutationType ops
+add database namespace entry {0 0 db} -> 104
+add schema namespace entry {104 0 public} -> 105
+upsert descriptor #104
+  -
+  +database:
+  +  defaultPrivileges: {}
+  +  id: 104
+  +  modificationTime: {}
+  +  name: db
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "2048"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  schemas:
+  +    public:
+  +      id: 105
+  +  version: "1"
+upsert descriptor #105
+  -
+  +schema:
+  +  id: 105
+  +  modificationTime: {}
+  +  name: public
+  +  parentId: 104
+  +  privileges:
+  +    ownerProto: admin
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "516"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  version: "1"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 17 MutationType ops
+add database namespace entry {0 0 db} -> 104
+add schema namespace entry {104 0 public} -> 105
+upsert descriptor #104
+  -
+  +database:
+  +  defaultPrivileges: {}
+  +  id: 104
+  +  modificationTime: {}
+  +  name: db
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "2048"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  schemas:
+  +    public:
+  +      id: 105
+  +  version: "1"
+upsert descriptor #105
+  -
+  +schema:
+  +  id: 105
+  +  modificationTime: {}
+  +  name: public
+  +  parentId: 104
+  +  privileges:
+  +    ownerProto: admin
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "516"
+  +      userProto: public
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 3
+  +  version: "1"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

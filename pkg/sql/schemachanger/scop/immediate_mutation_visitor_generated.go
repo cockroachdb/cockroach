@@ -128,6 +128,7 @@ type ImmediateMutationVisitor interface {
 	CreateSequenceDescriptor(context.Context, CreateSequenceDescriptor) error
 	SetSequenceOptions(context.Context, SetSequenceOptions) error
 	InitSequence(context.Context, InitSequence) error
+	CreateDatabaseDescriptor(context.Context, CreateDatabaseDescriptor) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -658,4 +659,9 @@ func (op SetSequenceOptions) Visit(ctx context.Context, v ImmediateMutationVisit
 // Visit is part of the ImmediateMutationOp interface.
 func (op InitSequence) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.InitSequence(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op CreateDatabaseDescriptor) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.CreateDatabaseDescriptor(ctx, op)
 }

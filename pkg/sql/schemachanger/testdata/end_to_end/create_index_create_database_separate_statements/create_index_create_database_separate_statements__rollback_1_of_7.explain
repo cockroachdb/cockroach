@@ -1,0 +1,75 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+INSERT INTO t SELECT val, val+1 FROM generate_series(1,10) AS temp(val);
+
+/* test */
+CREATE UNIQUE INDEX idx ON t(j) WHERE (i > 0);
+CREATE DATABASE db;
+EXPLAIN (DDL) rollback at post-commit stage 1 of 7;
+----
+Schema change plan for rolling back CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹j›) WHERE (‹i› > ‹0›);
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 22 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC           → ABSENT  IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 2 (idx-)}
+      │    │    ├── PUBLIC           → ABSENT  IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (idx-)}
+      │    │    ├── PUBLIC           → ABSENT  IndexName:{DescID: 104 (t), Name: "idx", IndexID: 2 (idx-)}
+      │    │    ├── PUBLIC           → ABSENT  IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
+      │    │    ├── PUBLIC           → ABSENT  IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
+      │    │    ├── PUBLIC           → ABSENT  IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
+      │    │    ├── BACKFILL_ONLY    → ABSENT  SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey)}
+      │    │    ├── DELETE_ONLY      → ABSENT  TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
+      │    │    ├── DESCRIPTOR_ADDED → DROPPED Database:{DescID: 105 (db-)}
+      │    │    ├── PUBLIC           → ABSENT  Namespace:{DescID: 105 (db-), Name: "db"}
+      │    │    ├── PUBLIC           → ABSENT  DatabaseRoleSetting:{DescID: 105 (db-), Name: "__placeholder_role_name__"}
+      │    │    ├── PUBLIC           → ABSENT  Owner:{DescID: 105 (db-)}
+      │    │    ├── PUBLIC           → ABSENT  UserPrivileges:{DescID: 105 (db-), Name: "admin"}
+      │    │    ├── PUBLIC           → ABSENT  UserPrivileges:{DescID: 105 (db-), Name: "public"}
+      │    │    ├── PUBLIC           → ABSENT  UserPrivileges:{DescID: 105 (db-), Name: "root"}
+      │    │    ├── DESCRIPTOR_ADDED → DROPPED Schema:{DescID: 106 (public-)}
+      │    │    ├── PUBLIC           → ABSENT  Namespace:{DescID: 106 (public-), Name: "public", ReferencedDescID: 105 (db-)}
+      │    │    ├── PUBLIC           → ABSENT  SchemaParent:{DescID: 106 (public-), ReferencedDescID: 105 (db-)}
+      │    │    ├── PUBLIC           → ABSENT  Owner:{DescID: 106 (public-)}
+      │    │    ├── PUBLIC           → ABSENT  UserPrivileges:{DescID: 106 (public-), Name: "admin"}
+      │    │    ├── PUBLIC           → ABSENT  UserPrivileges:{DescID: 106 (public-), Name: "public"}
+      │    │    └── PUBLIC           → ABSENT  UserPrivileges:{DescID: 106 (public-), Name: "root"}
+      │    └── 26 Mutation operations
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
+      │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+      │         ├── MarkDescriptorAsDropped {"DescriptorID":106}
+      │         ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":105,"SchemaID":106}}
+      │         ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+      │         ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
+      │         ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
+      │         ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+      │         ├── MarkDescriptorAsDropped {"DescriptorID":105}
+      │         ├── DrainDescriptorName {"Namespace":{"DescriptorID":105,"Name":"db"}}
+      │         ├── RemoveDatabaseRoleSettings {"DatabaseID":105}
+      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+      │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
+      │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
+      │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
+      │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":105,"DescriptorID":106,"Name":"public"}}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 3 elements transitioning toward ABSENT
+           │    ├── DROPPED → ABSENT Database:{DescID: 105 (db-)}
+           │    ├── PUBLIC  → ABSENT DatabaseData:{DescID: 105 (db-)}
+           │    └── DROPPED → ABSENT Schema:{DescID: 106 (public-)}
+           └── 7 Mutation operations
+                ├── DeleteDescriptor {"DescriptorID":105}
+                ├── CreateGCJobForDatabase {"DatabaseID":105}
+                ├── DeleteDescriptor {"DescriptorID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

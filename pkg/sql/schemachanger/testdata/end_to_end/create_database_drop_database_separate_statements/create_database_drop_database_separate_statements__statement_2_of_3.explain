@@ -1,0 +1,52 @@
+/* setup */
+
+/* test */
+CREATE DATABASE db;
+EXPLAIN (DDL) DROP DATABASE db;
+----
+Schema change plan for DROP DATABASE ‹db›; following CREATE DATABASE ‹db›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 14 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (db-), Name: "db"}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (db-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (db-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (db-), Name: "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (db-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Database:{DescID: 104 (db-)}
+ │         │    ├── PUBLIC → ABSENT  DatabaseRoleSetting:{DescID: 104 (db-), Name: "__placeholder_role_name__"}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (public-), Name: "public", ReferencedDescID: 104 (db-)}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 105 (public-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (public-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (public-), Name: "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (public-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Schema:{DescID: 105 (public-)}
+ │         │    └── PUBLIC → ABSENT  SchemaParent:{DescID: 105 (public-), ReferencedDescID: 104 (db-)}
+ │         └── 13 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
+ │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":105}}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":105,"Name":"public"}}
+ │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
+ │              ├── DrainDescriptorName {"Namespace":{"DescriptorID":104,"Name":"db"}}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"public"}
+ │              └── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 4 elements transitioning toward ABSENT
+      │    │    ├── DROPPED → ABSENT Database:{DescID: 104 (db-)}
+      │    │    ├── ABSENT  → PUBLIC DatabaseRoleSetting:{DescID: 104 (db-), Name: "__placeholder_role_name__"}
+      │    │    ├── PUBLIC  → ABSENT DatabaseData:{DescID: 104 (db-)}
+      │    │    └── DROPPED → ABSENT Schema:{DescID: 105 (public-)}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward ABSENT
+           │    └── PUBLIC → ABSENT DatabaseRoleSetting:{DescID: 104 (db-), Name: "__placeholder_role_name__"}
+           └── 1 Mutation operation
+                └── RemoveDatabaseRoleSettings {"DatabaseID":104}
