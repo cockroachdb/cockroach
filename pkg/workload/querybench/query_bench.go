@@ -30,7 +30,6 @@ type queryBench struct {
 	connFlags       *workload.ConnFlags
 	queryFile       string
 	numRunsPerQuery int
-	vectorize       string
 	verbose         bool
 
 	queries []string
@@ -50,24 +49,15 @@ var queryBenchMeta = workload.Meta{
 		g.flags.FlagSet = pflag.NewFlagSet(`querybench`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`query-file`: {RuntimeOnly: true},
-			`optimizer`:  {RuntimeOnly: true},
-			`vectorize`:  {RuntimeOnly: true},
 			`num-runs`:   {RuntimeOnly: true},
 		}
 		g.flags.StringVar(&g.queryFile, `query-file`, ``, `File of newline separated queries to run`)
 		g.flags.IntVar(&g.numRunsPerQuery, `num-runs`, 0, `Specifies the number of times each query in the query file to be run `+
 			`(note that --duration and --max-ops take precedence, so if duration or max-ops is reached, querybench will exit without honoring --num-runs)`)
-		g.flags.StringVar(&g.vectorize, `vectorize`, "", `Set vectorize session variable`)
 		g.flags.BoolVar(&g.verbose, `verbose`, true, `Prints out the queries being run as well as histograms`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
-}
-
-// vectorizeSetting19_2Translation is a mapping from the 20.1+ vectorize session
-// variable value to the 19.2 syntax.
-var vectorizeSetting19_2Translation = map[string]string{
-	"on": "experimental_on",
 }
 
 // Meta implements the Generator interface.
@@ -120,19 +110,6 @@ func (g *queryBench) Ops(
 	// Allow a maximum of concurrency+1 connections to the database.
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
-
-	if g.vectorize != "" {
-		_, err := db.Exec("SET vectorize=" + g.vectorize)
-		if err != nil && strings.Contains(err.Error(), "invalid value") {
-			if _, ok := vectorizeSetting19_2Translation[g.vectorize]; ok {
-				// Fall back to using the pre-20.1 vectorize options.
-				_, err = db.Exec("SET vectorize=" + vectorizeSetting19_2Translation[g.vectorize])
-			}
-		}
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
-	}
 
 	stmts := make([]namedStmt, len(g.queries))
 	for i, query := range g.queries {
