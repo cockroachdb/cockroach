@@ -614,7 +614,7 @@ func acquireNodeLease(
 	return didAcquire, nil
 }
 
-// releaseLease from store.
+// releaseLease deletes an entry from system.lease.
 func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
 	if m.IsDraining() {
 		// Release synchronously to guarantee release before exiting.
