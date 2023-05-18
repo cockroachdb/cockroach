@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -178,14 +179,14 @@ type AuthorizationAccessor interface {
 		ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind,
 	) error
 
-	// HasAdminRole verifies if a user has an admin role.
+	// HasAdminRole verifies if current user has an admin role.
 	HasAdminRole(ctx context.Context) (bool, error)
 
 	// HasOwnership returns true iff the role, or any role the role is a member
 	// of, has ownership privilege of the desc.
 	HasOwnership(ctx context.Context, privilegeObject privilege.Object) (bool, error)
 
-	// CheckPrivilegeForUser verifies that the user has `privilege` on `descriptor`.
+	// CheckPrivilegeForUser verifies that `user` has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
 		ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername,
 	) error
@@ -194,11 +195,24 @@ type AuthorizationAccessor interface {
 	// and indirect) and returns a map of "role" -> "isAdmin".
 	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error)
 
-	// HasPrivilege checks if the user has `privilege` on `descriptor`.
+	// HasPrivilege checks if the `user` has `privilege` on `privilegeObject`.
 	HasPrivilege(ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername) (bool, error)
 
 	// HasAnyPrivilege returns true if user has any privileges at all.
 	HasAnyPrivilege(ctx context.Context, privilegeObject privilege.Object) (bool, error)
+
+	// HasRoleOption returns true if current user
+	// - is root or node, or
+	// - is an admin, or
+	// - is a member of a role with option `roleOption`.
+	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
+
+	// HasGlobalPrivilegeOrRoleOption returns a bool representing whether the current user
+	// has a global privilege or the corresponding legacy role option.
+	HasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) (bool, error)
+
+	// CheckRoleExists returns nil if `role` exists.
+	CheckRoleExists(ctx context.Context, role username.SQLUsername) error
 }
 
 // AstFormatter provides interfaces for formatting AST nodes.

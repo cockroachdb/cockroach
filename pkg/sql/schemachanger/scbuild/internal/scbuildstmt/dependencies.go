@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -216,12 +217,28 @@ type PrivilegeChecker interface {
 	// privilege for the element.
 	CheckPrivilege(e scpb.Element, privilege privilege.Kind)
 
+	// HasGlobalPrivilegeOrRoleOption returns a bool representing whether the current user
+	// has a global privilege or the corresponding legacy role option.
+	HasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) (bool, error)
+
 	// CurrentUserHasAdminOrIsMemberOf returns true iff the current user is (1)
 	// an admin or (2) has membership in the specified role.
-	CurrentUserHasAdminOrIsMemberOf(member username.SQLUsername) bool
+	CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername) bool
 
 	// CurrentUser returns the user of current session.
 	CurrentUser() username.SQLUsername
+
+	// HasRoleOption returns true if current user
+	// - is root or node, or
+	// - is an admin, or
+	// - is a member of a role with option `roleOption`.
+	// This check should be done on the version of the privilege that is stored in
+	// the `system.role_options` table. Example: CREATEROLE instead of NOCREATEROLE.
+	// NOLOGIN instead of LOGIN.
+	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
+
+	// CheckRoleExists returns nil if `role` exists.
+	CheckRoleExists(ctx context.Context, role username.SQLUsername) error
 }
 
 // TableHelpers has methods useful for creating new table elements.
