@@ -214,49 +214,49 @@ var (
 	}
 	metaReplicateQueueReplaceDeadReplicaSuccessCount = metric.Metadata{
 		Name:        "queue.replicate.replacedeadreplica.success",
-		Help:        "Number of successful dead replica replica replacements processed by the replicate queue",
+		Help:        "Number of successful dead replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueReplaceDeadReplicaErrorCount = metric.Metadata{
 		Name:        "queue.replicate.replacedeadreplica.error",
-		Help:        "Number of failed dead replica replica replacements processed by the replicate queue",
+		Help:        "Number of failed dead replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueReplaceDecommissioningReplicaSuccessCount = metric.Metadata{
 		Name:        "queue.replicate.replacedecommissioningreplica.success",
-		Help:        "Number of successful decommissioning replica replica replacements processed by the replicate queue",
+		Help:        "Number of successful decommissioning replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueReplaceDecommissioningReplicaErrorCount = metric.Metadata{
 		Name:        "queue.replicate.replacedecommissioningreplica.error",
-		Help:        "Number of failed decommissioning replica replica replacements processed by the replicate queue",
+		Help:        "Number of failed decommissioning replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueRemoveDecommissioningReplicaSuccessCount = metric.Metadata{
 		Name:        "queue.replicate.removedecommissioningreplica.success",
-		Help:        "Number of successful decommissioning replica replica removals processed by the replicate queue",
+		Help:        "Number of successful decommissioning replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueRemoveDecommissioningReplicaErrorCount = metric.Metadata{
 		Name:        "queue.replicate.removedecommissioningreplica.error",
-		Help:        "Number of failed decommissioning replica replica removals processed by the replicate queue",
+		Help:        "Number of failed decommissioning replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueRemoveDeadReplicaSuccessCount = metric.Metadata{
 		Name:        "queue.replicate.removedeadreplica.success",
-		Help:        "Number of successful dead replica replica removals processed by the replicate queue",
+		Help:        "Number of successful dead replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueRemoveDeadReplicaErrorCount = metric.Metadata{
 		Name:        "queue.replicate.removedeadreplica.error",
-		Help:        "Number of failed dead replica replica removals processed by the replicate queue",
+		Help:        "Number of failed dead replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
