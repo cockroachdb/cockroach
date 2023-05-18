@@ -130,6 +130,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"IndexDescriptorVersion":       {},
 						"MutationID":                   {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase": {
+						"FormatCode": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants": {
 						"ConstraintType": {},
 					},
