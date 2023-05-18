@@ -2306,8 +2306,8 @@ go.etcd.io/etcd v0.5.0-alpha.5.0.20200910180754-dd1b699fc489/go.mod h1:yVHk9ub3C
 go.etcd.io/etcd/api/v3 v3.5.0/go.mod h1:cbVKeC6lCfl7j/8jBhAK6aIYO9XOjdptoxU/nLQcPvs=
 go.etcd.io/etcd/client/pkg/v3 v3.5.0/go.mod h1:IJHfcCEKxYu1Os13ZdwCwIUTUVGYTSAM3YSwc9/Ac1g=
 go.etcd.io/etcd/client/v2 v2.305.0/go.mod h1:h9puh54ZTgAKtEbut2oe9P4L/oqKCVB6xsXlzd7alYQ=
-go.etcd.io/raft/v3 v3.0.0-20230315220435-5fe1c31c5158 h1:JdVbiz8TIDFV4pyXRQ+z7dcJueHcqB4NwRGm7tnr4wo=
-go.etcd.io/raft/v3 v3.0.0-20230315220435-5fe1c31c5158/go.mod h1:xa/jfCF4K9FpWEAXstT+Nw4ToWdmhJ8oeC5eburtypA=
+go.etcd.io/raft/v3 v3.0.0-20230518105827-4967cffe43c1 h1:9Y3qiUHghHReOPfdeNN76MAVNTNfY5Ldly0YqqLduKs=
+go.etcd.io/raft/v3 v3.0.0-20230518105827-4967cffe43c1/go.mod h1:xa/jfCF4K9FpWEAXstT+Nw4ToWdmhJ8oeC5eburtypA=
 go.mongodb.org/mongo-driver v1.0.3/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.1/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.2/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
