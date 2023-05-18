@@ -12,6 +12,7 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { merge } from "lodash";
 import { DOMAIN_NAME, noopReducer } from "../utils";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import "immer";
 export type UserSQLRolesRequest = cockroach.server.serverpb.UserSQLRolesRequest;
 
 export type UIConfigState = {

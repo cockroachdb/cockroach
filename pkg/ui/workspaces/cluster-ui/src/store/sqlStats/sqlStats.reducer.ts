@@ -15,6 +15,7 @@ import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../../timeScaleDropdown";
 import moment from "moment-timezone";
 import { createInitialState, RequestState } from "src/api/types";
+import "immer";
 
 export type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
 

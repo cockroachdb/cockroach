@@ -18,6 +18,7 @@ import {
 } from "src/api/statementsApi";
 import { generateStmtDetailsToID } from "../../util";
 import moment from "moment-timezone";
+import "immer";
 
 export type SQLDetailsStatsState = {
   data: StatementDetailsResponse;

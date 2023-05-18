@@ -15,6 +15,7 @@ import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsResponse,
 } from "../../api";
+import "immer";
 
 export type StatementDiagnosticsState = {
   data: StatementDiagnosticsResponse;
