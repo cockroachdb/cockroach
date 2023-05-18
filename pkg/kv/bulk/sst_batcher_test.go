@@ -199,7 +199,7 @@ func TestDuplicateHandling(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			b, err := bulk.MakeTestingSSTBatcher(ctx, kvDB, s.ClusterSettings(),
-				tc.skipDuplicates, tc.ingestAll, mem.MakeBoundAccount(), reqs)
+				tc.skipDuplicates, tc.ingestAll, mem.MakeConcurrentBoundAccount(), reqs)
 			require.NoError(t, err)
 			defer b.Close(ctx)
 			k := func(i int, ts int) storage.MVCCKey {

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -80,24 +79,6 @@ func (dbc *dbAdapter) RangeFeed(
 	return dbc.distSender.RangeFeed(ctx, spans, startFrom, eventC, opts...)
 }
 
-// concurrentBoundAccount is a thread safe bound account.
-type concurrentBoundAccount struct {
-	syncutil.Mutex
-	*mon.BoundAccount
-}
-
-func (ba *concurrentBoundAccount) Grow(ctx context.Context, x int64) error {
-	ba.Lock()
-	defer ba.Unlock()
-	return ba.BoundAccount.Grow(ctx, x)
-}
-
-func (ba *concurrentBoundAccount) Shrink(ctx context.Context, x int64) {
-	ba.Lock()
-	defer ba.Unlock()
-	ba.BoundAccount.Shrink(ctx, x)
-}
-
 // Scan is part of the DB interface.
 func (dbc *dbAdapter) Scan(
 	ctx context.Context,
@@ -110,11 +91,10 @@ func (dbc *dbAdapter) Scan(
 		return errors.AssertionFailedf("expected at least 1 span, got none")
 	}
 
-	var acc *concurrentBoundAccount
+	var acc *mon.ConcurrentBoundAccount
 	if cfg.mon != nil {
-		ba := cfg.mon.MakeBoundAccount()
-		defer ba.Close(ctx)
-		acc = &concurrentBoundAccount{BoundAccount: &ba}
+		acc = cfg.mon.MakeConcurrentBoundAccount()
+		defer acc.Close(ctx)
 	}
 
 	// If we don't have parallelism configured, just scan each span in turn.
@@ -171,7 +151,7 @@ func (dbc *dbAdapter) scanSpan(
 	targetScanBytes int64,
 	onScanDone OnScanCompleted,
 	overSystemTable bool,
-	acc *concurrentBoundAccount,
+	acc *mon.ConcurrentBoundAccount,
 ) error {
 	if acc != nil {
 		if err := acc.Grow(ctx, targetScanBytes); err != nil {
@@ -236,7 +216,7 @@ func (dbc *dbAdapter) divideAndSendScanRequests(
 	targetScanBytes int64,
 	onSpanDone OnScanCompleted,
 	overSystemTable bool,
-	acc *concurrentBoundAccount,
+	acc *mon.ConcurrentBoundAccount,
 ) error {
 	// Build a span group so that we can iterate spans in order.
 	var sg roachpb.SpanGroup

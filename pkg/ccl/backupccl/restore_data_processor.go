@@ -587,7 +587,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			// TODO(rui): we can change this to the processor's bound account, but
 			// currently there seems to be some accounting errors that will cause
 			// tests to fail.
-			rd.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
+			rd.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
 			rd.flowCtx.Cfg.BulkSenderLimiter,
 		)
 		if err != nil {
