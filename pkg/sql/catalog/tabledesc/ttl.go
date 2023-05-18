@@ -74,13 +74,18 @@ func ValidateTTLExpirationExpr(desc catalog.TableDescriptor) error {
 	if expirationExpr == "" {
 		return nil
 	}
-	expr, err := parser.ParseExpr(string(expirationExpr))
+	exprs, err := parser.ParseExprs([]string{string(expirationExpr)})
 	if err != nil {
 		return errors.Wrapf(err, "ttl_expiration_expression %q must be a valid expression", expirationExpr)
+	} else if len(exprs) != 1 {
+		return errors.Newf(
+			`ttl_expiration_expression %q must be a single expression`,
+			expirationExpr,
+		)
 	}
 	// Ideally, we would also call schemaexpr.ValidateTTLExpirationExpression
 	// here, but that requires a SemaCtx which we don't have here.
-	valid, err := schemaexpr.HasValidColumnReferences(desc, expr)
+	valid, err := schemaexpr.HasValidColumnReferences(desc, exprs[0])
 	if err != nil {
 		return err
 	}
