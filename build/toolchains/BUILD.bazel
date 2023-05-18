@@ -1,5 +1,4 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-load("@build_bazel_rules_nodejs//nodejs:toolchain.bzl", "node_toolchain")
 
 # We define a number of toolchains, each of which has a name of the form:
 #     cross_HOST_TARGET_toolchain
@@ -267,11 +266,6 @@ toolchain(
     ],
     toolchain = ":node_freebsd_local_toolchain",
     toolchain_type = "@rules_nodejs//nodejs:toolchain_type",
-)
-
-node_toolchain(
-    name = "node_freebsd_local_toolchain",
-    target_tool_path = "/usr/local/bin/node",
 )
 
 # There are aliases for each of these flags defined in .bazelrc; for example,
