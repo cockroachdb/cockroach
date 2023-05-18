@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { cockroach } from "src/js";
+import { cockroach } from "src/js/protos";
 import KeyVisSamplesResponse = cockroach.server.serverpb.KeyVisSamplesResponse;
 import IKeyVisSample = cockroach.server.serverpb.KeyVisSamplesResponse.IKeyVisSample;
 import IBucket = cockroach.server.serverpb.KeyVisSamplesResponse.IBucket;
