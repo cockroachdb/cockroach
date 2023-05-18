@@ -12,6 +12,7 @@ package split
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"testing"
@@ -292,92 +293,76 @@ func TestDecider_MaxStat(t *testing.T) {
 
 func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rand := rand.New(rand.NewSource(11))
+	ctx := context.Background()
 
-	var d Decider
-	loadSplitConfig := testLoadSplitConfig{
-		randSource:    rand,
-		useWeighted:   false,
-		statRetention: time.Second,
-		statThreshold: 1,
-	}
-
-	Init(&d, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, SplitCPU)
-
-	baseKey := keys.SystemSQLCodec.TablePrefix(51)
+	// We use two different base keys to avoid only retaining key, which will
+	// never split. The split finder strips the column family suffix from sampled
+	// keys, meaning an identical base key will map to the same sample key.
+	baseKey1 := keys.SystemSQLCodec.TablePrefix(51)
+	baseKey2 := keys.SystemSQLCodec.TablePrefix(52)
 	for i := 0; i < 4; i++ {
-		baseKey = encoding.EncodeUvarintAscending(baseKey, uint64(52+i))
+		baseKey1 = encoding.EncodeUvarintAscending(baseKey1, uint64(51+i))
+		baseKey2 = encoding.EncodeUvarintAscending(baseKey2, uint64(52+i))
 	}
-	c0 := func() roachpb.Span { return roachpb.Span{Key: append([]byte(nil), keys.MakeFamilyKey(baseKey, 1)...)} }
-	c1 := func() roachpb.Span { return roachpb.Span{Key: append([]byte(nil), keys.MakeFamilyKey(baseKey, 9)...)} }
-
-	expK, err := keys.EnsureSafeSplitKey(c1().Key)
-	require.NoError(t, err)
-
-	var k roachpb.Key
-	var now time.Time
-	for i := 0; i < 2*int(minSplitSuggestionInterval/time.Second); i++ {
-		now = now.Add(500 * time.Millisecond)
-		d.Record(context.Background(), now, ld(1), c0)
-		now = now.Add(500 * time.Millisecond)
-		d.Record(context.Background(), now, ld(1), c1)
-		k = d.MaybeSplitKey(context.Background(), now)
-		if len(k) != 0 {
-			break
-		}
+	c0 := func() roachpb.Span { return roachpb.Span{Key: append([]byte(nil), keys.MakeFamilyKey(baseKey1, 1)...)} }
+	c1 := func() roachpb.Span { return roachpb.Span{Key: append([]byte(nil), keys.MakeFamilyKey(baseKey2, 9)...)} }
+	c2 := func() roachpb.Span {
+		return roachpb.Span{Key: append([]byte(nil), encoding.EncodeUvarintAscending(baseKey1, math.MaxInt32+1)...)}
+	}
+	c3 := func() roachpb.Span {
+		return roachpb.Span{Key: append([]byte(nil), encoding.EncodeUvarintAscending(baseKey2, math.MaxInt32+2)...)}
 	}
 
-	require.Equal(t, expK, k)
-}
-
-func TestDeciderIgnoresEnsureSafeSplitKeyOnError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	rand := rand.New(rand.NewSource(11))
-	var d Decider
-
-	loadSplitConfig := testLoadSplitConfig{
-		randSource:    rand,
-		useWeighted:   false,
-		statRetention: time.Second,
-		statThreshold: 1,
+	testCases := []struct {
+		obj          SplitObjective
+		spanA, spanB func() roachpb.Span
+		safe         bool
+	}{
+		{obj: SplitQPS, spanA: c0, spanB: c1, safe: true},
+		{obj: SplitCPU, spanA: c0, spanB: c1, safe: true},
+		{obj: SplitQPS, spanA: c2, spanB: c3, safe: false},
+		{obj: SplitCPU, spanA: c2, spanB: c3, safe: false},
 	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s/safe=%v", tc.obj.String(), tc.safe), func(t *testing.T) {
+			loadSplitConfig := testLoadSplitConfig{
+				randSource:    rand.New(rand.NewSource(11)),
+				statRetention: time.Second,
+				statThreshold: 1,
+				useWeighted:   tc.obj == SplitCPU,
+			}
+			var d Decider
+			Init(&d, &loadSplitConfig, &LoadSplitterMetrics{
+				PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+				NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+			}, tc.obj)
 
-	Init(&d, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, SplitCPU)
+			// Check that the start key of the (B) request span matches our safe or
+			// unsafe expectation. If the key is unsafe, then expK becomes nil and we
+			// don't expect a split key to be returned from Decider.MaybeSplitKey.
+			expK, err := keys.EnsureSafeSplitKey(tc.spanB().Key)
+			if tc.safe {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
 
-	baseKey := keys.SystemSQLCodec.TablePrefix(51)
-	for i := 0; i < 4; i++ {
-		baseKey = encoding.EncodeUvarintAscending(baseKey, uint64(52+i))
+			var k roachpb.Key
+			var now time.Time
+			for i := 0; i < 2*int(minSplitSuggestionInterval/time.Second); i++ {
+				now = now.Add(500 * time.Millisecond)
+				d.Record(ctx, now, ld(1), tc.spanA)
+				now = now.Add(500 * time.Millisecond)
+				d.Record(ctx, now, ld(1), tc.spanB)
+				k = d.MaybeSplitKey(ctx, now)
+				if len(k) != 0 {
+					require.NotNil(t, k)
+					break
+				}
+			}
+			require.Equal(t, expK, k, &d)
+		})
 	}
-	c0 := func() roachpb.Span {
-		return roachpb.Span{Key: append([]byte(nil), encoding.EncodeUvarintAscending(baseKey, math.MaxInt32+1)...)}
-	}
-	c1 := func() roachpb.Span {
-		return roachpb.Span{Key: append([]byte(nil), encoding.EncodeUvarintAscending(baseKey, math.MaxInt32+2)...)}
-	}
-
-	_, err := keys.EnsureSafeSplitKey(c1().Key)
-	require.Error(t, err)
-
-	var k roachpb.Key
-	var now time.Time
-	for i := 0; i < 2*int(minSplitSuggestionInterval/time.Second); i++ {
-		now = now.Add(500 * time.Millisecond)
-		d.Record(context.Background(), now, ld(1), c0)
-		now = now.Add(500 * time.Millisecond)
-		d.Record(context.Background(), now, ld(1), c1)
-		k = d.MaybeSplitKey(context.Background(), now)
-		if len(k) != 0 {
-			break
-		}
-	}
-
-	require.Equal(t, c1().Key, k)
 }
 
 func TestMaxStatTracker(t *testing.T) {

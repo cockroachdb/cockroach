@@ -46,6 +46,17 @@ func (r WFLargestRandSource) Intn(int) int {
 	return 0
 }
 
+func colKey(prefix roachpb.Key) roachpb.Key {
+	return keys.MakeFamilyKey(prefix, 9)
+}
+
+func colFamSpan(span roachpb.Span) roachpb.Span {
+	return roachpb.Span{
+		Key:    colKey(span.Key),
+		EndKey: colKey(span.EndKey),
+	}
+}
+
 // TestSplitWeightedFinderKey verifies the Key() method correctly
 // finds an appropriate split point for the range.
 func TestSplitWeightedFinderKey(t *testing.T) {
@@ -190,17 +201,6 @@ func TestSplitWeightedFinderRecorder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-
-	colKey := func(prefix roachpb.Key) roachpb.Key {
-		return keys.MakeFamilyKey(prefix, 9)
-	}
-
-	colFamSpan := func(span roachpb.Span) roachpb.Span {
-		return roachpb.Span{
-			Key:    colKey(span.Key),
-			EndKey: colKey(span.EndKey),
-		}
-	}
 
 	const ReservoirKeyOffset = 1000
 

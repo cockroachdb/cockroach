@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -54,6 +55,11 @@ type weightedSample struct {
 	count       int
 }
 
+func (w weightedSample) String() string {
+	return fmt.Sprintf("%s(l=%.1f r=%.1f c=%d w=%.1f)",
+		w.key, w.left, w.right, w.count, w.weight)
+}
+
 // WeightedFinder is a structure that is used to determine the split point
 // using the Weighted Reservoir Sampling method (a simplified version of A-Chao
 // algorithm).
@@ -88,12 +94,47 @@ func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
 	}
 
 	var idx int
+	var isSafe bool
+	var safeKey roachpb.Key
+	var err error
 	count := f.count
-	f.count++
-	f.totalWeight += weight
+	// We only wish to retain safe split keys as samples, as they are the split
+	// keys which are returned from Key(). If instead we kept every key, it is
+	// possible for all reservoir keys to map to the same split key implicitly
+	// with column families. This also prevents ever returning an invalid split
+	// key, as we don't retain unsafe samples. If the key is not a safe split
+	// key:
+	//
+	//   - ignore it if the reservoir isn't full; or
+	//   - bypass sampling probability and record
+	//
+	// In both cases we don't include it in the count nor reservoir. This biases
+	// the algorithm, as keys which do not have a safe split key are no longer
+	// included in the reservoir.
+	//
+	// Note this doesn't stop every sample being the same key, however it will
+	// cause no split key logging and bump metrics.
+	//
+	// TODO(kvoli): When the single key situation arises, we should backoff
+	// attempting to split. There is a fixed overhead on the hotpath when the
+	// finder is active.
+	if safeKey, err = keys.EnsureSafeSplitKey(key); err == nil {
+		isSafe = true
+		f.count++
+		// NB: An unsafe key could never be included in the reservoir. The
+		// probability of a key with weight w being included is loosely k * w / W.
+		// Where W is the sum of safe key weights previously sampled (including w)
+		// and k is the reservoir size. k * w can be larger than W when k > 1 (20).
+		f.totalWeight += weight
+	}
+
 	if count < splitKeySampleSize {
-		idx = count
-	} else if f.randSource.Float64() > splitKeySampleSize*weight/f.totalWeight {
+		if isSafe {
+			idx = count
+		} else {
+			return
+		}
+	} else if !isSafe || f.randSource.Float64() > splitKeySampleSize*weight/f.totalWeight {
 		for i := range f.samples {
 			// Example: Suppose we have candidate split key = "k" (i.e.
 			// f.samples[i].Key).
@@ -124,27 +165,10 @@ func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
 		idx = f.randSource.Intn(splitKeySampleSize)
 	}
 
-	// We only wish to retain safe split keys as samples, as they are the split
-	// keys that will eventually be returned from Key(). If instead we kept every
-	// key, it is possible for all sample keys to map to the same split key
-	// implicitly with column families. Note this doesn't stop every sample being
-	// the same key, however it will cause no split key logging and bump metrics.
-	// TODO(kvoli): When the single key situation arises, we should backoff
-	// attempting to split. There is a fixed overhead on the hotpath when the
-	// finder is active.
-	if safeKey, err := keys.EnsureSafeSplitKey(key); err == nil {
-		key = safeKey
-	} else {
-		// If the key is not a safe split key, instead ignore it and don't bump any
-		// counters. This biases the algorithm slightly, as keys which would be
-		// invalid are not sampled, nor their impact recorded if they reach here.
-		return
-	}
-
 	// Note we always use the start key of the span. We could
 	// take the average of the byte slices, but that seems
 	// unnecessarily complex for practical usage.
-	f.samples[idx] = weightedSample{key: key, weight: weight}
+	f.samples[idx] = weightedSample{key: safeKey, weight: weight}
 }
 
 // Record implements the LoadBasedSplitter interface.
@@ -287,4 +311,22 @@ func (f *WeightedFinder) PopularKeyFrequency() float64 {
 	}
 
 	return popularKeyWeight / totalWeight
+}
+
+func (f *WeightedFinder) String() string {
+	var buf strings.Builder
+	sort.Slice(f.samples[:], func(i, j int) bool {
+		return f.samples[i].key.Compare(f.samples[j].key) < 0
+	})
+
+	fmt.Fprintf(&buf, "key=%s start=%s count=%d total=%.2f samples=[",
+		f.Key(), f.startTime, f.count, f.totalWeight)
+	for i, key := range f.samples {
+		if i > 0 {
+			fmt.Fprint(&buf, " ")
+		}
+		fmt.Fprintf(&buf, "%s", key)
+	}
+	fmt.Fprint(&buf, "]")
+	return buf.String()
 }

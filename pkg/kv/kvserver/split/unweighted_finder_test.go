@@ -13,8 +13,8 @@ package split
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math/rand"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type DFLargestRandSource struct{}
@@ -221,6 +222,8 @@ func TestSplitFinderRecorder(t *testing.T) {
 	// Test recording a key query after the reservoir is full without replacement.
 	fullReservoir := replacementReservoir
 	fullSpan := roachpb.Span{
+		// [/Table/1000, /Table/1001)
+		// [/Table/1000, /Table/1001)
 		Key:    keys.SystemSQLCodec.TablePrefix(ReservoirKeyOffset),
 		EndKey: keys.SystemSQLCodec.TablePrefix(ReservoirKeyOffset + 1),
 	}
@@ -257,24 +260,39 @@ func TestSplitFinderRecorder(t *testing.T) {
 	}{
 		// Test recording a key query before the reservoir is full.
 		{basicSpan, DFLargestRandSource{}, 0, basicReservoir, expectedBasicReservoir},
+		{colFamSpan(basicSpan), DFLargestRandSource{}, 0, basicReservoir, expectedBasicReservoir},
 		// Test recording a key query after the reservoir is full with replacement.
 		{replacementSpan, ZeroRandSource{}, splitKeySampleSize + 1, replacementReservoir, expectedReplacementReservoir},
-		// Test recording a key query after the reservoir is full without replacement.
+		{colFamSpan(replacementSpan), ZeroRandSource{}, splitKeySampleSize + 1, replacementReservoir, expectedReplacementReservoir},
+		// Test recording a key query after the reservoir is full without
+		// replacement. NB: We don't test that the colFamSpan case is identical to
+		// the non-column family case, they are not. The existing reservoir has
+		// samples:
+		//
+		//  [...,/Table/1001,...]
+		//
+		// The request span is [/Table/1000,/Table/1001) whilst the column family
+		// request span is [/Table/1000/9/1,/Table/1001/9/1). The column family
+		// request span properly contains /Table/1001, whilst the non-column family
+		// request span does not.
+		//
+		// We could convert each request's keys using EnsureSafeSplitKey before
+		// recording to address this.
 		{fullSpan, DFLargestRandSource{}, splitKeySampleSize + 1, fullReservoir, expectedFullReservoir},
 		// Test recording a spanning query.
 		{spanningSpan, DFLargestRandSource{}, splitKeySampleSize + 1, spanningReservoir, expectedSpanningReservoir},
+		{colFamSpan(spanningSpan), DFLargestRandSource{}, splitKeySampleSize + 1, spanningReservoir, expectedSpanningReservoir},
 	}
 
 	for i, test := range testCases {
-		finder := NewUnweightedFinder(timeutil.Now(), test.randSource)
-		finder.samples = test.currReservoir
-		finder.count = test.currCount
-		finder.Record(test.recordSpan, 1)
-		if !reflect.DeepEqual(finder.samples, test.expectedReservoir) {
-			t.Errorf(
-				"%d: expected reservoir: %v, but got reservoir: %v",
-				i, test.expectedReservoir, finder.samples)
-		}
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			finder := NewUnweightedFinder(timeutil.Now(), test.randSource)
+			finder.samples = test.currReservoir
+			finder.count = test.currCount
+			finder.Record(test.recordSpan, 1)
+			require.Equal(t, test.expectedReservoir, finder.samples,
+				"record=[%s,%s) finder=%s", test.recordSpan.Key, test.recordSpan.EndKey, finder)
+		})
 	}
 }
 

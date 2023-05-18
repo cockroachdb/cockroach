@@ -16,9 +16,9 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -51,6 +51,8 @@ type LoadBasedSplitter interface {
 	// PopularKeyFrequency returns the percentage that the most popular key
 	// appears in the sampled candidate split keys.
 	PopularKeyFrequency() float64
+
+	String() string
 }
 
 type LoadSplitConfig interface {
@@ -175,6 +177,20 @@ func Init(
 	lbs.mu.objective = objective
 }
 
+func (d *Decider) String() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "objective=%s count=%d last=%.1f last-roll=%s last-suggest=%s\n",
+		d.mu.objective, d.mu.count, d.mu.lastStatVal, d.mu.lastStatRollover, d.mu.lastSplitSuggestion)
+	if d.mu.splitFinder != nil {
+		fmt.Fprint(&buf, d.mu.splitFinder.String())
+	}
+
+	return buf.String()
+}
+
 // Record notifies the Decider that 'n' operations are being carried out which
 // operate on the span returned by the supplied method. The closure will only
 // be called when necessary, that is, when the Decider is considering a split
@@ -294,8 +310,9 @@ func (d *Decider) MaybeSplitKey(ctx context.Context, now time.Time) roachpb.Key 
 
 	d.recordLocked(ctx, now, 0, nil)
 	if d.mu.splitFinder != nil && d.mu.splitFinder.Ready(now) {
-		// We've found a key to split at. This key might be in the middle of a
-		// SQL row. If we fail to rectify that, we'll cause SQL crashes:
+		// We've found a key to split at. This previously (#103483) might have been
+		// in the middle of a SQL row. If we fail to rectify that, we'll cause SQL
+		// crashes:
 		//
 		// https://github.com/cockroachdb/cockroach/pull/42056
 		//
@@ -311,25 +328,15 @@ func (d *Decider) MaybeSplitKey(ctx context.Context, now time.Time) roachpb.Key 
 		//
 		// (see TestDeciderCallsEnsureSafeSplitKey).
 		//
-		// The key found here isn't guaranteed to be a valid SQL column family
-		// key. This is because the keys are sampled from StartKey of requests
-		// hitting this replica. Ranged operations may well wish to exclude the
-		// start point by calling .Next() or may span multiple ranges, and so
-		// such a key may end up being passed to EnsureSafeSplitKey here.
+		// The key found here is guaranteed to be a either a valid SQL column family
+		// key or non SQL key. This is because the LoadBasedSplitter implementations
+		// only retain keys after checking keys.EnsureSafeSplitKey. Unsafe keys are
+		// not retained and can therefore never be returned. See
+		// LoadBasedSplitter.Record.
 		//
 		// We take the risk that the result may sometimes not be a good split
-		// point (or even in this range).
-		//
-		// Note that we ignore EnsureSafeSplitKey when it returns an error since
-		// that error only tells us that this key couldn't possibly be a SQL
-		// key. This is more common than one might think since SQL issues plenty
-		// of scans over all column families, meaning that we'll frequently find
-		// a key that has no column family suffix and thus errors out in
-		// EnsureSafeSplitKey.
+		// point or that we are unable to determine a split.
 		key = d.mu.splitFinder.Key()
-		if safeKey, err := keys.EnsureSafeSplitKey(key); err == nil {
-			key = safeKey
-		}
 	}
 	return key
 }

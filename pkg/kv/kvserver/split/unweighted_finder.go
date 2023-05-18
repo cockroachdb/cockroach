@@ -15,8 +15,10 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -59,6 +61,11 @@ type sample struct {
 	left, right, contained int
 }
 
+func (s sample) String() string {
+	return fmt.Sprintf("%s(l=%d r=%d c=%d)",
+		s.key, s.left, s.right, s.contained)
+}
+
 // UnweightedFinder is a structure that is used to determine the split point
 // using the Reservoir Sampling method.
 type UnweightedFinder struct {
@@ -89,11 +96,35 @@ func (f *UnweightedFinder) Record(span roachpb.Span, weight float64) {
 	}
 
 	var idx int
+	var isSafe bool
+	var safeStartKey roachpb.Key
+	var err error
 	count := f.count
-	f.count++
+	// We only wish to retain safe split keys as samples, as they are the split
+	// keys which are returned from Key(). If instead we kept every key, it is
+	// possible for all reservoir keys to map to the same split key implicitly
+	// with column families. This also prevents ever returning an invalid split
+	// key, as we don't retain unsafe samples. If the key is not a safe split
+	// key:
+	//
+	//   - ignore it if the reservoir isn't full; or
+	//   - bypass sampling probability and record
+	//
+	// In both cases we don't include it in the count nor reservoir. This biases
+	// the algorithm, as keys which do not have a safe split key are no longer
+	// included in the reservoir.
+	if safeStartKey, err = keys.EnsureSafeSplitKey(span.Key); err == nil {
+		isSafe = true
+		f.count++
+	}
+
 	if count < splitKeySampleSize {
-		idx = count
-	} else if idx = f.randSource.Intn(count); idx >= splitKeySampleSize {
+		if isSafe {
+			idx = count
+		} else {
+			return
+		}
+	} else if idx = f.randSource.Intn(count); idx >= splitKeySampleSize || !isSafe {
 		// Increment all existing keys' counters.
 		for i := range f.samples {
 			if span.ProperlyContainsKey(f.samples[i].key) {
@@ -115,10 +146,9 @@ func (f *UnweightedFinder) Record(span roachpb.Span, weight float64) {
 		return
 	}
 
-	// Note we always use the start key of the span. We could
-	// take the average of the byte slices, but that seems
-	// unnecessarily complex for practical usage.
-	f.samples[idx] = sample{key: span.Key}
+	// Note we always use the start key of the span. We could take the average of
+	// the byte slices, but that seems unnecessarily complex for practical usage.
+	f.samples[idx] = sample{key: safeStartKey}
 }
 
 // Key implements the LoadBasedSplitter interface. Key returns the candidate
@@ -215,4 +245,19 @@ func (f *UnweightedFinder) PopularKeyFrequency() float64 {
 	}
 
 	return float64(popularKeyCount) / float64(splitKeySampleSize)
+}
+
+func (f *UnweightedFinder) String() string {
+	var buf strings.Builder
+
+	fmt.Fprintf(&buf, "key=%s start=%s count=%d samples=[",
+		f.Key(), f.startTime, f.count)
+	for i, key := range f.samples {
+		if i > 0 {
+			fmt.Fprint(&buf, " ")
+		}
+		fmt.Fprintf(&buf, "%s", key)
+	}
+	fmt.Fprint(&buf, "]")
+	return buf.String()
 }
