@@ -149,7 +149,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	}
 }
 
-// Test that the theartbeat loop detects aborted transactions and stops.
+// Test that the heartbeat loop detects aborted transactions and stops.
 func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

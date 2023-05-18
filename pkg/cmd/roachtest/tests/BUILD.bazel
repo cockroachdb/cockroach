@@ -153,6 +153,7 @@ go_library(
         "synctest.go",
         "sysbench.go",
         "tlp.go",
+        "tombstones.go",
         "tpc_utils.go",
         "tpcc.go",
         "tpcdsvec.go",

@@ -2184,10 +2184,14 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
-			// No retry, preemptive refresh before commit.
-			allIsoLevels: &expect{
-				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: false,
+			perIsoLevel: map[isolation.Level]*expect{
+				// No retry, preemptive refresh before commit.
+				isolation.Serializable: {
+					expClientRefreshSuccess:        true,
+					expClientAutoRetryAfterRefresh: false,
+				},
+				// No refresh, no retry.
+				isolation.Snapshot: {},
 			},
 		},
 		{
@@ -2321,14 +2325,14 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("a", "put") // advance timestamp
 				return txn.CommitInBatch(ctx, b)
 			},
-			// Read-only request (Get) prevents server-side refresh.
-			// TODO(nvanbenschoten): This is written like this to exercise the
-			// perIsoLevel mechanism.
 			perIsoLevel: map[isolation.Level]*expect{
+				// Read-only request (Get) prevents server-side refresh.
 				isolation.Serializable: {
 					expClientRefreshSuccess:        true,
 					expClientAutoRetryAfterRefresh: true,
 				},
+				// No refresh, no retry.
+				isolation.Snapshot: {},
 			},
 		},
 		{
@@ -2343,10 +2347,14 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("a", "put") // advance timestamp
 				return txn.CommitInBatch(ctx, b)
 			},
-			// Read-only request (Scan) prevents server-side refresh.
-			allIsoLevels: &expect{
-				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: true,
+			perIsoLevel: map[isolation.Level]*expect{
+				// Read-only request (Scan) prevents server-side refresh.
+				isolation.Serializable: {
+					expClientRefreshSuccess:        true,
+					expClientAutoRetryAfterRefresh: true,
+				},
+				// No refresh, no retry.
+				isolation.Snapshot: {},
 			},
 		},
 		{
@@ -2454,10 +2462,14 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return txn.CommitInBatch(ctx, b)
 			},
-			// No retry, preemptive refresh before commit.
-			allIsoLevels: &expect{
-				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: false,
+			perIsoLevel: map[isolation.Level]*expect{
+				// No retry, preemptive refresh before commit.
+				isolation.Serializable: {
+					expClientRefreshSuccess:        true,
+					expClientAutoRetryAfterRefresh: false,
+				},
+				// No refresh, no retry.
+				isolation.Snapshot: {},
 			},
 		},
 		{
@@ -3111,11 +3123,16 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b := txn.NewBatch()
 				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				b.Put("c", "put")
-				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry from get
+				return txn.CommitInBatch(ctx, b)
 			},
-			allIsoLevels: &expect{
-				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: true,
+			perIsoLevel: map[isolation.Level]*expect{
+				// Both writes will succeed, EndTxn will retry.
+				isolation.Serializable: {
+					expClientRefreshSuccess:        true,
+					expClientAutoRetryAfterRefresh: true,
+				},
+				// No refresh, no retry.
+				isolation.Snapshot: {},
 			},
 		},
 		{
@@ -3131,11 +3148,16 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b := txn.NewBatch()
 				b.DelRange("a", "b", false /* returnKeys */)
 				b.CPut("c", "cput", kvclientutils.StrToCPutExistingValue("value"))
-				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
+				return txn.CommitInBatch(ctx, b)
 			},
-			allIsoLevels: &expect{
-				expClientRefreshSuccess:        true,
-				expClientAutoRetryAfterRefresh: true,
+			perIsoLevel: map[isolation.Level]*expect{
+				// Both writes will succeed, EndTxn will retry.
+				isolation.Serializable: {
+					expClientRefreshSuccess:        true,
+					expClientAutoRetryAfterRefresh: true,
+				},
+				// No refresh, no retry.
+				isolation.Snapshot: {},
 			},
 		},
 		{
@@ -3634,8 +3656,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// TODO(nvanbenschoten): test Snapshot isolation.
-			testLevels := []isolation.Level{isolation.Serializable}
+			testLevels := []isolation.Level{isolation.Serializable, isolation.Snapshot}
 			for _, iso := range testLevels {
 				t.Run(iso.String(), func(t *testing.T) {
 					run(t, tc, iso)
