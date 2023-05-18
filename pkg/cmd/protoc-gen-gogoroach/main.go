@@ -35,6 +35,7 @@ func fixImports(s string) string {
 		}
 
 		line = strings.ReplaceAll(line, "github.com/cockroachdb/cockroach/pkg/etcd", "go.etcd.io/etcd")
+		line = strings.ReplaceAll(line, "github.com/cockroachdb/cockroach/pkg/go.etcd.io", "go.etcd.io")
 		line = strings.ReplaceAll(line, "github.com/cockroachdb/cockroach/pkg/errorspb", "github.com/cockroachdb/errors/errorspb")
 		line = strings.ReplaceAll(line, "golang.org/x/net/context", "context")
 		if builtinRegex.MatchString(line) {

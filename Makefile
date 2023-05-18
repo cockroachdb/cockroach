@@ -328,7 +328,7 @@ endif
 
 # Force vendor directory to rebuild.
 .PHONY: vendor_rebuild
-vendor_rebuild: bin/.submodules-initialized
+vendor_rebuild: bin/.submodules-initialized | fake-protobufs
 	$(GO_INSTALL) -v -mod=mod github.com/goware/modvendor
 	./build/vendor_rebuild.sh
 
@@ -367,6 +367,7 @@ CLUSTER_UI_JS := pkg/ui/cluster-ui/dist/main.js
 
 .SECONDARY: $(CLUSTER_UI_JS)
 $(CLUSTER_UI_JS): $(shell find pkg/ui/workspaces/cluster-ui/src -type f | sed 's/ /\\ /g') pkg/ui/yarn.installed pkg/ui/workspaces/db-console/src/js/protos.d.ts | bin/.submodules-initialized
+	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn install --ignore-optional --offline
 	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn build
 
 .SECONDARY: pkg/ui/yarn.installed
@@ -378,7 +379,7 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-in
 	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
 	touch $@
 
-vendor/modules.txt: | bin/.submodules-initialized
+vendor/modules.txt: | bin/.submodules-initialized fake-protobufs
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
@@ -793,6 +794,7 @@ SQLPARSER_TARGETS = \
 	pkg/sql/lexbase/reserved_keywords.go
 
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources
+$(PROTOBUF_TARGETS): fake-protobufs
 
 SWAGGER_TARGETS :=
   #docs/generated/swagger/spec.json
@@ -1248,6 +1250,12 @@ protobuf: $(PROTOBUF_TARGETS)
 protobuf: ## Regenerate generated code for protobuf definitions.
 	$(info $(yellow)[WARNING] Use `dev generate protobuf` instead.$(term-reset))
 
+.PHONY: fake-protobufs
+fake-protobufs:
+	set -e; for dir in $(sort $(dir $(GO_PROTOS))); do \
+	    echo "package $$(basename $$dir)" > $$dir/empty.pb.go; \
+	done
+
 # pre-push locally runs most of the checks CI will run. Notably, it doesn't run
 # the acceptance tests.
 .PHONY: pre-push
@@ -1329,6 +1337,7 @@ PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/api/annotations.proto=google.golang.o
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Metcd/raft/v3/raftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb,
 
 GW_SERVER_PROTOS := ./pkg/server/serverpb/admin.proto ./pkg/server/serverpb/status.proto ./pkg/server/serverpb/authentication.proto
 GW_TS_PROTOS := ./pkg/ts/tspb/timeseries.proto
@@ -1852,7 +1861,7 @@ $(has-build-info): override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=$(TARGET_TRIPLE)" \
 	$(if $(BUILDCHANNEL),-X "github.com/cockroachdb/cockroach/pkg/build.channel=$(BUILDCHANNEL)")
 
-$(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
+$(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized fake-protobufs
 	@echo go install -v $*
 	$(PREREQS) $(if $($*-package),$($*-package),./pkg/cmd/$*) > $@.d.tmp
 	mv -f $@.d.tmp $@.d

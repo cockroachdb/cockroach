@@ -25,6 +25,9 @@
   "exclude": [
     "node_modules",
     "dist",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/*.stories.tsx",
     "**/*.test.*",
     ".jest"
   ]
