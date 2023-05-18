@@ -16,6 +16,7 @@ import (
 	"math"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -987,8 +988,8 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	tc.StopServer(1)
 	tc.StopServer(2)
 
-	wait := func(duration int64) {
-		manualClock.Increment(duration)
+	wait := func(duration time.Duration) {
+		manualClock.Increment(duration.Nanoseconds())
 		// Gossip and heartbeat all the live stores, we do this manually otherwise the
 		// allocator on server 0 may see everyone as temporarily dead due to the
 		// clock move above.
@@ -999,7 +1000,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	}
 	// We need to wait until 2 and 3 are considered to be dead.
 	timeUntilStoreDead := storepool.TimeUntilStoreDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
-	wait(timeUntilStoreDead.Nanoseconds())
+	wait(timeUntilStoreDead)
 
 	checkDead := func(store *kvserver.Store, storeIdx int) error {
 		if dead, timetoDie, err := store.GetStoreConfig().StorePool.IsDead(
@@ -1007,11 +1008,11 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			// Sometimes a gossip update arrives right after server shutdown and
 			// after we manually moved the time, so move it again.
 			if err == nil {
-				wait(timetoDie.Nanoseconds())
+				wait(timetoDie)
 			}
 			// NB: errors.Wrapf(nil, ...) returns nil.
 			// nolint:errwrap
-			return errors.Errorf("expected server 2 to be dead, instead err=%v, dead=%v", err, dead)
+			return errors.Errorf("expected server %d to be dead, instead err=%v, dead=%v", storeIdx, err, dead)
 		}
 		return nil
 	}
@@ -1034,7 +1035,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	_, _, enqueueError := tc.GetFirstStoreFromServer(t, 0).
 		Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 
-	require.NoError(t, enqueueError)
+	require.NoError(t, enqueueError, "failed to enqueue replica for replication")
 
 	var newLeaseHolder roachpb.ReplicationTarget
 	testutils.SucceedsSoon(t, func() error {
@@ -1058,8 +1059,28 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		require.NotEqual(t, "sf", dc)
 	}
 	history := repl.GetLeaseHistory()
-	// make sure we see the eu node as a lease holder in the second to last position.
-	require.Equal(t, tc.Target(0).NodeID, history[len(history)-2].Replica.NodeID)
+	// Make sure we see the eu node as a lease holder in the second to last
+	// leaseholder change.
+	// Since we can have expiration and epoch based leases at the tail of the
+	// history, we need to ignore them together if they originate from the same
+	// leaseholder.
+	nextNodeID := history[len(history)-1].Replica.NodeID
+	lastMove := len(history) - 2
+	for ; lastMove >= 0; lastMove-- {
+		if history[lastMove].Replica.NodeID != nextNodeID {
+			break
+		}
+	}
+	lastMove++
+	var leasesMsg []string
+	for _, h := range history {
+		leasesMsg = append(leasesMsg, h.String())
+	}
+	leaseHistory := strings.Join(leasesMsg, ", ")
+	require.Greater(t, lastMove, 0,
+		"must have at least one leaseholder change in history (lease history: %s)", leaseHistory)
+	require.Equal(t, tc.Target(0).NodeID, history[lastMove-1].Replica.NodeID,
+		"node id prior to last lease move (lease history: %s)", leaseHistory)
 }
 
 // This test verifies that when a node starts flapping its liveness, all leases
