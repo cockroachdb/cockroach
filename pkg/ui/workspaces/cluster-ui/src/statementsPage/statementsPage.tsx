@@ -427,7 +427,9 @@ export class StatementsPage extends React.Component<
       ...prevState,
       pagination: { ...pagination, current },
     }));
-    this.props.onPageChanged(current);
+    if (this.props.onPageChanged) {
+      this.props.onPageChanged(current);
+    }
   };
 
   onSubmitSearchField = (search: string): void => {
