@@ -19,7 +19,14 @@ type avgResponseEstimator struct {
 	// responseBytes tracks the total footprint of all responses that the
 	// Streamer has already received.
 	responseBytes float64
-	numResponses  float64
+	// numRequestsStarted tracks the number of single-range requests that we
+	// have started evaluating (regardless of the fact whether the evaluation is
+	// finished or needs to be resumed). Any request included into a
+	// BatchRequest can be "not started" if the BatchRequest's limits were
+	// exhausted before the request's turn came. If the originally-enqueued
+	// request spanned multiple ranges, then each single-range request is
+	// tracked separately here.
+	numRequestsStarted float64
 }
 
 const (
@@ -43,12 +50,29 @@ func (e *avgResponseEstimator) init(sv *settings.Values) {
 	e.avgResponseSizeMultiple = streamerAvgResponseSizeMultiple.Get(sv)
 }
 
-// getAvgResponseSize returns the current estimate of a footprint of a single
-// response.
+// getAvgResponseSize returns the current estimate of a footprint of a response
+// to one single-range request.
+//
+// This means that if a ScanRequest spans multiple ranges, then this estimate
+// should be used for the TargetBytes parameter for each truncated single-range
+// ScanRequest independently (rather than the whole multi-range original one).
+// Also, it means that if one single-range ScanRequest needs to be paginated
+// across BatchRequests (i.e. there will be "resume" ScanRequests), then the
+// estimate includes the footprint of all those "resume" responses as well as of
+// the first "non-resume" response.
+// TODO(yuzefovich): we might want to have a separate estimate for Gets and
+// Scans.
 func (e *avgResponseEstimator) getAvgResponseSize() int64 {
-	if e.numResponses == 0 {
+	if e.numRequestsStarted == 0 {
 		return initialAvgResponseSize
 	}
+	// We're estimating the response size as the average over the received
+	// responses. Importantly, we divide the total responses' footprint by the
+	// number of "started" requests. This allows us to handle partial
+	// ScanResponses that need to be resumed across BatchRequests without
+	// double-counting them in the denominator of the average computation (which
+	// would lead to artificially low estimate, see #103586 for an example).
+	//
 	// Note that we're multiplying the average by a response size multiple for a
 	// couple of reasons:
 	//
@@ -77,13 +101,14 @@ func (e *avgResponseEstimator) getAvgResponseSize() int64 {
 	// responses, but it is likely to be suboptimal because it would be unfair
 	// to "large" batches that come in late (i.e. it would not be reactive
 	// enough). Consider using another function here.
-	return int64(e.responseBytes / e.numResponses * e.avgResponseSizeMultiple)
+	return int64(e.responseBytes / e.numRequestsStarted * e.avgResponseSizeMultiple)
 }
 
-// update updates the actual information of the estimator based on numResponses
-// responses that took up responseBytes bytes in footprint and correspond to a
-// single BatchResponse.
-func (e *avgResponseEstimator) update(responseBytes int64, numResponses int64) {
+// update updates the actual information of the estimator based on responses
+// that took up responseBytes bytes in footprint and correspond to a single
+// BatchResponse. numRequestsStarted indicates the number of requests that were
+// just started in that BatchResponse.
+func (e *avgResponseEstimator) update(responseBytes int64, numRequestsStarted int) {
 	e.responseBytes += float64(responseBytes)
-	e.numResponses += float64(numResponses)
+	e.numRequestsStarted += float64(numRequestsStarted)
 }
