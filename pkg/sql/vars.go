@@ -1492,9 +1492,6 @@ var varGen = map[string]sessionVar{
 	`transaction_isolation`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			level := kvTxnIsolationLevelToTree(evalCtx.Txn.IsoLevel())
-			if level == tree.UnspecifiedIsolation {
-				level = tree.SerializableIsolation
-			}
 			return strings.ToLower(level.String()), nil
 		},
 		RuntimeSet: func(ctx context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
