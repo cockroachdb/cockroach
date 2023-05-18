@@ -304,15 +304,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	tenantCapabilitiesTestingKnobs, _ := cfg.TestingKnobs.TenantCapabilitiesTestingKnobs.(*tenantcapabilities.TestingKnobs)
 	authorizer := tenantcapabilitiesauthorizer.New(cfg.Settings, tenantCapabilitiesTestingKnobs)
 	rpcCtxOpts := rpc.ContextOptions{
-		TenantID:         roachpb.SystemTenantID,
-		UseNodeAuth:      true,
-		NodeID:           cfg.IDContainer,
-		StorageClusterID: cfg.ClusterIDContainer,
-		Config:           cfg.Config,
-		Clock:            clock.WallClock(),
-		ToleratedOffset:  clock.ToleratedOffset(),
-		Stopper:          stopper,
-		Settings:         cfg.Settings,
+		TenantID:               roachpb.SystemTenantID,
+		UseNodeAuth:            true,
+		NodeID:                 cfg.IDContainer,
+		StorageClusterID:       cfg.ClusterIDContainer,
+		Config:                 cfg.Config,
+		Clock:                  clock.WallClock(),
+		ToleratedOffset:        clock.ToleratedOffset(),
+		FatalOnOffsetViolation: true,
+		Stopper:                stopper,
+		Settings:               cfg.Settings,
 		OnOutgoingPing: func(ctx context.Context, req *rpc.PingRequest) error {
 			// Outgoing ping will block requests with codes.FailedPrecondition to
 			// notify caller that this replica is decommissioned but others could
@@ -344,11 +345,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		return rpcContext.VerifyDialback(ctx, req, resp, cfg.Locality)
 	}
 
-	rpcContext.HeartbeatCB = func() {
-		if err := rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {
-			log.Ops.Fatalf(ctx, "%v", err)
-		}
-	}
 	registry.AddMetricStruct(rpcContext.Metrics())
 
 	// Attempt to load TLS configs right away, failures are permanent.
