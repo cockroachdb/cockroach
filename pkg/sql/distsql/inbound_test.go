@@ -58,7 +58,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	st := cluster.MakeTestingClusterSettings()
-	mt := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
+	mt := execinfra.MakeDistSQLMetrics()
 	srv := NewServer(
 		ctx,
 		execinfra.ServerConfig{

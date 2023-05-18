@@ -10,10 +10,7 @@
 
 package metric
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 func (r *Registry) findMetricByName(name string) Iterable {
 	r.Lock()
@@ -79,7 +76,6 @@ func TestRegistry(t *testing.T) {
 	r.AddMetric(NewHistogram(HistogramOptions{
 		Mode:     HistogramModePrometheus,
 		Metadata: Metadata{Name: "top.histogram"},
-		Duration: time.Minute,
 		Buckets:  Count1KBuckets,
 	}))
 
@@ -111,7 +107,6 @@ func TestRegistry(t *testing.T) {
 		StructHistogram: NewHistogram(HistogramOptions{
 			Mode:     HistogramModePrometheus,
 			Metadata: Metadata{Name: "struct.histogram"},
-			Duration: time.Minute,
 			Buckets:  Count1KBuckets,
 		}),
 		NestedStructGauge: NestedStruct{
@@ -135,7 +130,6 @@ func TestRegistry(t *testing.T) {
 		privateStructHistogram: NewHistogram(HistogramOptions{
 			Mode:     HistogramModePrometheus,
 			Metadata: Metadata{Name: "private.struct.histogram"},
-			Duration: time.Minute,
 			Buckets:  Count1KBuckets,
 		}),
 		privateNestedStructGauge: NestedStruct{

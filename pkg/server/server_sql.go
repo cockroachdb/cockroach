@@ -403,9 +403,8 @@ type monitorAndMetrics struct {
 }
 
 type monitorAndMetricsOptions struct {
-	memoryPoolSize          int64
-	histogramWindowInterval time.Duration
-	settings                *cluster.Settings
+	memoryPoolSize int64
+	settings       *cluster.Settings
 }
 
 var vmoduleSetting = settings.RegisterStringSetting(
@@ -418,7 +417,7 @@ var vmoduleSetting = settings.RegisterStringSetting(
 // newRootSQLMemoryMonitor returns a started BytesMonitor and corresponding
 // metrics.
 func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
-	rootSQLMetrics := sql.MakeBaseMemMetrics("root", opts.histogramWindowInterval)
+	rootSQLMetrics := sql.MakeBaseMemMetrics("root")
 	// We do not set memory monitors or a noteworthy limit because the children of
 	// this monitor will be setting their own noteworthy limits.
 	rootSQLMemoryMonitor := mon.NewMonitor(
@@ -630,7 +629,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.nodeIDContainer,
 			cfg.sqlLivenessProvider,
 			cfg.Settings,
-			cfg.HistogramWindowInterval(),
 			func(ctx context.Context, opName string, user username.SQLUsername) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment
 				// in sql/jobs/registry.go on planHookMaker.
@@ -667,7 +665,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	cfg.registry.AddMetricStruct(rootSQLMetrics)
 
 	// Set up internal memory metrics for use by internal SQL executors.
-	internalMemMetrics := sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
+	internalMemMetrics := sql.MakeMemMetrics("internal")
 	cfg.registry.AddMetricStruct(internalMemMetrics)
 
 	rootSQLMemoryMonitor := cfg.monitorAndMetrics.rootSQLMemoryMonitor
@@ -676,7 +674,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// operations (IMPORT, index backfill). It is itself a child of the
 	// ParentMemoryMonitor.
 	bulkMemoryMonitor := mon.NewMonitorInheritWithLimit("bulk-mon", 0 /* limit */, rootSQLMemoryMonitor)
-	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
+	bulkMetrics := bulk.MakeBulkMetrics()
 	cfg.registry.AddMetricStruct(bulkMetrics)
 	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
 	bulkMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
@@ -718,7 +716,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		}
 	}))
 
-	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
+	distSQLMetrics := execinfra.MakeDistSQLMetrics()
 	cfg.registry.AddMetricStruct(distSQLMetrics)
 	rowMetrics := sql.NewRowMetrics(false /* internal */)
 	cfg.registry.AddMetricStruct(rowMetrics)
@@ -970,7 +968,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SQLLiveness:               cfg.sqlLivenessProvider,
 		JobRegistry:               jobRegistry,
 		VirtualSchemas:            virtualSchemas,
-		HistogramWindowInterval:   cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:      cfg.distSender.RangeDescriptorCache(),
 		RoleMemberCache:           sql.NewMembershipCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
 		SessionInitCache:          sessioninit.NewCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
@@ -1123,7 +1120,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Set up internal memory metrics for use by internal SQL executors.
 	// Don't add them to the registry now because it will be added as part of pgServer metrics.
-	sqlMemMetrics := sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
+	sqlMemMetrics := sql.MakeMemMetrics("sql")
 
 	// Initialize the pgwire server which handles connections
 	// established via the pgPreServer.
@@ -1133,7 +1130,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.Settings,
 		sqlMemMetrics,
 		rootSQLMemoryMonitor,
-		cfg.HistogramWindowInterval(),
 		execCfg,
 	)
 

@@ -10,11 +10,7 @@
 
 package execinfra
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 // DistSQLMetrics contains pointers to the metrics for monitoring DistSQL
 // processing.
@@ -125,7 +121,7 @@ var (
 const log10int64times1000 = 19 * 1000
 
 // MakeDistSQLMetrics instantiates the metrics holder for DistSQL monitoring.
-func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
+func MakeDistSQLMetrics() DistSQLMetrics {
 	return DistSQLMetrics{
 		QueriesActive:         metric.NewGauge(metaQueriesActive),
 		QueriesTotal:          metric.NewCounter(metaQueriesTotal),
@@ -134,7 +130,6 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		FlowsTotal:            metric.NewCounter(metaFlowsTotal),
 		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaMemMaxBytes,
-			Duration: histogramWindow,
 			MaxVal:   log10int64times1000,
 			SigFigs:  3,
 			Buckets:  metric.MemoryUsage64MBBuckets,
@@ -144,7 +139,6 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		CurDiskBytesCount: metric.NewGauge(metaDiskCurBytes),
 		MaxDiskBytesHist: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaDiskMaxBytes,
-			Duration: histogramWindow,
 			MaxVal:   log10int64times1000,
 			SigFigs:  3,
 			Buckets:  metric.MemoryUsage64MBBuckets}),

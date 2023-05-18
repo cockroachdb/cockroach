@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -70,7 +69,6 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 			RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:     metric.HistogramModePrometheus,
 				Metadata: metric.Metadata{},
-				Duration: 10 * time.Second,
 				Buckets:  metric.IOLatencyBuckets,
 			}),
 		},

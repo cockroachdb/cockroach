@@ -83,7 +83,7 @@ func (m *mockLockedSender) ChainMockSend(
 // which case the pipeliner will panic if it ever needs to condense lock spans.
 func makeMockTxnPipeliner(iter condensableSpanSetRangeIterator) (txnPipeliner, *mockLockedSender) {
 	mockSender := &mockLockedSender{}
-	metrics := MakeTxnMetrics(time.Hour)
+	metrics := MakeTxnMetrics()
 	everyN := log.Every(time.Hour)
 	return txnPipeliner{
 		st:                     cluster.MakeTestingClusterSettings(),

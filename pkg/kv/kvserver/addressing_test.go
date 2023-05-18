@@ -17,7 +17,6 @@ import (
 	"reflect"
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -143,7 +142,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 				Settings:   store.cfg.Settings,
 				Clock:      store.cfg.Clock,
 				Stopper:    stopper,
-				Metrics:    kvcoord.MakeTxnMetrics(time.Second),
+				Metrics:    kvcoord.MakeTxnMetrics(),
 			},
 			store.TestSender(),
 		)

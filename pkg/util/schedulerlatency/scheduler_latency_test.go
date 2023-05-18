@@ -86,13 +86,14 @@ func TestSchedulerLatencySampler(t *testing.T) {
 
 		var err error
 		reg.Each(func(name string, mtr interface{}) {
-			wh := mtr.(metric.WindowedHistogram)
-			avg := wh.MeanWindowed()
+			// TODO(aaditya): verify that this is correct
+			wh := mtr.(metric.IHistogram)
+			avg := wh.Mean()
 			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 				avg = 0
 			}
 
-			if wh.ValueAtQuantileWindowed(99) == 0 || avg == 0 {
+			if metric.ValueAtQuantile(wh.ToPrometheusMetric().Histogram, 99) == 0 || avg == 0 {
 				err = fmt.Errorf("expected non-zero p99 scheduling latency metrics")
 			}
 		})
@@ -172,7 +173,6 @@ func TestComputeSchedulerPercentileAgainstPrometheus(t *testing.T) {
 		promhist := metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePrometheus,
 			Metadata: metric.Metadata{},
-			Duration: time.Hour,
 			Buckets:  hist.Buckets,
 		})
 		for i := 0; i < len(hist.Counts); i++ {
@@ -184,12 +184,12 @@ func TestComputeSchedulerPercentileAgainstPrometheus(t *testing.T) {
 			}
 		}
 
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(100), percentile(&hist, 1.00), 1) // pmax
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(0), percentile(&hist, 0.00), 1)   // pmin
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(50), percentile(&hist, 0.50), 1)  // p50
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(75), percentile(&hist, 0.75), 1)  // p75
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(90), percentile(&hist, 0.90), 1)  // p90
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(99), percentile(&hist, 0.99), 1)  // p99
+		require.InDelta(t, metric.ValueAtQuantile(promhist.ToPrometheusMetric().Histogram, 100), percentile(&hist, 1.00), 1) // pmax
+		require.InDelta(t, metric.ValueAtQuantile(promhist.ToPrometheusMetric().Histogram, 0), percentile(&hist, 0.00), 1)   // pmin
+		require.InDelta(t, metric.ValueAtQuantile(promhist.ToPrometheusMetric().Histogram, 50), percentile(&hist, 0.50), 1)  // p50
+		require.InDelta(t, metric.ValueAtQuantile(promhist.ToPrometheusMetric().Histogram, 75), percentile(&hist, 0.75), 1)  // p75
+		require.InDelta(t, metric.ValueAtQuantile(promhist.ToPrometheusMetric().Histogram, 90), percentile(&hist, 0.90), 1)  // p90
+		require.InDelta(t, metric.ValueAtQuantile(promhist.ToPrometheusMetric().Histogram, 99), percentile(&hist, 0.99), 1)  // p99
 	}
 }
 

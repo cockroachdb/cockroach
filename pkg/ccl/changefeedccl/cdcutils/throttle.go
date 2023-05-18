@@ -147,7 +147,7 @@ type Metrics struct {
 }
 
 // MakeMetrics constructs a Metrics struct with the provided histogram window.
-func MakeMetrics(histogramWindow time.Duration) Metrics {
+func MakeMetrics() Metrics {
 	makeMetric := func(n string) metric.Metadata {
 		return metric.Metadata{
 			Name:        fmt.Sprintf("changefeed.%s.messages_pushback_nanos", n),

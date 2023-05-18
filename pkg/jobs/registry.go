@@ -212,7 +212,6 @@ func MakeRegistry(
 	nodeID *base.SQLIDContainer,
 	sqlInstance sqlliveness.Instance,
 	settings *cluster.Settings,
-	histogramWindowInterval time.Duration,
 	execCtxFn jobExecCtxMaker,
 	preventAdoptionFile string,
 	td *tracedumper.TraceDumper,
@@ -247,7 +246,7 @@ func MakeRegistry(
 	}
 	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
 	r.mu.waiting = make(map[jobspb.JobID]map[*waitingSet]struct{})
-	r.metrics.init(histogramWindowInterval)
+	r.metrics.init()
 	return r
 }
 

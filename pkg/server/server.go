@@ -445,7 +445,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	distSender := kvcoord.NewDistSender(distSenderCfg)
 	registry.AddMetricStruct(distSender.Metrics())
 
-	txnMetrics := kvcoord.MakeTxnMetrics(cfg.HistogramWindowInterval())
+	txnMetrics := kvcoord.MakeTxnMetrics()
 	registry.AddMetricStruct(txnMetrics)
 	txnCoordSenderFactoryCfg := kvcoord.TxnCoordSenderFactoryConfig{
 		AmbientCtx:   cfg.AmbientCtx,
@@ -493,15 +493,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nodes: make(map[roachpb.NodeID]interface{}),
 	}
 	nodeLiveness := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
-		AmbientCtx:              cfg.AmbientCtx,
-		Stopper:                 stopper,
-		Clock:                   clock,
-		DB:                      db,
-		Gossip:                  g,
-		LivenessThreshold:       nlActive,
-		RenewalDuration:         nlRenewal,
-		Settings:                st,
-		HistogramWindowInterval: cfg.HistogramWindowInterval(),
+		AmbientCtx:        cfg.AmbientCtx,
+		Stopper:           stopper,
+		Clock:             clock,
+		DB:                db,
+		Gossip:            g,
+		LivenessThreshold: nlActive,
+		RenewalDuration:   nlRenewal,
+		Settings:          st,
 		// When we learn that a node is decommissioning, we want to proactively
 		// enqueue the ranges we have that also have a replica on the
 		// decommissioning node.
@@ -581,9 +580,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Break a circular dependency: we need the rootSQLMemoryMonitor to construct
 	// the KV memory monitor for the StoreConfig.
 	sqlMonitorAndMetrics := newRootSQLMemoryMonitor(monitorAndMetricsOptions{
-		memoryPoolSize:          cfg.MemoryPoolSize,
-		histogramWindowInterval: cfg.HistogramWindowInterval(),
-		settings:                cfg.Settings,
+		memoryPoolSize: cfg.MemoryPoolSize,
+		settings:       cfg.Settings,
 	})
 	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
@@ -593,7 +591,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		serverrangefeed.CreateBudgetFactoryConfig(
 			kvMemoryMonitor,
 			cfg.MemoryPoolSize,
-			cfg.HistogramWindowInterval(),
 			func(limit int64) int64 {
 				if !serverrangefeed.RangefeedBudgetsEnabled.Get(&st.SV) {
 					return 0
@@ -758,7 +755,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ScanInterval:                 cfg.ScanInterval,
 		ScanMinIdleTime:              cfg.ScanMinIdleTime,
 		ScanMaxIdleTime:              cfg.ScanMaxIdleTime,
-		HistogramWindowInterval:      cfg.HistogramWindowInterval(),
 		StorePool:                    storePool,
 		LogRangeAndNodeEvents:        cfg.EventLogEnabled,
 		RangeDescriptorCache:         distSender.RangeDescriptorCache(),
@@ -937,10 +933,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Instantiate the KV prober.
 	kvProber := kvprober.NewProber(kvprober.Opts{
-		Tracer:                  cfg.AmbientCtx.Tracer,
-		DB:                      db,
-		Settings:                st,
-		HistogramWindowInterval: cfg.HistogramWindowInterval(),
+		Tracer:   cfg.AmbientCtx.Tracer,
+		DB:       db,
+		Settings: st,
 	})
 	registry.AddMetricStruct(kvProber.Metrics())
 
@@ -1004,7 +999,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.Config,
 		cfg.Settings,
 		rpcContext.GetServerTLSConfig,
-		cfg.HistogramWindowInterval(),
 		sqlMonitorAndMetrics.rootSQLMemoryMonitor,
 		true, /* acceptTenantName */
 	)

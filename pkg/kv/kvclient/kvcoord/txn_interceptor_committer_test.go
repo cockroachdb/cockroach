@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
@@ -28,7 +27,7 @@ import (
 
 func makeMockTxnCommitter() (txnCommitter, *mockLockedSender) {
 	mockSender := &mockLockedSender{}
-	metrics := MakeTxnMetrics(metric.TestSampleInterval)
+	metrics := MakeTxnMetrics()
 	return txnCommitter{
 		st:      cluster.MakeTestingClusterSettings(),
 		stopper: stop.NewStopper(),

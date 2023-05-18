@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -172,7 +171,7 @@ func TestConfluentSchemaRegistryRetryMetrics(t *testing.T) {
 	regServer := cdctest.StartErrorTestSchemaRegistry(409)
 	defer regServer.Close()
 
-	sliMetrics, err := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics).AggMetrics.getOrCreateScope("")
+	sliMetrics, err := MakeMetrics().(*Metrics).AggMetrics.getOrCreateScope("")
 	require.NoError(t, err)
 
 	t.Run("ping works when all is well", func(t *testing.T) {

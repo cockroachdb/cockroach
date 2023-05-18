@@ -49,7 +49,7 @@ func TestHeartbeatReply(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour),
 		clusterID:          &base.ClusterIDContainer{},
 		version:            st.Version,
 	}
@@ -116,13 +116,13 @@ func TestManualHeartbeat(t *testing.T) {
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
 		maxOffset:          maxOffset,
-		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour),
 		ready:              make(chan error, 1),
 		version:            st.Version,
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour),
 		clusterID:          &base.ClusterIDContainer{},
 		version:            st.Version,
 	}
@@ -174,7 +174,7 @@ func TestClusterIDCompare(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour),
 		clusterID:          &base.ClusterIDContainer{},
 		version:            st.Version,
 	}
@@ -218,7 +218,7 @@ func TestNodeIDCompare(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour),
 		clusterID:          &base.ClusterIDContainer{},
 		nodeID:             &base.NodeIDContainer{},
 		version:            st.Version,
@@ -256,7 +256,7 @@ func TestTenantVersionCheck(t *testing.T) {
 		true /* initialize */)
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour),
 		clusterID:          &base.ClusterIDContainer{},
 		version:            st.Version,
 	}

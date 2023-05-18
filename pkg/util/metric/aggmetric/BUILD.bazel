@@ -29,7 +29,6 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         ":aggmetric",
-        "//pkg/base",
         "//pkg/roachpb",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",

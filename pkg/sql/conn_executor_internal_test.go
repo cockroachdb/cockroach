@@ -282,7 +282,7 @@ func startConnExecutor(
 	db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
 	st := cluster.MakeTestingClusterSettings()
 	nodeID := base.TestingIDContainer
-	distSQLMetrics := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
+	distSQLMetrics := execinfra.MakeDistSQLMetrics()
 	gw := gossip.MakeOptionalGossip(nil)
 	tempEngine, tempFS, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
@@ -341,7 +341,6 @@ func startConnExecutor(
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},
 		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, st),
-		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
 		CollectionFactory:       descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec),
 	}
 
@@ -355,7 +354,7 @@ func startConnExecutor(
 		},
 		w: resultChannel,
 	}
-	sqlMetrics := MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
+	sqlMetrics := MakeMemMetrics("test" /* endpoint */)
 
 	onDefaultIntSizeChange := func(int32) {}
 	conn, err := s.SetupConn(ctx, SessionArgs{}, buf, cc, sqlMetrics, onDefaultIntSizeChange)

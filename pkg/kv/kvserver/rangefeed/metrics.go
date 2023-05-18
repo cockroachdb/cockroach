@@ -84,7 +84,7 @@ type FeedBudgetPoolMetrics struct {
 func (FeedBudgetPoolMetrics) MetricStruct() {}
 
 // NewFeedBudgetMetrics creates new metrics for RangeFeed budgets.
-func NewFeedBudgetMetrics(histogramWindow time.Duration) *FeedBudgetPoolMetrics {
+func NewFeedBudgetMetrics() *FeedBudgetPoolMetrics {
 	makeMemMetricMetadata := func(name, help string) metric.Metadata {
 		return metric.Metadata{
 			Name:        "kv.rangefeed.mem_" + name,

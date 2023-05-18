@@ -36,7 +36,8 @@ type Registry struct {
 	// computedLabels get filled in by GetLabels().
 	// We hold onto the slice to avoid a re-allocation every
 	// time the metrics get scraped.
-	computedLabels []*prometheusgo.LabelPair
+	computedLabels        []*prometheusgo.LabelPair
+	prevRecordedHistogram map[string]prometheusgo.Histogram
 }
 
 type labelPair struct {
@@ -75,6 +76,25 @@ func (r *Registry) GetLabels() []*prometheusgo.LabelPair {
 		r.computedLabels[i].Value = proto.String(fmt.Sprint(l.value))
 	}
 	return r.computedLabels
+}
+
+// ComputeHistogramDelta calculates the difference between the cached histogram
+// and the current histogram. It then updates, the cache with the current
+// histogram.
+func (r *Registry) ComputeHistogramDelta(
+	name string, cur *prometheusgo.Histogram, updateCache bool,
+) *prometheusgo.Histogram {
+	r.Lock()
+	defer r.Unlock()
+
+	delta := *cur
+	if prev, ok := r.prevRecordedHistogram[name]; ok {
+		SubtractPrometheusHistograms(&delta, &prev)
+	}
+	if updateCache {
+		r.prevRecordedHistogram[name] = *cur
+	}
+	return &delta
 }
 
 // AddMetric adds the passed-in metric to the registry.

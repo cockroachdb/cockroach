@@ -32,7 +32,7 @@ func TestUpdateOffset(t *testing.T) {
 
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	maxOffset := time.Nanosecond
-	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour, 0)
+	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour)
 
 	const key = 2
 	const latency = 10 * time.Millisecond
@@ -98,7 +98,7 @@ func TestVerifyClockOffset(t *testing.T) {
 
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	maxOffset := 50 * time.Nanosecond
-	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour, 0)
+	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour)
 
 	for idx, tc := range []struct {
 		offsets       []RemoteOffset
@@ -164,7 +164,7 @@ func TestClockOffsetMetrics(t *testing.T) {
 
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	maxOffset := 20 * time.Nanosecond
-	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour, 0)
+	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour)
 	monitor.mu.offsets = map[roachpb.NodeID]RemoteOffset{
 		0: {
 			Offset:      13,
@@ -191,7 +191,7 @@ func TestLatencies(t *testing.T) {
 
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	maxOffset := time.Nanosecond
-	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour, 0)
+	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour)
 
 	// All test cases have to have at least 11 measurement values in order for
 	// the exponentially-weighted moving average to work properly. See the

@@ -186,12 +186,11 @@ type nodeMetrics struct {
 	MethodCounts [kvpb.NumMethods]*metric.Counter
 }
 
-func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
+func makeNodeMetrics(reg *metric.Registry) nodeMetrics {
 	nm := nodeMetrics{
 		Latency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaExecLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		Success:    metric.NewCounter(metaExecSuccess),
@@ -421,7 +420,7 @@ func NewNode(
 		storeCfg:              cfg,
 		stopper:               stopper,
 		recorder:              recorder,
-		metrics:               makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		metrics:               makeNodeMetrics(reg),
 		stores:                stores,
 		txnMetrics:            txnMetrics,
 		execCfg:               nil, // filled in later by InitLogger()

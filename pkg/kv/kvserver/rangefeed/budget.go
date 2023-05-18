@@ -14,7 +14,6 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -284,12 +283,11 @@ type BudgetFactory struct {
 // decouple derived parameter calculation from the function that creates
 // factories so that it could be tested independently.
 type BudgetFactoryConfig struct {
-	rootMon                 *mon.BytesMonitor
-	provisionalFeedLimit    int64
-	adjustLimit             func(int64) int64
-	totalRangeReedBudget    int64
-	histogramWindowInterval time.Duration
-	settings                *settings.Values
+	rootMon              *mon.BytesMonitor
+	provisionalFeedLimit int64
+	adjustLimit          func(int64) int64
+	totalRangeReedBudget int64
+	settings             *settings.Values
 }
 
 func (b BudgetFactoryConfig) empty() bool {
@@ -302,7 +300,6 @@ func (b BudgetFactoryConfig) empty() bool {
 func CreateBudgetFactoryConfig(
 	rootMon *mon.BytesMonitor,
 	memoryPoolSize int64,
-	histogramWindowInterval time.Duration,
 	adjustLimit func(int64) int64,
 	settings *settings.Values,
 ) BudgetFactoryConfig {
@@ -312,12 +309,11 @@ func CreateBudgetFactoryConfig(
 	totalRangeReedBudget := int64(float64(memoryPoolSize) * totalSharedFeedBudgetFraction)
 	feedSizeLimit := int64(float64(totalRangeReedBudget) * maxFeedFraction)
 	return BudgetFactoryConfig{
-		rootMon:                 rootMon,
-		provisionalFeedLimit:    feedSizeLimit,
-		adjustLimit:             adjustLimit,
-		totalRangeReedBudget:    totalRangeReedBudget,
-		histogramWindowInterval: histogramWindowInterval,
-		settings:                settings,
+		rootMon:              rootMon,
+		provisionalFeedLimit: feedSizeLimit,
+		adjustLimit:          adjustLimit,
+		totalRangeReedBudget: totalRangeReedBudget,
+		settings:             settings,
 	}
 }
 
@@ -327,7 +323,7 @@ func NewBudgetFactory(ctx context.Context, config BudgetFactoryConfig) *BudgetFa
 	if config.empty() {
 		return nil
 	}
-	metrics := NewFeedBudgetMetrics(config.histogramWindowInterval)
+	metrics := NewFeedBudgetMetrics()
 	systemRangeMonitor := mon.NewMonitorInheritWithLimit("rangefeed-system-monitor",
 		systemRangeFeedBudget, config.rootMon)
 	systemRangeMonitor.SetMetrics(metrics.SystemBytesCount, nil /* maxHist */)

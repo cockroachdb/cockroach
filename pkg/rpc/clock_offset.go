@@ -12,7 +12,6 @@ package rpc
 
 import (
 	"context"
-	"math"
 	"time"
 
 	"github.com/VividCortex/ewma"
@@ -119,10 +118,7 @@ func (r *RemoteClockMonitor) TestingResetLatencyInfos() {
 // toleratedOffset of 0 disables offset checking and metrics, but still records
 // latency metrics.
 func newRemoteClockMonitor(
-	clock hlc.WallClock,
-	toleratedOffset time.Duration,
-	offsetTTL time.Duration,
-	histogramWindowInterval time.Duration,
+	clock hlc.WallClock, toleratedOffset time.Duration, offsetTTL time.Duration,
 ) *RemoteClockMonitor {
 	r := RemoteClockMonitor{
 		clock:           clock,
@@ -132,16 +128,12 @@ func newRemoteClockMonitor(
 	r.mu.offsets = make(map[roachpb.NodeID]RemoteOffset)
 	r.mu.latencyInfos = make(map[roachpb.NodeID]*latencyInfo)
 	r.mu.connCount = make(map[roachpb.NodeID]uint)
-	if histogramWindowInterval == 0 {
-		histogramWindowInterval = time.Duration(math.MaxInt64)
-	}
 	r.metrics = RemoteClockMetrics{
 		ClockOffsetMeanNanos:   metric.NewGauge(metaClockOffsetMeanNanos),
 		ClockOffsetStdDevNanos: metric.NewGauge(metaClockOffsetStdDevNanos),
 		LatencyHistogramNanos: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaLatencyHistogramNanos,
-			Duration: histogramWindowInterval,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 	}

@@ -464,31 +464,26 @@ func makeMetrics(internal bool) Metrics {
 			DistSQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:     metric.HistogramModePreferHdrLatency,
 				Metadata: getMetricMeta(MetaDistSQLExecLatency, internal),
-				Duration: 6 * metricsSampleInterval,
 				Buckets:  metric.IOLatencyBuckets,
 			}),
 			SQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:     metric.HistogramModePreferHdrLatency,
 				Metadata: getMetricMeta(MetaSQLExecLatency, internal),
-				Duration: 6 * metricsSampleInterval,
 				Buckets:  metric.IOLatencyBuckets,
 			}),
 			DistSQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:     metric.HistogramModePreferHdrLatency,
 				Metadata: getMetricMeta(MetaDistSQLServiceLatency, internal),
-				Duration: 6 * metricsSampleInterval,
 				Buckets:  metric.IOLatencyBuckets,
 			}),
 			SQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:     metric.HistogramModePreferHdrLatency,
 				Metadata: getMetricMeta(MetaSQLServiceLatency, internal),
-				Duration: 6 * metricsSampleInterval,
 				Buckets:  metric.IOLatencyBuckets,
 			}),
 			SQLTxnLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:     metric.HistogramModePreferHdrLatency,
 				Metadata: getMetricMeta(MetaSQLTxnLatency, internal),
-				Duration: 6 * metricsSampleInterval,
 				Buckets:  metric.IOLatencyBuckets,
 			}),
 			SQLTxnsOpen:         metric.NewGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
@@ -516,7 +511,6 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 		StatsMetrics: StatsMetrics{
 			SQLStatsMemoryMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
 				Metadata: MetaSQLStatsMemMaxBytes,
-				Duration: cfg.HistogramWindowInterval,
 				MaxVal:   log10int64times1000,
 				SigFigs:  3,
 				Buckets:  metric.MemoryUsage64MBBuckets,
@@ -524,7 +518,6 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 			SQLStatsMemoryCurBytesCount: metric.NewGauge(MetaSQLStatsMemCurBytes),
 			ReportedSQLStatsMemoryMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
 				Metadata: MetaReportedSQLStatsMemMaxBytes,
-				Duration: cfg.HistogramWindowInterval,
 				MaxVal:   log10int64times1000,
 				SigFigs:  3,
 				Buckets:  metric.MemoryUsage64MBBuckets,
@@ -536,14 +529,12 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 			SQLStatsFlushDuration: metric.NewHistogram(metric.HistogramOptions{
 				Mode:     metric.HistogramModePreferHdrLatency,
 				Metadata: MetaSQLStatsFlushDuration,
-				Duration: 6 * metricsSampleInterval,
 				Buckets:  metric.IOLatencyBuckets,
 			}),
 			SQLStatsRemovedRows: metric.NewCounter(MetaSQLStatsRemovedRows),
 			SQLTxnStatsCollectionOverhead: metric.NewHistogram(metric.HistogramOptions{
 				Mode:     metric.HistogramModePreferHdrLatency,
 				Metadata: MetaSQLTxnStatsCollectionOverhead,
-				Duration: 6 * metricsSampleInterval,
 				Buckets:  metric.IOLatencyBuckets,
 			}),
 		},

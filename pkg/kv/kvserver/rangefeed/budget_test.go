@@ -192,7 +192,7 @@ func TestBudgetFactory(t *testing.T) {
 	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, s)
 	rootMon.Start(context.Background(), nil, mon.NewStandaloneBudget(10000000))
 	bf := NewBudgetFactory(context.Background(),
-		CreateBudgetFactoryConfig(rootMon, 10000, time.Second*5, budgetLowThresholdFn(10000), &s.SV))
+		CreateBudgetFactoryConfig(rootMon, 10000, budgetLowThresholdFn(10000), &s.SV))
 
 	// Verify system ranges use own budget.
 	bSys := bf.CreateBudget(keys.MustAddr(keys.Meta1Prefix))
@@ -216,7 +216,7 @@ func TestDisableBudget(t *testing.T) {
 	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, s)
 	rootMon.Start(context.Background(), nil, mon.NewStandaloneBudget(10000000))
 	bf := NewBudgetFactory(context.Background(),
-		CreateBudgetFactoryConfig(rootMon, 10000, time.Second*5, func(_ int64) int64 {
+		CreateBudgetFactoryConfig(rootMon, 10000, func(_ int64) int64 {
 			return 0
 		}, &s.SV))
 
@@ -233,7 +233,6 @@ func TestDisableBudgetOnTheFly(t *testing.T) {
 		CreateBudgetFactoryConfig(
 			m,
 			10000000,
-			time.Second*5,
 			func(l int64) int64 {
 				return l
 			},
@@ -268,7 +267,7 @@ func TestConfigFactory(t *testing.T) {
 	rootMon.Start(context.Background(), nil, mon.NewStandaloneBudget(10000000))
 
 	// Check provisionalFeedLimit is computed.
-	config := CreateBudgetFactoryConfig(rootMon, 100000, time.Second*5, budgetLowThresholdFn(10000),
+	config := CreateBudgetFactoryConfig(rootMon, 100000, budgetLowThresholdFn(10000),
 		&s.SV)
 	require.Less(t, config.provisionalFeedLimit, int64(100000),
 		"provisional range limit should be lower than whole memory pool")
@@ -277,7 +276,7 @@ func TestConfigFactory(t *testing.T) {
 	// Check if global disable switch works.
 	useBudgets = false
 	defer func() { useBudgets = true }()
-	config = CreateBudgetFactoryConfig(rootMon, 100000, time.Second*5, budgetLowThresholdFn(10000),
+	config = CreateBudgetFactoryConfig(rootMon, 100000, budgetLowThresholdFn(10000),
 		&s.SV)
 	require.True(t, config.empty(), "config not empty despite disabled factory")
 }
@@ -297,9 +296,8 @@ func TestBudgetLimits(t *testing.T) {
 			require.Equal(t, provisionalSize, size)
 			return adjustedSize
 		},
-		totalRangeReedBudget:    100000,
-		histogramWindowInterval: time.Second * 5,
-		settings:                &s.SV,
+		totalRangeReedBudget: 100000,
+		settings:             &s.SV,
 	})
 
 	userKey := roachpb.RKey(keys.ScratchRangeMin)
@@ -314,9 +312,8 @@ func TestBudgetLimits(t *testing.T) {
 		adjustLimit: func(int64) int64 {
 			return 0
 		},
-		totalRangeReedBudget:    100000,
-		histogramWindowInterval: time.Second * 5,
-		settings:                &s.SV,
+		totalRangeReedBudget: 100000,
+		settings:             &s.SV,
 	})
 	b = bf.CreateBudget(userKey)
 	require.Nil(t, b, "budget is disabled")

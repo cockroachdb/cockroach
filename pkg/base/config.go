@@ -106,21 +106,6 @@ const (
 // DefaultCertsDirectory is the default value for the cert directory flag.
 var DefaultCertsDirectory = os.ExpandEnv("${HOME}/.cockroach-certs")
 
-// DefaultHistogramWindowInterval returns the default rotation window for
-// histograms.
-func DefaultHistogramWindowInterval() time.Duration {
-	const defHWI = 6 * DefaultMetricsSampleInterval
-
-	// Rudimentary overflow detection; this can result if
-	// DefaultMetricsSampleInterval is set to an extremely large number, likely
-	// in the context of a test or an intentional attempt to disable metrics
-	// collection. Just return the default in this case.
-	if defHWI < DefaultMetricsSampleInterval {
-		return DefaultMetricsSampleInterval
-	}
-	return defHWI
-}
-
 var (
 	// NetworkTimeout is the timeout used for network operations that require a
 	// single network round trip. It is conservatively defined as one maximum
@@ -392,24 +377,6 @@ type Config struct {
 	// LocalityAddresses contains private IP addresses that can only be accessed
 	// in the corresponding locality.
 	LocalityAddresses []roachpb.LocalityAddress
-}
-
-// HistogramWindowInterval is used to determine the approximate length of time
-// that individual samples are retained in in-memory histograms. Currently,
-// it is set to the arbitrary length of six times the Metrics sample interval.
-//
-// The length of the window must be longer than the sampling interval due to
-// issue #12998, which was causing histograms to return zero values when sampled
-// because all samples had been evicted.
-//
-// Note that this is only intended to be a temporary fix for the above issue,
-// as our current handling of metric histograms have numerous additional
-// problems. These are tracked in github issue #7896, which has been given
-// a relatively high priority in light of recent confusion around histogram
-// metrics. For more information on the issues underlying our histogram system
-// and the proposed fixes, please see issue #7896.
-func (*Config) HistogramWindowInterval() time.Duration {
-	return DefaultHistogramWindowInterval()
 }
 
 // InitDefaults sets up the default values for a config.

@@ -508,14 +508,14 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 
 	eachRecordableValue(mr.mu.nodeRegistry, func(name string, val float64) {
 		nodeStat.Metrics[name] = val
-	})
+	}, false)
 
 	// Generate status summaries for stores.
 	for storeID, r := range mr.mu.storeRegistries {
 		storeMetrics := make(map[string]float64, lastStoreMetricCount)
 		eachRecordableValue(r, func(name string, val float64) {
 			storeMetrics[name] = val
-		})
+		}, false)
 
 		// Gather descriptor from store.
 		descriptor, err := mr.mu.stores[storeID].Descriptor(ctx, false /* useCached */)
@@ -606,24 +606,32 @@ type registryRecorder struct {
 	timestampNanos int64
 }
 
-func extractValue(name string, mtr interface{}, fn func(string, float64)) error {
+func extractValue(
+	reg *metric.Registry, name string, mtr interface{}, fn func(string, float64), tsdb bool,
+) error {
 	switch mtr := mtr.(type) {
-	case metric.WindowedHistogram:
-		// Use cumulative stats here
-		count, sum := mtr.Total()
-		fn(name+"-count", float64(count))
-		fn(name+"-sum", sum)
-		// Use windowed stats for avg and quantiles
-		avg := mtr.MeanWindowed()
+	case metric.IHistogram:
+		// Take a snapshot of the current metric.IHistogram
+		cur := mtr.ToPrometheusMetric().Histogram
+
+		// Use cumulative stats for sum and count.
+		fn(name+"-sum", cur.GetSampleSum())
+		fn(name+"-count", float64(cur.GetSampleCount()))
+
+		// Use delta for quantile and average calculation if there is a previously
+		// recorded snapshot for this histogram.
+		delta := reg.ComputeHistogramDelta(name, cur, tsdb)
+		avg := delta.GetSampleSum() / float64(cur.GetSampleCount())
 		if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 			avg = 0
 		}
 		fn(name+"-avg", avg)
 		for _, pt := range metric.RecordHistogramQuantiles {
-			fn(name+pt.Suffix, mtr.ValueAtQuantileWindowed(pt.Quantile))
+			fn(name+pt.Suffix, metric.ValueAtQuantile(delta, pt.Quantile))
 		}
 	case metric.PrometheusExportable:
-		// NB: this branch is intentionally at the bottom since all metrics implement it.
+		// NB: this branch is intentionally at the bottom since all metrics
+		// implement it.
 		m := mtr.ToPrometheusMetric()
 		if m.Gauge != nil {
 			fn(name, *m.Gauge.Value)
@@ -641,9 +649,9 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 // function once for each recordable value represented by that metric. This is
 // useful to expand certain metric types (such as histograms) into multiple
 // recordable values.
-func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
+func eachRecordableValue(reg *metric.Registry, fn func(string, float64), tsdb bool) {
 	reg.Each(func(name string, mtr interface{}) {
-		if err := extractValue(name, mtr, fn); err != nil {
+		if err := extractValue(reg, name, mtr, fn, tsdb); err != nil {
 			log.Warningf(context.TODO(), "%v", err)
 			return
 		}
@@ -662,7 +670,7 @@ func (rr registryRecorder) record(dest *[]tspb.TimeSeriesData) {
 				},
 			},
 		})
-	})
+	}, true)
 }
 
 // recordChild filters the metrics in the registry down to those provided in

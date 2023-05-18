@@ -268,7 +268,6 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		Clock:                       clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		ScanInterval:                10 * time.Minute,
-		HistogramWindowInterval:     metric.TestSampleInterval,
 		ProtectedTimestampReader:    spanconfig.EmptyProtectedTSReader(clock),
 		SnapshotSendLimit:           DefaultSnapshotSendLimit,
 		SnapshotApplyLimit:          DefaultSnapshotApplyLimit,
@@ -1121,9 +1120,6 @@ type StoreConfig struct {
 	// snapshot that are permitted to be sent concurrently.
 	SnapshotSendLimit int64
 
-	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
-	HistogramWindowInterval time.Duration
-
 	// ProtectedTimestampReader provides a read-only view into the protected
 	// timestamp subsystem. It is queried during the GC process.
 	ProtectedTimestampReader spanconfig.ProtectedTSReader
@@ -1275,7 +1271,7 @@ func NewStore(
 		cfg:                               cfg,
 		db:                                cfg.DB, // TODO(tschottdorf): remove redundancy.
 		nodeDesc:                          nodeDesc,
-		metrics:                           newStoreMetrics(cfg.HistogramWindowInterval),
+		metrics:                           newStoreMetrics(),
 		ctSender:                          cfg.ClosedTimestampSender,
 		ioThresholds:                      &iot,
 		rangeFeedSlowClosedTimestampNudge: singleflight.NewGroup("rangfeed-ct-nudge", "range"),
@@ -1382,7 +1378,7 @@ func NewStore(
 	s.tsCache = tscache.New(cfg.Clock)
 	s.metrics.registry.AddMetricStruct(s.tsCache.Metrics())
 
-	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
+	s.txnWaitMetrics = txnwait.NewMetrics()
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 	s.snapshotApplyQueue = multiqueue.NewMultiQueue(int(cfg.SnapshotApplyLimit))
 	s.snapshotSendQueue = multiqueue.NewMultiQueue(int(cfg.SnapshotSendLimit))
@@ -2985,8 +2981,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		averageWriteBytesPerSecond += loadStats.WriteBytesPerSecond
 		replicaCPUNanosPerSecond := loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond
 		averageCPUNanosPerSecond += replicaCPUNanosPerSecond
-		s.metrics.RecentReplicaCPUNanosPerSecond.RecordValue(replicaCPUNanosPerSecond)
-		s.metrics.RecentReplicaQueriesPerSecond.RecordValue(loadStats.QueriesPerSecond)
+		s.metrics.RecentReplicaCPUNanosPerSecond.RecordValueFloat(replicaCPUNanosPerSecond)
+		s.metrics.RecentReplicaQueriesPerSecond.RecordValueFloat(loadStats.QueriesPerSecond)
 
 		locks += metrics.LockTableMetrics.Locks
 		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos

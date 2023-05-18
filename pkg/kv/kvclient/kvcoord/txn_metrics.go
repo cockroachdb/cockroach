@@ -11,8 +11,6 @@
 package kvcoord
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -276,7 +274,7 @@ var (
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose
 // windowed portions retain data for approximately histogramWindow.
-func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
+func MakeTxnMetrics() TxnMetrics {
 	return TxnMetrics{
 		Aborts:                              metric.NewCounter(metaAbortsRates),
 		Commits:                             metric.NewCounter(metaCommitsRates),
@@ -293,7 +291,6 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Durations: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaDurationsHistograms,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		TxnsWithCondensedIntents:      metric.NewCounter(metaTxnsWithCondensedIntentSpans),
@@ -301,7 +298,6 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		TxnsRejectedByLockSpanBudget:  metric.NewCounter(metaTxnsRejectedByLockSpanBudget),
 		Restarts: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaRestartsHistogram,
-			Duration: histogramWindow,
 			MaxVal:   100,
 			SigFigs:  3,
 			Buckets:  metric.Count1KBuckets,

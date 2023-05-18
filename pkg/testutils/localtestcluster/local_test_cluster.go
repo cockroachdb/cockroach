@@ -188,18 +188,16 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	}
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip
-	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	active, renewal := cfg.NodeLivenessDurations()
 	cfg.NodeLiveness = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
-		AmbientCtx:              cfg.AmbientCtx,
-		Stopper:                 ltc.stopper,
-		Clock:                   cfg.Clock,
-		DB:                      cfg.DB,
-		Gossip:                  cfg.Gossip,
-		LivenessThreshold:       active,
-		RenewalDuration:         renewal,
-		Settings:                cfg.Settings,
-		HistogramWindowInterval: cfg.HistogramWindowInterval,
+		AmbientCtx:        cfg.AmbientCtx,
+		Stopper:           ltc.stopper,
+		Clock:             cfg.Clock,
+		DB:                cfg.DB,
+		Gossip:            cfg.Gossip,
+		LivenessThreshold: active,
+		RenewalDuration:   renewal,
+		Settings:          cfg.Settings,
 	})
 	storepool.TimeUntilStoreDead.Override(ctx, &cfg.Settings.SV, storepool.TestTimeUntilStoreDead)
 	cfg.StorePool = storepool.NewStorePool(

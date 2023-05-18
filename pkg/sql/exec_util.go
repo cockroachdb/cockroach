@@ -1299,9 +1299,6 @@ type ExecutorConfig struct {
 	ExternalConnectionTestingKnobs       *externalconn.TestingKnobs
 	EventLogTestingKnobs                 *EventLogTestingKnobs
 
-	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
-	HistogramWindowInterval time.Duration
-
 	// RangeDescriptorCache is updated by DistSQL when it finds out about
 	// misplanned spans.
 	RangeDescriptorCache *rangecache.RangeCache

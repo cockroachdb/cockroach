@@ -12,7 +12,6 @@ import (
 	"context"
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -52,7 +51,7 @@ func BenchmarkMemBuffer(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	metrics := kvevent.MakeMetrics(time.Minute)
+	metrics := kvevent.MakeMetrics()
 	st := cluster.MakeTestingClusterSettings()
 
 	buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics)

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -223,7 +222,7 @@ func TestSchedulerLoop(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	m := newStoreMetrics(metric.TestSampleInterval)
+	m := newStoreMetrics()
 	p := newTestProcessor()
 	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1, 1, 1)
 	s.Start(stopper)
@@ -259,7 +258,7 @@ func TestSchedulerBuffering(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	m := newStoreMetrics(metric.TestSampleInterval)
+	m := newStoreMetrics()
 	p := newTestProcessor()
 	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1, 1, 5)
 	s.Start(stopper)
@@ -382,7 +381,7 @@ func TestNewSchedulerShards(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("workers=%d/shardSize=%d", tc.workers, tc.shardSize), func(t *testing.T) {
-			m := newStoreMetrics(metric.TestSampleInterval)
+			m := newStoreMetrics()
 			p := newTestProcessor()
 			s := newRaftScheduler(log.MakeTestingAmbientContext(nil), m, p,
 				tc.workers, tc.shardSize, tc.priorityWorkers, 5)
@@ -408,7 +407,7 @@ func TestSchedulerPriority(t *testing.T) {
 	defer cancel()
 	defer stopper.Stop(ctx)
 
-	m := newStoreMetrics(metric.TestSampleInterval)
+	m := newStoreMetrics()
 	p := newTestProcessor()
 	s := newRaftScheduler(log.MakeTestingAmbientContext(nil), m, p, 1, 1, 1, 5)
 	s.Start(stopper)
@@ -538,7 +537,7 @@ func runSchedulerEnqueueRaftTicks(
 	defer stopper.Stop(ctx)
 
 	a := log.MakeTestingAmbientContext(stopper.Tracer())
-	m := newStoreMetrics(metric.TestSampleInterval)
+	m := newStoreMetrics()
 	p := newTestProcessor()
 	s := newRaftScheduler(
 		a, m, p, numWorkers, defaultRaftSchedulerShardSize, defaultRaftSchedulerPriorityShardSize, 5)

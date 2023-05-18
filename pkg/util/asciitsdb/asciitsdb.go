@@ -100,15 +100,25 @@ func (t *TSDB) Scrape(ctx context.Context) {
 		if _, ok := t.mu.points[name]; !ok {
 			return
 		}
-
 		switch mtr := val.(type) {
-		case metric.WindowedHistogram:
+		case metric.IHistogram:
 			if _, ok := t.mu.points[name]; !ok {
 				return
 			}
 			count, _ := mtr.Total()
 			t.mu.points[name+"-count"] = append(t.mu.points[name+"-count"], float64(count))
-			avg := mtr.MeanWindowed()
+			avg := mtr.Mean()
+			cur := mtr.ToPrometheusMetric().Histogram
+			n := float64(cur.GetSampleCount())
+			t.mu.points[name+"-count"] = append(t.mu.points[name+"-count"], n)
+
+			// Use delta for quantile and average calculation if there is a previously recorded
+			// snapshot for this histogram.
+			if prev, ok := t.reg.PrevRecordedHistogram[name]; ok {
+				// Capture a copy of the current histogram for use in the next extraction.
+				t.reg.PrevRecordedHistogram[name] = *cur
+				metric.SubtractPrometheusHistograms(cur, &prev)
+			}
 			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 				avg = 0
 			}
@@ -120,11 +130,10 @@ func (t *TSDB) Scrape(ctx context.Context) {
 				{"-p75", 75},
 				{"-p50", 50},
 			} {
-				t.mu.points[name+pt.suffix] = append(t.mu.points[name+pt.suffix], mtr.ValueAtQuantileWindowed(pt.quantile))
+				t.mu.points[name+pt.suffix] = append(t.mu.points[name+pt.suffix], metric.ValueAtQuantile(cur, pt.quantile))
 			}
 		case metric.PrometheusExportable:
-			// NB: this branch is intentionally at the bottom since all metrics
-			// implement it.
+			// NB: this branch is intentionally at the bottom since all metrics implement it.
 			m := mtr.ToPrometheusMetric()
 			if m.Gauge != nil {
 				t.mu.points[name] = append(t.mu.points[name], *m.Gauge.Value)

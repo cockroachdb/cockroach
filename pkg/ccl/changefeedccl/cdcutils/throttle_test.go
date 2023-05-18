@@ -11,7 +11,6 @@ package cdcutils
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -25,7 +24,7 @@ func TestNodeLevelThrottler(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	sv := &cluster.MakeTestingClusterSettings().SV
-	m := MakeMetrics(time.Minute)
+	m := MakeMetrics()
 	throttler := NodeLevelThrottler(sv, &m)
 
 	// Default: no throttling

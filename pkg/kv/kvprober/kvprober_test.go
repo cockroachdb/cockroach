@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -196,9 +195,8 @@ func TestWriteProbe(t *testing.T) {
 
 func initTestProber(ctx context.Context, m *mock) *Prober {
 	p := NewProber(Opts{
-		Tracer:                  tracing.NewTracer(),
-		HistogramWindowInterval: time.Minute, // actual value not important to test
-		Settings:                cluster.MakeTestingClusterSettings(),
+		Tracer:   tracing.NewTracer(),
+		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	readEnabled.Override(ctx, &p.settings.SV, m.read)
 	writeEnabled.Override(ctx, &p.settings.SV, m.write)

@@ -8,10 +8,7 @@
 
 package sqlproxyccl
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 // metrics contains pointers to the metrics for monitoring proxy operations.
 type metrics struct {
@@ -242,7 +239,6 @@ func makeProxyMetrics() metrics {
 		ConnectionLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaConnMigrationAttemptedCount,
-			Duration: base.DefaultHistogramWindowInterval(),
 			Buckets:  metric.NetworkLatencyBuckets,
 		}),
 		AuthFailedCount:        metric.NewCounter(metaAuthFailedCount),
@@ -251,7 +247,6 @@ func makeProxyMetrics() metrics {
 		DialTenantLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaDialTenantLatency,
-			Duration: base.DefaultHistogramWindowInterval(),
 			Buckets:  metric.NetworkLatencyBuckets},
 		),
 		DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
@@ -263,12 +258,10 @@ func makeProxyMetrics() metrics {
 		ConnMigrationAttemptedLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaConnMigrationAttemptedLatency,
-			Duration: base.DefaultHistogramWindowInterval(),
 			Buckets:  metric.NetworkLatencyBuckets,
 		}),
 		ConnMigrationTransferResponseMessageSize: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaConnMigrationTransferResponseMessageSize,
-			Duration: base.DefaultHistogramWindowInterval(),
 			Buckets:  metric.DataSize16MBBuckets,
 			MaxVal:   maxExpectedTransferResponseMessageSize,
 			SigFigs:  1,

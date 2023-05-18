@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -184,7 +183,6 @@ func newMetrics(c *Controller) *metrics {
 		m.WaitDuration[wc] = metric.NewHistogram(
 			metric.HistogramOptions{
 				Metadata: annotateMetricTemplateWithWorkClass(wc, waitDuration),
-				Duration: base.DefaultHistogramWindowInterval(),
 				Buckets:  metric.IOLatencyBuckets,
 				Mode:     metric.HistogramModePrometheus,
 			},

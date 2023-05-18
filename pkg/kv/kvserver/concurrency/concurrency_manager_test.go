@@ -680,7 +680,7 @@ func (c *cluster) makeConfig() concurrency.Config {
 		Settings:       c.st,
 		Clock:          c.clock,
 		IntentResolver: c,
-		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
+		TxnWaitMetrics: txnwait.NewMetrics(),
 	}
 }
 

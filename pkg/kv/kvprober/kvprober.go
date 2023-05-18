@@ -66,9 +66,6 @@ type Opts struct {
 	DB       *kv.DB
 	Settings *cluster.Settings
 	Tracer   *tracing.Tracer
-	// The windowed portion of the latency histogram retains values for
-	// approximately histogramWindow. See metrics library for more.
-	HistogramWindowInterval time.Duration
 }
 
 var (
@@ -257,7 +254,6 @@ func NewProber(opts Opts) *Prober {
 			ReadProbeLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:     metric.HistogramModePreferHdrLatency,
 				Metadata: metaReadProbeLatency,
-				Duration: opts.HistogramWindowInterval,
 				Buckets:  metric.NetworkLatencyBuckets,
 			}),
 			WriteProbeAttempts: metric.NewCounter(metaWriteProbeAttempts),
@@ -265,7 +261,6 @@ func NewProber(opts Opts) *Prober {
 			WriteProbeLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:     metric.HistogramModePreferHdrLatency,
 				Metadata: metaWriteProbeLatency,
-				Duration: opts.HistogramWindowInterval,
 				Buckets:  metric.NetworkLatencyBuckets,
 			}),
 			WriteProbeQuarantineOldestDuration: metric.NewFunctionalGauge(

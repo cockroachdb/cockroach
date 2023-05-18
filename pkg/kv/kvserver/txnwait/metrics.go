@@ -28,7 +28,7 @@ type Metrics struct {
 }
 
 // NewMetrics creates a new Metrics instance with all related metric fields.
-func NewMetrics(histogramWindowInterval time.Duration) *Metrics {
+func NewMetrics() *Metrics {
 	return &Metrics{
 		PusheeWaiting: metric.NewGauge(
 			metric.Metadata{
@@ -73,10 +73,9 @@ func NewMetrics(histogramWindowInterval time.Duration) *Metrics {
 				Measurement: "Pusher wait time",
 				Unit:        metric.Unit_NANOSECONDS,
 			},
-			MaxVal:   time.Hour.Nanoseconds(),
-			SigFigs:  1,
-			Duration: histogramWindowInterval,
-			Buckets:  metric.LongRunning60mLatencyBuckets,
+			MaxVal:  time.Hour.Nanoseconds(),
+			SigFigs: 1,
+			Buckets: metric.LongRunning60mLatencyBuckets,
 		}),
 
 		QueryWaitTime: metric.NewHistogram(metric.HistogramOptions{
@@ -86,10 +85,9 @@ func NewMetrics(histogramWindowInterval time.Duration) *Metrics {
 				Measurement: "Query wait time",
 				Unit:        metric.Unit_NANOSECONDS,
 			},
-			MaxVal:   time.Hour.Nanoseconds(),
-			SigFigs:  1,
-			Duration: histogramWindowInterval,
-			Buckets:  metric.LongRunning60mLatencyBuckets,
+			MaxVal:  time.Hour.Nanoseconds(),
+			SigFigs: 1,
+			Buckets: metric.LongRunning60mLatencyBuckets,
 		}),
 
 		DeadlocksTotal: metric.NewCounter(

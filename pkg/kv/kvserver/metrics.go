@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"runtime/debug"
 	"sync/atomic"
-	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
@@ -2536,7 +2535,7 @@ func newTenantsStorageMetrics() *TenantsStorageMetrics {
 	return sm
 }
 
-func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
+func newStoreMetrics() *StoreMetrics {
 	storeRegistry := metric.NewRegistry()
 	rdbBytesIngested := storageLevelGaugeSlice(metaRdbBytesIngested)
 	rdbLevelSize := storageLevelGaugeSlice(metaRdbLevelSize)
@@ -2572,7 +2571,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LeaseRequestLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaLeaseRequestLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.NetworkLatencyBuckets,
 		}),
 		LeaseTransferSuccessCount: metric.NewCounter(metaLeaseTransferSuccessCount),
@@ -2717,7 +2715,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftTicks: metric.NewCounter(metaRaftTicks),
 		RaftQuotaPoolPercentUsed: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaRaftQuotaPoolPercentUsed,
-			Duration: histogramWindow,
 			MaxVal:   100,
 			SigFigs:  1,
 			Buckets:  metric.Percent100Buckets,
@@ -2728,31 +2725,26 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaRaftLogCommitLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		RaftCommandCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaRaftCommandCommitLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		RaftHandleReadyLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaRaftHandleReadyLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		RaftApplyCommittedLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaRaftApplyCommittedLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		RaftSchedulerLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaRaftSchedulerLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		RaftTimeoutCampaign:  metric.NewCounter(metaRaftTimeoutCampaign),
@@ -2899,13 +2891,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaReadBatchEvaluationLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaReplicaReadBatchEvaluationLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		ReplicaWriteBatchEvaluationLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaReplicaWriteBatchEvaluationLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		FlushUtilization: metric.NewGaugeFloat64(metaStorageFlushUtilization),

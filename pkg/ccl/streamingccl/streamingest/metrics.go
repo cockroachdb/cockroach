@@ -154,7 +154,7 @@ type Metrics struct {
 func (*Metrics) MetricStruct() {}
 
 // MakeMetrics makes the metrics for stream ingestion job monitoring.
-func MakeMetrics(histogramWindow time.Duration) metric.Struct {
+func MakeMetrics() metric.Struct {
 	m := &Metrics{
 		IngestedEvents:       metric.NewCounter(metaReplicationEventsIngested),
 		IngestedLogicalBytes: metric.NewCounter(metaReplicationIngestedBytes),
@@ -164,21 +164,18 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		JobProgressUpdates:   metric.NewCounter(metaJobProgressUpdates),
 		FlushHistNanos: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaReplicationFlushHistNanos,
-			Duration: histogramWindow,
 			Buckets:  metric.BatchProcessLatencyBuckets,
 			MaxVal:   streamingFlushHistMaxLatency.Nanoseconds(),
 			SigFigs:  1,
 		}),
 		CommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaReplicationCommitLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.BatchProcessLatencyBuckets,
 			MaxVal:   streamingCommitLatencyMaxValue.Nanoseconds(),
 			SigFigs:  1,
 		}),
 		AdmitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaReplicationAdmitLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.BatchProcessLatencyBuckets,
 			MaxVal:   streamingAdmitLatencyMaxValue.Nanoseconds(),
 			SigFigs:  1,

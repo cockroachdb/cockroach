@@ -337,7 +337,6 @@ func newTenantServer(
 			baseCfg.Config,
 			args.Settings,
 			args.rpcContext.GetServerTLSConfig,
-			baseCfg.HistogramWindowInterval(),
 			args.monitorAndMetrics.rootSQLMemoryMonitor,
 			false, /* acceptTenantName */
 		)
@@ -1067,7 +1066,7 @@ func makeTenantSQLServerArgs(
 		clientKnobs = *p
 	}
 
-	txnMetrics := kvcoord.MakeTxnMetrics(baseCfg.HistogramWindowInterval())
+	txnMetrics := kvcoord.MakeTxnMetrics()
 	registry.AddMetricStruct(txnMetrics)
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
@@ -1153,9 +1152,8 @@ func makeTenantSQLServerArgs(
 	sessionRegistry := sql.NewSessionRegistry()
 
 	monitorAndMetrics := newRootSQLMemoryMonitor(monitorAndMetricsOptions{
-		memoryPoolSize:          sqlCfg.MemoryPoolSize,
-		histogramWindowInterval: baseCfg.HistogramWindowInterval(),
-		settings:                baseCfg.Settings,
+		memoryPoolSize: sqlCfg.MemoryPoolSize,
+		settings:       baseCfg.Settings,
 	})
 	remoteFlowRunnerAcc := monitorAndMetrics.rootSQLMemoryMonitor.MakeBoundAccount()
 	remoteFlowRunner := flowinfra.NewRemoteFlowRunner(baseCfg.AmbientCtx, stopper, &remoteFlowRunnerAcc)

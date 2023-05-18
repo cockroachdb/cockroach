@@ -49,11 +49,10 @@ var (
 const log10int64times1000 = 19 * 1000
 
 // MakeBulkMetrics instantiates the metrics holder for bulk operation monitoring.
-func MakeBulkMetrics(histogramWindow time.Duration) Metrics {
+func MakeBulkMetrics() Metrics {
 	return Metrics{
 		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaMemMaxBytes,
-			Duration: histogramWindow,
 			MaxVal:   log10int64times1000,
 			SigFigs:  3,
 			Buckets:  metric.MemoryUsage64MBBuckets,

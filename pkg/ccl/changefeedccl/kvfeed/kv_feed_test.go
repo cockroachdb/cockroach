@@ -118,7 +118,7 @@ func TestKVFeed(t *testing.T) {
 			context.Background(), "test", mon.MemoryResource,
 			nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
 		)
-		metrics := kvevent.MakeMetrics(time.Minute)
+		metrics := kvevent.MakeMetrics()
 
 		// bufferFactory, when called, gives you a memory-monitored
 		// in-memory "buffer" to write to and read from.

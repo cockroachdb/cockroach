@@ -293,9 +293,7 @@ type tenantSpecificMetrics struct {
 	SQLMemMetrics               sql.MemoryMetrics
 }
 
-func makeTenantSpecificMetrics(
-	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
-) tenantSpecificMetrics {
+func makeTenantSpecificMetrics(sqlMemMetrics sql.MemoryMetrics) tenantSpecificMetrics {
 	return tenantSpecificMetrics{
 		BytesInCount:  metric.NewCounter(MetaBytesIn),
 		BytesOutCount: metric.NewCounter(MetaBytesOut),
@@ -304,14 +302,13 @@ func makeTenantSpecificMetrics(
 		ConnLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: MetaConnLatency,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		ConnFailures:                metric.NewCounter(MetaConnFailures),
 		PGWireCancelTotalCount:      metric.NewCounter(MetaPGWireCancelTotal),
 		PGWireCancelIgnoredCount:    metric.NewCounter(MetaPGWireCancelIgnored),
 		PGWireCancelSuccessfulCount: metric.NewCounter(MetaPGWireCancelSuccessful),
-		ConnMemMetrics:              sql.MakeBaseMemMetrics("conns", histogramWindow),
+		ConnMemMetrics:              sql.MakeBaseMemMetrics("conns"),
 		SQLMemMetrics:               sqlMemMetrics,
 	}
 }
@@ -335,7 +332,6 @@ func MakeServer(
 	st *cluster.Settings,
 	sqlMemMetrics sql.MemoryMetrics,
 	parentMemoryMonitor *mon.BytesMonitor,
-	histogramWindow time.Duration,
 	executorConfig *sql.ExecutorConfig,
 ) *Server {
 	ctx := ambientCtx.AnnotateCtx(context.Background())
@@ -344,7 +340,7 @@ func MakeServer(
 		cfg:        cfg,
 		execCfg:    executorConfig,
 
-		tenantMetrics: makeTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
+		tenantMetrics: makeTenantSpecificMetrics(sqlMemMetrics),
 	}
 	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,

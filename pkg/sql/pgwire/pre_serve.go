@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -130,12 +129,11 @@ func NewPreServeConnHandler(
 	cfg *base.Config,
 	st *cluster.Settings,
 	getTLSConfig func() (*tls.Config, error),
-	histogramWindow time.Duration,
 	parentMemoryMonitor *mon.BytesMonitor,
 	acceptTenantName bool,
 ) *PreServeConnHandler {
 	ctx := ambientCtx.AnnotateCtx(context.Background())
-	metrics := makeTenantIndependentMetrics(histogramWindow)
+	metrics := makeTenantIndependentMetrics()
 	s := PreServeConnHandler{
 		cfg:                      cfg,
 		st:                       st,
@@ -185,7 +183,7 @@ type tenantIndependentMetrics struct {
 	PreServeCurBytes      *metric.Gauge
 }
 
-func makeTenantIndependentMetrics(histogramWindow time.Duration) tenantIndependentMetrics {
+func makeTenantIndependentMetrics() tenantIndependentMetrics {
 	return tenantIndependentMetrics{
 		PreServeBytesInCount:  metric.NewCounter(MetaPreServeBytesIn),
 		PreServeBytesOutCount: metric.NewCounter(MetaPreServeBytesOut),
@@ -193,7 +191,6 @@ func makeTenantIndependentMetrics(histogramWindow time.Duration) tenantIndepende
 		PreServeConnFailures:  metric.NewCounter(MetaPreServeConnFailures),
 		PreServeMaxBytes: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: MetaPreServeMaxBytes,
-			Duration: histogramWindow,
 			Buckets:  metric.MemoryUsage64MBBuckets,
 			Mode:     metric.HistogramModePrometheus,
 		}),

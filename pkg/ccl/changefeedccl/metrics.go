@@ -421,7 +421,7 @@ var (
 	}
 )
 
-func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
+func newAggregateMetrics() *AggMetrics {
 	metaChangefeedEmittedMessages := metric.Metadata{
 		Name:        "changefeed.emitted_messages",
 		Help:        "Messages emitted by all feeds",
@@ -560,7 +560,6 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		FilteredMessages: b.Counter(metaChangefeedFilteredMessages),
 		MessageSize: b.Histogram(metric.HistogramOptions{
 			Metadata: metaMessageSize,
-			Duration: histogramWindow,
 			MaxVal:   10 << 20, /* 10MB max message size */
 			SigFigs:  1,
 			Buckets:  metric.DataSize16MBBuckets,
@@ -571,7 +570,6 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		SizeBasedFlushes: b.Counter(metaSizeBasedFlushes),
 		ParallelIOQueueNanos: b.Histogram(metric.HistogramOptions{
 			Metadata: metaChangefeedParallelIOQueueNanos,
-			Duration: histogramWindow,
 			MaxVal:   changefeedIOQueueMaxLatency.Nanoseconds(),
 			SigFigs:  2,
 			Buckets:  metric.BatchProcessLatencyBuckets,
@@ -580,28 +578,24 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 
 		BatchHistNanos: b.Histogram(metric.HistogramOptions{
 			Metadata: metaChangefeedBatchHistNanos,
-			Duration: histogramWindow,
 			MaxVal:   changefeedBatchHistMaxLatency.Nanoseconds(),
 			SigFigs:  1,
 			Buckets:  metric.BatchProcessLatencyBuckets,
 		}),
 		FlushHistNanos: b.Histogram(metric.HistogramOptions{
 			Metadata: metaChangefeedFlushHistNanos,
-			Duration: histogramWindow,
 			MaxVal:   changefeedFlushHistMaxLatency.Nanoseconds(),
 			SigFigs:  2,
 			Buckets:  metric.BatchProcessLatencyBuckets,
 		}),
 		CommitLatency: b.Histogram(metric.HistogramOptions{
 			Metadata: metaCommitLatency,
-			Duration: histogramWindow,
 			MaxVal:   commitLatencyMaxValue.Nanoseconds(),
 			SigFigs:  1,
 			Buckets:  metric.BatchProcessLatencyBuckets,
 		}),
 		AdmitLatency: b.Histogram(metric.HistogramOptions{
 			Metadata: metaAdmitLatency,
-			Duration: histogramWindow,
 			MaxVal:   admitLatencyMaxValue.Nanoseconds(),
 			SigFigs:  1,
 			Buckets:  metric.BatchProcessLatencyBuckets,
@@ -711,35 +705,32 @@ func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 }
 
 // MakeMetrics makes the metrics for changefeed monitoring.
-func MakeMetrics(histogramWindow time.Duration) metric.Struct {
+func MakeMetrics() metric.Struct {
 	m := &Metrics{
-		AggMetrics:        newAggregateMetrics(histogramWindow),
-		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
-		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),
+		AggMetrics:        newAggregateMetrics(),
+		KVFeedMetrics:     kvevent.MakeMetrics(),
+		SchemaFeedMetrics: schemafeed.MakeMetrics(),
 		ResolvedMessages:  metric.NewCounter(metaChangefeedForwardedResolvedMessages),
 		Failures:          metric.NewCounter(metaChangefeedFailures),
 		QueueTimeNanos:    metric.NewCounter(metaEventQueueTime),
 		CheckpointHistNanos: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaChangefeedCheckpointHistNanos,
-			Duration: histogramWindow,
 			MaxVal:   changefeedCheckpointHistMaxLatency.Nanoseconds(),
 			SigFigs:  2,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
-		ThrottleMetrics: cdcutils.MakeMetrics(histogramWindow),
+		ThrottleMetrics: cdcutils.MakeMetrics(),
 		ReplanCount:     metric.NewCounter(metaChangefeedReplanCount),
 		// Below two metrics were never implemented using the hdr histogram. Set ForceUsePrometheus
 		// to true.
 		ParallelConsumerFlushNanos: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaChangefeedEventConsumerFlushNanos,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 			Mode:     metric.HistogramModePrometheus,
 		}),
 		ParallelConsumerConsumeNanos: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaChangefeedEventConsumerConsumeNanos,
-			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 			Mode:     metric.HistogramModePrometheus,
 		}),

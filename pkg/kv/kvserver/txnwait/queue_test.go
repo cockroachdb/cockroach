@@ -253,7 +253,7 @@ func makeConfig(s kv.SenderFunc, stopper *stop.Stopper) Config {
 	}
 	cfg.Clock = hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	cfg.Stopper = stopper
-	cfg.Metrics = NewMetrics(time.Minute)
+	cfg.Metrics = NewMetrics()
 	if s != nil {
 		factory := kv.NonTransactionalFactoryFunc(s)
 		cfg.DB = kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, cfg.Clock, stopper)

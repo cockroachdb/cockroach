@@ -28,7 +28,7 @@ type AggHistogram struct {
 var _ metric.Iterable = (*AggHistogram)(nil)
 var _ metric.PrometheusIterable = (*AggHistogram)(nil)
 var _ metric.PrometheusExportable = (*AggHistogram)(nil)
-var _ metric.WindowedHistogram = (*AggHistogram)(nil)
+var _ metric.IHistogram = (*AggHistogram)(nil)
 
 // NewHistogram constructs a new AggHistogram.
 func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHistogram {
@@ -61,29 +61,17 @@ func (a *AggHistogram) GetMetadata() metric.Metadata { return a.h.GetMetadata() 
 // Inspect is part of the metric.Iterable interface.
 func (a *AggHistogram) Inspect(f func(interface{})) { f(a) }
 
-// TotalWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) TotalWindowed() (int64, float64) {
-	return a.h.TotalWindowed()
+func (a *AggHistogram) RecordValue(n int64) {
+	a.h.RecordValue(n)
 }
 
-// Total is part of the metric.WindowedHistogram interface
+// Total is part of the metric.IHistogram interface
 func (a *AggHistogram) Total() (int64, float64) {
 	return a.h.Total()
 }
 
-// MeanWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) MeanWindowed() float64 {
-	return a.h.MeanWindowed()
-}
-
-// Mean is part of the metric.WindowedHistogram interface
 func (a *AggHistogram) Mean() float64 {
 	return a.h.Mean()
-}
-
-// ValueAtQuantileWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) ValueAtQuantileWindowed(q float64) float64 {
-	return a.h.ValueAtQuantileWindowed(q)
 }
 
 // GetType is part of the metric.PrometheusExportable interface.
@@ -143,5 +131,5 @@ func (g *Histogram) Unlink() {
 // recording the maximum value instead.
 func (g *Histogram) RecordValue(v int64) {
 	g.h.RecordValue(v)
-	g.parent.h.RecordValue(v)
+	g.parent.RecordValue(v)
 }

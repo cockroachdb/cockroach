@@ -13,7 +13,6 @@ package jobs
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -248,15 +247,15 @@ var (
 func (Metrics) MetricStruct() {}
 
 // init initializes the metrics for job monitoring.
-func (m *Metrics) init(histogramWindowInterval time.Duration) {
+func (m *Metrics) init() {
 	if MakeRowLevelTTLMetricsHook != nil {
-		m.RowLevelTTL = MakeRowLevelTTLMetricsHook(histogramWindowInterval)
+		m.RowLevelTTL = MakeRowLevelTTLMetricsHook()
 	}
 	if MakeChangefeedMetricsHook != nil {
-		m.Changefeed = MakeChangefeedMetricsHook(histogramWindowInterval)
+		m.Changefeed = MakeChangefeedMetricsHook()
 	}
 	if MakeStreamIngestMetricsHook != nil {
-		m.StreamIngest = MakeStreamIngestMetricsHook(histogramWindowInterval)
+		m.StreamIngest = MakeStreamIngestMetricsHook()
 	}
 	m.AdoptIterations = metric.NewCounter(metaAdoptIterations)
 	m.ClaimedJobs = metric.NewCounter(metaClaimedJobs)
@@ -290,14 +289,14 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 
 // MakeChangefeedMetricsHook allows for registration of changefeed metrics from
 // ccl code.
-var MakeChangefeedMetricsHook func(time.Duration) metric.Struct
+var MakeChangefeedMetricsHook func() metric.Struct
 
 // MakeStreamIngestMetricsHook allows for registration of streaming metrics from
 // ccl code.
-var MakeStreamIngestMetricsHook func(duration time.Duration) metric.Struct
+var MakeStreamIngestMetricsHook func() metric.Struct
 
 // MakeRowLevelTTLMetricsHook allows for registration of row-level TTL metrics.
-var MakeRowLevelTTLMetricsHook func(time.Duration) metric.Struct
+var MakeRowLevelTTLMetricsHook func() metric.Struct
 
 // JobTelemetryMetrics is a telemetry metrics for individual job types.
 type JobTelemetryMetrics struct {

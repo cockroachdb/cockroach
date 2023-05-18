@@ -19,7 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1752,7 +1751,6 @@ func makeWorkQueueMetricsSingle(name string) workQueueMetricsSingle {
 		WaitDurations: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: addName(name, waitDurationsMeta),
-			Duration: base.DefaultHistogramWindowInterval(),
 			Buckets:  metric.IOLatencyBuckets,
 		}),
 		WaitQueueLength: metric.NewGauge(addName(name, waitQueueLengthMeta)),

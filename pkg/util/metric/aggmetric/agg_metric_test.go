@@ -17,7 +17,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -72,10 +71,9 @@ func TestAggMetric(t *testing.T) {
 		Metadata: metric.Metadata{
 			Name: "histo_gram",
 		},
-		Duration: base.DefaultHistogramWindowInterval(),
-		MaxVal:   100,
-		SigFigs:  1,
-		Buckets:  metric.Count1KBuckets,
+		MaxVal:  100,
+		SigFigs: 1,
+		Buckets: metric.Count1KBuckets,
 	}, "tenant_id")
 	r.AddMetric(h)
 
@@ -176,7 +174,6 @@ func TestAggMetricBuilder(t *testing.T) {
 	f := b.GaugeFloat64(metric.Metadata{Name: "baz_gauge"})
 	h := b.Histogram(metric.HistogramOptions{
 		Metadata: metric.Metadata{Name: "histo_gram"},
-		Duration: base.DefaultHistogramWindowInterval(),
 		MaxVal:   100,
 		SigFigs:  1,
 		Buckets:  metric.Count1KBuckets,

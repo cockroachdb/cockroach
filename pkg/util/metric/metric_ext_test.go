@@ -13,7 +13,6 @@ package metric_test
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -28,7 +27,6 @@ func TestHistogramPrometheus(t *testing.T) {
 	h := metric.NewHistogram(metric.HistogramOptions{
 		Mode:     metric.HistogramModePrometheus,
 		Metadata: metric.Metadata{},
-		Duration: time.Second,
 		Buckets:  []float64{1, 2, 3, 4, 5, 6, 10, 20, 30},
 	})
 	h.RecordValue(1)

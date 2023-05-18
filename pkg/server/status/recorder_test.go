@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -437,13 +436,6 @@ func TestMetricsRecorder(t *testing.T) {
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
-	// Ensure the metric system's view of time does not advance during this test
-	// as the test expects time to not advance too far which would age the actual
-	// data (e.g. in histogram's) unexpectedly.
-	defer metric.TestingSetNow(func() time.Time {
-		return manual.Now()
-	})()
-
 	// ========================================
 	// Generate Metrics Data & Expected Results
 	// ========================================
@@ -577,7 +569,6 @@ func TestMetricsRecorder(t *testing.T) {
 			case "histogram":
 				h := metric.NewHistogram(metric.HistogramOptions{
 					Metadata: metric.Metadata{Name: reg.prefix + data.name},
-					Duration: time.Second,
 					Buckets:  []float64{1.0, 10.0, 100.0, 1000.0},
 					Mode:     metric.HistogramModePrometheus,
 				})

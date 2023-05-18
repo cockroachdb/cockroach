@@ -37,9 +37,23 @@ type runtimeHistogram struct {
 	mult float64 // multiplier to apply to each bucket boundary, used when translating across units
 }
 
+func (h *runtimeHistogram) RecordValue(_ int64) {
+	panic("RecordValue is not implemented by the runtime histogram")
+}
+
+func (h *runtimeHistogram) Total() (int64, float64) {
+	promHist := h.ToPrometheusMetric().Histogram
+	return int64(promHist.GetSampleCount()), promHist.GetSampleSum()
+}
+
+func (h *runtimeHistogram) Mean() float64 {
+	pHist := h.ToPrometheusMetric().Histogram
+	return pHist.GetSampleSum() / float64(pHist.GetSampleCount())
+}
+
 var _ metric.Iterable = &runtimeHistogram{}
 var _ metric.PrometheusExportable = &runtimeHistogram{}
-var _ metric.WindowedHistogram = (*runtimeHistogram)(nil)
+var _ metric.IHistogram = &runtimeHistogram{}
 
 // newRuntimeHistogram creates a histogram with the given metadata configured
 // with the given buckets. The buckets must be a strict subset of what this
@@ -142,33 +156,6 @@ func (h *runtimeHistogram) GetMetadata() metric.Metadata {
 
 // Inspect is part of the Iterable interface.
 func (h *runtimeHistogram) Inspect(f func(interface{})) { f(h) }
-
-// TotalWindowed implements the WindowedHistogram interface.
-func (h *runtimeHistogram) TotalWindowed() (int64, float64) {
-	return h.Total()
-}
-
-// Total implements the WindowedHistogram interface.
-func (h *runtimeHistogram) Total() (int64, float64) {
-	pHist := h.ToPrometheusMetric().Histogram
-	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
-}
-
-// ValueAtQuantileWindowed implements the WindowedHistogram interface.
-func (h *runtimeHistogram) ValueAtQuantileWindowed(q float64) float64 {
-	return metric.ValueAtQuantileWindowed(h.ToPrometheusMetric().Histogram, q)
-}
-
-// MeanWindowed implements the WindowedHistogram interface.
-func (h *runtimeHistogram) MeanWindowed() float64 {
-	return h.Mean()
-}
-
-// Mean implements the WindowedHistogram interface.
-func (h *runtimeHistogram) Mean() float64 {
-	pHist := h.ToPrometheusMetric().Histogram
-	return pHist.GetSampleSum() / float64(pHist.GetSampleCount())
-}
 
 // reBucketExpAndTrim takes a list of bucket boundaries (lower bound inclusive)
 // and down samples the buckets to those a multiple of base apart. The end

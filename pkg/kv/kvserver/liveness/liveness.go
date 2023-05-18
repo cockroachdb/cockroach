@@ -285,15 +285,14 @@ type Record struct {
 // separation has grown organically and various options could in principle
 // be moved back and forth.
 type NodeLivenessOptions struct {
-	AmbientCtx              log.AmbientContext
-	Stopper                 *stop.Stopper
-	Settings                *cluster.Settings
-	Gossip                  *gossip.Gossip
-	Clock                   *hlc.Clock
-	DB                      *kv.DB
-	LivenessThreshold       time.Duration
-	RenewalDuration         time.Duration
-	HistogramWindowInterval time.Duration
+	AmbientCtx        log.AmbientContext
+	Stopper           *stop.Stopper
+	Settings          *cluster.Settings
+	Gossip            *gossip.Gossip
+	Clock             *hlc.Clock
+	DB                *kv.DB
+	LivenessThreshold time.Duration
+	RenewalDuration   time.Duration
 	// OnNodeDecommissioned is invoked whenever the instance learns that a
 	// node was permanently removed from the cluster. This method must be
 	// idempotent as it may be invoked multiple times and defaults to a
@@ -332,7 +331,6 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 		HeartbeatLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaHeartbeatLatency,
-			Duration: opts.HistogramWindowInterval,
 			Buckets:  metric.NetworkLatencyBuckets,
 		}),
 	}

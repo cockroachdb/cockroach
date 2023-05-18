@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -3570,7 +3569,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		// Construct a new DB with a fresh set of TxnMetrics. This allows the test
 		// to precisely assert on the metrics without having to worry about other
 		// transactions in the system affecting them.
-		metrics := kvcoord.MakeTxnMetrics(metric.TestSampleInterval)
+		metrics := kvcoord.MakeTxnMetrics()
 		tcsFactoryCfg := kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx:   s.AmbientCtx(),
 			Settings:     s.ClusterSettings(),

@@ -24,13 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
 
 func makeMockTxnSpanRefresher() (txnSpanRefresher, *mockLockedSender) {
 	mockSender := &mockLockedSender{}
-	metrics := MakeTxnMetrics(metric.TestSampleInterval)
+	metrics := MakeTxnMetrics()
 	return txnSpanRefresher{
 		st:           cluster.MakeTestingClusterSettings(),
 		knobs:        new(ClientTestingKnobs),

@@ -44,8 +44,6 @@ type HdrHistogram struct {
 	mu     struct {
 		syncutil.Mutex
 		cumulative *hdrhistogram.Histogram
-		*tickHelper
-		sliding *hdrhistogram.WindowedHistogram
 	}
 }
 
@@ -57,23 +55,12 @@ var _ Iterable = &HdrHistogram{}
 // rotates every 'duration'; both the windowed and the cumulative histogram
 // track nonnegative values up to 'maxVal' with 'sigFigs' decimal points of
 // precision.
-func NewHdrHistogram(
-	metadata Metadata, duration time.Duration, maxVal int64, sigFigs int,
-) *HdrHistogram {
+func NewHdrHistogram(metadata Metadata, maxVal int64, sigFigs int) *HdrHistogram {
 	h := &HdrHistogram{
 		Metadata: metadata,
 		maxVal:   maxVal,
 	}
-	wHist := hdrhistogram.NewWindowed(hdrHistogramHistWrapNum, 0, maxVal, sigFigs)
 	h.mu.cumulative = hdrhistogram.New(0, maxVal, sigFigs)
-	h.mu.sliding = wHist
-	h.mu.tickHelper = &tickHelper{
-		nextT:        now(),
-		tickInterval: duration / hdrHistogramHistWrapNum,
-		onTick: func() {
-			wHist.Rotate()
-		},
-	}
 	return h
 }
 
@@ -84,9 +71,9 @@ func NewHdrHistogram(
 //
 // The windowed portion of the Histogram retains values for approximately
 // histogramWindow.
-func NewHdrLatency(metadata Metadata, histogramWindow time.Duration) *HdrHistogram {
+func NewHdrLatency(metadata Metadata) *HdrHistogram {
 	return NewHdrHistogram(
-		metadata, histogramWindow, HdrHistogramMaxLatency.Nanoseconds(), 1,
+		metadata, HdrHistogramMaxLatency.Nanoseconds(), 1,
 	)
 }
 
@@ -97,9 +84,6 @@ func (h *HdrHistogram) RecordValue(v int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.mu.sliding.Current.RecordValue(v) != nil {
-		_ = h.mu.sliding.Current.RecordValue(h.maxVal)
-	}
 	if h.mu.cumulative.RecordValue(v) != nil {
 		_ = h.mu.cumulative.RecordValue(h.maxVal)
 	}
@@ -122,9 +106,6 @@ func (h *HdrHistogram) Min() int64 {
 
 // Inspect calls the closure with the empty string and the receiver.
 func (h *HdrHistogram) Inspect(f func(interface{})) {
-	h.mu.Lock()
-	maybeTick(h.mu.tickHelper)
-	h.mu.Unlock()
 	f(h)
 }
 
@@ -138,7 +119,6 @@ func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	hist := &prometheusgo.Histogram{}
 
 	h.mu.Lock()
-	maybeTick(h.mu.tickHelper)
 	bars := h.mu.cumulative.Distribution()
 	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
 
@@ -169,52 +149,6 @@ func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	}
 }
 
-// TotalWindowed implements the WindowedHistogram interface.
-func (h *HdrHistogram) TotalWindowed() (int64, float64) {
-	pHist := h.ToPrometheusMetricWindowed().Histogram
-	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
-}
-
-func (h *HdrHistogram) toPrometheusMetricWindowedLocked() *prometheusgo.Metric {
-	hist := &prometheusgo.Histogram{}
-
-	maybeTick(h.mu.tickHelper)
-	bars := h.mu.sliding.Current.Distribution()
-	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
-
-	var cumCount uint64
-	var sum float64
-	for _, bar := range bars {
-		if bar.Count == 0 {
-			// No need to expose trivial buckets.
-			continue
-		}
-		upperBound := float64(bar.To)
-		sum += upperBound * float64(bar.Count)
-
-		cumCount += uint64(bar.Count)
-		curCumCount := cumCount // need a new alloc thanks to bad proto code
-
-		hist.Bucket = append(hist.Bucket, &prometheusgo.Bucket{
-			CumulativeCount: &curCumCount,
-			UpperBound:      &upperBound,
-		})
-	}
-	hist.SampleCount = &cumCount
-	hist.SampleSum = &sum // can do better here; we approximate in the loop
-
-	return &prometheusgo.Metric{
-		Histogram: hist,
-	}
-}
-
-// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the right type.
-func (h *HdrHistogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.toPrometheusMetricWindowedLocked()
-}
-
 // GetMetadata returns the metric's metadata including the Prometheus
 // MetricType.
 func (h *HdrHistogram) GetMetadata() Metadata {
@@ -223,23 +157,9 @@ func (h *HdrHistogram) GetMetadata() Metadata {
 	return baseMetadata
 }
 
-func (h *HdrHistogram) ValueAtQuantileWindowed(q float64) float64 {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	return ValueAtQuantileWindowed(h.toPrometheusMetricWindowedLocked().Histogram, q)
-}
-
 func (h *HdrHistogram) Mean() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	return h.mu.cumulative.Mean()
-}
-
-func (h *HdrHistogram) MeanWindowed() float64 {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	return h.mu.sliding.Current.Mean()
 }

@@ -8,11 +8,7 @@
 
 package kvevent
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 var (
 	metaChangefeedBufferEntriesIn = metric.Metadata{
@@ -64,7 +60,7 @@ type Metrics struct {
 }
 
 // MakeMetrics constructs a Metrics struct with the provided histogram window.
-func MakeMetrics(histogramWindow time.Duration) Metrics {
+func MakeMetrics() Metrics {
 	return Metrics{
 		BufferEntriesIn:          metric.NewCounter(metaChangefeedBufferEntriesIn),
 		BufferEntriesOut:         metric.NewCounter(metaChangefeedBufferEntriesOut),

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -82,7 +81,7 @@ func NewTxnCoordSenderFactory(
 		tcf.heartbeatInterval = base.DefaultTxnHeartbeatInterval
 	}
 	if tcf.metrics == (TxnMetrics{}) {
-		tcf.metrics = MakeTxnMetrics(metric.TestSampleInterval)
+		tcf.metrics = MakeTxnMetrics()
 	}
 	return tcf
 }

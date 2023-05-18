@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -541,7 +540,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 		return nil, err
 	}
 
-	metrics := makeTenantSpecificMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
+	metrics := makeTenantSpecificMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */)
 	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics, timeutil.Now(), nil)
 	return pgwireConn, nil
 }
@@ -1082,8 +1081,8 @@ func TestMaliciousInputs(t *testing.T) {
 				close(errChan)
 			}(tc)
 
-			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
-			metrics := makeTenantSpecificMetrics(sqlMetrics, time.Second /* histogramWindow */)
+			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */)
+			metrics := makeTenantSpecificMetrics(sqlMetrics)
 
 			conn := newConn(
 				r,

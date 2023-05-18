@@ -10,11 +10,7 @@
 
 package sql
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 // BaseMemoryMetrics contains a max histogram and a current count of the
 // bytes allocated by a sql endpoint.
@@ -70,12 +66,9 @@ func makeMemMetricMetadata(name, help string) metric.Metadata {
 	}
 }
 
-func makeMemMetricHistogram(
-	metadata metric.Metadata, histogramWindow time.Duration,
-) metric.IHistogram {
+func makeMemMetricHistogram(metadata metric.Metadata) metric.IHistogram {
 	return metric.NewHistogram(metric.HistogramOptions{
 		Metadata: metadata,
-		Duration: histogramWindow,
 		MaxVal:   log10int64times1000,
 		SigFigs:  3,
 		Buckets:  metric.MemoryUsage64MBBuckets,
@@ -84,19 +77,19 @@ func makeMemMetricHistogram(
 
 // MakeBaseMemMetrics instantiates the metric objects for an SQL endpoint, but
 // only includes the root metrics: .max and .current, without txn and session.
-func MakeBaseMemMetrics(endpoint string, histogramWindow time.Duration) BaseMemoryMetrics {
+func MakeBaseMemMetrics(endpoint string) BaseMemoryMetrics {
 	prefix := "sql.mem." + endpoint
 	MetaMemMaxBytes := makeMemMetricMetadata(prefix+".max", "Memory usage per sql statement for "+endpoint)
 	MetaMemCurBytes := makeMemMetricMetadata(prefix+".current", "Current sql statement memory usage for "+endpoint)
 	return BaseMemoryMetrics{
-		MaxBytesHist:  makeMemMetricHistogram(MetaMemMaxBytes, histogramWindow),
+		MaxBytesHist:  makeMemMetricHistogram(MetaMemMaxBytes),
 		CurBytesCount: metric.NewGauge(MetaMemCurBytes),
 	}
 }
 
 // MakeMemMetrics instantiates the metric objects for an SQL endpoint.
-func MakeMemMetrics(endpoint string, histogramWindow time.Duration) MemoryMetrics {
-	base := MakeBaseMemMetrics(endpoint, histogramWindow)
+func MakeMemMetrics(endpoint string) MemoryMetrics {
+	base := MakeBaseMemMetrics(endpoint)
 	prefix := "sql.mem." + endpoint
 	MetaMemMaxTxnBytes := makeMemMetricMetadata(prefix+".txn.max", "Memory usage per sql transaction for "+endpoint)
 	MetaMemTxnCurBytes := makeMemMetricMetadata(prefix+".txn.current", "Current sql transaction memory usage for "+endpoint)
@@ -106,11 +99,11 @@ func MakeMemMetrics(endpoint string, histogramWindow time.Duration) MemoryMetric
 	MetaMemSessionPreparedCurBytes := makeMemMetricMetadata(prefix+".session.prepared.current", "Current sql session memory usage by prepared statements for "+endpoint)
 	return MemoryMetrics{
 		BaseMemoryMetrics:            base,
-		TxnMaxBytesHist:              makeMemMetricHistogram(MetaMemMaxTxnBytes, histogramWindow),
+		TxnMaxBytesHist:              makeMemMetricHistogram(MetaMemMaxTxnBytes),
 		TxnCurBytesCount:             metric.NewGauge(MetaMemTxnCurBytes),
-		SessionMaxBytesHist:          makeMemMetricHistogram(MetaMemMaxSessionBytes, histogramWindow),
+		SessionMaxBytesHist:          makeMemMetricHistogram(MetaMemMaxSessionBytes),
 		SessionCurBytesCount:         metric.NewGauge(MetaMemSessionCurBytes),
-		SessionPreparedMaxBytesHist:  makeMemMetricHistogram(MetaMemMaxSessionPreparedBytes, histogramWindow),
+		SessionPreparedMaxBytesHist:  makeMemMetricHistogram(MetaMemMaxSessionPreparedBytes),
 		SessionPreparedCurBytesCount: metric.NewGauge(MetaMemSessionPreparedCurBytes),
 	}
 }
