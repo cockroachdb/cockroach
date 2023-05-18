@@ -45,28 +45,32 @@ func newColSchema(numCols int) *colSchema {
 	}
 }
 
+// typSupported filters out types which can be returned by randgen.RandType
+// that are not supported by the writer.
+func typSupported(typ *types.T) bool {
+	switch typ.Family() {
+	case types.AnyFamily, types.TSQueryFamily, types.TSVectorFamily,
+		types.TupleFamily, types.VoidFamily:
+		return false
+	case types.ArrayFamily:
+		if typ.ArrayContents().Family() == types.ArrayFamily || typ.ArrayContents().Family() == types.TupleFamily {
+			return false
+		}
+		return typSupported(typ.ArrayContents())
+	default:
+		// It is better to let an unexpected type pass the filter and fail the test
+		// because we can observe and document such failures.
+		return true
+	}
+}
+
 // randTestingType returns a random type for testing.
 func randTestingType(rng *rand.Rand) *types.T {
-	unsupported := true
+	supported := false
 	var typ *types.T
-	for unsupported {
+	for !supported {
 		typ = randgen.RandType(rng)
-		// Filter out types which can be returned by randgen.RandType
-		// that are not supported by the writer.
-		switch typ.Family() {
-		case types.AnyFamily, types.TSQueryFamily, types.TSVectorFamily,
-			types.VoidFamily, types.TupleFamily:
-			unsupported = true
-		case types.ArrayFamily:
-			if typ.ArrayContents().Family() == types.ArrayFamily || typ.ArrayContents().Family() == types.TupleFamily {
-				unsupported = true
-			}
-			unsupported = false
-		default:
-			// It is better to let an unexpected type pass the filter and fail the test
-			// because we can observe and document such failures.
-			unsupported = false
-		}
+		supported = typSupported(typ)
 	}
 	return typ
 }
