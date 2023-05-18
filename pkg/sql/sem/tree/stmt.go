@@ -97,6 +97,7 @@ const (
 	CreateProcedureTag     = "CREATE PROCEDURE"
 	CreateSchemaTag        = "CREATE SCHEMA"
 	CreateSequenceTag      = "CREATE SEQUENCE"
+	CreateDatabaseTag      = "CREATE DATABASE"
 	CommentOnColumnTag     = "COMMENT ON COLUMN"
 	CommentOnConstraintTag = "COMMENT ON CONSTRAINT"
 	CommentOnDatabaseTag   = "COMMENT ON DATABASE"
