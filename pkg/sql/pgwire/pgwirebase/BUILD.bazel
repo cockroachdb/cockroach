@@ -39,6 +39,7 @@ go_library(
         "//pkg/util/tsearch",
         "//pkg/util/uint128",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_lib_pq//oid",
     ],
