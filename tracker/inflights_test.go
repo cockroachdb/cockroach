@@ -227,6 +227,28 @@ func TestInflightsFull(t *testing.T) {
 	}
 }
 
+func TestInflightsReset(t *testing.T) {
+	in := NewInflights(10, 1000)
+	// Imitate a semi-realistic flow during which the inflight tracker is
+	// periodically reset to empty. Byte usage must not "leak" across resets.
+	index := uint64(0)
+	for epoch := 0; epoch < 100; epoch++ {
+		in.reset()
+		// Add 5 messages. They should not max out the limit yet.
+		for i := 0; i < 5; i++ {
+			require.False(t, in.Full())
+			index++
+			in.Add(index, 16)
+		}
+		// Ack all but last 2 indices.
+		in.FreeLE(index - 2)
+		require.False(t, in.Full())
+		require.Equal(t, 2, in.Count())
+	}
+	in.FreeLE(index)
+	require.Equal(t, 0, in.Count())
+}
+
 func inflightsBuffer(indices []uint64, sizes []uint64) []inflight {
 	if len(indices) != len(sizes) {
 		panic("len(indices) != len(sizes)")

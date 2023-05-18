@@ -137,6 +137,7 @@ func (in *Inflights) Count() int { return in.count }
 
 // reset frees all inflights.
 func (in *Inflights) reset() {
-	in.count = 0
 	in.start = 0
+	in.count = 0
+	in.bytes = 0
 }
