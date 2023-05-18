@@ -81,8 +81,9 @@ func TestTenantMetadataUpdate(t *testing.T) {
 
 	// Use an old version.
 	ten := &Tenant{
-		Version:          "002",
-		PrivateEndpoints: []string{"a", "b"},
+		Version:                 "002",
+		AllowedCIDRRanges:       []string{"0.0.0.0/0"},
+		AllowedPrivateEndpoints: []string{"a", "b"},
 	}
 	e.UpdateTenant(ten)
 	require.True(t, e.IsValid())

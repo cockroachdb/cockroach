@@ -63,21 +63,34 @@ func TestPrivateEndpoints(t *testing.T) {
 		p := &acl.PrivateEndpoints{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_ALL,
-					PrivateEndpoints: []string{"foo", "baz"},
+					ConnectivityType:        tenant.ALLOW_ALL,
+					AllowedPrivateEndpoints: []string{"foo", "baz"},
 				}, nil
 			},
 		}
 		err := p.CheckConnection(ctx, makeConn("bar"))
-		require.EqualError(t, err, "connection to '42' denied: cluster does not allow this private connection")
+		require.EqualError(t, err, "connection to '42' denied: cluster does not allow private connections from endpoint 'bar'")
+	})
+
+	t.Run("default behavior if no entries", func(t *testing.T) {
+		p := &acl.PrivateEndpoints{
+			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
+				return &tenant.Tenant{
+					ConnectivityType:        tenant.ALLOW_ALL,
+					AllowedPrivateEndpoints: []string{},
+				}, nil
+			},
+		}
+		err := p.CheckConnection(ctx, makeConn("bar"))
+		require.EqualError(t, err, "connection to '42' denied: cluster does not allow private connections from endpoint 'bar'")
 	})
 
 	t.Run("good private connection", func(t *testing.T) {
 		p := &acl.PrivateEndpoints{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_ALL,
-					PrivateEndpoints: []string{"foo"},
+					ConnectivityType:        tenant.ALLOW_ALL,
+					AllowedPrivateEndpoints: []string{"foo"},
 				}, nil
 			},
 		}
@@ -89,13 +102,13 @@ func TestPrivateEndpoints(t *testing.T) {
 		p := &acl.PrivateEndpoints{
 			LookupTenantFn: func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error) {
 				return &tenant.Tenant{
-					ConnectivityType: tenant.ALLOW_PUBLIC_ONLY,
-					PrivateEndpoints: []string{"foo"},
+					ConnectivityType:        tenant.ALLOW_PUBLIC_ONLY,
+					AllowedPrivateEndpoints: []string{"foo"},
 				}, nil
 			},
 		}
 		err := p.CheckConnection(ctx, makeConn("foo"))
-		require.EqualError(t, err, "connection to '42' denied: cluster does not allow this private connection")
+		require.EqualError(t, err, "connection to '42' denied: cluster does not allow private connections from endpoint 'foo'")
 	})
 }
 
