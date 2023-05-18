@@ -28,34 +28,39 @@ import (
 // - rangeAnalyzedConstraints initialization: pool and release; stateForInit, finishInit
 // - rangeAnalyzedConstraints read-only functions.
 
+func parseConstraint(t *testing.T, field string) roachpb.Constraint {
+	var typ roachpb.Constraint_Type
+	switch field[0] {
+	case '+':
+		typ = roachpb.Constraint_REQUIRED
+	case '-':
+		typ = roachpb.Constraint_PROHIBITED
+	default:
+		t.Fatalf(fmt.Sprintf("unexpected start of field %s", field))
+	}
+	kv := strings.Split(field[1:], "=")
+	if len(kv) != 2 {
+		t.Fatalf("unexpected field %s", field)
+	}
+	return roachpb.Constraint{
+		Type:  typ,
+		Key:   kv[0],
+		Value: kv[1],
+	}
+}
+
+func parseConstraints(t *testing.T, fields []string) []roachpb.Constraint {
+	var cc []roachpb.Constraint
+	for _, field := range fields {
+		cc = append(cc, parseConstraint(t, field))
+	}
+	return cc
+}
+
 func TestNormalizedSpanConfig(t *testing.T) {
 	interner := newStringInterner()
 	datadriven.RunTest(t, "testdata/normalize_config",
 		func(t *testing.T, d *datadriven.TestData) string {
-			parseConstraints := func(fields []string) []roachpb.Constraint {
-				var cc []roachpb.Constraint
-				for _, field := range fields {
-					var typ roachpb.Constraint_Type
-					switch field[0] {
-					case '+':
-						typ = roachpb.Constraint_REQUIRED
-					case '-':
-						typ = roachpb.Constraint_PROHIBITED
-					default:
-						t.Fatalf(fmt.Sprintf("unexpected start of field %s", field))
-					}
-					kv := strings.Split(field[1:], "=")
-					if len(kv) != 2 {
-						t.Fatalf("unexpected field %s", field)
-					}
-					cc = append(cc, roachpb.Constraint{
-						Type:  typ,
-						Key:   kv[0],
-						Value: kv[1],
-					})
-				}
-				return cc
-			}
 			parseConstraintsConj := func(fields []string) roachpb.ConstraintsConjunction {
 				var cc roachpb.ConstraintsConjunction
 				if strings.HasPrefix(fields[0], "num-replicas=") {
@@ -65,7 +70,7 @@ func TestNormalizedSpanConfig(t *testing.T) {
 					cc.NumReplicas = int32(replicas)
 					fields = fields[1:]
 				}
-				cc.Constraints = parseConstraints(fields)
+				cc.Constraints = parseConstraints(t, fields)
 				return cc
 			}
 			printSpanConf := func(b *strings.Builder, conf roachpb.SpanConfig) {
@@ -117,7 +122,7 @@ func TestNormalizedSpanConfig(t *testing.T) {
 						cc := parseConstraintsConj(parts[1:])
 						conf.VoterConstraints = append(conf.VoterConstraints, cc)
 					case "lease-preference":
-						cc := parseConstraints(parts[1:])
+						cc := parseConstraints(t, parts[1:])
 						conf.LeasePreferences = append(conf.LeasePreferences, roachpb.LeasePreference{
 							Constraints: cc,
 						})
@@ -144,17 +149,18 @@ func TestNormalizedSpanConfig(t *testing.T) {
 		})
 }
 
+func printPostingList(b *strings.Builder, pl storeIDPostingList) {
+	for i := range pl {
+		prefix := ""
+		if i > 0 {
+			prefix = ", "
+		}
+		fmt.Fprintf(b, "%s%d", prefix, pl[i])
+	}
+}
+
 func TestStoreIDPostingList(t *testing.T) {
 	pls := map[string]storeIDPostingList{}
-	printPL := func(b *strings.Builder, pl storeIDPostingList) {
-		for i := range pl {
-			prefix := ""
-			if i > 0 {
-				prefix = ", "
-			}
-			fmt.Fprintf(b, "%s%d", prefix, pl[i])
-		}
-	}
 	forceAllocation := rand.Intn(2) == 1
 
 	datadriven.RunTest(t, "testdata/posting_list",
@@ -178,7 +184,7 @@ func TestStoreIDPostingList(t *testing.T) {
 				}
 				pls[name] = pl
 				var b strings.Builder
-				printPL(&b, pl)
+				printPostingList(&b, pl)
 				return b.String()
 
 			case "intersect", "union", "is-equal":
@@ -199,7 +205,7 @@ func TestStoreIDPostingList(t *testing.T) {
 					}
 					pls[x] = plX
 					var b strings.Builder
-					printPL(&b, plX)
+					printPostingList(&b, plX)
 					return b.String()
 				}
 
@@ -224,7 +230,7 @@ func TestStoreIDPostingList(t *testing.T) {
 					pls[name] = pl
 					var b strings.Builder
 					fmt.Fprintf(&b, "%t: ", rv)
-					printPL(&b, pl)
+					printPostingList(&b, pl)
 					return b.String()
 				}
 

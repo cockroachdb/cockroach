@@ -23,6 +23,7 @@ go_library(
 go_test(
     name = "allocator2_test",
     srcs = [
+        "constraint_matcher_test.go",
         "constraint_test.go",
         "memo_helper_test.go",
     ],
