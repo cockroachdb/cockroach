@@ -1517,6 +1517,42 @@ project
       ├── x:7 * 2 [as="?column?":12, outer=(7), immutable]
       └── z:9 IS NULL [as="?column?":13, outer=(9)]
 
+# Case where the outer filter null-rejects one projected column, but not another
+# column.
+norm expect=RejectNullsProject
+SELECT * FROM (
+  SELECT xyz.z + 1 AS m, xyz.y + 1 AS n
+  FROM a FULL OUTER JOIN xyz ON true
+) tmp, xyz
+WHERE tmp.n = xyz.y
+----
+inner-join (hash)
+ ├── columns: m:12 n:13!null x:14!null y:15!null z:16
+ ├── immutable
+ ├── fd: (14)-->(15,16), (13)==(15), (15)==(13)
+ ├── project
+ │    ├── columns: m:12 n:13!null
+ │    ├── immutable
+ │    ├── left-join (cross)
+ │    │    ├── columns: y:8!null z:9
+ │    │    ├── select
+ │    │    │    ├── columns: y:8!null z:9
+ │    │    │    ├── scan xyz
+ │    │    │    │    └── columns: y:8 z:9
+ │    │    │    └── filters
+ │    │    │         └── y:8 IS NOT NULL [outer=(8), constraints=(/8: (/NULL - ]; tight)]
+ │    │    ├── scan a
+ │    │    └── filters (true)
+ │    └── projections
+ │         ├── z:9 + 1 [as=m:12, outer=(9), immutable]
+ │         └── y:8 + 1 [as=n:13, outer=(8), immutable]
+ ├── scan xyz
+ │    ├── columns: x:14!null y:15 z:16
+ │    ├── key: (14)
+ │    └── fd: (14)-->(15,16)
+ └── filters
+      └── n:13 = y:15 [outer=(13,15), constraints=(/13: (/NULL - ]; /15: (/NULL - ]), fd=(13)==(15), (15)==(13)]
+
 # No-op case because null-rejection is not requested for column k.
 norm expect-not=RejectNullsProject
 SELECT * FROM
