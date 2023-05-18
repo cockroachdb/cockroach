@@ -62,10 +62,7 @@ var rangeLeaseRenewalDuration = func() time.Duration {
 // https://github.com/cockroachdb/cockroach/issues/103654
 func registerFailover(r registry.Registry) {
 	for _, leases := range []registry.LeaseType{registry.EpochLeases, registry.ExpirationLeases} {
-		var suffix string
-		if leases == registry.ExpirationLeases {
-			suffix = "/lease=expiration"
-		}
+		suffix := fmt.Sprintf("/lease=%s", leases)
 
 		for _, readOnly := range []bool{false, true} {
 			readOnly := readOnly // pin loop variable
@@ -90,7 +87,7 @@ func registerFailover(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:      "failover/partial/lease-gateway" + suffix,
+			Name:      "failover/partition-partial/lease-gateway" + suffix,
 			Owner:     registry.OwnerKV,
 			Benchmark: true,
 			Timeout:   30 * time.Minute,
@@ -100,7 +97,7 @@ func registerFailover(r registry.Registry) {
 		})
 
 		r.Add(registry.TestSpec{
-			Name:      "failover/partial/lease-leader" + suffix,
+			Name:      "failover/partition-partial/lease-leader" + suffix,
 			Owner:     registry.OwnerKV,
 			Benchmark: true,
 			Timeout:   30 * time.Minute,
@@ -110,7 +107,7 @@ func registerFailover(r registry.Registry) {
 		})
 
 		r.Add(registry.TestSpec{
-			Name:      "failover/partial/lease-liveness" + suffix,
+			Name:      "failover/partition-partial/lease-liveness" + suffix,
 			Owner:     registry.OwnerKV,
 			Benchmark: true,
 			Timeout:   30 * time.Minute,
@@ -131,7 +128,7 @@ func registerFailover(r registry.Registry) {
 				postValidation = registry.PostValidationNoDeadNodes
 			}
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/non-system/%s%s", failureMode, suffix),
+				Name:                fmt.Sprintf("failover/%s/user%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
@@ -139,11 +136,11 @@ func registerFailover(r registry.Registry) {
 				Cluster:             r.MakeClusterSpec(7, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
 				Leases:              leases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runFailoverNonSystem(ctx, t, c, failureMode)
+					runFailoverUser(ctx, t, c, failureMode)
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
+				Name:                fmt.Sprintf("failover/%s/liveness%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
 				Tags:                registry.Tags("weekly"),
 				Benchmark:           true,
@@ -156,7 +153,7 @@ func registerFailover(r registry.Registry) {
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
+				Name:                fmt.Sprintf("failover/%s/system%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
 				Tags:                registry.Tags("weekly"),
 				Benchmark:           true,
@@ -165,7 +162,7 @@ func registerFailover(r registry.Registry) {
 				Cluster:             r.MakeClusterSpec(7, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
 				Leases:              leases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runFailoverSystemNonLiveness(ctx, t, c, failureMode)
+					runFailoverSystem(ctx, t, c, failureMode)
 				},
 			})
 		}
@@ -380,7 +377,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 
 	m := c.NewMonitor(ctx, c.Range(1, 7))
 
-	failer := makeFailer(t, c, m, failureModeBlackhole, opts, settings, rng).(PartialFailer)
+	failer := makeFailer(t, c, m, failureModePartitionFull, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -520,7 +517,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
-	failer := makeFailer(t, c, m, failureModeBlackhole, opts, settings, rng).(PartialFailer)
+	failer := makeFailer(t, c, m, failureModePartitionFull, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -658,7 +655,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 
 	m := c.NewMonitor(ctx, c.Range(1, 7))
 
-	failer := makeFailer(t, c, m, failureModeBlackhole, opts, settings, rng).(PartialFailer)
+	failer := makeFailer(t, c, m, failureModePartitionFull, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -744,8 +741,8 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	m.Wait()
 }
 
-// runFailoverNonSystem benchmarks the maximum duration of range unavailability
-// following a leaseholder failure with only non-system ranges.
+// runFailoverUser benchmarks the maximum duration of range unavailability
+// following a leaseholder failure with only user ranges.
 //
 //   - No system ranges located on the failed node.
 //
@@ -761,9 +758,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 //
 // The test runs a kv50 workload via gateways on n1-n3, measuring the pMax
 // latency for graphing.
-func runFailoverNonSystem(
-	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
-) {
+func runFailoverUser(ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
 	rng, _ := randutil.NewTestRand()
@@ -974,7 +969,7 @@ func runFailoverLiveness(
 	m.Wait()
 }
 
-// runFailoverSystemNonLiveness benchmarks the maximum duration of range
+// runFailoverSystem benchmarks the maximum duration of range
 // unavailability following a leaseholder failure with only system ranges,
 // excluding the liveness range which is tested separately in
 // runFailoverLiveness.
@@ -993,7 +988,7 @@ func runFailoverLiveness(
 //
 // The test runs a kv50 workload via gateways on n1-n3, measuring the pMax
 // latency for graphing.
-func runFailoverSystemNonLiveness(
+func runFailoverSystem(
 	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
 ) {
 	require.Equal(t, 7, c.Spec().NodeCount)
@@ -1099,23 +1094,23 @@ func runFailoverSystemNonLiveness(
 type failureMode string
 
 const (
-	failureModeBlackhole     failureMode = "blackhole"
-	failureModeBlackholeRecv failureMode = "blackhole-recv"
-	failureModeBlackholeSend failureMode = "blackhole-send"
-	failureModeCrash         failureMode = "crash"
-	failureModeDeadlock      failureMode = "deadlock"
-	failureModeDiskStall     failureMode = "disk-stall"
-	failureModePause         failureMode = "pause"
-	failureModeNoop          failureMode = "noop"
+	failureModeCrash            failureMode = "crash"
+	failureModeDeadlock         failureMode = "deadlock"
+	failureModeDiskStall        failureMode = "disk-stall"
+	failureModePartitionFull    failureMode = "partition-full"
+	failureModePartitionReceive failureMode = "partition-receive"
+	failureModePartitionSend    failureMode = "partition-send"
+	failureModePause            failureMode = "pause"
+	failureModeNoop             failureMode = "noop"
 )
 
 var allFailureModes = []failureMode{
-	failureModeBlackhole,
-	failureModeBlackholeRecv,
-	failureModeBlackholeSend,
 	failureModeCrash,
 	failureModeDeadlock,
 	failureModeDiskStall,
+	failureModePartitionFull,
+	failureModePartitionReceive,
+	failureModePartitionSend,
 	failureModePause,
 	// failureModeNoop intentionally omitted
 }
@@ -1151,20 +1146,20 @@ func makeFailerWithoutLocalNoop(
 	rng *rand.Rand,
 ) Failer {
 	switch failureMode {
-	case failureModeBlackhole:
+	case failureModePartitionFull:
 		return &blackholeFailer{
 			t:      t,
 			c:      c,
 			input:  true,
 			output: true,
 		}
-	case failureModeBlackholeRecv:
+	case failureModePartitionReceive:
 		return &blackholeFailer{
 			t:     t,
 			c:     c,
 			input: true,
 		}
-	case failureModeBlackholeSend:
+	case failureModePartitionSend:
 		return &blackholeFailer{
 			t:      t,
 			c:      c,
@@ -1281,11 +1276,11 @@ type blackholeFailer struct {
 
 func (f *blackholeFailer) Mode() failureMode {
 	if f.input && !f.output {
-		return failureModeBlackholeRecv
+		return failureModePartitionReceive
 	} else if f.output && !f.input {
-		return failureModeBlackholeSend
+		return failureModePartitionSend
 	}
-	return failureModeBlackhole
+	return failureModePartitionFull
 }
 
 func (f *blackholeFailer) String() string              { return string(f.Mode()) }
