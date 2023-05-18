@@ -1323,11 +1323,7 @@ func (t *logicTest) newCluster(
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
 	// "testdata/rename_table". Figure out what's up with that.
-	if serverArgs.MaxSQLMemoryLimit == 0 {
-		// Specify a fixed memory limit (some test cases verify OOM conditions;
-		// we don't want those to take long on large machines).
-		serverArgs.MaxSQLMemoryLimit = 256 * 1024 * 1024
-	}
+
 	// We have some queries that bump into 100MB default temp storage limit
 	// when run with fakedist-disk config, so we'll use a larger limit here.
 	// There isn't really a downside to doing so.
@@ -4004,7 +4000,7 @@ var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_C
 // want to specify for the test clusters to be created with.
 type TestServerArgs struct {
 	// MaxSQLMemoryLimit determines the value of --max-sql-memory startup
-	// argument for the server. If unset, then the default limit of 192MiB will
+	// argument for the server. If unset, then the default limit of 256MiB will
 	// be used.
 	MaxSQLMemoryLimit int64
 	// If set, mutations.MaxBatchSize, row.getKVBatchSize, and other values
