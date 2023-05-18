@@ -209,12 +209,6 @@ func (d *dev) crossBuild(
 	var script strings.Builder
 	script.WriteString("set -euxo pipefail\n")
 	script.WriteString(fmt.Sprintf("bazel %s\n", shellescape.QuoteCommand(bazelArgs)))
-	for _, arg := range bazelArgs {
-		if arg == "--config=with_ui" {
-			script.WriteString("bazel run @yarn//:yarn -- --check-files --cwd pkg/ui --offline\n")
-			break
-		}
-	}
 	var bazelBinSet bool
 	script.WriteString("set +x\n")
 	for _, target := range targets {
