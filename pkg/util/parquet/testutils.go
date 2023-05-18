@@ -11,6 +11,7 @@
 package parquet
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"math"
@@ -56,8 +57,8 @@ func ReadFileAndVerifyDatums(
 	}()
 
 	require.NoError(t, err)
-	require.Equal(t, int64(numRows), meta.GetNumRows())
-	require.Equal(t, numCols, meta.Schema.NumColumns())
+	require.Equal(t, numRows, len(readDatums))
+	require.Equal(t, numCols, len(readDatums[0]))
 
 	numRowGroups := int(math.Ceil(float64(numRows) / float64(writer.cfg.maxRowGroupLength)))
 	require.EqualValues(t, numRowGroups, len(meta.GetRowGroups()))
@@ -106,6 +107,12 @@ func ReadFile(
 		return nil, nil, nil, err
 	}
 
+	tupleColumnsMeta := reader.MetaData().KeyValueMetadata().FindValue(tupleIndexesMetaKey)
+	tupleColumns, err := deserialize2DIntArray(*tupleColumnsMeta)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	typOidsMeta := reader.MetaData().KeyValueMetadata().FindValue(typeOidMetaKey)
 	if typOidsMeta == nil {
 		return nil, nil, nil,
@@ -141,100 +148,96 @@ func ReadFile(
 			// arrayEntryRepLevel for more info.
 			isArray := col.Descriptor().MaxRepetitionLevel() == 1
 
-			switch col.Type() {
-			case parquet.Types.Boolean:
-				colDatums, read, err := readBatch(col, make([]bool, 1), dec, isArray)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-				if read != rowsInRowGroup {
-					return nil, nil, nil,
-						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
-				}
-				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
-			case parquet.Types.Int32:
-				colDatums, read, err := readBatch(col, make([]int32, 1), dec, isArray)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-				if read != rowsInRowGroup {
-					return nil, nil, nil,
-						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
-				}
-				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
-			case parquet.Types.Int64:
-				colDatums, read, err := readBatch(col, make([]int64, 1), dec, isArray)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-				if read != rowsInRowGroup {
-					return nil, nil, nil,
-						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
-				}
-				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
-			case parquet.Types.Int96:
-				panic("unimplemented")
-			case parquet.Types.Float:
-				arrs, read, err := readBatch(col, make([]float32, 1), dec, isArray)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-				if read != rowsInRowGroup {
-					return nil, nil, nil,
-						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
-				}
-				decodeValuesIntoDatumsHelper(arrs, readDatums, colIdx, startingRowIdx)
-			case parquet.Types.Double:
-				arrs, read, err := readBatch(col, make([]float64, 1), dec, isArray)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-				if read != rowsInRowGroup {
-					return nil, nil, nil,
-						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
-				}
-				decodeValuesIntoDatumsHelper(arrs, readDatums, colIdx, startingRowIdx)
-			case parquet.Types.ByteArray:
-				colDatums, read, err := readBatch(col, make([]parquet.ByteArray, 1), dec, isArray)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-				if read != rowsInRowGroup {
-					return nil, nil, nil,
-						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
-				}
-				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
-			case parquet.Types.FixedLenByteArray:
-				colDatums, read, err := readBatch(col, make([]parquet.FixedLenByteArray, 1), dec, isArray)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-				if read != rowsInRowGroup {
-					return nil, nil, nil,
-						errors.AssertionFailedf("expected to read %d values but found %d", rowsInRowGroup, read)
-				}
-				decodeValuesIntoDatumsHelper(colDatums, readDatums, colIdx, startingRowIdx)
+			isTuple := col.Descriptor().MaxDefinitionLevel() == 2
+
+			datumsForColInRowGroup, err := readColInRowGroup(col, dec, rowsInRowGroup, isArray, isTuple)
+			if err != nil {
+				return nil, nil, nil, err
 			}
+			decodeValuesIntoDatumsHelper(datumsForColInRowGroup, readDatums, colIdx, startingRowIdx)
 		}
 		startingRowIdx += int(rowsInRowGroup)
 	}
+
+	for i := 0; i < len(readDatums); i++ {
+		readDatums[i] = squashTuples(readDatums[i], tupleColumns)
+	}
+
 	// Since reader.MetaData() is being returned, we do not close the reader.
 	// This is defensive - we should not assume any method or data on the reader
 	// is safe to read once it is closed.
 	return reader.MetaData(), readDatums, reader.Close, nil
 }
 
+func readColInRowGroup(
+	col file.ColumnChunkReader, dec decoder, rowsInRowGroup int64, isArray bool, isTuple bool,
+) ([]tree.Datum, error) {
+	switch col.Type() {
+	case parquet.Types.Boolean:
+		colDatums, err := readRowGroup(col, make([]bool, 1), dec, rowsInRowGroup, isArray, isTuple)
+		if err != nil {
+			return nil, err
+		}
+		return colDatums, nil
+	case parquet.Types.Int32:
+		colDatums, err := readRowGroup(col, make([]int32, 1), dec, rowsInRowGroup, isArray, isTuple)
+		if err != nil {
+			return nil, err
+		}
+		return colDatums, nil
+	case parquet.Types.Int64:
+		colDatums, err := readRowGroup(col, make([]int64, 1), dec, rowsInRowGroup, isArray, isTuple)
+		if err != nil {
+			return nil, err
+		}
+		return colDatums, nil
+	case parquet.Types.Int96:
+		panic("unimplemented")
+	case parquet.Types.Float:
+		colDatums, err := readRowGroup(col, make([]float32, 1), dec, rowsInRowGroup, isArray, isTuple)
+		if err != nil {
+			return nil, err
+		}
+		return colDatums, nil
+	case parquet.Types.Double:
+		colDatums, err := readRowGroup(col, make([]float64, 1), dec, rowsInRowGroup, isArray, isTuple)
+		if err != nil {
+			return nil, err
+		}
+		return colDatums, nil
+	case parquet.Types.ByteArray:
+		colDatums, err := readRowGroup(col, make([]parquet.ByteArray, 1), dec, rowsInRowGroup, isArray, isTuple)
+		if err != nil {
+			return nil, err
+		}
+		return colDatums, nil
+	case parquet.Types.FixedLenByteArray:
+		colDatums, err := readRowGroup(col, make([]parquet.FixedLenByteArray, 1), dec, rowsInRowGroup, isArray, isTuple)
+		if err != nil {
+			return nil, err
+		}
+		return colDatums, nil
+	default:
+		return nil, errors.AssertionFailedf("unexpected type: %s", col.Type())
+	}
+}
+
 type batchReader[T parquetDatatypes] interface {
 	ReadBatch(batchSize int64, values []T, defLvls []int16, repLvls []int16) (total int64, valuesRead int, err error)
 }
 
-// readBatch reads all the datums in a row group for a column.
-func readBatch[T parquetDatatypes](
-	r file.ColumnChunkReader, valueAlloc []T, dec decoder, isArray bool,
-) (tree.Datums, int64, error) {
+// readRowGroup reads all the datums in a row group for a physical column.
+func readRowGroup[T parquetDatatypes](
+	r file.ColumnChunkReader,
+	valueAlloc []T,
+	dec decoder,
+	expectedRowCount int64,
+	isArray bool,
+	isTuple bool,
+) (tree.Datums, error) {
 	br, ok := r.(batchReader[T])
 	if !ok {
-		return nil, 0, errors.AssertionFailedf("expected batchReader for type %T, but found %T instead", valueAlloc, r)
+		return nil, errors.AssertionFailedf("expected batchReader for type %T, but found %T instead", valueAlloc, r)
 	}
 
 	result := make([]tree.Datum, 0)
@@ -244,7 +247,7 @@ func readBatch[T parquetDatatypes](
 	for {
 		numRowsRead, _, err := br.ReadBatch(1, valueAlloc, defLevels[:], repLevels[:])
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		if numRowsRead == 0 {
 			break
@@ -275,9 +278,26 @@ func readBatch[T parquetDatatypes](
 			// Deflevel 3 represents a non-null datum in an array.
 			d, err := decode(dec, valueAlloc[0])
 			if err != nil {
-				return nil, 0, err
+				return nil, err
 			}
 			currentArrayDatum.Array = append(currentArrayDatum.Array, d)
+		} else if isTuple {
+			// Deflevel 0 represents a null tuple
+			// Deflevel 1 represents a null value in a non null tuple
+			// Deflevel 2 represents a non-null value in a non-null tuple
+			switch defLevels[0] {
+			case 0:
+				nullTuple := tree.MakeDTuple(types.MakeTuple([]*types.T{}))
+				result = append(result, &nullTuple)
+			case 1:
+				result = append(result, tree.DNull)
+			case 2:
+				d, err := decode(dec, valueAlloc[0])
+				if err != nil {
+					return nil, err
+				}
+				result = append(result, d)
+			}
 		} else {
 			// Deflevel 0 represents a null value
 			// Deflevel 1 represents a non-null value
@@ -285,14 +305,17 @@ func readBatch[T parquetDatatypes](
 			if defLevels[0] != 0 {
 				d, err = decode(dec, valueAlloc[0])
 				if err != nil {
-					return nil, 0, err
+					return nil, err
 				}
 			}
 			result = append(result, d)
 		}
 	}
-
-	return result, int64(len(result)), nil
+	if int64(len(result)) != expectedRowCount {
+		return nil, errors.AssertionFailedf(
+			"expected to read %d rows in row group, found %d", expectedRowCount, int64(len(result)))
+	}
+	return result, nil
 }
 
 func decodeValuesIntoDatumsHelper(
@@ -352,6 +375,13 @@ func ValidateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 		for i := 0; i < len(arr1); i++ {
 			ValidateDatum(t, arr1[i], arr2[i])
 		}
+	case types.TupleFamily:
+		arr1 := expected.(*tree.DTuple).D
+		arr2 := actual.(*tree.DTuple).D
+		require.Equal(t, len(arr1), len(arr2))
+		for i := 0; i < len(arr1); i++ {
+			ValidateDatum(t, arr1[i], arr2[i])
+		}
 	case types.EnumFamily:
 		require.Equal(t, expected.(*tree.DEnum).LogicalRep, actual.(*tree.DEnum).LogicalRep)
 	case types.CollatedStringFamily:
@@ -383,6 +413,7 @@ func makeTestingEnumType() *types.T {
 
 const typeOidMetaKey = `crdbTypeOIDs`
 const typeFamilyMetaKey = `crdbTypeFamilies`
+const tupleIndexesMetaKey = `crdbTupleIndexes`
 
 // MakeReaderMetadata returns column type metadata that will be written to all
 // parquet files. This metadata is useful for roundtrip tests where we construct
@@ -391,24 +422,37 @@ func MakeReaderMetadata(sch *SchemaDefinition) map[string]string {
 	meta := map[string]string{}
 	typOids := make([]uint32, 0, len(sch.cols))
 	typFamilies := make([]int32, 0, len(sch.cols))
+	var tupleIntervals [][]uint32
 	for _, col := range sch.cols {
-		typOids = append(typOids, uint32(col.typ.Oid()))
-		typFamilies = append(typFamilies, int32(col.typ.Family()))
+		// Tuples get flattened out such that each field in the tuple is
+		// its own physical column in the parquet file.
+		if col.typ.Family() == types.TupleFamily {
+			for _, typ := range col.typ.TupleContents() {
+				typOids = append(typOids, uint32(typ.Oid()))
+				typFamilies = append(typFamilies, int32(typ.Family()))
+			}
+			tupleInterval := []uint32{col.physicalColsStartIdx, col.physicalColsStartIdx + col.numPhysicalCols - 1}
+			tupleIntervals = append(tupleIntervals, tupleInterval)
+		} else {
+			typOids = append(typOids, uint32(col.typ.Oid()))
+			typFamilies = append(typFamilies, int32(col.typ.Family()))
+		}
 	}
 	meta[typeOidMetaKey] = serializeIntArray(typOids)
 	meta[typeFamilyMetaKey] = serializeIntArray(typFamilies)
+	meta[tupleIndexesMetaKey] = serialize2DIntArray(tupleIntervals)
 	return meta
 }
 
-// serializeIntArray serializes an int array to a string "23 2 32 43 32".
+// serializeIntArray serializes an int array to a string "[23 2 32 43 32]".
 func serializeIntArray[I int32 | uint32](ints []I) string {
-	return strings.Trim(fmt.Sprint(ints), "[]")
+	return fmt.Sprint(ints)
 }
 
-// deserializeIntArray deserializes an integer sting in the format "23 2 32 43
-// 32" to an array of ints.
+// deserializeIntArray deserializes an integer sting in the format "[23 2 32 43
+// 32]" to an array of ints.
 func deserializeIntArray(s string) ([]uint32, error) {
-	vals := strings.Split(s, " ")
+	vals := strings.Split(strings.Trim(s, "[]"), " ")
 	result := make([]uint32, 0, len(vals))
 	for _, val := range vals {
 		intVal, err := strconv.Atoi(val)
@@ -418,4 +462,89 @@ func deserializeIntArray(s string) ([]uint32, error) {
 		result = append(result, uint32(intVal))
 	}
 	return result, nil
+}
+
+// serialize2DIntArray serializes a 2D int array in the format
+// "[1 2 3][4 5 6][7 8 9]".
+func serialize2DIntArray(ints [][]uint32) string {
+	var buf bytes.Buffer
+	for _, colIdxs := range ints {
+		buf.WriteString(serializeIntArray(colIdxs))
+	}
+	return buf.String()
+}
+
+// deserialize2DIntArray deserializes an integer sting in the format "23 2 32 43
+// 32" to an array of ints.
+func deserialize2DIntArray(s string) ([][]uint32, error) {
+	var result [][]uint32
+	found := true
+	var currentArray string
+	var remaining string
+	for found {
+		currentArray, remaining, found = strings.Cut(s, "]")
+		if !found {
+			break
+		}
+		// currentArray always has the form "[x y" where x, y are integers
+		// Drop the leading "["
+		currentArray = currentArray[1:]
+		tupleInts, err := deserializeIntArray(currentArray)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, tupleInts)
+		s = remaining
+	}
+	return result, nil
+}
+
+// squashTuples takes an array of datums and merges groups of adjacent datums
+// into tuples using the passed intervals. Example:
+//
+// Input: ["0", "1", "2", "3", "4", "5", "6"] [[0, 1], [3, 3], [4, 6]]
+// Output: [("0", "1"), "2", ("3"), ("4", "5", "6")]
+//
+// Behavior is undefined if the intervals are not sorted, not disjoint,
+// not ascending, or out of bounds.
+func squashTuples(datumRow []tree.Datum, tupleColIndexes [][]uint32) []tree.Datum {
+	if len(tupleColIndexes) == 0 {
+		return datumRow
+	}
+	tupleIdx := 0
+	var updatedDatums []tree.Datum
+	var currentTupleDatums []tree.Datum
+	var currentTupleTypes []*types.T
+	for i, d := range datumRow {
+		if tupleIdx < len(tupleColIndexes) {
+			tupleUpperIdx := tupleColIndexes[tupleIdx][1]
+			tupleLowerIdx := tupleColIndexes[tupleIdx][0]
+
+			if uint32(i) >= tupleLowerIdx && uint32(i) <= tupleUpperIdx {
+				currentTupleDatums = append(currentTupleDatums, d)
+				currentTupleTypes = append(currentTupleTypes, d.ResolvedType())
+
+				if uint32(i) == tupleUpperIdx {
+
+					// NULL CASE
+					if currentTupleTypes[0].Family() == types.TupleFamily {
+						updatedDatums = append(updatedDatums, tree.DNull)
+					} else {
+						tupleDatum := tree.MakeDTuple(types.MakeTuple(currentTupleTypes), currentTupleDatums...)
+						updatedDatums = append(updatedDatums, &tupleDatum)
+					}
+
+					currentTupleTypes = []*types.T{}
+					currentTupleDatums = []tree.Datum{}
+
+					tupleIdx += 1
+				}
+			} else {
+				updatedDatums = append(updatedDatums, d)
+			}
+		} else {
+			updatedDatums = append(updatedDatums, d)
+		}
+	}
+	return updatedDatums
 }

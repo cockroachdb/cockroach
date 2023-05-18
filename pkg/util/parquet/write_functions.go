@@ -109,17 +109,52 @@ var zeroLengthArrayDefLevel = []int16{1}
 var arrayEntryNilDefLevel = []int16{2}
 var arrayEntryNonNilDefLevel = []int16{3}
 
-// A colWriter is responsible for writing a datum to a file.ColumnChunkWriter.
+// The following definition levels are used when writing datums which are in
+// tuples. This explanation is valid for the array schema constructed in
+// makeColumn. Any corresponding repetition level should be 0 as nonzero
+// repetition levels are only valid for arrays in this library.
+//
+// In summary:
+//   - def level 0 means the tuple is null
+//   - def level 1 means the tuple is not null, and contains a null datum
+//   - def level 2 means the tuple is not null, and contains a non-null datum
+//
+// Examples:
+//
+// # Null Tuple
+//
+// d := tree.DNull
+//
+//	for _, writeFn := range tupleFields {
+//	   writeFn(tree.DNull, ..., defLevels = [0], ...)
+//	}
+//
+// # Typical Tuple
+//
+// d := tree.MakeDTuple(1, NULL, 2)
+// writeFnForField1(datum, ..., defLevels = [2], ...)
+// writeFnForField2(datum, ..., defLevels = [1], ...)
+// writeFnForField3(datum, ..., defLevels = [2], ...)
+var nilTupleDefLevel = []int16{0}
+var tupleFieldNilDefLevel = []int16{1}
+var tupleFieldNonNilDefLevel = []int16{2}
+
+// A colWriter is responsible for encoding a datum and writing it to
+// a file.ColumnChunkWriter. In some cases, the datum will be divided
+// and written separately to different file.ColumnChunkWriters.
 type colWriter interface {
-	Write(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx) error
+	Write(d tree.Datum, w []file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx) error
 }
 
 type scalarWriter writeFn
 
 func (w scalarWriter) Write(
-	d tree.Datum, cw file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx,
+	d tree.Datum, cw []file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx,
 ) error {
-	return writeScalar(d, cw, a, fmtCtx, writeFn(w))
+	if len(cw) != 1 {
+		return errors.AssertionFailedf("invalid number of column chunk writers in scalar writer: %d", len(cw))
+	}
+	return writeScalar(d, cw[0], a, fmtCtx, writeFn(w))
 }
 
 func writeScalar(
@@ -141,9 +176,12 @@ func writeScalar(
 type arrayWriter writeFn
 
 func (w arrayWriter) Write(
-	d tree.Datum, cw file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx,
+	d tree.Datum, cw []file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx,
 ) error {
-	return writeArray(d, cw, a, fmtCtx, writeFn(w))
+	if len(cw) != 1 {
+		return errors.AssertionFailedf("invalid number of column chunk writers in array writer: %d", len(cw))
+	}
+	return writeArray(d, cw[0], a, fmtCtx, writeFn(w))
 }
 
 func writeArray(
@@ -175,6 +213,47 @@ func writeArray(
 			}
 		}
 	}
+	return nil
+}
+
+type tupleWriter []writeFn
+
+func (tw tupleWriter) Write(
+	d tree.Datum, cw []file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx,
+) error {
+	if len(cw) != len(tw) {
+		return errors.AssertionFailedf(
+			"invalid number of column chunk writers (%d) for tuple writer (%d)",
+			len(cw), len(tw))
+	}
+	return writeTuple(d, cw, a, fmtCtx, tw)
+}
+
+func writeTuple(
+	d tree.Datum, w []file.ColumnChunkWriter, a *batchAlloc, fmtCtx *tree.FmtCtx, wFns []writeFn,
+) error {
+	if d == tree.DNull {
+		for i, wFn := range wFns {
+			if err := wFn(tree.DNull, w[i], a, fmtCtx, nilTupleDefLevel, newEntryRepLevel); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	dt, ok := tree.AsDTuple(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DTuple, found %T", d)
+	}
+	for i, wFn := range wFns {
+		defLevel := tupleFieldNonNilDefLevel
+		if dt.D[i] == tree.DNull {
+			defLevel = tupleFieldNilDefLevel
+		}
+		if err := wFn(dt.D[i], w[i], a, fmtCtx, defLevel, newEntryRepLevel); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -688,7 +767,7 @@ type parquetDatatypes interface {
 	bool | int32 | int64 | float32 | float64 | parquet.ByteArray | parquet.FixedLenByteArray
 }
 
-// batchWriter is an interface representing parquet column chunk writers such as
+// batchWriter is an interface representing parquet datumColumn chunk writers such as
 // file.Int64ColumnChunkWriter and file.BooleanColumnChunkWriter.
 type batchWriter[T parquetDatatypes] interface {
 	WriteBatch(values []T, defLevels, repLevels []int16) (valueOffset int64, err error)
