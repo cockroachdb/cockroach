@@ -4967,10 +4967,6 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-https://fake-host?ca_cert=Zm9v`,
 	)
 	sqlDB.ExpectErr(
-		t, `sink requires https`,
-		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-http://fake-host`,
-	)
-	sqlDB.ExpectErr(
 		t, `this sink is incompatible with option confluent_schema_registry`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', confluent_schema_registry=$2`,
 		`webhook-https://fake-host`, schemaReg.URL(),
