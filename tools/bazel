@@ -54,10 +54,15 @@ if [[ -n "${ALWAYS_RUN_GAZELLE}" ]]; then
     esac
 fi
 
-BASE="/private/var/tmp/_bazel_${USER}/bases/"
+# If some invoking tool picked an output base for us, respect it.
+if [[ ! -z "${BAZEL_OUTPUT_BASE}" ]]; then
+  exec $BAZEL_REAL --output_base="${BAZEL_OUTPUT_BASE}" "$@"
+fi
+
+BASES="/private/var/tmp/_bazel_${USER}/bases/"
 
 # If we're not on macOS/haven't enabled multi-bases, just run bazel normally.
-if [ ! -d "${BASE}" ]; then 
+if [ ! -d "${BASES}" ]; then 
     exec $BAZEL_REAL "$@"
 fi
 
@@ -86,21 +91,30 @@ fi
 # specifying bazel would resolve the workspace root then hash it. Rather than 
 # resolve the root, we're going to pretend we're only run from the root, and if
 # we're run elsewhere, just make a separate base for that location. 
-SUFFIX="$(pwd | md5 | head -c12)"
+SUFFIX="$(pwd | md5 | head -c6)"
+
+# Make creating the claim pidfile atomic.
+set -o noclobber
 
 # Check if any of our extra bases are available: no pidfile or pidfile's PID is
 # no longer running. If we find one, claim it via a PID and then run bazel with
 # that as its output_base.
 for i in {1..3}; do
-  PIDFILE="${BASE}${i}/inuse"
-  if [ ! -f ${PIDFILE} ] || ! ps -p "$(cat ${PIDFILE} 2> /dev/null)" >/dev/null 2>/dev/null; then
-    # Claim this base.
-    mkdir -p "${BASE}${i}"
-    echo "$$" > "${PIDFILE}"
-    # We don't need to cleanup claim files since we check pids, but doing so can
-    # save us a ps call later.
+  BASE="${BASES}${i}"
+  mkdir -p "${BASE}"
+  PIDFILE="${BASE}/inuse"
+
+  # Check for and move orphaned PID files out of the way.
+  if [ -f "$PIDFILE" ]; then
+    OWNER="$(cat ${PIDFILE} 2>/dev/null)"
+    if ! ps -p "${OWNER}" >/dev/null 2>/dev/null && [ "${OWNER}" = "$(cat ${PIDFILE} 2>/dev/null)" ]; then
+      mv -n "${PIDFILE}" "${PIDFILE}.orphan-${OWNER}" 2>/dev/null
+    fi
+  fi
+  # Claim and use this base if able (atomic thanks to noclobber above).
+  if echo "$$" 2> /dev/null > "${PIDFILE}"; then
     trap 'rm "${PIDFILE}"' EXIT
-    $BAZEL_REAL --output_base="${BASE}${i}/${SUFFIX}" "$@"
+    $BAZEL_REAL --output_base="${BASE}/${SUFFIX}" "$@"
     exit $?
   fi
 done
