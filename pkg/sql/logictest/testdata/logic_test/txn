@@ -213,6 +213,9 @@ BEGIN TRANSACTION
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
+statement error pgcode 25001 cannot change the isolation level of a running transaction
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED
+
 statement ok
 ROLLBACK
 
@@ -220,7 +223,10 @@ statement ok
 BEGIN TRANSACTION
 
 statement ok
-UPDATE kv SET v = 'b' WHERE k in ('a')
+SELECT * FROM kv LIMIT 1
+
+statement error pgcode 25001 cannot change the isolation level of a running transaction
+SET transaction_isolation = 'READ COMMITTED'
 
 statement ok
 ROLLBACK
@@ -262,8 +268,7 @@ COMMIT
 statement error invalid value for parameter "transaction_isolation": "read uncommitted"
 SET transaction_isolation = 'read uncommitted'
 
-# We can explicitly start a transaction with isolation level
-# specified.
+# We can explicitly start a transaction with isolation level specified.
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
@@ -280,6 +285,39 @@ query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+read committed
+
+statement ok
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+serializable
+
+# The isolation level of a transaction can be changed with the session variable too.
+statement ok
+SET transaction_isolation = 'READ COMMITTED'
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+read committed
+
+query T
+SHOW transaction_isolation
+----
+read committed
 
 statement ok
 COMMIT
@@ -589,11 +627,16 @@ serializable
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-# TODO(rafi): Once the session variable is supported, this should show read committed.
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-serializable
+read committed
+
+# SHOW without a transaction should create an auto-transaction with the new default level
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+read committed
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE
@@ -602,6 +645,14 @@ query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 serializable
+
+statement ok
+SET default_transaction_isolation = 'read committed'
+
+query T
+SHOW default_transaction_isolation
+----
+read committed
 
 statement ok
 SET DEFAULT_TRANSACTION_ISOLATION TO 'SNAPSHOT'
@@ -620,6 +671,19 @@ query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
+
+statement ok
+COMMIT
+
+# With the isolation level specified, BEGIN ISOLATION LEVEL overrides the default.
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+read committed
 
 statement ok
 COMMIT
