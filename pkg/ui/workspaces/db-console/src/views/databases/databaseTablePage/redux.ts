@@ -45,6 +45,9 @@ const { TableDetailsRequest, TableStatsRequest, TableIndexStatsRequest } =
 
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
+// Hardcoded isTenant value for db-console.
+const isTenant = false;
+
 export const mapStateToProps = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, databaseNameAttr),
@@ -58,6 +61,7 @@ export const mapStateToProps = createSelector(
   state => selectIsMoreThanOneNode(state),
   state => selectAutomaticStatsCollectionEnabled(state),
   state => selectHasAdminRole(state),
+  _ => isTenant,
   (
     database,
     table,
@@ -68,6 +72,7 @@ export const mapStateToProps = createSelector(
     showNodeRegionsSection,
     automaticStatsCollectionEnabled,
     hasAdminRole,
+    isTenant,
   ): DatabaseTablePageData => {
     const details = tableDetails[generateTableID(database, table)];
     const stats = tableStats[generateTableID(database, table)];
@@ -159,7 +164,11 @@ export const mapStateToProps = createSelector(
           stats?.data?.approximate_disk_bytes || 0,
         ).toNumber(),
         rangeCount: FixLong(stats?.data?.range_count || 0).toNumber(),
-        nodesByRegionString: getNodesByRegionString(nodes, nodeRegions),
+        nodesByRegionString: getNodesByRegionString(
+          nodes,
+          nodeRegions,
+          isTenant,
+        ),
       },
       indexStats: {
         loading: !!indexStats?.inFlight,
