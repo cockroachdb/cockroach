@@ -128,6 +128,7 @@ func TestReplicaLeaseStatus(t *testing.T) {
 				Gossip: gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry(),
 					zonepb.DefaultZoneConfigRef()),
 			})
+			l.TestingStart(true)
 			r := Replica{store: &Store{
 				Ident: &roachpb.StoreIdent{StoreID: 1, NodeID: 1},
 				cfg:   StoreConfig{Clock: clock, NodeLiveness: l},
