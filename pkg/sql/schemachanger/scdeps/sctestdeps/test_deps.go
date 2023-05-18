@@ -207,6 +207,21 @@ func (s *TestState) MemberOfWithAdminOption(
 	return nil, nil
 }
 
+// HasGlobalPrivilegeOrRoleOption implements the scbuild.AuthorizationAccessor interface.
+func (s *TestState) HasGlobalPrivilegeOrRoleOption(
+	ctx context.Context, privilege privilege.Kind,
+) (bool, error) {
+	s.LogSideEffectf("checking current user %q has system privilege %q or the corresponding"+
+		" legacy role option", s.User(), privilege.DisplayName())
+	return true, nil
+}
+
+// CheckRoleExists implements the scbuild.AuthorizationAccessor interface.
+func (s *TestState) CheckRoleExists(ctx context.Context, role username.SQLUsername) error {
+	s.LogSideEffectf("checking role/user %q exists", role)
+	return nil
+}
+
 // IndexPartitioningCCLCallback implements the scbuild.Dependencies interface.
 func (s *TestState) IndexPartitioningCCLCallback() scbuild.CreatePartitioningCCLCallback {
 	if ccl := scdeps.CreatePartitioningCCL; ccl != nil {

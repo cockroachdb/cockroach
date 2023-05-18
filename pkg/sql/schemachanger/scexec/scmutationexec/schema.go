@@ -25,12 +25,12 @@ func (i *immediateVisitor) CreateSchemaDescriptor(
 ) error {
 	mut := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   catid.InvalidDescID, // Set by `SchemaParent` element
-		Name:       "",                  // Set by `Namespace` element
+		Name:       "",                  // Set by `SchemaName` element
 		ID:         op.SchemaID,
 		Privileges: &catpb.PrivilegeDescriptor{Version: catpb.Version23_2}, // Populated by `UserPrivileges` elements and `Owner` element
 		Version:    1,
+		State:      descpb.DescriptorState_ADD,
 	}).BuildCreatedMutableSchema()
-	mut.State = descpb.DescriptorState_ADD
 	i.CreateDescriptor(mut)
 	return nil
 }
