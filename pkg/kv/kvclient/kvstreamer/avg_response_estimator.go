@@ -36,6 +36,7 @@ var streamerAvgResponseSizeMultiple = settings.RegisterFloatSetting(
 	"sql.distsql.streamer.avg_response_size_multiple",
 	"determines the multiple used when calculating the average response size by the streamer component",
 	defaultAvgResponseSizeMultiple,
+	settings.NonNegativeFloat,
 )
 
 func (e *avgResponseEstimator) init(sv *settings.Values) {
