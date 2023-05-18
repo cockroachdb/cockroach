@@ -148,8 +148,8 @@ func waitUntilProducerActive(
 	for r := retry.Start(ro); r.Next(); {
 		status, err = client.Heartbeat(ctx, streamID, heartbeatTimestamp)
 		if err != nil {
-			return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job error",
-				ingestionJobID)
+			return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job %d error",
+				ingestionJobID, streamID)
 		}
 		if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
 			break
@@ -158,7 +158,8 @@ func waitUntilProducerActive(
 	}
 	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
 		return jobs.MarkAsPermanentJobError(errors.Errorf("failed to resume ingestion job %d "+
-			"as the producer job is not active and in status %s", ingestionJobID, status.StreamStatus))
+			"as the producer job %d is not active and in status %s", ingestionJobID,
+			streamID, status.StreamStatus))
 	}
 	return nil
 }
@@ -304,53 +305,47 @@ func ingestWithRetries(
 		if jobs.IsPermanentJobError(err) || errors.Is(err, context.Canceled) {
 			break
 		}
-		const msgFmt = "stream ingestion waits for retrying after error: %q"
+		const msgFmt = "stream ingestion waits for retrying after error: %s"
 		log.Warningf(ctx, msgFmt, err)
 		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.ReplicationError,
 			fmt.Sprintf(msgFmt, err))
 		retryCount++
 	}
 	if err != nil {
-		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.ReplicationError,
-			fmt.Sprintf("stream ingestion encountered error and is to be paused: %s", err))
-	} else {
-		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.ReplicationCuttingOver,
-			"stream ingestion finished successfully")
+		return err
 	}
-	return err
+	updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.ReplicationCuttingOver,
+		"stream ingestion finished successfully")
+	return nil
 }
 
 // The ingestion job should never fail, only pause, as progress should never be lost.
-func (s *streamIngestionResumer) handleResumeError(resumeCtx context.Context, err error) error {
-	const errorFmt = "ingestion job failed (%v) but is being paused"
-	errorMessage := fmt.Sprintf(errorFmt, err)
-	log.Warningf(resumeCtx, errorFmt, err)
-
+func (s *streamIngestionResumer) handleResumeError(
+	ctx context.Context, execCtx sql.JobExecContext, err error,
+) error {
+	const errorFmt = "ingestion job failed (%s) but is being paused"
+	log.Warningf(ctx, errorFmt, err)
+	updateRunningStatus(ctx, execCtx, s.job, jobspb.ReplicationError, fmt.Sprintf(errorFmt, err))
 	// The ingestion job is paused but the producer job will keep
 	// running until it times out. Users can still resume ingestion before
 	// the producer job times out.
-	return s.job.NoTxn().PauseRequestedWithFunc(resumeCtx, func(
-		ctx context.Context, planHookState interface{}, txn isql.Txn,
-		progress *jobspb.Progress,
-	) error {
-		progress.RunningStatus = errorMessage
-		return nil
-	}, errorMessage)
+	return jobs.MarkPauseRequestError(err)
 }
 
 // Resume is part of the jobs.Resumer interface.  Ensure that any errors
 // produced here are returned as s.handleResumeError.
-func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx interface{}) error {
+func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// Protect the destination tenant's keyspan from garbage collection.
-	err := s.protectDestinationTenant(resumeCtx, execCtx)
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	err := s.protectDestinationTenant(ctx, execCtx)
 	if err != nil {
-		return s.handleResumeError(resumeCtx, err)
+		return s.handleResumeError(ctx, jobExecCtx, err)
 	}
 
 	// Start ingesting KVs from the replication stream.
-	err = ingestWithRetries(resumeCtx, execCtx.(sql.JobExecContext), s.job)
+	err = ingestWithRetries(ctx, jobExecCtx, s.job)
 	if err != nil {
-		return s.handleResumeError(resumeCtx, err)
+		return s.handleResumeError(ctx, jobExecCtx, err)
 	}
 	return nil
 }
@@ -360,9 +355,7 @@ func releaseDestinationTenantProtectedTimestamp(
 ) error {
 	if err := ptp.Release(ctx, ptsID); err != nil {
 		if errors.Is(err, protectedts.ErrNotExists) {
-			// No reason to return an error which might cause problems if it doesn't
-			// seem to exist.
-			log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+			log.Warningf(ctx, "failed to release protected ts as it does not to exist: %s", err)
 			err = nil
 		}
 		return err
@@ -697,7 +690,7 @@ func (c *cutoverProgressTracker) onCompletedCallback(
 	}
 
 	if err := c.updateJobProgress(ctx, c.remainingSpans.Slice()); err != nil {
-		log.Warningf(ctx, "failed to update job progress: %v", err)
+		log.Warningf(ctx, "failed to update job progress: %s", err)
 	}
 	return nil
 }
