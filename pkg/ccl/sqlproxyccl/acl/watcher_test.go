@@ -76,12 +76,12 @@ func TestACLWatcher(t *testing.T) {
 	dir, tds := tenantdirsvr.SetupTestDirectory(t, ctx, stopper, nil /* timeSource */)
 	tenantID := roachpb.MustMakeTenantID(10)
 	tds.CreateTenant(tenantID, &tenant.Tenant{
-		Version:           "001",
-		TenantID:          tenantID.ToUint64(),
-		ClusterName:       "my-tenant",
-		ConnectivityType:  tenant.ALLOW_ALL,
-		AllowedCIDRRanges: []string{"1.1.0.0/16"},
-		PrivateEndpoints:  []string{"foo-bar-baz", "cockroachdb"},
+		Version:                 "001",
+		TenantID:                tenantID.ToUint64(),
+		ClusterName:             "my-tenant",
+		ConnectivityType:        tenant.ALLOW_ALL,
+		AllowedCIDRRanges:       []string{"1.1.0.0/16"},
+		AllowedPrivateEndpoints: []string{"foo-bar-baz", "cockroachdb"},
 	})
 
 	t.Run("connection is allowed", func(t *testing.T) {
@@ -254,12 +254,12 @@ func TestACLWatcher(t *testing.T) {
 
 		// Update the tenant.
 		tds.UpdateTenant(tenantID, &tenant.Tenant{
-			Version:           "002",
-			TenantID:          tenantID.ToUint64(),
-			ClusterName:       "my-tenant",
-			ConnectivityType:  tenant.ALLOW_ALL,
-			AllowedCIDRRanges: []string{"1.1.0.0/16"},
-			PrivateEndpoints:  []string{"foo-bar-baz"},
+			Version:                 "002",
+			TenantID:                tenantID.ToUint64(),
+			ClusterName:             "my-tenant",
+			ConnectivityType:        tenant.ALLOW_ALL,
+			AllowedCIDRRanges:       []string{"1.1.0.0/16"},
+			AllowedPrivateEndpoints: []string{"foo-bar-baz"},
 		})
 
 		// Wait until watcher has received the updated event.

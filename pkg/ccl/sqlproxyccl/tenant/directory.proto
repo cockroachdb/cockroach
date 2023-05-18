@@ -133,10 +133,10 @@ message Tenant {
   // allowed to access the tenant. This will only apply if the tenant allows
   // public connections.
   repeated string allowed_cidr_ranges = 5 [(gogoproto.customname) = "AllowedCIDRRanges"];
-  // PrivateEndpoints corresponds to the list of available endpoint identifiers
-  // that could access the tenant. This will only apply if the tenant allows
-  // private connections.
-  repeated string private_endpoints = 6;
+  // AllowedPrivateEndpoints corresponds to the list of endpoint identifiers
+  // that are allowed to access the tenant. This will only apply if the tenant
+  // allows private connections.
+  repeated string allowed_private_endpoints = 6;
 }
 
 // GetTenantRequest is used by a client to request from the sever metadata
