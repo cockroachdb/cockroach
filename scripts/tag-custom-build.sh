@@ -50,7 +50,7 @@ git tag "$TAG" "$SHA"
 git push git@github.com:cockroachdb/cockroach.git "$TAG"
 
 TAG_URL="https://github.com/cockroachdb/cockroach/releases/tag/${TAG}"
-TEAMCITY_URL="https://teamcity.cockroachdb.com/buildConfiguration/Internal_Release_Process_TestingMakeAndPublishBuildV221?mode=builds&branch=${TAG}"
+TEAMCITY_URL="https://teamcity.cockroachdb.com/buildConfiguration/Internal_Cockroach_Release_Customized_MakeAndPublishCustomizedBuildArtifacts?mode=builds&branch=${TAG}"
 if [ "$(command -v open)" ] ; then
     open "$TEAMCITY_URL"
     open "$TAG_URL"
@@ -75,4 +75,14 @@ Here is where the build run should show up in TeamCity for the tag:
 
 Tag name: $TAG
 Build ID: $ID
+
+The binaries will be available at:
+  https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-amd64.tgz
+  https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-arm64.tgz
+  https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.darwin-10.9-amd64.tgz
+  https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.windows-6.2-amd64.zip
+
+Pull the docker image by:
+  docker pull us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/cockroach-customized:$ID
+
 EOF
