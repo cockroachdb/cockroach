@@ -24,6 +24,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",
+        "//pkg/util/netutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

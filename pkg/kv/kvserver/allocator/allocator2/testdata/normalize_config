@@ -1,3 +1,29 @@
+# No constraint or voter constraints, and normalization adds the empty
+# constraint.
+normalize num-replicas=3 num-voters=3
+----
+input:
+ num-replicas=3 num-voters=3
+output:
+ num-replicas=3 num-voters=3
+ constraints:
+   :3
+
+# No constraint, but have non-voters. Normalization adds the empty constraint.
+normalize num-replicas=5 num-voters=3
+voter-constraint +region=a
+----
+input:
+ num-replicas=5 num-voters=3
+ voter-constraints:
+   +region=a
+output:
+ num-replicas=5 num-voters=3
+ constraints:
+   :5
+ voter-constraints:
+   +region=a:3
+
 normalize num-replicas=3 num-voters=3
 constraint +region=us-west -zone=us-west-b
 constraint +zone=us-west-a

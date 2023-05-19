@@ -180,7 +180,7 @@ func (r *RemoteClockMonitor) AllLatencies() map[roachpb.NodeID]time.Duration {
 }
 
 // OnConnect tracks connections count per node.
-func (r *RemoteClockMonitor) OnConnect(ctx context.Context, nodeID roachpb.NodeID) {
+func (r *RemoteClockMonitor) OnConnect(_ context.Context, nodeID roachpb.NodeID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	count := r.mu.connCount[nodeID]
@@ -189,7 +189,7 @@ func (r *RemoteClockMonitor) OnConnect(ctx context.Context, nodeID roachpb.NodeI
 }
 
 // OnDisconnect removes all information associated with the provided node when there's no connections remain.
-func (r *RemoteClockMonitor) OnDisconnect(ctx context.Context, nodeID roachpb.NodeID) {
+func (r *RemoteClockMonitor) OnDisconnect(_ context.Context, nodeID roachpb.NodeID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	count, ok := r.mu.connCount[nodeID]
