@@ -2647,9 +2647,12 @@ func (rpcCtx *Context) VerifyDialback(
 	if nodeID == 0 || request.NeedsDialback == PingRequest_BLOCKING {
 		// Since we don't have a successful reverse connection, try and dial back
 		// manually. We don't use the regular dialer pool to avoid a circular dependency:
-		// Dialing through the pool starts with a blocking connection, and now there is
-		// an infinite loop of blocking connections. A throwaway connection keeps it simple.
-		ctx := rpcCtx.makeDialCtx(target, 0, SystemClass)
+		// Dialing through the pool starts with a BLOCKING connection, which the remote
+		// side would try to dial back, which would call into VerifyDialback for this
+		// connection again, etc, for an infinite loop of blocking connections.
+		// A throwaway connection keeps it simple.
+		ctx := rpcCtx.makeDialCtx(target, request.OriginNodeID, SystemClass)
+		ctx = logtags.AddTag(ctx, "dialback", nil)
 		conn, err := rpcCtx.grpcDialRaw(ctx, target, SystemClass, grpc.WithBlock())
 		if err != nil {
 			log.Infof(ctx, "blocking dialback connection failed to %s, n%d, %v", target, nodeID, err)
@@ -2662,11 +2665,43 @@ func (rpcCtx *Context) VerifyDialback(
 		_ = conn.Close() // nolint:grpcconnclose
 		return nil
 	} else {
-		// If the previous attempt ended in an error, we can confidently report we
-		// are unable to dialback. If the attempt is still ongoing, then we want
-		// to allow it to finish. Once it has finished, we will leave this error
-		// here until the connection health becomes healthy either through
-		// checking the health manually or a blocking ping succeeding.
+		// Async dialback is considered "successful" if there is a healthy
+		// SystemClass connection to the sender. We don't want to block on this dial
+		// if it is necessary, so we keep a map.
+		//
+		// If there is a healthy SystemClass connection, we don't enter this branch
+		// and clean up the map. So here, we assume there isn't one and we build an
+		// ad-hoc circuit breaker: when we first arrive here, we put a dialback attempt
+		// into the map and return success for now; in the future we will return the
+		// definite outcome of the attempt once it is known (and return success until
+		// then).
+		// If the outcome is an error: this is sticky; even if a newer attempt would
+		// succeed, we stick to the old one. (Again, when a reverse SystemClass
+		// connection comes into existence, we clean up all state and are done). If
+		// the outcome is success: it is not sticky; we check the state of the
+		// connection on each VerifyDialback call.
+		//
+		// Generally this means that when a VerifyDialback call fails, the caller
+		// (i.e. the remote node) needs to send BLOCKING heartbeats instead, which
+		// can succeed once the network issues are resolved, and can only then
+		// switch back to NON_BLOCKING.
+		//
+		// TODO(tbg): the stickiness of errors is not ideal and likely accidental.
+		// We could change loadOrCreateDialbackAttempt to keep two connections if
+		// the first one is in a definite error state and remove the errored
+		// connection when the result of the second connection is known, but let's
+		// just wait for #99191 to land which is really what we want here:
+		// connection state that is kept across attempts (vs. today, where a broken
+		// conn gets dropped on the spot).
+		//
+		// At that point, this entire branch just becomes:
+		//
+		//   if errors.Is(connHealthErr, ErrNotHeartbeated) {
+		//   	return nil // connection attempt is now ongoing, but result not known yet
+		//   }
+		//   return connHealthErr // return result of latest heartbeat attempt
+		//
+		// and the map can be removed entirely.
 		return rpcCtx.loadOrCreateDialbackAttempt(nodeID, target)
 	}
 }
