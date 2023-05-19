@@ -17,6 +17,7 @@ changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consu
 changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	tenant-rw
 changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation	tenant-rw
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds	tenant-rw
+changefeed.protect_timestamp.max_age	duration	96h0m0s	fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration	tenant-rw
 changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables	tenant-rw
 changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value.	tenant-rw
 cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload	tenant-rw
@@ -74,7 +75,7 @@ server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with
 server.rangelog.ttl	duration	720h0m0s	if nonzero, entries in system.rangelog older than this duration are periodically purged	tenant-rw
 server.shutdown.connection_wait	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	tenant-rw
 server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.drain_wait is to set the wait time for health probes to notice that the node is not ready.)	tenant-rw
-server.shutdown.jobs_wait	duration	10s	the maximum amount of time a server waits for all currently executing jobs to notice drain request and to perform orderly shutdown	tenant-rw
+server.shutdown.jobs_wait	duration	0s	the maximum amount of time a server waits for all currently executing jobs to notice drain request and to perform orderly shutdown	tenant-rw
 server.shutdown.query_wait	duration	10s	the timeout for waiting for active queries to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	tenant-rw
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead	tenant-rw
 server.user_login.cert_password_method.auto_scram_promotion.enabled	boolean	true	whether to automatically promote cert-password authentication to use SCRAM	tenant-rw
