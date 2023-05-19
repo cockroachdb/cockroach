@@ -105,7 +105,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/charmbracelet/bubbles v0.15.1-0.20230123181021-a6a12c4a31eb
 	github.com/client9/misspell v0.3.4
-	github.com/cockroachdb/apd/v3 v3.1.2
+	github.com/cockroachdb/apd/v3 v3.2.0
 	github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go/v2 v2.3.3
