@@ -2667,9 +2667,7 @@ func (rpcCtx *Context) VerifyDialback(
 		// to allow it to finish. Once it has finished, we will leave this error
 		// here until the connection health becomes healthy either through
 		// checking the health manually or a blocking ping succeeding.
-		return rpcCtx.loadOrCreateConnAttempt(nodeID, func() *Connection {
-			return rpcCtx.GRPCDialNode(target, nodeID, SystemClass)
-		})
+		return rpcCtx.loadOrCreateDialbackAttempt(nodeID, target)
 	}
 }
 
@@ -2684,7 +2682,7 @@ func (rpcCtx *Context) clearPreviousAttempt(nodeID roachpb.NodeID) {
 	}
 }
 
-// loadOrCreateConnAttempt checks if we have an in-progress connection attempt
+// loadOrCreateDialbackAttempt checks if we have an in-progress connection attempt
 // to a store, and if not will create a connection and store it in the map. It
 // takes a function to create a connection because the connection is only
 // created in the case where it doesn't already exist. If there is already a
@@ -2694,9 +2692,7 @@ func (rpcCtx *Context) clearPreviousAttempt(nodeID roachpb.NodeID) {
 // Note that the connection attempt is one-shot: if it fails, the error is
 // permanent and the caller needs to do something that resets it, like a
 // blocking dial.
-func (rpcCtx *Context) loadOrCreateConnAttempt(
-	nodeID roachpb.NodeID, createConnFunc func() *Connection,
-) error {
+func (rpcCtx *Context) loadOrCreateDialbackAttempt(nodeID roachpb.NodeID, target string) error {
 	rpcCtx.dialbackMu.Lock()
 	defer rpcCtx.dialbackMu.Unlock()
 
@@ -2704,7 +2700,7 @@ func (rpcCtx *Context) loadOrCreateConnAttempt(
 	if previousAttempt == nil {
 		// There is no previous attempt in place. Create a connection and store it for
 		// the future, for now return success.
-		rpcCtx.dialbackMu.m[nodeID] = createConnFunc()
+		rpcCtx.dialbackMu.m[nodeID] = rpcCtx.GRPCDialNode(target, nodeID, SystemClass)
 		return nil
 	}
 
