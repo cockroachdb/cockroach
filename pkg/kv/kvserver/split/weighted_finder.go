@@ -14,9 +14,9 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -52,6 +52,11 @@ type weightedSample struct {
 	weight      float64
 	left, right float64
 	count       int
+}
+
+func (w weightedSample) String() string {
+	return fmt.Sprintf("%s(l=%.1f r=%.1f c=%d w=%.1f)",
+		w.key, w.left, w.right, w.count, w.weight)
 }
 
 // WeightedFinder is a structure that is used to determine the split point
@@ -122,23 +127,6 @@ func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
 		return
 	} else {
 		idx = f.randSource.Intn(splitKeySampleSize)
-	}
-
-	// We only wish to retain safe split keys as samples, as they are the split
-	// keys that will eventually be returned from Key(). If instead we kept every
-	// key, it is possible for all sample keys to map to the same split key
-	// implicitly with column families. Note this doesn't stop every sample being
-	// the same key, however it will cause no split key logging and bump metrics.
-	// TODO(kvoli): When the single key situation arises, we should backoff
-	// attempting to split. There is a fixed overhead on the hotpath when the
-	// finder is active.
-	if safeKey, err := keys.EnsureSafeSplitKey(key); err == nil {
-		key = safeKey
-	} else {
-		// If the key is not a safe split key, instead ignore it and don't bump any
-		// counters. This biases the algorithm slightly, as keys which would be
-		// invalid are not sampled, nor their impact recorded if they reach here.
-		return
 	}
 
 	// Note we always use the start key of the span. We could
@@ -265,6 +253,10 @@ func (f *WeightedFinder) NoSplitKeyCauseLogMsg() string {
 
 // PopularKeyFrequency implements the LoadBasedSplitter interface.
 func (f *WeightedFinder) PopularKeyFrequency() float64 {
+	// Sort the sample slice to determine the frequency that a popular key
+	// appears. We could copy the slice, however it would require an allocation.
+	// The probability a sample is replaced doesn't change as it is independent
+	// of position.
 	sort.Slice(f.samples[:], func(i, j int) bool {
 		return f.samples[i].key.Compare(f.samples[j].key) < 0
 	})
@@ -287,4 +279,18 @@ func (f *WeightedFinder) PopularKeyFrequency() float64 {
 	}
 
 	return popularKeyWeight / totalWeight
+}
+
+func (f *WeightedFinder) String() string {
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "key=%s start=%s count=%d total=%.2f samples=[",
+		f.Key(), f.startTime, f.count, f.totalWeight)
+	for i, key := range f.samples {
+		if i > 0 {
+			fmt.Fprint(&buf, " ")
+		}
+		fmt.Fprintf(&buf, "%s", key)
+	}
+	fmt.Fprint(&buf, "]")
+	return buf.String()
 }
