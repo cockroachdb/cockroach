@@ -691,6 +691,16 @@ See storage.AggregatedIteratorStats for more details.`,
 		Measurement: "Iterator Ops",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaStorageCompactionsDuration = metric.Metadata{
+		Name: "storage.compactions.duration",
+		Help: `Cumulative sum of all compaction durations.
+
+The rate of this value provides the effective compaction concurrency of a store,
+which can be useful to determine whether the maximum compaction concurrency is
+fully utilized.`,
+		Measurement: "Processing Time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaStorageCompactionsKeysPinnedCount = metric.Metadata{
 		Name: "storage.compactions.keys.pinned.count",
 		Help: `Cumulative count of storage engine KVs written to sstables during flushes and compactions due to open LSM snapshots.
@@ -2047,6 +2057,7 @@ type StoreMetrics struct {
 	SharedStorageBytesWritten     *metric.Gauge
 	StorageCompactionsPinnedKeys  *metric.Gauge
 	StorageCompactionsPinnedBytes *metric.Gauge
+	StorageCompactionsDuration    *metric.Gauge
 	IterBlockBytes                *metric.Gauge
 	IterBlockBytesInCache         *metric.Gauge
 	IterBlockReadDuration         *metric.Gauge
@@ -2669,6 +2680,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SharedStorageBytesWritten:     metric.NewGauge(metaSharedStorageBytesWritten),
 		StorageCompactionsPinnedKeys:  metric.NewGauge(metaStorageCompactionsKeysPinnedCount),
 		StorageCompactionsPinnedBytes: metric.NewGauge(metaStorageCompactionsKeysPinnedBytes),
+		StorageCompactionsDuration:    metric.NewGauge(metaStorageCompactionsDuration),
 		FlushableIngestCount:          metric.NewGauge(metaFlushableIngestCount),
 		FlushableIngestTableCount:     metric.NewGauge(metaFlushableIngestTableCount),
 		FlushableIngestTableSize:      metric.NewGauge(metaFlushableIngestTableBytes),
@@ -3014,6 +3026,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.IterInternalSteps.Update(int64(m.Iterator.InternalSteps))
 	sm.StorageCompactionsPinnedKeys.Update(int64(m.Snapshots.PinnedKeys))
 	sm.StorageCompactionsPinnedBytes.Update(int64(m.Snapshots.PinnedSize))
+	sm.StorageCompactionsDuration.Update(int64(m.Compact.Duration))
 	sm.SharedStorageBytesRead.Update(m.SharedStorageReadBytes)
 	sm.SharedStorageBytesWritten.Update(m.SharedStorageWriteBytes)
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
