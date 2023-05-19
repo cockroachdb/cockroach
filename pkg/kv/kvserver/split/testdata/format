@@ -1,0 +1,49 @@
+requests key_dist=zipfian key_max=10000 span_dist=uniform span_max=1000 weight_dist=uniform weight_max=10 range_request_percent=5 request_count=10000
+----
+
+requests key_dist=zipfian key_max=10000 span_dist=uniform span_max=1000 weight_dist=zipfian weight_max=1000 range_request_percent=50 request_count=10000
+----
+
+finder weighted=true
+----
+
+eval seed=42 iterations=1 all=true mix=sequential mix_count=2 show_last=true
+----
+description                                         no_key(%)  avg_diff(%)  max_diff(%)  avg_optimal_diff(%)  max_optimal_diff(%)
+mixed_requests(2)                                   0.00       19.53        19.53        0.03                 0.03
+w=zip(1000)/k=zip(10000)/s=uni(1000)/s(%)=50/10000                                                            
+w=uni(10)/k=zip(10000)/s=uni(1000)/s(%)=5/10000                                                               
+	key=/Table/87 start=2022-03-21 11:00:00 +0000 UTC count=25561 total=1419849.00 samples=[/Table/69(l=7224.5 r=7795.5 c=2849 w=3.0)/Table/87(l=9956.5 r=10234.5 c=3865 w=10.0)/Table/1668(l=812538.5 r=195240.0 c=21230 w=444.5)/Table/2(l=8747.5 r=87057.5 c=10900 w=576.0)/Table/8037(l=901079.0 r=20812.5 c=20257 w=184.0)/Table/9(l=51478.5 r=174844.5 c=12399 w=26.0)/Table/1651(l=290138.5 r=75912.5 c=14059 w=0.5)/Table/314(l=272083.0 r=233374.0 c=15523 w=892.0)/Table/1352(l=768870.0 r=212101.5 c=20956 w=203.0)/Table/4738(l=1121617.5 r=103873.0 c=23605 w=469.5)/Table/3(l=130260.0 r=1074155.5 c=23365 w=217.0)/Table/103(l=76825.0 r=100252.0 c=11795 w=641.0)/Table/1(l=0.0 r=934301.5 c=20401 w=900.0)/Table/813(l=904660.0 r=415556.5 c=24666 w=333.0)/Table/3402(l=881283.0 r=120617.5 c=21193 w=499.5)/Table/5267(l=1137936.0 r=89270.0 c=23633 w=415.0)/Table/5(l=84925.0 r=399060.0 c=15297 w=579.0)/Table/27(l=90438.0 r=203733.0 c=13169 w=396.0)/Table/8(l=99945.0 r=368634.0 c=15139 w=396.5)/Table/5418(l=1158653.5 r=86238.0 c=23807 w=404.0)]
+
+finder weighted=false
+----
+
+eval seed=42 iterations=1 all=true mix=sequential mix_count=2 show_last=true
+----
+description                                         no_key(%)  avg_diff(%)  max_diff(%)  avg_optimal_diff(%)  max_optimal_diff(%)
+mixed_requests(2)                                   0.00       10.24        10.24        0.00                 0.00
+w=zip(1000)/k=zip(10000)/s=uni(1000)/s(%)=50/10000                                                            
+w=uni(10)/k=zip(10000)/s=uni(1000)/s(%)=5/10000                                                               
+	key=/Table/150 start=2022-03-21 11:00:00 +0000 UTC count=20000 samples=[/Table/1(l=0 r=10765 c=0)/Table/6471(l=11887 r=569 c=20)/Table/445(l=9589 r=5229 c=1554)/Table/2(l=1005 r=9976 c=95)/Table/208(l=928 r=674 c=47)/Table/3(l=2022 r=14906 c=652)/Table/59(l=6662 r=9756 c=2249)/Table/1(l=0 r=8197 c=0)/Table/5(l=1215 r=4715 c=67)/Table/4166(l=15271 r=1574 c=61)/Table/41(l=1155 r=1583 c=71)/Table/6012(l=7020 r=394 c=2)/Table/191(l=5393 r=3893 c=259)/Table/351(l=1430 r=788 c=60)/Table/150(l=3593 r=3009 c=189)/Table/9(l=1561 r=4339 c=77)/Table/1(l=0 r=11452 c=0)/Table/2(l=1383 r=16499 c=472)/Table/8882(l=10944 r=142 c=8)/Table/650(l=1009 r=382 c=22)]
+
+decider duration=100 retention=200 objective=cpu threshold=100
+----
+
+eval seed=42 iterations=1 all=true mix=sequential mix_count=2 show_last=true
+----
+description                                         no_key(%)  avg_diff(%)  max_diff(%)  avg_optimal_diff(%)  max_optimal_diff(%)
+mixed_requests(2)                                   0.00       9.65         9.65         0.00                 0.00
+w=zip(1000)/k=zip(10000)/s=uni(1000)/s(%)=50/10000                                                            
+w=uni(10)/k=zip(10000)/s=uni(1000)/s(%)=5/10000                                                               
+	objective=cpu count=0 suggestions=2 last=1095.0 last-roll=2022-03-21 11:01:40 +0000 UTC last-suggest=2022-03-21 11:01:11.01 +0000 UTC key=/Table/364 start=2022-03-21 11:00:01 +0000 UTC count=25255 total=1393083.00 samples=[/Table/543(l=332352.0 r=196353.0 c=15788 w=197.5)/Table/1845(l=612345.5 r=132589.5 c=18259 w=814.0)/Table/1682(l=855050.5 r=200277.0 c=21642 w=414.5)/Table/843(l=840761.5 r=361325.5 c=23322 w=289.0)/Table/2298(l=349798.5 r=69947.5 c=14612 w=651.0)/Table/1(l=0.0 r=92474.0 c=10876 w=504.0)/Table/2(l=18849.5 r=216279.5 c=12465 w=257.0)/Table/772(l=469831.5 r=207783.5 c=17540 w=267.0)/Table/1(l=0.0 r=65074.0 c=10591 w=816.0)/Table/2(l=31814.5 r=330641.5 c=14004 w=727.0)/Table/364(l=570082.0 r=449326.0 c=21285 w=707.0)/Table/3215(l=758301.5 r=107126.5 c=19539 w=794.0)/Table/373(l=148425.0 r=110099.5 c=12753 w=378.5)/Table/8418(l=248162.5 r=4261.5 c=12656 w=539.0)/Table/2(l=48035.0 r=565252.0 c=16850 w=576.0)/Table/81(l=514780.0 r=774727.5 c=24305 w=387.0)/Table/95(l=501304.5 r=703667.5 c=23366 w=809.0)/Table/1(l=0.0 r=955749.5 c=20642 w=134.5)/Table/950(l=412144.0 r=150808.0 c=16261 w=339.5)/Table/3(l=132444.5 r=1084693.5 c=23518 w=453.5)]
+
+decider duration=100 retention=200 objective=qps threshold=100
+----
+
+eval seed=42 iterations=1 all=true mix=sequential mix_count=2 show_last=true
+----
+description                                         no_key(%)  avg_diff(%)  max_diff(%)  avg_optimal_diff(%)  max_optimal_diff(%)
+mixed_requests(2)                                   0.00       18.29        18.29        0.00                 0.00
+w=zip(1000)/k=zip(10000)/s=uni(1000)/s(%)=50/10000                                                            
+w=uni(10)/k=zip(10000)/s=uni(1000)/s(%)=5/10000                                                               
+	objective=qps count=0 suggestions=2 last=1095.0 last-roll=2022-03-21 11:01:40 +0000 UTC last-suggest=2022-03-21 11:01:11.01 +0000 UTC key=/Table/99 start=2022-03-21 11:00:01 +0000 UTC count=19800 samples=[/Table/261(l=6213 r=3962 c=390)/Table/1010(l=9184 r=2937 c=155)/Table/2(l=1249 r=14557 c=366)/Table/1(l=0 r=10876 c=0)/Table/3479(l=1285 r=164 c=0)/Table/1(l=0 r=17380 c=0)/Table/7362(l=17822 r=616 c=29)/Table/47(l=3418 r=4434 c=145)/Table/1(l=0 r=5797 c=0)/Table/1(l=0 r=16706 c=0)/Table/2(l=258 r=2332 c=19)/Table/313(l=4445 r=2607 c=164)/Table/3(l=1357 r=7933 c=55)/Table/99(l=1029 r=1002 c=47)/Table/7359(l=6363 r=226 c=2)/Table/1(l=0 r=5777 c=0)/Table/422(l=7083 r=3682 c=487)/Table/520(l=10888 r=5591 c=1675)/Table/4741(l=10033 r=851 c=10)/Table/1(l=0 r=1213 c=0)]
