@@ -461,9 +461,8 @@ func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Co
 // non-Internal users of the Context are free to dial nodes without
 // specifying a node ID (see GRPCUnvalidatedDial()) however later calls to
 // Dial with the same target and class with a node ID will create a new
-// underlying connection. The inverse however is not true, a connection
-// dialed without a node ID will use an existing connection to a matching
-// (targetAddr, class) pair.
+// underlying connection which will not be reused by calls specifying the
+// NodeID.
 type connKey struct {
 	targetAddr string
 	// Note: this ought to be renamed, see:
@@ -629,7 +628,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 			hasher := fnv.New64a()
 			var b [8]byte
 			binary.BigEndian.PutUint64(b[:], opts.TenantID.ToUint64())
-			hasher.Write(b[:])
+			_, _ = hasher.Write(b[:])
 			hashedTenantID := hasher.Sum64()
 
 			prevOnSet := opts.StorageClusterID.OnSet
@@ -1520,15 +1519,15 @@ type serverStream struct {
 	sender   pipeWriter
 }
 
-func (s serverStream) SetHeader(md metadata.MD) error {
+func (s serverStream) SetHeader(_ metadata.MD) error {
 	panic("unimplemented")
 }
 
-func (s serverStream) SendHeader(md metadata.MD) error {
+func (s serverStream) SendHeader(_ metadata.MD) error {
 	panic("unimplemented")
 }
 
-func (s serverStream) SetTrailer(md metadata.MD) {
+func (s serverStream) SetTrailer(_ metadata.MD) {
 	panic("unimplemented")
 }
 
@@ -1796,15 +1795,15 @@ func (rpcCtx *Context) dialOptsNetwork(
 	// We need to define a MaxBackoff but it should never be used due to
 	// our setup with onlyOnceDialer below. So note that our choice here is
 	// inconsequential assuming all works as designed.
-	backoff := time.Second
-	if backoff > base.DialTimeout {
+	bo := time.Second
+	if bo > base.DialTimeout {
 		// This is for testing where we set a small DialTimeout. gRPC will
 		// internally round up the min connection timeout to the max backoff. This
 		// can be unintuitive and so we opt out of it by lowering the max backoff.
-		backoff = base.DialTimeout
+		bo = base.DialTimeout
 	}
-	backoffConfig.BaseDelay = backoff
-	backoffConfig.MaxDelay = backoff
+	backoffConfig.BaseDelay = bo
+	backoffConfig.MaxDelay = bo
 	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
 		Backoff:           backoffConfig,
 		MinConnectTimeout: base.DialTimeout}))

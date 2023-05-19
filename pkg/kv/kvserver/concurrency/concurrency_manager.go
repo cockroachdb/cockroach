@@ -515,7 +515,15 @@ func (m *managerImpl) HandleTransactionPushError(
 // OnLockAcquired implements the LockManager interface.
 func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcquisition) {
 	if err := m.lt.AcquireLock(acq); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		if errors.IsAssertionFailure(err) {
+			log.Fatalf(ctx, "%v", err)
+		}
+		// It's reasonable to expect benign errors here that the layer above
+		// (command evaluation) isn't equipped to deal with. As long as we're not
+		// violating any assertions, we simply log and move on. One benign case is
+		// when an unreplicated lock is being acquired by a transaction at an older
+		// epoch.
+		log.Errorf(ctx, "%v", err)
 	}
 }
 

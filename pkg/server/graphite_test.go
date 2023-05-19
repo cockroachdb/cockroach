@@ -27,6 +27,10 @@ import (
 // TestGraphite tests that a server pushes metrics data to Graphite endpoint,
 // if configured. In addition, it verifies that things don't fall apart when
 // the endpoint goes away.
+//
+// TODO(obs-inf): this test takes 2m because GraphiteExporter.Push times out after
+// 2m with a `write: broken pipe` error, even though it's using a DialTimeout. This
+// is a waste of time.
 func TestGraphite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

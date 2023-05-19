@@ -32,9 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 )
 
@@ -794,7 +796,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 					return
 				}
 				if err := r.maybeConnect(ctx, stopper); err != nil {
-					if everyN.ShouldLog() {
+					if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && everyN.ShouldLog() {
 						log.Infof(ctx, "side-transport failed to connect to n%d: %s", r.nodeID, err)
 					}
 					time.Sleep(errSleepTime)
