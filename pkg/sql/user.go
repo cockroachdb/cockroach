@@ -12,6 +12,8 @@ package sql
 
 import (
 	"context"
+	"os"
+	"runtime/pprof"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -208,7 +210,19 @@ func getUserInfoRunFn(
 	runFn := func(ctx context.Context, fn func(ctx context.Context) error) error { return fn(ctx) }
 	if timeout != 0 {
 		runFn = func(ctx context.Context, fn func(ctx context.Context) error) error {
-			return contextutil.RunWithTimeout(ctx, opName, timeout, fn)
+			otherCtx, cancel := context.WithCancel(ctx)
+			go func() {
+				select {
+				case <-otherCtx.Done():
+					return
+				case <-time.After(timeout - time.Second):
+					_ = pprof.Lookup("goroutine").WriteTo(os.Stdout, 2)
+				}
+			}()
+			return contextutil.RunWithTimeout(ctx, opName, timeout, func(ctx context.Context) error {
+				defer cancel()
+				return fn(ctx)
+			})
 		}
 	}
 	return runFn
