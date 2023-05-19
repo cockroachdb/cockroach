@@ -11,13 +11,13 @@
 package split
 
 import (
-	"fmt"
 	"math"
 	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/redact"
 )
 
 // Load-based splitting.
@@ -52,6 +52,16 @@ type weightedSample struct {
 	weight      float64
 	left, right float64
 	count       int
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (ws weightedSample) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%s(l=%.1f r=%.1f c=%d w=%.1f)",
+		ws.key, ws.left, ws.right, ws.count, ws.weight)
+}
+
+func (ws weightedSample) String() string {
+	return redact.StringWithoutMarkers(ws)
 }
 
 // WeightedFinder is a structure that is used to determine the split point
@@ -254,17 +264,22 @@ func (f *WeightedFinder) noSplitKeyCause() (insufficientCounters, imbalance int)
 }
 
 // NoSplitKeyCauseLogMsg implements the LoadBasedSplitter interface.
-func (f *WeightedFinder) NoSplitKeyCauseLogMsg() string {
+func (f *WeightedFinder) NoSplitKeyCauseLogMsg() redact.RedactableString {
 	insufficientCounters, imbalance := f.noSplitKeyCause()
 	if insufficientCounters == splitKeySampleSize {
 		return ""
 	}
-	noSplitKeyCauseLogMsg := fmt.Sprintf("No split key found: insufficient counters = %d, imbalance = %d", insufficientCounters, imbalance)
-	return noSplitKeyCauseLogMsg
+	return redact.Sprintf(
+		"no split key found: insufficient counters = %d, imbalance = %d",
+		insufficientCounters, imbalance)
 }
 
 // PopularKeyFrequency implements the LoadBasedSplitter interface.
 func (f *WeightedFinder) PopularKeyFrequency() float64 {
+	// Sort the sample slice to determine the frequency that a popular key
+	// appears. We could copy the slice, however it would require an allocation.
+	// The probability a sample is replaced doesn't change as it is independent
+	// of position.
 	sort.Slice(f.samples[:], func(i, j int) bool {
 		return f.samples[i].key.Compare(f.samples[j].key) < 0
 	})
@@ -287,4 +302,14 @@ func (f *WeightedFinder) PopularKeyFrequency() float64 {
 	}
 
 	return popularKeyWeight / totalWeight
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (f *WeightedFinder) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("key=%v start=%v count=%d total=%.2f samples=%v",
+		f.Key(), f.startTime, f.count, f.totalWeight, f.samples)
+}
+
+func (f *WeightedFinder) String() string {
+	return redact.StringWithoutMarkers(f)
 }
