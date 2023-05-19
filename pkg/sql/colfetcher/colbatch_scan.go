@@ -12,10 +12,12 @@ package colfetcher
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -174,6 +177,9 @@ func newColBatchScanBase(
 	}
 
 	s := colBatchScanBasePool.Get().(*colBatchScanBase)
+	// TODO(yuzefovich): consider sorting these spans when
+	// spec.MaintainOrdering==false and when streamer isn't used (similar to
+	// what we do for lookup/index joins.
 	s.Spans = spec.Spans
 	if !flowCtx.Local {
 		// Make a copy of the spans so that we could get the misplanned ranges
@@ -331,11 +337,13 @@ func NewColBatchScan(
 	ctx context.Context,
 	fetcherAllocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
+	streamerBudgetAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	estimatedRowCount uint64,
+	diskMonitor *mon.BytesMonitor,
 	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColBatchScan, []*types.T, error) {
 	base, bsHeader, tableArgs, err := newColBatchScanBase(
@@ -344,20 +352,73 @@ func NewColBatchScan(
 	if err != nil {
 		return nil, nil, err
 	}
-	kvFetcher := row.NewKVFetcher(
-		flowCtx.Txn,
-		bsHeader,
-		spec.Reverse,
-		spec.LockingStrength,
-		spec.LockingWaitPolicy,
-		spec.LockingDurability,
-		flowCtx.EvalCtx.SessionData().LockTimeout,
-		kvFetcherMemAcc,
-		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
-	)
+
+	totalMemoryLimit := execinfra.GetWorkMemLimit(flowCtx)
+	cFetcherMemoryLimit := totalMemoryLimit
+
+	var useStreamer bool
+	txn := flowCtx.Txn
+	// TODO(yuzefovich): support reverse scans in the streamer.
+	if !spec.Reverse {
+		useStreamer, txn, err = flowCtx.UseStreamer()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	var kvFetcher *row.KVFetcher
+	if useStreamer {
+		if streamerBudgetAcc == nil {
+			return nil, nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
+		}
+		var diskBuffer kvstreamer.ResultDiskBuffer
+		if spec.MaintainOrdering {
+			if diskMonitor == nil {
+				return nil, nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
+			}
+			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
+				flowCtx.Cfg.TempStorage, diskMonitor,
+			)
+		}
+		// Keep 1/16th of the memory limit for the output batch of the cFetcher,
+		// and we'll give the remaining memory to the streamer budget below.
+		cFetcherMemoryLimit = int64(math.Ceil(float64(totalMemoryLimit) / 16.0))
+		streamerBudgetLimit := 15 * cFetcherMemoryLimit
+		kvFetcher = row.NewStreamingKVFetcher(
+			flowCtx.Cfg.DistSender,
+			flowCtx.Stopper(),
+			txn,
+			flowCtx.EvalCtx.Settings,
+			flowCtx.EvalCtx.SessionData(),
+			spec.LockingWaitPolicy,
+			spec.LockingStrength,
+			spec.LockingDurability,
+			streamerBudgetLimit,
+			streamerBudgetAcc,
+			spec.MaintainOrdering,
+			false, /* singleRowLookup */
+			int(spec.FetchSpec.MaxKeysPerRow),
+			diskBuffer,
+			kvFetcherMemAcc,
+		)
+		// TODO(XXX): think through this.
+		base.batchBytesLimit = 0
+	} else {
+		kvFetcher = row.NewKVFetcher(
+			txn,
+			bsHeader,
+			spec.Reverse,
+			spec.LockingStrength,
+			spec.LockingWaitPolicy,
+			spec.LockingDurability,
+			flowCtx.EvalCtx.SessionData().LockTimeout,
+			kvFetcherMemAcc,
+			flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+		)
+	}
+
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	fetcher.cFetcherArgs = cFetcherArgs{
-		execinfra.GetWorkMemLimit(flowCtx),
+		cFetcherMemoryLimit,
 		estimatedRowCount,
 		flowCtx.TraceKV,
 		true, /* singleUse */
