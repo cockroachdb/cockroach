@@ -43,17 +43,45 @@ type archInfo struct {
 	ReleaseArchiveExtension string
 }
 
+// N.B. DebugArchitecture must correspond to 'SuffixFromPlatform' followed by stripping the literal (os) version,
+// in 'MakeCRDBBinaryNonReleaseFile' (see pkg/release/build.go and pkg/release/release.go).
+//
+//	ReleaseArchitecture must correspond to 'SuffixFromPlatform' followed by stripping "gnu-" in 'makeArchiveKeys'
+//
+// (see pkg/release/upload.go).
+// TODO(srosenberg): refactor to use the above, directly from pkg/release/ which is the source of truth.
 var (
-	linuxArchInfo = archInfo{
+	linux_x86_64_ArchInfo = archInfo{
 		DebugArchitecture:       "linux-gnu-amd64",
 		ReleaseArchitecture:     "linux-amd64",
 		LibraryExtension:        ".so",
 		ExecutableExtension:     "",
 		ReleaseArchiveExtension: "tgz",
 	}
-	darwinArchInfo = archInfo{
+	linux_x86_64_fips_ArchInfo = archInfo{
+		DebugArchitecture:       "linux-gnu-amd64-fips",
+		ReleaseArchitecture:     "linux-amd64-fips",
+		LibraryExtension:        ".so",
+		ExecutableExtension:     "",
+		ReleaseArchiveExtension: "tgz",
+	}
+	linux_arm64_ArchInfo = archInfo{
+		DebugArchitecture:       "linux-gnu-arm64",
+		ReleaseArchitecture:     "linux-arm64",
+		LibraryExtension:        ".so",
+		ExecutableExtension:     "",
+		ReleaseArchiveExtension: "tgz",
+	}
+	darwin_x86_64_ArchInfo = archInfo{
 		DebugArchitecture:       "darwin-amd64",
 		ReleaseArchitecture:     "darwin-10.9-amd64",
+		LibraryExtension:        ".dylib",
+		ExecutableExtension:     "",
+		ReleaseArchiveExtension: "tgz",
+	}
+	darwin_arm64_ArchInfo = archInfo{
+		DebugArchitecture:       "darwin-arm64.unsigned",
+		ReleaseArchitecture:     "darwin-11.0-arm64",
 		LibraryExtension:        ".dylib",
 		ExecutableExtension:     "",
 		ReleaseArchiveExtension: "tgz",
@@ -69,18 +97,36 @@ var (
 	crdbLibraries = []string{"libgeos", "libgeos_c"}
 )
 
-// ArchInfoForOS returns an ArchInfo for the given OS if the OS is
-// currently supported.
-func archInfoForOS(os string) (archInfo, error) {
+// ArchInfoForOS returns an ArchInfo for the given OS and Architecture if currently supported.
+func ArchInfoForOS(os string, arch string) (archInfo, error) {
+	if arch != "" && arch != "amd64" && arch != "arm64" && arch != "fips" {
+		return archInfo{}, errors.Errorf("unsupported architecture %q", arch)
+	}
+
 	switch os {
 	case "linux":
-		return linuxArchInfo, nil
+		if arch == "arm64" {
+			return linux_arm64_ArchInfo, nil
+		}
+		if arch == "fips" {
+			return linux_x86_64_fips_ArchInfo, nil
+		}
+		return linux_x86_64_ArchInfo, nil
 	case "darwin":
-		return darwinArchInfo, nil
+		if arch == "arm64" {
+			return darwin_arm64_ArchInfo, nil
+		}
+		if arch == "fips" {
+			return archInfo{}, errors.Errorf("%q is not supported on %q", arch, os)
+		}
+		return darwin_x86_64_ArchInfo, nil
 	case "windows":
+		if arch == "fips" || arch == "arm64" {
+			return archInfo{}, errors.Errorf("%q is not supported on %q", arch, os)
+		}
 		return windowsArchInfo, nil
 	default:
-		return archInfo{}, errors.Errorf("no release architecture information for %q", os)
+		return archInfo{}, errors.Errorf("unsupported OS %q", os)
 	}
 }
 
@@ -130,16 +176,17 @@ func StageApplication(
 	applicationName string,
 	version string,
 	os string,
+	arch string,
 	destDir string,
 ) error {
-	archInfo, err := archInfoForOS(os)
+	archInfo, err := ArchInfoForOS(os, arch)
 	if err != nil {
 		return err
 	}
 
 	switch applicationName {
 	case "cockroach":
-		err := StageRemoteBinary(
+		err := stageRemoteBinary(
 			ctx, l, c, applicationName, "cockroach/cockroach", version, archInfo.DebugArchitecture, destDir,
 		)
 		if err != nil {
@@ -164,7 +211,8 @@ func StageApplication(
 		}
 		return nil
 	case "workload":
-		err := StageRemoteBinary(
+		// N.B. workload binary is only available for linux amd64: https://github.com/cockroachdb/cockroach/issues/103563
+		err := stageRemoteBinary(
 			ctx, l, c, applicationName, "cockroach/workload", version, "" /* arch */, destDir,
 		)
 		return err
@@ -177,8 +225,10 @@ func StageApplication(
 
 // URLsForApplication returns a slice of URLs that should be
 // downloaded for the given application.
-func URLsForApplication(application string, version string, os string) ([]*url.URL, error) {
-	archInfo, err := archInfoForOS(os)
+func URLsForApplication(
+	application string, version string, os string, arch string,
+) ([]*url.URL, error) {
+	archInfo, err := ArchInfoForOS(os, arch)
 	if err != nil {
 		return nil, err
 	}
@@ -205,6 +255,7 @@ func URLsForApplication(application string, version string, os string) ([]*url.U
 		}
 		return urls, nil
 	case "workload":
+		// N.B. workload binary is only available for linux amd64: https://github.com/cockroachdb/cockroach/issues/103563
 		u, err := getEdgeURL("cockroach/workload", version, "" /* arch */, "" /* extension */)
 		if err != nil {
 			return nil, err
@@ -225,7 +276,7 @@ func URLsForApplication(application string, version string, os string) ([]*url.U
 // application path to each specified by the cluster to the specified directory.
 // If no SHA is specified, the latest build of the binary is used instead.
 // Returns the SHA of the resolved binary.
-func StageRemoteBinary(
+func stageRemoteBinary(
 	ctx context.Context,
 	l *logger.Logger,
 	c *SyncedCluster,
