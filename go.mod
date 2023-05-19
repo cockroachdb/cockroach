@@ -428,3 +428,5 @@ replace vitess.io/vitess => github.com/cockroachdb/vitess v0.0.0-20210218160543-
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d6955c8edbc
 
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
+
+replace go.etcd.io/raft/v3 => github.com/cockroachdb/raft/v3 v3.0.0-20230315220435-5fe1c31c5158
