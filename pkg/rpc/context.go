@@ -2662,11 +2662,46 @@ func (rpcCtx *Context) VerifyDialback(
 		_ = conn.Close() // nolint:grpcconnclose
 		return nil
 	} else {
-		// If the previous attempt ended in an error, we can confidently report we
-		// are unable to dialback. If the attempt is still ongoing, then we want
-		// to allow it to finish. Once it has finished, we will leave this error
-		// here until the connection health becomes healthy either through
-		// checking the health manually or a blocking ping succeeding.
+		// Async dialback is considered "successful" if there is a healthy
+		// SystemClass connection to the sender. We don't want to block on this dial
+		// if it is necessary, so we keep a map. Initially, the map is empty: we'll
+		// insert the result of the corresponding GRPCDialNode, which acts as a
+		// promise, and continue for now.
+		//
+		// The next call to VerifyDialback (i.e. receipt of the next heartbeat from the
+		// remote node requesting a non-blocking dialback) then checks the `Health()` method
+		// of the map entry. If it's healthy - great, we remove it from the map. If it's
+		// ErrNotHeartbeated, i.e. the connection attempt is still ongoing, we treat it
+		// as successfully but keep in the map. Eventually, an attempt sees it as healthy,
+		// and we remove the map entry.
+		//
+		// The next call will then insert the connection again, following the same
+		// logic. (It is likely still healthy).
+		//
+		// The next call will then remove it again (since it was healthy), and so on.
+		//
+		// At some point, we might find that the connection is unhealthy. It is then
+		// kept in the map and all NON_BLOCKING pings bounce off this stored
+		// connection. It will not be reset until a BLOCKING ping arrives from the
+		// remote node, in which case we'll take the above branch which does clear
+		// the non-blocking attempt. In particular, we will continue to fail
+		// non-blocking pings even if a newer matching *Connection already exists
+		// (because we only check "our" map, not the rpcCtx's map).
+		//
+		// None of this causes problems today because the remote always starts its
+		// heartbeat loop with a BLOCKING ping, follower by NON_BLOCKING pings until
+		// it hits an error (then the next ping will be BLOCKING again, etc).
+		//
+		// TODO(tbg): this structure is odd: BLOCKING and NON_BLOCKING are tightly
+		// coupled which is surprising and could lead to bugs if we made changes to
+		// the callers. Also, the alternating addition and removal of a healthy
+		// *Connection to the map is odd. Why don't we just leave it in the map?
+		// Revisit this after #99191, I think then we can ditch the map and simply
+		// check `GRPCDial(target, node, SystemClass).Health()` because the rpcCtx
+		// will hold on to the connection across failures for us. Since Health()
+		// can go bad and back to good again, things would also work out without
+		// the use of an initial BLOCKING ping and the oddity of alternating map
+		// insertion and removal would also be addressed (by removing the map).
 		return rpcCtx.loadOrCreateDialbackAttempt(nodeID, target)
 	}
 }
