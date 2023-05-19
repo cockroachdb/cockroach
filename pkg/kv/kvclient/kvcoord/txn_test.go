@@ -358,8 +358,64 @@ func TestTxnWeakIsolationLevelsTolerateWriteSkew(t *testing.T) {
 			require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
 		}
 	}
+
 	for _, isoLevel := range isolation.Levels() {
 		t.Run(isoLevel.String(), func(t *testing.T) { run(isoLevel) })
+	}
+}
+
+// TestTxnWriteReadConflict verifies that write-read conflicts are non-blocking
+// to the reader, except when both the writer and reader are both serializable
+// transactions. In that case, the reader will block until the writer completes.
+//
+// NOTE: the test does not exercise different priority levels. For that, see
+// TestCanPushWithPriority.
+func TestTxnWriteReadConflict(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	run := func(writeIsoLevel, readIsoLevel isolation.Level) {
+		s := createTestDB(t)
+		defer s.Stop()
+		ctx := context.Background()
+
+		// Begin the test's writer and reader transactions.
+		writeTxn := s.DB.NewTxn(ctx, "writer")
+		require.NoError(t, writeTxn.SetIsoLevel(writeIsoLevel))
+		readTxn := s.DB.NewTxn(ctx, "reader")
+		require.NoError(t, readTxn.SetIsoLevel(readIsoLevel))
+
+		// Perform a write to key "a" in the writer transaction.
+		require.NoError(t, writeTxn.Put(ctx, "a", "value"))
+
+		// Read from key "a" in the reader transaction.
+		expBlocking := writeIsoLevel == isolation.Serializable && readIsoLevel == isolation.Serializable
+		readCtx := ctx
+		if expBlocking {
+			var cancel func()
+			readCtx, cancel = context.WithTimeout(ctx, 500*time.Millisecond)
+			defer cancel()
+		}
+		res, err := readTxn.Get(readCtx, "a")
+
+		// Verify the expected blocking behavior.
+		if expBlocking {
+			require.Error(t, err)
+			require.ErrorIs(t, context.DeadlineExceeded, err)
+		} else {
+			require.NoError(t, err)
+			require.False(t, res.Exists())
+		}
+
+		require.NoError(t, writeTxn.Rollback(ctx))
+		require.NoError(t, readTxn.Rollback(ctx))
+	}
+
+	for _, writeIsoLevel := range isolation.Levels() {
+		for _, readIsoLevel := range isolation.Levels() {
+			name := fmt.Sprintf("writeIso=%s,readIso=%s", writeIsoLevel, readIsoLevel)
+			t.Run(name, func(t *testing.T) { run(writeIsoLevel, readIsoLevel) })
+		}
 	}
 }
 
