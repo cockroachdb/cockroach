@@ -167,15 +167,11 @@ func (fit *fakeSpanResolverIterator) Seek(
 	// Build ranges corresponding to the fake splits and assign them random
 	// replicas.
 	fit.ranges = make([]fakeRange, len(splits)-1)
-	// TODO(michae2): Condense this logic when #100051 is fixed.
-	nodes := fit.fsr.nodes
-	n := len(nodes)
 	for i := range fit.ranges {
-		j := fit.rng.Intn(n)
 		fit.ranges[i] = fakeRange{
 			startKey: splits[i],
 			endKey:   splits[i+1],
-			replica:  nodes[j],
+			replica:  fit.fsr.nodes[fit.rng.Intn(len(fit.fsr.nodes))],
 		}
 	}
 
