@@ -18,6 +18,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
