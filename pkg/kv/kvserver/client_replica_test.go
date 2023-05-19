@@ -2114,8 +2114,11 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	if a, e := metrics.LeaseTransferSuccessCount.Count(), int64(1); a != e {
 		t.Errorf("expected %d lease transfer successes; got %d", e, a)
 	}
-	if a, e := metrics.LeaseTransferErrorCount.Count(), int64(1); a != e {
-		t.Errorf("expected %d lease transfer errors; got %d", e, a)
+	// We mostly expect precisely one error, but there's a retry loop in
+	// `AdminTransferLease` that prevents transfers to followers who might need a
+	// snapshot. This can sometimes lead to additional errors being reported.
+	if a := metrics.LeaseTransferErrorCount.Count(); a == 0 {
+		t.Errorf("expected at least one lease transfer errors; got %d", a)
 	}
 
 	// Expire current leases and put a key to the epoch based scratch range to
