@@ -232,6 +232,7 @@ func (flowCtx *FlowCtx) UseStreamer() (bool, *kv.Txn, error) {
 var UseStreamerEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.distsql.use_streamer.enabled",
+	// TODO(XXX): description update.
 	"determines whether the usage of the Streamer API is allowed. "+
 		"Enabling this will increase the speed of lookup/index joins "+
 		"while adhering to memory limits.",

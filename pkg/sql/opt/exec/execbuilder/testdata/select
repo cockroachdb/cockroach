@@ -1924,6 +1924,10 @@ ALTER TABLE a SPLIT AT VALUES(5)
 statement ok
 SELECT * FROM a
 
+# We want to ensure that local spans are parallelized without the streamer.
+statement ok
+SET streamer_enabled = false
+
 # Make sure that the scan actually gets parallelized.
 statement ok
 SET tracing = on; SELECT * FROM a WHERE a = 0 OR a = 10; SET tracing = off
@@ -1949,6 +1953,9 @@ querying next range at /Table/127/1/10/0
 querying next range at /Table/127/1/0/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/127/1/10/0
+
+statement ok
+RESET streamer_enabled
 
 # Test for 42202 -- ensure filters can get pushed down through project-set.
 statement ok

@@ -453,6 +453,7 @@ quality of service: regular
           KV bytes read: 16 B
           KV gRPC calls: 2
           estimated max memory allocated: 0 B
+          estimated max sql temp disk usage: 0 B
           estimated row count: 1 (100% of the table; stats collected <hidden> ago)
           table: a@a_y_idx
           spans: FULL SCAN (SOFT LIMIT)

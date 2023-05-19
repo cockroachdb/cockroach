@@ -124,13 +124,22 @@ type ColIndexJoin struct {
 	// table because the scan might synthesize additional implicit system columns.
 	ResultTypes []*types.T
 
-	// maintainOrdering is true when the index join is required to maintain its
-	// input ordering, in which case the ordering of the spans cannot be changed.
-	maintainOrdering bool
-
 	// usesStreamer indicates whether the ColIndexJoin is using the Streamer
 	// API.
 	usesStreamer bool
+
+	// sortSpans indicates whether the ColIndexJoin should sort the spans before
+	// passing them to the cFetcher.
+	//
+	// We do so when maintaining order is not required. This allows lower layers
+	// to optimize iteration over the data. Note that the looked up rows are
+	// output unchanged, in the retrieval order, so it is not safe to do this
+	// when maintainOrdering is true (the ordering to be maintained may be
+	// different than the ordering in the index).
+	//
+	// We don't want to sort the spans if we're using the Streamer since it will
+	// perform the sort on its own.
+	sortSpans bool
 }
 
 var _ ScanOperator = &ColIndexJoin{}
@@ -195,16 +204,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				s.state = indexJoinDone
 				continue
 			}
-
-			if !s.usesStreamer && !s.maintainOrdering {
-				// Sort the spans when !maintainOrdering. This allows lower layers to
-				// optimize iteration over the data. Note that the looked up rows are
-				// output unchanged, in the retrieval order, so it is not safe to do
-				// this when maintainOrdering is true (the ordering to be maintained
-				// may be different than the ordering in the index).
-				//
-				// We don't want to sort the spans here if we're using the
-				// Streamer since it will perform the sort on its own.
+			if s.sortSpans {
 				sort.Sort(spans)
 			}
 
@@ -618,16 +618,16 @@ func NewColIndexJoin(
 	)
 
 	op := &ColIndexJoin{
-		OneInputNode:     colexecop.NewOneInputNode(input),
-		flowCtx:          flowCtx,
-		processorID:      processorID,
-		cf:               fetcher,
-		spanAssembler:    spanAssembler,
-		ResultTypes:      tableArgs.typs,
-		maintainOrdering: spec.MaintainOrdering,
-		txn:              txn,
-		usesStreamer:     useStreamer,
-		limitHintHelper:  execinfra.MakeLimitHintHelper(spec.LimitHint, post),
+		OneInputNode:    colexecop.NewOneInputNode(input),
+		flowCtx:         flowCtx,
+		processorID:     processorID,
+		cf:              fetcher,
+		spanAssembler:   spanAssembler,
+		ResultTypes:     tableArgs.typs,
+		txn:             txn,
+		usesStreamer:    useStreamer,
+		sortSpans:       !spec.MaintainOrdering && !useStreamer,
+		limitHintHelper: execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 	}
 	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(
 		useStreamer, flowCtx.EvalCtx.TestingKnobs.ForceProductionValues, flowCtx.EvalCtx.SessionData(),

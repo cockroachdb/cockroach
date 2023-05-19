@@ -828,7 +828,7 @@ func NewColOperator(
 			// unlimited one. We also need another unlimited account for the
 			// KV fetcher.
 			accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
-				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID, 2, /* numAccounts */
+				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID, 3, /* numAccounts */
 			)
 			estimatedRowCount := spec.EstimatedRowCount
 			var scanOp colfetcher.ScanOperator
@@ -904,9 +904,16 @@ func NewColOperator(
 				}
 			}
 			if scanOp == nil {
+				var streamerDiskMonitor *mon.BytesMonitor
+				if core.TableReader.MaintainOrdering {
+					streamerDiskMonitor = args.MonitorRegistry.CreateDiskMonitor(
+						ctx, flowCtx, "streamer" /* opName */, spec.ProcessorID,
+					)
+				}
 				scanOp, resultTypes, err = colfetcher.NewColBatchScan(
 					ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
-					flowCtx, spec.ProcessorID, core.TableReader, post, estimatedRowCount, args.TypeResolver,
+					accounts[2], flowCtx, spec.ProcessorID, core.TableReader, post,
+					estimatedRowCount, streamerDiskMonitor, args.TypeResolver,
 				)
 				if err != nil {
 					return r, err
