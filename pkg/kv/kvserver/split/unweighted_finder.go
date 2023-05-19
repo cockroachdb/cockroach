@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -57,6 +58,11 @@ const (
 type sample struct {
 	key                    roachpb.Key
 	left, right, contained int
+}
+
+func (s sample) String() string {
+	return fmt.Sprintf("%s(l=%d r=%d c=%d)",
+		s.key, s.left, s.right, s.contained)
 }
 
 // UnweightedFinder is a structure that is used to determine the split point
@@ -215,4 +221,19 @@ func (f *UnweightedFinder) PopularKeyFrequency() float64 {
 	}
 
 	return float64(popularKeyCount) / float64(splitKeySampleSize)
+}
+
+func (f *UnweightedFinder) String() string {
+	var buf strings.Builder
+
+	fmt.Fprintf(&buf, "key=%s start=%s count=%d samples=[",
+		f.Key(), f.startTime, f.count)
+	for i, key := range f.samples {
+		if i > 0 {
+			fmt.Fprint(&buf, " ")
+		}
+		fmt.Fprintf(&buf, "%s", key)
+	}
+	fmt.Fprint(&buf, "]")
+	return buf.String()
 }
