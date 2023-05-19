@@ -1318,7 +1318,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 			// so this would only cause duplication.
 			excludeFiles := "*.log,*.txt,*.pprof"
 			cmd := fmt.Sprintf(
-				"%s debug zip --exclude-files='%s' --url {pgurl:%d} %s",
+				"%s debug zip --include-range-info --exclude-files='%s' --url {pgurl:%d} %s",
 				defaultCockroachPath, excludeFiles, i, zipName,
 			)
 			if err := c.RunE(ctx, c.Node(i), cmd); err != nil {

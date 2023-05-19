@@ -45,41 +45,34 @@ func newColSchema(numCols int) *colSchema {
 	}
 }
 
-// supportedTypes contains all types supported by the writer,
-// which is all types that pass randomized testing below.
-var supportedTypes []*types.T
-
-func init() {
-	for _, typ := range randgen.SeedTypes {
-		switch typ.Family() {
-		// The types below are unsupported. They will fail randomized tests.
-		case types.AnyFamily:
-		case types.TSQueryFamily, types.TSVectorFamily:
-		case types.VoidFamily:
-		case types.TupleFamily:
-		case types.ArrayFamily:
-			// We will manually add array types which are supported below.
-			// Excluding types.TupleFamily and types.ArrayFamily leaves us with only
-			// scalar types so far.
-		default:
-			supportedTypes = append(supportedTypes, typ)
+// typSupported filters out types which can be returned by randgen.RandType
+// that are not supported by the writer.
+func typSupported(typ *types.T) bool {
+	switch typ.Family() {
+	case types.AnyFamily, types.TSQueryFamily, types.TSVectorFamily,
+		types.TupleFamily, types.VoidFamily:
+		return false
+	case types.ArrayFamily:
+		if typ.ArrayContents().Family() == types.ArrayFamily || typ.ArrayContents().Family() == types.TupleFamily {
+			return false
 		}
+		return typSupported(typ.ArrayContents())
+	default:
+		// It is better to let an unexpected type pass the filter and fail the test
+		// because we can observe and document such failures.
+		return true
 	}
+}
 
-	// randgen.SeedTypes does not include types.Json, so we add it manually here.
-	supportedTypes = append(supportedTypes, types.Json)
-
-	// Include all array types which are arrays of the scalar types above.
-	var arrayTypes []*types.T
-	for oid := range types.ArrayOids {
-		arrayTyp := types.OidToType[oid]
-		for _, typ := range supportedTypes {
-			if arrayTyp.InternalType.ArrayContents == typ {
-				arrayTypes = append(arrayTypes, arrayTyp)
-			}
-		}
+// randTestingType returns a random type for testing.
+func randTestingType(rng *rand.Rand) *types.T {
+	supported := false
+	var typ *types.T
+	for !supported {
+		typ = randgen.RandType(rng)
+		supported = typSupported(typ)
 	}
-	supportedTypes = append(supportedTypes, arrayTypes...)
+	return typ
 }
 
 func makeRandDatums(numRows int, sch *colSchema, rng *rand.Rand) [][]tree.Datum {
@@ -93,10 +86,12 @@ func makeRandDatums(numRows int, sch *colSchema, rng *rand.Rand) [][]tree.Datum 
 	return datums
 }
 
-func makeRandSchema(numCols int, allowedTypes []*types.T, rng *rand.Rand) *colSchema {
+func makeRandSchema(
+	numCols int, randType func(rng *rand.Rand) *types.T, rng *rand.Rand,
+) *colSchema {
 	sch := newColSchema(numCols)
 	for i := 0; i < numCols; i++ {
-		sch.columnTypes[i] = allowedTypes[rng.Intn(len(allowedTypes))]
+		sch.columnTypes[i] = randType(rng)
 		sch.columnNames[i] = fmt.Sprintf("%s%d", sch.columnTypes[i].Name(), i)
 	}
 	return sch
@@ -111,7 +106,7 @@ func TestRandomDatums(t *testing.T) {
 	numCols := 128
 	maxRowGroupSize := int64(8)
 
-	sch := makeRandSchema(numCols, supportedTypes, rng)
+	sch := makeRandSchema(numCols, randTestingType, rng)
 	datums := makeRandDatums(numRows, sch, rng)
 
 	fileName := "TestRandomDatums.parquet"

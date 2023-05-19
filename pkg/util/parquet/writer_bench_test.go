@@ -15,6 +15,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,10 @@ func BenchmarkParquetWriter(b *testing.B) {
 			require.NoError(b, err)
 
 			// Slice a single type out of supportedTypes.
-			sch := makeRandSchema(numCols, benchmarkTypes[i:i+1], rng)
+			sch := makeRandSchema(numCols,
+				func(rng *rand.Rand) *types.T {
+					return benchmarkTypes[i]
+				}, rng)
 			datums := makeRandDatums(1, sch, rng)
 
 			schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
@@ -60,13 +64,16 @@ func BenchmarkParquetWriter(b *testing.B) {
 
 func getBenchmarkTypes() []*types.T {
 	var typs []*types.T
-	for _, typ := range supportedTypes {
+	// NB: This depends on randgen.SeedTypes containing all scalar
+	// types supported by the writer, and all the types below once.
+	for _, typ := range randgen.SeedTypes {
 		switch typ.Family() {
+		case types.AnyFamily, types.TSQueryFamily, types.TSVectorFamily,
+			types.VoidFamily, types.TupleFamily:
+			// Remove Any Tuple.
 		case types.ArrayFamily:
-			// Pick out one array type to benchmark arrays.
-			if typ.ArrayContents() == types.Int {
-				typs = append(typs, typ)
-			}
+			// Replace Any Array with Int Array.
+			typs = append(typs, types.IntArray)
 		default:
 			typs = append(typs, typ)
 		}
