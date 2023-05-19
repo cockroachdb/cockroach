@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -339,7 +340,11 @@ func (c *TenantStreamingClusters) WaitUntilStartTimeReached(ingestionJobID jobsp
 }
 
 func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID) {
-	testutils.SucceedsSoon(t, func() error {
+	timeout := 45 * time.Second
+	if skip.NightlyStress() {
+		timeout *= 3
+	}
+	testutils.SucceedsWithin(t, func() error {
 		payload := jobutils.GetJobPayload(t, db, ingestionJobID)
 		details, ok := payload.Details.(*jobspb.Payload_StreamIngestion)
 		if !ok {
@@ -364,7 +369,7 @@ func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJo
 				highwater.String(), startTime.String())
 		}
 		return nil
-	})
+	}, timeout)
 }
 
 func CreateScatteredTable(t *testing.T, c *TenantStreamingClusters, numNodes int) {
