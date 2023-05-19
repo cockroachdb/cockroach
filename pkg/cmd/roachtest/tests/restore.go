@@ -524,10 +524,10 @@ func (hw hardwareSpecs) String(verbose bool) string {
 }
 
 func (hw hardwareSpecs) getWorkloadNode() int {
-	if hw.workloadNode {
-		return hw.nodes + 1
+	if !hw.workloadNode {
+		panic(`this test does not have a workload node`)
 	}
-	return 0
+	return hw.nodes + 1
 }
 
 func (hw hardwareSpecs) getCRDBNodes() option.NodeListOption {
@@ -673,35 +673,44 @@ type backupWorkload interface {
 	// DatabaseName specifies the name of the database the workload will operate on.
 	DatabaseName() string
 
-	// initWorkload loads the cluster with the workload's schema and initial data.
-	initWorkload(ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs)
+	// init loads the cluster with the workload's schema and initial data.
+	init(ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs)
 
-	// foregroundRun begins a foreground workload that runs indefinitely until the passed context
+	// run begins a workload that runs indefinitely until the passed context
 	// is cancelled.
-	foregroundRun(ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs) error
+	run(ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs) error
 }
 
 type tpceRestore struct {
 	customers int
+	spec      *tpceSpec
 }
 
-func (tpce tpceRestore) initWorkload(
+func (tpce tpceRestore) getSpec(
 	ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs,
-) {
+) *tpceSpec {
+	if tpce.spec != nil {
+		return tpce.spec
+	}
 	tpceSpec, err := initTPCESpec(ctx, t.L(), c, sp.getWorkloadNode(), sp.getCRDBNodes())
 	require.NoError(t, err)
-	tpceSpec.init(ctx, t, c, tpceCmdOptions{
+	return tpceSpec
+}
+
+func (tpce tpceRestore) init(
+	ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs,
+) {
+	spec := tpce.getSpec(ctx, t, c, sp)
+	spec.init(ctx, t, c, tpceCmdOptions{
 		customers: tpce.customers,
 		racks:     sp.nodes})
 }
 
-func (tpce tpceRestore) foregroundRun(
+func (tpce tpceRestore) run(
 	ctx context.Context, t test.Test, c cluster.Cluster, sp hardwareSpecs,
 ) error {
-	tpceSpec, err := initTPCESpec(ctx, t.L(), c, sp.getWorkloadNode(), sp.getCRDBNodes())
-	require.NoError(t, err)
-
-	_, err = tpceSpec.run(ctx, t, c, tpceCmdOptions{
+	spec := tpce.getSpec(ctx, t, c, sp)
+	_, err := spec.run(ctx, t, c, tpceCmdOptions{
 		// Set the duration to be a week to ensure the workload never exits early.
 		duration:  time.Hour * 7 * 24,
 		customers: tpce.customers,
