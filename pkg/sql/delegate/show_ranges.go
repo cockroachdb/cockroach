@@ -161,8 +161,10 @@ SELECT
 	}
 	// As well as the span boundaries, if any.
 	buf.WriteString(`
-  s.start_key AS span_start_key,
-  s.end_key AS span_end_key
+  s.start_key AS object_start_key,
+  s.end_key AS object_end_key,
+  IF(s.start_key < r.start_key, r.start_key, s.start_key) AS per_range_start_key,
+  IF(s.end_key < r.end_key, s.end_key, r.end_key) AS per_range_end_key
 FROM crdb_internal.ranges_no_leases r
 `)
 
@@ -413,7 +415,7 @@ AND s.end_key > r.start_key`)
 		// prefix when possible.
 		switch n.Options.Mode {
 		case tree.UniqueRanges, tree.ExpandTables:
-			// Note: we cannot use span_start/end_key reliably here, because
+			// Note: we cannot use object_start/end_key reliably here, because
 			// when Mode == tree.UniqueRanges the DISTINCT clause has
 			// eliminated it. So we must recompute the span manually.
 			fmt.Fprintf(&buf, `
@@ -432,13 +434,13 @@ AND s.end_key > r.start_key`)
 		case tree.ExpandIndexes:
 			buf.WriteString(`
   CASE
-    WHEN r.start_key = span_start_key THEN '…/<IndexMin>'
+    WHEN r.start_key = object_start_key THEN '…/<IndexMin>'
     WHEN r.start_key = crdb_internal.table_span(table_id)[1] THEN '…/<TableMin>'
     WHEN r.start_key < crdb_internal.table_span(table_id)[1] THEN '<before:'||crdb_internal.pretty_key(r.start_key,-1)||'>'
     ELSE '…'||crdb_internal.pretty_key(r.start_key, 1)
   END AS start_key,
   CASE
-    WHEN r.end_key = span_end_key THEN '…/…/<IndexMax>'
+    WHEN r.end_key = object_end_key THEN '…/…/<IndexMax>'
     WHEN r.end_key = crdb_internal.table_span(table_id)[2] THEN '…/<TableMax>'
     WHEN r.end_key > crdb_internal.table_span(table_id)[2] THEN '<after:'||crdb_internal.pretty_key(r.end_key,-1)||'>'
     ELSE '…'||crdb_internal.pretty_key(r.end_key, 1)
@@ -451,15 +453,15 @@ AND s.end_key > r.start_key`)
 	case tree.ShowRangesIndex:
 		buf.WriteString(`
   CASE
-    WHEN r.start_key = span_start_key THEN '…/<IndexMin>'
+    WHEN r.start_key = object_start_key THEN '…/<IndexMin>'
     WHEN r.start_key = crdb_internal.table_span(table_id)[1] THEN '…/TableMin'
-    WHEN r.start_key < span_start_key THEN '<before:'||crdb_internal.pretty_key(r.start_key,-1)||'>'
+    WHEN r.start_key < object_start_key THEN '<before:'||crdb_internal.pretty_key(r.start_key,-1)||'>'
     ELSE '…'||crdb_internal.pretty_key(r.start_key, 2)
   END AS start_key,
   CASE
-    WHEN r.end_key = span_end_key THEN '…/<IndexMax>'
+    WHEN r.end_key = object_end_key THEN '…/<IndexMax>'
     WHEN r.end_key = crdb_internal.table_span(table_id)[2] THEN '…/<TableMax>'
-    WHEN r.end_key > span_end_key THEN '<after:'||crdb_internal.pretty_key(r.end_key,-1)||'>'
+    WHEN r.end_key > object_end_key THEN '<after:'||crdb_internal.pretty_key(r.end_key,-1)||'>'
     ELSE '…'||crdb_internal.pretty_key(r.end_key, 2)
   END AS end_key,
 `)
@@ -589,24 +591,24 @@ AND s.end_key > r.start_key`)
 			prefix = "'…'||"
 		}
 		fmt.Fprintf(&buf, `,
-  %[2]scrdb_internal.pretty_key(span_start_key, %[1]d) AS index_start_key,
-  %[2]scrdb_internal.pretty_key(span_end_key, %[1]d) AS index_end_key`, shift, prefix)
+  %[2]scrdb_internal.pretty_key(per_range_start_key, %[1]d) AS index_start_key,
+  %[2]scrdb_internal.pretty_key(per_range_end_key, %[1]d) AS index_end_key`, shift, prefix)
 
 		if n.Options.Keys {
 			buf.WriteString(`,
-  span_start_key AS raw_index_start_key,
-  span_end_key AS raw_index_end_key`)
+  per_range_start_key AS raw_index_start_key,
+  per_range_end_key AS raw_index_end_key`)
 		}
 
 	case tree.ExpandTables:
 		buf.WriteString(`,
-  crdb_internal.pretty_key(span_start_key, -1) AS table_start_key,
-  crdb_internal.pretty_key(span_end_key, -1) AS table_end_key`)
+  crdb_internal.pretty_key(per_range_start_key, -1) AS table_start_key,
+  crdb_internal.pretty_key(per_range_end_key, -1) AS table_end_key`)
 
 		if n.Options.Keys {
 			buf.WriteString(`,
-  span_start_key AS raw_table_start_key,
-  span_end_key AS raw_table_end_key`)
+  per_range_start_key AS raw_table_start_key,
+  per_range_end_key AS raw_table_end_key`)
 		}
 	}
 
@@ -662,7 +664,7 @@ AND s.end_key > r.start_key`)
 	buf.WriteString("\nFROM intermediate r ORDER BY r.start_key")
 	switch n.Options.Mode {
 	case tree.ExpandIndexes, tree.ExpandTables:
-		buf.WriteString(", r.span_start_key")
+		buf.WriteString(", r.per_range_start_key")
 	}
 
 	//
