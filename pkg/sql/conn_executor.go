@@ -2893,7 +2893,7 @@ func (ex *connExecutor) setCopyLoggingFields(stmt statements.Statement[tree.Stat
 	ex.planner.stmt = Statement{
 		Statement: stmt,
 	}
-	ann := tree.MakeAnnotations(0)
+	ann := tree.MakeAnnotations(stmt.NumAnnotations)
 	ex.planner.extendedEvalCtx.Context.Annotations = &ann
 	ex.planner.extendedEvalCtx.Context.Placeholders = &tree.PlaceholderInfo{}
 	ex.planner.curPlan.init(&ex.planner.stmt, &ex.planner.instrumentation)
