@@ -100,6 +100,7 @@ func readNextMessages(
 				len(actual), numMessages, f, f)
 		}
 		m, err := f.Next()
+		tdebug(fmt.Sprintf("got message: (%+v)", m))
 		if log.V(1) {
 			if m != nil {
 				log.Infof(context.Background(), `msg %s: %s->%s (%s) (%s)`,
@@ -206,6 +207,7 @@ func assertPayloadsBase(
 	if len(expected) > 100 {
 		// Webhook sink is very slow; We have few tests that read 1000 messages.
 		timeout += time.Duration(math.Log(float64(len(expected)))) * time.Minute
+
 	}
 
 	require.NoError(t,
@@ -478,7 +480,7 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 	resetRetry := testingUseFastRetry()
 	resetFlushFrequency := changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)
 	cluster, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, knobs,
+		t, 10 /* numServers */, knobs,
 		multiregionccltestutils.WithUseDatabase("d"),
 	)
 	cleanupAndReset := func() {

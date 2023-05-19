@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/url"
 	"runtime"
@@ -911,15 +912,15 @@ type OrderedSinkRowSlice []OrderedSinkRow
 func (p OrderedSinkRowSlice) Len() int      { return len(p) }
 func (p OrderedSinkRowSlice) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
-// Sorts by mvcc timestamp in *descending* order
-func (p OrderedSinkRowSlice) Less(i, j int) bool { return p[j].row.Mvcc.Less(p[i].row.Mvcc) }
+// Sorts by mvcc timestamp in *ascending* order
+func (p OrderedSinkRowSlice) Less(i, j int) bool { return p[i].row.Mvcc.Less(p[j].row.Mvcc) }
 
 type orderedSink struct {
 	processorID   int32
 	forwardingBuf encDatumRowBuffer
 	unorderedBuf  OrderedSinkRowSlice
 	alloc         tree.DatumAlloc
-	metrics       metricsRecorder
+	metrics       *Metrics
 }
 
 var _ EventSink = (*orderedSink)(nil)
@@ -944,6 +945,7 @@ func (s *orderedSink) EmitRow(
 			Mvcc:  mvcc,
 		},
 	})
+	debug(fmt.Sprintf("AGG APPENDING (%+v) (buffered len: %d)", s.unorderedBuf[len(s.unorderedBuf)-1].row, len(s.unorderedBuf)))
 	return nil
 }
 
@@ -954,7 +956,12 @@ func (s *orderedSink) EmitUpToResolved(
 	if len(s.unorderedBuf) == 0 {
 		return nil
 	}
-	sort.Sort(s.unorderedBuf)
+	debug(fmt.Sprintf("AGG EMIT UP TO RESOLVED (buffered len: %d)", len(s.unorderedBuf)))
+	sort.Sort(s.unorderedBuf) // Orders from lowest to highest
+	// fmt.Printf("\x1b[31m SORTING \x1b[0m\n")
+	// for _, el := range s.unorderedBuf {
+	// 	fmt.Printf("\x1b[31m EL (%+v) \x1b[0m\n", el.row)
+	// }
 
 	orderedUpdate := jobspb.OrderedRows{
 		Rows:              make([]jobspb.OrderedRows_Row, 0, len(s.unorderedBuf)),
@@ -963,6 +970,8 @@ func (s *orderedSink) EmitUpToResolved(
 
 	var toRelease kvevent.Alloc
 	defer toRelease.Release(ctx)
+
+	debug(fmt.Sprintf("AGG diff: %d lowestUnordered: %s resolved: %s, highestUnordered: %s", resolved.WallTime-s.unorderedBuf[0].row.Mvcc.WallTime, s.unorderedBuf[0].row.Mvcc, resolved, s.unorderedBuf[len(s.unorderedBuf)-1].row.Mvcc))
 
 	for _, r := range s.unorderedBuf {
 		if resolved.Less(r.row.Mvcc) {
@@ -977,6 +986,9 @@ func (s *orderedSink) EmitUpToResolved(
 	if err != nil {
 		return err
 	}
+	s.metrics.TotalOrderingForwards.Inc(1)
+	s.metrics.TotalOrderingEventsForwarded.Inc(int64(len(orderedUpdate.Rows)))
+	debug(fmt.Sprintf("AGG FORWARDING %d, remaining: %d", len(orderedUpdate.Rows), len(s.unorderedBuf)))
 	s.forwardingBuf.Push(rowenc.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
 		{Datum: tree.DNull}, // topic

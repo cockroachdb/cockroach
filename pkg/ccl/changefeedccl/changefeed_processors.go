@@ -280,7 +280,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	if opts.TotalOrdering() {
 		sink := &orderedSink{
 			processorID: ca.processorID,
-			metrics:     recorder,
+			metrics:     ca.metrics,
 		}
 		ca.changedRowBuf = &sink.forwardingBuf
 		ca.sink = sink
@@ -600,6 +600,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return nil
 	}
 
+	// debug(fmt.Sprintf("AGG FORWARDING RESOLVED SPAN %s", resolved))
 	advanced, err := ca.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
@@ -919,6 +920,7 @@ func newChangeFrontierProcessor(
 		orderedRowMerger: &orderedRowMerger{
 			orderedRows: make(map[int32][]jobspb.OrderedRows_Row),
 			frontier:    sf,
+			metrics:     flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics),
 		},
 	}
 
@@ -1286,6 +1288,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	cf.maybeLogBehindSpan(frontierChanged)
 
 	if (frontierChanged || resolved.BoundaryType == jobspb.ResolvedSpan_BACKFILL) && cf.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal) {
+		debug("TRY FLUSH")
 		err = cf.orderedRowMerger.TryFlush(cf.Ctx())
 		if err != nil {
 			return err
@@ -1781,21 +1784,25 @@ type orderedRowMerger struct {
 
 	frontier *schemaChangeFrontier
 	sink     EventSink
+	metrics  *Metrics
 }
 
 func (m *orderedRowMerger) Append(rows jobspb.OrderedRows) {
 	wasEmpty := len(m.orderedRows[rows.SourceProcessorID]) == 0
+	defer m.metrics.TotalOrderingFrontierAppends.Inc(1)
 
 	// Prepend newer rows to the back of the queue
-	m.orderedRows[rows.SourceProcessorID] = append(rows.Rows, m.orderedRows[rows.SourceProcessorID]...)
+	m.orderedRows[rows.SourceProcessorID] = append(m.orderedRows[rows.SourceProcessorID], rows.Rows...)
+	debug2(fmt.Sprintf("FRONTIER APPENDING %d", len(rows.Rows)))
 
 	allRows := m.orderedRows[rows.SourceProcessorID]
 	if wasEmpty && len(allRows) > 0 {
-		heap.Push(&m.minHeap, RowHeapEntry{source: rows.SourceProcessorID, row: allRows[len(allRows)-1]})
+		heap.Push(&m.minHeap, RowHeapEntry{source: rows.SourceProcessorID, row: allRows[0]})
 	}
 }
 
 func (m *orderedRowMerger) TryFlush(ctx context.Context) error {
+	pops := 0
 	for {
 		if m.minHeap.Peek() == nil {
 			break
@@ -1803,23 +1810,27 @@ func (m *orderedRowMerger) TryFlush(ctx context.Context) error {
 		nextTs := m.minHeap.Peek().row.Mvcc
 		if nextTs.LessEq(m.frontier.Frontier()) || nextTs.Equal(m.frontier.BackfillTS()) {
 			next := heap.Pop(&m.minHeap).(RowHeapEntry)
+			pops += 1
 			err := m.sink.EmitRow(ctx, nil, next.row.Key, next.row.Value, hlc.Timestamp{}, next.row.Mvcc, kvevent.Alloc{})
 			if err != nil {
 				return err
 			}
 
 			oldRows := m.orderedRows[next.source]
-			m.orderedRows[next.source] = oldRows[0 : len(oldRows)-1]
+			m.orderedRows[next.source] = oldRows[1:]
 			remainingRows := m.orderedRows[next.source]
 
 			// Replace the value that was popped with the next lowest
 			if len(remainingRows) > 0 {
-				heap.Push(&m.minHeap, RowHeapEntry{source: next.source, row: remainingRows[len(remainingRows)-1]})
+				heap.Push(&m.minHeap, RowHeapEntry{source: next.source, row: remainingRows[0]})
 			}
 		} else {
 			break
 		}
 	}
+	debug2(fmt.Sprintf("FRONTIER FLUSHING %d", pops))
+
+	defer m.metrics.TotalOrderingFrontierFlushes.Inc(1)
 
 	return m.sink.Flush(ctx)
 }

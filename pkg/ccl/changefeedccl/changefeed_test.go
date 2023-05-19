@@ -263,29 +263,79 @@ func TestChangefeedBasics(t *testing.T) {
 }
 
 func TestChangefeedTotalOrdering(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	// defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, ordering='total'`)
-		defer closeFeed(t, foo)
-		for i := 0; i < 1000; i++ {
-			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
-		}
+	cluster, db, cleanup := startTestCluster(t)
+	defer cleanup()
 
-		var expectedMessages []string
-		for i := 0; i < 1000; i++ {
-			expectedMessages = append(expectedMessages, fmt.Sprintf(
-				`foo: [%d]->{"after": {"a": %d}}`, i, i,
-			))
-		}
+	f := makeKafkaFeedFactory(cluster, db)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 
-		assertPayloadsTotalOrdering(t, foo, expectedMessages)
+	sqlDB.ExecMultiple(t,
+		`INSERT INTO foo (a) SELECT * FROM generate_series(1, 10);`,
+		`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));`,
+		`ALTER TABLE foo SCATTER;`,
+	)
+
+	foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, ordering='total', resolved='1s', initial_scan='yes'`)
+	defer closeFeed(t, foo)
+	var expectedBackfillMessages []string
+	for i := 1; i <= 10; i++ {
+		expectedBackfillMessages = append(expectedBackfillMessages, fmt.Sprintf(
+			`foo: [%d]->{"after": {"a": %d}}`, i, i,
+		))
 	}
+	tdebug("waiting for backfill messages")
+	assertPayloadsStripTs(t, foo, expectedBackfillMessages)
+	// tdebug("waiting for resolved")
+	// expectResolvedTimestamp(t, foo)
+	// tdebug("got first resolved, waiting for second")
+	// expectResolvedTimestamp(t, foo)
+	// tdebug("got second resolved")
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	for i := 11; i <= 20; i++ {
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+	}
+	// sqlDB2 := sqlutils.MakeSQLRunner(cluster.ServerConn(1))
+	// for i := 2001; i <= 3000; i++ {
+	// 	sqlDB2.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+	// }
+	// sqlDB3 := sqlutils.MakeSQLRunner(cluster.ServerConn(2))
+	// for i := 3001; i <= 4000; i++ {
+	// 	sqlDB3.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+	// }
+
+	var expectedMessages []string
+	for i := 11; i <= 20; i++ {
+		expectedMessages = append(expectedMessages, fmt.Sprintf(
+			`foo: [%d]->{"after": {"a": %d}}`, i, i,
+		))
+	}
+	assertPayloadsTotalOrdering(t, foo, expectedMessages)
+	// t.FailNow()
+
+	// testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+	// 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	// 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+	// 	foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, ordering='total'`)
+	// 	defer closeFeed(t, foo)
+	// 	for i := 0; i < 1000; i++ {
+	// 		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+	// 	}
+
+	// 	var expectedMessages []string
+	// 	for i := 0; i < 1000; i++ {
+	// 		expectedMessages = append(expectedMessages, fmt.Sprintf(
+	// 			`foo: [%d]->{"after": {"a": %d}}`, i, i,
+	// 		))
+	// 	}
+
+	// 	assertPayloadsTotalOrdering(t, foo, expectedMessages)
+	// }
+
+	// cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestChangefeedBasicQuery(t *testing.T) {

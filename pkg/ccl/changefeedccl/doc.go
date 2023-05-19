@@ -88,3 +88,19 @@ schema for the relevant table at the event's timestamp.
 	                                         +------------+
 */
 package changefeedccl
+
+func tdebug(s string) {
+	// log.Warningf(context.Background(), "[TDEBUG] \x1b[31m %s \x1b[0m\n", s)
+}
+func debug(s string) {
+	// log.Warningf(context.Background(), "[DEBUG] \x1b[32m %s \x1b[0m\n", s)
+}
+func debug2(s string) {
+	// log.Warningf(context.Background(), "[DEBUG] \x1b[33m %s \x1b[0m\n", s)
+}
+func debug3(s string) {
+	// log.Warningf(context.Background(), "[DEBUG] \x1b[34m %s \x1b[0m\n", s)
+}
+func debug4(s string) {
+	// log.Warningf(context.Background(), "[DEBUG] \x1b[35m %s \x1b[0m\n", s)
+}

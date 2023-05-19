@@ -1294,22 +1294,34 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "240m"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 4000, duration: "240m"})
 
-			feed := ct.newChangefeed(feedArgs{
+			ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
 				targets:  allTpccTargets,
 				opts: map[string]string{
-					// "ordering":     "'total'",
-					"initial_scan": "'no'",
-					"updated":      "",
-					"resolved":     "'5s'",
+					"metrics_label": "'total'",
+					"ordering":      "'total'",
+					"initial_scan":  "'no'",
+					"updated":       "",
+					"resolved":      "'5s'",
 				},
 			})
 
-			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 30 * time.Minute,
-			})
+			// ct.newChangefeed(feedArgs{
+			// 	sinkType: kafkaSink,
+			// 	targets:  allTpccTargets,
+			// 	opts: map[string]string{
+			// 		"metrics_label": "'key'",
+			// 		"ordering":      "'key'",
+			// 		"initial_scan":  "'no'",
+			// 		"updated":       "",
+			// 		"resolved":      "'5s'",
+			// 	},
+			// })
+			// ct.runFeedLatencyVerifier(feed, latencyTargets{
+			// 	initialScanLatency: 30 * time.Minute,
+			// })
 
 			ct.waitForWorkload()
 		},

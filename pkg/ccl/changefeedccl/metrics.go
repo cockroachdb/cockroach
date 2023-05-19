@@ -693,6 +693,10 @@ type Metrics struct {
 	ParallelConsumerFlushNanos     metric.IHistogram
 	ParallelConsumerConsumeNanos   metric.IHistogram
 	ParallelConsumerInFlightEvents *metric.Gauge
+	TotalOrderingForwards          *metric.Counter
+	TotalOrderingEventsForwarded   *metric.Counter
+	TotalOrderingFrontierFlushes   *metric.Counter
+	TotalOrderingFrontierAppends   *metric.Counter
 
 	mu struct {
 		syncutil.Mutex
@@ -744,6 +748,38 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Mode:     metric.HistogramModePrometheus,
 		}),
 		ParallelConsumerInFlightEvents: metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
+		TotalOrderingForwards: metric.NewCounter(
+			metric.Metadata{
+				Name:        "changefeed.total_ordering_forwards",
+				Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
+				Measurement: "Messages",
+				Unit:        metric.Unit_COUNT,
+			},
+		),
+		TotalOrderingEventsForwarded: metric.NewCounter(
+			metric.Metadata{
+				Name:        "changefeed.total_ordering_events_forwarded",
+				Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
+				Measurement: "Messages",
+				Unit:        metric.Unit_COUNT,
+			},
+		),
+		TotalOrderingFrontierFlushes: metric.NewCounter(
+			metric.Metadata{
+				Name:        "changefeed.total_ordering_frontier_flushes",
+				Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
+				Measurement: "Messages",
+				Unit:        metric.Unit_COUNT,
+			},
+		),
+		TotalOrderingFrontierAppends: metric.NewCounter(
+			metric.Metadata{
+				Name:        "changefeed.total_ordering_frontier_appends",
+				Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
+				Measurement: "Messages",
+				Unit:        metric.Unit_COUNT,
+			},
+		),
 	}
 
 	m.mu.resolved = make(map[int]hlc.Timestamp)
