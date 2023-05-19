@@ -385,7 +385,6 @@ type Context struct {
 
 	heartbeatInterval time.Duration
 	heartbeatTimeout  time.Duration
-	HeartbeatCB       func()
 
 	rpcCompression bool
 
@@ -483,12 +482,13 @@ func (c connKey) SafeFormat(p redact.SafePrinter, _ rune) {
 // ContextOptions are passed to NewContext to set up a new *Context.
 // All pointer fields and TenantID are required.
 type ContextOptions struct {
-	TenantID        roachpb.TenantID
-	Config          *base.Config
-	Clock           hlc.WallClock
-	ToleratedOffset time.Duration
-	Stopper         *stop.Stopper
-	Settings        *cluster.Settings
+	TenantID               roachpb.TenantID
+	Config                 *base.Config
+	Clock                  hlc.WallClock
+	ToleratedOffset        time.Duration
+	FatalOnOffsetViolation bool
+	Stopper                *stop.Stopper
+	Settings               *cluster.Settings
 	// OnIncomingPing is called when handling a PingRequest, after
 	// preliminary checks but before recording clock offset information.
 	// It can inject an error or modify the response.
@@ -2546,10 +2546,9 @@ func (rpcCtx *Context) runHeartbeat(
 					request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 				}
 				rpcCtx.RemoteClocks.UpdateOffset(ctx, conn.remoteNodeID, request.Offset, pingDuration)
-			}
-
-			if cb := rpcCtx.HeartbeatCB; cb != nil {
-				cb()
+				if err := rpcCtx.RemoteClocks.VerifyClockOffset(ctx); err != nil && rpcCtx.FatalOnOffsetViolation {
+					log.Ops.Fatalf(ctx, "%v", err)
+				}
 			}
 
 			return nil
