@@ -113,14 +113,14 @@ WHERE table_name LIKE 'repl%'
    OR start_key LIKE '/System%'
 ORDER BY range_id
 ----
-start_key                end_key                  range_id  database_name  schema_name  table_name                       table_id  table_start_key  to_hex  table_end_key  to_hex
-/System/NodeLiveness     /System/NodeLivenessMax  2         NULL           NULL         NULL                             NULL      NULL             NULL    NULL           NULL
-/System/NodeLivenessMax  /System/tsd              3         NULL           NULL         NULL                             NULL      NULL             NULL    NULL           NULL
-/System/tsd              /System/"tse"            4         NULL           NULL         NULL                             NULL      NULL             NULL    NULL           NULL
-/System/"tse"            /Table/0                 5         NULL           NULL         NULL                             NULL      NULL             NULL    NULL           NULL
-/Table/25                /Table/26                27        system         public       replication_constraint_stats     25        /Table/25        a1      /Table/26      a2
-/Table/26                /Table/27                28        system         public       replication_critical_localities  26        /Table/26        a2      /Table/27      a3
-/Table/27                /Table/28                29        system         public       replication_stats                27        /Table/27        a3      /Table/28      a4
+start_key                end_key                  range_id  database_name  schema_name  table_name                       table_id  table_start_key  to_hex  table_end_key            to_hex
+/System/NodeLiveness     /System/NodeLivenessMax  2         NULL           NULL         NULL                             NULL      NULL             NULL    /System/NodeLivenessMax  04006c6976656e6573732e
+/System/NodeLivenessMax  /System/tsd              3         NULL           NULL         NULL                             NULL      NULL             NULL    /System/tsd              04747364
+/System/tsd              /System/"tse"            4         NULL           NULL         NULL                             NULL      NULL             NULL    /System/"tse"            04747365
+/System/"tse"            /Table/0                 5         NULL           NULL         NULL                             NULL      NULL             NULL    /Table/0                 88
+/Table/25                /Table/26                27        system         public       replication_constraint_stats     25        /Table/25        a1      /Table/26                a2
+/Table/26                /Table/27                28        system         public       replication_critical_localities  26        /Table/26        a2      /Table/27                a3
+/Table/27                /Table/28                29        system         public       replication_stats                27        /Table/27        a3      /Table/28                a4
 
 subtest show_cluster_ranges/with_indexes
 
@@ -154,14 +154,14 @@ WHERE table_name LIKE 'repl%'
    OR start_key LIKE '/System%'
 ORDER BY range_id
 ----
-start_key                end_key                  range_id  database_name  schema_name  table_name                       table_id  index_name  index_id  index_start_key  to_hex  index_end_key  to_hex
-/System/NodeLiveness     /System/NodeLivenessMax  2         NULL           NULL         NULL                             NULL      NULL        NULL      NULL             NULL    NULL           NULL
-/System/NodeLivenessMax  /System/tsd              3         NULL           NULL         NULL                             NULL      NULL        NULL      NULL             NULL    NULL           NULL
-/System/tsd              /System/"tse"            4         NULL           NULL         NULL                             NULL      NULL        NULL      NULL             NULL    NULL           NULL
-/System/"tse"            /Table/0                 5         NULL           NULL         NULL                             NULL      NULL        NULL      NULL             NULL    NULL           NULL
-/Table/25                /Table/26                27        system         public       replication_constraint_stats     25        primary     1         /Table/25/1      a189    /Table/25/2    a18a
-/Table/26                /Table/27                28        system         public       replication_critical_localities  26        primary     1         /Table/26/1      a289    /Table/26/2    a28a
-/Table/27                /Table/28                29        system         public       replication_stats                27        primary     1         /Table/27/1      a389    /Table/27/2    a38a
+start_key                end_key                  range_id  database_name  schema_name  table_name                       table_id  index_name  index_id  index_start_key  to_hex  index_end_key            to_hex
+/System/NodeLiveness     /System/NodeLivenessMax  2         NULL           NULL         NULL                             NULL      NULL        NULL      NULL             NULL    /System/NodeLivenessMax  04006c6976656e6573732e
+/System/NodeLivenessMax  /System/tsd              3         NULL           NULL         NULL                             NULL      NULL        NULL      NULL             NULL    /System/tsd              04747364
+/System/tsd              /System/"tse"            4         NULL           NULL         NULL                             NULL      NULL        NULL      NULL             NULL    /System/"tse"            04747365
+/System/"tse"            /Table/0                 5         NULL           NULL         NULL                             NULL      NULL        NULL      NULL             NULL    /Table/0                 88
+/Table/25                /Table/26                27        system         public       replication_constraint_stats     25        primary     1         /Table/25/1      a189    /Table/25/2              a18a
+/Table/26                /Table/27                28        system         public       replication_critical_localities  26        primary     1         /Table/26/1      a289    /Table/26/2              a28a
+/Table/27                /Table/28                29        system         public       replication_stats                27        primary     1         /Table/27/1      a389    /Table/27/2              a38a
 
 
 subtest show_ranges_from_database
@@ -227,13 +227,13 @@ start_key        end_key          range_id  database_name  schema_name  table_na
 /Table/25        /Table/26        27        system         public       replication_constraint_stats     25        primary     1         /Table/25/1      /Table/25/2
 /Table/26        /Table/27        28        system         public       replication_critical_localities  26        primary     1         /Table/26/1      /Table/26/2
 /Table/27        /Table/28        29        system         public       replication_stats                27        primary     1         /Table/27/1      /Table/27/2
-/Table/62        /Table/106/1/10  63        test           public       t                                106       t_pkey      1         /Table/106/1     /Table/106/2
-/Table/106/1/10  /Table/106/2/20  64        test           public       t                                106       t_pkey      1         /Table/106/1     /Table/106/2
-/Table/106/1/10  /Table/106/2/20  64        test           public       t                                106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/20  /Table/106/2/30  65        test           public       t                                106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/30  /Table/107/1/42  66        test           public       t                                106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/30  /Table/107/1/42  66        test           public       u                                107       u_pkey      1         /Table/107/1     /Table/107/2
-/Table/107/1/42  /Max             67        test           public       u                                107       u_pkey      1         /Table/107/1     /Table/107/2
+/Table/62        /Table/106/1/10  63        test           public       t                                106       t_pkey      1         /Table/106/1     /Table/106/1/10
+/Table/106/1/10  /Table/106/2/20  64        test           public       t                                106       t_pkey      1         /Table/106/1/10  /Table/106/2
+/Table/106/1/10  /Table/106/2/20  64        test           public       t                                106       idx         2         /Table/106/2     /Table/106/2/20
+/Table/106/2/20  /Table/106/2/30  65        test           public       t                                106       idx         2         /Table/106/2/20  /Table/106/2/30
+/Table/106/2/30  /Table/107/1/42  66        test           public       t                                106       idx         2         /Table/106/2/30  /Table/106/3
+/Table/106/2/30  /Table/107/1/42  66        test           public       u                                107       u_pkey      1         /Table/107/1     /Table/107/1/42
+/Table/107/1/42  /Max             67        test           public       u                                107       u_pkey      1         /Table/107/1/42  /Table/107/2
 
 subtest show_ranges_from_database/with_tables
 
@@ -265,13 +265,12 @@ FROM [SHOW RANGES WITH TABLES]
 ORDER BY range_id
 ----
 start_key        end_key          range_id  schema_name  table_name  table_id  table_start_key  table_end_key
-/Table/62        /Table/106/1/10  63        public       t           106       /Table/106       /Table/107
-/Table/106/1/10  /Table/106/2/20  64        public       t           106       /Table/106       /Table/107
-/Table/106/2/20  /Table/106/2/30  65        public       t           106       /Table/106       /Table/107
-/Table/106/2/30  /Table/107/1/42  66        public       t           106       /Table/106       /Table/107
-/Table/106/2/30  /Table/107/1/42  66        public       u           107       /Table/107       /Table/108
-/Table/107/1/42  /Max             67        public       u           107       /Table/107       /Table/108
-
+/Table/62        /Table/106/1/10  63        public       t           106       /Table/106       /Table/106/1/10
+/Table/106/1/10  /Table/106/2/20  64        public       t           106       /Table/106/1/10  /Table/106/2/20
+/Table/106/2/20  /Table/106/2/30  65        public       t           106       /Table/106/2/20  /Table/106/2/30
+/Table/106/2/30  /Table/107/1/42  66        public       t           106       /Table/106/2/30  /Table/107
+/Table/106/2/30  /Table/107/1/42  66        public       u           107       /Table/107       /Table/107/1/42
+/Table/107/1/42  /Max             67        public       u           107       /Table/107/1/42  /Table/108
 
 subtest show_ranges_from_database/with_indexes
 
@@ -304,13 +303,13 @@ FROM [SHOW RANGES WITH INDEXES]
 ORDER BY range_id, table_id, index_id
 ----
 start_key        end_key          range_id  schema_name  table_name  table_id  index_name  index_id  index_start_key  index_end_key
-/Table/62        /Table/106/1/10  63        public       t           106       t_pkey      1         /Table/106/1     /Table/106/2
-/Table/106/1/10  /Table/106/2/20  64        public       t           106       t_pkey      1         /Table/106/1     /Table/106/2
-/Table/106/1/10  /Table/106/2/20  64        public       t           106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/20  /Table/106/2/30  65        public       t           106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/30  /Table/107/1/42  66        public       t           106       idx         2         /Table/106/2     /Table/106/3
-/Table/106/2/30  /Table/107/1/42  66        public       u           107       u_pkey      1         /Table/107/1     /Table/107/2
-/Table/107/1/42  /Max             67        public       u           107       u_pkey      1         /Table/107/1     /Table/107/2
+/Table/62        /Table/106/1/10  63        public       t           106       t_pkey      1         /Table/106/1     /Table/106/1/10
+/Table/106/1/10  /Table/106/2/20  64        public       t           106       t_pkey      1         /Table/106/1/10  /Table/106/2
+/Table/106/1/10  /Table/106/2/20  64        public       t           106       idx         2         /Table/106/2     /Table/106/2/20
+/Table/106/2/20  /Table/106/2/30  65        public       t           106       idx         2         /Table/106/2/20  /Table/106/2/30
+/Table/106/2/30  /Table/107/1/42  66        public       t           106       idx         2         /Table/106/2/30  /Table/106/3
+/Table/106/2/30  /Table/107/1/42  66        public       u           107       u_pkey      1         /Table/107/1     /Table/107/1/42
+/Table/107/1/42  /Max             67        public       u           107       u_pkey      1         /Table/107/1/42  /Table/107/2
 
 
 subtest show_ranges_from_table
@@ -398,11 +397,11 @@ SELECT start_key, end_key, range_id, index_name, index_id, index_start_key, inde
 ORDER BY range_id, index_id
 ----
 start_key           end_key                  range_id  index_name  index_id  index_start_key  index_end_key
-<before:/Table/62>  …/1/10                   63        t_pkey      1         …/1              …/2
-…/1/10              …/2/20                   64        t_pkey      1         …/1              …/2
-…/1/10              …/2/20                   64        idx         2         …/2              …/3
-…/2/20              …/2/30                   65        idx         2         …/2              …/3
-…/2/30              <after:/Table/107/1/42>  66        idx         2         …/2              …/3
+<before:/Table/62>  …/1/10                   63        t_pkey      1         …/1              …/1/10
+…/1/10              …/2/20                   64        t_pkey      1         …/1/10           …/2
+…/1/10              …/2/20                   64        idx         2         …/2              …/2/20
+…/2/20              …/2/30                   65        idx         2         …/2/20           …/2/30
+…/2/30              <after:/Table/107/1/42>  66        idx         2         …/2/30           …/3
 
 
 
