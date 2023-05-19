@@ -72,7 +72,7 @@ var (
 		"server.shutdown.jobs_wait",
 		"the maximum amount of time a server waits for all currently executing jobs "+
 			"to notice drain request and to perform orderly shutdown",
-		10*time.Second,
+		0*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
 	).WithPublic()
 )

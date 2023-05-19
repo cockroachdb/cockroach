@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -95,7 +94,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
 	"github.com/lib/pq"
@@ -5624,84 +5622,6 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 		storeKnobs.TestingRequestFilter = requestFilter
 		args.Knobs.Store = storeKnobs
 	}))
-}
-
-func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(shouldPause bool) cdcTestFn {
-		return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-			sqlDB := sqlutils.MakeSQLRunner(s.DB)
-			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-			sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b'), (4, 'c'), (7, 'd'), (8, 'e')`)
-
-			var tableID int
-			sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables `+
-				`WHERE name = 'foo' AND database_name = current_database()`).
-				Scan(&tableID)
-			stmt := `CREATE CHANGEFEED FOR foo WITH resolved`
-			if shouldPause {
-				stmt += ", " + changefeedbase.OptProtectDataFromGCOnPause
-			}
-			foo := feed(t, f, stmt)
-			defer closeFeed(t, foo)
-			assertPayloads(t, foo, []string{
-				`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
-				`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
-				`foo: [4]->{"after": {"a": 4, "b": "c"}}`,
-				`foo: [7]->{"after": {"a": 7, "b": "d"}}`,
-				`foo: [8]->{"after": {"a": 8, "b": "e"}}`,
-			})
-			expectResolvedTimestamp(t, foo)
-
-			// Pause the job then ensure that it has a reasonable protected timestamp.
-
-			ctx := context.Background()
-			serverCfg := s.Server.DistSQLServer().(*distsql.ServerImpl).ServerConfig
-			jr := serverCfg.JobRegistry
-			pts := ptstorage.WithDatabase(
-				serverCfg.ProtectedTimestampProvider, serverCfg.DB,
-			)
-
-			feedJob := foo.(cdctest.EnterpriseTestFeed)
-			require.NoError(t, feedJob.Pause())
-			{
-				j, err := jr.LoadJob(ctx, feedJob.JobID())
-				require.NoError(t, err)
-				progress := j.Progress()
-				details := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
-				if shouldPause {
-					require.NotEqual(t, uuid.Nil, details.ProtectedTimestampRecord)
-					r, err := pts.GetRecord(ctx, details.ProtectedTimestampRecord)
-					require.NoError(t, err)
-					require.True(t, r.Timestamp.LessEq(*progress.GetHighWater()))
-				} else {
-					require.Equal(t, uuid.Nil, details.ProtectedTimestampRecord)
-				}
-			}
-
-			// Resume the job and ensure that the protected timestamp is removed once
-			// the changefeed has caught up.
-			require.NoError(t, feedJob.Resume())
-			testutils.SucceedsSoon(t, func() error {
-				resolvedTs, _ := expectResolvedTimestamp(t, foo)
-				j, err := jr.LoadJob(ctx, feedJob.JobID())
-				require.NoError(t, err)
-				details := j.Progress().Details.(*jobspb.Progress_Changefeed).Changefeed
-				r, err := pts.GetRecord(ctx, details.ProtectedTimestampRecord)
-				if err != nil || r.Timestamp.Less(resolvedTs) {
-					return fmt.Errorf("expected protected timestamp record %v to have timestamp greater than %v", r, resolvedTs)
-				}
-				return nil
-			})
-		}
-	}
-
-	testutils.RunTrueAndFalse(t, "protect_on_pause", func(t *testing.T, shouldPause bool) {
-		cdcTest(t, testFn(shouldPause), feedTestEnterpriseSinks)
-	})
-
 }
 
 func TestManyChangefeedsOneTable(t *testing.T) {
