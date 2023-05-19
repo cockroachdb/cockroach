@@ -243,9 +243,10 @@ func PushTxn(
 		}
 	}
 
+	pusherIso, pusheeIso := args.PusherTxn.IsoLevel, reply.PusheeTxn.IsoLevel
+	pusherPri, pusheePri := args.PusherTxn.Priority, reply.PusheeTxn.Priority
 	var pusherWins bool
 	var reason string
-
 	switch {
 	case txnwait.IsExpired(cArgs.EvalCtx.Clock().Now(), &reply.PusheeTxn):
 		reason = "pushee is expired"
@@ -257,7 +258,7 @@ func PushTxn(
 		// If just attempting to cleanup old or already-committed txns,
 		// pusher always fails.
 		pusherWins = false
-	case txnwait.CanPushWithPriority(args.PusherTxn.Priority, reply.PusheeTxn.Priority):
+	case txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri):
 		reason = "pusher has priority"
 		pusherWins = true
 	case args.Force:
