@@ -370,7 +370,7 @@ func showBackupPlanHook(
 			p.ExecCfg().InternalDB,
 			p.User(),
 		)
-		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup, 
+		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup,
 you must pass the 'encryption_info_dir' parameter that points to the directory of your full backup`
 		if showStmt.Options.EncryptionPassphrase != nil {
 			passphrase, err := exprEval.String(ctx, showStmt.Options.EncryptionPassphrase)
@@ -428,13 +428,16 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				return err
 			}
 		}
-		collection, computedSubdir := backupdest.CollectionAndSubdir(dest[0], subdir)
+		collections, computedSubdir, err := backupdest.CollectionsAndSubdir(dest, subdir)
+		if err != nil {
+			return err
+		}
 		fullyResolvedIncrementalsDirectory, err := backupdest.ResolveIncrementalsBackupLocation(
 			ctx,
 			p.User(),
 			p.ExecCfg(),
 			explicitIncPaths,
-			[]string{collection},
+			collections,
 			computedSubdir,
 		)
 		if err != nil {
