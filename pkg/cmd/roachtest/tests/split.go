@@ -407,7 +407,8 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(4))
 	startOpts := option.DefaultStartOptsNoBackups()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
-		"--vmodule=split_queue=2,store_rebalancer=2,allocator=2,replicate_queue=2",
+		"--vmodule=split_queue=2,store_rebalancer=2,allocator=2,replicate_queue=2,"+
+			"decider=3,replica_split_load=1",
 	)
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 
@@ -424,7 +425,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 		// Set the objective to QPS or CPU and update the load split threshold
 		// appropriately.
 		if params.qpsThreshold > 0 {
-			t.Status("setting split objective to QPS with threshold %d", params.qpsThreshold)
+			t.Status("setting split objective to QPS with threshold ", params.qpsThreshold)
 			if err := setLoadBasedRebalancingObjective(ctx, db, "qps"); err != nil {
 				return err
 			}
@@ -433,7 +434,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 				return err
 			}
 		} else if params.cpuThreshold > 0 {
-			t.Status("setting split objective to CPU with threshold %s", params.cpuThreshold)
+			t.Status("setting split objective to CPU with threshold ", params.cpuThreshold)
 			if err := setLoadBasedRebalancingObjective(ctx, db, "cpu"); err != nil {
 				return err
 			}

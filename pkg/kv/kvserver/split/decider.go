@@ -14,7 +14,6 @@ package split
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/redact"
 )
 
 const minSplitSuggestionInterval = time.Minute
@@ -30,6 +30,7 @@ const minNoSplitKeyLoggingMetricsInterval = time.Minute
 const minPerSecondSampleDuration = time.Second
 
 type LoadBasedSplitter interface {
+	redact.SafeFormatter
 	// Record informs the LoadBasedSplitter about where the span lies with regard
 	// to the keys in the samples.
 	Record(span roachpb.Span, weight float64)
@@ -46,11 +47,14 @@ type LoadBasedSplitter interface {
 	// number of samples that don't pass each split key requirement if not all
 	// samples are invalid due to insufficient counters, otherwise returns an
 	// empty string.
-	NoSplitKeyCauseLogMsg() string
+	NoSplitKeyCauseLogMsg() redact.RedactableString
 
 	// PopularKeyFrequency returns the percentage that the most popular key
 	// appears in the sampled candidate split keys.
 	PopularKeyFrequency() float64
+
+	// String formats the state of the load based splitter.
+	String() string
 }
 
 type LoadSplitConfig interface {
@@ -154,6 +158,7 @@ type Decider struct {
 		// Fields tracking split key suggestions.
 		splitFinder         LoadBasedSplitter // populated when engaged or decided
 		lastSplitSuggestion time.Time         // last stipulation to client to carry out split
+		suggestionsMade     int               // suggestions made since last reset
 
 		// Fields tracking logging / metrics around load-based splitter split key.
 		lastNoSplitKeyLoggingMetrics time.Time
@@ -173,6 +178,23 @@ func Init(
 	lbs.loadSplitterMetrics = loadSplitterMetrics
 	lbs.config = config
 	lbs.mu.objective = objective
+}
+
+type lockedDecider Decider
+
+func (ld *lockedDecider) SafeFormat(w redact.SafePrinter, r rune) {
+	w.Printf(
+		"objective=%v count=%d suggestions=%d last=%.1f last-roll=%v last-suggest=%v",
+		ld.mu.objective, ld.mu.count, ld.mu.suggestionsMade, ld.mu.lastStatVal,
+		ld.mu.lastStatRollover, ld.mu.lastSplitSuggestion,
+	)
+	if ld.mu.splitFinder != nil {
+		w.Printf(" %v", ld.mu.splitFinder)
+	}
+}
+
+func (ld *lockedDecider) String() string {
+	return redact.StringWithoutMarkers(ld)
 }
 
 // Record notifies the Decider that 'n' operations are being carried out which
@@ -231,20 +253,25 @@ func (d *Decider) recordLocked(
 		if s.Key != nil {
 			d.mu.splitFinder.Record(span(), float64(n))
 		}
-		if d.mu.splitFinder.Ready(now) {
-			if d.mu.splitFinder.Key() != nil {
-				if now.Sub(d.mu.lastSplitSuggestion) > minSplitSuggestionInterval {
-					d.mu.lastSplitSuggestion = now
-					return true
-				}
+		// We don't want to check for a split key if we don't need to as it
+		// requires some computation. When the splitFinder isn't ready or we
+		// recently suggested a split, skip the key check.
+		if d.mu.splitFinder.Ready(now) &&
+			now.Sub(d.mu.lastSplitSuggestion) > minSplitSuggestionInterval {
+			if splitKey := d.mu.splitFinder.Key(); splitKey != nil {
+				log.KvDistribution.VEventf(ctx, 3, "suggesting split key %v splitter_state=%v",
+					splitKey, (*lockedDecider)(d))
+				d.mu.lastSplitSuggestion = now
+				d.mu.suggestionsMade++
+				return true
 			} else {
 				if now.Sub(d.mu.lastNoSplitKeyLoggingMetrics) > minNoSplitKeyLoggingMetricsInterval {
 					d.mu.lastNoSplitKeyLoggingMetrics = now
-					noSplitKeyCauseLogMsg := d.mu.splitFinder.NoSplitKeyCauseLogMsg()
-					if noSplitKeyCauseLogMsg != "" {
+					if causeMsg := d.mu.splitFinder.NoSplitKeyCauseLogMsg(); causeMsg != "" {
 						popularKeyFrequency := d.mu.splitFinder.PopularKeyFrequency()
-						noSplitKeyCauseLogMsg += fmt.Sprintf(", most popular key occurs in %d%% of samples", int(popularKeyFrequency*100))
-						log.KvDistribution.Infof(ctx, "%s", noSplitKeyCauseLogMsg)
+						log.KvDistribution.Infof(ctx, "%s, most popular key occurs in %d%% of samples",
+							causeMsg, int(popularKeyFrequency*100))
+						log.KvDistribution.VInfof(ctx, 3, "splitter_state=%v", (*lockedDecider)(d))
 						if popularKeyFrequency >= splitKeyThreshold {
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
 						}
@@ -349,6 +376,7 @@ func (d *Decider) resetLocked(now time.Time) {
 	d.mu.count = 0
 	d.mu.maxStat.reset(now, d.config.StatRetention())
 	d.mu.splitFinder = nil
+	d.mu.suggestionsMade = 0
 	d.mu.lastSplitSuggestion = time.Time{}
 	d.mu.lastNoSplitKeyLoggingMetrics = time.Time{}
 }

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"testing"
 	"text/tabwriter"
 	"time"
@@ -342,6 +343,7 @@ type lbsTestSettings struct {
 	finderConfig  *finderConfig
 	seed          uint64
 	iterations    int
+	showLastState bool
 }
 
 func uint32ToKey(key uint32) roachpb.Key {
@@ -444,6 +446,7 @@ type repeatedResult struct {
 	avgOptimalPercentDifference, maxOptimalPercentDifference float64
 	avgRecordExecutionTime, avgKeyExecutionTime time.Duration
 	noKeyFoundPercent                           float64
+	lastStateString                             string
 }
 
 func resultTable(configs []multiReqConfig, rr []repeatedResult, showTiming bool) string {
@@ -506,7 +509,6 @@ func resultTable(configs []multiReqConfig, rr []repeatedResult, showTiming bool)
 	_ = w.Flush()
 
 	return buf.String()
-
 }
 
 func runTestRepeated(settings *lbsTestSettings) repeatedResult {
@@ -515,6 +517,7 @@ func runTestRepeated(settings *lbsTestSettings) repeatedResult {
 		avgOptimalPercentDifference, maxOptimalPercentDifference float64
 		avgRecordExecutionTime, avgKeyExecutionTime time.Duration
 		noKeyFoundPercent                           float64
+		lastStateString                             string
 	)
 	randSource := rand.New(rand.NewSource(settings.seed))
 	requestGen := settings.requestConfig.makeGenerator(randSource)
@@ -522,6 +525,7 @@ func runTestRepeated(settings *lbsTestSettings) repeatedResult {
 	for i := 0; i < settings.iterations; i++ {
 		var recordFn func(span roachpb.Span, weight int)
 		var keyFn func() roachpb.Key
+		var stringFn func() string
 
 		if settings.deciderConfig != nil {
 			d := settings.deciderConfig.makeDecider(randSource)
@@ -540,6 +544,7 @@ func runTestRepeated(settings *lbsTestSettings) repeatedResult {
 			keyFn = func() roachpb.Key {
 				return d.MaybeSplitKey(ctx, now)
 			}
+			stringFn = (*lockedDecider)(d).String
 		} else {
 			f := settings.finderConfig.makeFinder(randSource)
 			recordFn = func(span roachpb.Span, weight int) {
@@ -548,6 +553,7 @@ func runTestRepeated(settings *lbsTestSettings) repeatedResult {
 			keyFn = func() roachpb.Key {
 				return f.Key()
 			}
+			stringFn = f.String
 		}
 		ret := runTest(recordFn, keyFn, randSource, requestGen)
 
@@ -571,6 +577,9 @@ func runTestRepeated(settings *lbsTestSettings) repeatedResult {
 		avgRecordExecutionTime += ret.recordExecutionTime
 		avgKeyExecutionTime += ret.keyExecutionTime
 
+		if i == settings.iterations-1 && settings.showLastState {
+			lastStateString = stringFn()
+		}
 	}
 
 	nRuns := settings.iterations
@@ -592,6 +601,7 @@ func runTestRepeated(settings *lbsTestSettings) repeatedResult {
 		avgRecordExecutionTime:      avgRecordExecutionTime,
 		avgKeyExecutionTime:         avgKeyExecutionTime,
 		noKeyFoundPercent:           noKeyFoundPercent,
+		lastStateString:             lastStateString,
 	}
 }
 
@@ -821,7 +831,7 @@ func TestDataDriven(t *testing.T) {
 				findConfig = &finderConfig{
 					weighted: weighted,
 				}
-
+				decConfig = nil
 			case "decider":
 				var duration int
 				var threshold int
@@ -841,24 +851,20 @@ func TestDataDriven(t *testing.T) {
 					objective: splitObj,
 					duration:  time.Duration(duration) * time.Second,
 				}
+				findConfig = nil
 			case "eval":
 				var seed uint64
 				var iterations, mixCount int
-				var showTiming, cartesian, all bool
+				var showTiming, cartesian, all, showLastState bool
 				var mix string
 				var mixT mixType
 
 				d.ScanArgs(t, "seed", &seed)
 				d.ScanArgs(t, "iterations", &iterations)
-				if d.HasArg("timing") {
-					d.ScanArgs(t, "timing", &showTiming)
-				}
-				if d.HasArg("cartesian") {
-					d.ScanArgs(t, "cartesian", &cartesian)
-				}
-				if d.HasArg("all") {
-					d.ScanArgs(t, "all", &all)
-				}
+				d.MaybeScanArgs(t, "timing", &showTiming)
+				d.MaybeScanArgs(t, "cartesian", &cartesian)
+				d.MaybeScanArgs(t, "all", &all)
+				d.MaybeScanArgs(t, "show_last", &showLastState)
 				if d.HasArg("mix") {
 					d.ScanArgs(t, "mix", &mix)
 					d.ScanArgs(t, "mix_count", &mixCount)
@@ -900,9 +906,26 @@ func TestDataDriven(t *testing.T) {
 						finderConfig:  findConfig,
 						seed:          seed,
 						iterations:    iterations,
+						showLastState: showLastState,
 					})
 				}
-				return resultTable(evalRequestConfigs, repeatedResults, showTiming)
+				retTable := resultTable(evalRequestConfigs, repeatedResults, showTiming)
+				if showLastState {
+					showRequestConfgDesc := len(evalRequestConfigs) > 1
+					var buf strings.Builder
+					for i := range evalRequestConfigs {
+						if i > 0 {
+							buf.WriteString("\n")
+						}
+						if showRequestConfgDesc {
+							buf.WriteString(evalRequestConfigs[i].String())
+						}
+						fmt.Fprintf(&buf, "\t%s",
+							repeatedResults[i].lastStateString)
+					}
+					return fmt.Sprintf("%s%s", retTable, buf.String())
+				}
+				return retTable
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
