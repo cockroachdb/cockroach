@@ -83,7 +83,7 @@ start-waiting: <bool>
  Calls lockTable.ScanOptimistic. The request must not have an existing guard.
  If a guard is returned, stores it for later use.
 
-acquire r=<name> k=<key> durability=r|u
+acquire r=<name> k=<key> durability=r|u [ignored-seqs=<int>[-<int>][,<int>[-<int>]]]
 ----
 <error string>
 
@@ -372,6 +372,11 @@ func TestLockTableBasic(t *testing.T) {
 					durability = lock.Replicated
 				}
 				acq := roachpb.MakeLockAcquisition(req.Txn, roachpb.Key(key), durability)
+				var ignored []enginepb.IgnoredSeqNumRange
+				if d.HasArg("ignored-seqs") {
+					ignored = scanIgnoredSeqNumbers(t, d)
+				}
+				acq.IgnoredSeqNums = ignored
 				if err := lt.AcquireLock(&acq); err != nil {
 					return err.Error()
 				}
@@ -413,29 +418,7 @@ func TestLockTableBasic(t *testing.T) {
 				span := getSpan(t, d, s)
 				var ignored []enginepb.IgnoredSeqNumRange
 				if d.HasArg("ignored-seqs") {
-					var seqsStr string
-					d.ScanArgs(t, "ignored-seqs", &seqsStr)
-					parts := strings.Split(seqsStr, ",")
-					for _, p := range parts {
-						pair := strings.Split(p, "-")
-						if len(pair) != 1 && len(pair) != 2 {
-							d.Fatalf(t, "error parsing %s", parts)
-						}
-						startNum, err := strconv.ParseInt(pair[0], 10, 32)
-						if err != nil {
-							d.Fatalf(t, "error parsing ignored seqnums: %s", err)
-						}
-						ignoredRange := enginepb.IgnoredSeqNumRange{
-							Start: enginepb.TxnSeq(startNum), End: enginepb.TxnSeq(startNum)}
-						if len(pair) == 2 {
-							endNum, err := strconv.ParseInt(pair[1], 10, 32)
-							if err != nil {
-								d.Fatalf(t, "error parsing ignored seqnums: %s", err)
-							}
-							ignoredRange.End = enginepb.TxnSeq(endNum)
-						}
-						ignored = append(ignored, ignoredRange)
-					}
+					ignored = scanIgnoredSeqNumbers(t, d)
 				}
 				// TODO(sbhola): also test STAGING.
 				intent := &roachpb.LockUpdate{
@@ -745,6 +728,34 @@ func getStrength(t *testing.T, d *datadriven.TestData, strS string) lock.Strengt
 		d.Fatalf(t, "unknown lock strength: %s", strS)
 		return 0
 	}
+}
+
+func scanIgnoredSeqNumbers(t *testing.T, d *datadriven.TestData) []enginepb.IgnoredSeqNumRange {
+	var ignored []enginepb.IgnoredSeqNumRange
+	var seqsStr string
+	d.ScanArgs(t, "ignored-seqs", &seqsStr)
+	parts := strings.Split(seqsStr, ",")
+	for _, p := range parts {
+		pair := strings.Split(p, "-")
+		if len(pair) != 1 && len(pair) != 2 {
+			d.Fatalf(t, "error parsing %s", parts)
+		}
+		startNum, err := strconv.ParseInt(pair[0], 10, 32)
+		if err != nil {
+			d.Fatalf(t, "error parsing ignored seqnums: %s", err)
+		}
+		ignoredRange := enginepb.IgnoredSeqNumRange{
+			Start: enginepb.TxnSeq(startNum), End: enginepb.TxnSeq(startNum)}
+		if len(pair) == 2 {
+			endNum, err := strconv.ParseInt(pair[1], 10, 32)
+			if err != nil {
+				d.Fatalf(t, "error parsing ignored seqnums: %s", err)
+			}
+			ignoredRange.End = enginepb.TxnSeq(endNum)
+		}
+		ignored = append(ignored, ignoredRange)
+	}
+	return ignored
 }
 
 func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) string {
