@@ -3662,6 +3662,25 @@ var charts = []sectionDescription{
 					"admission.elastic_cpu.acquired_nanos",
 					"admission.elastic_cpu.returned_nanos",
 					"admission.elastic_cpu.max_available_nanos",
+					"admission.elastic_cpu.pre_work_nanos",
+				},
+			},
+			{
+				Title: "Elastic CPU Available Tokens",
+				Metrics: []string{
+					"admission.elastic_cpu.available_nanos",
+				},
+			},
+			{
+				Title: "Elastic CPU Tokens Exhausted Duration Sum",
+				Metrics: []string{
+					"admission.elastic_cpu.nanos_exhausted_duration",
+				},
+			},
+			{
+				Title: "Elastic CPU Tokens Over Limit Duration",
+				Metrics: []string{
+					"admission.elastic_cpu.over_limit_durations",
 				},
 			},
 			{
