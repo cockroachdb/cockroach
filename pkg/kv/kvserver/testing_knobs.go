@@ -152,6 +152,10 @@ type StoreTestingKnobs struct {
 	DisableReplicateQueue bool
 	// DisableLoadBasedSplitting turns off LBS so no splits happen because of load.
 	DisableLoadBasedSplitting bool
+	// LoadBasedSplittingOverrideKey returns a key which should be used for load
+	// based splitting, overriding any value returned from the real load based
+	// splitter.
+	LoadBasedSplittingOverrideKey func(rangeID roachpb.RangeID) (splitKey roachpb.Key, useSplitKey bool)
 	// DisableSplitQueue disables the split queue.
 	DisableSplitQueue bool
 	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance

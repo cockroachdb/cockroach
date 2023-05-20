@@ -15,7 +15,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/redact"
 )
@@ -132,23 +131,6 @@ func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
 		return
 	} else {
 		idx = f.randSource.Intn(splitKeySampleSize)
-	}
-
-	// We only wish to retain safe split keys as samples, as they are the split
-	// keys that will eventually be returned from Key(). If instead we kept every
-	// key, it is possible for all sample keys to map to the same split key
-	// implicitly with column families. Note this doesn't stop every sample being
-	// the same key, however it will cause no split key logging and bump metrics.
-	// TODO(kvoli): When the single key situation arises, we should backoff
-	// attempting to split. There is a fixed overhead on the hotpath when the
-	// finder is active.
-	if safeKey, err := keys.EnsureSafeSplitKey(key); err == nil {
-		key = safeKey
-	} else {
-		// If the key is not a safe split key, instead ignore it and don't bump any
-		// counters. This biases the algorithm slightly, as keys which would be
-		// invalid are not sampled, nor their impact recorded if they reach here.
-		return
 	}
 
 	// Note we always use the start key of the span. We could
