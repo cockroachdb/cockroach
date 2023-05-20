@@ -12,7 +12,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/split",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
@@ -39,7 +38,6 @@ go_test(
         "//pkg/roachpb",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
-        "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
         "//pkg/util/stop",
