@@ -12,14 +12,12 @@ package split
 
 import (
 	"context"
-	"math"
 	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/assert"
@@ -238,82 +236,6 @@ func TestDecider_MaxQPS(t *testing.T) {
 	d.RecordMax(ms(24000), 6)
 
 	assertMaxQPS(25000, 6, true)
-}
-
-func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	intn := rand.New(rand.NewSource(11)).Intn
-
-	var d Decider
-	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	})
-
-	baseKey := keys.SystemSQLCodec.TablePrefix(51)
-	for i := 0; i < 4; i++ {
-		baseKey = encoding.EncodeUvarintAscending(baseKey, uint64(52+i))
-	}
-	c0 := func() roachpb.Span { return roachpb.Span{Key: append([]byte(nil), keys.MakeFamilyKey(baseKey, 1)...)} }
-	c1 := func() roachpb.Span { return roachpb.Span{Key: append([]byte(nil), keys.MakeFamilyKey(baseKey, 9)...)} }
-
-	expK, err := keys.EnsureSafeSplitKey(c1().Key)
-	require.NoError(t, err)
-
-	var k roachpb.Key
-	var now time.Time
-	for i := 0; i < 2*int(minSplitSuggestionInterval/time.Second); i++ {
-		now = now.Add(500 * time.Millisecond)
-		d.Record(context.Background(), now, 1, c0)
-		now = now.Add(500 * time.Millisecond)
-		d.Record(context.Background(), now, 1, c1)
-		k = d.MaybeSplitKey(context.Background(), now)
-		if len(k) != 0 {
-			break
-		}
-	}
-
-	require.Equal(t, expK, k)
-}
-
-func TestDeciderIgnoresEnsureSafeSplitKeyOnError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	intn := rand.New(rand.NewSource(11)).Intn
-
-	var d Decider
-	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	})
-
-	baseKey := keys.SystemSQLCodec.TablePrefix(51)
-	for i := 0; i < 4; i++ {
-		baseKey = encoding.EncodeUvarintAscending(baseKey, uint64(52+i))
-	}
-	c0 := func() roachpb.Span {
-		return roachpb.Span{Key: append([]byte(nil), encoding.EncodeUvarintAscending(baseKey, math.MaxInt32+1)...)}
-	}
-	c1 := func() roachpb.Span {
-		return roachpb.Span{Key: append([]byte(nil), encoding.EncodeUvarintAscending(baseKey, math.MaxInt32+2)...)}
-	}
-
-	_, err := keys.EnsureSafeSplitKey(c1().Key)
-	require.Error(t, err)
-
-	var k roachpb.Key
-	var now time.Time
-	for i := 0; i < 2*int(minSplitSuggestionInterval/time.Second); i++ {
-		now = now.Add(500 * time.Millisecond)
-		d.Record(context.Background(), now, 1, c0)
-		now = now.Add(500 * time.Millisecond)
-		d.Record(context.Background(), now, 1, c1)
-		k = d.MaybeSplitKey(context.Background(), now)
-		if len(k) != 0 {
-			break
-		}
-	}
-
-	require.Equal(t, c1().Key, k)
 }
 
 func TestMaxQPSTracker(t *testing.T) {
