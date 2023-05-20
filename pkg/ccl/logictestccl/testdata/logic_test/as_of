@@ -333,3 +333,6 @@ PREPARE placeholder_min_timestamp_stmt AS SELECT * FROM t AS OF SYSTEM TIME with
 
 statement error expected interval argument for max_staleness
 PREPARE placeholder_bounded_staleness_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_max_staleness($1)
+
+statement error expected float argument for to_timestamp
+PREPARE placeholder_with_min_timestamp_to_timestamp_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(to_timestamp($1))
