@@ -4153,23 +4153,6 @@ func TestFindValidSplitKeys(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	userID := TestingUserDescID(0)
-	// Manually creates rows corresponding to the schema:
-	// CREATE TABLE t (id1 STRING, id2 STRING, ... PRIMARY KEY (id1, id2, ...))
-	addTablePrefix := func(prefix roachpb.Key, id uint32, rowVals ...string) roachpb.Key {
-		tableKey := append(prefix, keys.SystemSQLCodec.TablePrefix(id)...)
-		rowKey := roachpb.Key(encoding.EncodeVarintAscending(tableKey, 1))
-		for _, rowVal := range rowVals {
-			rowKey = encoding.EncodeStringAscending(rowKey, rowVal)
-		}
-		return rowKey
-	}
-	tablePrefix := func(id uint32, rowVals ...string) roachpb.Key {
-		return addTablePrefix(nil, id, rowVals...)
-	}
-	addColFam := func(rowKey roachpb.Key, colFam uint32) roachpb.Key {
-		return keys.MakeFamilyKey(append([]byte(nil), rowKey...), colFam)
-	}
-
 	type testCase struct {
 		keys       []roachpb.Key
 		rangeStart roachpb.Key // optional
@@ -4308,16 +4291,16 @@ func TestFindValidSplitKeys(t *testing.T) {
 		// or return the start key of the range.
 		{
 			keys: []roachpb.Key{
-				addColFam(tablePrefix(userID, "a"), 1),
-				addColFam(tablePrefix(userID, "a"), 2),
-				addColFam(tablePrefix(userID, "a"), 3),
-				addColFam(tablePrefix(userID, "a"), 4),
-				addColFam(tablePrefix(userID, "a"), 5),
-				addColFam(tablePrefix(userID, "b"), 1),
-				addColFam(tablePrefix(userID, "c"), 1),
+				testAddColFam(testTablePrefix(userID, "a"), 1),
+				testAddColFam(testTablePrefix(userID, "a"), 2),
+				testAddColFam(testTablePrefix(userID, "a"), 3),
+				testAddColFam(testTablePrefix(userID, "a"), 4),
+				testAddColFam(testTablePrefix(userID, "a"), 5),
+				testAddColFam(testTablePrefix(userID, "b"), 1),
+				testAddColFam(testTablePrefix(userID, "c"), 1),
 			},
-			rangeStart: tablePrefix(userID, "a"),
-			expSplit:   tablePrefix(userID, "b"),
+			rangeStart: testTablePrefix(userID, "a"),
+			expSplit:   testTablePrefix(userID, "b"),
 			expError:   false,
 		},
 		// More example table data. Make sure ranges at the start of a table can
@@ -4325,58 +4308,58 @@ func TestFindValidSplitKeys(t *testing.T) {
 		// break for such ranges.
 		{
 			keys: []roachpb.Key{
-				addColFam(tablePrefix(userID, "a"), 1),
-				addColFam(tablePrefix(userID, "b"), 1),
-				addColFam(tablePrefix(userID, "c"), 1),
-				addColFam(tablePrefix(userID, "d"), 1),
+				testAddColFam(testTablePrefix(userID, "a"), 1),
+				testAddColFam(testTablePrefix(userID, "b"), 1),
+				testAddColFam(testTablePrefix(userID, "c"), 1),
+				testAddColFam(testTablePrefix(userID, "d"), 1),
 			},
 			rangeStart: keys.SystemSQLCodec.TablePrefix(userID),
-			expSplit:   tablePrefix(userID, "c"),
+			expSplit:   testTablePrefix(userID, "c"),
 			expError:   false,
 		},
 		// More example table data. Make sure ranges at the start of a table can
 		// be split properly even in the presence of a large first row.
 		{
 			keys: []roachpb.Key{
-				addColFam(tablePrefix(userID, "a"), 1),
-				addColFam(tablePrefix(userID, "a"), 2),
-				addColFam(tablePrefix(userID, "a"), 3),
-				addColFam(tablePrefix(userID, "a"), 4),
-				addColFam(tablePrefix(userID, "a"), 5),
-				addColFam(tablePrefix(userID, "b"), 1),
-				addColFam(tablePrefix(userID, "c"), 1),
+				testAddColFam(testTablePrefix(userID, "a"), 1),
+				testAddColFam(testTablePrefix(userID, "a"), 2),
+				testAddColFam(testTablePrefix(userID, "a"), 3),
+				testAddColFam(testTablePrefix(userID, "a"), 4),
+				testAddColFam(testTablePrefix(userID, "a"), 5),
+				testAddColFam(testTablePrefix(userID, "b"), 1),
+				testAddColFam(testTablePrefix(userID, "c"), 1),
 			},
 			rangeStart: keys.SystemSQLCodec.TablePrefix(TestingUserDescID(0)),
-			expSplit:   tablePrefix(userID, "b"),
+			expSplit:   testTablePrefix(userID, "b"),
 			expError:   false,
 		},
 		// One partition where partition key is the first column. Checks that
 		// split logic is not confused by the special partition start key.
 		{
 			keys: []roachpb.Key{
-				addColFam(tablePrefix(userID, "a", "a"), 1),
-				addColFam(tablePrefix(userID, "a", "b"), 1),
-				addColFam(tablePrefix(userID, "a", "c"), 1),
-				addColFam(tablePrefix(userID, "a", "d"), 1),
+				testAddColFam(testTablePrefix(userID, "a", "a"), 1),
+				testAddColFam(testTablePrefix(userID, "a", "b"), 1),
+				testAddColFam(testTablePrefix(userID, "a", "c"), 1),
+				testAddColFam(testTablePrefix(userID, "a", "d"), 1),
 			},
-			rangeStart: tablePrefix(userID, "a"),
-			expSplit:   tablePrefix(userID, "a", "c"),
+			rangeStart: testTablePrefix(userID, "a"),
+			expSplit:   testTablePrefix(userID, "a", "c"),
 			expError:   false,
 		},
 		// One partition with a large first row. Checks that our logic to avoid
 		// splitting in the middle of a row still applies.
 		{
 			keys: []roachpb.Key{
-				addColFam(tablePrefix(userID, "a", "a"), 1),
-				addColFam(tablePrefix(userID, "a", "a"), 2),
-				addColFam(tablePrefix(userID, "a", "a"), 3),
-				addColFam(tablePrefix(userID, "a", "a"), 4),
-				addColFam(tablePrefix(userID, "a", "a"), 5),
-				addColFam(tablePrefix(userID, "a", "b"), 1),
-				addColFam(tablePrefix(userID, "a", "c"), 1),
+				testAddColFam(testTablePrefix(userID, "a", "a"), 1),
+				testAddColFam(testTablePrefix(userID, "a", "a"), 2),
+				testAddColFam(testTablePrefix(userID, "a", "a"), 3),
+				testAddColFam(testTablePrefix(userID, "a", "a"), 4),
+				testAddColFam(testTablePrefix(userID, "a", "a"), 5),
+				testAddColFam(testTablePrefix(userID, "a", "b"), 1),
+				testAddColFam(testTablePrefix(userID, "a", "c"), 1),
 			},
-			rangeStart: tablePrefix(userID, "a"),
-			expSplit:   tablePrefix(userID, "a", "b"),
+			rangeStart: testTablePrefix(userID, "a"),
+			expSplit:   testTablePrefix(userID, "a", "b"),
 			expError:   false,
 		},
 	}
@@ -4398,17 +4381,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				defer engine.Close()
 
 				ms := &enginepb.MVCCStats{}
-				val := roachpb.MakeValueFromString(strings.Repeat("X", 10))
-				for _, k := range test.keys {
-					// Add three MVCC versions of every key. Splits are not allowed
-					// between MVCC versions, so this shouldn't have any effect.
-					for j := 1; j <= 3; j++ {
-						ts := hlc.Timestamp{Logical: int32(j)}
-						if err := MVCCPut(ctx, engine, ms, []byte(k), ts, hlc.ClockTimestamp{}, val, nil); err != nil {
-							t.Fatal(err)
-						}
-					}
-				}
+				testPopulateKeysWithVersions(ctx, t, engine, ms, test.keys)
 				rangeStart := test.keys[0]
 				if len(test.rangeStart) > 0 {
 					rangeStart = test.rangeStart
@@ -4516,6 +4489,203 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 				t.Errorf("%d: expected split key %q; got %q", i, expKey, splitKey)
 			}
 		})
+	}
+}
+
+// testAddPrefix manually creates rows corresponding to the schema e.g.
+// CREATE TABLE t (id1 STRING, id2 STRING, ... PRIMARY KEY (id1, id2, ...))
+func testAddPrefix(prefix roachpb.Key, id uint32, rowVals ...string) roachpb.Key {
+	tableKey := append(prefix, keys.SystemSQLCodec.TablePrefix(id)...)
+	rowKey := roachpb.Key(encoding.EncodeVarintAscending(tableKey, 1))
+	for _, rowVal := range rowVals {
+		rowKey = encoding.EncodeStringAscending(rowKey, rowVal)
+	}
+	return rowKey
+}
+
+func testTablePrefix(id uint32, rowVals ...string) roachpb.Key {
+	return testAddPrefix(nil, id, rowVals...)
+}
+func testAddColFam(rowKey roachpb.Key, colFam uint32) roachpb.Key {
+	return keys.MakeFamilyKey(append([]byte(nil), rowKey...), colFam)
+}
+
+// testPopulateKeysWithVersions puts the keys into the engine provided. Each
+// key is added with 3 MVCC versions with a XX.. value.
+func testPopulateKeysWithVersions(
+	ctx context.Context, t *testing.T, engine Engine, ms *enginepb.MVCCStats, keys []roachpb.Key,
+) {
+	val := roachpb.MakeValueFromString(strings.Repeat("X", 10))
+	for _, k := range keys {
+		// Add three MVCC versions of every key. Splits are not allowed
+		// between MVCC versions, so this shouldn't have any effect.
+		for j := 1; j <= 3; j++ {
+			ts := hlc.Timestamp{Logical: int32(j)}
+			require.NoError(
+				t,
+				MVCCPut(ctx, engine, ms, []byte(k), ts, hlc.ClockTimestamp{}, val, nil),
+			)
+		}
+	}
+}
+
+// TestMVCCFirstSplitKey checks that the split key returned from
+// MVCCFirstSplitKey is:
+// (1) Within a range's bounds
+// (2) No less than the desired split key.
+// (3) Greater than the first key, or first row's keys in table ranges.
+// (4) Not inbetween the start and end of a row for table ranges.
+func TestMVCCFirstSplitKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	userID := TestingUserDescID(0)
+
+	type splitExpect struct {
+		desired  roachpb.Key
+		expected roachpb.Key
+	}
+
+	testCases := []struct {
+		keys             []roachpb.Key
+		startKey, endKey roachpb.Key
+		splits           []splitExpect
+	}{
+		{
+			// No keys, no splits.
+			keys:     []roachpb.Key{},
+			startKey: roachpb.Key("a"),
+			endKey:   roachpb.Key("z"),
+			splits: []splitExpect{
+				{desired: roachpb.Key("a"), expected: nil},
+				{desired: roachpb.Key("m"), expected: nil},
+				{desired: roachpb.Key("z"), expected: nil},
+			},
+		},
+		{
+			// All keys are outside the range, no keys to spit at so expect no
+			// splits.
+			keys: []roachpb.Key{
+				roachpb.Key("0"),
+				roachpb.Key("c"),
+				roachpb.Key("d"),
+			},
+			startKey: roachpb.Key("a"),
+			endKey:   roachpb.Key("c"),
+			splits: []splitExpect{
+				{desired: roachpb.Key("a"), expected: nil},
+				{desired: roachpb.Key("b"), expected: nil},
+				{desired: roachpb.Key("c"), expected: nil},
+			},
+		},
+		{
+			// Only one key within the range, require at least two keys to split.
+			keys: []roachpb.Key{
+				// (0) is outside the range [a,c)
+				roachpb.Key("0"),
+				roachpb.Key("a"),
+				// (c) is outside of the range [a,c).
+				roachpb.Key("c"),
+			},
+			startKey: roachpb.Key("a"),
+			endKey:   roachpb.Key("c"),
+			splits: []splitExpect{
+				{desired: roachpb.Key("a"), expected: nil},
+				{desired: roachpb.Key("b"), expected: nil},
+				{desired: roachpb.Key("c"), expected: nil},
+			},
+		},
+		{
+			// Enough keys to realize a split on c. Only desiredSplitKeys <= c should
+			// split at c.
+			keys: []roachpb.Key{
+				// (0) is outside the range [a,e)
+				roachpb.Key("0"),
+				roachpb.Key("b"),
+				roachpb.Key("c"),
+				// (e) is outside of the range [a,e).
+				roachpb.Key("e"),
+			},
+			startKey: roachpb.Key("a"),
+			endKey:   roachpb.Key("e"),
+			splits: []splitExpect{
+				// Should iterate to the first split key after minSpitKey which is (c).
+				{desired: roachpb.Key("0"), expected: roachpb.Key("c")},
+				{desired: roachpb.Key("b"), expected: roachpb.Key("c")},
+				{desired: roachpb.Key("c"), expected: roachpb.Key("c")},
+				// Desired split key is after the last key in the range (c), shouldn't
+				// split.
+				{desired: roachpb.Key("d"), expected: nil},
+			},
+		},
+		{
+			keys: []roachpb.Key{
+				testAddColFam(testTablePrefix(userID, "a"), 1),
+				testAddColFam(testTablePrefix(userID, "b"), 1),
+				testAddColFam(testTablePrefix(userID, "b"), 2),
+				testAddColFam(testTablePrefix(userID, "b"), 3),
+				testAddColFam(testTablePrefix(userID, "d"), 1),
+				// (e,1) is outside of the range [a,e)
+				testAddColFam(testTablePrefix(userID, "e"), 1),
+			},
+			startKey: testTablePrefix(userID, "a"),
+			endKey:   testTablePrefix(userID, "e"),
+			splits: []splitExpect{
+				{desired: testAddColFam(testTablePrefix(userID, "a"), 0), expected: testTablePrefix(userID, "b")},
+				{desired: testAddColFam(testTablePrefix(userID, "b"), 3), expected: testTablePrefix(userID, "b")},
+				// The first key after the desired split key is (d,1), expect a split
+				// at the prefix (d).
+				{desired: testAddColFam(testTablePrefix(userID, "b"), 4), expected: testTablePrefix(userID, "d")},
+				// Desired split key is after the last key in the range (d,1),
+				// shouldn't split.
+				{desired: testAddColFam(testTablePrefix(userID, "d"), 2), expected: nil},
+			},
+		},
+		{
+			// One partiton key, where the partition key is the first column (a).
+			keys: []roachpb.Key{
+				testAddColFam(testTablePrefix(userID, "a", "a"), 1),
+				testAddColFam(testTablePrefix(userID, "a", "a"), 3),
+				testAddColFam(testTablePrefix(userID, "a", "b"), 1),
+				testAddColFam(testTablePrefix(userID, "a", "c"), 1),
+				// (a,d,0) is outside the range [a,(a,d)).
+				testAddColFam(testTablePrefix(userID, "a", "d"), 0),
+			},
+			startKey: testTablePrefix(userID, "a"),
+			endKey:   testTablePrefix(userID, "a", "d"),
+			splits: []splitExpect{
+				{desired: testTablePrefix(userID, "a"), expected: testTablePrefix(userID, "a", "b")},
+				{desired: testAddColFam(testTablePrefix(userID, "a", "a"), 3), expected: testTablePrefix(userID, "a", "b")},
+				{desired: testAddColFam(testTablePrefix(userID, "a", "b"), 2), expected: testTablePrefix(userID, "a", "c")},
+				// Desired split key is after the last key in the range (a,c,1),
+				// shouldn't split.
+				{desired: testAddColFam(testTablePrefix(userID, "a", "c"), 2), expected: nil},
+				{desired: testTablePrefix(userID, "a", "e"), expected: nil},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%v", tc.keys),
+			func(t *testing.T) {
+				ctx := context.Background()
+				engine := NewDefaultInMemForTesting()
+				defer engine.Close()
+
+				testPopulateKeysWithVersions(ctx, t, engine, &enginepb.MVCCStats{}, tc.keys)
+				rangeStartAddr := keys.MustAddr(tc.startKey)
+				rangeEndAddr := keys.MustAddr(tc.endKey)
+				for _, split := range tc.splits {
+					t.Run(fmt.Sprintf("%v", split.desired), func(t *testing.T) {
+						desiredSplitAddr := keys.MustAddr(split.desired)
+						splitKey, err := MVCCFirstSplitKey(ctx, engine, desiredSplitAddr, rangeStartAddr, rangeEndAddr)
+						// NB: We don't expect errors. If no split key can be found, we
+						// expect a nil splitKey to be returned.
+						require.NoError(t, err)
+						require.Equal(t, split.expected, splitKey)
+					})
+				}
+			})
 	}
 }
 
