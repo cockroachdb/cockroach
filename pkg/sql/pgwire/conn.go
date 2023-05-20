@@ -1370,6 +1370,9 @@ func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult)
 	for i, col := range row {
 		fmtCode := pgwirebase.FormatText
 		if r.formatCodes != nil {
+			if i >= len(r.formatCodes) {
+				return errors.AssertionFailedf("could not find format code for column %d in %v", i, r.formatCodes)
+			}
 			fmtCode = r.formatCodes[i]
 		}
 		switch fmtCode {
@@ -1412,6 +1415,9 @@ func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandR
 			for vecIdx := 0; vecIdx < len(c.vecsScratch.Vecs); vecIdx++ {
 				fmtCode := pgwirebase.FormatText
 				if r.formatCodes != nil {
+					if vecIdx >= len(r.formatCodes) {
+						return errors.AssertionFailedf("could not find format code for column %d in %v", vecIdx, r.formatCodes)
+					}
 					fmtCode = r.formatCodes[vecIdx]
 				}
 				switch fmtCode {
