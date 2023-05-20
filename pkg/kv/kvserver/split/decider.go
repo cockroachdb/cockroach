@@ -17,7 +17,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -313,6 +312,8 @@ func (d *Decider) maxStatLocked(ctx context.Context, now time.Time) (float64, bo
 // or if it wasn't able to determine a suitable split key.
 //
 // It is legal to call MaybeSplitKey at any time.
+// WARNING: The key returned from MaybeSplitKey has no guarantee of being a
+// safe split key. The key is derived from sampled spans. See below.
 func (d *Decider) MaybeSplitKey(ctx context.Context, now time.Time) roachpb.Key {
 	var key roachpb.Key
 
@@ -336,27 +337,20 @@ func (d *Decider) MaybeSplitKey(ctx context.Context, now time.Time) roachpb.Key 
 		//
 		//   /Table/51/52/53/54/55
 		//
-		// (see TestDeciderCallsEnsureSafeSplitKey).
+		// The key found here isn't guaranteed to be a valid SQL column family key.
+		// This is because the keys are sampled from StartKey and EndKey of
+		// requests hitting this replica. Ranged operations may well wish to
+		// exclude the start point by calling .Next() or may span multiple ranges,
+		// and so such a key may end up being returned. This is more common than
+		// one might think since SQL issues plenty of scans over all column
+		// families, meaning that we'll frequently find a key that has no column
+		// family suffix and thus errors out in EnsureSafeSplitKey.
 		//
-		// The key found here isn't guaranteed to be a valid SQL column family
-		// key. This is because the keys are sampled from StartKey of requests
-		// hitting this replica. Ranged operations may well wish to exclude the
-		// start point by calling .Next() or may span multiple ranges, and so
-		// such a key may end up being passed to EnsureSafeSplitKey here.
-		//
-		// We take the risk that the result may sometimes not be a good split
-		// point (or even in this range).
-		//
-		// Note that we ignore EnsureSafeSplitKey when it returns an error since
-		// that error only tells us that this key couldn't possibly be a SQL
-		// key. This is more common than one might think since SQL issues plenty
-		// of scans over all column families, meaning that we'll frequently find
-		// a key that has no column family suffix and thus errors out in
-		// EnsureSafeSplitKey.
+		// We do not attempt to validate the key is safe here, simply return it to
+		// the caller as the best possible split point found so far. See
+		// replica.adminSplitWithDescriptor for how split keys are handled when we
+		// aren't certain the provided key is safe.
 		key = d.mu.splitFinder.Key()
-		if safeKey, err := keys.EnsureSafeSplitKey(key); err == nil {
-			key = safeKey
-		}
 	}
 	return key
 }

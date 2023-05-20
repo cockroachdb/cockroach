@@ -79,7 +79,7 @@ func (r *Replica) AdminSplit(
 
 	err := r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
 		var err error
-		reply, err = r.adminSplitWithDescriptor(ctx, args, desc, true /* delayable */, reason)
+		reply, err = r.adminSplitWithDescriptor(ctx, args, desc, true /* delayable */, reason, false /* findFirstSafeKey */)
 		return err
 	})
 	return reply, err
@@ -292,7 +292,6 @@ func splitTxnStickyUpdateAttempt(
 // affirmative the descriptor is passed to AdminSplit, which performs a
 // Conditional Put on the RangeDescriptor to ensure that no other operation has
 // modified the range in the time the decision was being made.
-// TODO(tschottdorf): should assert that split key is not a local key.
 //
 // See the comment on splitTrigger for details on the complexities.
 func (r *Replica) adminSplitWithDescriptor(
@@ -301,6 +300,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	desc *roachpb.RangeDescriptor,
 	delayable bool,
 	reason string,
+	findFirstSafeKey bool,
 ) (kvpb.AdminSplitResponse, error) {
 	var err error
 	var reply kvpb.AdminSplitResponse
@@ -341,11 +341,36 @@ func (r *Replica) adminSplitWithDescriptor(
 				ri := r.GetRangeInfo(ctx)
 				return reply, kvpb.NewRangeKeyMismatchErrorWithCTPolicy(ctx, args.Key, args.Key, desc, &ri.Lease, ri.ClosedTimestampPolicy)
 			}
-			foundSplitKey = args.SplitKey
+			// When findFirstSafeKey is true, we find the first key after or at
+			// args.SplitKey which is a safe split to split at. The current user of
+			// findFirstSafeKey is load based splitting, which only has knowledge of
+			// sampled keys from batch requests. These sampled keys can be
+			// arbitrarily within SQL rows due to column family keys.
+			//
+			// Not every caller requires a real key as a split point (creating empty
+			// table), however when we cannot verify the split key as safe, the most
+			// reliable method is checking existing keys.
+			if findFirstSafeKey {
+				var desiredSplitKey roachpb.RKey
+				if desiredSplitKey, err = keys.Addr(args.SplitKey); err != nil {
+					return reply, err
+				}
+				if foundSplitKey, err = storage.MVCCFirstSplitKey(
+					ctx, r.store.TODOEngine(), desiredSplitKey,
+					desc.StartKey, desc.EndKey,
+				); err != nil {
+					return reply, errors.Wrap(err, "unable to determine split key")
+				} else if foundSplitKey == nil {
+					return reply, unsplittableRangeError{}
+				}
+			} else {
+				foundSplitKey = args.SplitKey
+			}
 		}
 
 		if !kvserverbase.ContainsKey(desc, foundSplitKey) {
-			return reply, errors.Errorf("requested split key %s out of bounds of %s", args.SplitKey, r)
+			return reply, errors.Errorf("requested split key %s (found=%s) out of bounds of %s",
+				args.SplitKey, foundSplitKey, r)
 		}
 
 		// If predicate keys are specified, make sure they are contained by this
