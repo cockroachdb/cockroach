@@ -254,11 +254,28 @@ func (r *Replica) recordBatchForLoadBasedSplitting(
 
 // loadSplitKey returns a suggested load split key for the range if it exists,
 // otherwise it returns nil. If there were any errors encountered when
-// validating the split key, the error is returned as well.
+// validating the split key, the error is returned as well. It is guaranteed
+// that the key returned, if non-nil, will be greater than the start key of the
+// range and also within the range bounds.
+//
+// NOTE: The returned split key CAN BE BETWEEN A SQL ROW, The split key
+// returned should only be used to engage a split via adminSplitWithDescriptor
+// where findNextSafeKey is set to true.
 func (r *Replica) loadSplitKey(ctx context.Context, now time.Time) roachpb.Key {
 	splitKey := r.loadBasedSplitter.MaybeSplitKey(ctx, now)
 	if splitKey == nil {
 		return nil
+	}
+
+	// If the splitKey belongs to a Table range, try and shorten the key to just
+	// the row prefix. This allows us to check that splitKey doesn't map to the
+	// first key of the range here.
+	//
+	// NB: We handle unsafe split keys in replica.adminSplitWithDescriptor, so it
+	// isn't an issue if we return an unsafe key here. See the case where
+	// findNextSafeKey is true.
+	if keyRowPrefix, err := keys.EnsureSafeSplitKey(splitKey); err == nil {
+		splitKey = keyRowPrefix
 	}
 
 	// We swallow the error here and instead log an event. It is currently
