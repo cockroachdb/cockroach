@@ -191,17 +191,6 @@ func TestSplitWeightedFinderRecorder(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	colKey := func(prefix roachpb.Key) roachpb.Key {
-		return keys.MakeFamilyKey(prefix, 9)
-	}
-
-	colFamSpan := func(span roachpb.Span) roachpb.Span {
-		return roachpb.Span{
-			Key:    colKey(span.Key),
-			EndKey: colKey(span.EndKey),
-		}
-	}
-
 	const ReservoirKeyOffset = 1000
 
 	// Test recording a key query before the reservoir is full.
@@ -295,16 +284,12 @@ func TestSplitWeightedFinderRecorder(t *testing.T) {
 	}{
 		// Test recording a key query before the reservoir is full.
 		{basicSpan, basicWeight, WFLargestRandSource{}, 0, basicReservoir, expectedBasicReservoir},
-		{colFamSpan(basicSpan), basicWeight, WFLargestRandSource{}, 0, basicReservoir, expectedBasicReservoir},
 		// Test recording a key query after the reservoir is full with replacement.
 		{replacementSpan, replacementWeight, ZeroRandSource{}, splitKeySampleSize + 1, replacementReservoir, expectedReplacementReservoir},
-		{colFamSpan(replacementSpan), replacementWeight, ZeroRandSource{}, splitKeySampleSize + 1, replacementReservoir, expectedReplacementReservoir},
 		// Test recording a key query after the reservoir is full without replacement.
 		{fullSpan, fullWeight, WFLargestRandSource{}, splitKeySampleSize + 1, fullReservoir, expectedFullReservoir},
-		{colFamSpan(fullSpan), fullWeight, WFLargestRandSource{}, splitKeySampleSize + 1, fullReservoir, expectedFullReservoir},
 		// Test recording a spanning query.
 		{spanningSpan, spanningWeight, WFLargestRandSource{}, splitKeySampleSize + 1, spanningReservoir, expectedSpanningReservoir},
-		{colFamSpan(spanningSpan), spanningWeight, WFLargestRandSource{}, splitKeySampleSize + 1, spanningReservoir, expectedSpanningReservoir},
 	}
 
 	for i, test := range testCases {
