@@ -5911,7 +5911,27 @@ func MVCCFindSplitKey(
 	// was dangerous because partitioning can split off ranges that do not start
 	// at valid row keys. The keys that are present in the range, by contrast, are
 	// necessarily valid row keys.
-	it.SeekGE(MakeMVCCMetadataKey(key.AsRawKey()))
+	minSplitKey, err := mvccMinSplitKey(it, key.AsRawKey())
+	if err != nil {
+		return nil, err
+	} else if minSplitKey == nil {
+		return nil, nil
+	}
+
+	splitKey, err := it.FindSplitKey(key.AsRawKey(), endKey.AsRawKey(), minSplitKey, targetSize)
+	if err != nil {
+		return nil, err
+	}
+	// Ensure the key is a valid split point that does not fall in the middle of a
+	// SQL row by removing the column family ID, if any, from the end of the key.
+	return keys.EnsureSafeSplitKey(splitKey.Key)
+}
+
+// mvccMinSplitKey returns the minimum key that a range may be split at. The
+// caller is responsible for setting the iterator upper bound to the range end
+// key. The caller is also responsible for closing the iterator.
+func mvccMinSplitKey(it MVCCIterator, startKey roachpb.Key) (roachpb.Key, error) {
+	it.SeekGE(MakeMVCCMetadataKey(startKey))
 	if ok, err := it.Valid(); err != nil {
 		return nil, err
 	} else if !ok {
@@ -5935,14 +5955,54 @@ func MVCCFindSplitKey(
 		// Allow a split at any key that sorts after it.
 		minSplitKey = it.UnsafeKey().Key.Clone().Next()
 	}
+	return minSplitKey, nil
+}
 
-	splitKey, err := it.FindSplitKey(key.AsRawKey(), endKey.AsRawKey(), minSplitKey, targetSize)
+// MVCCFirstSplitKey returns the first key which is safe to split at and no
+// less than desiredSplitKey in the range which spans [startKey,endKey). If a
+// non-nil key is returned, it is safe to split at. If a nil key is returned, no
+// safe split key could be determined. The safe split key returned is
+// guaranteed to be:
+//
+//  1. Within [startKey,endKey).
+//  2. No less than desiredSplitKey.
+//  3. Greater than the first key in [startKey,endKey]; or greater than all the
+//     first row's keys if a table range. .
+//  4. Not in between the start and end of a row for table ranges.
+//
+// The returned split key is NOT guaranteed to be outside a no-split span, such
+// as Meta1, Meta2Max or Node Liveness.
+func MVCCFirstSplitKey(
+	_ context.Context, reader Reader, desiredSplitKey, startKey, endKey roachpb.RKey,
+) (roachpb.Key, error) {
+	it := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: endKey.AsRawKey()})
+	defer it.Close()
+
+	// If the caller has provided a desiredSplitKey less than the minimum split
+	// key, we update the desired split key to be the minimum split key. This
+	// prevents splitting before the first row in a Table range, which would
+	// result in the LHS having now rows.
+	minSplitKey, err := mvccMinSplitKey(it, startKey.AsRawKey())
 	if err != nil {
 		return nil, err
+	} else if minSplitKey == nil {
+		return nil, nil
 	}
-	// Ensure the key is a valid split point that does not fall in the middle of a
-	// SQL row by removing the column family ID, if any, from the end of the key.
-	return keys.EnsureSafeSplitKey(splitKey.Key)
+	var seekKey roachpb.Key
+	if minSplitKey.Compare(desiredSplitKey.AsRawKey()) > 0 {
+		seekKey = minSplitKey
+	} else {
+		seekKey = desiredSplitKey.AsRawKey()
+	}
+
+	it.SeekGE(MakeMVCCMetadataKey(seekKey))
+	if ok, err := it.Valid(); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, nil
+	}
+
+	return keys.EnsureSafeSplitKey(it.UnsafeKey().Key.Clone())
 }
 
 // willOverflow returns true iff adding both inputs would under- or overflow
