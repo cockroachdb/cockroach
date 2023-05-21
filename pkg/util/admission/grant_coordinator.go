@@ -78,6 +78,8 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	sgc.pebbleMetricsProvider = pmp
 	sgc.closeCh = make(chan struct{})
 	metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
+	// System starts off unloaded/with unlimited tokens, so use the unloaded values.
+	currTickDuration := unloadedDuration
 	for _, m := range metrics {
 		gc := sgc.initGrantCoordinator(m.StoreID)
 		// Defensive call to LoadAndStore even though Store ought to be sufficient
@@ -88,7 +90,9 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 			sgc.numStores++
 		}
 		gc.pebbleMetricsTick(startupCtx, m)
-		gc.allocateIOTokensTick()
+		gc.allocateIOTokensTick(
+			currTickDuration,
+		)
 	}
 	if sgc.disableTickerForTesting {
 		return
@@ -97,14 +101,31 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	ctx := sgc.ambientCtx.AnnotateCtx(context.Background())
 
 	go func() {
+		// For each adjustmentInterval, we pick a tick rate depending on the system
+		// load. If the system is unloaded, we tick at a 250ms rate, and if the system
+		// is loaded, we tick at a 1ms rate. See the comment above the
+		// adjustmentInterval definition to see why we tick at different rates.
 		var ticks int64
-		ticker := time.NewTicker(ioTokenTickDuration)
+		ticker := time.NewTicker(time.Duration(unloadedDuration))
 		done := false
+		var systemLoaded bool // First adjustment interval is unloaded.
+		currTime := time.Now()
 		for !done {
 			select {
 			case <-ticker.C:
 				ticks++
-				if ticks%ticksInAdjustmentInterval == 0 {
+				if ticks%currTickDuration.ticksInAdjustmentInterval() == 0 {
+					abs := func(diff time.Duration) time.Duration {
+						if diff < 0 {
+							return -diff
+						}
+						return diff
+					}
+					if timeElapsed := time.Since(currTime); abs(timeElapsed-(15*time.Second)) > 100*time.Millisecond {
+						// TODO(bananabrick): Get rid of this.
+						t := timeElapsed - (15 * time.Second)
+						panic(t.String())
+					}
 					metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
 					if len(metrics) != sgc.numStores {
 						log.Warningf(ctx,
@@ -113,17 +134,30 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					for _, m := range metrics {
 						if unsafeGc, ok := sgc.gcMap.Load(int64(m.StoreID)); ok {
 							gc := (*GrantCoordinator)(unsafeGc)
-							gc.pebbleMetricsTick(ctx, m)
+
+							// We say that the system has load if at least one store is loaded.
+							storeLoaded := gc.pebbleMetricsTick(ctx, m)
+							systemLoaded = systemLoaded || storeLoaded
 							iotc.UpdateIOThreshold(m.StoreID, gc.ioLoadListener.ioThreshold)
 						} else {
 							log.Warningf(ctx,
 								"seeing metrics for unknown storeID %d", m.StoreID)
 						}
 					}
+
+					if systemLoaded {
+						currTickDuration = loadedDuration
+					} else {
+						currTickDuration = unloadedDuration
+					}
+					ticker.Reset(time.Duration(currTickDuration))
+					ticks = 0
+					currTime = time.Now()
 				}
+
 				sgc.gcMap.Range(func(_ int64, unsafeGc unsafe.Pointer) bool {
 					gc := (*GrantCoordinator)(unsafeGc)
-					gc.allocateIOTokensTick()
+					gc.allocateIOTokensTick(currTickDuration)
 					// true indicates that iteration should continue after the
 					// current entry has been processed.
 					return true
@@ -148,11 +182,11 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		// Setting tokens to unlimited is defensive. We expect that
 		// pebbleMetricsTick and allocateIOTokensTick will get called during
 		// initialization, which will also set these to unlimited.
-		startingIOTokens:                unlimitedTokens / ticksInAdjustmentInterval,
+		startingIOTokens:                unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval(),
 		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
 	}
-	kvg.coordMu.availableIOTokens = unlimitedTokens / ticksInAdjustmentInterval
-	kvg.coordMu.elasticDiskBWTokensAvailable = unlimitedTokens / ticksInAdjustmentInterval
+	kvg.coordMu.availableIOTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
+	kvg.coordMu.elasticDiskBWTokensAvailable = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 
 	opts := makeWorkQueueOptions(KVWork)
 	// This is IO work, so override the usesTokens value.
@@ -634,13 +668,13 @@ func NewGrantCoordinatorSQL(
 // pebbleMetricsTick is called every adjustmentInterval seconds and passes
 // through to the ioLoadListener, so that it can adjust the plan for future IO
 // token allocations.
-func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m StoreMetrics) {
-	coord.ioLoadListener.pebbleMetricsTick(ctx, m)
+func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m StoreMetrics) bool {
+	return coord.ioLoadListener.pebbleMetricsTick(ctx, m)
 }
 
 // allocateIOTokensTick tells the ioLoadListener to allocate tokens.
-func (coord *GrantCoordinator) allocateIOTokensTick() {
-	coord.ioLoadListener.allocateTokensTick()
+func (coord *GrantCoordinator) allocateIOTokensTick(t tickDuration) {
+	coord.ioLoadListener.allocateTokensTick(t)
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	if !coord.mu.grantChainActive {
