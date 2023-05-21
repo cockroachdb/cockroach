@@ -180,8 +180,8 @@ func TestIOLoadListener(t *testing.T) {
 					fmt.Fprintf(&buf, "%s\n", req.buf.String())
 					req.buf.Reset()
 				}
-				for i := 0; i < ticksInAdjustmentInterval; i++ {
-					ioll.allocateTokensTick()
+				for i := 0; i < int(unloadedIntervalData.ticksInAdjustmentInterval); i++ {
+					ioll.allocateTokensTick(unloadedIntervalData)
 					if i == 0 || !printOnlyFirstTick {
 						fmt.Fprintf(&buf, "tick: %d, %s\n", i, kvGranter.buf.String())
 					}
@@ -210,8 +210,8 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		// Override the totalNumByteTokens manually to trigger the overflow bug.
 		ioll.totalNumByteTokens = math.MaxInt64 - i
 		ioll.byteTokensAllocated = 0
-		for j := 0; j < ticksInAdjustmentInterval; j++ {
-			ioll.allocateTokensTick()
+		for j := 0; j < int(unloadedIntervalData.ticksInAdjustmentInterval); j++ {
+			ioll.allocateTokensTick(unloadedIntervalData)
 		}
 	}
 	// Bug2: overflow when bytes added delta is 0.
@@ -222,7 +222,7 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	}
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
-	ioll.allocateTokensTick()
+	ioll.allocateTokensTick(unloadedIntervalData)
 }
 
 // TODO(sumeer): we now do more work outside adjustTokensInner, so the parts
@@ -311,8 +311,8 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 			Metrics:   &m,
 			DiskStats: d,
 		})
-		for j := 0; j < ticksInAdjustmentInterval; j++ {
-			ioll.allocateTokensTick()
+		for j := 0; j < int(unloadedIntervalData.ticksInAdjustmentInterval); j++ {
+			ioll.allocateTokensTick(unloadedIntervalData)
 			require.LessOrEqual(t, int64(0), ioll.smoothedIntL0CompactedBytes)
 			require.LessOrEqual(t, float64(0), ioll.smoothedCompactionByteTokens)
 			require.LessOrEqual(t, float64(0), ioll.smoothedNumFlushTokens)
@@ -355,11 +355,11 @@ type testGranterWithIOTokens struct {
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
 
 func (g *testGranterWithIOTokens) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64,
+	ioTokens int64, elasticDiskBandwidthTokens int64, currTickIntervalData tickIntervalData,
 ) (tokensUsed int64) {
 	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s elastic-disk-bw-tokens=%s",
-		tokensForTokenTickDurationToString(ioTokens),
-		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens))
+		tokensForTokenTickDurationToString(ioTokens, currTickIntervalData),
+		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens, currTickIntervalData))
 	if g.allTokensUsed {
 		return ioTokens * 2
 	}
@@ -382,8 +382,8 @@ func (g *testGranterWithIOTokens) setLinearModels(
 	fmt.Fprintf(&g.buf, "\n")
 }
 
-func tokensForTokenTickDurationToString(tokens int64) string {
-	if tokens >= unlimitedTokens/ticksInAdjustmentInterval {
+func tokensForTokenTickDurationToString(tokens int64, currTickIntervalData tickIntervalData) string {
+	if tokens >= unlimitedTokens/currTickIntervalData.ticksInAdjustmentInterval {
 		return "unlimited"
 	}
 	return fmt.Sprintf("%d", tokens)
@@ -398,7 +398,7 @@ type testGranterNonNegativeTokens struct {
 var _ granterWithIOTokens = &testGranterNonNegativeTokens{}
 
 func (g *testGranterNonNegativeTokens) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64,
+	ioTokens int64, elasticDiskBandwidthTokens int64, _ tickIntervalData,
 ) (tokensUsed int64) {
 	require.LessOrEqual(g.t, int64(0), ioTokens)
 	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
