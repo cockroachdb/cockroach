@@ -13,25 +13,25 @@ import { Link } from "react-router-dom";
 import { isSelectedColumn } from "../../columnsSelector/utils";
 import { ColumnDescriptor } from "../../sortedtable";
 import {
-  recentTransactionColumnsFromCommon,
+  activeTransactionColumnsFromCommon,
   ExecutionsColumn,
   executionsTableTitles,
   getLabel,
 } from "../execTableCommon";
-import { RecentTransaction, ExecutionType } from "../types";
+import { ActiveTransaction, ExecutionType } from "../types";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { limitText } from "../../util";
 
-export function makeRecentTransactionsColumns(
+export function makeActiveTransactionsColumns(
   isTenant: boolean,
-): ColumnDescriptor<RecentTransaction>[] {
+): ColumnDescriptor<ActiveTransaction>[] {
   const execType: ExecutionType = "transaction";
   return [
-    recentTransactionColumnsFromCommon.executionID,
+    activeTransactionColumnsFromCommon.executionID,
     {
       name: "mostRecentStatement",
       title: executionsTableTitles.mostRecentStatement(execType),
-      cell: (item: RecentTransaction) => {
+      cell: (item: ActiveTransaction) => {
         const queryText = limitText(item.query || "", 70);
         return (
           <Tooltip placement="bottom" content={item.query}>
@@ -45,30 +45,30 @@ export function makeRecentTransactionsColumns(
           </Tooltip>
         );
       },
-      sort: (item: RecentTransaction) => item.query,
+      sort: (item: ActiveTransaction) => item.query,
     },
-    recentTransactionColumnsFromCommon.status,
-    recentTransactionColumnsFromCommon.startTime,
-    recentTransactionColumnsFromCommon.elapsedTime,
-    !isTenant ? recentTransactionColumnsFromCommon.timeSpentWaiting : null,
+    activeTransactionColumnsFromCommon.status,
+    activeTransactionColumnsFromCommon.startTime,
+    activeTransactionColumnsFromCommon.elapsedTime,
+    !isTenant ? activeTransactionColumnsFromCommon.timeSpentWaiting : null,
     {
       name: "statementCount",
       title: executionsTableTitles.statementCount(execType),
-      cell: (item: RecentTransaction) => item.statementCount,
-      sort: (item: RecentTransaction) => item.statementCount,
+      cell: (item: ActiveTransaction) => item.statementCount,
+      sort: (item: ActiveTransaction) => item.statementCount,
     },
     {
       name: "retries",
       title: executionsTableTitles.retries(execType),
-      cell: (item: RecentTransaction) => item.retries,
-      sort: (item: RecentTransaction) => item.retries,
+      cell: (item: ActiveTransaction) => item.retries,
+      sort: (item: ActiveTransaction) => item.retries,
     },
-    recentTransactionColumnsFromCommon.applicationName,
+    activeTransactionColumnsFromCommon.applicationName,
   ].filter(col => col != null);
 }
 
 export function getColumnOptions(
-  columns: ColumnDescriptor<RecentTransaction>[],
+  columns: ColumnDescriptor<ActiveTransaction>[],
   selectedColumns: string[] | null,
 ): { label: string; value: string; isSelected: boolean }[] {
   return columns

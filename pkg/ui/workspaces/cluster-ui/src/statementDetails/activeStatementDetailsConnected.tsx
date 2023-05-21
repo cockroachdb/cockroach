@@ -14,42 +14,45 @@ import { Dispatch } from "redux";
 import { actions as sessionsActions } from "src/store/sessions";
 import { AppState } from "../store";
 import {
-  RecentTransactionDetails,
-  RecentTransactionDetailsDispatchProps,
-} from "./recentTransactionDetails";
-import { RecentTransactionDetailsStateProps } from ".";
+  ActiveStatementDetails,
+  ActiveStatementDetailsDispatchProps,
+} from "./activeStatementDetails";
+import { ActiveStatementDetailsStateProps } from ".";
 import {
-  selectRecentTransaction,
-  selectContentionDetailsForTransaction,
-} from "src/selectors/recentExecutions.selectors";
+  selecteActiveStatement,
+  selectContentionDetailsForStatement,
+} from "src/selectors/activeExecutions.selectors";
+import { selectHasAdminRole, selectIsTenant } from "src/store/uiConfig";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
 const mapStateToProps = (
   state: AppState,
   props: RouteComponentProps,
-): RecentTransactionDetailsStateProps => {
+): ActiveStatementDetailsStateProps => {
   return {
-    transaction: selectRecentTransaction(state, props),
-    contentionDetails: selectContentionDetailsForTransaction(state, props),
+    contentionDetails: selectContentionDetailsForStatement(state, props),
+    statement: selecteActiveStatement(state, props),
     match: props.match,
+    isTenant: selectIsTenant(state),
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 
 const mapDispatchToProps = (
   dispatch: Dispatch,
-): RecentTransactionDetailsDispatchProps => ({
+): ActiveStatementDetailsDispatchProps => ({
   refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
 });
 
-export const RecentTransactionDetailsPageConnected = withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(RecentTransactionDetails),
+export const RecentStatementDetailsPageConnected = withRouter(
+  connect(mapStateToProps, mapDispatchToProps)(ActiveStatementDetails),
 );
 
 // Prior to 23.1, this component was called
-// ActiveTransactionDetailsPageConnected. We keep the alias here to avoid
+// ActiveStatementDetailsPageConnected. We keep the alias here to avoid
 // breaking the multi-version support in managed-service's console code.
 // When managed-service drops support for 22.2 (around the end of 2024?),
 // we can remove this code.
-export const ActiveTransactionDetailsPageConnected =
-  RecentTransactionDetailsPageConnected;
+export const ActiveStatementDetailsPageConnected =
+  RecentStatementDetailsPageConnected;

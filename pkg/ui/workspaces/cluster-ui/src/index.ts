@@ -50,7 +50,7 @@ export * from "./tracez";
 export { util, api };
 export * from "./sessions";
 export * from "./timeScaleDropdown";
-export * from "./recentExecutions";
+export * from "./activeExecutions";
 export * from "./graphs";
 export * from "./selectors";
 export * from "./contexts";

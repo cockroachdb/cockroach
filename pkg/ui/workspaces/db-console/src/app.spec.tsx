@@ -29,11 +29,11 @@ stubComponentInModule("src/views/statements/statementDetails", "default");
 stubComponentInModule("src/views/transactions/transactionsPage", "default");
 stubComponentInModule("src/views/transactions/transactionDetails", "default");
 stubComponentInModule(
-  "src/views/statements/recentStatementDetailsConnected",
+  "src/views/statements/activeStatementDetailsConnected",
   "default",
 );
 stubComponentInModule(
-  "src/views/transactions/recentTransactionDetailsConnected",
+  "src/views/transactions/activeTransactionDetailsConnected",
   "default",
 );
 stubComponentInModule("src/views/insights/workloadInsightsPage", "default");
@@ -394,7 +394,7 @@ describe("Routing to", () => {
       screen.getByRole("tab", { name: "Statements", selected: true });
     });
 
-    test("routes to <RecentStatementsView> component with view=active", () => {
+    test("routes to <ActivetStatementsView> component with view=active", () => {
       navigateToPath("/sql-activity?tab=Statements&view=active");
       screen.getByRole("tab", { name: "Statements", selected: true });
     });
@@ -414,7 +414,7 @@ describe("Routing to", () => {
       screen.getByRole("tab", { name: "Transactions", selected: true });
     });
 
-    test("routes to <RecentTransactionsView> component with view=active", () => {
+    test("routes to <ActiveTransactionsView> component with view=active", () => {
       navigateToPath("/sql-activity?tab=Transactions&view=active");
       screen.getByRole("tab", { name: "Transactions", selected: true });
     });
@@ -430,14 +430,14 @@ describe("Routing to", () => {
   // Active execution details.
 
   describe("'/execution' path", () => {
-    test("'/execution/statement/statementID' routes to <RecentStatementDetails>", () => {
+    test("'/execution/statement/statementID' routes to <ActiveStatementDetails>", () => {
       navigateToPath("/execution/statement/stmtID");
-      screen.getByTestId("recentStatementDetailsConnected");
+      screen.getByTestId("activeStatementDetailsConnected");
     });
 
-    test("'/execution/transaction/transactionID' routes to <RecentTransactionDetails>", () => {
+    test("'/execution/transaction/transactionID' routes to <ActiveTransactionDetails>", () => {
       navigateToPath("/execution/transaction/transactionID");
-      screen.getByTestId("recentTransactionDetailsConnected");
+      screen.getByTestId("activeTransactionDetailsConnected");
     });
   });
   {
