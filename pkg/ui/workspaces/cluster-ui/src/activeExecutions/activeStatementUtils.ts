@@ -11,40 +11,40 @@
 import moment from "moment-timezone";
 import { byteArrayToUuid } from "src/sessions";
 import { TimestampToMoment, unset } from "src/util";
-import { RecentTransaction } from ".";
+import { ActiveTransaction } from ".";
 import {
   SessionsResponse,
   ActiveStatementPhase,
   ExecutionStatus,
-  RecentTransactionFilters,
+  ActiveTransactionFilters,
   SessionStatusType,
   ContendedExecution,
-  RecentExecutions,
+  ActiveExecutions,
   ExecutionContentionDetails,
-  RecentExecution,
+  ActiveExecution,
 } from "./types";
-import { RecentStatement, RecentStatementFilters } from "./types";
+import { ActiveStatement, ActiveStatementFilters } from "./types";
 import { ClusterLocksResponse, ClusterLockState } from "src/api";
 import { DurationToMomentDuration } from "src/util/convert";
 
-export const RECENT_STATEMENT_SEARCH_PARAM = "q";
+export const ACTIVE_STATEMENT_SEARCH_PARAM = "q";
 export const INTERNAL_APP_NAME_PREFIX = "$ internal";
 
-export function filterRecentStatements(
-  statements: RecentStatement[],
-  filters: RecentStatementFilters,
+export function filterActiveStatements(
+  statements: ActiveStatement[],
+  filters: ActiveStatementFilters,
   internalAppNamePrefix: string,
   search?: string,
-): RecentStatement[] {
+): ActiveStatement[] {
   if (statements == null) return [];
 
   let filteredStatements = statements;
 
-  const isInternal = (statement: RecentStatement) =>
+  const isInternal = (statement: ActiveStatement) =>
     statement.application.startsWith(internalAppNamePrefix);
   if (filters.app) {
     filteredStatements = filteredStatements.filter(
-      (statement: RecentStatement) => {
+      (statement: ActiveStatement) => {
         const apps = filters.app.toString().split(",");
         let showInternal = false;
         if (apps.includes(internalAppNamePrefix)) {
@@ -67,7 +67,7 @@ export function filterRecentStatements(
 
   if (filters.executionStatus) {
     filteredStatements = filteredStatements.filter(
-      (statement: RecentStatement) => {
+      (statement: ActiveStatement) => {
         const executionStatuses = filters.executionStatus.toString().split(",");
 
         return executionStatuses.includes(statement.status);
@@ -86,19 +86,19 @@ export function filterRecentStatements(
 }
 
 /**
- * getRecentExecutionsFromSessions returns recent statements and
+ * getActiveExecutionsFromSessions returns Active statements and
  * transactions from the array of sessions provided.
  * @param sessionsResponse sessions array from which to extract data
  * @returns
  */
-export function getRecentExecutionsFromSessions(
+export function getActiveExecutionsFromSessions(
   sessionsResponse: SessionsResponse,
-): RecentExecutions {
+): ActiveExecutions {
   if (sessionsResponse.sessions == null)
     return { statements: [], transactions: [] };
 
-  const statements: RecentStatement[] = [];
-  const transactions: RecentTransaction[] = [];
+  const statements: ActiveStatement[] = [];
+  const transactions: ActiveTransaction[] = [];
 
   sessionsResponse.sessions
     .filter(
@@ -109,7 +109,7 @@ export function getRecentExecutionsFromSessions(
     .forEach(session => {
       const sessionID = byteArrayToUuid(session.id);
 
-      let activeStmt: RecentStatement = null;
+      let activeStmt: ActiveStatement = null;
       if (session.active_queries.length) {
         // There will only ever be one query in this array.
         const query = session.active_queries[0];
@@ -167,8 +167,8 @@ export function getRecentExecutionsFromSessions(
   };
 }
 
-export function getAppsFromRecentExecutions(
-  executions: RecentExecution[] | null,
+export function getAppsFromActiveExecutions(
+  executions: ActiveExecution[] | null,
   internalAppNamePrefix: string,
 ): string[] {
   if (executions == null) return [];
@@ -185,20 +185,20 @@ export function getAppsFromRecentExecutions(
   return Array.from(uniqueAppNames).sort();
 }
 
-export function filterRecentTransactions(
-  txns: RecentTransaction[] | null,
-  filters: RecentTransactionFilters,
+export function filterActiveTransactions(
+  txns: ActiveTransaction[] | null,
+  filters: ActiveTransactionFilters,
   internalAppNamePrefix: string,
   search?: string,
-): RecentTransaction[] {
+): ActiveTransaction[] {
   if (txns == null) return [];
 
   let filteredTxns = txns;
 
-  const isInternal = (txn: RecentTransaction) =>
+  const isInternal = (txn: ActiveTransaction) =>
     txn.application.startsWith(internalAppNamePrefix);
   if (filters.app) {
-    filteredTxns = filteredTxns.filter((txn: RecentTransaction) => {
+    filteredTxns = filteredTxns.filter((txn: ActiveTransaction) => {
       const apps = filters.app.toString().split(",");
       let showInternal = false;
       if (apps.includes(internalAppNamePrefix)) {
@@ -217,7 +217,7 @@ export function filterRecentTransactions(
   }
 
   if (filters.executionStatus) {
-    filteredTxns = filteredTxns.filter((txn: RecentTransaction) => {
+    filteredTxns = filteredTxns.filter((txn: ActiveTransaction) => {
       const executionStatuses = filters.executionStatus.toString().split(",");
 
       return executionStatuses.includes(txn.status);
@@ -235,7 +235,7 @@ export function filterRecentTransactions(
 }
 
 export function getContendedExecutionsForTxn(
-  transactions: RecentTransaction[],
+  transactions: ActiveTransaction[],
   locks: ClusterLockState[],
   txnExecID: string, // Txn we are returning contention info for.
 ): {
@@ -252,7 +252,7 @@ export function getContendedExecutionsForTxn(
     return null;
   }
 
-  const txnByID: Record<string, RecentTransaction> = {};
+  const txnByID: Record<string, ActiveTransaction> = {};
   transactions.forEach(txn => (txnByID[txn.transactionID] = txn));
 
   const waiters: ContendedExecution[] = [];
@@ -329,26 +329,26 @@ export function getWaitTimeByTxnIDFromLocks(
   return waitTimeRecord;
 }
 
-export const getRecentTransaction = (
-  transactions: RecentTransaction[],
+export const getActiveTransaction = (
+  transactions: ActiveTransaction[],
   txnExecutionID: string,
-): RecentTransaction | null => {
+): ActiveTransaction | null => {
   if (!transactions || transactions.length === 0) return null;
   return transactions.find(txn => txn.transactionID === txnExecutionID);
 };
 
-export const getRecentStatement = (
-  statements: RecentStatement[],
+export const getActiveStatement = (
+  statements: ActiveStatement[],
   stmtExecutionID: string,
-): RecentStatement => {
+): ActiveStatement => {
   if (!statements || statements.length === 0) return null;
   return statements.find(stmt => stmt.statementID === stmtExecutionID);
 };
 
 export const getContentionDetailsFromLocksAndTxns = (
   clusterLocks: ClusterLocksResponse | null,
-  transactions: RecentTransaction[],
-  currentTransaction: RecentTransaction | null,
+  transactions: ActiveTransaction[],
+  currentTransaction: ActiveTransaction | null,
 ): ExecutionContentionDetails | null => {
   if (!currentTransaction || !clusterLocks?.length) {
     return null;

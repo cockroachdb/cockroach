@@ -9,10 +9,10 @@
 // licenses/APL.txt.
 
 import {
-  RecentExecutions,
-  selectRecentExecutionsCombiner,
-  getRecentStatement,
-  getRecentTransaction,
+  ActiveExecutions,
+  selectActiveExecutionsCombiner,
+  getActiveStatement,
+  getActiveTransaction,
   getContentionDetailsFromLocksAndTxns,
   selectExecutionID,
   ExecutionStatus,
@@ -33,15 +33,15 @@ export const selectClusterLocksMaxApiSizeReached = (
   return !!state.cachedData.clusterLocks?.data?.maxSizeReached;
 };
 
-export const selectRecentExecutions = createSelector(
+export const selectActiveExecutions = createSelector(
   selectSessions,
   selectClusterLocks,
-  selectRecentExecutionsCombiner,
+  selectActiveExecutionsCombiner,
 );
 
-export const selectRecentStatements = createSelector(
-  selectRecentExecutions,
-  (executions: RecentExecutions) => executions.statements,
+export const selectActiveStatements = createSelector(
+  selectActiveExecutions,
+  (executions: ActiveExecutions) => executions.statements,
 );
 
 export const selectExecutionStatus = () => {
@@ -52,10 +52,10 @@ export const selectExecutionStatus = () => {
   return execStatuses;
 };
 
-export const selectRecentStatement = createSelector(
-  selectRecentStatements,
+export const selectActiveStatement = createSelector(
+  selectActiveStatements,
   selectExecutionID,
-  getRecentStatement,
+  getActiveStatement,
 );
 
 export const selectAppName = createSelector(
@@ -68,27 +68,27 @@ export const selectAppName = createSelector(
   },
 );
 
-export const selectRecentTransactions = createSelector(
-  selectRecentExecutions,
-  (executions: RecentExecutions) => executions.transactions,
+export const selectActiveTransactions = createSelector(
+  selectActiveExecutions,
+  (executions: ActiveExecutions) => executions.transactions,
 );
 
-export const selectRecentTransaction = createSelector(
-  selectRecentTransactions,
+export const selectActiveTransaction = createSelector(
+  selectActiveTransactions,
   selectExecutionID,
-  getRecentTransaction,
+  getActiveTransaction,
 );
 
 export const selectContentionDetailsForTransaction = createSelector(
   selectClusterLocks,
-  selectRecentTransactions,
-  selectRecentTransaction,
+  selectActiveTransactions,
+  selectActiveTransaction,
   getContentionDetailsFromLocksAndTxns,
 );
 
-const selectRecentTxnFromStmt = createSelector(
-  selectRecentStatement,
-  selectRecentTransactions,
+const selectActiveTxnFromStmt = createSelector(
+  selectActiveStatement,
+  selectActiveTransactions,
   (stmt, transactions) => {
     return stmt
       ? transactions.find(txn => txn.transactionID === stmt.transactionID)
@@ -97,7 +97,7 @@ const selectRecentTxnFromStmt = createSelector(
 );
 export const selectContentionDetailsForStatement = createSelector(
   selectClusterLocks,
-  selectRecentTransactions,
-  selectRecentTxnFromStmt,
+  selectActiveTransactions,
+  selectActiveTxnFromStmt,
   getContentionDetailsFromLocksAndTxns,
 );

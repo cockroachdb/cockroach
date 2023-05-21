@@ -14,11 +14,11 @@ import { Link } from "react-router-dom";
 import { Col, Row } from "antd";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import {
-  RecentStatement,
+  ActiveStatement,
   ExecutionContentionDetails,
-} from "src/recentExecutions";
+} from "src/activeExecutions";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
-import { StatusIcon } from "src/recentExecutions/statusIcon";
+import { StatusIcon } from "src/activeExecutions/statusIcon";
 import { DATE_FORMAT_24_TZ, Duration } from "src/util";
 
 import "antd/lib/col/style";
@@ -32,11 +32,11 @@ import { Timestamp } from "../timestamp";
 const cx = classNames.bind(styles);
 
 type Props = {
-  statement?: RecentStatement;
+  statement?: ActiveStatement;
   contentionDetails?: ExecutionContentionDetails;
 };
 
-export const RecentStatementDetailsOverviewTab = ({
+export const ActiveStatementDetailsOverviewTab = ({
   statement,
   contentionDetails,
 }: Props): React.ReactElement => {

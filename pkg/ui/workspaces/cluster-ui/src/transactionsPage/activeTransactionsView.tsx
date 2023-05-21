@@ -18,80 +18,84 @@ import {
 import { Loading } from "src/loading/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
-import { RecentStatement, RecentStatementFilters } from "src/recentExecutions";
-import { Filter } from "src/queryFilter";
+import {
+  ActiveTransaction,
+  ActiveStatementFilters,
+  ActiveTransactionFilters,
+} from "src/activeExecutions";
 import LoadingError from "src/sqlActivity/errorComponent";
 import {
-  RECENT_STATEMENT_SEARCH_PARAM,
-  getAppsFromRecentExecutions,
-  filterRecentStatements,
-} from "../recentExecutions/recentStatementUtils";
-import {
   calculateActiveFilters,
-  defaultFilters,
+  Filter,
   getFullFiltersAsStringRecord,
+  inactiveFiltersState,
 } from "../queryFilter";
-import { RecentStatementsSection } from "../recentExecutions/recentStatementsSection";
-import { queryByName, syncHistory } from "src/util/query";
-import { getTableSortFromURL } from "../sortedtable/getTableSortFromURL";
-import { getRecentStatementFiltersFromURL } from "src/queryFilter/utils";
+import { getAppsFromActiveExecutions } from "../activeExecutions/activeStatementUtils";
+import { ActiveTransactionsSection } from "src/activeExecutions/activeTransactionsSection";
 import { Pagination } from "src/pagination";
+
+import styles from "../statementsPage/statementsPage.module.scss";
+import { queryByName, syncHistory } from "src/util/query";
+import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
+import { getActiveTransactionFiltersFromURL } from "src/queryFilter/utils";
+import { filterActiveTransactions } from "../activeExecutions/activeStatementUtils";
 import { InlineAlert } from "@cockroachlabs/ui-components";
-
-import styles from "./statementsPage.module.scss";
-
 const cx = classNames.bind(styles);
-const PAGE_SIZE = 20;
 
-export type RecentStatementsViewDispatchProps = {
+export type ActiveTransactionsViewDispatchProps = {
   onColumnsSelect: (columns: string[]) => void;
-  onFiltersChange: (filters: RecentStatementFilters) => void;
+  onFiltersChange: (filters: ActiveTransactionFilters) => void;
   onSortChange: (ss: SortSetting) => void;
   refreshLiveWorkload: () => void;
 };
 
-export type RecentStatementsViewStateProps = {
+export type ActiveTransactionsViewStateProps = {
   selectedColumns: string[];
-  statements: RecentStatement[];
-  sortSetting: SortSetting;
+  transactions: ActiveTransaction[];
   sessionsError: Error | null;
-  filters: RecentStatementFilters;
+  filters: ActiveTransactionFilters;
   executionStatus: string[];
+  sortSetting: SortSetting;
   internalAppNamePrefix: string;
   isTenant?: boolean;
   maxSizeApiReached?: boolean;
 };
 
-export type RecentStatementsViewProps = RecentStatementsViewStateProps &
-  RecentStatementsViewDispatchProps;
+export type ActiveTransactionsViewProps = ActiveTransactionsViewStateProps &
+  ActiveTransactionsViewDispatchProps;
 
-export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
+const RECENT_TXN_SEARCH_PARAM = "q";
+const PAGE_SIZE = 20;
+
+export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   onColumnsSelect,
   refreshLiveWorkload,
   onFiltersChange,
   onSortChange,
+  isTenant,
   selectedColumns,
   sortSetting,
-  statements,
+  transactions,
   sessionsError,
   filters,
   executionStatus,
   internalAppNamePrefix,
-  isTenant,
   maxSizeApiReached,
-}: RecentStatementsViewProps) => {
+}: ActiveTransactionsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
     pageSize: PAGE_SIZE,
   });
+
   const history = useHistory();
   const [search, setSearch] = useState<string>(
-    queryByName(history.location, RECENT_STATEMENT_SEARCH_PARAM),
+    queryByName(history.location, RECENT_TXN_SEARCH_PARAM),
   );
 
   useEffect(() => {
-    // Refresh every 10 seconds.
+    // Refresh  every 10 seconds.
     refreshLiveWorkload();
+
     const interval = setInterval(refreshLiveWorkload, 10 * 1000);
     return () => {
       clearInterval(interval);
@@ -105,12 +109,11 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
     // Note that the desired behaviour is currently that the user is unable to
     // clear filters via the URL, and must do so with page controls.
     const sortSettingURL = getTableSortFromURL(history.location);
-    const filtersFromURL = getRecentStatementFiltersFromURL(history.location);
+    const filtersFromURL = getActiveTransactionFiltersFromURL(history.location);
 
     if (sortSettingURL) {
       onSortChange(sortSettingURL);
     }
-
     if (filtersFromURL) {
       onFiltersChange(filtersFromURL);
     }
@@ -123,11 +126,10 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
       {
         ascending: sortSetting.ascending.toString(),
         columnTitle: sortSetting.columnTitle,
-        [RECENT_STATEMENT_SEARCH_PARAM]: search,
         ...getFullFiltersAsStringRecord(filters),
+        [RECENT_TXN_SEARCH_PARAM]: search,
       },
       history,
-      true,
     );
   }, [
     history,
@@ -139,23 +141,23 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
 
   const resetPagination = () => {
     setPagination({
-      pageSize: PAGE_SIZE,
       current: 1,
+      pageSize: PAGE_SIZE,
     });
   };
 
-  const onSortClick = (ss: SortSetting): void => {
+  const onChangeSortSetting = (ss: SortSetting): void => {
     onSortChange(ss);
     resetPagination();
   };
 
-  const onSubmitSearch = (newSearch: string): void => {
+  const onSubmitSearch = (newSearch: string) => {
     if (newSearch === search) return;
     setSearch(newSearch);
     resetPagination();
   };
 
-  const onSubmitFilters = (selectedFilters: RecentStatementFilters) => {
+  const onSubmitFilters = (selectedFilters: ActiveStatementFilters) => {
     onFiltersChange(selectedFilters);
     resetPagination();
   };
@@ -163,15 +165,15 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
   const clearSearch = () => onSubmitSearch("");
   const clearFilters = () =>
     onSubmitFilters({
-      app: defaultFilters.app,
-      executionStatus: defaultFilters.executionStatus,
+      app: inactiveFiltersState.app,
+      executionStatus: inactiveFiltersState.executionStatus,
     });
 
-  const apps = getAppsFromRecentExecutions(statements, internalAppNamePrefix);
+  const apps = getAppsFromActiveExecutions(transactions, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
 
-  const filteredStatements = filterRecentStatements(
-    statements,
+  const filteredTransactions = filterActiveTransactions(
+    transactions,
     filters,
     internalAppNamePrefix,
     search,
@@ -189,6 +191,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
       <PageConfig>
         <PageConfigItem>
           <Search
+            placeholder="Search Transactions"
             onSubmit={onSubmitSearch}
             onClear={clearSearch}
             defaultValue={search}
@@ -207,31 +210,31 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={statements == null}
-          page="active statements"
+          loading={transactions == null}
+          page="active transactions"
           error={sessionsError}
           renderError={() =>
             LoadingError({
-              statsType: "statements",
+              statsType: "transactions",
             })
           }
         >
-          <RecentStatementsSection
+          <ActiveTransactionsSection
             filters={filters}
             pagination={pagination}
             search={search}
-            statements={filteredStatements}
+            transactions={filteredTransactions}
             selectedColumns={selectedColumns}
             sortSetting={sortSetting}
             onClearFilters={clearFilters}
-            onChangeSortSetting={onSortClick}
+            onChangeSortSetting={onChangeSortSetting}
             onColumnsSelect={onColumnsSelect}
             isTenant={isTenant}
           />
           <Pagination
             pageSize={pagination.pageSize}
             current={pagination.current}
-            total={filteredStatements?.length}
+            total={filteredTransactions?.length}
             onChange={onChangePage}
           />
           {maxSizeApiReached && (
