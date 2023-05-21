@@ -498,7 +498,10 @@ func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantRe
 
 // setAvailableTokens implements granterWithIOTokens.
 func (sg *kvStoreTokenGranter) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64,
+	ioTokens int64,
+	elasticDiskBandwidthTokens int64,
+	ioTokenCapacity int64,
+	elasticDiskBandwidthTokensCapacity int64,
 ) (ioTokensUsed int64) {
 	sg.coord.mu.Lock()
 	defer sg.coord.mu.Unlock()
@@ -508,15 +511,15 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 	// availableIOTokens become <= 0. We want to remember this previous
 	// over-allocation.
 	sg.subtractTokensLocked(-ioTokens, true)
-	if sg.coordMu.availableIOTokens > ioTokens {
-		// Clamp to tokens.
-		sg.coordMu.availableIOTokens = ioTokens
+
+	if sg.coordMu.availableIOTokens > ioTokenCapacity {
+		sg.coordMu.availableIOTokens = ioTokenCapacity
 	}
-	sg.startingIOTokens = ioTokens
+	sg.startingIOTokens = sg.coordMu.availableIOTokens
 
 	sg.coordMu.elasticDiskBWTokensAvailable += elasticDiskBandwidthTokens
-	if sg.coordMu.elasticDiskBWTokensAvailable > elasticDiskBandwidthTokens {
-		sg.coordMu.elasticDiskBWTokensAvailable = elasticDiskBandwidthTokens
+	if sg.coordMu.elasticDiskBWTokensAvailable > elasticDiskBandwidthTokensCapacity {
+		sg.coordMu.elasticDiskBWTokensAvailable = elasticDiskBandwidthTokensCapacity
 	}
 
 	return ioTokensUsed
