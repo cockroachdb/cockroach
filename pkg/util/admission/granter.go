@@ -498,25 +498,51 @@ func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantRe
 
 // setAvailableTokens implements granterWithIOTokens.
 func (sg *kvStoreTokenGranter) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64,
+	ioTokens int64,
+	elasticDiskBandwidthTokens int64,
+	currTickIntervalData tickIntervalData,
 ) (ioTokensUsed int64) {
 	sg.coord.mu.Lock()
 	defer sg.coord.mu.Unlock()
 	ioTokensUsed = sg.startingIOTokens - sg.coordMu.availableIOTokens
+	prevAvailableIOTokens := sg.coordMu.availableIOTokens
 	// It is possible for availableIOTokens to be negative because of
 	// tookWithoutPermission or because tryGet will satisfy requests until
 	// availableIOTokens become <= 0. We want to remember this previous
 	// over-allocation.
 	sg.subtractTokensLocked(-ioTokens, true)
-	if sg.coordMu.availableIOTokens > ioTokens {
-		// Clamp to tokens.
-		sg.coordMu.availableIOTokens = ioTokens
+	// ioTokens can be small because setAvailableTokens can be called every ms.
+	// Consider a workload which requires tokens every 10ms. We don't want 9ms
+	// worth of tokens to be wasted. So, we allow availableIOTokens to be as high
+	// as burstMultiplier * ioTokens instead of clamping at ioTokens.
+	var burstMultiplier int64 = 1
+	if currTickIntervalData.ticksInAdjustmentInterval == loadedIntervalData.ticksInAdjustmentInterval {
+		burstMultiplier = 250
 	}
-	sg.startingIOTokens = ioTokens
 
+	maxTokensAllowed := ioTokens * burstMultiplier
+	if prevAvailableIOTokens > maxTokensAllowed {
+		// Only allow availableIOTokens to increase up to maxTokensAllowed when the
+		// prevAvailableIOTokens is <= maxTokensAllowed. We perform this check to
+		// avoid situations where the IO tokens made available to the
+		// kvStoreTokenGranter over the previous interval was some very high
+		// value(e.g. during the StoreGrantCoordinator initialization), and ioTokens
+		// in the current interval is small. In such a situation, availableIOTokens =
+		// availableIOTokens + ioTokens, which is greater than 250 * ioTokens, but we
+		// don't want to set availableIOTokens to 250 * ioTokens.
+		sg.coordMu.availableIOTokens = ioTokens
+	} else if sg.coordMu.availableIOTokens > maxTokensAllowed {
+		sg.coordMu.availableIOTokens = ioTokens * burstMultiplier
+	}
+	sg.startingIOTokens = sg.coordMu.availableIOTokens
+
+	prevAvailableDiskBWTokens := sg.coordMu.elasticDiskBWTokensAvailable
 	sg.coordMu.elasticDiskBWTokensAvailable += elasticDiskBandwidthTokens
-	if sg.coordMu.elasticDiskBWTokensAvailable > elasticDiskBandwidthTokens {
+	maxDiskBWTokensAllowed := elasticDiskBandwidthTokens * burstMultiplier
+	if prevAvailableDiskBWTokens > maxDiskBWTokensAllowed {
 		sg.coordMu.elasticDiskBWTokensAvailable = elasticDiskBandwidthTokens
+	} else if sg.coordMu.elasticDiskBWTokensAvailable > elasticDiskBandwidthTokens * burstMultiplier {
+		sg.coordMu.elasticDiskBWTokensAvailable = elasticDiskBandwidthTokens * burstMultiplier
 	}
 
 	return ioTokensUsed

@@ -219,14 +219,48 @@ func TestGranterBasic(t *testing.T) {
 				kvsa.slotAdjusterIncrementsMetric.Count(), kvsa.slotAdjusterDecrementsMetric.Count(),
 			)
 
+		case "set-tokens-loop":
+			var ioTokens int
+			var elasticTokens int
+			var loop int
+			d.ScanArgs(t, "io-tokens", &ioTokens)
+			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
+			d.ScanArgs(t, "loop", &loop)
+
+			for loop > 0 {
+				loop--
+				// We are not using a real ioLoadListener, and simply setting the
+				// tokens (the ioLoadListener has its own test).
+				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
+					int64(ioTokens), int64(elasticTokens), loadedIntervalData,
+				)
+			}
+			coord.testingTryGrant()
+			return flushAndReset()
+
 		case "set-tokens":
 			var ioTokens int
 			var elasticTokens int
+			var tickRate int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
 			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
+			if d.HasArg("tick-rate") {
+				d.ScanArgs(t, "tick-rate", &tickRate)
+			}
+			currTickData := unloadedIntervalData
+			if tickRate == 1 {
+				currTickData = loadedIntervalData
+			} else if tickRate == 250 {
+				currTickData = unloadedIntervalData
+			} else {
+				return "unsupported tick rate"
+			}
+
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
-			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(int64(ioTokens), int64(elasticTokens))
+			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
+				int64(ioTokens), int64(elasticTokens), currTickData,
+			)
 			coord.testingTryGrant()
 			return flushAndReset()
 
