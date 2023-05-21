@@ -47,22 +47,22 @@ import {
   TransactionsPageRootProps,
 } from "./transactionsPageRoot";
 import {
-  mapStateToRecentTransactionsPageProps,
-  mapDispatchToRecentTransactionsPageProps,
-} from "./recentTransactionsPage.selectors";
+  mapStateToActiveTransactionsPageProps,
+  mapDispatchToActiveTransactionsPageProps,
+} from "./activeTransactionsPage.selectors";
 import {
-  RecentTransactionsViewStateProps,
-  RecentTransactionsViewDispatchProps,
-} from "./recentTransactionsView";
+  ActiveTransactionsViewStateProps,
+  ActiveTransactionsViewDispatchProps,
+} from "./activeTransactionsView";
 
 type StateProps = {
   fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;
-  activePageProps: RecentTransactionsViewStateProps;
+  activePageProps: ActiveTransactionsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: TransactionsPageDispatchProps;
-  activePageProps: RecentTransactionsViewDispatchProps;
+  activePageProps: ActiveTransactionsViewDispatchProps;
 };
 
 export const TransactionsPageConnected = withRouter(
@@ -87,7 +87,7 @@ export const TransactionsPageConnected = withRouter(
         limit: selectTxnsPageLimit(state),
         reqSortSetting: selectTxnsPageReqSort(state),
       },
-      activePageProps: mapStateToRecentTransactionsPageProps(state),
+      activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),
     (dispatch: Dispatch) => ({
       fingerprintsPageProps: {
@@ -173,7 +173,7 @@ export const TransactionsPageConnected = withRouter(
             }),
           ),
       },
-      activePageProps: mapDispatchToRecentTransactionsPageProps(dispatch),
+      activePageProps: mapDispatchToActiveTransactionsPageProps(dispatch),
     }),
     (stateProps, dispatchProps) => ({
       fingerprintsPageProps: {

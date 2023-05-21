@@ -9,12 +9,12 @@
 // licenses/APL.txt.
 
 export {
-  getRecentExecutionsFromSessions,
+  getActiveExecutionsFromSessions,
   getContendedExecutionsForTxn,
   getWaitTimeByTxnIDFromLocks,
-  getRecentTransaction,
-  getRecentStatement,
+  getActiveTransaction,
+  getActiveStatement,
   getContentionDetailsFromLocksAndTxns,
-} from "./recentStatementUtils";
+} from "./activeStatementUtils";
 
 export * from "./types";

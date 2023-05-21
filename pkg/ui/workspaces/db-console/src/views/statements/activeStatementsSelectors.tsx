@@ -9,14 +9,13 @@
 // licenses/APL.txt.
 
 import {
-  RecentTransactionFilters,
-  RecentTransactionsViewDispatchProps,
+  ActiveStatementFilters,
   defaultFilters,
   SortSetting,
 } from "@cockroachlabs/cluster-ui";
 import {
+  selectActiveStatements,
   selectAppName,
-  selectRecentTransactions,
   selectExecutionStatus,
   selectClusterLocksMaxApiSizeReached,
 } from "src/selectors";
@@ -24,54 +23,51 @@ import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 
-const transactionsColumnsLocalSetting = new LocalSetting<
+const selectedColumnsLocalSetting = new LocalSetting<
   AdminUIState,
   string | null
 >(
-  "columns/ActiveTransactionsPage",
+  "columns/ActiveStatementsPage",
   (state: AdminUIState) => state.localSettings,
   null,
 );
 
-const defaultActiveTxnFilters = {
+const defaultActiveFilters = {
   app: defaultFilters.app,
   executionStatus: defaultFilters.executionStatus,
 };
 
 const filtersLocalSetting = new LocalSetting<
   AdminUIState,
-  RecentTransactionFilters
+  ActiveStatementFilters
 >(
-  "filters/ActiveTransactionsPage",
+  "filters/ActiveStatementsPage",
   (state: AdminUIState) => state.localSettings,
-  defaultActiveTxnFilters,
+  defaultActiveFilters,
 );
 
 const sortSettingLocalSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "sortSetting/ActiveTransactionsPage",
+  "sortSetting/ActiveStatementsPage",
   (state: AdminUIState) => state.localSettings,
   { ascending: false, columnTitle: "startTime" },
 );
 
-export const mapStateToRecentTransactionsPageProps = (state: AdminUIState) => ({
-  selectedColumns: transactionsColumnsLocalSetting.selectorToArray(state),
-  transactions: selectRecentTransactions(state),
-  sessionsError: state.cachedData?.sessions.lastError,
+export const mapStateToActiveStatementViewProps = (state: AdminUIState) => ({
   filters: filtersLocalSetting.selector(state),
-  executionStatus: selectExecutionStatus(),
+  selectedColumns: selectedColumnsLocalSetting.selectorToArray(state),
   sortSetting: sortSettingLocalSetting.selector(state),
+  statements: selectActiveStatements(state),
+  executionStatus: selectExecutionStatus(),
+  sessionsError: state.cachedData?.sessions.lastError,
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
 });
 
-// This object is just for convenience so we don't need to supply dispatch to
-// each action.
-export const recentTransactionsPageActionCreators: RecentTransactionsViewDispatchProps =
-  {
-    onColumnsSelect: (columns: string[]) =>
-      transactionsColumnsLocalSetting.set(columns.join(",")),
-    onFiltersChange: (filters: RecentTransactionFilters) =>
-      filtersLocalSetting.set(filters),
-    onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
-    refreshLiveWorkload,
-  };
+export const activeStatementsViewActions = {
+  onColumnsSelect: (columns: string[]) =>
+    selectedColumnsLocalSetting.set(columns.join(",")),
+  refreshLiveWorkload,
+  onFiltersChange: (filters: ActiveStatementFilters) =>
+    filtersLocalSetting.set(filters),
+  onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
+};
