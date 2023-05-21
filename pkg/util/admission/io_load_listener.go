@@ -213,13 +213,19 @@ const unlimitedTokens = math.MaxInt64
 
 // Token changes are made at a coarse time granularity of 15s since
 // compactions can take ~10s to complete. The totalNumByteTokens to give out over
-// the 15s interval are given out in a smoothed manner, at 250ms intervals.
+// the 15s interval are given out in a smoothed manner, at either 1ms intervals,
+// or 250ms intervals depending on system load.
 // This has similarities with the following kinds of token buckets:
 //   - Zero replenishment rate and a burst value that is changed every 15s. We
 //     explicitly don't want a huge burst every 15s.
-//   - A replenishment rate equal to totalNumByteTokens/60, with a burst capped at
-//     totalNumByteTokens/60. The only difference with the code here is that if
-//     totalNumByteTokens is small, the integer rounding effects are compensated for.
+//   - For loaded systems, a replenishment rate equal to
+//     totalNumByteTokens/15000(once per ms), with a burst capped at
+//     totalNumByteTokens/60.
+//   - For unloaded systems, a replenishment rate equal to
+//     totalNumByteTokens/60(once per 250ms), with a burst capped at
+//     totalNumByteTokens/60.
+//   - The only difference with the code here is that if totalNumByteTokens is
+//     small, the integer rounding effects are compensated for.
 //
 // In an experiment with extreme overload using KV0 with block size 64KB,
 // and 4096 clients, we observed the following states of L0 at 1min
@@ -249,21 +255,36 @@ const unlimitedTokens = math.MaxInt64
 // complete (as opposed to also tracking progress in bytes of on-going
 // compactions).
 //
-// The 250ms interval to hand out the computed tokens is due to the needs of
-// flush tokens. For compaction tokens, a 1s interval is fine-grained enough.
+// At most a 250ms interval to hand out the computed tokens is due to the
+// needs of flush tokens. For compaction tokens, a 1s interval is fine-grained
+// enough.
 //
-// If flushing a memtable take 100ms, then 10 memtables can be sustainably
+// If flushing a memtable takes 100ms, then 10 memtables can be sustainably
 // flushed in 1s. If we dole out flush tokens in 1s intervals, then there are
 // enough tokens to create 10 memtables at the very start of a 1s interval,
 // which will cause a write stall. Intuitively, the faster it is to flush a
 // memtable, the smaller the interval for doling out these tokens. We have
-// observed flushes taking ~0.5s, so we picked a 250ms interval for doling out
-// these tokens. We could use a value smaller than 250ms, but we've observed
-// CPU utilization issues at lower intervals (see the discussion in
-// runnable.go).
+// observed flushes taking ~0.5s, so we need to pick an interval less than 0.5s,
+// say 250ms, for doling out these tokens.
+//
+// We use a 1ms interval for handing out tokens, to avoid upto 250ms wait times
+// for high priority requests. See https://github.com/cockroachdb/cockroach/issues/91509
+// for details. We use a 250ms intervals for underloaded systems, to avoid CPU
+// utilization issues (see the discussion in runnable.go).
 const adjustmentInterval = 15
-const ticksInAdjustmentInterval = 60
-const ioTokenTickDuration = 250 * time.Millisecond
+
+// Metadata associated with a single tick in an adjustment interval.
+type tickIntervalData struct {
+	ticksInAdjustmentInterval int64
+	tickDuration time.Duration
+}
+
+var unloadedIntervalData = tickIntervalData{
+	60, 250 * time.Millisecond,
+}
+var loadedIntervalData = tickIntervalData{
+	15000, time.Millisecond,
+}
 
 func cumLSMWriteAndIngestedBytes(
 	m *pebble.Metrics,
@@ -313,18 +334,18 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 	io.cumFlushWriteThroughput = metrics.Flush.WriteThroughput
 }
 
-// allocateTokensTick gives out 1/ticksInAdjustmentInterval of the
-// various tokens every 250ms.
-func (io *ioLoadListener) allocateTokensTick() {
+// allocateTokensTick gives out 1/currTickIntervalData.ticksInAdjustmentInterval
+// of the various tokens every currTickIntervalData.tickDuration.
+func (io *ioLoadListener) allocateTokensTick(currTickIntervalData tickIntervalData) {
 	allocateFunc := func(total int64, allocated int64) (toAllocate int64) {
 		// unlimitedTokens==MaxInt64, so avoid overflow in the rounding up
 		// calculation.
-		if total >= unlimitedTokens-(ticksInAdjustmentInterval-1) {
-			toAllocate = total / ticksInAdjustmentInterval
+		if total >= unlimitedTokens-(currTickIntervalData.ticksInAdjustmentInterval-1) {
+			toAllocate = total / currTickIntervalData.ticksInAdjustmentInterval
 		} else {
 			// Round up so that we don't accumulate tokens to give in a burst on the
 			// last tick.
-			toAllocate = (total + ticksInAdjustmentInterval - 1) / ticksInAdjustmentInterval
+			toAllocate = (total + currTickIntervalData.ticksInAdjustmentInterval - 1) / currTickIntervalData.ticksInAdjustmentInterval
 			if toAllocate < 0 {
 				panic(errors.AssertionFailedf("toAllocate is negative %d", toAllocate))
 			}
@@ -352,7 +373,11 @@ func (io *ioLoadListener) allocateTokensTick() {
 	}
 	io.elasticDiskBWTokensAllocated += toAllocateElasticDiskBWTokens
 
-	io.byteTokensUsed += io.kvGranter.setAvailableTokens(toAllocateByteTokens, toAllocateElasticDiskBWTokens)
+	io.byteTokensUsed += io.kvGranter.setAvailableTokens(
+		toAllocateByteTokens,
+		toAllocateElasticDiskBWTokens,
+		currTickIntervalData,
+	)
 }
 
 func computeIntervalDiskLoadInfo(
