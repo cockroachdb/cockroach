@@ -17,15 +17,15 @@ import {
   StatementsPageProps,
 } from "src/statementsPage/statementsPage";
 import {
-  RecentStatementsView,
-  RecentStatementsViewProps,
-} from "./recentStatementsView";
+  ActiveStatementsView,
+  ActiveStatementsViewProps,
+} from "./activeStatementsView";
 import { statementsSql } from "src/util/docs";
 import { Anchor } from "src/anchor";
 
 export type StatementsPageRootProps = {
   fingerprintsPageProps: StatementsPageProps;
-  activePageProps: RecentStatementsViewProps;
+  activePageProps: ActiveStatementsViewProps;
 };
 
 export const StatementsPageRoot = ({
@@ -59,7 +59,7 @@ export const StatementsPageRoot = ({
           {/* TODO (xinhaoz) #78379 add 'Learn More' link to documentation page*/}
         </span>
       ),
-      component: <RecentStatementsView {...activePageProps} />,
+      component: <ActiveStatementsView {...activePageProps} />,
     },
   ];
 

@@ -13,42 +13,42 @@ import { Link } from "react-router-dom";
 import { isSelectedColumn } from "../../columnsSelector/utils";
 import { ColumnDescriptor } from "../../sortedtable";
 import {
-  recentStatementColumnsFromCommon,
+  activeStatementColumnsFromCommon,
   ExecutionsColumn,
   executionsTableTitles,
   getLabel,
 } from "../execTableCommon";
-import { RecentStatement } from "../types";
+import { ActiveStatement } from "../types";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { limitText } from "../../util";
 
-export function makeRecentStatementsColumns(
+export function makeActiveStatementsColumns(
   isTenant: boolean,
-): ColumnDescriptor<RecentStatement>[] {
+): ColumnDescriptor<ActiveStatement>[] {
   return [
-    recentStatementColumnsFromCommon.executionID,
+    activeStatementColumnsFromCommon.executionID,
     {
       name: "execution",
       title: executionsTableTitles.execution("statement"),
-      cell: (item: RecentStatement) => (
+      cell: (item: ActiveStatement) => (
         <Tooltip placement="bottom" content={item.query}>
           <Link to={`/execution/statement/${item.statementID}`}>
             {limitText(item.query, 70)}
           </Link>
         </Tooltip>
       ),
-      sort: (item: RecentStatement) => item.query,
+      sort: (item: ActiveStatement) => item.query,
     },
-    recentStatementColumnsFromCommon.status,
-    recentStatementColumnsFromCommon.startTime,
-    recentStatementColumnsFromCommon.elapsedTime,
-    !isTenant ? recentStatementColumnsFromCommon.timeSpentWaiting : null,
-    recentStatementColumnsFromCommon.applicationName,
+    activeStatementColumnsFromCommon.status,
+    activeStatementColumnsFromCommon.startTime,
+    activeStatementColumnsFromCommon.elapsedTime,
+    !isTenant ? activeStatementColumnsFromCommon.timeSpentWaiting : null,
+    activeStatementColumnsFromCommon.applicationName,
   ].filter(col => col != null);
 }
 
 export function getColumnOptions(
-  columns: ColumnDescriptor<RecentStatement>[],
+  columns: ColumnDescriptor<ActiveStatement>[],
   selectedColumns: string[] | null,
 ): { label: string; value: string; isSelected: boolean }[] {
   return columns

@@ -9,32 +9,32 @@
 // licenses/APL.txt.
 
 import {
-  RecentTransactionDetails,
-  RecentTransactionDetailsStateProps,
-  RecentTransactionDetailsDispatchProps,
+  ActiveTransactionDetails,
+  ActiveTransactionDetailsStateProps,
+  ActiveTransactionDetailsDispatchProps,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AdminUIState } from "src/redux/state";
 import { refreshLiveWorkload } from "src/redux/apiReducers";
 import {
-  selectRecentTransaction,
+  selectActiveTransaction,
   selectContentionDetailsForTransaction,
 } from "src/selectors";
 
-const RecentTransactionDetailsConnected = withRouter(
+const ActiveTransactionDetailsConnected = withRouter(
   connect<
-    RecentTransactionDetailsStateProps,
-    RecentTransactionDetailsDispatchProps,
+    ActiveTransactionDetailsStateProps,
+    ActiveTransactionDetailsDispatchProps,
     RouteComponentProps
   >(
     (state: AdminUIState, props: RouteComponentProps) => ({
-      transaction: selectRecentTransaction(state, props),
+      transaction: selectActiveTransaction(state, props),
       contentionDetails: selectContentionDetailsForTransaction(state, props),
       match: props.match,
     }),
     { refreshLiveWorkload },
-  )(RecentTransactionDetails),
+  )(ActiveTransactionDetails),
 );
 
-export default RecentTransactionDetailsConnected;
+export default ActiveTransactionDetailsConnected;
