@@ -11,7 +11,6 @@
 package liveness
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -126,7 +125,7 @@ func TestShouldReplaceLiveness(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			if act := shouldReplaceLiveness(context.Background(), test.old, test.new); act != test.exp {
+			if act := livenessChanged(test.old, test.new); act != test.exp {
 				t.Errorf("unexpected update: %+v", test)
 			}
 		})
