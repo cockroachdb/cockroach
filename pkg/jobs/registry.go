@@ -147,6 +147,10 @@ type Registry struct {
 		// process starts.
 		draining bool
 
+		// numDrainWait is the number of jobs that are still
+		// processing drain request.
+		numDrainWait int
+
 		// ingestingJobs is a map of jobs which are actively ingesting on this node
 		// including via a processor.
 		ingestingJobs map[jobspb.JobID]struct{}
@@ -158,6 +162,10 @@ type Registry struct {
 	// in an orderly fashion, prior to resumer context being canceled.
 	// The registry will no longer adopt new jobs once this channel closed.
 	drainRequested chan struct{}
+	// jobDrained signaled to indicate that the job watching drainRequested channel
+	// completed its drain logic.
+	jobDrained chan struct{}
+
 	// drainJobs closed when registry should drain/cancel all active
 	// jobs and should no longer adopt new jobs.
 	drainJobs chan struct{}
@@ -238,6 +246,7 @@ func MakeRegistry(
 		withSessionEvery: log.Every(time.Second),
 		drainJobs:        make(chan struct{}),
 		drainRequested:   make(chan struct{}),
+		jobDrained:       make(chan struct{}, 1),
 	}
 	if knobs != nil {
 		r.knobs = *knobs
@@ -1993,28 +2002,65 @@ func (r *Registry) WaitForRegistryShutdown(ctx context.Context) {
 }
 
 // DrainRequested informs the job system that this node is being drained.
-// Returns a function that, when invoked, will initiate drain process
-// by requesting all currently running jobs, as well as various job registry
-// processes terminate.
+// Waits up to maxWait time for any callers who are monitoring for registry
+// drain to complete their drain logic.
 // WaitForRegistryShutdown can then be used to wait for those tasks to complete.
-func (r *Registry) DrainRequested() func() {
+func (r *Registry) DrainRequested(ctx context.Context, maxWait time.Duration) {
 	r.mu.Lock()
 	alreadyDraining := r.mu.draining
+	numWait := r.mu.numDrainWait
 	r.mu.draining = true
 	r.mu.Unlock()
 
 	if alreadyDraining {
-		return func() {}
+		return
 	}
 
 	close(r.drainRequested)
-	return func() { close(r.drainJobs) }
+	defer close(r.drainJobs)
+
+	if numWait == 0 {
+		return
+	}
+
+	t := timeutil.NewTimer()
+	defer t.Stop()
+	t.Reset(maxWait)
+
+	for numWait > 0 {
+		select {
+		case <-ctx.Done():
+			return
+		case <-r.stopper.ShouldQuiesce():
+			return
+		case <-t.C:
+			return
+		case <-r.jobDrained:
+			r.mu.Lock()
+			numWait = r.mu.numDrainWait
+			r.mu.Unlock()
+		}
+	}
 }
 
 // OnDrain returns a channel that can be selected on to detect when the job
 // registry begins draining.
-func (r *Registry) OnDrain() <-chan struct{} {
-	return r.drainRequested
+// The caller must invoke returned function when drain completes.
+func (r *Registry) OnDrain() (<-chan struct{}, func()) {
+	r.mu.Lock()
+	r.mu.numDrainWait++
+	r.mu.Unlock()
+
+	return r.drainRequested, func() {
+		r.mu.Lock()
+		r.mu.numDrainWait--
+		r.mu.Unlock()
+
+		select {
+		case r.jobDrained <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // TestingIsJobIdle returns true if the job is adopted and currently idle.
