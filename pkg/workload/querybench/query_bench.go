@@ -12,10 +12,11 @@ package querybench
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	gosql "database/sql"
-	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -29,11 +30,11 @@ type queryBench struct {
 	flags           workload.Flags
 	connFlags       *workload.ConnFlags
 	queryFile       string
+	separator       string
 	numRunsPerQuery int
-	vectorize       string
 	verbose         bool
 
-	queries []string
+	stmts []namedStmt
 }
 
 func init() {
@@ -41,33 +42,39 @@ func init() {
 }
 
 var queryBenchMeta = workload.Meta{
-	Name: `querybench`,
-	Description: `QueryBench runs queries from the specified file. The queries are run ` +
-		`sequentially in each concurrent worker.`,
+	Name:        `querybench`,
+	Description: `QueryBench runs queries from the specified file.`,
+	Details: `
+Queries are run sequentially in each concurrent worker.
+
+The file should contain one query per line, or alternatively specify a query
+separator (e.g. ;) via --separator. Comments are specified with # or -- at the
+start of the line (with whitespace). Each query can be prefixed by a name and
+colon. For example:
+
+-- This is a comment.
+name: SELECT foo FROM bar
+
+# Another comment. The query name is optional.
+UPDATE bar SET foo = 'baz'
+`,
 	Version: `1.0.0`,
 	New: func() workload.Generator {
 		g := &queryBench{}
 		g.flags.FlagSet = pflag.NewFlagSet(`querybench`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`query-file`: {RuntimeOnly: true},
-			`optimizer`:  {RuntimeOnly: true},
-			`vectorize`:  {RuntimeOnly: true},
+			`separator`:  {RuntimeOnly: true},
 			`num-runs`:   {RuntimeOnly: true},
 		}
 		g.flags.StringVar(&g.queryFile, `query-file`, ``, `File of newline separated queries to run`)
+		g.flags.StringVar(&g.separator, `separator`, ``, `String separating queries (defaults to newline)`)
 		g.flags.IntVar(&g.numRunsPerQuery, `num-runs`, 0, `Specifies the number of times each query in the query file to be run `+
 			`(note that --duration and --max-ops take precedence, so if duration or max-ops is reached, querybench will exit without honoring --num-runs)`)
-		g.flags.StringVar(&g.vectorize, `vectorize`, "", `Set vectorize session variable`)
 		g.flags.BoolVar(&g.verbose, `verbose`, true, `Prints out the queries being run as well as histograms`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
-}
-
-// vectorizeSetting19_2Translation is a mapping from the 20.1+ vectorize session
-// variable value to the 19.2 syntax.
-var vectorizeSetting19_2Translation = map[string]string{
-	"on": "experimental_on",
 }
 
 // Meta implements the Generator interface.
@@ -83,14 +90,14 @@ func (g *queryBench) Hooks() workload.Hooks {
 			if g.queryFile == "" {
 				return errors.Errorf("Missing required argument '--query-file'")
 			}
-			queries, err := GetQueries(g.queryFile)
+			stmts, err := GetQueries(g.queryFile, g.separator)
 			if err != nil {
 				return err
 			}
-			if len(queries) < 1 {
+			if len(stmts) < 1 {
 				return errors.New("no queries found in file")
 			}
-			g.queries = queries
+			g.stmts = stmts
 			if g.numRunsPerQuery < 0 {
 				return errors.New("negative --num-runs specified")
 			}
@@ -121,37 +128,16 @@ func (g *queryBench) Ops(
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
 
-	if g.vectorize != "" {
-		_, err := db.Exec("SET vectorize=" + g.vectorize)
-		if err != nil && strings.Contains(err.Error(), "invalid value") {
-			if _, ok := vectorizeSetting19_2Translation[g.vectorize]; ok {
-				// Fall back to using the pre-20.1 vectorize options.
-				_, err = db.Exec("SET vectorize=" + vectorizeSetting19_2Translation[g.vectorize])
-			}
+	stmts := g.stmts
+	for i := range stmts {
+		if prep, err := db.Prepare(stmts[i].query); err == nil {
+			stmts[i].preparedStmt = prep
 		}
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
-	}
-
-	stmts := make([]namedStmt, len(g.queries))
-	for i, query := range g.queries {
-		stmts[i] = namedStmt{
-			// TODO(solon): Allow specifying names in the query file rather than using
-			// the entire query as the name.
-			name: fmt.Sprintf("%2d: %s", i+1, query),
-		}
-		stmt, err := db.Prepare(query)
-		if err != nil {
-			stmts[i].query = query
-			continue
-		}
-		stmts[i].preparedStmt = stmt
 	}
 
 	maxNumStmts := 0
 	if g.numRunsPerQuery > 0 {
-		maxNumStmts = g.numRunsPerQuery * len(g.queries)
+		maxNumStmts = g.numRunsPerQuery * len(stmts)
 	}
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
@@ -168,29 +154,56 @@ func (g *queryBench) Ops(
 	return ql, nil
 }
 
-// GetQueries returns the lines of a file as a string slice. Ignores lines
-// beginning with '#' or '--'.
-func GetQueries(path string) ([]string, error) {
+// GetQueries returns the queries in a file as a slice of named statements. If
+// no separator is given, splits by newlines.
+func GetQueries(path, separator string) ([]namedStmt, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
+	// reComments removes comments at start of line. Don't attempt to parse the
+	// query, just naïvely interpret # and -- as comments.
+	reComments := regexp.MustCompile(`(?m)^\s*(#|--).*`)
+
+	// reNamedQuery handles optional query names, e.g.:
+	// name: SELECT foo FROM bar
+	// If no name is given, the entire query is used as the name.
+	reNamedQuery := regexp.MustCompile(`(?s)^\s*(\S+):\s*(.*)$`)
+
+	// Scan queries up to 1 MB in size with the given separator.
 	scanner := bufio.NewScanner(file)
-	// Read lines up to 1 MB in size.
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-	var lines []string
+	if separator := []byte(separator); len(separator) > 0 {
+		scanner.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+			if i := bytes.Index(data, separator); i >= 0 {
+				return i + len(separator), data[0:i], nil
+			} else if atEOF && len(data) > 0 {
+				return len(data), data, nil
+			}
+			return 0, nil, nil
+		})
+	}
+
+	var stmts []namedStmt
 	for scanner.Scan() {
-		line := scanner.Text()
-		if len(line) > 0 && line[0] != '#' && !strings.HasPrefix(line, "--") {
-			lines = append(lines, line)
+		query := scanner.Text()
+		query = reComments.ReplaceAllLiteralString(query, ``)
+		query = strings.TrimSpace(query)
+
+		name := query
+		if m := reNamedQuery.FindStringSubmatch(query); m != nil {
+			name, query = m[1], m[2]
+		}
+		if len(query) > 0 {
+			stmts = append(stmts, namedStmt{
+				name:  name,
+				query: query,
+			})
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return lines, nil
+	return stmts, scanner.Err()
 }
 
 type namedStmt struct {
