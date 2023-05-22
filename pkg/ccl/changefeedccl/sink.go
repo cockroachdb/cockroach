@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
 	"net/url"
 	"runtime"
@@ -902,25 +901,28 @@ func sinkSupportsConcurrentEmits(sink EventSink) bool {
 	return ok
 }
 
-type OrderedSinkRow struct {
+type orderedSinkRow struct {
 	alloc kvevent.Alloc
 	row   jobspb.OrderedRows_Row
 }
 
-type OrderedSinkRowSlice []OrderedSinkRow
+// OrderedSinkRowSlice stores a list of rows and their allocations, implementing
+// sorting methods to sort in ascending order.
+type OrderedSinkRowSlice []orderedSinkRow
 
-func (p OrderedSinkRowSlice) Len() int      { return len(p) }
-func (p OrderedSinkRowSlice) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
-
-// Sorts by mvcc timestamp in *ascending* order
+func (p OrderedSinkRowSlice) Len() int           { return len(p) }
+func (p OrderedSinkRowSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p OrderedSinkRowSlice) Less(i, j int) bool { return p[i].row.Mvcc.Less(p[j].row.Mvcc) }
 
+// orderedSink collects rows in memory, and upon a call to EmitUpToResolved
+// sorts the rows and emits the sorted rows to the forwardingBuf
 type orderedSink struct {
 	processorID   int32
 	forwardingBuf encDatumRowBuffer
 	unorderedBuf  OrderedSinkRowSlice
 	alloc         tree.DatumAlloc
 	metrics       *Metrics
+	frontier      *schemaChangeFrontier
 }
 
 var _ EventSink = (*orderedSink)(nil)
@@ -937,7 +939,7 @@ func (s *orderedSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	s.unorderedBuf = append(s.unorderedBuf, OrderedSinkRow{
+	s.unorderedBuf = append(s.unorderedBuf, orderedSinkRow{
 		alloc: alloc,
 		row: jobspb.OrderedRows_Row{
 			Key:   key,
@@ -945,18 +947,16 @@ func (s *orderedSink) EmitRow(
 			Mvcc:  mvcc,
 		},
 	})
-	debug(fmt.Sprintf("AGG APPENDING (%+v) (buffered len: %d)", s.unorderedBuf[len(s.unorderedBuf)-1].row, len(s.unorderedBuf)))
+	// debug(fmt.Sprintf("AGG APPENDING (%+v) (buffered len: %d)", s.unorderedBuf[len(s.unorderedBuf)-1].row, len(s.unorderedBuf)))
 	return nil
 }
 
 // EmitResolvedTimestamp implements the Sink interface.
-func (s *orderedSink) EmitUpToResolved(
-	ctx context.Context, resolved hlc.Timestamp,
-) error {
+func (s *orderedSink) EmitUpToResolved(ctx context.Context) error {
 	if len(s.unorderedBuf) == 0 {
 		return nil
 	}
-	debug(fmt.Sprintf("AGG EMIT UP TO RESOLVED (buffered len: %d)", len(s.unorderedBuf)))
+	// debug(fmt.Sprintf("AGG EMIT UP TO RESOLVED (buffered len: %d)", len(s.unorderedBuf)))
 	sort.Sort(s.unorderedBuf) // Orders from lowest to highest
 	// fmt.Printf("\x1b[31m SORTING \x1b[0m\n")
 	// for _, el := range s.unorderedBuf {
@@ -971,10 +971,10 @@ func (s *orderedSink) EmitUpToResolved(
 	var toRelease kvevent.Alloc
 	defer toRelease.Release(ctx)
 
-	debug(fmt.Sprintf("AGG diff: %d lowestUnordered: %s resolved: %s, highestUnordered: %s", resolved.WallTime-s.unorderedBuf[0].row.Mvcc.WallTime, s.unorderedBuf[0].row.Mvcc, resolved, s.unorderedBuf[len(s.unorderedBuf)-1].row.Mvcc))
+	// debug(fmt.Sprintf("AGG diff: %d lowestUnordered: %s resolved: %s, highestUnordered: %s", resolved.WallTime-s.unorderedBuf[0].row.Mvcc.WallTime, s.unorderedBuf[0].row.Mvcc, resolved, s.unorderedBuf[len(s.unorderedBuf)-1].row.Mvcc))
 
 	for _, r := range s.unorderedBuf {
-		if resolved.Less(r.row.Mvcc) {
+		if s.frontier.Frontier().Less(r.row.Mvcc) && !r.row.Mvcc.Equal(s.frontier.BackfillTS()) {
 			break
 		}
 		orderedUpdate.Rows = append(orderedUpdate.Rows, r.row)
@@ -988,7 +988,7 @@ func (s *orderedSink) EmitUpToResolved(
 	}
 	s.metrics.TotalOrderingForwards.Inc(1)
 	s.metrics.TotalOrderingEventsForwarded.Inc(int64(len(orderedUpdate.Rows)))
-	debug(fmt.Sprintf("AGG FORWARDING %d, remaining: %d", len(orderedUpdate.Rows), len(s.unorderedBuf)))
+	// debug(fmt.Sprintf("AGG FORWARDING %d, remaining: %d", len(orderedUpdate.Rows), len(s.unorderedBuf)))
 	s.forwardingBuf.Push(rowenc.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
 		{Datum: tree.DNull}, // topic

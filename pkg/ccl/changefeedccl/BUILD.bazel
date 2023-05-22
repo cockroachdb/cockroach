@@ -201,6 +201,7 @@ go_test(
         "sink_test.go",
         "sink_webhook_test.go",
         "testfeed_test.go",
+        "total_ordering_test.go",
         "validations_test.go",
     ],
     args = ["-test.timeout=3595s"],
