@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -663,14 +662,12 @@ func expectResultColumns(
 		col, err := catalog.MustFindColumnByName(desc, colName)
 		require.NoError(t, err)
 		res = append(res, ResultColumn{
-			ResultColumn: colinfo.ResultColumn{
-				Name:           col.GetName(),
-				Typ:            col.GetType(),
-				TableID:        desc.GetID(),
-				PGAttributeNum: uint32(col.GetPGAttributeNum()),
-			},
-			ord:       colNamesSet[colName],
-			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
+			Name:           col.GetName(),
+			Typ:            col.GetType(),
+			TableID:        desc.GetID(),
+			PGAttributeNum: uint32(col.GetPGAttributeNum()),
+			ord:            colNamesSet[colName],
+			sqlString:      col.ColumnDesc().SQLStringNotHumanReadable(),
 		})
 	}
 	return res

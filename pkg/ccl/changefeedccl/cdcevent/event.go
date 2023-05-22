@@ -218,9 +218,16 @@ func (r Row) forEachColumn(fn ColumnFn, colIndexes []int) error {
 // ResultColumn associates ResultColumn with an ordinal position where
 // such column expected to be found.
 type ResultColumn struct {
-	colinfo.ResultColumn
-	ord       int
-	sqlString string
+	Name string
+	Typ  *types.T
+
+	// TableID/PGAttributeNum identify the source of the column, if it is a simple
+	// reference to a column of a base table (or view). If it is not a simple
+	// reference, these fields are zeroes.
+	TableID        descpb.ID // OID of column's source table (pg_attribute.attrelid).
+	PGAttributeNum uint32    // Column's number in source table (pg_attribute.attnum).
+	ord            int
+	sqlString      string
 }
 
 // SQLStringNotHumanReadable returns the SQL statement describing the column.
@@ -277,12 +284,11 @@ func NewEventDescriptor(
 	// addColumn is a helper to add a column to this descriptor.
 	addColumn := func(col catalog.Column, ord int) int {
 		resultColumn := ResultColumn{
-			ResultColumn: colinfo.ResultColumn{
-				Name:           col.GetName(),
-				Typ:            col.GetType(),
-				TableID:        desc.GetID(),
-				PGAttributeNum: uint32(col.GetPGAttributeNum()),
-			},
+			Name:           col.GetName(),
+			Typ:            col.GetType(),
+			TableID:        desc.GetID(),
+			PGAttributeNum: uint32(col.GetPGAttributeNum()),
+
 			ord:       ord,
 			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
 		}
@@ -726,11 +732,10 @@ func TestingMakeEventRowFromEncDatums(
 					colName += fmt.Sprintf("_%d", names[colName]-1)
 				}
 				cols = append(cols, ResultColumn{
-					ResultColumn: colinfo.ResultColumn{
-						Name:    colName,
-						Typ:     typ,
-						TableID: 42,
-					},
+					Name:    colName,
+					Typ:     typ,
+					TableID: 42,
+
 					ord: i,
 				})
 			}
