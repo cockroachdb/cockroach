@@ -202,7 +202,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		HistogramWindowInterval: cfg.HistogramWindowInterval,
 		Engines:                 []storage.Engine{ltc.Eng},
 	})
-	storepool.TimeUntilStoreDead.Override(ctx, &cfg.Settings.SV, storepool.TestTimeUntilStoreDead)
+	liveness.TimeUntilStoreDead.Override(ctx, &cfg.Settings.SV, liveness.TestTimeUntilStoreDead)
 	cfg.StorePool = storepool.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,

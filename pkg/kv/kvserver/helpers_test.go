@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -215,7 +216,7 @@ func (s *Store) RaftSchedulerPriorityIDs() []roachpb.RangeID {
 }
 
 func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
-	storepool.TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, storepool.TestTimeUntilStoreDeadOff)
+	liveness.TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, liveness.TestTimeUntilStoreDeadOff)
 	return storepool.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,
