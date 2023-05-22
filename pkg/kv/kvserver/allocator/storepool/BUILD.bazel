@@ -41,6 +41,7 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":storepool"],
     deps = [
+        "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

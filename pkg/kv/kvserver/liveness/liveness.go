@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	diskStorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -40,6 +41,41 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+const (
+	// TestTimeUntilStoreDead is the test value for TimeUntilStoreDead to
+	// quickly mark stores as dead.
+	TestTimeUntilStoreDead = 5 * time.Millisecond
+
+	// TestTimeUntilStoreDeadOff is the test value for TimeUntilStoreDead that
+	// prevents the store pool from marking stores as dead.
+	TestTimeUntilStoreDeadOff = 24 * time.Hour
+)
+const timeUntilStoreDeadSettingName = "server.time_until_store_dead"
+
+// TimeUntilStoreDead wraps "server.time_until_store_dead".
+var TimeUntilStoreDead = func() *settings.DurationSetting {
+	s := settings.RegisterDurationSetting(
+		settings.TenantWritable,
+		timeUntilStoreDeadSettingName,
+		"the time after which if there is no new gossiped information about a store, it is considered dead",
+		5*time.Minute,
+		func(v time.Duration) error {
+			// Setting this to less than the interval for gossiping stores is a big
+			// no-no, since this value is compared to the age of the most recent gossip
+			// from each store to determine whether that store is live. Put a buffer of
+			// 15 seconds on top to allow time for gossip to propagate.
+			const minTimeUntilStoreDead = gossip.StoresInterval + 15*time.Second
+			if v < minTimeUntilStoreDead {
+				return errors.Errorf("cannot set %s to less than %v: %v",
+					timeUntilStoreDeadSettingName, minTimeUntilStoreDead, v)
+			}
+			return nil
+		},
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
 
 var (
 	// ErrMissingRecord is returned when asking for liveness information
