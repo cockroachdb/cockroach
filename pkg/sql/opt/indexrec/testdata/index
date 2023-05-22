@@ -105,11 +105,11 @@ project
       ├── columns: t1.k:1!null t1.i:2!null t2.k:8!null t2.i:9!null
       ├── cost: 763.793689
       ├── fd: (2)-->(1), (1)==(8), (8)==(1)
-      ├── scan t2@_hyp_3
+      ├── scan t2@_hyp_2
       │    ├── columns: t2.k:8 t2.i:9!null
       │    ├── constraint: /9/11: [/4 - ]
       │    └── cost: 371.353333
-      ├── scan t1@_hyp_4
+      ├── scan t1@_hyp_3
       │    ├── columns: t1.k:1 t1.i:2!null
       │    ├── constraint: /2/5: [/4 - ]
       │    ├── cost: 371.476667
@@ -540,7 +540,7 @@ full-join (cross)
 index-candidates
 SELECT t1.k, t1.s, t2.k, t2.i
 FROM t1 LEFT JOIN t2
-ON t1.k != t2.k
+ON t1.k = t2.k
 AND t1.s IS NOT NULL
 AND t2.i IS NULL
 ----
@@ -556,26 +556,30 @@ t2:
 index-recommendations
 SELECT t1.k, t1.s, t2.k, t2.i
 FROM t1 LEFT JOIN t2
-ON t1.k != t2.k
+ON t1.k = t2.k
 AND t1.s IS NOT NULL
 AND t2.i IS NULL
 ----
-creation: CREATE INDEX ON t.public.t2 (i) STORING (k);
+creation: CREATE INDEX ON t.public.t1 (k) STORING (s);
+creation: CREATE INDEX ON t.public.t2 (i, k);
 --
 optimal plan:
-left-join (cross)
+left-join (merge)
  ├── columns: k:1 s:4 k:8 i:9
- ├── cost: 1240.055
- ├── scan t1
+ ├── left ordering: +1
+ ├── right ordering: +8
+ ├── cost: 1146.48
+ ├── scan t1@_hyp_1
  │    ├── columns: t1.k:1 t1.s:4
- │    └── cost: 1098.72
- ├── scan t2@_hyp_1
+ │    ├── cost: 1098.72
+ │    └── ordering: +1
+ ├── scan t2@_hyp_3
  │    ├── columns: t2.k:8 t2.i:9
- │    ├── constraint: /9/11: [/NULL - /NULL]
+ │    ├── constraint: /9/8/11: [/NULL - /NULL]
  │    ├── cost: 28.6200002
- │    └── fd: ()-->(9)
+ │    ├── fd: ()-->(9)
+ │    └── ordering: +8 opt(9) [actual: +8]
  └── filters
-      ├── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
       └── t1.s:4 IS NOT NULL [outer=(4), constraints=(/4: (/NULL - ]; tight)]
 
 # Test more complex queries. See rule 5 in indexrec.FindIndexCandidateSet. The
@@ -656,7 +660,7 @@ inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
 
 # Multi-column combinations used: J + R.
 index-candidates
-SELECT t1.k, t1.f FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.f > 0
+SELECT t1.k, t1.f FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.f > 0
 ----
 t1:
  (f)
@@ -666,17 +670,18 @@ t2:
  (k)
 
 index-recommendations
-SELECT t1.k, t1.f FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.f > 0
+SELECT t1.k, t1.f FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.f > 0
 ----
 creation: CREATE INDEX ON t.public.t1 (f) STORING (k);
 --
 optimal plan:
 project
  ├── columns: k:1!null f:3!null
- ├── cost: 5893.93736
- └── inner-join (cross)
+ ├── cost: 1536.93403
+ └── inner-join (hash)
       ├── columns: t1.k:1!null f:3!null t2.k:8!null
-      ├── cost: 4804.91736
+      ├── cost: 1504.24403
+      ├── fd: (1)==(8), (8)==(1)
       ├── scan t2
       │    ├── columns: t2.k:8
       │    └── cost: 1078.52
@@ -685,11 +690,11 @@ project
       │    ├── constraint: /3/5: [/5e-324 - ]
       │    └── cost: 374.686667
       └── filters
-           └── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+           └── t1.k:1 = t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Multi-column combinations used: EQ, EQ + J.
 index-candidates
-SELECT t1.i, t1.s FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.i = 2 AND t1.s = 'NG'
+SELECT t1.i, t1.s FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.i = 2 AND t1.s = 'NG'
 ----
 t1:
  (i)
@@ -701,35 +706,33 @@ t2:
  (k)
 
 index-recommendations
-SELECT t1.i, t1.s FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.i = 2 AND t1.s = 'NG'
+SELECT t1.i, t1.s FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.i = 2 AND t1.s = 'NG'
 ----
 creation: CREATE INDEX ON t.public.t1 (i, s) STORING (k);
+creation: CREATE INDEX ON t.public.t2 (k);
 --
 optimal plan:
 project
  ├── columns: i:2!null s:4!null
- ├── cost: 1122.17334
+ ├── cost: 59.7384854
  ├── fd: ()-->(2,4)
- └── inner-join (cross)
+ └── inner-join (lookup t2@_hyp_1)
       ├── columns: t1.k:1!null t1.i:2!null t1.s:4!null t2.k:8!null
-      ├── cost: 1119.17772
-      ├── fd: ()-->(2,4)
-      ├── scan t2
-      │    ├── columns: t2.k:8
-      │    └── cost: 1078.52
+      ├── key columns: [1] = [8]
+      ├── cost: 59.6292168
+      ├── fd: ()-->(2,4), (1)==(8), (8)==(1)
       ├── scan t1@_hyp_4
       │    ├── columns: t1.k:1 t1.i:2!null t1.s:4!null
       │    ├── constraint: /2/4/5: [/2/'NG' - /2/'NG']
       │    ├── cost: 19.0036757
       │    └── fd: ()-->(2,4)
-      └── filters
-           └── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+      └── filters (true)
 
 # Multi-column combinations used: EQ, EQ + R, J + R, EQ + J, EQ + J + R.
 index-candidates
 SELECT count(*)
 FROM t1 LEFT JOIN t2
-ON t1.k != t2.k
+ON t1.k = t2.k
 GROUP BY t2.s, t2.i
 UNION ALL
 SELECT count(*)
@@ -759,7 +762,7 @@ t2:
 index-recommendations
 SELECT count(*)
 FROM t1 LEFT JOIN t2
-ON t1.k != t2.k
+ON t1.k = t2.k
 GROUP BY t2.s, t2.i
 UNION ALL
 SELECT count(*)
@@ -770,7 +773,9 @@ FROM (
   AND t1.s = 'NG'
 )
 ----
+creation: CREATE INDEX ON t.public.t1 (k);
 creation: CREATE INDEX ON t.public.t1 (s, f) STORING (i);
+creation: CREATE INDEX ON t.public.t2 (k) STORING (i, s);
 --
 optimal plan:
 union-all
@@ -778,27 +783,30 @@ union-all
  ├── left columns: count_rows:14
  ├── right columns: count_rows:22
  ├── cardinality: [1 - ]
- ├── cost: 25610.0782
+ ├── cost: 2766.58731
  ├── project
  │    ├── columns: count_rows:14!null
- │    ├── cost: 25571.0458
+ │    ├── cost: 2727.55537
  │    └── group-by (hash)
  │         ├── columns: t2.i:9 t2.s:10 count_rows:14!null
  │         ├── grouping columns: t2.i:9 t2.s:10
- │         ├── cost: 25561.0258
+ │         ├── cost: 2717.53581
  │         ├── key: (9,10)
  │         ├── fd: (9,10)-->(14)
- │         ├── left-join (cross)
+ │         ├── left-join (merge)
  │         │    ├── columns: t1.k:1 t2.k:8 t2.i:9 t2.s:10
- │         │    ├── cost: 12217.5163
- │         │    ├── scan t1
+ │         │    ├── left ordering: +1
+ │         │    ├── right ordering: +8
+ │         │    ├── cost: 2307.36
+ │         │    ├── scan t1@_hyp_4
  │         │    │    ├── columns: t1.k:1
- │         │    │    └── cost: 1088.62
- │         │    ├── scan t2
+ │         │    │    ├── cost: 1088.62
+ │         │    │    └── ordering: +1
+ │         │    ├── scan t2@_hyp_2
  │         │    │    ├── columns: t2.k:8 t2.i:9 t2.s:10
- │         │    │    └── cost: 1098.72
- │         │    └── filters
- │         │         └── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+ │         │    │    ├── cost: 1098.72
+ │         │    │    └── ordering: +8
+ │         │    └── filters (true)
  │         └── aggregations
  │              └── count-rows [as=count_rows:14]
  └── scalar-group-by
