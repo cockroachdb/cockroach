@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
@@ -46,17 +47,6 @@ import (
 // For higher levels in the SQL layer, these interface are likely not
 // suitable; consider instead schema_accessors.go and resolver.go.
 //
-
-// PublicSchemaCreatePrivilegeEnabled is the cluster setting that determines
-// whether the CREATE privilege is given to the `public` role on the `public`
-// schema at the time the schema is created.
-var PublicSchemaCreatePrivilegeEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.auth.public_schema_create_privilege.enabled",
-	"determines whether to grant all users the CREATE privileges on the public "+
-		"schema when it is created",
-	true,
-	settings.WithPublic)
 
 // createDatabase takes Database descriptor and creates it if needed,
 // incrementing the descriptor counter. Returns true if the descriptor
@@ -144,7 +134,7 @@ func (p *planner) createDatabase(
 		dbdesc.MaybeWithDatabaseRegionConfig(regionConfig),
 		dbdesc.WithPublicSchemaID(publicSchemaID),
 	)
-	includeCreatePriv := PublicSchemaCreatePrivilegeEnabled.Get(&p.execCfg.Settings.SV)
+	includeCreatePriv := sqlclustersettings.PublicSchemaCreatePrivilegeEnabled.Get(&p.execCfg.Settings.SV)
 	publicSchema := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   id,
 		Name:       catconstants.PublicSchemaName,
@@ -336,18 +326,6 @@ var InitializeMultiRegionMetadataCCL = func(
 	)
 }
 
-// DefaultPrimaryRegionClusterSettingName is the name of the cluster setting that returns
-const DefaultPrimaryRegionClusterSettingName = "sql.defaults.primary_region"
-
-// DefaultPrimaryRegion is a cluster setting that contains the default primary region.
-var DefaultPrimaryRegion = settings.RegisterStringSetting(
-	settings.ApplicationLevel,
-	DefaultPrimaryRegionClusterSettingName,
-	`if not empty, all databases created without a PRIMARY REGION will `+
-		`implicitly have the given PRIMARY REGION`,
-	"",
-	settings.WithPublic)
-
 // SecondaryTenantsMultiRegionAbstractionsEnabledSettingName is the name of the
 // cluster setting that governs secondary tenant multi-region abstraction usage.
 const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.virtual_cluster.feature_access.multiregion.enabled"
@@ -462,7 +440,7 @@ func (p *planner) getDefaultDatabaseRegions(
 	ctx context.Context,
 ) (primary tree.Name, nonPrimary []tree.Name, err error) {
 	// If 'sql.defaults.primary_region' is set, use the setting value.
-	defaultPrimaryRegion := DefaultPrimaryRegion.Get(&p.execCfg.Settings.SV)
+	defaultPrimaryRegion := sqlclustersettings.DefaultPrimaryRegion.Get(&p.execCfg.Settings.SV)
 	if defaultPrimaryRegion != "" {
 		return tree.Name(defaultPrimaryRegion), nil, nil
 	}

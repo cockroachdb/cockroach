@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -603,7 +604,7 @@ func prepareNewTablesForIngestion(
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	includePublicSchemaCreatePriv := sql.PublicSchemaCreatePrivilegeEnabled.Get(&p.ExecCfg().Settings.SV)
+	includePublicSchemaCreatePriv := sqlclustersettings.PublicSchemaCreatePrivilegeEnabled.Get(&p.ExecCfg().Settings.SV)
 	if err := ingesting.WriteDescriptors(
 		ctx, txn, p.User(), descsCol, nil /* databases */, nil /* schemas */, tableDescs,
 		nil /* types */, nil /* functions */, tree.RequestedDescriptors, seqValKVs,

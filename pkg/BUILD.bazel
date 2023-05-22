@@ -2124,6 +2124,7 @@ GO_TARGETS = [
     "//pkg/sql/sessionprotectedts:sessionprotectedts_test",
     "//pkg/sql/span:span",
     "//pkg/sql/span:span_test",
+    "//pkg/sql/sqlclustersettings:sqlclustersettings",
     "//pkg/sql/sqlerrors:sqlerrors",
     "//pkg/sql/sqlfsm:sqlfsm",
     "//pkg/sql/sqlinstance/instancestorage:instancestorage",
