@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -207,7 +208,7 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 		tenSQLDB.Exec(
 			t,
 			fmt.Sprintf(
-				"SET CLUSTER SETTING %s = 'us-east1'", sql.DefaultPrimaryRegionClusterSettingName,
+				"SET CLUSTER SETTING %s = 'us-east1'", sqlclustersettings.DefaultPrimaryRegionClusterSettingName,
 			),
 		)
 		setAndWaitForTenantReadOnlyClusterSetting(

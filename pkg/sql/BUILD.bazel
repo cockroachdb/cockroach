@@ -489,6 +489,7 @@ go_library(
         "//pkg/sql/sessioninit",
         "//pkg/sql/sessionphase",
         "//pkg/sql/span",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlfsm",
         "//pkg/sql/sqlinstance",
