@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -420,7 +421,7 @@ func (p *planner) AlterDatabaseDropRegion(
 				pgcode.InvalidDatabaseDefinition,
 				"databases in this cluster must have at least 1 region",
 				n.Region,
-				DefaultPrimaryRegionClusterSettingName,
+				sqlclustersettings.DefaultPrimaryRegionClusterSettingName,
 			)
 		}
 

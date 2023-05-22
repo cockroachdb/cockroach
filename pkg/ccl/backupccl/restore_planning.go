@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2265,7 +2266,7 @@ func planDatabaseModifiersForRestore(
 ) (map[descpb.ID]*jobspb.RestoreDetails_DatabaseModifier, []catalog.Descriptor, error) {
 	databaseModifiers := make(map[descpb.ID]*jobspb.RestoreDetails_DatabaseModifier)
 	defaultPrimaryRegion := catpb.RegionName(
-		sql.DefaultPrimaryRegion.Get(&p.ExecCfg().Settings.SV),
+		sqlclustersettings.DefaultPrimaryRegion.Get(&p.ExecCfg().Settings.SV),
 	)
 	if !p.ExecCfg().Codec.ForSystemTenant() &&
 		!sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Get(&p.ExecCfg().Settings.SV) {
@@ -2282,7 +2283,7 @@ func planDatabaseModifiersForRestore(
 		return nil, nil, errors.WithHintf(
 			err,
 			"try disabling the default PRIMARY REGION by using RESET CLUSTER SETTING %s",
-			sql.DefaultPrimaryRegionClusterSettingName,
+			sqlclustersettings.DefaultPrimaryRegionClusterSettingName,
 		)
 	}
 
@@ -2297,7 +2298,7 @@ func planDatabaseModifiersForRestore(
 		return nil, nil, errors.WithHintf(
 			err,
 			"set the default PRIMARY REGION to a region that exists (see SHOW REGIONS FROM CLUSTER) then using SET CLUSTER SETTING %s = 'region'",
-			sql.DefaultPrimaryRegionClusterSettingName,
+			sqlclustersettings.DefaultPrimaryRegionClusterSettingName,
 		)
 	}
 
@@ -2349,7 +2350,7 @@ func planDatabaseModifiersForRestore(
 				),
 				"to change the default primary region, use SET CLUSTER SETTING %[1]s = 'region' "+
 					"or use RESET CLUSTER SETTING %[1]s to disable this behavior",
-				sql.DefaultPrimaryRegionClusterSettingName,
+				sqlclustersettings.DefaultPrimaryRegionClusterSettingName,
 			),
 		)
 
