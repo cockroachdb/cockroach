@@ -145,15 +145,27 @@ ORDER BY
 				i, order, newOrder, district-1)
 		}
 	}
+	if err := districtRows.Err(); err != nil {
+		retErr = errors.CombineErrors(retErr, errors.Wrap(err, "on district"))
+	}
+	if err := newOrderRows.Err(); err != nil {
+		retErr = errors.CombineErrors(retErr, errors.Wrap(err, "on new_order"))
+	}
+	if err := orderRows.Err(); err != nil {
+		retErr = errors.CombineErrors(retErr, errors.Wrap(err, "on order"))
+	}
+	// Return the error before performing the remaining checks, because they are
+	// expected to fail if something else has already gone wrong.
+	if retErr != nil {
+		return retErr
+	}
 	if districtRows.Next() || newOrderRows.Next() || orderRows.Next() {
 		return errors.New("length mismatch between rows")
 	}
 	if i == 0 {
 		return errors.Errorf("zero rows")
 	}
-	retErr = errors.CombineErrors(retErr, districtRows.Err())
-	retErr = errors.CombineErrors(retErr, newOrderRows.Err())
-	return errors.CombineErrors(retErr, orderRows.Err())
+	return nil
 }
 
 func check3323(db *gosql.DB, asOfSystemTime string) error {
@@ -226,17 +238,17 @@ ORDER BY
 			return errors.Errorf("order.sum(o_ol_cnt): %d != order_line.count(*): %d", left, right)
 		}
 	}
-	if leftRows.Next() || rightRows.Next() {
-		return errors.Errorf("at %s: length of order.sum(o_ol_cnt) != order_line.count(*)", ts)
-	}
-	if i == 0 {
-		return errors.Errorf("0 rows returned")
-	}
 	if err := leftRows.Err(); err != nil {
 		return errors.Wrap(err, "on `order`")
 	}
 	if err := rightRows.Err(); err != nil {
 		return errors.Wrap(err, "on `order_line`")
+	}
+	if leftRows.Next() || rightRows.Next() {
+		return errors.Errorf("at %s: length of order.sum(o_ol_cnt) != order_line.count(*)", ts)
+	}
+	if i == 0 {
+		return errors.Errorf("0 rows returned")
 	}
 	return nil
 }
