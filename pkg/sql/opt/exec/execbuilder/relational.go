@@ -620,7 +620,7 @@ func (b *Builder) scanParams(
 
 	locking := scan.Locking
 	if b.forceForUpdateLocking {
-		locking = forUpdateLocking
+		locking = locking.Max(forUpdateLocking)
 	}
 	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 

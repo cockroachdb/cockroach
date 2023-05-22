@@ -78,6 +78,7 @@ func (lm lockingSpec) get() opt.Locking {
 		return opt.Locking{
 			Strength:   spec.Strength,
 			WaitPolicy: spec.WaitPolicy,
+			Durability: tree.LockDurabilityGuaranteed,
 		}
 	}
 	return opt.Locking{}

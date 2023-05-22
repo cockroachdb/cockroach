@@ -1199,6 +1199,37 @@ func (p LockingWaitPolicy) Max(p2 LockingWaitPolicy) LockingWaitPolicy {
 	return LockingWaitPolicy(max(byte(p), byte(p2)))
 }
 
+// LockingDurability represents the durability of a lock. It is currently not
+// exposed through SQL, but is instead set according to statement type and
+// isolation level. It is included here for completeness.
+type LockingDurability byte
+
+const (
+	// LockDurabilityBestEffort represents the default: make a best-effort attempt
+	// to hold the lock until commit while keeping it unreplicated and
+	// in-memory. This must not be used when correctness depends on locking.
+	LockDurabilityBestEffort LockingDurability = iota
+
+	// LockDurabilityGuaranteed guarantees that if the transaction commits, the
+	// lock was held until commit. This must be used when correctness depends on
+	// locking.
+	LockDurabilityGuaranteed
+)
+
+var lockingDurabilityName = [...]string{
+	LockDurabilityBestEffort: "best-effort",
+	LockDurabilityGuaranteed: "guaranteed",
+}
+
+func (d LockingDurability) String() string {
+	return lockingDurabilityName[d]
+}
+
+// Max returns the maximum of the two locking durabilities.
+func (d LockingDurability) Max(d2 LockingDurability) LockingDurability {
+	return LockingDurability(max(byte(d), byte(d2)))
+}
+
 func max(a, b byte) byte {
 	if a > b {
 		return a
