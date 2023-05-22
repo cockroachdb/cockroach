@@ -1313,7 +1313,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.Statement> fetch_cursor_stmt
 %type <tree.Statement> move_cursor_stmt
 %type <tree.CursorStmt> cursor_movement_specifier
-%type <bool> opt_hold opt_binary
+%type <bool> opt_hold opt_binary opt_nowait
 %type <tree.CursorSensitivity> opt_sensitivity
 %type <tree.CursorScrollOption> opt_scroll
 %type <int64> opt_forward_backward forward_backward
@@ -6533,14 +6533,23 @@ alter_tenant_service_stmt:
 | ALTER TENANT tenant_spec START error // SHOW HELP: ALTER TENANT SERVICE
 | ALTER TENANT tenant_spec STOP error // SHOW HELP: ALTER TENANT SERVICE
 
+opt_nowait:
+  WITH NOWAIT
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
 
 // %Help: ALTER TENANT REPLICATION - alter tenant replication stream
 // %Category: Experimental
 // %Text:
 // ALTER TENANT <tenant_spec> PAUSE REPLICATION
 // ALTER TENANT <tenant_spec> RESUME REPLICATION
-// ALTER TENANT <tenant_spec> COMPLETE REPLICATION TO LATEST
-// ALTER TENANT <tenant_spec> COMPLETE REPLICATION TO SYSTEM TIME 'time'
+// ALTER TENANT <tenant_spec> COMPLETE REPLICATION TO LATEST [WITH WAIT]
+// ALTER TENANT <tenant_spec> COMPLETE REPLICATION TO SYSTEM TIME 'time' [WITH WAIT]
 // ALTER TENANT <tenant_spec> SET REPLICATION opt=value,...
 alter_tenant_replication_stmt:
   ALTER TENANT tenant_spec PAUSE REPLICATION
@@ -6559,7 +6568,7 @@ alter_tenant_replication_stmt:
       Command: tree.ResumeJob,
     }
   }
-| ALTER TENANT tenant_spec COMPLETE REPLICATION TO SYSTEM TIME a_expr
+| ALTER TENANT tenant_spec COMPLETE REPLICATION TO SYSTEM TIME a_expr opt_nowait
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
@@ -6567,9 +6576,10 @@ alter_tenant_replication_stmt:
       Cutover: &tree.ReplicationCutoverTime{
         Timestamp: $9.expr(),
       },
+      NoWait: $10.bool(),
     }
   }
-| ALTER TENANT tenant_spec COMPLETE REPLICATION TO LATEST
+| ALTER TENANT tenant_spec COMPLETE REPLICATION TO LATEST opt_nowait
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
@@ -6577,6 +6587,7 @@ alter_tenant_replication_stmt:
       Cutover: &tree.ReplicationCutoverTime{
         Latest: true,
       },
+      NoWait: $8.bool(),
     }
   }
 | ALTER TENANT tenant_spec SET REPLICATION tenant_replication_options_list
@@ -6587,7 +6598,6 @@ alter_tenant_replication_stmt:
       Options: *$6.tenantReplicationOptions(),
     }
   }
-
 
 // %Help: ALTER TENANT CLUSTER SETTING - alter tenant cluster settings
 // %Category: Group

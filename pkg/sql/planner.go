@@ -155,6 +155,10 @@ func (evalCtx *extendedEvalContext) QueueJob(record *jobs.Record) jobspb.JobID {
 	return jobID
 }
 
+func (evalCtx *extendedEvalContext) AddCreatedJobID(jobID jobspb.JobID) {
+	evalCtx.jobs.addCreatedJobID(jobID)
+}
+
 // planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution. It is logically
 // scoped to the execution of a single statement, and should not be used to

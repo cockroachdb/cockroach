@@ -176,7 +176,7 @@ func alterReplicationJobHook(
 		if alterTenantStmt.Cutover != nil {
 			pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 			actualCutoverTime, err := alterTenantJobCutover(
-				ctx, p.InternalSQLTxn(), jobRegistry, pts, alterTenantStmt, tenInfo, cutoverTime)
+				ctx, p, jobRegistry, pts, alterTenantStmt, tenInfo, cutoverTime)
 			if err != nil {
 				return err
 			}
@@ -213,7 +213,7 @@ func alterReplicationJobHook(
 // TO LATEST' then the frontier high water timestamp is used.
 func alterTenantJobCutover(
 	ctx context.Context,
-	txn isql.Txn,
+	p sql.PlanHookState,
 	jobRegistry *jobs.Registry,
 	ptp protectedts.Storage,
 	alterTenantStmt *tree.AlterTenantReplication,
@@ -223,7 +223,7 @@ func alterTenantJobCutover(
 	if alterTenantStmt == nil || alterTenantStmt.Cutover == nil {
 		return hlc.Timestamp{}, errors.AssertionFailedf("unexpected nil ALTER TENANT cutover expression")
 	}
-
+	txn := p.InternalSQLTxn()
 	tenantName := tenInfo.Name
 	job, err := jobRegistry.LoadJobWithTxn(ctx, tenInfo.TenantReplicationJobID, txn)
 	if err != nil {
@@ -266,6 +266,10 @@ func alterTenantJobCutover(
 	}
 	if err := applyCutoverTime(ctx, jobRegistry, txn, tenInfo.TenantReplicationJobID, cutoverTime); err != nil {
 		return hlc.Timestamp{}, err
+	}
+
+	if !alterTenantStmt.NoWait {
+		p.ExtendedEvalContext().AddCreatedJobID(tenInfo.TenantReplicationJobID)
 	}
 
 	return cutoverTime, nil
