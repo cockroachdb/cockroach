@@ -533,6 +533,14 @@ const tenantsListObj = new CachedDataReducer(
 
 export const refreshTenantsList = tenantsListObj.refresh;
 
+const connectivityObj = new CachedDataReducer(
+  api.getNetworkConnectivity,
+  "connectivity",
+  moment.duration(30, "s"),
+);
+
+export const refreshConnectivity = connectivityObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<
@@ -597,6 +605,7 @@ export interface APIReducersState {
   snapshot: KeyedCachedDataReducerState<clusterUiApi.GetTracingSnapshotResponse>;
   rawTrace: KeyedCachedDataReducerState<clusterUiApi.GetTraceResponse>;
   tenants: CachedDataReducerState<api.ListTenantsResponseMessage>;
+  connectivity: CachedDataReducerState<api.NetworkConnectivityResponse>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -652,6 +661,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [statementFingerprintInsightsReducerObj.actionNamespace]:
     statementFingerprintInsightsReducerObj.reducer,
   [tenantsListObj.actionNamespace]: tenantsListObj.reducer,
+  [connectivityObj.actionNamespace]: connectivityObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };
