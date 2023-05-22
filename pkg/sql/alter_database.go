@@ -897,6 +897,10 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
+	*params.extendedEvalCtx.validateDbZoneConfig = true
+
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -904,7 +908,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		updatedRegionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		true, /* validateLocalities */
+		false, /*validateLocalities*/
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -2020,6 +2024,8 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+
+	*params.extendedEvalCtx.validateDbZoneConfig = true
 
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
