@@ -1348,10 +1348,8 @@ GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
 
 user testuser
 
-query T
-SELECT key::STRING FROM crdb_internal.node_contention_events LIMIT 1
-----
-\x
+statement ok
+SELECT * FROM crdb_internal.node_contention_events
 
 statement ok
 SELECT * FROM crdb_internal.transaction_contention_events
