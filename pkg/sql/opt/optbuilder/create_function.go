@@ -179,57 +179,59 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		panic(err)
 	}
 
-	targetVolatility := tree.GetFuncVolatility(cf.Options)
-	// Validate each statement and collect the dependencies.
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i, stmt := range stmts {
-		var stmtScope *scope
-		// We need to disable stable function folding because we want to catch the
-		// volatility of stable functions. If folded, we only get a scalar and lose
-		// the volatility.
-		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
-			stmtScope = b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
-		})
-		checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
+	if lang == catpb.Function_SQL {
+		targetVolatility := tree.GetFuncVolatility(cf.Options)
+		// Validate each statement and collect the dependencies.
+		fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+		for i, stmt := range stmts {
+			var stmtScope *scope
+			// We need to disable stable function folding because we want to catch the
+			// volatility of stable functions. If folded, we only get a scalar and lose
+			// the volatility.
+			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+				stmtScope = b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+			})
+			checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
 
-		// Format the statements with qualified datasource names.
-		formatFuncBodyStmt(fmtCtx, stmt.AST, i > 0 /* newLine */)
+			// Format the statements with qualified datasource names.
+			formatFuncBodyStmt(fmtCtx, stmt.AST, i > 0 /* newLine */)
 
-		// Validate that the result type of the last statement matches the
-		// return type of the function.
-		if i == len(stmts)-1 {
-			// TODO(mgartner): stmtScope.cols does not describe the result
-			// columns of the statement. We should use physical.Presentation
-			// instead.
-			err := validateReturnType(funcReturnType, stmtScope.cols)
-			if err != nil {
-				panic(err)
+			// Validate that the result type of the last statement matches the
+			// return type of the function.
+			if i == len(stmts)-1 {
+				// TODO(mgartner): stmtScope.cols does not describe the result
+				// columns of the statement. We should use physical.Presentation
+				// instead.
+				err := validateReturnType(funcReturnType, stmtScope.cols)
+				if err != nil {
+					panic(err)
+				}
 			}
+
+			deps = append(deps, b.schemaDeps...)
+			typeDeps.UnionWith(b.schemaTypeDeps)
+			// Add statement ast into CreateFunction node for logging purpose.
+			cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
+			// Reset the tracked dependencies for next statement.
+			b.schemaDeps = nil
+			b.schemaTypeDeps = intsets.Fast{}
 		}
 
-		deps = append(deps, b.schemaDeps...)
-		typeDeps.UnionWith(b.schemaTypeDeps)
-		// Add statement ast into CreateFunction node for logging purpose.
-		cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
-		// Reset the tracked dependencies for next statement.
-		b.schemaDeps = nil
-		b.schemaTypeDeps = intsets.Fast{}
-	}
+		if targetVolatility == tree.FunctionImmutable && len(deps) > 0 {
+			panic(
+				pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"referencing relations is not allowed in immutable function",
+				),
+			)
+		}
 
-	if targetVolatility == tree.FunctionImmutable && len(deps) > 0 {
-		panic(
-			pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"referencing relations is not allowed in immutable function",
-			),
-		)
-	}
-
-	// Override the function body so that references are fully qualified.
-	for i, option := range cf.Options {
-		if _, ok := option.(tree.FunctionBodyStr); ok {
-			cf.Options[i] = tree.FunctionBodyStr(fmtCtx.String())
-			break
+		// Override the function body so that references are fully qualified.
+		for i, option := range cf.Options {
+			if _, ok := option.(tree.FunctionBodyStr); ok {
+				cf.Options[i] = tree.FunctionBodyStr(fmtCtx.String())
+				break
+			}
 		}
 	}
 
@@ -404,6 +406,7 @@ func (b *Builder) makeRecursiveFunctionResolver(
 ) *recursiveFunctionResolver {
 	var functionVol tree.FunctionVolatility
 	var isLeakproof, calledOnNullInput bool
+	var language tree.FunctionLanguage
 	for _, option := range cf.Options {
 		switch t := option.(type) {
 		case tree.FunctionVolatility:
@@ -412,6 +415,8 @@ func (b *Builder) makeRecursiveFunctionResolver(
 			isLeakproof = true
 		case tree.FunctionNullInputBehavior:
 			calledOnNullInput = t == tree.FunctionCalledOnNullInput
+		case tree.FunctionLanguage:
+			language = t
 		}
 	}
 
@@ -449,6 +454,7 @@ func (b *Builder) makeRecursiveFunctionResolver(
 						IsUDF:             true,
 						ReturnSet:         cf.ReturnType.IsSet,
 						CalledOnNullInput: calledOnNullInput,
+						Language:          language,
 					},
 				}),
 			schemaName.Schema(),

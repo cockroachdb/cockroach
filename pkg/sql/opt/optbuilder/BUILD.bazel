@@ -29,6 +29,7 @@ go_library(
         "opaque.go",
         "orderby.go",
         "partial_index.go",
+        "plsql.go",
         "project.go",
         "scalar.go",
         "scope.go",

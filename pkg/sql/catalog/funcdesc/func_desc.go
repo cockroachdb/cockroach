@@ -707,6 +707,10 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	if desc.ReturnType.ReturnSet {
 		ret.Class = tree.GeneratorClass
 	}
+	ret.Language, err = desc.getFunctionLanguage()
+	if err != nil {
+		return nil, err
+	}
 
 	return ret, nil
 }
@@ -744,6 +748,16 @@ func (desc *immutable) calledOnNullInput() (bool, error) {
 	default:
 		return false, errors.Newf("unknown null input behavior")
 	}
+}
+
+func (desc *immutable) getFunctionLanguage() (tree.FunctionLanguage, error) {
+	switch desc.Lang {
+	case catpb.Function_SQL:
+		return tree.FunctionLangSQL, nil
+	case catpb.Function_PLPGSQL:
+		return tree.FunctionLangPLpgSQL, nil
+	}
+	return tree.FunctionLangUnknown, errors.Newf("unknown function language: %v", desc.Lang)
 }
 
 // ToCreateExpr implements the FunctionDescriptor interface.
@@ -784,6 +798,8 @@ func (desc *immutable) getCreateExprLang() tree.FunctionLanguage {
 	switch desc.Lang {
 	case catpb.Function_SQL:
 		return tree.FunctionLangSQL
+	case catpb.Function_PLPGSQL:
+		return tree.FunctionLangPLpgSQL
 	}
 	return tree.FunctionLangUnknown
 }

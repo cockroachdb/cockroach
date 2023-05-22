@@ -85,9 +85,10 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 		if err := maybeValidateNewFuncVolatility(params, fnDesc, option); err != nil {
 			return err
 		}
-		if err := setFuncOption(params, fnDesc, option); err != nil {
-			return err
-		}
+	}
+
+	if err := setFuncOptions(params, fnDesc, n.n.Options); err != nil {
+		return err
 	}
 
 	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
