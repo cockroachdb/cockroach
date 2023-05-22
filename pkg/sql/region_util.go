@@ -2339,3 +2339,42 @@ func (p *planner) GetMultiregionConfig(databaseID descpb.ID) (interface{}, bool)
 func (p *planner) IsANSIDML() bool {
 	return p.stmt.IsANSIDML()
 }
+
+// zoneConfigValidator implements descs.ZoneConfigValidator
+type zoneConfigValidator struct {
+	txn     *kv.Txn
+	descs   *descs.Collection
+	execCfg *ExecutorConfig
+}
+
+// newZoneConfigValidator creates a new zone config validator.
+func newZoneConfigValidator(
+	txn *kv.Txn, descs *descs.Collection, execCfg *ExecutorConfig,
+) descs.ZoneConfigValidator {
+	return &zoneConfigValidator{
+		txn:     txn,
+		descs:   descs,
+		execCfg: execCfg,
+	}
+}
+
+// ValidateDbZoneConfig implements descs.ZoneConfigValidator.
+func (zv *zoneConfigValidator) ValidateDbZoneConfig(
+	ctx context.Context, db catalog.DatabaseDescriptor,
+) error {
+	regionConfig, err := SynthesizeRegionConfig(
+		ctx, zv.txn, db.GetID(), zv.descs,
+	)
+	if err != nil {
+		return err
+	}
+	_, err = generateAndValidateZoneConfigForMultiRegionDatabase(ctx,
+		zv.execCfg,
+		regionConfig,
+		true, /*validateLocalities*/
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}

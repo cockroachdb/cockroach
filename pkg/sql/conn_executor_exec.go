@@ -970,10 +970,12 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 		}
 	}
 
-	if err := ex.extraTxnState.descCollection.ValidateUncommittedDescriptors(ctx, ex.state.mu.txn); err != nil {
+	zoneConfigValidator := newZoneConfigValidator(ex.state.mu.txn,
+		ex.extraTxnState.descCollection,
+		ex.planner.execCfg)
+	if err := ex.extraTxnState.descCollection.ValidateUncommittedDescriptors(ctx, ex.state.mu.txn, ex.extraTxnState.validateDbZoneConfig, zoneConfigValidator); err != nil {
 		return err
 	}
-
 	if err := descs.CheckSpanCountLimit(
 		ctx,
 		ex.extraTxnState.descCollection,
