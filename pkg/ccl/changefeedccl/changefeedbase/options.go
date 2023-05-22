@@ -442,9 +442,12 @@ var InitialScanOnlyUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, Opt
 // OptKeyInValue is disallowed because parquet files have no concept of key
 // columns, so there is no reason to emit duplicate key datums.
 //
+// OptTopicInValue is disallowed because the cloudstorage sink puts topic
+// names in parquet file names.
+//
 // TODO(#103129): add support for some of these
 var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptResolvedTimestamps, OptDiff,
-	OptMVCCTimestamps, OptUpdatedTimestamps, OptKeyInValue)
+	OptMVCCTimestamps, OptUpdatedTimestamps, OptKeyInValue, OptTopicInValue)
 
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
 // users to alter.

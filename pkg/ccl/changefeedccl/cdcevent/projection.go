@@ -9,7 +9,6 @@
 package cdcevent
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -44,10 +43,9 @@ func MakeProjection(d *EventDescriptor) Projection {
 func (p *Projection) addColumn(name string, typ *types.T, sqlString string, colIdxSlice *[]int) {
 	ord := len(p.cols)
 	p.cols = append(p.cols, ResultColumn{
-		ResultColumn: colinfo.ResultColumn{
-			Name: name,
-			Typ:  typ,
-		},
+		Name: name,
+		Typ:  typ,
+
 		ord:       ord,
 		sqlString: sqlString,
 	})
