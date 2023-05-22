@@ -17,6 +17,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -622,14 +623,22 @@ func (b *Builder) scanParams(
 	if b.forceForUpdateLocking {
 		locking = locking.Max(forUpdateLocking)
 	}
-	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
-
-	// Raise error if row-level locking is part of a read-only transaction.
-	// TODO(nvanbenschoten): this check should be shared across all expressions
-	// that can perform row-level locking.
-	if locking.IsLocking() && b.evalCtx.TxnReadOnly {
-		return exec.ScanParams{}, opt.ColMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-			"cannot execute %s in a read-only transaction", locking.Strength.String())
+	if locking.IsLocking() {
+		// Raise error if row-level locking is part of a read-only transaction.
+		// TODO(nvanbenschoten): this check should be shared across all expressions
+		// that can perform row-level locking.
+		if b.evalCtx.TxnReadOnly {
+			return exec.ScanParams{}, opt.ColMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+				"cannot execute %s in a read-only transaction", locking.Strength.String())
+		}
+		if locking.Durability == tree.LockDurabilityGuaranteed &&
+			b.evalCtx.Txn.IsoLevel() != isolation.Serializable {
+			return exec.ScanParams{}, opt.ColMap{}, unimplemented.NewWithIssuef(
+				100144, "cannot execute SELECT FOR UPDATE statements under %s isolation",
+				b.evalCtx.Txn.IsoLevel(),
+			)
+		}
+		b.ContainsNonDefaultKeyLocking = true
 	}
 
 	needed, outputMap := b.getColumns(scan.Cols, scan.Table)
