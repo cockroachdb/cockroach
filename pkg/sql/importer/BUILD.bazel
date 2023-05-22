@@ -93,6 +93,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/stats",
         "//pkg/sql/types",

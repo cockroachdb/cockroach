@@ -504,6 +504,7 @@ go_library(
         "//pkg/sql/sessionphase",
         "//pkg/sql/sessionprotectedts",
         "//pkg/sql/span",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlfsm",
         "//pkg/sql/sqlinstance",
