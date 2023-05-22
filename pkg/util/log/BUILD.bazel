@@ -62,6 +62,7 @@ go_library(
         "//pkg/util/encoding/encodingtype",
         "//pkg/util/envutil",
         "//pkg/util/fileutil",
+        "//pkg/util/httputil",
         "//pkg/util/jsonbytes",
         "//pkg/util/log/channel",
         "//pkg/util/log/logconfig",
@@ -164,6 +165,7 @@ go_test(
     deps = [
         "//pkg/base/serverident",
         "//pkg/build",
+        "//pkg/ccl/backupccl/backupinfo",
         "//pkg/cli/exit",
         "//pkg/settings/cluster",
         "//pkg/util/caller",

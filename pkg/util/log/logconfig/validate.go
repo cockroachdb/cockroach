@@ -107,6 +107,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		DisableKeepAlives: &bf,
 		Method:            func() *HTTPSinkMethod { m := HTTPSinkMethod(http.MethodPost); return &m }(),
 		Timeout:           &zeroDuration,
+		Compression:       &GzipCompression,
 	}
 
 	propagateCommonDefaults(&baseFileDefaults.CommonSinkConfig, baseCommonSinkConfig)
@@ -448,6 +449,9 @@ func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
 	propagateHTTPDefaults(&hsc.HTTPDefaults, c.HTTPDefaults)
 	if hsc.Address == nil || len(*hsc.Address) == 0 {
 		return errors.New("address cannot be empty")
+	}
+	if *hsc.Compression != GzipCompression && *hsc.Compression != NoneCompression {
+		return errors.New("compression must be 'gzip' or 'none'")
 	}
 	return c.ValidateCommonSinkConfig(hsc.CommonSinkConfig)
 }

@@ -11,6 +11,7 @@
 package log
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net"
@@ -287,6 +288,69 @@ func TestHTTPSinkContentTypePlainText(t *testing.T) {
 		contentType := header.Get("Content-Type")
 		if contentType != expectedContentType {
 			return errors.Newf("mismatched content type: expected %s, got %s", expectedContentType, contentType)
+		}
+		return nil
+	}
+
+	testBase(t, defaults, testFn, false /* hangServer */, time.Duration(0))
+}
+
+func TestHTTPSinkHeadersAndCompression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	address := "http://localhost" // testBase appends the port
+	timeout := 5 * time.Second
+	tb := true
+	format := "json"
+	expectedContentType := "application/json"
+	expectedContentEncoding := logconfig.GzipCompression
+	defaults := logconfig.HTTPDefaults{
+		Address: &address,
+		Timeout: &timeout,
+
+		// We need to disable keepalives otherwise the HTTP server in the
+		// test will let an async goroutine run waiting for more requests.
+		DisableKeepAlives: &tb,
+		CommonSinkConfig: logconfig.CommonSinkConfig{
+			Format:    &format,
+			Buffering: disabledBufferingCfg,
+		},
+
+		Compression: &logconfig.GzipCompression,
+		Headers:     map[string]string{"X-CRDB-TEST": "secret-value"},
+	}
+
+	testFn := func(header http.Header, body string) error {
+		t.Log(body)
+		contentType := header.Get("Content-Type")
+		if contentType != expectedContentType {
+			return errors.Newf("mismatched content type: expected %s, got %s", expectedContentType, contentType)
+		}
+		contentEncoding := header.Get("Content-Encoding")
+		if contentEncoding != expectedContentEncoding {
+			return errors.Newf("mismatched content encoding: expected %s, got %s", expectedContentEncoding, contentEncoding)
+		}
+
+		var isGzipped = func(dat []byte) bool {
+			gzipPrefix := []byte("\x1F\x8B\x08")
+			return bytes.HasPrefix(dat, gzipPrefix)
+		}
+
+		if !isGzipped([]byte(body)) {
+			return errors.New("expected gzipped body")
+		}
+		found := false
+		for k, v := range header {
+			if k == "X-Crdb-Test" {
+				for _, vv := range v {
+					if vv == "secret-value" {
+						found = true
+					}
+				}
+			}
+		}
+		if !found {
+			return errors.New("expected to find special header in request")
 		}
 		return nil
 	}
