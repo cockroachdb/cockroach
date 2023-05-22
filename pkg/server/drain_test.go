@@ -191,8 +191,6 @@ func newTestDrainContext(t *testing.T, drainSleepCallCount *int) *testDrainConte
 		}),
 	}
 
-	serverutils.SetClusterSetting(t, tc.tc, "server.shutdown.jobs_wait", 0)
-
 	// We'll have the RPC talk to the first node.
 	var err error
 	tc.c, tc.connCloser, err = getAdminClientForServer(tc.tc.Server(0))
@@ -329,7 +327,6 @@ func TestServerShutdownReleasesSession(t *testing.T) {
 	defer tenant.Stopper().Stop(ctx)
 	tenantSQL := sqlutils.MakeSQLRunner(tenantSQLRaw)
 
-	tenantSQL.Exec(t, "SET CLUSTER SETTING server.shutdown.jobs_wait = '0s'")
 	queryOwner := func(id base.SQLInstanceID) (owner *string) {
 		tenantSQL.QueryRow(t, "SELECT session_id FROM system.sql_instances WHERE id = $1", id).Scan(&owner)
 		return owner
