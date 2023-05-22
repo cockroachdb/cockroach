@@ -1602,6 +1602,19 @@ func NewTableDesc(
 				incTelemetryForNewColumn(d, col)
 			}
 
+			// Version gates for enabling primary keys for JSONB columns
+			if col.Type.Family() == types.JsonFamily && d.PrimaryKey.IsPrimaryKey && !version.IsActive(clusterversion.V23_2) {
+				return nil, errors.WithHint(
+					pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						"index element %s of type %s is not indexable in a non-inverted index",
+						col.Name,
+						col.Type.Name(),
+					),
+					"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"),
+				)
+			}
+
 			desc.AddColumn(col)
 
 			if idx != nil {
@@ -1786,7 +1799,7 @@ func NewTableDesc(
 			); err != nil {
 				return nil, err
 			}
-			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted); err != nil {
+			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
 				return nil, err
 			}
 			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
