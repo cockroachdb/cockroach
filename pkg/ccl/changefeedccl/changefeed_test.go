@@ -262,6 +262,96 @@ func TestChangefeedBasics(t *testing.T) {
 	// cloudStorageTest is a regression test for #36994.
 }
 
+func TestChangefeedTotalOrderingInitialScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	rnd, _ := randutil.NewTestRand()
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		valRange := []int{1, 1000}
+		sqlDB.Exec(t, `CREATE TABLE foo(a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo (a) SELECT * FROM generate_series(%d, %d)`, valRange[0], valRange[1]))
+
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+			s.SystemServer.DB(), s.Codec, "d", "foo")
+		tableSpan := fooDesc.PrimaryIndexSpan(s.Codec)
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// Ensure Scan Requests are always small enough that we receive multiple
+		// resolved events during a backfill
+		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
+			b.Header.MaxSpanRequestKeys = 1 + rnd.Int63n(100)
+			return nil
+		}
+
+		// Emit resolved events for majority of spans.  Be extra paranoid and ensure that
+		// we have at least 1 span for which we don't emit resolved timestamp (to force checkpointing).
+		haveGaps := false
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) bool {
+			if r.Span.Equal(tableSpan) {
+				// Do not emit resolved events for the entire table span.
+				// We "simulate" large table by splitting single table span into many parts, so
+				// we want to resolve those sub-spans instead of the entire table span.
+				// However, we have to emit something -- otherwise the entire changefeed
+				// machine would not work.
+				r.Span.EndKey = tableSpan.Key.Next()
+				return false
+			}
+			if haveGaps {
+				return rnd.Intn(10) > 7
+			}
+			haveGaps = true
+			return true
+		}
+
+		// Checkpoint progress frequently, and set the checkpoint size limit.
+		changefeedbase.FrontierCheckpointFrequency.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 1)
+
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms',ordering='total'`)
+		defer func() {
+			closeFeed(t, foo)
+		}()
+
+		jobFeed := foo.(cdctest.EnterpriseTestFeed)
+		loadProgress := func() jobspb.Progress {
+			jobID := jobFeed.JobID()
+			job, err := registry.LoadJob(context.Background(), jobID)
+			require.NoError(t, err)
+			return job.Progress()
+		}
+
+		// Wait for non-nil checkpoint.
+		testutils.SucceedsSoon(t, func() error {
+			progress := loadProgress()
+			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
+				return nil
+			}
+			return errors.New("waiting for checkpoint")
+		})
+
+		foundMsg := false
+		for msg, err := foo.Next(); msg != nil; msg, err = foo.Next() {
+			require.NoError(t, err)
+			if msg.Key != nil {
+				foundMsg = true
+				break
+			}
+		}
+		require.True(t, foundMsg)
+	}
+
+	cdcTestWithSystem(t, testFn, feedTestForceSink("webhook"))
+}
+
 func TestChangefeedTotalOrdering(t *testing.T) {
 	// defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

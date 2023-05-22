@@ -281,6 +281,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		sink := &orderedSink{
 			processorID: ca.processorID,
 			metrics:     ca.metrics,
+			frontier:    ca.frontier,
 		}
 		ca.changedRowBuf = &sink.forwardingBuf
 		ca.sink = sink

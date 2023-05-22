@@ -956,12 +956,7 @@ func (s *orderedSink) EmitUpToResolved(ctx context.Context) error {
 	if len(s.unorderedBuf) == 0 {
 		return nil
 	}
-	// debug(fmt.Sprintf("AGG EMIT UP TO RESOLVED (buffered len: %d)", len(s.unorderedBuf)))
 	sort.Sort(s.unorderedBuf) // Orders from lowest to highest
-	// fmt.Printf("\x1b[31m SORTING \x1b[0m\n")
-	// for _, el := range s.unorderedBuf {
-	// 	fmt.Printf("\x1b[31m EL (%+v) \x1b[0m\n", el.row)
-	// }
 
 	orderedUpdate := jobspb.OrderedRows{
 		Rows:              make([]jobspb.OrderedRows_Row, 0, len(s.unorderedBuf)),

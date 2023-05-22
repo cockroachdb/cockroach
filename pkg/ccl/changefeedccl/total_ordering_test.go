@@ -161,6 +161,7 @@ var _ EventSink = (*mockSink)(nil)
 
 func TestOrderedMerger(t *testing.T) {
 	sf, err := makeSchemaChangeFrontier(hlc.Timestamp{}, makeSpan(t, "a", "f"))
+	sf.initialHighWater = hlc.Timestamp{WallTime: 100}
 	require.NoError(t, err)
 
 	rng, _ := randutil.NewTestRand()
@@ -174,12 +175,16 @@ func TestOrderedMerger(t *testing.T) {
 				metrics:     MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics),
 			}, t: t}
 
+		for j := 0; j < 100; j++ {
+			orderedSinks[i].emitTs(100)
+		}
+
 		for j := 0; j < 500; j++ {
-			ts := rng.Int63n(4999) + 1
+			ts := rng.Int63n(4999) + 101
 			orderedSinks[i].emitTs(ts)
 		}
 		for j := 500; j < 1000; j++ {
-			ts := rng.Int63n(4999) + 5001
+			ts := rng.Int63n(4999) + 5101
 			orderedSinks[i].emitTs(ts)
 		}
 	}
@@ -203,8 +208,10 @@ func TestOrderedMerger(t *testing.T) {
 		}
 	}
 
+	// Should output results of initial scan
+	forwardFrontier("a", "f", 0)
 	require.NoError(t, merger.TryFlush(context.Background()))
-	require.Equal(t, sink.emits, 0)
+	require.Equal(t, sink.emits, 500)
 
 	forwardFrontier("a", "f", 2000)
 	require.NoError(t, merger.TryFlush(context.Background()))
@@ -228,10 +235,10 @@ func TestOrderedMerger(t *testing.T) {
 	require.Greater(t, sink.emits, prevEmits)
 
 	require.NoError(t, merger.TryFlush(context.Background()))
-	forwardFrontier("a", "f", 10000)
+	forwardFrontier("a", "f", 11000)
 	require.NoError(t, merger.TryFlush(context.Background()))
 	require.Zero(t, merger.minHeap.Len())
-	require.Equal(t, sink.emits, 5000)
+	require.Equal(t, sink.emits, 5500)
 
 	// Should handle a backfill where events are arriving at .Prev of the walltime
 	_, err = sf.ForwardResolvedSpan(jobspb.ResolvedSpan{
