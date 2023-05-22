@@ -29,6 +29,7 @@ import {
   SQLDetailsStatsReducerState,
   reducer as sqlDetailsStats,
 } from "./statementDetails";
+import { reducer as txnStats, TxnStatsState } from "./transactionStats";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -38,7 +39,8 @@ export type AdminUiState = {
   sessions: SessionsState;
   terminateQuery: TerminateQueryState;
   uiConfig: UIConfigState;
-  sqlStats: SQLStatsState;
+  statements: SQLStatsState;
+  transactions: TxnStatsState;
   sqlDetailsStats: SQLDetailsStatsReducerState;
 };
 
@@ -54,7 +56,8 @@ export const reducers = combineReducers<AdminUiState>({
   sessions,
   terminateQuery,
   uiConfig,
-  sqlStats,
+  statements: sqlStats,
+  transactions: txnStats,
   sqlDetailsStats,
 });
 

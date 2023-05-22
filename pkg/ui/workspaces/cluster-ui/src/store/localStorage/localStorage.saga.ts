@@ -10,11 +10,14 @@
 
 import { AnyAction } from "redux";
 import { all, call, takeEvery, takeLatest, put } from "redux-saga/effects";
-import { actions, LocalStorageKeys } from "./localStorage.reducer";
+import {
+  actions,
+  LocalStorageKeys,
+  TypedPayload,
+} from "./localStorage.reducer";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { PayloadAction } from "@reduxjs/toolkit";
-import { TypedPayload } from "./localStorage.reducer";
-import { TimeScale } from "../../timeScaleDropdown";
+import { TimeScale } from "src/timeScaleDropdown";
 
 export function* updateLocalStorageItemSaga(action: AnyAction) {
   const { key, value } = action.payload;
@@ -28,12 +31,11 @@ export function* updateLocalStorageItemSaga(action: AnyAction) {
 export function* updateTimeScale(
   action: PayloadAction<TypedPayload<TimeScale>>,
 ) {
-  yield all([put(sqlStatsActions.invalidated())]);
-  const { value } = action.payload;
+  yield put(sqlStatsActions.invalidated());
   yield call(
     { context: localStorage, fn: localStorage.setItem },
     LocalStorageKeys.GLOBAL_TIME_SCALE,
-    JSON.stringify(value),
+    JSON.stringify(action.payload?.value),
   );
 }
 

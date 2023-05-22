@@ -13,7 +13,7 @@ import { createSelector } from "reselect";
 import { withRouter } from "react-router-dom";
 import {
   refreshNodes,
-  refreshStatements,
+  refreshTxns,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
@@ -29,16 +29,26 @@ import {
   Filters,
   defaultFilters,
   util,
+  api,
 } from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { LocalSetting } from "src/redux/localsettings";
 import { selectTimeScale } from "src/redux/timeScale";
 
-// selectStatements returns the array of AggregateStatistics to show on the
+export const selectTxnsLastUpdated = (state: AdminUIState) =>
+  state.cachedData.transactions?.setAt?.utc();
+
+export const selectTxnsDataValid = (state: AdminUIState) =>
+  state.cachedData.transactions?.valid;
+
+export const selectTxnsDataInFlight = (state: AdminUIState) =>
+  state.cachedData.transactions?.inFlight;
+
+// selectData returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
 export const selectData = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.transactions,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data || state.inFlight || !state.valid) return null;
     return state.data;
@@ -48,7 +58,7 @@ export const selectData = createSelector(
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
 export const selectLastReset = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.transactions,
   (state: CachedDataReducerState<StatementsResponseMessage>) => {
     if (!state.data) {
       return "unknown";
@@ -59,7 +69,7 @@ export const selectLastReset = createSelector(
 );
 
 export const selectLastError = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
+  (state: AdminUIState) => state.cachedData.transactions,
   (state: CachedDataReducerState<StatementsResponseMessage>) => state.lastError,
 );
 
@@ -87,14 +97,26 @@ export const transactionColumnsLocalSetting = new LocalSetting(
   null,
 );
 
+export const reqSortSetting = new LocalSetting(
+  "reqSortSetting/TransactionsPage",
+  (state: AdminUIState) => state.localSettings,
+  api.DEFAULT_STATS_REQ_OPTIONS.sort,
+);
+
+export const limitSetting = new LocalSetting(
+  "reqLimitSetting/TransactionsPage",
+  (state: AdminUIState) => state.localSettings,
+  api.DEFAULT_STATS_REQ_OPTIONS.limit,
+);
+
 const TransactionsPageConnected = withRouter(
   connect(
     (state: AdminUIState) => ({
       columns: transactionColumnsLocalSetting.selectorToArray(state),
       data: selectData(state),
-      isDataValid: state?.cachedData?.statements?.valid ?? false,
-      isReqInFlight: state?.cachedData?.statements?.inFlight ?? false,
-      lastUpdated: state?.cachedData?.statements?.setAt,
+      isDataValid: selectTxnsDataValid(state),
+      isReqInFlight: selectTxnsDataInFlight(state),
+      lastUpdated: selectTxnsLastUpdated(state),
       timeScale: selectTimeScale(state),
       error: selectLastError(state),
       filters: filtersLocalSetting.selector(state),
@@ -102,11 +124,13 @@ const TransactionsPageConnected = withRouter(
       nodeRegions: nodeRegionsByIDSelector(state),
       search: searchLocalSetting.selector(state),
       sortSetting: sortSettingLocalSetting.selector(state),
-      statementsError: state.cachedData.statements.lastError,
+      statementsError: state.cachedData.transactions.lastError,
       hasAdminRole: selectHasAdminRole(state),
+      limit: limitSetting.selector(state),
+      reqSortSetting: reqSortSetting.selector(state),
     }),
     {
-      refreshData: refreshStatements,
+      refreshData: refreshTxns,
       refreshNodes,
       refreshUserSQLRoles,
       resetSQLStats: resetSQLStatsAction,
@@ -130,6 +154,8 @@ const TransactionsPageConnected = withRouter(
         }),
       onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
       onSearchComplete: (query: string) => searchLocalSetting.set(query),
+      onChangeLimit: (newLimit: number) => limitSetting.set(newLimit),
+      onChangeReqSort: (sort: api.SqlStatsSortType) => reqSortSetting.set(sort),
     },
   )(TransactionsPage),
 );

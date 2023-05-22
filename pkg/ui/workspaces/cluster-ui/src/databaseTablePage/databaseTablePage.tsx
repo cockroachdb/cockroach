@@ -41,7 +41,6 @@ import { commonStyles } from "src/common";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import moment, { Moment } from "moment";
 import { Search as IndexIcon } from "@cockroachlabs/icons";
-import { formatDate } from "antd/es/date-picker/utils";
 import { Link } from "react-router-dom";
 import classnames from "classnames/bind";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
@@ -313,17 +312,14 @@ export class DatabaseTablePage extends React.Component<
     const lastReset = this.props.indexStats.lastReset;
     switch (indexStat.lastUsedType) {
       case "read":
-        return formatDate(
-          indexStat.lastUsed,
-          "[Last read:] MMM DD, YYYY [at] H:mm",
-        );
+        return indexStat.lastUsed.format("[Last read:] MMM DD, YYYY [at] H:mm");
       case "reset":
       default:
         // TODO(lindseyjin): replace default case with create time after it's added to table_indexes
         if (lastReset.isSame(this.minDate)) {
           return "Never";
         } else {
-          return formatDate(lastReset, "[Last reset:] MMM DD, YYYY [at] H:mm");
+          return lastReset.format("[Last reset:] MMM DD, YYYY [at] H:mm");
         }
     }
   }
@@ -457,8 +453,7 @@ export class DatabaseTablePage extends React.Component<
                           {this.props.details.statsLastUpdated && (
                             <SummaryCardItem
                               label="Table Stats Last Updated"
-                              value={formatDate(
-                                this.props.details.statsLastUpdated,
+                              value={this.props.details.statsLastUpdated.format(
                                 "MMM DD, YYYY [at] H:mm [(UTC)]",
                               )}
                             />

@@ -26,6 +26,7 @@ import * as api from "src/util/api";
 import { VersionList } from "src/interfaces/cockroachlabs";
 import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import * as protos from "src/js/protos";
 
 // The primary export of this file are the "refresh" functions of the various
@@ -317,14 +318,24 @@ const storesReducerObj = new KeyedCachedDataReducer(
 export const refreshStores = storesReducerObj.refresh;
 
 const queriesReducerObj = new CachedDataReducer(
-  api.getCombinedStatements,
+  clusterUiApi.getCombinedStatements,
   "statements",
-  moment.duration(5, "m"),
-  moment.duration(30, "m"),
-  true, // Allow new requests to replace in flight ones.
+  null,
+  moment.duration(10, "m"),
+  true,
 );
 export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
+
+const txnFingerprintStatsReducerObj = new CachedDataReducer(
+  clusterUiApi.getFlushedTxnStatsApi,
+  "transactions",
+  null,
+  moment.duration(30, "m"),
+  true,
+);
+export const invalidateTxns = txnFingerprintStatsReducerObj.invalidateData;
+export const refreshTxns = txnFingerprintStatsReducerObj.refresh;
 
 export const statementDetailsRequestToID = (
   req: api.StatementDetailsRequestMessage,
@@ -416,6 +427,7 @@ export interface APIReducersState {
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
   statements: CachedDataReducerState<api.StatementsResponseMessage>;
+  transactions: CachedDataReducerState<api.StatementsResponseMessage>;
   statementDetails: KeyedCachedDataReducerState<
     api.StatementDetailsResponseMessage
   >;
@@ -457,6 +469,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [sessionsReducerObj.actionNamespace]: sessionsReducerObj.reducer,
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
+  [txnFingerprintStatsReducerObj.actionNamespace]:
+    txnFingerprintStatsReducerObj.reducer,
   [statementDetailsReducerObj.actionNamespace]:
     statementDetailsReducerObj.reducer,
   [dataDistributionReducerObj.actionNamespace]:

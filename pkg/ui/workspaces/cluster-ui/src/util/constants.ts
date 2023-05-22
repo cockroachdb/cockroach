@@ -41,5 +41,3 @@ export const serverToClientErrorMessageMap = new Map([
     REMOTE_DEBUGGING_ERROR_TEXT,
   ],
 ]);
-
-export const STATS_LONG_LOADING_DURATION = duration(2, "s");

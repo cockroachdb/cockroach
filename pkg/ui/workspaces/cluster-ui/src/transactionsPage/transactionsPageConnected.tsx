@@ -16,6 +16,7 @@ import { AppState, uiConfigActions } from "src/store";
 import { actions as nodesActions } from "src/store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { TransactionsPage } from "./transactionsPage";
+import { actions as txnStatsActions } from "src/store/transactionStats";
 import {
   TransactionsPageStateProps,
   TransactionsPageDispatchProps,
@@ -27,17 +28,23 @@ import {
   selectSortSetting,
   selectFilters,
   selectSearch,
+  selectTransactionsDataValid,
+  selectTransactionsLastUpdated,
+  selectTransactionsDataInFlight,
 } from "./transactionsPage.selectors";
 import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import {
-  selectStatementsLastUpdated,
-  selectStatementsDataValid,
-  selectStatementsDataInFlight,
-} from "src/statementsPage/statementsPage.selectors";
-import { selectTimeScale } from "../store/utils/selectors";
-import { StatementsRequest } from "src/api/statementsApi";
-import { actions as localStorageActions } from "../store/localStorage";
+  selectTxnsPageLimit,
+  selectTxnsPageReqSort,
+  selectTimeScale,
+} from "../store/utils/selectors";
+import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
+import {
+  actions as localStorageActions,
+  updateTxnsPageLimitAction,
+  updateTxnsPageReqSortAction,
+} from "../store/localStorage";
 import { Filters } from "../queryFilter";
 import { actions as analyticsActions } from "../store/analytics";
 import { TimeScale } from "../timeScaleDropdown";
@@ -51,9 +58,9 @@ export const TransactionsPageConnected = withRouter(
     (state: AppState) => ({
       columns: selectTxnColumns(state),
       data: selectTransactionsData(state),
-      isDataValid: selectStatementsDataValid(state),
-      isReqInFlight: selectStatementsDataInFlight(state),
-      lastUpdated: selectStatementsLastUpdated(state),
+      isDataValid: selectTransactionsDataValid(state),
+      isReqInFlight: selectTransactionsDataInFlight(state),
+      lastUpdated: selectTransactionsLastUpdated(state),
       timeScale: selectTimeScale(state),
       error: selectTransactionsLastError(state),
       filters: selectFilters(state),
@@ -62,10 +69,12 @@ export const TransactionsPageConnected = withRouter(
       search: selectSearch(state),
       sortSetting: selectSortSetting(state),
       hasAdminRole: selectHasAdminRole(state),
+      limit: selectTxnsPageLimit(state),
+      reqSortSetting: selectTxnsPageReqSort(state),
     }),
     (dispatch: Dispatch) => ({
       refreshData: (req: StatementsRequest) =>
-        dispatch(sqlStatsActions.refresh(req)),
+        dispatch(txnStatsActions.refresh(req)),
       refreshNodes: () => dispatch(nodesActions.refresh()),
       refreshUserSQLRoles: () =>
         dispatch(uiConfigActions.refreshUserSQLRoles()),
@@ -131,6 +140,10 @@ export const TransactionsPageConnected = withRouter(
           }),
         );
       },
+      onChangeLimit: (limit: number) =>
+        dispatch(updateTxnsPageLimitAction(limit)),
+      onChangeReqSort: (sort: SqlStatsSortType) =>
+        dispatch(updateTxnsPageReqSortAction(sort)),
     }),
   )(TransactionsPage),
 );

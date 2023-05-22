@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -9,14 +9,9 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { AppState } from "../reducers";
+import { adminUISelector } from "../utils/selectors";
 
-const adminUISelector = createSelector(
-  (state: AppState) => state.adminUI,
-  adminUiState => adminUiState,
-);
-
-export const sqlStatsSelector = createSelector(
+export const txnStatsSelector = createSelector(
   adminUISelector,
-  adminUiState => adminUiState?.statements,
+  adminUiState => adminUiState?.transactions,
 );

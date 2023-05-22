@@ -724,23 +724,6 @@ export function getStores(
   );
 }
 
-// getCombinedStatements returns statements the cluster has recently executed, and some stats about them.
-export function getCombinedStatements(
-  req: StatementsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<StatementsResponseMessage> {
-  const queryStr = propsToQueryString({
-    start: req.start.toInt(),
-    end: req.end.toInt(),
-  });
-  return timeoutFetch(
-    serverpb.StatementsResponse,
-    `${STATUS_PREFIX}/combinedstmts?${queryStr}`,
-    null,
-    timeout,
-  );
-}
-
 // getStatementDetails returns the statistics about the selected statement.
 export function getStatementDetails(
   req: StatementDetailsRequestMessage,

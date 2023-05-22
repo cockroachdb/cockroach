@@ -325,7 +325,7 @@ func TestClusterResetSQLStats(t *testing.T) {
 			}
 
 			statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
-				Combined: true,
+				Combined: flushed,
 			})
 			require.NoError(t, err)
 
@@ -339,7 +339,7 @@ func TestClusterResetSQLStats(t *testing.T) {
 			require.NoError(t, err)
 
 			statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
-				Combined: true,
+				Combined: flushed,
 			})
 			require.NoError(t, err)
 
