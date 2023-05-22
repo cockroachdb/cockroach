@@ -744,13 +744,6 @@ func TestLogic_export(
 	runLogicTest(t, "export")
 }
 
-func TestLogic_expression_index(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "expression_index")
-}
-
 func TestLogic_external_connection_privileges(
 	t *testing.T,
 ) {
@@ -1057,13 +1050,6 @@ func TestLogic_json_builtins(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "json_builtins")
-}
-
-func TestLogic_json_index(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "json_index")
 }
 
 func TestLogic_kv_builtin_functions(
