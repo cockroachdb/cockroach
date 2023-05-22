@@ -17,6 +17,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -618,18 +619,9 @@ func (b *Builder) scanParams(
 		return exec.ScanParams{}, opt.ColMap{}, err
 	}
 
-	locking := scan.Locking
-	if b.forceForUpdateLocking {
-		locking = locking.Max(forUpdateLocking)
-	}
-	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
-
-	// Raise error if row-level locking is part of a read-only transaction.
-	// TODO(nvanbenschoten): this check should be shared across all expressions
-	// that can perform row-level locking.
-	if locking.IsLocking() && b.evalCtx.TxnReadOnly {
-		return exec.ScanParams{}, opt.ColMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-			"cannot execute %s in a read-only transaction", locking.Strength.String())
+	locking, err := b.buildLocking(scan.Locking)
+	if err != nil {
+		return exec.ScanParams{}, opt.ColMap{}, err
 	}
 
 	needed, outputMap := b.getColumns(scan.Cols, scan.Table)
@@ -2170,11 +2162,10 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	cols := join.Cols
 	needed, output := b.getColumns(cols, join.Table)
 
-	locking := join.Locking
-	if b.forceForUpdateLocking {
-		locking = locking.Max(forUpdateLocking)
+	locking, err := b.buildLocking(join.Locking)
+	if err != nil {
+		return execPlan{}, err
 	}
-	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	res := execPlan{outputCols: output}
 	b.recordJoinAlgorithm(exec.IndexJoin)
@@ -2491,11 +2482,10 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	idx := tab.Index(join.Index)
 	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
 
-	locking := join.Locking
-	if b.forceForUpdateLocking {
-		locking = locking.Max(forUpdateLocking)
+	locking, err := b.buildLocking(join.Locking)
+	if err != nil {
+		return execPlan{}, err
 	}
-	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	joinType, err := joinOpToJoinType(join.JoinType)
 	if err != nil {
@@ -2733,11 +2723,10 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		return execPlan{}, err
 	}
 
-	locking := join.Locking
-	if b.forceForUpdateLocking {
-		locking = locking.Max(forUpdateLocking)
+	locking, err := b.buildLocking(join.Locking)
+	if err != nil {
+		return execPlan{}, err
 	}
-	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	joinType, err := joinOpToJoinType(join.JoinType)
 	if err != nil {
@@ -2813,13 +2802,14 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	leftOrdinals, leftColMap := b.getColumns(leftCols, join.LeftTable)
 	rightOrdinals, rightColMap := b.getColumns(rightCols, join.RightTable)
 
-	leftLocking := join.LeftLocking
-	rightLocking := join.RightLocking
-	if b.forceForUpdateLocking {
-		leftLocking = leftLocking.Max(forUpdateLocking)
-		rightLocking = rightLocking.Max(forUpdateLocking)
+	leftLocking, err := b.buildLocking(join.LeftLocking)
+	if err != nil {
+		return execPlan{}, err
 	}
-	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || leftLocking.IsLocking() || rightLocking.IsLocking()
+	rightLocking, err := b.buildLocking(join.RightLocking)
+	if err != nil {
+		return execPlan{}, err
+	}
 
 	allCols := joinOutputMap(leftColMap, rightColMap)
 
@@ -2882,6 +2872,29 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 
 	// Apply a post-projection to retain only the columns we need.
 	return b.applySimpleProject(res, join, join.Cols, join.ProvidedPhysical().Ordering)
+}
+
+func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
+	if b.forceForUpdateLocking {
+		locking = locking.Max(forUpdateLocking)
+	}
+	if locking.IsLocking() {
+		// Raise error if row-level locking is part of a read-only transaction.
+		if b.evalCtx.TxnReadOnly {
+			return opt.Locking{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+				"cannot execute %s in a read-only transaction", locking.Strength.String(),
+			)
+		}
+		if locking.Durability == tree.LockDurabilityGuaranteed &&
+			b.evalCtx.Txn.IsoLevel() != isolation.Serializable {
+			return opt.Locking{}, unimplemented.NewWithIssuef(
+				100144, "cannot execute SELECT FOR UPDATE statements under %s isolation",
+				b.evalCtx.Txn.IsoLevel(),
+			)
+		}
+		b.ContainsNonDefaultKeyLocking = true
+	}
+	return locking, nil
 }
 
 func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
