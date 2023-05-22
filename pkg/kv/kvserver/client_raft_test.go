@@ -371,37 +371,39 @@ func TestRestoreReplicas(t *testing.T) {
 
 	// Perform an increment before replication to ensure that commands are not
 	// repeated on restarts.
-	incArgs := incrementArgs([]byte("a"), 23)
-	if _, err := kv.SendWrapped(ctx,
-		store.TestSender(), incArgs); err != nil {
-		t.Fatal(err)
-	}
+	incArgs := incrementArgs(key, 23)
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), incArgs)
+	require.NoError(t, pErr.GoError())
 
 	tc.AddVotersOrFatal(t, key, tc.Target(1))
 
 	require.NoError(t, tc.Restart())
 
-	incArgs = incrementArgs([]byte("a"), 5)
-	failures := 0
-	successes := 0
-	// Send a command on each store. It should only succeed on the lease holder.
+	// Find the leaseholder and follower. The restart may cause the Raft
+	// leadership to bounce around a bit, since we don't fully enable Raft
+	// prevote, so we loop for a bit until we find the leaseholder.
+	incArgs = incrementArgs(key, 5)
 	var followerStore *kvserver.Store
-	for i := 0; i < len(tc.Servers); i++ {
-		if _, pErr := kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, i).TestSender(), incArgs); pErr != nil {
-			failures++
-			if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); !ok {
-				t.Fatalf("expected not lease holder error; got %s", pErr)
+	testutils.SucceedsSoon(t, func() error {
+		var pErr *kvpb.Error
+		for i := 0; i < tc.NumServers(); i++ {
+			_, pErr = kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, i).TestSender(), incArgs)
+			if pErr == nil {
+				followerStore = tc.GetFirstStoreFromServer(t, 1-i)
+				break
 			}
-			followerStore = tc.GetFirstStoreFromServer(t, i)
-		} else {
-			successes++
+			require.IsType(t, &kvpb.NotLeaseHolderError{}, pErr.GetDetail())
 		}
-	}
-	require.Equal(t, failures, 1)
-	require.Equal(t, successes, 1)
+		return pErr.GoError()
+	})
+
+	// The follower should now return a NLHE.
+	_, pErr = kv.SendWrapped(ctx, followerStore.TestSender(), incArgs)
+	require.Error(t, pErr.GoError())
+	require.IsType(t, &kvpb.NotLeaseHolderError{}, pErr.GetDetail())
 
 	testutils.SucceedsSoon(t, func() error {
-		getArgs := getArgs([]byte("a"))
+		getArgs := getArgs(key)
 		if reply, err := kv.SendWrappedWith(ctx, followerStore.TestSender(), kvpb.Header{
 			ReadConsistency: kvpb.INCONSISTENT,
 		}, getArgs); err != nil {
