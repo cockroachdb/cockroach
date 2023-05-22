@@ -1328,3 +1328,57 @@ user root
 
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
+
+# test privileges/roles for contention related tables
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_contention_events
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.transaction_contention_events
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.cluster_locks
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
+
+user testuser
+
+query T
+SELECT key::STRING FROM crdb_internal.node_contention_events LIMIT 1
+----
+\x
+
+statement ok
+SELECT * FROM crdb_internal.transaction_contention_events
+
+statement ok
+SELECT * FROM crdb_internal.cluster_locks
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.node_contention_events
+
+statement ok
+SELECT * FROM crdb_internal.transaction_contention_events
+
+statement ok
+SELECT * FROM crdb_internal.cluster_locks
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITY FROM testuser
