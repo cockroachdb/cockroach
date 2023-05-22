@@ -6,11 +6,17 @@
 # that do get emitted in various contention scenarios.
 
 statement ok
-GRANT ADMIN TO testuser
+GRANT CREATE ON DATABASE test TO testuser
 
 statement ok
 CREATE TABLE kv (k VARCHAR PRIMARY KEY, v VARCHAR);
 ALTER TABLE kv SPLIT AT VALUES ('b'), ('d'), ('q'), ('z')
+
+statement ok
+GRANT INSERT ON TABLE kv TO testuser
+
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
 
 query TT
 SELECT * FROM kv
@@ -42,6 +48,14 @@ user testuser nodeidx=3
 
 statement ok
 ROLLBACK
+
+# Check keys are redacted based on privileges
+user testuser
+
+query T
+SELECT key::STRING FROM crdb_internal.node_contention_events LIMIT 1
+----
+\x
 
 user root
 

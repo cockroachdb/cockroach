@@ -132,15 +132,7 @@ func (nconf *normalizedSpanConfig) uninternedConfig() roachpb.SpanConfig {
 		nconstraints []internedConstraintsConjunction) []roachpb.ConstraintsConjunction {
 		var rv []roachpb.ConstraintsConjunction
 		for _, ncc := range nconstraints {
-			var cc roachpb.ConstraintsConjunction
-			cc.NumReplicas = ncc.numReplicas
-			for _, c := range ncc.constraints {
-				cc.Constraints = append(cc.Constraints, roachpb.Constraint{
-					Type:  c.typ,
-					Key:   nconf.interner.toString(c.key),
-					Value: nconf.interner.toString(c.value),
-				})
-			}
+			cc := ncc.unintern(nconf.interner)
 			rv = append(rv, cc)
 		}
 		return rv
@@ -230,6 +222,21 @@ func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationshi
 type internedConstraintsConjunction struct {
 	numReplicas int32
 	constraints constraintsConj
+}
+
+func (icc internedConstraintsConjunction) unintern(
+	interner *stringInterner,
+) roachpb.ConstraintsConjunction {
+	var cc roachpb.ConstraintsConjunction
+	cc.NumReplicas = icc.numReplicas
+	for _, c := range icc.constraints {
+		cc.Constraints = append(cc.Constraints, roachpb.Constraint{
+			Type:  c.typ,
+			Key:   interner.toString(c.key),
+			Value: interner.toString(c.value),
+		})
+	}
+	return cc
 }
 
 type internedLeasePreference struct {
@@ -719,6 +726,10 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 			// Nothing to do.
 			return
 		}
+		for i := 0; i < len(ac.constraints); i++ {
+			ac.satisfiedByReplica[voterIndex] = extend2DSlice(ac.satisfiedByReplica[voterIndex])
+			ac.satisfiedByReplica[nonVoterIndex] = extend2DSlice(ac.satisfiedByReplica[nonVoterIndex])
+		}
 		// Compute the list of all constraints satisfied by each store.
 		for kind := voterIndex; kind < numReplicaKinds; kind++ {
 			for i, store := range rac.buf.replicas[kind] {
@@ -763,7 +774,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 					for _, index := range constraintIndices {
 						if index == int32(j) {
 							ac.satisfiedByReplica[kind][j] =
-								append(ac.satisfiedByReplica[kind][j], rac.replicas[voterIndex][i].StoreID)
+								append(ac.satisfiedByReplica[kind][j], rac.replicas[kind][i].StoreID)
 							rac.buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
 							done = doneFunc()
 							// This store is finished.
@@ -791,7 +802,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 				constraintIndices := rac.buf.replicaConstraintIndices[kind][i]
 				for _, index := range constraintIndices {
 					ac.satisfiedByReplica[kind][index] =
-						append(ac.satisfiedByReplica[kind][index], rac.replicas[voterIndex][i].StoreID)
+						append(ac.satisfiedByReplica[kind][index], rac.replicas[kind][i].StoreID)
 					rac.buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
 					break
 				}
@@ -1434,6 +1445,14 @@ func (lti *localityTierInterner) intern(locality roachpb.Locality) localityTiers
 	}
 	lt.str = buf.String()
 	return lt
+}
+
+func (lti *localityTierInterner) unintern(lt localityTiers) roachpb.Locality {
+	var locality roachpb.Locality
+	for _, t := range lt.tiers {
+		locality.Tiers = append(locality.Tiers, roachpb.Tier{Value: lti.si.toString(t)})
+	}
+	return locality
 }
 
 type localityTiers struct {
