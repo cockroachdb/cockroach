@@ -11,6 +11,7 @@
 package parquet
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/apache/arrow/go/v11/parquet"
@@ -23,63 +24,81 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// Setting parquet.Repetitions.Optional makes parquet a column nullable. When
-// writing a datum, we will always specify a definition level to indicate if the
-// datum is null or not. See comments on nonNilDefLevel or nilDefLevel for more info.
+// Setting parquet.Repetitions.Optional makes a column nullable. When writing a
+// datum, we will always specify a definition level to indicate if the datum is
+// null or not. See comments on nonNilDefLevel or nilDefLevel for more info.
 var defaultRepetitions = parquet.Repetitions.Optional
 
-// A schema field is an internal identifier for schema nodes used by the parquet library.
-// A value of -1 will let the library auto-assign values. This does not affect reading
-// or writing parquet files.
+// A schema field is an internal identifier for schema nodes used by the parquet
+// library. A value of -1 will let the library auto-assign values. This does not
+// affect reading or writing parquet files.
 const defaultSchemaFieldID = int32(-1)
 
 // The parquet library utilizes a type length of -1 for all types
 // except for the type parquet.FixedLenByteArray, in which case the type
-// length is the length of the array. See comment on (*schema.PrimitiveNode).TypeLength()
+// length is the length of the array. See comment on
+// (*schema.PrimitiveNode).TypeLength()
 const defaultTypeLength = -1
 
-// A column stores column metadata.
-type column struct {
+// A datumColumn stores metadata for a CRDB datum column.
+type datumColumn struct {
 	node      schema.Node
 	colWriter colWriter
 	typ       *types.T
+
+	// numPhysicalCols is the number of columns which will be created in a
+	// parquet file for this datumColumn. physicalColsStartIdx is the index of
+	// the first of these columns.
+	//
+	// Typically, there is a 1:1 mapping between columns and physical columns in
+	// a file. However, if there is at least one tuple in the schema, then the
+	// mapping is not 1:1 since each field in a tuple gets its own physical
+	// column.
+	//
+	// Ex. For the datumColumns [i int, j (int, int), k (int, int)] where j and
+	// k are tuples, the physical columns generated will be [i int, j.0 int,
+	// j.1, int, k.0 int, k.1 int]. The start index of datumColumn j is 1. The
+	// start index of datumColumn k is 3.
+	numPhysicalCols      int
+	physicalColsStartIdx int
 }
 
 // A SchemaDefinition stores a parquet schema.
 type SchemaDefinition struct {
-	// The index of a column when reading or writing parquet files
-	// will correspond to the column's index in this array.
-	cols []column
+	cols []datumColumn
 
 	// The schema is a root node with terminal children nodes which represent
-	// primitive types such as int or bool. The individual columns can be
-	// traversed using schema.Column(i). The children are indexed from [0,
-	// len(cols)).
+	// primitive types such as int or bool.
 	schema *schema.Schema
 }
 
 // NewSchema generates a SchemaDefinition.
 //
-// Columns in the returned SchemaDefinition will match
-// the order they appear in the supplied parameters.
+// Columns in the returned SchemaDefinition will match the order they appear in
+// the supplied parameters.
 func NewSchema(columnNames []string, columnTypes []*types.T) (*SchemaDefinition, error) {
 	if len(columnTypes) != len(columnNames) {
 		return nil, errors.AssertionFailedf("the number of column names must match the number of column types")
 	}
 
-	cols := make([]column, 0)
+	cols := make([]datumColumn, 0)
 	fields := make([]schema.Node, 0)
 
+	physicalColStartIdx := 0
 	for i := 0; i < len(columnNames); i++ {
 		if columnTypes[i] == nil {
 			return nil, errors.AssertionFailedf("column %s missing type information", columnNames[i])
 		}
-		parquetCol, err := makeColumn(columnNames[i], columnTypes[i], defaultRepetitions)
+		column, err := makeColumn(columnNames[i], columnTypes[i], defaultRepetitions)
 		if err != nil {
 			return nil, err
 		}
-		cols = append(cols, parquetCol)
-		fields = append(fields, parquetCol.node)
+
+		column.physicalColsStartIdx = physicalColStartIdx
+		physicalColStartIdx += column.numPhysicalCols
+
+		cols = append(cols, column)
+		fields = append(fields, column.node)
 	}
 
 	groupNode, err := schema.NewGroupNode("schema", parquet.Repetitions.Required,
@@ -93,23 +112,22 @@ func NewSchema(columnNames []string, columnTypes []*types.T) (*SchemaDefinition,
 	}, nil
 }
 
-// makeColumn constructs a column.
-func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (column, error) {
-	result := column{typ: typ}
+// makeColumn constructs a datumColumn. It does not populate
+// datumColumn.physicalColsStartIdx.
+func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (datumColumn, error) {
+	result := datumColumn{typ: typ, numPhysicalCols: 1}
 	var err error
 	switch typ.Family() {
 	case types.BoolFamily:
 		result.node = schema.NewBooleanNode(colName, repetitions, defaultSchemaFieldID)
 		result.colWriter = scalarWriter(writeBool)
-		result.typ = types.Bool
 		return result, nil
 	case types.StringFamily:
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
 			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
-
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeString)
 		return result, nil
@@ -121,7 +139,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 				parquet.Types.Int64, defaultTypeLength,
 				defaultSchemaFieldID)
 			if err != nil {
-				return result, err
+				return datumColumn{}, err
 			}
 			result.colWriter = scalarWriter(writeInt64)
 			return result, nil
@@ -150,7 +168,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 				scale), parquet.Types.ByteArray, defaultTypeLength,
 			defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeDecimal)
 		return result, nil
@@ -159,7 +177,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.UUIDLogicalType{},
 			parquet.Types.FixedLenByteArray, uuid.Size, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeUUID)
 		return result, nil
@@ -170,7 +188,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeTimestamp)
 		return result, nil
@@ -181,7 +199,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeTimestampTZ)
 		return result, nil
@@ -190,7 +208,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeINet)
 		return result, nil
@@ -199,7 +217,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.JSONLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeJSON)
 		return result, nil
@@ -208,7 +226,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeBit)
 		return result, nil
@@ -217,7 +235,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeBytes)
 		return result, nil
@@ -226,7 +244,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.EnumLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeEnum)
 		return result, nil
@@ -237,7 +255,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeDate)
 		return result, nil
@@ -246,7 +264,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeBox2D)
 		return result, nil
@@ -255,7 +273,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeGeography)
 		return result, nil
@@ -264,7 +282,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeGeometry)
 		return result, nil
@@ -273,7 +291,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeInterval)
 		return result, nil
@@ -284,7 +302,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.NewTimeLogicalType(true, schema.TimeUnitMicros), parquet.Types.Int64,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeTime)
 		return result, nil
@@ -295,7 +313,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeTimeTZ)
 		return result, nil
@@ -305,7 +323,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 				repetitions, parquet.Types.Float,
 				defaultTypeLength, defaultSchemaFieldID)
 			if err != nil {
-				return result, err
+				return datumColumn{}, err
 			}
 			result.colWriter = scalarWriter(writeFloat32)
 			return result, nil
@@ -314,7 +332,7 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, parquet.Types.Double,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeFloat64)
 		return result, nil
@@ -327,14 +345,14 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
 			defaultTypeLength, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
 		result.colWriter = scalarWriter(writeCollatedString)
 		return result, nil
 	case types.ArrayFamily:
 		// Arrays for type T are represented by the following:
 		// message schema {                 -- toplevel schema
-		//   optional group a (LIST) {      -- list column
+		//   optional group a (LIST) {      -- column for this array
 		//     repeated group list {
 		//       optional T element;
 		//     }
@@ -348,29 +366,95 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (c
 			return result, pgerror.Newf(pgcode.FeatureNotSupported,
 				"parquet writer does not support nested arrays")
 		}
+		if typ.ArrayContents().Family() == types.TupleFamily {
+			return result, pgerror.Newf(pgcode.FeatureNotSupported,
+				"parquet writer does not support tuples in arrays")
+		}
+
 		elementCol, err := makeColumn("element", typ.ArrayContents(),
 			parquet.Repetitions.Optional)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
+
 		innerListFields := []schema.Node{elementCol.node}
 		innerListNode, err := schema.NewGroupNode("list", parquet.Repetitions.Repeated,
 			innerListFields, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
+
 		outerListFields := []schema.Node{innerListNode}
+
 		result.node, err = schema.NewGroupNodeLogical(colName, parquet.Repetitions.Optional,
 			outerListFields, schema.ListLogicalType{}, defaultSchemaFieldID)
 		if err != nil {
-			return result, err
+			return datumColumn{}, err
 		}
+		// NB: Because we assert that the inner elements are not arrays or tuples,
+		// it is guaranteed that they are scalar.
 		scalarColWriter, ok := elementCol.colWriter.(scalarWriter)
 		if !ok {
-			return result, errors.AssertionFailedf("expected scalar column writer")
+			return datumColumn{}, errors.AssertionFailedf("expected scalar column writer")
 		}
 		result.colWriter = arrayWriter(scalarColWriter)
 		result.typ = elementCol.typ
+		return result, nil
+	case types.TupleFamily:
+		// Tuples for types T1...Tn are represented by the following:
+		// message schema {                 -- toplevel schema
+		//   optional group a (LIST) {
+		//       optional T1 element;       -- physical column for the first field
+		//       ...
+		//       optional Tn element;       -- physical column for the nth field
+		//   }
+		// }
+		// There is more info about encoding groups here:
+		// https://arrow.apache.org/blog/2022/10/08/arrow-parquet-encoding-part-2/
+		contents := typ.TupleContents()
+		if len(contents) == 0 {
+			return result, pgerror.Newf(pgcode.FeatureNotSupported,
+				"parquet writer does not support empty tuples")
+		}
+		labels := typ.TupleLabels() // may be nil.
+		nodes := make([]schema.Node, 0, len(contents))
+		colWriters := make([]writeFn, 0, len(contents))
+		for i, innerTyp := range contents {
+			if innerTyp.Family() == types.ArrayFamily {
+				return result, pgerror.Newf(pgcode.FeatureNotSupported,
+					"parquet writer does not support arrays in tuples")
+			}
+			if innerTyp.Family() == types.TupleFamily {
+				return result, pgerror.Newf(pgcode.FeatureNotSupported,
+					"parquet writer does not support nested tuples")
+			}
+			var label string
+			if labels == nil {
+				label = fmt.Sprintf("%s_col%d", colName, i)
+			} else {
+				label = labels[i]
+			}
+			elementCol, err := makeColumn(label, innerTyp, defaultRepetitions)
+			if err != nil {
+				return datumColumn{}, err
+			}
+			nodes = append(nodes, elementCol.node)
+			// NB: Because we assert that the inner elements are not arrays or tuples,
+			// it is guaranteed that they are scalar.
+			wFn, ok := elementCol.colWriter.(scalarWriter)
+			if !ok {
+				return datumColumn{}, errors.AssertionFailedf("expected scalar column writer")
+			}
+			colWriters = append(colWriters, writeFn(wFn))
+		}
+
+		result.colWriter = tupleWriter(colWriters)
+		result.node, err = schema.NewGroupNode(colName, parquet.Repetitions.Optional,
+			nodes, defaultSchemaFieldID)
+		result.numPhysicalCols = len(colWriters)
+		if err != nil {
+			return datumColumn{}, err
+		}
 		return result, nil
 	default:
 		return result, pgerror.Newf(pgcode.FeatureNotSupported,

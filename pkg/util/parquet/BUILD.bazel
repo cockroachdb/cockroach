@@ -53,6 +53,7 @@ go_test(
         "//pkg/util/bitarray",
         "//pkg/util/duration",
         "//pkg/util/ipaddr",
+        "//pkg/util/json",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/uuid",

@@ -137,6 +137,14 @@ type Writer struct {
 	// The current number of rows written to the row group writer.
 	currentRowGroupSize   int64
 	currentRowGroupWriter file.BufferedRowGroupWriter
+	// Caches the file.ColumnChunkWriters for each datumColumn in the schema
+	// definition. The array at columnChunkWriterCache[i] has has
+	// sch.cols[i].numPhysicalCols writers. The writers should be valid for the
+	// lifespan of the currentRowGroupWriter.
+	//
+	// The purpose of this cache is to avoid allocating an array of
+	// file.ColumnChunkWriter every time we call a colWriter.
+	columnChunkWriterCache [][]file.ColumnChunkWriter
 }
 
 // NewWriter constructs a new Writer which outputs to
@@ -164,27 +172,46 @@ func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, 
 		parquet.WithCompression(cfg.compression),
 	}
 	props := parquet.NewWriterProperties(parquetOpts...)
-	writer := file.NewParquetWriter(sink, sch.schema.Root(), file.WithWriterProps(props), file.WithWriteMetadata(cfg.metadata))
+	writer := file.NewParquetWriter(sink, sch.schema.Root(), file.WithWriterProps(props),
+		file.WithWriteMetadata(cfg.metadata))
 
 	return &Writer{
-		sch:    sch,
-		writer: writer,
-		cfg:    cfg,
-		ba:     &batchAlloc{},
+		sch:                    sch,
+		writer:                 writer,
+		cfg:                    cfg,
+		ba:                     &batchAlloc{},
+		columnChunkWriterCache: make([][]file.ColumnChunkWriter, len(sch.cols)),
 	}, nil
 }
 
-func (w *Writer) writeDatumToColChunk(d tree.Datum, colIdx int) error {
-	cw, err := w.currentRowGroupWriter.Column(colIdx)
-	if err != nil {
-		return err
+// setNewRowGroupWriter appends a new row group to the Writer and
+// refreshes the entries in the column chunk writer cache.
+func (w *Writer) setNewRowGroupWriter() error {
+	w.currentRowGroupWriter = w.writer.AppendBufferedRowGroup()
+
+	for colIdx := 0; colIdx < len(w.sch.cols); colIdx++ {
+		w.columnChunkWriterCache[colIdx] = w.columnChunkWriterCache[colIdx][:0]
+		physicalStartIdx := w.sch.cols[colIdx].physicalColsStartIdx
+		physicalEndIdx := physicalStartIdx + w.sch.cols[colIdx].numPhysicalCols
+		for i := physicalStartIdx; i < physicalEndIdx; i += 1 {
+			cw, err := w.currentRowGroupWriter.Column(i)
+			if err != nil {
+				return err
+			}
+			w.columnChunkWriterCache[colIdx] = append(w.columnChunkWriterCache[colIdx], cw)
+		}
 	}
 
+	w.currentRowGroupSize = 0
+	return nil
+}
+
+func (w *Writer) writeDatumToColChunk(d tree.Datum, datumColIdx int) (err error) {
 	// tree.NewFmtCtx uses an underlying pool, so we can assume there is no
 	// allocation here.
 	fmtCtx := tree.NewFmtCtx(tree.FmtExport)
 	defer fmtCtx.Close()
-	if err = w.sch.cols[colIdx].colWriter.Write(d, cw, w.ba, fmtCtx); err != nil {
+	if err = w.sch.cols[datumColIdx].colWriter.Write(d, w.columnChunkWriterCache[datumColIdx], w.ba, fmtCtx); err != nil {
 		return err
 	}
 
@@ -194,22 +221,26 @@ func (w *Writer) writeDatumToColChunk(d tree.Datum, colIdx int) error {
 // AddRow writes the supplied datums. There is no guarantee
 // that they will be flushed to the sink after AddRow returns.
 func (w *Writer) AddRow(datums []tree.Datum) error {
+	if len(datums) != len(w.sch.cols) {
+		return errors.AssertionFailedf("expected %d datums in row, got %d datums",
+			len(w.sch.cols), len(datums))
+	}
+
 	if w.currentRowGroupWriter == nil {
-		w.currentRowGroupWriter = w.writer.AppendBufferedRowGroup()
+		if err := w.setNewRowGroupWriter(); err != nil {
+			return err
+		}
 	} else if w.currentRowGroupSize == w.cfg.maxRowGroupLength {
 		if err := w.currentRowGroupWriter.Close(); err != nil {
 			return err
 		}
-		w.currentRowGroupWriter = w.writer.AppendBufferedRowGroup()
-		w.currentRowGroupSize = 0
+		if err := w.setNewRowGroupWriter(); err != nil {
+			return err
+		}
 	}
 
-	if len(datums) != len(w.sch.cols) {
-		return errors.AssertionFailedf("expected %d datums in row, got %d datums", len(w.sch.cols), len(datums))
-	}
-
-	for idx, d := range datums {
-		if err := w.writeDatumToColChunk(d, idx); err != nil {
+	for datumColIdx, d := range datums {
+		if err := w.writeDatumToColChunk(d, datumColIdx); err != nil {
 			return err
 		}
 	}
