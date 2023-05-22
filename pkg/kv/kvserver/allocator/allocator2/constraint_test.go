@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,89 +58,96 @@ func parseConstraints(t *testing.T, fields []string) []roachpb.Constraint {
 	return cc
 }
 
+func parseConstraintsConj(t *testing.T, fields []string) roachpb.ConstraintsConjunction {
+	var cc roachpb.ConstraintsConjunction
+	if strings.HasPrefix(fields[0], "num-replicas=") {
+		val := strings.TrimPrefix(fields[0], "num-replicas=")
+		replicas, err := strconv.Atoi(val)
+		require.NoError(t, err)
+		cc.NumReplicas = int32(replicas)
+		fields = fields[1:]
+	}
+	cc.Constraints = parseConstraints(t, fields)
+	return cc
+}
+
+func parseSpanConfig(t *testing.T, d *datadriven.TestData) roachpb.SpanConfig {
+	var numReplicas, numVoters int
+	var conf roachpb.SpanConfig
+	d.ScanArgs(t, "num-replicas", &numReplicas)
+	conf.NumReplicas = int32(numReplicas)
+	d.ScanArgs(t, "num-voters", &numVoters)
+	conf.NumVoters = int32(numVoters)
+	for _, line := range strings.Split(d.Input, "\n") {
+		parts := strings.Fields(line)
+		if len(parts) == 0 {
+			continue
+		}
+		switch parts[0] {
+		case "constraint":
+			cc := parseConstraintsConj(t, parts[1:])
+			conf.Constraints = append(conf.Constraints, cc)
+		case "voter-constraint":
+			cc := parseConstraintsConj(t, parts[1:])
+			conf.VoterConstraints = append(conf.VoterConstraints, cc)
+		case "lease-preference":
+			cc := parseConstraints(t, parts[1:])
+			conf.LeasePreferences = append(conf.LeasePreferences, roachpb.LeasePreference{
+				Constraints: cc,
+			})
+		default:
+			t.Fatalf("unknown field: %s", parts[0])
+		}
+	}
+	return conf
+}
+
+func printSpanConfig(b *strings.Builder, conf roachpb.SpanConfig) {
+	fmt.Fprintf(b, " num-replicas=%d num-voters=%d\n", conf.NumReplicas, conf.NumVoters)
+	if len(conf.Constraints) > 0 {
+		fmt.Fprintf(b, " constraints:\n")
+		for _, cc := range conf.Constraints {
+			fmt.Fprintf(b, "   %s\n", cc.String())
+		}
+	}
+	if len(conf.VoterConstraints) > 0 {
+		fmt.Fprintf(b, " voter-constraints:\n")
+		for _, cc := range conf.VoterConstraints {
+			fmt.Fprintf(b, "   %s\n", cc.String())
+		}
+	}
+	if len(conf.LeasePreferences) > 0 {
+		fmt.Fprintf(b, " lease-preferences:\n")
+		for _, lp := range conf.LeasePreferences {
+			fmt.Fprintf(b, "   ")
+			for i, cons := range lp.Constraints {
+				if i > 0 {
+					b.WriteRune(',')
+				}
+				b.WriteString(cons.String())
+			}
+			fmt.Fprintf(b, "\n")
+		}
+	}
+}
+
 func TestNormalizedSpanConfig(t *testing.T) {
 	interner := newStringInterner()
 	datadriven.RunTest(t, "testdata/normalize_config",
 		func(t *testing.T, d *datadriven.TestData) string {
-			parseConstraintsConj := func(fields []string) roachpb.ConstraintsConjunction {
-				var cc roachpb.ConstraintsConjunction
-				if strings.HasPrefix(fields[0], "num-replicas=") {
-					val := strings.TrimPrefix(fields[0], "num-replicas=")
-					replicas, err := strconv.Atoi(val)
-					require.NoError(t, err)
-					cc.NumReplicas = int32(replicas)
-					fields = fields[1:]
-				}
-				cc.Constraints = parseConstraints(t, fields)
-				return cc
-			}
-			printSpanConf := func(b *strings.Builder, conf roachpb.SpanConfig) {
-				fmt.Fprintf(b, " num-replicas=%d num-voters=%d\n", conf.NumReplicas, conf.NumVoters)
-				if len(conf.Constraints) > 0 {
-					fmt.Fprintf(b, " constraints:\n")
-					for _, cc := range conf.Constraints {
-						fmt.Fprintf(b, "   %s\n", cc.String())
-					}
-				}
-				if len(conf.VoterConstraints) > 0 {
-					fmt.Fprintf(b, " voter-constraints:\n")
-					for _, cc := range conf.VoterConstraints {
-						fmt.Fprintf(b, "   %s\n", cc.String())
-					}
-				}
-				if len(conf.LeasePreferences) > 0 {
-					fmt.Fprintf(b, " lease-preferences:\n")
-					for _, lp := range conf.LeasePreferences {
-						fmt.Fprintf(b, "   ")
-						for i, cons := range lp.Constraints {
-							if i > 0 {
-								b.WriteRune(',')
-							}
-							b.WriteString(cons.String())
-						}
-						fmt.Fprintf(b, "\n")
-					}
-				}
-			}
 			switch d.Cmd {
 			case "normalize":
-				var numReplicas, numVoters int
-				var conf roachpb.SpanConfig
-				d.ScanArgs(t, "num-replicas", &numReplicas)
-				conf.NumReplicas = int32(numReplicas)
-				d.ScanArgs(t, "num-voters", &numVoters)
-				conf.NumVoters = int32(numVoters)
-				for _, line := range strings.Split(d.Input, "\n") {
-					parts := strings.Fields(line)
-					if len(parts) == 0 {
-						continue
-					}
-					switch parts[0] {
-					case "constraint":
-						cc := parseConstraintsConj(parts[1:])
-						conf.Constraints = append(conf.Constraints, cc)
-					case "voter-constraint":
-						cc := parseConstraintsConj(parts[1:])
-						conf.VoterConstraints = append(conf.VoterConstraints, cc)
-					case "lease-preference":
-						cc := parseConstraints(t, parts[1:])
-						conf.LeasePreferences = append(conf.LeasePreferences, roachpb.LeasePreference{
-							Constraints: cc,
-						})
-					default:
-						return fmt.Sprintf("unknown field: %s", parts[0])
-					}
-				}
+				conf := parseSpanConfig(t, d)
 				var b strings.Builder
 				fmt.Fprintf(&b, "input:\n")
-				printSpanConf(&b, conf)
+				printSpanConfig(&b, conf)
 				nConf, err := makeNormalizedSpanConfig(&conf, interner)
 				if err != nil {
 					fmt.Fprintf(&b, "err=%s\n", err.Error())
 				}
 				if nConf != nil {
 					fmt.Fprintf(&b, "output:\n")
-					printSpanConf(&b, nConf.uninternedConfig())
+					printSpanConfig(&b, nConf.uninternedConfig())
 				}
 				return b.String()
 
@@ -239,6 +247,131 @@ func TestStoreIDPostingList(t *testing.T) {
 				d.ScanArgs(t, "name", &name)
 				pl := pls[name]
 				return fmt.Sprintf("%d", pl.hash())
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
+
+func parseReplicaType(val string) (roachpb.ReplicaType, error) {
+	typ, ok := roachpb.ReplicaType_value[val]
+	if !ok {
+		return 0, errors.AssertionFailedf("unknown replica type %s", val)
+	}
+	return roachpb.ReplicaType(typ), nil
+}
+
+func printRangeAnalyzedConstraints(
+	b *strings.Builder, rac *rangeAnalyzedConstraints, lti *localityTierInterner,
+) {
+	fmt.Fprintf(b, "needed: voters %d non-voters %d\n",
+		rac.numNeededReplicas[voterIndex], rac.numNeededReplicas[nonVoterIndex])
+	printStoreAndLocality := func(prefix string, sAndL []storeAndLocality) {
+		fmt.Fprintf(b, "%s", prefix)
+		for _, elem := range sAndL {
+			fmt.Fprintf(b, " %s(%s)", elem.StoreID.String(), lti.unintern(elem.localityTiers).String())
+		}
+		fmt.Fprintf(b, "\n")
+	}
+	printStoreIDs := func(prefix string, ids []roachpb.StoreID) {
+		fmt.Fprintf(b, "%s", prefix)
+		for _, id := range ids {
+			fmt.Fprintf(b, " %s", id.String())
+		}
+		fmt.Fprintf(b, "\n")
+	}
+	printAnalyzedConstraints := func(prefix string, ac analyzedConstraints) {
+		fmt.Fprintf(b, "%s\n", prefix)
+		for i := range ac.constraints {
+			fmt.Fprintf(b, "  %s\n", ac.constraints[i].unintern(lti.si))
+			printStoreIDs("    voters:", ac.satisfiedByReplica[voterIndex][i])
+			printStoreIDs("    non-voters:", ac.satisfiedByReplica[nonVoterIndex][i])
+		}
+		if len(ac.satisfiedNoConstraintReplica[voterIndex])+
+			len(ac.satisfiedNoConstraintReplica[nonVoterIndex]) > 0 {
+			fmt.Fprintf(b, "  satisfied-no-contraint:\n")
+			printStoreIDs("    voters:", ac.satisfiedNoConstraintReplica[voterIndex])
+			printStoreIDs("    voters:", ac.satisfiedNoConstraintReplica[nonVoterIndex])
+		}
+	}
+	printStoreAndLocality("voters:", rac.replicas[voterIndex])
+	printStoreAndLocality("non-voters:", rac.replicas[nonVoterIndex])
+	if !rac.constraints.isEmpty() {
+		printAnalyzedConstraints("constraints:", rac.constraints)
+	}
+	if !rac.voterConstraints.isEmpty() {
+		printAnalyzedConstraints("voter-constraints:", rac.voterConstraints)
+	}
+	fmt.Fprintf(b, "diversity: voter %f, all %f",
+		rac.votersDiversityScore, rac.replicasDiversityScore)
+}
+
+// TODO(sumeer): testing of query methods.
+func TestRangeAnalyzedConstraints(t *testing.T) {
+	interner := newStringInterner()
+	cm := newConstraintMatcher(interner)
+	ltInterner := newLocalityTierInterner(interner)
+	configs := map[string]*normalizedSpanConfig{}
+	stores := map[roachpb.StoreID]roachpb.StoreDescriptor{}
+
+	datadriven.RunTest(t, "testdata/range_analyzed_constraints",
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "store":
+				desc := parseStoreDescriptor(t, d)
+				cm.setStore(desc)
+				stores[desc.StoreID] = desc
+				return ""
+
+			case "span-config":
+				var name string
+				d.ScanArgs(t, "name", &name)
+				conf := parseSpanConfig(t, d)
+				var b strings.Builder
+				nConf, err := makeNormalizedSpanConfig(&conf, interner)
+				if err != nil {
+					fmt.Fprintf(&b, "normalization error: %s\n", err.Error())
+				}
+				configs[name] = nConf
+				printSpanConfig(&b, nConf.uninternedConfig())
+				return b.String()
+
+			case "analyze-constraints":
+				var configName string
+				d.ScanArgs(t, "config-name", &configName)
+				nConf := configs[configName]
+				rac := rangeAnalyzedConstraintsPool.Get().(*rangeAnalyzedConstraints)
+				buf := rac.stateForInit()
+				for _, line := range strings.Split(d.Input, "\n") {
+					parts := strings.Fields(line)
+					if len(parts) == 0 {
+						continue
+					}
+					var storeID int
+					var typ roachpb.ReplicaType
+					var err error
+					for _, part := range parts {
+						if strings.HasPrefix(part, "store-id=") {
+							part = strings.TrimPrefix(part, "store-id=")
+							storeID, err = strconv.Atoi(part)
+							require.NoError(t, err)
+						} else if strings.HasPrefix(part, "type=") {
+							part = strings.TrimPrefix(part, "type=")
+							typ, err = parseReplicaType(part)
+							require.NoError(t, err)
+						} else {
+							t.Fatalf("unknown part %s", part)
+						}
+					}
+					buf.tryAddingStore(roachpb.StoreID(storeID), typ,
+						ltInterner.intern(stores[roachpb.StoreID(storeID)].Locality()))
+				}
+				rac.finishInit(nConf, cm)
+				var b strings.Builder
+				printRangeAnalyzedConstraints(&b, rac, ltInterner)
+				releaseRangeAnalyzedConstraints(rac)
+				return b.String()
 
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)

@@ -466,6 +466,13 @@ type StoreTestingKnobs struct {
 
 	// RangeLeaseAcquireTimeoutOverride overrides RaftConfig.RangeLeaseAcquireTimeout().
 	RangeLeaseAcquireTimeoutOverride time.Duration
+
+	// BaseQueueInterceptor is designed to intercept calls to baseQueue functions
+	// to validate base queue properties. Currently, it only intercepts
+	// baseQueue.MaybeAdd and ensure correct setting of the pprof label. However,
+	// it can be easily extended to validate other properties of baseQueue if
+	// required.
+	BaseQueueInterceptor func(ctx context.Context, bq *baseQueue)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
