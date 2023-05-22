@@ -22,7 +22,6 @@ import (
 // Interface is the interface used in Container.
 type Interface interface {
 	Self() (livenesspb.Liveness, bool)
-	GetLivenesses() []livenesspb.Liveness
 	GetLiveness(nodeID roachpb.NodeID) (liveness.Record, bool)
 	GetLivenessesFromKV(ctx context.Context) ([]livenesspb.Liveness, error)
 	IsAvailable(roachpb.NodeID) bool
