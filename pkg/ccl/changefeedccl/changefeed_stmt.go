@@ -1207,6 +1207,12 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 	}
 
+	// Grab a "reference" to this nodes job registry in order to make sure
+	// this resumer has enough time to persist up to date checkpoint in case
+	// of node drain.
+	drainCh, cleanup := execCfg.JobRegistry.OnDrain()
+	defer cleanup()
+
 	// We'd like to avoid failing a changefeed unnecessarily, so when an error
 	// bubbles up to this level, we'd like to "retry" the flow if possible. This
 	// could be because the sink is down or because a cockroach node has crashed
@@ -1278,7 +1284,7 @@ func (b *changefeedResumer) resumeWithRetries(
 
 		if errors.Is(flowErr, changefeedbase.ErrNodeDraining) {
 			select {
-			case <-execCfg.JobRegistry.OnDrain():
+			case <-drainCh:
 				// If this node is draining, there is no point in retrying.
 				return jobs.MarkAsRetryJobError(changefeedbase.ErrNodeDraining)
 			default:
