@@ -52,6 +52,7 @@ func TestSetupLogging(t *testing.T) {
 		`unsafe-tls: false, ` +
 		`timeout: 0s, ` +
 		`disable-keep-alives: false, ` +
+		`compression: gzip, ` +
 		`filter: INFO, ` +
 		`format: json-compact, ` +
 		`redactable: true, ` +

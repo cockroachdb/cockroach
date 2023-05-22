@@ -118,6 +118,7 @@ sinks:
       unsafe-tls: false
       timeout: 0s
       disable-keep-alives: false
+      compression: gzip
       filter: INFO
       format: json-compact
       redact: false
