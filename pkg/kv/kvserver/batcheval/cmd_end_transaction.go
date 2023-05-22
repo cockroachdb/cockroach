@@ -1012,13 +1012,24 @@ func splitTrigger(
 			"unable to compute range key stats delta for RHS")
 	}
 
+	// Retrieve MVCC Stats from the current batch instead of using stats from
+	// execution context. Stats in the context could diverge from storage snapshot
+	// of current request when lease extensions are applied. We must not write
+	// absolute stats values for LHS based on this value, always produce a delta
+	// since underlying stats in storage could change.
+	currentStats, err := MakeStateLoader(rec).LoadMVCCStats(ctx, batch)
+	if err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
+			"unable to fetch original range mvcc stats for split")
+	}
+
 	h := splitStatsHelperInput{
-		AbsPreSplitBothEstimated: rec.GetMVCCStats(),
-		DeltaBatchEstimated:      bothDeltaMS,
-		DeltaRangeKey:            rangeKeyDeltaMS,
-		AbsPostSplitLeftFn:       makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
-		AbsPostSplitRightFn:      makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
-		ScanRightFirst:           splitScansRightForStatsFirst || emptyRHS,
+		AbsPreSplitBothStored: currentStats,
+		DeltaBatchEstimated:   bothDeltaMS,
+		DeltaRangeKey:         rangeKeyDeltaMS,
+		PostSplitScanLeftFn:   makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
+		PostSplitScanRightFn:  makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
+		ScanRightFirst:        splitScansRightForStatsFirst || emptyRHS,
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
@@ -1031,7 +1042,7 @@ func splitTrigger(
 var splitScansRightForStatsFirst = util.ConstantWithMetamorphicTestBool(
 	"split-scans-right-for-stats-first", false)
 
-// makeScanStatsFn constructs a splitStatsScanFn for the provided post-split
+// makeScanStatsFn constructs a getStatsFn for the provided post-split
 // range descriptor which computes the range's statistics.
 func makeScanStatsFn(
 	ctx context.Context,
@@ -1039,7 +1050,7 @@ func makeScanStatsFn(
 	ts hlc.Timestamp,
 	sideDesc *roachpb.RangeDescriptor,
 	sideName string,
-) splitStatsScanFn {
+) getStatsFn {
 	return func() (enginepb.MVCCStats, error) {
 		sideMS, err := rditer.ComputeStatsForRange(sideDesc, reader, ts.WallTime)
 		if err != nil {
