@@ -146,6 +146,7 @@ func (r Recording) String() string {
 func (r Recording) SafeFormat(w redact.SafePrinter, _ rune) {
 	if len(r) == 0 {
 		w.SafeString("<empty recording>")
+		return
 	}
 
 	start := r[0].StartTime
