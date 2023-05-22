@@ -3512,6 +3512,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.TxnReadOnly = ex.state.readOnly
 	evalCtx.TxnImplicit = ex.implicitTxn()
 	evalCtx.TxnIsSingleStmt = false
+	evalCtx.TxnIsoLevel = ex.state.isolationLevel
 	if newTxn || !ex.implicitTxn() {
 		// Only update the stmt timestamp if in a new txn or an explicit txn. This is because this gets
 		// called multiple times during an extended protocol implicit txn, but we
