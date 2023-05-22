@@ -607,6 +607,23 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return err
 	}
 
+	// debug("note resolved span")
+	// debug(fmt.Sprintf("advanced: %v, resolved: %s, backfillts: %s", advanced, resolved.Timestamp, ca.frontier.BackfillTS()))
+	if advanced || resolved.Timestamp.Equal(ca.frontier.BackfillTS()) {
+		// debug("advanced || backfillts")
+		if ss, ok := ca.sink.(*safeSink); ok {
+			if ew, ok := ss.wrapped.(*errorWrapperSink); ok {
+				if o, ok := ew.wrapped.(*orderedSink); ok {
+					// debug("emitting up to resolved")
+					err := o.EmitUpToResolved(ca.Ctx())
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
 	checkpointFrontier := advanced &&
@@ -644,17 +661,6 @@ func (ca *changeAggregator) flushFrontier() error {
 	// resolved spans in the job progress.
 	if err := ca.flushBufferedEvents(); err != nil {
 		return err
-	}
-
-	if ss, ok := ca.sink.(*safeSink); ok {
-		if ew, ok := ss.wrapped.(*errorWrapperSink); ok {
-			if o, ok := ew.wrapped.(*orderedSink); ok {
-				err := o.EmitUpToResolved(ca.Ctx())
-				if err != nil {
-					return err
-				}
-			}
-		}
 	}
 
 	// Iterate frontier spans and build a list of spans to emit.
@@ -910,6 +916,7 @@ func newChangeFrontierProcessor(
 	if err != nil {
 		return nil, err
 	}
+	sf.initialHighWater = spec.Feed.StatementTime
 
 	cf := &changeFrontier{
 		flowCtx:       flowCtx,
@@ -1259,6 +1266,7 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
 
 	for _, resolved := range resolvedSpans.ResolvedSpans {
+		debug3(fmt.Sprintf("AGG PROGRESS (%+v)", resolved))
 		// Inserting a timestamp less than the one the changefeed flow started at
 		// could potentially regress the job progress. This is not expected, but it
 		// was a bug at one point, so assert to prevent regressions.
@@ -1288,7 +1296,8 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 
 	cf.maybeLogBehindSpan(frontierChanged)
 
-	if cf.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal) && (frontierChanged || resolved.BoundaryType == jobspb.ResolvedSpan_BACKFILL) {
+	if cf.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal) && (frontierChanged || resolved.Timestamp == cf.frontier.BackfillTS()) {
+		// debug2(fmt.Sprintf("try flush %s, %s", resolved.Timestamp, cf.frontier.BackfillTS()))
 		err = cf.orderedRowMerger.TryFlush(cf.Ctx())
 		if err != nil {
 			return err
@@ -1810,9 +1819,9 @@ func (m *orderedRowMerger) TryFlush(ctx context.Context) error {
 			break
 		}
 		nextTs := m.minHeap.Peek().row.Mvcc
+		// debug2(fmt.Sprintf("NextTS: %s, frontier: %s, backfillTs: %s", nextTs, m.frontier.Frontier(), m.frontier.BackfillTS()))
 		if nextTs.LessEq(m.frontier.Frontier()) || nextTs.Equal(m.frontier.BackfillTS()) {
 			next := heap.Pop(&m.minHeap).(RowHeapEntry)
-			// debug2(fmt.Sprintf("Popped %s from %d", next.row.Mvcc, next.source))
 			pops += 1
 			err := m.sink.EmitRow(ctx, nil, next.row.Key, next.row.Value, hlc.Timestamp{}, next.row.Mvcc, kvevent.Alloc{})
 			if err != nil {

@@ -944,7 +944,7 @@ func (s *orderedSink) EmitRow(
 		row: jobspb.OrderedRows_Row{
 			Key:   key,
 			Value: value,
-			Mvcc:  mvcc,
+			Mvcc:  updated,
 		},
 	})
 	// debug(fmt.Sprintf("AGG APPENDING (%+v) (buffered len: %d)", s.unorderedBuf[len(s.unorderedBuf)-1].row, len(s.unorderedBuf)))
@@ -969,6 +969,7 @@ func (s *orderedSink) EmitUpToResolved(ctx context.Context) error {
 	// debug(fmt.Sprintf("AGG diff: %d lowestUnordered: %s resolved: %s, highestUnordered: %s", resolved.WallTime-s.unorderedBuf[0].row.Mvcc.WallTime, s.unorderedBuf[0].row.Mvcc, resolved, s.unorderedBuf[len(s.unorderedBuf)-1].row.Mvcc))
 
 	for _, r := range s.unorderedBuf {
+		// debug(fmt.Sprintf("AGG CHECK %s, frontier: %s, backfillts: %s", r.row.Mvcc, s.frontier.Frontier(), s.frontier.BackfillTS()))
 		if s.frontier.Frontier().Less(r.row.Mvcc) && !r.row.Mvcc.Equal(s.frontier.BackfillTS()) {
 			break
 		}
