@@ -36,16 +36,16 @@
     text-align center
     width 95px
     padding 9px 0
-    a
+    a, div
       font-family SourceSansPro-SemiBold
       font-size 12px
       font-weight 600
       line-height 1.67
       letter-spacing 0.3px
       color $adminui-grey-2
-      &:hover
-        color $colors--primary-blue-3
-        text-decoration underline
+    a:hover
+      color $colors--primary-blue-3
+      text-decoration underline
     &:first-child
       border-right 2px solid $colors--neutral-2
     .Chip
@@ -98,7 +98,7 @@
     letter-spacing 0.1px
     color $table-border-color
   .Chip--tooltip__latency
-     margin-top 25px
+     margin-bottom 4px
   .Chip--tooltip__nodes
     display flex
     justify-content space-between
@@ -120,6 +120,8 @@
       margin 0
     &--item-title
       line-height 1.71
+    &--header
+      border-bottom solid #3b4a60 1px
   .color
     &--green, &--lightgreen
       color $colors--primary-green-2
@@ -129,3 +131,5 @@
       color $colors--primary-blue-2
     &--yellow
       color $colors--functional-yellow-3
+    &--red
+      color $colors--functional-red-3

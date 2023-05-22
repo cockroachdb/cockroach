@@ -42,20 +42,8 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
   navigateTo = (selected: DropdownOption) => {
     trackNetworkSort(selected.label);
     this.props.onChangeCollapse(false);
-    this.props.history.push(`/reports/network/${selected.value}`);
-  };
-
-  componentDidMount() {
-    this.setDefaultSortValue("region");
-  }
-
-  setDefaultSortValue = (sortValue: string) => {
-    const isDefaultValuePresent = this.getSortValues(this.props.sort).find(
-      e => e.value === sortValue,
-    );
-    if (isDefaultValuePresent) {
-      this.navigateTo(isDefaultValuePresent);
-    }
+    this.props.location.pathname = `/reports/network/${selected.value}`;
+    this.props.history.push(this.props.location);
   };
 
   getSortValues = (sort: NetworkSort[]) =>
