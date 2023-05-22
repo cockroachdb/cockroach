@@ -12,8 +12,16 @@ import React from "react";
 import "./styles.styl";
 
 interface IChipProps {
-  title: string;
-  type?: "green" | "lightgreen" | "grey" | "blue" | "lightblue" | "yellow";
+  title: React.ReactChild;
+  type?:
+    | "green"
+    | "lightgreen"
+    | "grey"
+    | "blue"
+    | "lightblue"
+    | "yellow"
+    | "red"
+    | "white";
 }
 
 export const Chip: React.SFC<IChipProps> = ({ title, type }) => (

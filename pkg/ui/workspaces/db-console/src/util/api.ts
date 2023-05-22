@@ -208,6 +208,11 @@ export type ListTenantsRequestMessage =
 export type ListTenantsResponseMessage =
   protos.cockroach.server.serverpb.ListTenantsResponse;
 
+export type NetworkConnectivityRequest =
+  protos.cockroach.server.serverpb.NetworkConnectivityRequest;
+export type NetworkConnectivityResponse =
+  protos.cockroach.server.serverpb.NetworkConnectivityResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -846,6 +851,18 @@ export function getTenants(
   return timeoutFetch(
     serverpb.ListTenantsResponse,
     `${API_PREFIX}/tenants`,
+    req as any,
+    timeout,
+  );
+}
+
+export function getNetworkConnectivity(
+  req: NetworkConnectivityRequest,
+  timeout?: moment.Duration,
+): Promise<NetworkConnectivityResponse> {
+  return timeoutFetch(
+    serverpb.NetworkConnectivityResponse,
+    `${STATUS_PREFIX}/connectivity`,
     req as any,
     timeout,
   );
