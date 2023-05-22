@@ -8,14 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Divider, Tooltip } from "antd";
+import { Tooltip } from "antd";
 import "antd/lib/divider/style";
 import "antd/lib/tooltip/style";
 import { Chip } from "src/views/app/components/chip";
-import Modal from "src/views/app/components/modal";
-import { getDisplayName } from "src/redux/nodes";
 import React from "react";
-import { NoConnection } from "..";
 import "./legend.styl";
 import { Text, TextTypes } from "src/components";
 
@@ -25,7 +22,6 @@ interface ILegendProps {
   mean: number;
   stddevPlus1: number;
   stddevPlus2: number;
-  noConnections: NoConnection[];
 }
 
 export const Legend: React.SFC<ILegendProps> = ({
@@ -34,7 +30,6 @@ export const Legend: React.SFC<ILegendProps> = ({
   mean,
   stddevPlus1,
   stddevPlus2,
-  noConnections,
 }) => (
   <div key="legend" className="Legend">
     <div className="Legend--container">
@@ -104,70 +99,6 @@ export const Legend: React.SFC<ILegendProps> = ({
             </Text>
           </span>
         </div>
-      </div>
-    </div>
-    <Divider type="vertical" />
-    <div className="Legend--container">
-      <div className="Legend--container__head">
-        <Modal
-          title={`No Connections (${noConnections.length})`}
-          trigger={
-            noConnections.length === 0 && (
-              <Tooltip
-                placement="bottom"
-                title="This legend represents the loss of a connection between nodes and will help you understand if there is a one-way partition in your cluster."
-              >
-                <span
-                  className={"underline"}
-                >{`No Connections (${noConnections.length})`}</span>
-              </Tooltip>
-            )
-          }
-          triggerStyle="Legend--container__head--title color--link"
-          triggerTitle={`No Connections (${noConnections.length})`}
-        >
-          <table className="noConnections__table">
-            <tr className="noConnections__table--head">
-              <th>From Node</th>
-              <th>From Locality</th>
-              <th>To Node</th>
-              <th>To Locality</th>
-            </tr>
-            {noConnections.map(value => (
-              <tr className="noConnections__table--item">
-                <td>
-                  <span className="noConnections__table--item__bold">
-                    {getDisplayName(value)}
-                  </span>
-                  <span className="noConnections__table--item__normal">
-                    {value.from.address}
-                  </span>
-                </td>
-                <td>
-                  <span className="noConnections__table--item__normal">
-                    {value.from.locality}
-                  </span>
-                </td>
-                <td>
-                  <span className="noConnections__table--item__bold">
-                    {getDisplayName(value)}
-                  </span>
-                  <span className="noConnections__table--item__normal">
-                    {value.to.address}
-                  </span>
-                </td>
-                <td>
-                  <span className="noConnections__table--item__normal">
-                    {value.to.locality}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </table>
-        </Modal>
-      </div>
-      <div className="Legend--container__body">
-        <Chip title="--" type="yellow" />
       </div>
     </div>
   </div>

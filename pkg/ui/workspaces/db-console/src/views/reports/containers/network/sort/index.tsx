@@ -24,14 +24,18 @@ import "./sort.styl";
 interface ISortProps {
   onChangeFilter: (key: string, value: string) => void;
   onChangeCollapse: (checked: boolean) => void;
+  onShowAllNodesChange: (checked: boolean) => void;
   deselectFilterByKey: (key: string) => void;
   collapsed: boolean;
   sort: NetworkSort[];
   filter: NetworkFilter;
+  showDeadNodes: boolean;
 }
 
 class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
   onChange = ({ target }: any) => this.props.onChangeCollapse(target.checked);
+  onShowAllNodesChange = ({ target }: any) =>
+    this.props.onShowAllNodesChange(target.checked);
 
   pageView = () => {
     const { match } = this.props;
@@ -42,20 +46,8 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
   navigateTo = (selected: DropdownOption) => {
     trackNetworkSort(selected.label);
     this.props.onChangeCollapse(false);
-    this.props.history.push(`/reports/network/${selected.value}`);
-  };
-
-  componentDidMount() {
-    this.setDefaultSortValue("region");
-  }
-
-  setDefaultSortValue = (sortValue: string) => {
-    const isDefaultValuePresent = this.getSortValues(this.props.sort).find(
-      e => e.value === sortValue,
-    );
-    if (isDefaultValuePresent) {
-      this.navigateTo(isDefaultValuePresent);
-    }
+    this.props.location.pathname = `/reports/network/${selected.value}`;
+    this.props.history.push(this.props.location);
   };
 
   getSortValues = (sort: NetworkSort[]) =>
@@ -74,6 +66,7 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
       deselectFilterByKey,
       filter,
       match,
+      showDeadNodes,
     } = this.props;
     const nodeId = getMatchParamByName(match, "node_id");
     return (
@@ -99,6 +92,13 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
           onChange={this.onChange}
         >
           Collapse Nodes
+        </Checkbox>
+        <Divider type="vertical" style={{ height: "100%" }} />
+        <Checkbox
+          checked={showDeadNodes ?? !collapsed}
+          onChange={this.onShowAllNodesChange}
+        >
+          Show dead nodes
         </Checkbox>
       </div>
     );
