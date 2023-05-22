@@ -476,6 +476,9 @@ type FileSinkConfig struct {
 	prefix string
 }
 
+var GzipCompression = "gzip"
+var NoneCompression = "none"
+
 // HTTPDefaults refresents the configuration defaults for HTTP sinks.
 type HTTPDefaults struct {
 	// Address is the network address of the http server. The
@@ -501,6 +504,13 @@ type HTTPDefaults struct {
 	// intended for testing only and can cause excessive network
 	// overhead in production systems.
 	DisableKeepAlives *bool `yaml:"disable-keep-alives,omitempty"`
+
+	// Headers is a list of headers to attach to each HTTP request
+	Headers map[string]string `yaml:",omitempty,flow"`
+
+	// Compression can be "none" or "gzip" to enable gzip compression.
+	// Set to "gzip" by default.
+	Compression *string `yaml:",omitempty"`
 
 	CommonSinkConfig `yaml:",inline"`
 }
