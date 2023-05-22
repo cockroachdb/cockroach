@@ -524,6 +524,7 @@ explain(shape):
               table: abc@abc_b_idx
               spans: FULL SCAN
               locking strength: for update
+              locking durability: guaranteed
 explain(gist):
 • root
 │

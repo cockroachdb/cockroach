@@ -620,7 +620,7 @@ func (b *Builder) scanParams(
 
 	locking := scan.Locking
 	if b.forceForUpdateLocking {
-		locking = forUpdateLocking
+		locking = locking.Max(forUpdateLocking)
 	}
 	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
@@ -2172,7 +2172,7 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 
 	locking := join.Locking
 	if b.forceForUpdateLocking {
-		locking = forUpdateLocking
+		locking = locking.Max(forUpdateLocking)
 	}
 	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
@@ -2493,7 +2493,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 
 	locking := join.Locking
 	if b.forceForUpdateLocking {
-		locking = forUpdateLocking
+		locking = locking.Max(forUpdateLocking)
 	}
 	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
@@ -2735,7 +2735,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 
 	locking := join.Locking
 	if b.forceForUpdateLocking {
-		locking = forUpdateLocking
+		locking = locking.Max(forUpdateLocking)
 	}
 	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
@@ -2816,8 +2816,8 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	leftLocking := join.LeftLocking
 	rightLocking := join.RightLocking
 	if b.forceForUpdateLocking {
-		leftLocking = forUpdateLocking
-		rightLocking = forUpdateLocking
+		leftLocking = leftLocking.Max(forUpdateLocking)
+		rightLocking = rightLocking.Max(forUpdateLocking)
 	}
 	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || leftLocking.IsLocking() || rightLocking.IsLocking()
 
