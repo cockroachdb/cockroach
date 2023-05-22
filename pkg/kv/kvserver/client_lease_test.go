@@ -1002,7 +1002,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		}
 	}
 	// We need to wait until 2 and 3 are considered to be dead.
-	timeUntilStoreDead := storepool.TimeUntilStoreDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
+	timeUntilStoreDead := liveness.TimeUntilStoreDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
 	wait(timeUntilStoreDead.Nanoseconds())
 
 	checkDead := func(store *kvserver.Store, storeIdx int) error {

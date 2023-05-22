@@ -2217,7 +2217,7 @@ func getLivenessStatusMap(
 	if err != nil {
 		return nil, err
 	}
-	threshold := storepool.TimeUntilStoreDead.Get(&st.SV)
+	threshold := liveness.TimeUntilStoreDead.Get(&st.SV)
 
 	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {
@@ -2238,7 +2238,7 @@ func getLivenessResponse(
 		return nil, serverError(ctx, err)
 	}
 
-	threshold := storepool.TimeUntilStoreDead.Get(&st.SV)
+	threshold := liveness.TimeUntilStoreDead.Get(&st.SV)
 
 	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {

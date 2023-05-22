@@ -33,16 +33,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// TestTimeUntilStoreDead is the test value for TimeUntilStoreDead to
-	// quickly mark stores as dead.
-	TestTimeUntilStoreDead = 5 * time.Millisecond
-
-	// TestTimeUntilStoreDeadOff is the test value for TimeUntilStoreDead that
-	// prevents the store pool from marking stores as dead.
-	TestTimeUntilStoreDeadOff = 24 * time.Hour
-)
-
 // FailedReservationsTimeout specifies a duration during which the local
 // replicate queue will not consider stores which have failed a reservation a
 // viable target.
@@ -77,32 +67,6 @@ var TimeAfterStoreSuspect = settings.RegisterDurationSetting(
 		return nil
 	},
 )
-
-const timeUntilStoreDeadSettingName = "server.time_until_store_dead"
-
-// TimeUntilStoreDead wraps "server.time_until_store_dead".
-var TimeUntilStoreDead = func() *settings.DurationSetting {
-	s := settings.RegisterDurationSetting(
-		settings.TenantWritable,
-		timeUntilStoreDeadSettingName,
-		"the time after which if there is no new gossiped information about a store, it is considered dead",
-		5*time.Minute,
-		func(v time.Duration) error {
-			// Setting this to less than the interval for gossiping stores is a big
-			// no-no, since this value is compared to the age of the most recent gossip
-			// from each store to determine whether that store is live. Put a buffer of
-			// 15 seconds on top to allow time for gossip to propagate.
-			const minTimeUntilStoreDead = gossip.StoresInterval + 15*time.Second
-			if v < minTimeUntilStoreDead {
-				return errors.Errorf("cannot set %s to less than %v: %v",
-					timeUntilStoreDeadSettingName, minTimeUntilStoreDead, v)
-			}
-			return nil
-		},
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
 
 // The NodeCountFunc returns a count of the total number of nodes the user
 // intends for their to be in the cluster. The count includes dead nodes, but
@@ -527,7 +491,7 @@ func (sp *StorePool) statusString(nl NodeLivenessFunc) string {
 
 	var buf bytes.Buffer
 	now := sp.clock.Now()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeUntilStoreDead := liveness.TimeUntilStoreDead.Get(&sp.st.SV)
 	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 
 	for _, id := range ids {
@@ -820,7 +784,7 @@ func (sp *StorePool) decommissioningReplicasWithLiveness(
 	// NB: We use clock.Now() instead of clock.PhysicalTime() is order to
 	// take clock signals from remote nodes into consideration.
 	now := sp.clock.Now()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeUntilStoreDead := liveness.TimeUntilStoreDead.Get(&sp.st.SV)
 	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 
 	for _, repl := range repls {
@@ -864,7 +828,7 @@ func (sp *StorePool) IsDead(storeID roachpb.StoreID) (bool, time.Duration, error
 	// NB: We use clock.Now() instead of clock.PhysicalTime() is order to
 	// take clock signals from remote nodes into consideration.
 	now := sp.clock.Now()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeUntilStoreDead := liveness.TimeUntilStoreDead.Get(&sp.st.SV)
 
 	deadAsOf := sd.LastUpdatedTime.AddDuration(timeUntilStoreDead)
 	if now.After(deadAsOf) {
@@ -940,7 +904,7 @@ func (sp *StorePool) storeStatus(
 	// NB: We use clock.Now() instead of clock.PhysicalTime() is order to
 	// take clock signals from remote nodes into consideration.
 	now := sp.clock.Now()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeUntilStoreDead := liveness.TimeUntilStoreDead.Get(&sp.st.SV)
 	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 	return sd.status(now, timeUntilStoreDead, nl, timeAfterStoreSuspect), nil
 }
@@ -974,7 +938,7 @@ func (sp *StorePool) liveAndDeadReplicasWithLiveness(
 	defer sp.DetailsMu.Unlock()
 
 	now := sp.clock.Now()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeUntilStoreDead := liveness.TimeUntilStoreDead.Get(&sp.st.SV)
 	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 
 	for _, repl := range repls {
@@ -1250,7 +1214,7 @@ func (sp *StorePool) getStoreListFromIDsLocked(
 	var storeDescriptors []roachpb.StoreDescriptor
 
 	now := sp.clock.Now()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeUntilStoreDead := liveness.TimeUntilStoreDead.Get(&sp.st.SV)
 	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 
 	for _, storeID := range storeIDs {
