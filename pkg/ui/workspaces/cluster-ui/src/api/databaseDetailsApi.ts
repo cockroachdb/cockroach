@@ -11,12 +11,14 @@
 import {
   executeInternalSql,
   formatApiResult,
+  isMaxSizeError,
   LARGE_RESULT_SIZE,
   LONG_TIMEOUT,
   SqlApiQueryResponse,
   SqlApiResponse,
   SqlExecutionErrorMessage,
   SqlExecutionRequest,
+  SqlExecutionResponse,
   SqlStatement,
   SqlTxnResult,
   txnResultIsEmpty,
@@ -93,6 +95,13 @@ const getDatabaseId: DatabaseDetailsQuery<DatabaseIdRow> = {
       resp.idResp.error = txn_result.error;
     }
   },
+  handleMaxSizeError: (
+    dbName: string,
+    response: SqlTxnResult<DatabaseIdRow>,
+    dbDetail: DatabaseDetailsResponse,
+  ) => {
+    return new Promise<boolean>(() => false);
+  },
 };
 
 // Database Grants
@@ -128,6 +137,13 @@ const getDatabaseGrantsQuery: DatabaseDetailsQuery<DatabaseGrantsRow> = {
       }
     }
   },
+  handleMaxSizeError: (
+    dbName: string,
+    response: SqlTxnResult<DatabaseGrantsRow>,
+    dbDetail: DatabaseDetailsResponse,
+  ) => {
+    return new Promise<boolean>(() => false);
+  },
 };
 
 // Database Tables
@@ -157,17 +173,59 @@ const getDatabaseTablesQuery: DatabaseDetailsQuery<DatabaseTablesRow> = {
     resp: DatabaseDetailsResponse,
   ) => {
     if (!txnResultIsEmpty(txn_result)) {
-      resp.tablesResp.tables = txn_result.rows.map(row => {
+      if (!resp.tablesResp.tables) {
+        resp.tablesResp.tables = [];
+      }
+
+      txn_result.rows.forEach(row => {
         const escTableName = new QualifiedIdentifier([
           row.table_schema,
           row.table_name,
         ]).SQLString();
-        return `${escTableName}`;
+        return resp.tablesResp.tables.push(escTableName);
       });
     }
     if (txn_result.error) {
       resp.tablesResp.error = txn_result.error;
     }
+  },
+  handleMaxSizeError: async (
+    dbName: string,
+    response: SqlTxnResult<DatabaseTablesRow>,
+    dbDetail: DatabaseDetailsResponse,
+  ) => {
+    // Reset the error. It pulls all the names.
+    dbDetail.tablesResp.error = null;
+    let isMaxSize = true;
+    do {
+      const offsetQuery = {
+        sql: Format(
+          `SELECT table_schema, table_name
+         FROM %1.information_schema.tables
+         WHERE table_type != 'SYSTEM VIEW'
+         ORDER BY table_name offset %2`,
+          [new Identifier(dbName), dbDetail.tablesResp.tables.length],
+        ),
+      };
+      const req = createSqlExecutionRequest(dbName, [offsetQuery]);
+      const result = await executeInternalSql<DatabaseTablesRow>(req);
+      if (result?.execution?.txn_results?.length ?? 0 > 0) {
+        response = result.execution.txn_results[0];
+        if (result.execution.txn_results[0].rows?.length ?? 0 > 0) {
+          getDatabaseTablesQuery.addToDatabaseDetail(
+            result.execution.txn_results[0],
+            dbDetail,
+          );
+        }
+      }
+
+      isMaxSize = isMaxSizeError(result.error?.message);
+      if (!isMaxSize) {
+        dbDetail.error = result.error;
+      }
+    } while (isMaxSize);
+
+    return true;
   },
 };
 
@@ -228,6 +286,13 @@ const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
       resp.idResp.error = txn_result.error;
     }
   },
+  handleMaxSizeError: (
+    dbName: string,
+    response: SqlTxnResult<DatabaseZoneConfigRow>,
+    dbDetail: DatabaseDetailsResponse,
+  ) => {
+    return new Promise<boolean>(() => false);
+  },
 };
 
 // Database Stats
@@ -278,6 +343,13 @@ const getDatabaseSpanStats: DatabaseDetailsQuery<DatabaseSpanStatsRow> = {
       );
     }
   },
+  handleMaxSizeError: (
+    dbName: string,
+    response: SqlTxnResult<DatabaseSpanStatsRow>,
+    dbDetail: DatabaseDetailsResponse,
+  ) => {
+    return new Promise<boolean>(() => false);
+  },
 };
 
 type DatabaseReplicasRegionsRow = {
@@ -319,6 +391,13 @@ const getDatabaseReplicasAndRegions: DatabaseDetailsQuery<DatabaseReplicasRegion
       if (txn_result.error) {
         resp.stats.replicaData.error = txn_result.error;
       }
+    },
+    handleMaxSizeError: (
+      dbName: string,
+      response: SqlTxnResult<DatabaseReplicasRegionsRow>,
+      dbDetail: DatabaseDetailsResponse,
+    ) => {
+      return new Promise<boolean>(() => false);
     },
   };
 
@@ -367,6 +446,13 @@ const getDatabaseIndexUsageStats: DatabaseDetailsQuery<IndexUsageStatistic> = {
       resp.stats.indexStats.error = txn_result.error;
     }
   },
+  handleMaxSizeError: (
+    dbName: string,
+    response: SqlTxnResult<IndexUsageStatistic>,
+    dbDetail: DatabaseDetailsResponse,
+  ) => {
+    return new Promise<boolean>(() => false);
+  },
 };
 
 export type DatabaseDetailsRow =
@@ -384,6 +470,11 @@ type DatabaseDetailsQuery<RowType> = {
     response: SqlTxnResult<RowType>,
     dbDetail: DatabaseDetailsResponse,
   ) => void;
+  handleMaxSizeError: (
+    dbName: string,
+    response: SqlTxnResult<RowType>,
+    dbDetail: DatabaseDetailsResponse,
+  ) => Promise<boolean>;
 };
 
 const databaseDetailQueries: DatabaseDetailsQuery<DatabaseDetailsRow>[] = [
@@ -397,13 +488,10 @@ const databaseDetailQueries: DatabaseDetailsQuery<DatabaseDetailsRow>[] = [
 ];
 
 export function createDatabaseDetailsReq(dbName: string): SqlExecutionRequest {
-  return {
-    execute: true,
-    statements: databaseDetailQueries.map(query => query.createStmt(dbName)),
-    database: dbName,
-    max_result_size: LARGE_RESULT_SIZE,
-    timeout: LONG_TIMEOUT,
-  };
+  return createSqlExecutionRequest(
+    dbName,
+    databaseDetailQueries.map(query => query.createStmt(dbName)),
+  );
 }
 
 export async function getDatabaseDetails(
@@ -411,6 +499,19 @@ export async function getDatabaseDetails(
   timeout?: moment.Duration,
 ): Promise<SqlApiResponse<DatabaseDetailsResponse>> {
   return withTimeout(fetchDatabaseDetails(databaseName), timeout);
+}
+
+function createSqlExecutionRequest(
+  dbName: string,
+  statements: SqlStatement[],
+): SqlExecutionRequest {
+  return {
+    execute: true,
+    statements: statements,
+    database: dbName,
+    max_result_size: LARGE_RESULT_SIZE,
+    timeout: LONG_TIMEOUT,
+  };
 }
 
 async function fetchDatabaseDetails(
@@ -427,8 +528,44 @@ async function fetchDatabaseDetails(
     }
   });
   if (resp.error) {
+    if (resp.error.message.includes("max result size exceeded")) {
+      return fetchSeparatelyDatabaseDetails(databaseName);
+    }
     detailsResponse.error = resp.error;
   }
+  return formatApiResult<DatabaseDetailsResponse>(
+    detailsResponse,
+    detailsResponse.error,
+    "retrieving database details information",
+  );
+}
+
+async function fetchSeparatelyDatabaseDetails(
+  databaseName: string,
+): Promise<SqlApiResponse<DatabaseDetailsResponse>> {
+  const detailsResponse: DatabaseDetailsResponse = newDatabaseDetailsResponse();
+  for (const databaseDetailQuery of databaseDetailQueries) {
+    const req = createSqlExecutionRequest(databaseName, [
+      databaseDetailQuery.createStmt(databaseName),
+    ]);
+    const resp = await executeInternalSql<DatabaseDetailsRow>(req);
+    const txn_result = resp.execution.txn_results[0];
+    if (txn_result.rows) {
+      databaseDetailQuery.addToDatabaseDetail(txn_result, detailsResponse);
+    }
+
+    if (resp.error) {
+      const handleFailure = await databaseDetailQuery.handleMaxSizeError(
+        databaseName,
+        txn_result,
+        detailsResponse,
+      );
+      if (!handleFailure) {
+        detailsResponse.error = resp.error;
+      }
+    }
+  }
+
   return formatApiResult<DatabaseDetailsResponse>(
     detailsResponse,
     detailsResponse.error,
