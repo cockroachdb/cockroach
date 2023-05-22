@@ -2945,12 +2945,10 @@ func (ex *connExecutor) execCopyIn(
 		initPlanner: func(ctx context.Context, p *planner) {
 			ex.initPlanner(ctx, p)
 		},
-		resetPlanner: func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {
-			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
-			ex.resetPlanner(ctx, p, txn, stmtTS)
-		},
 	}
 
+	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
+	ex.resetPlanner(ctx, &ex.planner, txnOpt.txn, txnOpt.stmtTimestamp)
 	ex.setCopyLoggingFields(cmd.ParsedStmt)
 
 	var cm copyMachineInterface

@@ -968,7 +968,6 @@ func (p *planner) preparePlannerForCopy(
 	ctx context.Context, txnOpt *copyTxnOpt, finalBatch bool, implicitTxn bool,
 ) func(context.Context, error) error {
 	autoCommit := implicitTxn
-	txnOpt.resetPlanner(ctx, p, txnOpt.txn, txnOpt.txnTimestamp, txnOpt.stmtTimestamp)
 	if implicitTxn {
 		if p.SessionData().CopyFromAtomicEnabled {
 			// If the COPY should be atomic, only the final batch can commit.

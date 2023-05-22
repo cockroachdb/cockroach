@@ -195,6 +195,15 @@ func TestCopyLogging(t *testing.T) {
 				}
 				require.NoError(t, txn.Rollback())
 			})
+
+			t.Run("no privilege on table", func(t *testing.T) {
+				pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copy_test", url.User(username.TestUser))
+				defer cleanup()
+				conn, err := pgx.Connect(ctx, pgURL.String())
+				require.NoError(t, err)
+				err = conn.PgConn().Exec(ctx, `COPY t FROM STDIN`).Close()
+				require.ErrorContains(t, err, "user testuser does not have INSERT privilege on relation t")
+			})
 		})
 	}
 }
