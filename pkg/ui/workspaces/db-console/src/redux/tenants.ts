@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 import { createSelector } from "reselect";
 import { DropdownOption } from "../views/shared/components/dropdown";
+import { SYSTEM_TENANT_NAME } from "./cookies";
 import { AdminUIState } from "./state";
 
 export const tenantsSelector = (state: AdminUIState) =>
@@ -30,3 +31,9 @@ export const tenantDropdownOptions = createSelector(
     return tenantOptions;
   },
 );
+
+// isSystemTenant checks whether the provided tenant name is the
+// system tenant.
+export const isSystemTenant = (tenantName: string): boolean => {
+  return tenantName === SYSTEM_TENANT_NAME;
+};
