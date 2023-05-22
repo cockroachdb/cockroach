@@ -1276,12 +1276,22 @@ func (b *changefeedResumer) resumeWithRetries(
 			return jobs.MarkAsRetryJobError(err)
 		}
 
-		if errors.Is(flowErr, changefeedbase.ErrNodeDraining) {
+		isRegistryDraining := func() bool {
+			drainCh, cleanup := execCfg.JobRegistry.OnDrain()
+			defer cleanup()
 			select {
-			case <-execCfg.JobRegistry.OnDrain():
+			case <-drainCh:
+				return true
+			default:
+				return false
+			}
+		}
+
+		if errors.Is(flowErr, changefeedbase.ErrNodeDraining) {
+			if isRegistryDraining() {
 				// If this node is draining, there is no point in retrying.
 				return jobs.MarkAsRetryJobError(changefeedbase.ErrNodeDraining)
-			default:
+			} else {
 				// We know that some node (other than this one) is draining.
 				// When we retry, the planner ought to take into account
 				// this information.  However, there is a bit of a race here
