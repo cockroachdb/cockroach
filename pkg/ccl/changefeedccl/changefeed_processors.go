@@ -59,6 +59,10 @@ type changeAggregator struct {
 	kvFeedDoneCh chan struct{}
 	kvFeedMemMon *mon.BytesMonitor
 
+	// drainWatchCh is signaled if the registry on this node is being drained.
+	drainWatchCh <-chan struct{}
+	drainDone    func() // Cleanup function for drain watch.
+
 	// sink is the Sink to write rows to. Resolved timestamps are never written
 	// by changeAggregator.
 	sink EventSink
@@ -351,17 +355,17 @@ func (ca *changeAggregator) startKVFeed(
 		return nil, err
 	}
 
+	ca.drainWatchCh, ca.drainDone = ca.flowCtx.Cfg.JobRegistry.OnDrain()
 	// Arrange for kvFeed to terminate if the job registry is being drained.
 	kvfeedCfg.FeedWatcher = func(ctx context.Context) error {
-		drainCh := ca.flowCtx.Cfg.JobRegistry.OnDrain()
 		if ca.knobs.OnDrain != nil {
-			drainCh = ca.knobs.OnDrain()
+			ca.drainWatchCh = ca.knobs.OnDrain()
 		}
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-drainCh:
+		case <-ca.drainWatchCh:
 			return changefeedbase.ErrNodeDraining
 		}
 	}
@@ -502,6 +506,9 @@ func (ca *changeAggregator) close() {
 	// Wait for the poller to finish shutting down.
 	if ca.kvFeedDoneCh != nil {
 		<-ca.kvFeedDoneCh
+	}
+	if ca.drainDone != nil {
+		ca.drainDone()
 	}
 	if ca.eventConsumer != nil {
 		_ = ca.eventConsumer.Close() // context cancellation expected here.
