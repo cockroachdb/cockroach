@@ -585,6 +585,7 @@ describe("Routing to", () => {
       screen.getByText(NETWORK_DIAGNOSTICS_REPORT_HEADER, {
         selector: "h3",
       });
+      expect(history.location.pathname).toBe("/reports/network/region");
     });
   });
 
