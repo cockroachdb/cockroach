@@ -40,6 +40,9 @@
   },
   "exclude": [
     "cluster-ui",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/*.stories.tsx",
     "dist"
   ]
 }
