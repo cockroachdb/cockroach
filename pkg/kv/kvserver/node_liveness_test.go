@@ -750,14 +750,14 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 	nl := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
 	actualLMapNodes := make(map[roachpb.NodeID]struct{})
 	originalExpiration := testStartTime + nl.GetLivenessThreshold().Nanoseconds()
-	for _, l := range nl.GetLivenesses() {
+	for id, l := range nl.GetIsLiveMap() {
 		if a, e := l.Epoch, int64(1); a != e {
 			t.Errorf("liveness record had epoch %d, wanted %d", a, e)
 		}
 		if a, e := l.Expiration.WallTime, originalExpiration; a < e {
 			t.Errorf("liveness record had expiration %d, wanted %d", a, e)
 		}
-		actualLMapNodes[l.NodeID] = struct{}{}
+		actualLMapNodes[id] = struct{}{}
 	}
 	expectedLMapNodes := map[roachpb.NodeID]struct{}{1: {}, 2: {}, 3: {}}
 	if !reflect.DeepEqual(actualLMapNodes, expectedLMapNodes) {
@@ -781,7 +781,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 
 	// Verify that node liveness receives the change.
 	actualLMapNodes = make(map[roachpb.NodeID]struct{})
-	for _, l := range nl.GetLivenesses() {
+	for id, l := range nl.GetIsLiveMap() {
 		if a, e := l.Epoch, int64(1); a != e {
 			t.Errorf("liveness record had epoch %d, wanted %d", a, e)
 		}
@@ -792,7 +792,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 		if a, e := l.Expiration.WallTime, expectedExpiration; a < e {
 			t.Errorf("liveness record had expiration %d, wanted %d", a, e)
 		}
-		actualLMapNodes[l.NodeID] = struct{}{}
+		actualLMapNodes[id] = struct{}{}
 	}
 	if !reflect.DeepEqual(actualLMapNodes, expectedLMapNodes) {
 		t.Errorf("got liveness map nodes %+v; wanted %+v", actualLMapNodes, expectedLMapNodes)
@@ -1214,13 +1214,9 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 func verifyNodeIsDecommissioning(t *testing.T, tc *testcluster.TestCluster, nodeID roachpb.NodeID) {
 	testutils.SucceedsSoon(t, func() error {
 		for _, s := range tc.Servers {
-			for _, liv := range s.NodeLiveness().(*liveness.NodeLiveness).GetLivenesses() {
-				if liv.NodeID != nodeID {
-					continue
-				}
-				if !liv.Membership.Decommissioning() {
-					return errors.Errorf("unexpected Membership value of %v for node %v", liv.Membership, liv.NodeID)
-				}
+			liv, _ := s.NodeLiveness().(*liveness.NodeLiveness).GetLiveness(nodeID)
+			if !liv.Membership.Decommissioning() {
+				return errors.Errorf("unexpected Membership value of %v for node %v", liv.Membership, liv.NodeID)
 			}
 		}
 		return nil
