@@ -1525,33 +1525,43 @@ t2:
 # 10. Geospatial inverted + EQ + J: combined index between inverted + equal
 # candidates from same table
 index-candidates
-SELECT * FROM t2 JOIN t1 ON t2.k = t2.k WHERE st_covers(geog1, geog2)
+SELECT * FROM t2 JOIN t1 ON t1.k = t2.k WHERE st_covers(geog1, geog2)
 ----
+t1:
+ (k)
 t2:
  (geog1)
  (geog2)
+ (k)
 
 # 11. Geospatial inverted + J: no combined index between inverted + join
 # candidates
 index-candidates
-SELECT * FROM t2 JOIN t1 ON t2.k != t2.k WHERE st_covers(geog1, geog2)
+SELECT * FROM t2 JOIN t1 ON t1.k != t2.k WHERE st_covers(geog1, geog2)
 ----
+t1:
+ (k)
 t2:
  (geog1)
  (geog2)
+ (k)
 
 # 12. Geospatial inverted + J + EQ: combined index between join + equal
 # candidates Note: No combined index between equal and inverted index from
 # different tables
 index-candidates
-SELECT * FROM t2 JOIN t1 ON t2.k != t2.k WHERE st_covers(geog1, geog2) AND t2.i = 2
+SELECT * FROM t2 JOIN t1 ON t1.k != t2.k WHERE st_covers(geog1, geog2) AND t2.i = 2
 ----
+t1:
+ (k)
 t2:
  (geog1)
  (geog2)
  (i)
  (i, geog1)
  (i, geog2)
+ (i, k)
+ (k)
 
 # These following test cases cover different cases for multi-column combinations
 # for Box2d operations.
