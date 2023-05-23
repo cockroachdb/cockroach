@@ -15,6 +15,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"math"
 	"net/url"
 	"strings"
@@ -711,9 +712,7 @@ var _ sarama.Partitioner = &changefeedPartitioner{}
 var _ sarama.PartitionerConstructor = newChangefeedPartitioner
 
 func newChangefeedPartitioner(topic string) sarama.Partitioner {
-	return &changefeedPartitioner{
-		hash: sarama.NewHashPartitioner(topic),
-	}
+	return sarama.NewCustomHashPartitioner(fnv.New32a)(topic)
 }
 
 func (p *changefeedPartitioner) RequiresConsistency() bool { return true }
