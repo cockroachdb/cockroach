@@ -47,11 +47,9 @@ func TestCopyLogging(t *testing.T) {
 			s, db, _ := serverutils.StartServer(t, params)
 			defer s.Stopper().Stop(context.Background())
 
-			_, err := db.Exec(`
-		CREATE TABLE t (
-			i INT PRIMARY KEY
-		);
-	`)
+			_, err := db.Exec(`CREATE TABLE t (i INT PRIMARY KEY);`)
+			require.NoError(t, err)
+			_, err = db.Exec(`CREATE USER testuser`)
 			require.NoError(t, err)
 
 			for _, str := range strings {
@@ -194,6 +192,15 @@ func TestCopyLogging(t *testing.T) {
 					require.ErrorContains(t, err, `could not parse "bob" as type int`)
 				}
 				require.NoError(t, txn.Rollback())
+			})
+
+			t.Run("no privilege on table", func(t *testing.T) {
+				pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copy_test", url.User(username.TestUser))
+				defer cleanup()
+				conn, err := pgx.Connect(ctx, pgURL.String())
+				require.NoError(t, err)
+				err = conn.PgConn().Exec(ctx, `COPY t FROM STDIN`).Close()
+				require.ErrorContains(t, err, "user testuser does not have INSERT privilege on relation t")
 			})
 		})
 	}
