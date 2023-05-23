@@ -269,6 +269,126 @@ func TestMultiRoleAuditLogging(t *testing.T) {
 	}
 }
 
+func TestReducedAuditConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_SENSITIVE_ACCESS)
+	defer cleanup()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	rootRunner := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(context.Background())
+
+	// Dummy table/user used by tests.
+	setupQueries(t, rootRunner)
+
+	// Enable reduced config.
+	rootRunner.Exec(t, `SET CLUSTER SETTING sql.log.user_audit.reduced_config = true`)
+	testutils.SucceedsSoon(t, func() error {
+		var currentVal string
+		rootRunner.QueryRow(t,
+			"SHOW CLUSTER SETTING sql.log.user_audit.reduced_config",
+		).Scan(&currentVal)
+
+		if currentVal == "false" {
+			return errors.Newf("waiting for reduced config cluster setting to be true")
+		}
+		return nil
+	})
+
+	testUserURL, cleanupFn := sqlutils.PGUrl(t,
+		s.ServingSQLAddr(), t.Name(), url.User(username.TestUser))
+	defer cleanupFn()
+
+	testUserDb, err := gosql.Open("postgres", testUserURL.String())
+	require.NoError(t, err)
+	defer testUserDb.Close()
+	testRunner := sqlutils.MakeSQLRunner(testUserDb)
+
+	// Set a cluster configuration.
+	roleA := "roleA"
+	rootRunner.Exec(t, `SET CLUSTER SETTING sql.log.user_audit = '
+		roleA ALL
+	'`)
+
+	testutils.SucceedsSoon(t, func() error {
+		var currentVal string
+		rootRunner.QueryRow(t,
+			"SHOW CLUSTER SETTING sql.log.user_audit",
+		).Scan(&currentVal)
+
+		if currentVal == "" {
+			return errors.Newf("waiting for cluster setting to be set")
+		}
+		return nil
+	})
+
+	// Run a query. This initializes the reduced audit configuration for the user.
+	// Currently, there are no corresponding roles for the user in the audit configuration.
+	// Consequently, the user's reduced audit config will be nil.
+	testQuery := `SELECT * FROM u`
+	testRunner.Exec(t, testQuery)
+
+	// Grant a role the user that corresponds to an audit setting.
+	rootRunner.Exec(t, fmt.Sprintf("CREATE ROLE IF NOT EXISTS %s", roleA))
+	rootRunner.Exec(t, fmt.Sprintf("GRANT %s to testuser", roleA))
+
+	// Run the query again. We expect no log from this query even though the user now has a corresponding role
+	// as the reduced audit configuration has already been computed, and there were no corresponding audit settings
+	// for the user at that time.
+	testRunner.Exec(t, testQuery)
+
+	log.Flush()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"role_based_audit_event"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Expect the number of entries to be 0.
+	if len(entries) != 0 {
+		t.Fatal(errors.Newf("unexpected entries found"))
+	}
+
+	// Open 2nd connection for the test user.
+	testUserDb2, err := gosql.Open("postgres", testUserURL.String())
+	require.NoError(t, err)
+	defer testUserDb2.Close()
+	testRunner2 := sqlutils.MakeSQLRunner(testUserDb2)
+
+	// Run a query on the new connection. The new connection will cause the reduced audit config to be re-computed.
+	// The user now has a corresponding audit setting. We use a new query here to differentiate.
+	testRunner2.Exec(t, `GRANT SELECT ON TABLE u TO root`)
+
+	log.Flush()
+
+	entries, err = log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`GRANT SELECT ON TABLE ‹u› TO root`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Expect the number of entries to be 1.
+	if len(entries) != 1 {
+		t.Fatal(errors.Newf("unexpected number of entries found (not 1)"))
+	}
+}
+
 func setupQueries(t *testing.T, rootRunner *sqlutils.SQLRunner) {
 	// Dummy table/user used by tests.
 	rootRunner.Exec(t, `CREATE TABLE u(x int)`)
