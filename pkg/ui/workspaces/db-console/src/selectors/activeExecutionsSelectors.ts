@@ -33,6 +33,10 @@ export const selectClusterLocksMaxApiSizeReached = (
   return !!state.cachedData.clusterLocks?.data?.maxSizeReached;
 };
 
+export const selectIsAutoRefreshEnabled = (state: AdminUIState): boolean => {
+  return state.localSettings["isAutoRefreshEnabled/activeExecutions"];
+};
+
 export const selectActiveExecutions = createSelector(
   selectSessions,
   selectClusterLocks,

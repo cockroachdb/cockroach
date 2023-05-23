@@ -1,0 +1,2783 @@
+exec ${PAGER:-/usr/bin/less} "$0" || exit 1
+Executing tests from //pkg/ui/workspaces/cluster-ui:eslint
+-----------------------------------------------------------------------------
+error: antd component 'Switch' imported without corresponding style 'antd/lib/switch/style' (@cockroachlabs/crdb/require-antd-style-import) at pkg/ui/workspaces/cluster-ui/src/activeExecutions/refreshControl/refreshControl.tsx:11:10:
+   9 | // licenses/APL.txt.
+  10 |
+> 11 | import { Switch } from "antd";
+     |          ^
+  12 | import React from "react";
+  13 | import classNames from "classnames/bind";
+  14 | import styles from "./refreshControl.module.scss";
+
+
+error: Delete `·` (prettier/prettier) at pkg/ui/workspaces/cluster-ui/src/activeExecutions/refreshControl/refreshControl.tsx:15:20:
+  13 | import classNames from "classnames/bind";
+  14 | import styles from "./refreshControl.module.scss";
+> 15 | import RefreshIcon  from "src/icon/refreshIcon";
+     |                    ^
+  16 | import { Timestamp } from "src/timestamp";
+  17 | import { Moment } from "moment-timezone";
+  18 |
+
+
+error: Replace `></Timestamp>·` with `⏎··········></Timestamp>` (prettier/prettier) at pkg/ui/workspaces/cluster-ui/src/activeExecutions/refreshControl/refreshControl.tsx:57:46:
+  55 |           <Timestamp
+  56 |             time={lastRefreshTimestamp}
+> 57 |             format={REFRESH_TIMESTAMP_FORMAT}></Timestamp> 
+     |                                              ^
+  58 |           ) : (
+  59 |             "N/A"
+  60 |           )
+
+
+error: Replace `··········` with `········` (prettier/prettier) at pkg/ui/workspaces/cluster-ui/src/activeExecutions/refreshControl/refreshControl.tsx:58:1:
+  56 |             time={lastRefreshTimestamp}
+  57 |             format={REFRESH_TIMESTAMP_FORMAT}></Timestamp> 
+> 58 |           ) : (
+     | ^
+  59 |             "N/A"
+  60 |           )
+  61 |         }
+
+
+error: Replace `············` with `··········` (prettier/prettier) at pkg/ui/workspaces/cluster-ui/src/activeExecutions/refreshControl/refreshControl.tsx:59:1:
+  57 |             format={REFRESH_TIMESTAMP_FORMAT}></Timestamp> 
+  58 |           ) : (
+> 59 |             "N/A"
+     | ^
+  60 |           )
+  61 |         }
+  62 |             
+
+
+error: Replace `··)⏎········}⏎············` with `)}` (prettier/prettier) at pkg/ui/workspaces/cluster-ui/src/activeExecutions/refreshControl/refreshControl.tsx:60:9:
+  58 |           ) : (
+  59 |             "N/A"
+> 60 |           )
+     |         ^
+  61 |         }
+  62 |             
+  63 |       </span>
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/api/indexDetailsApi.ts:96:15:
+  94 |   SqlApiResponse<AggregateStatistics[]>
+  95 | > {
+> 96 |   const args: any = [`"${table}@${index}"`];
+     |               ^
+  97 |   let whereClause = "";
+  98 |   if (start) {
+  99 |     whereClause = `${whereClause} AND aggregated_ts >= '${start.toISOString()}'`;
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/api/safesql.spec.ts:85:13:
+  83 |       expected: string;
+  84 |       format: string;
+> 85 |       args: any[];
+     |             ^
+  86 |     }[] = [
+  87 |       { format: `hello %s`, args: null, expected: `invalid placeholder: %s` },
+  88 |       { format: `hello %`, args: null, expected: `invalid placeholder: %` },
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/api/safesql.ts:17:27:
+  15 | }
+  16 |
+> 17 | function isSQLStringer(s: any): s is SQLStringer {
+     |                           ^
+  18 |   // Check that s is not null/undefined (truthy) and has SQLString implemented.
+  19 |   return s && (s as SQLStringer).SQLString !== undefined;
+  20 | }
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/api/safesql.ts:160:47:
+  158 | // - if args[i] is an integer type, it is formatted as %d
+  159 | // - otherwise, panic with an error
+> 160 | export function Format(format: string, args?: any[]): string {
+      |                                               ^
+  161 |   let resultString = "";
+  162 |   // The loop structure here is adapted from the stdlib fmt.Sprintf code, but
+  163 |   // heavily simplified because we don't have to support different verbs, only
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/api/safesql.ts:238:33:
+  236 | }
+  237 |
+> 238 | function writeFormattedArg(arg: any, b: string): [string, string] {
+      |                                 ^
+  239 |   if (isSQLStringer(arg)) {
+  240 |     b += arg.SQLString();
+  241 |     return [b, ""];
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/api/statementDiagnosticsApi.ts:87:15:
+  85 |   expiresAfterSeconds,
+  86 | }: InsertStmtDiagnosticRequest): Promise<InsertStmtDiagnosticResponse> {
+> 87 |   const args: any = [stmtFingerprint];
+     |               ^
+  88 |
+  89 |   if (samplingProbability) {
+  90 |     args.push(samplingProbability);
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/api/tracezApi.ts:65:12:
+  63 |     `${API_PREFIX}/trace_snapshots?remote_node_id=${nodeID}`,
+  64 |     cockroach.server.serverpb.TakeTracingSnapshotRequest,
+> 65 |     req as any,
+     |            ^
+  66 |   );
+  67 | }
+  68 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/api/tracezApi.ts:98:15:
+   96 |     `${API_PREFIX}/traces?remote_node_id=${req.nodeID}`,
+   97 |     cockroach.server.serverpb.GetTraceRequest,
+>  98 |     rpcReq as any,
+      |               ^
+   99 |   );
+  100 | }
+  101 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/api/tracezApi.ts:116:12:
+  114 |     `${API_PREFIX}/settracerecordingtype?remote_node_id=${nodeID}`,
+  115 |     cockroach.server.serverpb.SetTraceRecordingTypeRequest,
+> 116 |     req as any,
+      |            ^
+  117 |   );
+  118 | }
+  119 |
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/barCharts/barChartFactory.tsx:31:8:
+  29 | }
+  30 |
+> 31 | export function barChartFactory<T>(
+     |        ^
+  32 |   type: "grey" | "red",
+  33 |   accessors: {
+  34 |     name: string;
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/barCharts/barCharts.tsx:144:8:
+  142 | export const retryBarChart = barChartFactory("red", retryBars, approximify);
+  143 |
+> 144 | export function workloadPctBarChart(
+      |        ^
+  145 |   statements: AggregateStatistics[],
+  146 |   defaultBarChartOptions: BarChartOptions<any>,
+  147 |   totalWorkload: number,
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/barCharts/barCharts.tsx:146:43:
+  144 | export function workloadPctBarChart(
+  145 |   statements: AggregateStatistics[],
+> 146 |   defaultBarChartOptions: BarChartOptions<any>,
+      |                                           ^
+  147 |   totalWorkload: number,
+  148 | ) {
+  149 |   return barChartFactory(
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/barCharts/latencyBreakdown.tsx:26:8:
+  24 | const cx = classNames.bind(styles);
+  25 |
+> 26 | export function latencyBreakdown(s: StatementStatistics) {
+     |        ^
+  27 |   const parseMean = s.stats.parse_lat.mean;
+  28 |   const parseSd = stdDevLong(s.stats.parse_lat, s.stats.count);
+  29 |   const planMean = s.stats.plan_lat.mean;
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/barCharts/rowsBreakdown.ts:19:8:
+  17 |   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+  18 |
+> 19 | export function rowsBreakdown(s: StatementStatistics) {
+     |        ^
+  20 |   const mean = s.stats.num_rows.mean;
+  21 |   const sd = stdDevLong(s.stats.num_rows, s.stats.count);
+  22 |   const domain = normalizeClosedDomain([0, mean + sd]);
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/barCharts/utils.ts:20:22:
+  18 |   protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
+  19 |
+> 20 | export const clamp = (i: number) => (i < 0 ? 0 : i);
+     |                      ^
+  21 |
+  22 | export const formatTwoPlaces = d3Format(".2f");
+  23 |
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/barCharts/utils.ts:24:8:
+  22 | export const formatTwoPlaces = d3Format(".2f");
+  23 |
+> 24 | export function bar(
+     |        ^
+  25 |   name: string,
+  26 |   value: (d: StatementStatistics | Transaction | TransactionInfo) => number,
+  27 | ) {
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:54:32:
+  52 |  * @constructor
+  53 |  */
+> 54 | const CheckboxOption = (props: any) => {
+     |                                ^
+  55 |   return (
+  56 |     <components.Option {...props}>
+  57 |       <input
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:71:25:
+  69 | // react-select component and add changes
+  70 | const customStyles = {
+> 71 |   container: (provided: any) => ({
+     |                         ^
+  72 |     ...provided,
+  73 |     border: "none",
+  74 |     height: "fit-content",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:76:23:
+  74 |     height: "fit-content",
+  75 |   }),
+> 76 |   control: (provided: any) => ({
+     |                       ^
+  77 |     ...provided,
+  78 |     display: "none",
+  79 |   }),
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:80:20:
+  78 |     display: "none",
+  79 |   }),
+> 80 |   menu: (provided: any) => ({
+     |                    ^
+  81 |     ...provided,
+  82 |     position: "relative",
+  83 |     boxShadow: "none",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:85:24:
+  83 |     boxShadow: "none",
+  84 |   }),
+> 85 |   menuList: (provided: any) => ({
+     |                        ^
+  86 |     ...provided,
+  87 |     maxHeight: "310px",
+  88 |   }),
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:89:22:
+  87 |     maxHeight: "310px",
+  88 |   }),
+> 89 |   option: (provided: any, state: any) => ({
+     |                      ^
+  90 |     ...provided,
+  91 |     backgroundColor: "white",
+  92 |     color: "#475872",
+
+
+warning: 'state' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:89:27:
+  87 |     maxHeight: "310px",
+  88 |   }),
+> 89 |   option: (provided: any, state: any) => ({
+     |                           ^
+  90 |     ...provided,
+  91 |     backgroundColor: "white",
+  92 |     color: "#475872",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:89:34:
+  87 |     maxHeight: "310px",
+  88 |   }),
+> 89 |   option: (provided: any, state: any) => ({
+     |                                  ^
+  90 |     ...provided,
+  91 |     backgroundColor: "white",
+  92 |     color: "#475872",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:96:26:
+  94 |     padding: "4px 10px",
+  95 |   }),
+> 96 |   multiValue: (provided: any) => ({
+     |                          ^
+  97 |     ...provided,
+  98 |     backgroundColor: "#E7ECF3",
+  99 |     borderRadius: "3px",
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:137:16:
+  135 |   }
+  136 |
+> 137 |   toggleOpen = () => {
+      |                ^
+  138 |     this.setState({
+  139 |       hide: !this.state.hide,
+  140 |     });
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:142:18:
+  140 |     });
+  141 |   };
+> 142 |   outsideClick = () => {
+      |                  ^
+  143 |     this.setState({ hide: true });
+  144 |   };
+  145 |   insideClick = (event: any) => {
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:145:17:
+  143 |     this.setState({ hide: true });
+  144 |   };
+> 145 |   insideClick = (event: any) => {
+      |                 ^
+  146 |     event.stopPropagation();
+  147 |   };
+  148 |
+
+
+warning: Argument 'event' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:145:18:
+  143 |     this.setState({ hide: true });
+  144 |   };
+> 145 |   insideClick = (event: any) => {
+      |                  ^
+  146 |     event.stopPropagation();
+  147 |   };
+  148 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/columnsSelector/columnsSelector.tsx:145:25:
+  143 |     this.setState({ hide: true });
+  144 |   };
+> 145 |   insideClick = (event: any) => {
+      |                         ^
+  146 |     event.stopPropagation();
+  147 |   };
+  148 |
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:17:14:
+  15 |
+  16 | export const selectCustomStyles = {
+> 17 |   container: (provided: any) => ({
+     |              ^
+  18 |     ...provided,
+  19 |     border: "none",
+  20 |   }),
+
+
+warning: Argument 'provided' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:17:15:
+  15 |
+  16 | export const selectCustomStyles = {
+> 17 |   container: (provided: any) => ({
+     |               ^
+  18 |     ...provided,
+  19 |     border: "none",
+  20 |   }),
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:17:25:
+  15 |
+  16 | export const selectCustomStyles = {
+> 17 |   container: (provided: any) => ({
+     |                         ^
+  18 |     ...provided,
+  19 |     border: "none",
+  20 |   }),
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:21:11:
+  19 |     border: "none",
+  20 |   }),
+> 21 |   option: (provided: any, state: any) => ({
+     |           ^
+  22 |     ...provided,
+  23 |     backgroundColor: state.isSelected ? "#DEEBFF" : provided.backgroundColor,
+  24 |     color: "#394455",
+
+
+warning: Argument 'provided' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:21:12:
+  19 |     border: "none",
+  20 |   }),
+> 21 |   option: (provided: any, state: any) => ({
+     |            ^
+  22 |     ...provided,
+  23 |     backgroundColor: state.isSelected ? "#DEEBFF" : provided.backgroundColor,
+  24 |     color: "#394455",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:21:22:
+  19 |     border: "none",
+  20 |   }),
+> 21 |   option: (provided: any, state: any) => ({
+     |                      ^
+  22 |     ...provided,
+  23 |     backgroundColor: state.isSelected ? "#DEEBFF" : provided.backgroundColor,
+  24 |     color: "#394455",
+
+
+warning: Argument 'state' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:21:27:
+  19 |     border: "none",
+  20 |   }),
+> 21 |   option: (provided: any, state: any) => ({
+     |                           ^
+  22 |     ...provided,
+  23 |     backgroundColor: state.isSelected ? "#DEEBFF" : provided.backgroundColor,
+  24 |     color: "#394455",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:21:34:
+  19 |     border: "none",
+  20 |   }),
+> 21 |   option: (provided: any, state: any) => ({
+     |                                  ^
+  22 |     ...provided,
+  23 |     backgroundColor: state.isSelected ? "#DEEBFF" : provided.backgroundColor,
+  24 |     color: "#394455",
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:26:12:
+  24 |     color: "#394455",
+  25 |   }),
+> 26 |   control: (provided: any) => ({
+     |            ^
+  27 |     ...provided,
+  28 |     width: "100%",
+  29 |     borderColor: "#C0C6D9",
+
+
+warning: Argument 'provided' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:26:13:
+  24 |     color: "#394455",
+  25 |   }),
+> 26 |   control: (provided: any) => ({
+     |             ^
+  27 |     ...provided,
+  28 |     width: "100%",
+  29 |     borderColor: "#C0C6D9",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:26:23:
+  24 |     color: "#394455",
+  25 |   }),
+> 26 |   control: (provided: any) => ({
+     |                       ^
+  27 |     ...provided,
+  28 |     width: "100%",
+  29 |     borderColor: "#C0C6D9",
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:31:22:
+  29 |     borderColor: "#C0C6D9",
+  30 |   }),
+> 31 |   dropdownIndicator: (provided: any) => ({
+     |                      ^
+  32 |     ...provided,
+  33 |     color: "#C0C6D9",
+  34 |   }),
+
+
+warning: Argument 'provided' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:31:23:
+  29 |     borderColor: "#C0C6D9",
+  30 |   }),
+> 31 |   dropdownIndicator: (provided: any) => ({
+     |                       ^
+  32 |     ...provided,
+  33 |     color: "#C0C6D9",
+  34 |   }),
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:31:33:
+  29 |     borderColor: "#C0C6D9",
+  30 |   }),
+> 31 |   dropdownIndicator: (provided: any) => ({
+     |                                 ^
+  32 |     ...provided,
+  33 |     color: "#C0C6D9",
+  34 |   }),
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:35:16:
+  33 |     color: "#C0C6D9",
+  34 |   }),
+> 35 |   singleValue: (provided: any) => ({
+     |                ^
+  36 |     ...provided,
+  37 |     color: "#475872",
+  38 |     fontFamily: "Lato-Regular",
+
+
+warning: Argument 'provided' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:35:17:
+  33 |     color: "#C0C6D9",
+  34 |   }),
+> 35 |   singleValue: (provided: any) => ({
+     |                 ^
+  36 |     ...provided,
+  37 |     color: "#475872",
+  38 |     fontFamily: "Lato-Regular",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:35:27:
+  33 |     color: "#C0C6D9",
+  34 |   }),
+> 35 |   singleValue: (provided: any) => ({
+     |                           ^
+  36 |     ...provided,
+  37 |     color: "#475872",
+  38 |     fontFamily: "Lato-Regular",
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:43:23:
+  41 |     lineHeight: 1.5,
+  42 |   }),
+> 43 |   indicatorSeparator: (provided: any) => ({
+     |                       ^
+  44 |     ...provided,
+  45 |   }),
+  46 | };
+
+
+warning: Argument 'provided' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:43:24:
+  41 |     lineHeight: 1.5,
+  42 |   }),
+> 43 |   indicatorSeparator: (provided: any) => ({
+     |                        ^
+  44 |     ...provided,
+  45 |   }),
+  46 | };
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/common/index.tsx:43:34:
+  41 |     lineHeight: 1.5,
+  42 |   }),
+> 43 |   indicatorSeparator: (provided: any) => ({
+     |                                  ^
+  44 |     ...provided,
+  45 |   }),
+  46 | };
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/contexts/timezoneContext.tsx:26:10:
+  24 |   Component: React.ComponentType<T & WithTimezoneProps>,
+  25 | ) {
+> 26 |   return (props: React.PropsWithChildren<T>) => {
+     |          ^
+  27 |     // This lambda is a React function component.
+  28 |     // It is safe to call a hook here.
+  29 |     // eslint-disable-next-line
+
+
+warning: 'useContext' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/databaseDetailsPage/databaseDetailsPage.tsx:11:17:
+   9 | // licenses/APL.txt.
+  10 |
+> 11 | import React, { useContext } from "react";
+     |                 ^
+  12 | import { Link, RouteComponentProps } from "react-router-dom";
+  13 | import { Tooltip } from "antd";
+  14 | import "antd/lib/tooltip/style";
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/declaration.d.ts:20:38:
+  18 | declare module "*.svg";
+  19 |
+> 20 | type ConstructorType = new (...args: any) => any;
+     |                                      ^
+  21 |
+  22 | type FirstConstructorParameter<P extends ConstructorType> =
+  23 |   ConstructorParameters<P>[0];
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/declaration.d.ts:20:46:
+  18 | declare module "*.svg";
+  19 |
+> 20 | type ConstructorType = new (...args: any) => any;
+     |                                              ^
+  21 |
+  22 | type FirstConstructorParameter<P extends ConstructorType> =
+  23 |   ConstructorParameters<P>[0];
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/highlightedText/highlightedText.tsx:73:8:
+  71 | }
+  72 |
+> 73 | export function getHighlightedText(
+     |        ^
+  74 |   text: string,
+  75 |   highlight: string,
+  76 |   hasDarkBkg: boolean,
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/icon/refreshIcon.tsx:19:21:
+  17 | }
+  18 |
+> 19 | const RefreshIcon = ({ className, onClick, color }: IconProps) => (
+     |                     ^
+  20 |   <svg
+  21 |     className={className}
+  22 |     width="18"
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/icon/stackIcon.tsx:17:26:
+  15 | }
+  16 |
+> 17 | export const StackIcon = ({ className, ...props }: IconProps) => (
+     |                          ^
+  18 |   <svg viewBox="0 0 16 16" className={className} {...props}>
+  19 |     <path
+  20 |       fillRule="evenodd"
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/indexDetailsPage/indexDetailsConnected.ts:71:53:
+  69 | });
+  70 |
+> 71 | export const ConnectedIndexDetailsPage = withRouter<any, any>(
+     |                                                     ^
+  72 |   connect(mapStateToProps, mapDispatchToProps)(IndexDetailsPage),
+  73 | );
+  74 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/indexDetailsPage/indexDetailsConnected.ts:71:58:
+  69 | });
+  70 |
+> 71 | export const ConnectedIndexDetailsPage = withRouter<any, any>(
+     |                                                          ^
+  72 |   connect(mapStateToProps, mapDispatchToProps)(IndexDetailsPage),
+  73 | );
+  74 |
+
+
+warning: 'Timezone' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/insights/workloadInsightDetails/insightDetailsTables.tsx:22:21:
+  20 | } from "../workloadInsights/util";
+  21 | import { TimeScale } from "../../timeScaleDropdown";
+> 22 | import { Timestamp, Timezone } from "../../timestamp";
+     |                     ^
+  23 |
+  24 | interface InsightDetailsTableProps {
+  25 |   data: ContentionEvent[];
+
+
+warning: 'setTimeScale' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/insights/workloadInsightDetails/statementInsightDetails.tsx:79:3:
+  77 |   timeScale,
+  78 |   hasAdminRole,
+> 79 |   setTimeScale,
+     |   ^
+  80 |   refreshUserSQLRoles,
+  81 | }) => {
+  82 |   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
+
+
+warning: 'TimeScale' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/insights/workloadInsightDetails/statementInsightDetailsOverviewTab.tsx:36:10:
+  34 |   TransactionDetailsLink,
+  35 | } from "../workloadInsights/util";
+> 36 | import { TimeScale } from "../../timeScaleDropdown";
+     |          ^
+  37 | import { getStmtInsightRecommendations } from "../utils";
+  38 | import { ContentionStatementDetailsTable } from "./insightDetailsTables";
+  39 | import { WaitTimeInsightsLabels } from "../../detailsPanels/waitTimeInsightsPanel";
+
+
+warning: 'TimeScale' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/insights/workloadInsights/statementInsights/statementInsightsTable.tsx:39:10:
+  37 | import classNames from "classnames/bind";
+  38 | import styles from "../util/workloadInsights.module.scss";
+> 39 | import { TimeScale } from "../../../timeScaleDropdown";
+     |          ^
+  40 | import { Badge } from "src/badge";
+  41 | import { Timestamp, Timezone } from "../../../timestamp";
+  42 |
+
+
+warning: 'Timezone' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/insights/workloadInsights/statementInsights/statementInsightsTable.tsx:41:21:
+  39 | import { TimeScale } from "../../../timeScaleDropdown";
+  40 | import { Badge } from "src/badge";
+> 41 | import { Timestamp, Timezone } from "../../../timestamp";
+     |                     ^
+  42 |
+  43 | const cx = classNames.bind(styles);
+  44 |
+
+
+warning: 'isTenant' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/insights/workloadInsights/statementInsights/statementInsightsView.tsx:115:3:
+  113 |   dropDownSelect,
+  114 |   maxSizeApiReached,
+> 115 |   isTenant,
+      |   ^
+  116 | }: StatementInsightsViewProps) => {
+  117 |   const [pagination, setPagination] = useState<ISortedTablePagination>({
+  118 |     current: 1,
+
+
+warning: 'execType' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/insights/workloadInsights/util/insightsColumns.tsx:169:16:
+  167 |     );
+  168 |   },
+> 169 |   schemaName: (execType: InsightExecEnum) => {
+      |                ^
+  170 |     return makeToolTip(<p>The name of the contended schema.</p>, "schemaName");
+  171 |   },
+  172 |   databaseName: (execType: InsightExecEnum) => {
+
+
+warning: 'execType' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/insights/workloadInsights/util/insightsColumns.tsx:172:18:
+  170 |     return makeToolTip(<p>The name of the contended schema.</p>, "schemaName");
+  171 |   },
+> 172 |   databaseName: (execType: InsightExecEnum) => {
+      |                  ^
+  173 |     return makeToolTip(
+  174 |       <p>The name of the contended database.</p>,
+  175 |       "databaseName",
+
+
+warning: 'execType' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/insights/workloadInsights/util/insightsColumns.tsx:178:15:
+  176 |     );
+  177 |   },
+> 178 |   tableName: (execType: InsightExecEnum) => {
+      |               ^
+  179 |     return makeToolTip(<p>The name of the contended table.</p>, "tableName");
+  180 |   },
+  181 |   indexName: (execType: InsightExecEnum) => {
+
+
+warning: 'execType' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/insights/workloadInsights/util/insightsColumns.tsx:181:15:
+  179 |     return makeToolTip(<p>The name of the contended table.</p>, "tableName");
+  180 |   },
+> 181 |   indexName: (execType: InsightExecEnum) => {
+      |               ^
+  182 |     return makeToolTip(<p>The name of the contended index.</p>, "indexName");
+  183 |   },
+  184 |   applicationName: (execType: InsightExecEnum) => {
+
+
+warning: 'prettyDOM' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/jobs/jobsPage/jobsPage.spec.tsx:16:10:
+  14 | import { formatDuration } from "../util/duration";
+  15 | import { allJobsFixture, earliestRetainedTime } from "./jobsPage.fixture";
+> 16 | import { prettyDOM, prettyFormat, render } from "@testing-library/react";
+     |          ^
+  17 | import React from "react";
+  18 | import { MemoryRouter } from "react-router-dom";
+  19 | import * as H from "history";
+
+
+warning: 'prettyFormat' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/jobs/jobsPage/jobsPage.spec.tsx:16:21:
+  14 | import { formatDuration } from "../util/duration";
+  15 | import { allJobsFixture, earliestRetainedTime } from "./jobsPage.fixture";
+> 16 | import { prettyDOM, prettyFormat, render } from "@testing-library/react";
+     |                     ^
+  17 | import React from "react";
+  18 | import { MemoryRouter } from "react-router-dom";
+  19 | import * as H from "history";
+
+
+warning: 'CoordinatedUniversalTime' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/jobs/jobsPage/jobsPage.spec.tsx:22:10:
+  20 |
+  21 | import Job = cockroach.server.serverpb.IJobResponse;
+> 22 | import { CoordinatedUniversalTime, TimezoneContext } from "src/contexts";
+     |          ^
+  23 |
+  24 | const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
+  25 |   const history = H.createHashHistory();
+
+
+warning: 'TimezoneContext' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/jobs/jobsPage/jobsPage.spec.tsx:22:36:
+  20 |
+  21 | import Job = cockroach.server.serverpb.IJobResponse;
+> 22 | import { CoordinatedUniversalTime, TimezoneContext } from "src/contexts";
+     |                                    ^
+  23 |
+  24 | const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
+  25 |   const history = H.createHashHistory();
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/jobs/jobsPage/jobsPage.tsx:244:32:
+  242 |   };
+  243 |
+> 244 |   formatJobsRetentionMessage = (earliestRetainedTime: ITimestamp) => {
+      |                                ^
+  245 |     return (
+  246 |       <>
+  247 |         Since{" "}
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/jobs/jobsPage/jobsTable.tsx:51:32:
+  49 | }
+  50 |
+> 51 | export const jobsColumnLabels: any = {
+     |                                ^
+  52 |   description: "Description",
+  53 |   status: "Status",
+  54 |   jobId: "Job ID",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/loading/loading.tsx:30:18:
+  28 |   className?: string;
+  29 |   image?: string;
+> 30 |   render?: () => any;
+     |                  ^
+  31 |   errorClassName?: string;
+  32 |   loadingClassName?: string;
+  33 |   renderError?: () => React.ReactElement;
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:27:11:
+  25 |   field: string;
+  26 |   options: SelectOption[];
+> 27 |   parent: any;
+     |           ^
+  28 |   placeholder: string;
+  29 |   value?: SelectOption[];
+  30 | }
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:39:31:
+  37 |  * @constructor
+  38 |  */
+> 39 | export const CheckboxOption = (props: any) => {
+     |                               ^
+  40 |   return (
+  41 |     <components.Option {...props}>
+  42 |       <input
+
+
+warning: Argument 'props' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:39:32:
+  37 |  * @constructor
+  38 |  */
+> 39 | export const CheckboxOption = (props: any) => {
+     |                                ^
+  40 |   return (
+  41 |     <components.Option {...props}>
+  42 |       <input
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:39:39:
+  37 |  * @constructor
+  38 |  */
+> 39 | export const CheckboxOption = (props: any) => {
+     |                                       ^
+  40 |   return (
+  41 |     <components.Option {...props}>
+  42 |       <input
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:56:25:
+  54 | // react-select component and add changes
+  55 | const customStyles = {
+> 56 |   container: (provided: any) => ({
+     |                         ^
+  57 |     ...provided,
+  58 |     border: "none",
+  59 |     height: "fit-content",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:61:33:
+  59 |     height: "fit-content",
+  60 |   }),
+> 61 |   dropdownIndicator: (provided: any) => ({
+     |                                 ^
+  62 |     ...provided,
+  63 |     color: "#C0C6D9",
+  64 |   }),
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:65:22:
+  63 |     color: "#C0C6D9",
+  64 |   }),
+> 65 |   option: (provided: any, state: any) => ({
+     |                      ^
+  66 |     ...provided,
+  67 |     backgroundColor: state.isSelected ? "#DEEBFF" : provided.backgroundColor,
+  68 |     color: "#394455",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:65:34:
+  63 |     color: "#C0C6D9",
+  64 |   }),
+> 65 |   option: (provided: any, state: any) => ({
+     |                                  ^
+  66 |     ...provided,
+  67 |     backgroundColor: state.isSelected ? "#DEEBFF" : provided.backgroundColor,
+  68 |     color: "#394455",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:70:23:
+  68 |     color: "#394455",
+  69 |   }),
+> 70 |   control: (provided: any) => ({
+     |                       ^
+  71 |     ...provided,
+  72 |     width: "100%",
+  73 |     borderColor: "#C0C6D9",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:75:26:
+  73 |     borderColor: "#C0C6D9",
+  74 |   }),
+> 75 |   multiValue: (provided: any) => ({
+     |                          ^
+  76 |     ...provided,
+  77 |     backgroundColor: "#E7ECF3",
+  78 |     borderRadius: "3px",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:80:27:
+  78 |     borderRadius: "3px",
+  79 |   }),
+> 80 |   placeholder: (provided: any) => ({
+     |                           ^
+  81 |     ...provided,
+  82 |     color: "#475872",
+  83 |   }),
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:99:36:
+   97 |  * @constructor
+   98 |  */
+>  99 | export const MultiSelectCheckbox = (props: MultiSelectCheckboxProps) => {
+      |                                    ^
+  100 |   const handleChange = (
+  101 |     selectedOptions: OptionsType<SelectOption>,
+  102 |     field: string,
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/multiSelectCheckbox/multiSelectCheckbox.tsx:103:13:
+  101 |     selectedOptions: OptionsType<SelectOption>,
+  102 |     field: string,
+> 103 |     parent: any,
+      |             ^
+  104 |   ) => {
+  105 |     const selected =
+  106 |       selectedOptions
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/outsideEventHandler/index.tsx:20:13:
+  18 | export interface OutsideEventHandlerProps {
+  19 |   onOutsideClick: () => void;
+> 20 |   children: any;
+     |             ^
+  21 |   mountNodePosition?: "fixed" | "initial";
+  22 |   ignoreClickOnRefs?: React.RefObject<HTMLDivElement>[];
+  23 | }
+
+
+warning: Argument 'props' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/outsideEventHandler/index.tsx:28:15:
+  26 |   nodeRef: React.RefObject<HTMLDivElement>;
+  27 |
+> 28 |   constructor(props: any) {
+     |               ^
+  29 |     super(props);
+  30 |     this.nodeRef = React.createRef();
+  31 |   }
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/outsideEventHandler/index.tsx:28:22:
+  26 |   nodeRef: React.RefObject<HTMLDivElement>;
+  27 |
+> 28 |   constructor(props: any) {
+     |                      ^
+  29 |     super(props);
+  30 |     this.nodeRef = React.createRef();
+  31 |   }
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/outsideEventHandler/index.tsx:41:13:
+  39 |   }
+  40 |
+> 41 |   onClick = (event: any) => {
+     |             ^
+  42 |     const { onOutsideClick, ignoreClickOnRefs = [] } = this.props;
+  43 |     const isChildEl =
+  44 |       this.nodeRef.current && this.nodeRef.current.contains(event.target);
+
+
+warning: Argument 'event' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/outsideEventHandler/index.tsx:41:14:
+  39 |   }
+  40 |
+> 41 |   onClick = (event: any) => {
+     |              ^
+  42 |     const { onOutsideClick, ignoreClickOnRefs = [] } = this.props;
+  43 |     const isChildEl =
+  44 |       this.nodeRef.current && this.nodeRef.current.contains(event.target);
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/outsideEventHandler/index.tsx:41:21:
+  39 |   }
+  40 |
+> 41 |   onClick = (event: any) => {
+     |                     ^
+  42 |     const { onOutsideClick, ignoreClickOnRefs = [] } = this.props;
+  43 |     const isChildEl =
+  44 |       this.nodeRef.current && this.nodeRef.current.contains(event.target);
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/queryFilter/filter.tsx:425:46:
+  423 |     const dropdownArea = hide ? hidden : dropdown;
+  424 |     const customStylesSmall = { ...selectCustomStyles };
+> 425 |     customStylesSmall.container = (provided: any) => ({
+      |                                              ^
+  426 |       ...provided,
+  427 |       width: "141px",
+  428 |       border: "none",
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/schedules/schedulesPage/scheduleTable.tsx:218:18:
+  216 |   }
+  217 |
+> 218 |   onChangePage = (current: number) => {
+      |                  ^
+  219 |     const { pagination } = this.state;
+  220 |     this.setState({ pagination: { ...pagination, current } });
+  221 |   };
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/schedules/schedulesPage/scheduleTable.tsx:223:22:
+  221 |   };
+  222 |
+> 223 |   renderEmptyState = () => {
+      |                      ^
+  224 |     const { isUsedFilter, schedules } = this.props;
+  225 |     const hasData = schedules?.length > 0;
+  226 |
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/schedules/schedulesPage/scheduleTable.tsx:249:3:
+  247 |   };
+  248 |
+> 249 |   render() {
+      |   ^
+  250 |     const schedules = this.props.schedules;
+  251 |     const { pagination } = this.state;
+  252 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/schedules/schedulesPage/scheduleTable.tsx:297:42:
+  295 |       )
+  296 |     ) {
+> 297 |       this.setState((prevState: Readonly<any>) => {
+      |                                          ^
+  298 |         return {
+  299 |           pagination: {
+  300 |             ...prevState.pagination,
+
+
+warning: 'protos' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/schedules/schedulesPage/schedulesPage.fixture.tsx:10:13:
+   8 | // by the Apache License, Version 2.0, included in the file
+   9 | // licenses/APL.txt.
+> 10 | import * as protos from "@cockroachlabs/crdb-protobuf-client";
+     |             ^
+  11 | import { createMemoryHistory } from "history";
+  12 | import Long from "long";
+  13 | import moment from "moment-timezone";
+
+
+warning: 'DropdownOption' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/schedules/schedulesPage/schedulesPage.tsx:17:20:
+  15 | import { Schedules } from "src/api/schedulesApi";
+  16 | import { Delayed } from "src/delayed";
+> 17 | import { Dropdown, DropdownOption } from "src/dropdown";
+     |                    ^
+  18 | import { Loading } from "src/loading";
+  19 | import { PageConfig, PageConfigItem } from "src/pageConfig";
+  20 | import { SortSetting } from "src/sortedtable";
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/searchCriteria/searchCriteria.tsx:54:48:
+  52 |   } = props;
+  53 |   const customStyles = { ...selectCustomStyles };
+> 54 |   customStyles.indicatorSeparator = (provided: any) => ({
+     |                                                ^
+  55 |     ...provided,
+  56 |     display: "none",
+  57 |   });
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/searchCriteria/searchCriteria.tsx:60:42:
+  58 |
+  59 |   const customStylesTop = { ...customStyles };
+> 60 |   customStylesTop.container = (provided: any) => ({
+     |                                          ^
+  61 |     ...provided,
+  62 |     width: "80px",
+  63 |     border: "none",
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/searchCriteria/searchCriteria.tsx:68:41:
+  66 |
+  67 |   const customStylesBy = { ...customStyles };
+> 68 |   customStylesBy.container = (provided: any) => ({
+     |                                         ^
+  69 |     ...provided,
+  70 |     width: "170px",
+  71 |     border: "none",
+
+
+warning: 'ActiveTransaction' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/selectors/activeExecutions.selectors.ts:14:3:
+  12 | import {
+  13 |   ActiveExecutions,
+> 14 |   ActiveTransaction,
+     |   ^
+  15 |   ExecutionStatus,
+  16 | } from "src/activeExecutions/types";
+  17 | import { AppState } from "src/store";
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/selectors/activeExecutions.selectors.ts:35:52:
+  33 |   state.adminUI?.clusterLocks?.data?.results;
+  34 |
+> 35 | export const selectClusterLocksMaxApiSizeReached = (state: AppState) =>
+     |                                                    ^
+  36 |   !!state.adminUI?.clusterLocks?.data?.maxSizeReached;
+  37 |
+  38 | export const selectActiveExecutions = createSelector(
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/selectors/activeExecutions.selectors.ts:49:38:
+  47 | );
+  48 |
+> 49 | export const selectExecutionStatus = () => {
+     |                                      ^
+  50 |   const execStatuses: string[] = [];
+  51 |   for (const execStatus in ExecutionStatus) {
+  52 |     execStatuses.push(execStatus);
+
+
+warning: 'unset' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/selectors/common.ts:18:3:
+  16 |   statementAttr,
+  17 |   txnFingerprintIdAttr,
+> 18 |   unset,
+     |   ^
+  19 |   ExecutionStatistics,
+  20 |   queryByName,
+  21 |   appAttr,
+
+
+warning: 'ExecutionStatistics' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/selectors/common.ts:19:3:
+  17 |   txnFingerprintIdAttr,
+  18 |   unset,
+> 19 |   ExecutionStatistics,
+     |   ^
+  20 |   queryByName,
+  21 |   appAttr,
+  22 |   flattenStatementStats,
+
+
+warning: 'queryByName' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/selectors/common.ts:20:3:
+  18 |   unset,
+  19 |   ExecutionStatistics,
+> 20 |   queryByName,
+     |   ^
+  21 |   appAttr,
+  22 |   flattenStatementStats,
+  23 |   FixFingerprintHexValue,
+
+
+warning: 'appAttr' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/selectors/common.ts:21:3:
+  19 |   ExecutionStatistics,
+  20 |   queryByName,
+> 21 |   appAttr,
+     |   ^
+  22 |   flattenStatementStats,
+  23 |   FixFingerprintHexValue,
+  24 | } from "src/util";
+
+
+warning: 'flattenStatementStats' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/selectors/common.ts:22:3:
+  20 |   queryByName,
+  21 |   appAttr,
+> 22 |   flattenStatementStats,
+     |   ^
+  23 |   FixFingerprintHexValue,
+  24 | } from "src/util";
+  25 | import { createSelector } from "@reduxjs/toolkit";
+
+
+warning: 'FixFingerprintHexValue' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/selectors/common.ts:23:3:
+  21 |   appAttr,
+  22 |   flattenStatementStats,
+> 23 |   FixFingerprintHexValue,
+     |   ^
+  24 | } from "src/util";
+  25 | import { createSelector } from "@reduxjs/toolkit";
+  26 | import { SqlStatsResponse } from "../api";
+
+
+warning: 'createSelector' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/selectors/common.ts:25:10:
+  23 |   FixFingerprintHexValue,
+  24 | } from "src/util";
+> 25 | import { createSelector } from "@reduxjs/toolkit";
+     |          ^
+  26 | import { SqlStatsResponse } from "../api";
+  27 | import { AggregateStatistics } from "src/statementsTable";
+  28 | import { StatementDiagnosticsDictionary } from "src/store/statementDiagnostics";
+
+
+warning: 'SqlStatsResponse' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/selectors/common.ts:26:10:
+  24 | } from "src/util";
+  25 | import { createSelector } from "@reduxjs/toolkit";
+> 26 | import { SqlStatsResponse } from "../api";
+     |          ^
+  27 | import { AggregateStatistics } from "src/statementsTable";
+  28 | import { StatementDiagnosticsDictionary } from "src/store/statementDiagnostics";
+  29 |
+
+
+warning: 'AggregateStatistics' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/selectors/common.ts:27:10:
+  25 | import { createSelector } from "@reduxjs/toolkit";
+  26 | import { SqlStatsResponse } from "../api";
+> 27 | import { AggregateStatistics } from "src/statementsTable";
+     |          ^
+  28 | import { StatementDiagnosticsDictionary } from "src/store/statementDiagnostics";
+  29 |
+  30 | // The functions in this file are agnostic to the different shape of each
+
+
+warning: 'StatementDiagnosticsDictionary' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/selectors/common.ts:28:10:
+  26 | import { SqlStatsResponse } from "../api";
+  27 | import { AggregateStatistics } from "src/statementsTable";
+> 28 | import { StatementDiagnosticsDictionary } from "src/store/statementDiagnostics";
+     |          ^
+  29 |
+  30 | // The functions in this file are agnostic to the different shape of each
+  31 | // state in db-console and cluster-ui. This file contains selector functions
+
+
+warning: 'req' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionDetailsPage.fixture.ts:49:19:
+  47 |   setTimeScale: () => {},
+  48 |   refreshSessions: () => {},
+> 49 |   cancelSession: (req: CancelSessionRequestMessage) => {},
+     |                   ^
+  50 |   cancelQuery: (req: CancelQueryRequestMessage) => {},
+  51 |   refreshNodes: () => {},
+  52 |   refreshNodesLiveness: () => {},
+
+
+warning: 'req' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionDetailsPage.fixture.ts:50:17:
+  48 |   refreshSessions: () => {},
+  49 |   cancelSession: (req: CancelSessionRequestMessage) => {},
+> 50 |   cancelQuery: (req: CancelQueryRequestMessage) => {},
+     |                 ^
+  51 |   refreshNodes: () => {},
+  52 |   refreshNodesLiveness: () => {},
+  53 |   uiConfig: {
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionsDetailsConnected.stories.tsx:48:16:
+  46 |   compose(
+  47 |     applyMiddleware(sagaMiddleware, routerMiddleware(history)),
+> 48 |     (window as any).__REDUX_DEVTOOLS_EXTENSION__ &&
+     |                ^
+  49 |       (window as any).__REDUX_DEVTOOLS_EXTENSION__(),
+  50 |   ),
+  51 | );
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionsDetailsConnected.stories.tsx:49:18:
+  47 |     applyMiddleware(sagaMiddleware, routerMiddleware(history)),
+  48 |     (window as any).__REDUX_DEVTOOLS_EXTENSION__ &&
+> 49 |       (window as any).__REDUX_DEVTOOLS_EXTENSION__(),
+     |                  ^
+  50 |   ),
+  51 | );
+  52 |
+
+
+warning: 'req' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionsPage.fixture.ts:213:19:
+  211 |   internalAppNamePrefix: "$ internal",
+  212 |   refreshSessions: () => {},
+> 213 |   cancelSession: (req: CancelSessionRequestMessage) => {},
+      |                   ^
+  214 |   cancelQuery: (req: CancelQueryRequestMessage) => {},
+  215 |   onSortingChange: () => {},
+  216 | };
+
+
+warning: 'req' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionsPage.fixture.ts:214:17:
+  212 |   refreshSessions: () => {},
+  213 |   cancelSession: (req: CancelSessionRequestMessage) => {},
+> 214 |   cancelQuery: (req: CancelQueryRequestMessage) => {},
+      |                 ^
+  215 |   onSortingChange: () => {},
+  216 | };
+  217 |
+
+
+warning: 'req' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionsPage.fixture.ts:242:19:
+  240 |   internalAppNamePrefix: "$ internal",
+  241 |   refreshSessions: () => {},
+> 242 |   cancelSession: (req: CancelSessionRequestMessage) => {},
+      |                   ^
+  243 |   cancelQuery: (req: CancelQueryRequestMessage) => {},
+  244 |   onSortingChange: () => {},
+  245 | };
+
+
+warning: 'req' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionsPage.fixture.ts:243:17:
+  241 |   refreshSessions: () => {},
+  242 |   cancelSession: (req: CancelSessionRequestMessage) => {},
+> 243 |   cancelQuery: (req: CancelQueryRequestMessage) => {},
+      |                 ^
+  244 |   onSortingChange: () => {},
+  245 | };
+  246 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionsPageConnected.stories.tsx:41:16:
+  39 |   compose(
+  40 |     applyMiddleware(sagaMiddleware, routerMiddleware(history)),
+> 41 |     (window as any).__REDUX_DEVTOOLS_EXTENSION__ &&
+     |                ^
+  42 |       (window as any).__REDUX_DEVTOOLS_EXTENSION__(),
+  43 |   ),
+  44 | );
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionsPageConnected.stories.tsx:42:18:
+  40 |     applyMiddleware(sagaMiddleware, routerMiddleware(history)),
+  41 |     (window as any).__REDUX_DEVTOOLS_EXTENSION__ &&
+> 42 |       (window as any).__REDUX_DEVTOOLS_EXTENSION__(),
+     |                  ^
+  43 |   ),
+  44 | );
+  45 |
+
+
+warning: 'props' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionsPageConnected.tsx:78:23:
+  76 | export const SessionsPageConnected = withRouter(
+  77 |   connect(
+> 78 |     (state: AppState, props: RouteComponentProps) => ({
+     |                       ^
+  79 |       sessions: selectSessions(state),
+  80 |       internalAppNamePrefix: selectAppName(state),
+  81 |       sessionsError: state.adminUI?.sessions.lastError,
+
+
+warning: 'DATE_FORMAT_24_TZ' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/sessions/sessionsTable.tsx:23:3:
+  21 |   Count,
+  22 |   DATE_FORMAT,
+> 23 |   DATE_FORMAT_24_TZ,
+     |   ^
+  24 | } from "src/util/format";
+  25 | import { Link } from "react-router-dom";
+  26 | import React from "react";
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/sortedtable/sortedtable.tsx:148:17:
+  146 |   // indicating sort order. If not provided, the column is not considered
+  147 |   // sortable.
+> 148 |   columnTitle?: any;
+      |                 ^
+  149 |   // className is a classname to apply to the td elements
+  150 |   className?: string;
+  151 |   titleAlign?: "left" | "right" | "center";
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/sortedtable/sortedtable.tsx:192:49:
+  190 |   SortedTableState
+  191 | > {
+> 192 |   static defaultProps: Partial<SortedTableProps<any>> = {
+      |                                                 ^
+  193 |     rowClass: (_obj: any) => "",
+  194 |     columns: [],
+  195 |     sortSetting: {
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/sortedtable/sortedtable.tsx:193:22:
+  191 | > {
+  192 |   static defaultProps: Partial<SortedTableProps<any>> = {
+> 193 |     rowClass: (_obj: any) => "",
+      |                      ^
+  194 |     columns: [],
+  195 |     sortSetting: {
+  196 |       ascending: false,
+
+
+warning: 'pagination' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/sortedtable/sortedtable.tsx:224:7:
+  222 |       sortSetting: SortSetting,
+  223 |       columns: ColumnDescriptor<T>[],
+> 224 |       pagination?: ISortedTablePagination,
+      |       ^
+  225 |     ): T[] => {
+  226 |       if (!sortSetting) {
+  227 |         return this.paginatedData();
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/statementDetails/diagnostics/diagnosticsView.tsx:130:13:
+  128 |       title: "Activated on",
+  129 |       hideTitleUnderline: true,
+> 130 |       cell: (diagnostic: StatementDiagnosticsReport) => (
+      |             ^
+  131 |         <Timestamp time={diagnostic.requested_at} format={DATE_FORMAT_24_TZ} />
+  132 |       ),
+  133 |       sort: (diagnostic: StatementDiagnosticsReport) =>
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/statementDetails/diagnostics/diagnosticsView.tsx:133:13:
+  131 |         <Timestamp time={diagnostic.requested_at} format={DATE_FORMAT_24_TZ} />
+  132 |       ),
+> 133 |       sort: (diagnostic: StatementDiagnosticsReport) =>
+      |             ^
+  134 |         moment(diagnostic.requested_at)?.unix(),
+  135 |     },
+  136 |     {
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/statementDetails/diagnostics/diagnosticsView.tsx:141:13:
+  139 |       hideTitleUnderline: true,
+  140 |       className: cx("column-size-small"),
+> 141 |       cell: (diagnostic: StatementDiagnosticsReport) => {
+      |             ^
+  142 |         const status = getDiagnosticsStatus(diagnostic);
+  143 |         return (
+  144 |           <DiagnosticStatusBadge
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/statementDetails/diagnostics/diagnosticsView.tsx:150:13:
+  148 |         );
+  149 |       },
+> 150 |       sort: (diagnostic: StatementDiagnosticsReport) =>
+      |             ^
+  151 |         String(diagnostic.completed),
+  152 |     },
+  153 |     {
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/statementDetails/diagnostics/diagnosticsView.tsx:158:13:
+  156 |       hideTitleUnderline: true,
+  157 |       className: cx("column-size-medium"),
+> 158 |       cell: (diagnostic: StatementDiagnosticsReport) => {
+      |             ^
+  159 |         if (diagnostic.completed) {
+  160 |           return (
+  161 |             <div
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/statementDetails/diagnostics/diagnosticsView.tsx:202:13:
+  200 |         );
+  201 |       },
+> 202 |       sort: (diagnostic: StatementDiagnosticsReport) =>
+      |             ^
+  203 |         String(diagnostic.completed),
+  204 |     },
+  205 |   ];
+
+
+warning: 'EncodeUriName' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/statementDetails/planDetails/plansTable.tsx:26:3:
+  24 |   Count,
+  25 |   intersperse,
+> 26 |   EncodeUriName,
+     |   ^
+  27 |   EncodeDatabaseTableIndexUri,
+  28 |   EncodeDatabaseTableUri,
+  29 | } from "../../util";
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/statementDetails/statementDetails.stories.tsx:42:16:
+  40 |   compose(
+  41 |     applyMiddleware(routerMiddleware(history)),
+> 42 |     (window as any).__REDUX_DEVTOOLS_EXTENSION__ &&
+     |                ^
+  43 |       (window as any).__REDUX_DEVTOOLS_EXTENSION__(),
+  44 |   ),
+  45 | );
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/statementDetails/statementDetails.stories.tsx:43:18:
+  41 |     applyMiddleware(routerMiddleware(history)),
+  42 |     (window as any).__REDUX_DEVTOOLS_EXTENSION__ &&
+> 43 |       (window as any).__REDUX_DEVTOOLS_EXTENSION__(),
+     |                  ^
+  44 |   ),
+  45 | );
+  46 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/statementDetails/statementDetailsConnected.ts:181:57:
+  179 | });
+  180 |
+> 181 | export const ConnectedStatementDetailsPage = withRouter<any, any>(
+      |                                                         ^
+  182 |   connect(mapStateToProps, mapDispatchToProps)(StatementDetails),
+  183 | );
+  184 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/statementDetails/statementDetailsConnected.ts:181:62:
+  179 | });
+  180 |
+> 181 | export const ConnectedStatementDetailsPage = withRouter<any, any>(
+      |                                                              ^
+  182 |   connect(mapStateToProps, mapDispatchToProps)(StatementDetails),
+  183 | );
+  184 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/statementsPage/statementsPageConnected.stories.tsx:42:16:
+  40 |   compose(
+  41 |     applyMiddleware(sagaMiddleware, routerMiddleware(history)),
+> 42 |     (window as any).__REDUX_DEVTOOLS_EXTENSION__ &&
+     |                ^
+  43 |       (window as any).__REDUX_DEVTOOLS_EXTENSION__(),
+  44 |   ),
+  45 | );
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/statementsPage/statementsPageConnected.stories.tsx:43:18:
+  41 |     applyMiddleware(sagaMiddleware, routerMiddleware(history)),
+  42 |     (window as any).__REDUX_DEVTOOLS_EXTENSION__ &&
+> 43 |       (window as any).__REDUX_DEVTOOLS_EXTENSION__(),
+     |                  ^
+  44 |   ),
+  45 | );
+  46 |
+
+
+warning: 'moment' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/statsTableUtil/statsTableUtil.tsx:13:8:
+  11 | import React from "react";
+  12 | import { Anchor } from "src/anchor";
+> 13 | import moment from "moment-timezone";
+     |        ^
+  14 |
+  15 | import { Tooltip } from "@cockroachlabs/ui-components";
+  16 | import {
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/clusterLocks/clusterLocks.saga.ts:23:45:
+  21 | import { getClusterLocksState } from "src/api/clusterLocksApi";
+  22 |
+> 23 | export function* requestClusterLocksSaga(): any {
+     |                                             ^
+  24 |   try {
+  25 |     const result = yield call(getClusterLocksState);
+  26 |     yield put(actions.received(result));
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/databasesList/databasesList.saga.ts:17:8:
+  15 | import moment from "moment-timezone";
+  16 |
+> 17 | export function* refreshDatabasesListSaga() {
+     |        ^
+  18 |   yield put(actions.request());
+  19 | }
+  20 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/databasesList/databasesList.saga.ts:21:46:
+  19 | }
+  20 |
+> 21 | export function* requestDatabasesListSaga(): any {
+     |                                              ^
+  22 |   try {
+  23 |     const result = yield call(getDatabasesList, moment.duration(10, "m"));
+  24 |     yield put(actions.received(result));
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/databasesList/databasesList.saga.ts:30:8:
+  28 | }
+  29 |
+> 30 | export function* databasesListSaga() {
+     |        ^
+  31 |   yield all([
+  32 |     takeLatest(actions.refresh, refreshDatabasesListSaga),
+  33 |     takeLatest(actions.request, requestDatabasesListSaga),
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/indexStats/indexStats.sagas.ts:35:8:
+  33 | import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+  34 |
+> 35 | export function* refreshIndexStatsSaga(
+     |        ^
+  36 |   action: PayloadAction<TableIndexStatsRequest>,
+  37 | ) {
+  38 |   yield put(indexStatsActions.request(action?.payload));
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/indexStats/indexStats.sagas.ts:43:4:
+  41 | export function* requestIndexStatsSaga(
+  42 |   action: PayloadAction<TableIndexStatsRequest>,
+> 43 | ): any {
+     |    ^
+  44 |   const key = action?.payload
+  45 |     ? generateTableID(action.payload.database, action.payload.table)
+  46 |     : "";
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/indexStats/indexStats.sagas.ts:64:10:
+  62 |
+  63 | export function receivedIndexStatsSagaFactory(delayMs: number) {
+> 64 |   return function* receivedIndexStatsSaga(
+     |          ^
+  65 |     action: PayloadAction<TableIndexStatsResponseWithKey>,
+  66 |   ) {
+  67 |     yield delay(delayMs);
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/indexStats/indexStats.sagas.ts:76:8:
+  74 | }
+  75 |
+> 76 | export function* resetIndexStatsSaga(
+     |        ^
+  77 |   action: PayloadAction<ResetIndexUsageStatsPayload>,
+  78 | ) {
+  79 |   const key = action?.payload
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/indexStats/indexStats.sagas.ts:103:8:
+  101 | }
+  102 |
+> 103 | export function* indexStatsSaga(
+      |        ^
+  104 |   cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
+  105 | ) {
+  106 |   yield all([
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/insightDetails/transactionInsightDetails/transactionInsightDetails.sagas.ts:22:8:
+  20 | import { ErrorWithKey, SqlApiResponse } from "src/api";
+  21 |
+> 22 | export function* refreshTransactionInsightDetailsSaga(
+     |        ^
+  23 |   action: PayloadAction<TxnInsightDetailsRequest>,
+  24 | ) {
+  25 |   yield put(actions.request(action.payload));
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/insightDetails/transactionInsightDetails/transactionInsightDetails.sagas.ts:30:4:
+  28 | export function* requestTransactionInsightDetailsSaga(
+  29 |   action: PayloadAction<TxnInsightDetailsRequest>,
+> 30 | ): any {
+     |    ^
+  31 |   try {
+  32 |     const result = yield call(getTxnInsightDetailsApi, action.payload);
+  33 |     yield put(actions.received(result));
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/insightDetails/transactionInsightDetails/transactionInsightDetails.sagas.ts:47:8:
+  45 | const timeoutsByExecID = new Map<string, NodeJS.Timeout>();
+  46 |
+> 47 | export function receivedTxnInsightsDetailsSaga(
+     |        ^
+  48 |   action: PayloadAction<SqlApiResponse<TxnInsightDetailsResponse>>,
+  49 | ) {
+  50 |   const execID = action.payload.results.txnExecutionID;
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/insightDetails/transactionInsightDetails/transactionInsightDetails.sagas.ts:59:8:
+  57 | }
+  58 |
+> 59 | export function* transactionInsightDetailsSaga() {
+     |        ^
+  60 |   yield all([
+  61 |     takeEvery(actions.refresh, refreshTransactionInsightDetailsSaga),
+  62 |     takeLatest(actions.request, requestTransactionInsightDetailsSaga),
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/insights/statementFingerprintInsights/statementFingerprintInsights.sagas.ts:27:4:
+  25 | export function* refreshStatementFingerprintInsightsSaga(
+  26 |   action: PayloadAction<StmtInsightsReq>,
+> 27 | ): any {
+     |    ^
+  28 |   yield put(actions.request(action.payload));
+  29 | }
+  30 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/insights/statementFingerprintInsights/statementFingerprintInsights.sagas.ts:33:4:
+  31 | export function* requestStatementFingerprintInsightsSaga(
+  32 |   action: PayloadAction<StmtInsightsReq>,
+> 33 | ): any {
+     |    ^
+  34 |   const key = HexStringToInt64String(action.payload.stmtFingerprintId);
+  35 |   try {
+  36 |     const result = yield call(getStmtInsightsApi, action.payload);
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/insights/statementFingerprintInsights/statementFingerprintInsights.sagas.ts:55:8:
+  53 | const timeoutsByFingerprintID = new Map<string, NodeJS.Timeout>();
+  54 |
+> 55 | export function receivedStatementFingerprintInsightsSaga(
+     |        ^
+  56 |   action: PayloadAction<FingerprintInsightResponseWithKey>,
+  57 | ) {
+  58 |   const fingerprintID = action.payload.key;
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/insights/statementFingerprintInsights/statementFingerprintInsights.sagas.ts:67:8:
+  65 | }
+  66 |
+> 67 | export function* statementFingerprintInsightsSaga() {
+     |        ^
+  68 |   yield all([
+  69 |     takeLatest(actions.refresh, refreshStatementFingerprintInsightsSaga),
+  70 |     takeLatest(actions.request, requestStatementFingerprintInsightsSaga),
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/insights/statementInsights/statementInsights.sagas.ts:17:8:
+  15 | import { PayloadAction } from "@reduxjs/toolkit";
+  16 |
+> 17 | export function* refreshStatementInsightsSaga(
+     |        ^
+  18 |   action?: PayloadAction<StmtInsightsReq>,
+  19 | ) {
+  20 |   yield put(actions.request(action?.payload));
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/insights/statementInsights/statementInsights.sagas.ts:25:4:
+  23 | export function* requestStatementInsightsSaga(
+  24 |   action?: PayloadAction<StmtInsightsReq>,
+> 25 | ): any {
+     |    ^
+  26 |   try {
+  27 |     const result = yield call(getStmtInsightsApi, action?.payload);
+  28 |     yield put(actions.received(result));
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/insights/statementInsights/statementInsights.sagas.ts:34:8:
+  32 | }
+  33 |
+> 34 | export function* statementInsightsSaga() {
+     |        ^
+  35 |   yield all([
+  36 |     takeLatest(actions.refresh, refreshStatementInsightsSaga),
+  37 |     takeLatest(actions.request, requestStatementInsightsSaga),
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/insights/transactionInsights/transactionInsights.sagas.ts:17:8:
+  15 | import { PayloadAction } from "@reduxjs/toolkit";
+  16 |
+> 17 | export function* refreshTransactionInsightsSaga(
+     |        ^
+  18 |   action?: PayloadAction<TxnInsightsRequest>,
+  19 | ) {
+  20 |   yield put(txnActions.request(action?.payload));
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/insights/transactionInsights/transactionInsights.sagas.ts:25:4:
+  23 | export function* requestTransactionInsightsSaga(
+  24 |   action?: PayloadAction<TxnInsightsRequest>,
+> 25 | ): any {
+     |    ^
+  26 |   try {
+  27 |     const result = yield call(getTxnInsightsApi, action?.payload);
+  28 |     yield put(txnActions.received(result));
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/insights/transactionInsights/transactionInsights.sagas.ts:34:8:
+  32 | }
+  33 |
+> 34 | export function* transactionInsightsSaga() {
+     |        ^
+  35 |   yield all([
+  36 |     takeLatest(txnActions.refresh, refreshTransactionInsightsSaga),
+  37 |     takeLatest(txnActions.request, requestTransactionInsightsSaga),
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/jobDetails/job.sagas.ts:18:8:
+  16 | import { ErrorWithKey } from "../../api";
+  17 |
+> 18 | export function* refreshJobSaga(action: PayloadAction<JobRequest>) {
+     |        ^
+  19 |   yield put(actions.request(action.payload));
+  20 | }
+  21 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/jobDetails/job.sagas.ts:22:69:
+  20 | }
+  21 |
+> 22 | export function* requestJobSaga(action: PayloadAction<JobRequest>): any {
+     |                                                                     ^
+  23 |   const key = action.payload.job_id.toString();
+  24 |   try {
+  25 |     const result = yield call(getJob, action.payload);
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/jobDetails/job.sagas.ts:39:8:
+  37 |   }
+  38 | }
+> 39 | export function* jobSaga() {
+     |        ^
+  40 |   yield all([
+  41 |     takeLatest(actions.refresh, refreshJobSaga),
+  42 |     takeLatest(actions.request, requestJobSaga),
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/jobs/jobs.sagas.ts:17:8:
+  15 | import { PayloadAction } from "@reduxjs/toolkit";
+  16 |
+> 17 | export function* refreshJobsSaga(action: PayloadAction<JobsRequest>) {
+     |        ^
+  18 |   yield put(actions.request(action.payload));
+  19 | }
+  20 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/jobs/jobs.sagas.ts:21:71:
+  19 | }
+  20 |
+> 21 | export function* requestJobsSaga(action: PayloadAction<JobsRequest>): any {
+     |                                                                       ^
+  22 |   try {
+  23 |     const result = yield call(getJobs, action.payload);
+  24 |     yield put(actions.received(result));
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/jobs/jobs.sagas.ts:30:8:
+  28 | }
+  29 |
+> 30 | export function* jobsSaga() {
+     |        ^
+  31 |   yield all([
+  32 |     takeEvery(actions.refresh, refreshJobsSaga),
+  33 |     takeEvery(actions.request, requestJobsSaga),
+
+
+warning: 'adminUISelector' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/store/jobs/jobs.selectors.ts:13:10:
+  11 | import { createSelector } from "reselect";
+  12 | import { localStorageSelector } from "../utils/selectors";
+> 13 | import { adminUISelector } from "../utils/selectors";
+     |          ^
+  14 |
+  15 | export const selectSortSetting = createSelector(
+  16 |   localStorageSelector,
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/liveness/liveness.sagas.ts:18:8:
+  16 | import { rootActions } from "../reducers";
+  17 |
+> 18 | export function* refreshLivenessSaga() {
+     |        ^
+  19 |   yield put(actions.request());
+  20 | }
+  21 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/liveness/liveness.sagas.ts:22:41:
+  20 | }
+  21 |
+> 22 | export function* requestLivenessSaga(): any {
+     |                                         ^
+  23 |   try {
+  24 |     const result = yield call(getLiveness);
+  25 |     yield put(actions.received(result));
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/liveness/liveness.sagas.ts:31:8:
+  29 | }
+  30 |
+> 31 | export function* receivedLivenessSaga(delayMs: number) {
+     |        ^
+  32 |   yield delay(delayMs);
+  33 |   yield put(actions.invalidated());
+  34 | }
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/liveness/liveness.sagas.ts:36:8:
+  34 | }
+  35 |
+> 36 | export function* livenessSaga(
+     |        ^
+  37 |   cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
+  38 | ) {
+  39 |   yield all([
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/localStorage/localStorage.reducer.ts:77:10:
+  75 | type Payload = {
+  76 |   key: keyof LocalStorageState;
+> 77 |   value: any;
+     |          ^
+  78 | };
+  79 |
+  80 | export type TypedPayload<T> = {
+
+
+error: Insert `,` (prettier/prettier) at pkg/ui/workspaces/cluster-ui/src/store/localStorage/localStorage.reducer.ts:244:72:
+  242 |   "lastTimestampRefresh/ActiveStatementsPage":
+  243 |     JSON.parse(
+> 244 |       localStorage.getItem("lastTimestampRefresh/ActiveStatementsPage")
+      |                                                                        ^
+  245 |      ) || defaultLastTimestampRefreshSetting,
+  246 |   "lastTimestampRefresh/ActiveTransactionsPage":
+  247 |     JSON.parse(
+
+
+error: Delete `·` (prettier/prettier) at pkg/ui/workspaces/cluster-ui/src/store/localStorage/localStorage.reducer.ts:245:1:
+  243 |     JSON.parse(
+  244 |       localStorage.getItem("lastTimestampRefresh/ActiveStatementsPage")
+> 245 |      ) || defaultLastTimestampRefreshSetting,
+      | ^
+  246 |   "lastTimestampRefresh/ActiveTransactionsPage":
+  247 |     JSON.parse(
+  248 |       localStorage.getItem("lastTimestampRefresh/ActiveTransactionsPage")
+
+
+error: Insert `,` (prettier/prettier) at pkg/ui/workspaces/cluster-ui/src/store/localStorage/localStorage.reducer.ts:248:74:
+  246 |   "lastTimestampRefresh/ActiveTransactionsPage":
+  247 |     JSON.parse(
+> 248 |       localStorage.getItem("lastTimestampRefresh/ActiveTransactionsPage")
+      |                                                                          ^
+  249 |     ) || defaultLastTimestampRefreshSetting,
+  250 | };
+  251 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/localStorage/localStorage.reducer.ts:256:21:
+  254 |   initialState,
+  255 |   reducers: {
+> 256 |     update: (state: any, action: PayloadAction<Payload>) => {
+      |                     ^
+  257 |       state[action.payload.key] = action.payload.value;
+  258 |     },
+  259 |     updateTimeScale: (
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/localStorage/localStorage.saga.ts:25:8:
+  23 | import { TimeScale } from "src/timeScaleDropdown";
+  24 |
+> 25 | export function* updateLocalStorageItemSaga(action: AnyAction) {
+     |        ^
+  26 |   const { key, value } = action.payload;
+  27 |   yield call(
+  28 |     { context: localStorage, fn: localStorage.setItem },
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/localStorage/localStorage.saga.ts:34:8:
+  32 | }
+  33 |
+> 34 | export function* updateTimeScale(
+     |        ^
+  35 |   action: PayloadAction<TypedPayload<TimeScale>>,
+  36 | ) {
+  37 |   yield all([
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/localStorage/localStorage.saga.ts:50:8:
+  48 | }
+  49 |
+> 50 | export function* localStorageSaga() {
+     |        ^
+  51 |   yield all([
+  52 |     takeEvery(actions.update, updateLocalStorageItemSaga),
+  53 |     takeLatest(actions.updateTimeScale, updateTimeScale),
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/nodes/nodes.sagas.ts:19:8:
+  17 | import { rootActions } from "../reducers";
+  18 |
+> 19 | export function* refreshNodesSaga() {
+     |        ^
+  20 |   yield put(actions.request());
+  21 | }
+  22 |
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/nodes/nodes.sagas.ts:23:8:
+  21 | }
+  22 |
+> 23 | export function* requestNodesSaga() {
+     |        ^
+  24 |   try {
+  25 |     const result: cockroach.server.serverpb.NodesResponse = yield call(
+  26 |       getNodes,
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/nodes/nodes.sagas.ts:34:8:
+  32 | }
+  33 |
+> 34 | export function* receivedNodesSaga(delayMs: number) {
+     |        ^
+  35 |   yield delay(delayMs);
+  36 |   yield put(actions.invalidated());
+  37 | }
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/nodes/nodes.sagas.ts:39:8:
+  37 | }
+  38 |
+> 39 | export function* nodesSaga(
+     |        ^
+  40 |   cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
+  41 | ) {
+  42 |   yield all([
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/nodes/nodes.selectors.ts:20:37:
+  18 | type ILocality = cockroach.roachpb.ILocality;
+  19 |
+> 20 | export const nodeStatusesSelector = (state: AppState) =>
+     |                                     ^
+  21 |   state.adminUI?.nodes.data || [];
+  22 |
+  23 | export const nodesSelector = createSelector(
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/notifications/notifications.sagas.ts:36:8:
+  34 | ) => void;
+  35 |
+> 36 | export function* notifificationsSaga() {
+     |        ^
+  37 |   // ***************************** //
+  38 |   // Terminate Query notifications //
+  39 |   // ***************************** //
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/schemaInsights/schemaInsights.sagas.ts:16:8:
+  14 | import { getSchemaInsights } from "../../api";
+  15 |
+> 16 | export function* refreshSchemaInsightsSaga() {
+     |        ^
+  17 |   yield put(actions.request());
+  18 | }
+  19 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/schemaInsights/schemaInsights.sagas.ts:20:47:
+  18 | }
+  19 |
+> 20 | export function* requestSchemaInsightsSaga(): any {
+     |                                               ^
+  21 |   try {
+  22 |     const result = yield call(getSchemaInsights);
+  23 |     yield put(actions.received(result));
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/schemaInsights/schemaInsights.sagas.ts:29:8:
+  27 | }
+  28 |
+> 29 | export function* schemaInsightsSaga() {
+     |        ^
+  30 |   yield all([
+  31 |     takeLatest(actions.refresh, refreshSchemaInsightsSaga),
+  32 |     takeLatest(actions.request, requestSchemaInsightsSaga),
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/sessions/sessions.sagas.ts:38:41:
+  36 | }
+  37 |
+> 38 | export function* requestSessionsSaga(): any {
+     |                                         ^
+  39 |   try {
+  40 |     const result = yield call(getSessions);
+  41 |     yield put(actions.received(result));
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/sessions/sessions.sagas.ts:47:8:
+  45 | }
+  46 |
+> 47 | export function* sessionsSaga() {
+     |        ^
+  48 |   yield all([
+  49 |     takeLatest(actions.refresh, refreshSessionsAndClusterLocksSaga),
+  50 |     takeLatest(actions.request, requestSessionsSaga),
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/sessions/sessions.selectors.ts:22:53:
+  20 |   (state: AppState) => state.adminUI?.sessions,
+  21 |   (_state: AppState, props: RouteComponentProps) => props,
+> 22 |   (state: SessionsState, props: RouteComponentProps<any>) => {
+     |                                                     ^
+  23 |     if (!state?.data) {
+  24 |       return null;
+  25 |     }
+
+
+warning: 'action' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/store/sqlStats/sqlStats.reducer.ts:53:22:
+  51 |       state.valid = false;
+  52 |     },
+> 53 |     refresh: (state, action: PayloadAction<StatementsRequest>) => {
+     |                      ^
+  54 |       state.inFlight = true;
+  55 |     },
+  56 |     request: (state, action: PayloadAction<StatementsRequest>) => {
+
+
+warning: 'action' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/store/sqlStats/sqlStats.reducer.ts:56:22:
+  54 |       state.inFlight = true;
+  55 |     },
+> 56 |     request: (state, action: PayloadAction<StatementsRequest>) => {
+     |                      ^
+  57 |       state.inFlight = true;
+  58 |     },
+  59 |     updateTimeScale: (_, _action: PayloadAction<UpdateTimeScalePayload>) => {},
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/sqlStats/sqlStats.sagas.ts:26:8:
+  24 | import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
+  25 |
+> 26 | export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
+     |        ^
+  27 |   yield put(sqlStatsActions.request(action.payload));
+  28 | }
+  29 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/sqlStats/sqlStats.sagas.ts:32:4:
+  30 | export function* requestSQLStatsSaga(
+  31 |   action: PayloadAction<StatementsRequest>,
+> 32 | ): any {
+     |    ^
+  33 |   try {
+  34 |     const result = yield call(getCombinedStatements, action.payload);
+  35 |     yield put(sqlStatsActions.received(result));
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/sqlStats/sqlStats.sagas.ts:41:8:
+  39 | }
+  40 |
+> 41 | export function* updateSQLStatsTimeScaleSaga(
+     |        ^
+  42 |   action: PayloadAction<UpdateTimeScalePayload>,
+  43 | ) {
+  44 |   const { ts } = action.payload;
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/sqlStats/sqlStats.sagas.ts:52:8:
+  50 | }
+  51 |
+> 52 | export function* resetSQLStatsSaga() {
+     |        ^
+  53 |   try {
+  54 |     yield call(resetSQLStats);
+  55 |     yield all([
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/sqlStats/sqlStats.sagas.ts:65:8:
+  63 | }
+  64 |
+> 65 | export function* sqlStatsSaga() {
+     |        ^
+  66 |   yield all([
+  67 |     takeLatest(sqlStatsActions.refresh, refreshSQLStatsSaga),
+  68 |     takeLatest(sqlStatsActions.request, requestSQLStatsSaga),
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/statementDetails/statementDetails.sagas.ts:22:8:
+  20 | import { generateStmtDetailsToID } from "src/util/appStats";
+  21 |
+> 22 | export function* refreshSQLDetailsStatsSaga(
+     |        ^
+  23 |   action: PayloadAction<StatementDetailsRequest>,
+  24 | ) {
+  25 |   yield put(sqlDetailsStatsActions.request(action?.payload));
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/statementDetails/statementDetails.sagas.ts:30:4:
+  28 | export function* requestSQLDetailsStatsSaga(
+  29 |   action: PayloadAction<StatementDetailsRequest>,
+> 30 | ): any {
+     |    ^
+  31 |   const key = action?.payload
+  32 |     ? generateStmtDetailsToID(
+  33 |         action.payload.fingerprint_id,
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/statementDetails/statementDetails.sagas.ts:55:8:
+  53 | }
+  54 |
+> 55 | export function* sqlDetailsStatsSaga() {
+     |        ^
+  56 |   yield all([
+  57 |     takeLatest(sqlDetailsStatsActions.refresh, refreshSQLDetailsStatsSaga),
+  58 |     takeLatest(sqlDetailsStatsActions.request, requestSQLDetailsStatsSaga),
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/statementDiagnostics/statementDiagnostics.sagas.ts:28:8:
+  26 | import { rootActions } from "../reducers";
+  27 |
+> 28 | export function* createDiagnosticsReportSaga(
+     |        ^
+  29 |   action: ReturnType<typeof actions.createReport>,
+  30 | ) {
+  31 |   try {
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/statementDiagnostics/statementDiagnostics.sagas.ts:48:8:
+  46 | // Notification components from db-console & managed service respectively, to
+  47 | // have a single component in cluster-ui to be used by both repos.
+> 48 | export function* cancelDiagnosticsReportSaga(
+     |        ^
+  49 |   action: ReturnType<typeof actions.cancelReport>,
+  50 | ) {
+  51 |   try {
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/statementDiagnostics/statementDiagnostics.sagas.ts:60:8:
+  58 | }
+  59 |
+> 60 | export function* refreshStatementsDiagnosticsSaga() {
+     |        ^
+  61 |   yield put(actions.request());
+  62 | }
+  63 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/statementDiagnostics/statementDiagnostics.sagas.ts:64:54:
+  62 | }
+  63 |
+> 64 | export function* requestStatementsDiagnosticsSaga(): any {
+     |                                                      ^
+  65 |   try {
+  66 |     const response = yield call(getStatementDiagnosticsReports);
+  67 |     yield put(actions.received(response));
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/statementDiagnostics/statementDiagnostics.sagas.ts:73:8:
+  71 | }
+  72 |
+> 73 | export function* receivedStatementsDiagnosticsSaga(delayMs: number) {
+     |        ^
+  74 |   yield delay(delayMs);
+  75 |   yield put(actions.invalidated());
+  76 | }
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/statementDiagnostics/statementDiagnostics.sagas.ts:78:8:
+  76 | }
+  77 |
+> 78 | export function* statementsDiagnosticsSagas(
+     |        ^
+  79 |   delayMs: number = CACHE_INVALIDATION_PERIOD,
+  80 | ) {
+  81 |   yield all([
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/terminateQuery/terminateQuery.sagas.ts:26:8:
+  24 | export type ICancelQueryRequest = cockroach.server.serverpb.ICancelQueryRequest;
+  25 |
+> 26 | export function* terminateSessionSaga(
+     |        ^
+  27 |   action: PayloadAction<ICancelSessionRequest>,
+  28 | ) {
+  29 |   const terminateSessionRequest = new CancelSessionRequest(action.payload);
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/terminateQuery/terminateQuery.sagas.ts:40:8:
+  38 | }
+  39 |
+> 40 | export function* terminateQuerySaga(
+     |        ^
+  41 |   action: PayloadAction<ICancelQueryRequest>,
+  42 | ) {
+  43 |   const terminateQueryRequest = new CancelQueryRequest(action.payload);
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/terminateQuery/terminateQuery.sagas.ts:54:8:
+  52 | }
+  53 |
+> 54 | export function* terminateSaga() {
+     |        ^
+  55 |   yield all([
+  56 |     takeEvery(terminateQueryActions.terminateSession, terminateSessionSaga),
+  57 |     takeEvery(terminateQueryActions.terminateQuery, terminateQuerySaga),
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/transactionStats/txnStats.sagas.ts:21:4:
+  19 | export function* refreshTxnStatsSaga(
+  20 |   action: PayloadAction<StatementsRequest>,
+> 21 | ): any {
+     |    ^
+  22 |   yield put(txnStatsActions.request(action.payload));
+  23 | }
+  24 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/transactionStats/txnStats.sagas.ts:27:4:
+  25 | export function* requestTxnStatsSaga(
+  26 |   action: PayloadAction<StatementsRequest>,
+> 27 | ): any {
+     |    ^
+  28 |   try {
+  29 |     const result = yield call(getFlushedTxnStatsApi, action.payload);
+  30 |     yield put(txnStatsActions.received(result));
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/transactionStats/txnStats.sagas.ts:36:34:
+  34 | }
+  35 |
+> 36 | export function* txnStatsSaga(): any {
+     |                                  ^
+  37 |   yield all([
+  38 |     takeLatest(txnStatsActions.refresh, refreshTxnStatsSaga),
+  39 |     takeLatest(txnStatsActions.request, requestTxnStatsSaga),
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/uiConfig/uiConfig.sagas.ts:18:45:
+  16 | import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+  17 |
+> 18 | export function* refreshUserSQLRolesSaga(): any {
+     |                                             ^
+  19 |   yield put(actions.requestUserSQLRoles());
+  20 | }
+  21 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/uiConfig/uiConfig.sagas.ts:22:45:
+  20 | }
+  21 |
+> 22 | export function* requestUserSQLRolesSaga(): any {
+     |                                             ^
+  23 |   try {
+  24 |     const result: cockroach.server.serverpb.UserSQLRolesResponse = yield call(
+  25 |       getUserSQLRoles,
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/uiConfig/uiConfig.sagas.ts:33:61:
+  31 | }
+  32 |
+> 33 | export function* receivedUserSQLRolesSaga(delayMs: number): any {
+     |                                                             ^
+  34 |   yield delay(delayMs);
+  35 |   yield put(actions.invalidatedUserSQLRoles());
+  36 | }
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/uiConfig/uiConfig.sagas.ts:40:4:
+  38 | export function* uiConfigSaga(
+  39 |   cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
+> 40 | ): any {
+     |    ^
+  41 |   yield all([
+  42 |     throttleWithReset(
+  43 |       cacheInvalidationPeriod,
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/store/utils/noopReducer.ts:31:28:
+  29 |  * by middleware but it doesn't change state.
+  30 |  */
+> 31 | export const noopReducer = (_state: unknown) => {};
+     |                            ^
+  32 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/utils/sagaEffects/throttleWithReset.ts:58:24:
+  56 |   pattern: ActionPattern<A>,
+  57 |   resetPattern: ActionPattern,
+> 58 |   task: (action: A) => any,
+     |                        ^
+  59 | ): ForkEffect<never> =>
+  60 |   fork(function* () {
+  61 |     // `actionChannel` creates a queue of the actions to process them sequentially.
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/utils/sagaEffects/throttleWithReset.ts:64:28:
+  62 |     // Using `buffers.none()` allows to handle only single action and discard any actions
+  63 |     // that arrive while current action is processed.
+> 64 |     const throttleChannel: any = yield actionChannel(pattern, buffers.none());
+     |                            ^
+  65 |     const resetChannel: any = yield actionChannel(resetPattern, buffers.none());
+  66 |     let t: Task;
+  67 |     while (true) {
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/utils/sagaEffects/throttleWithReset.ts:65:25:
+  63 |     // that arrive while current action is processed.
+  64 |     const throttleChannel: any = yield actionChannel(pattern, buffers.none());
+> 65 |     const resetChannel: any = yield actionChannel(resetPattern, buffers.none());
+     |                         ^
+  66 |     let t: Task;
+  67 |     while (true) {
+  68 |       const action: any = yield take(throttleChannel);
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/store/utils/sagaEffects/throttleWithReset.ts:68:21:
+  66 |     let t: Task;
+  67 |     while (true) {
+> 68 |       const action: any = yield take(throttleChannel);
+     |                     ^
+  69 |       // cancel previous task in order to handle only the most recent one.
+  70 |       // it implements the behavior of `takeLatest` effect
+  71 |       if (t) {
+
+
+warning: Argument 'storyFn' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/storybook/decorators/withBackground.tsx:13:32:
+  11 | import React from "react";
+  12 |
+> 13 | export const withBackground = (storyFn: any): React.ReactElement => (
+     |                                ^
+  14 |   <div style={{ backgroundColor: "#F5F7FA" }}>{storyFn()}</div>
+  15 | );
+  16 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/storybook/decorators/withBackground.tsx:13:41:
+  11 | import React from "react";
+  12 |
+> 13 | export const withBackground = (storyFn: any): React.ReactElement => (
+     |                                         ^
+  14 |   <div style={{ backgroundColor: "#F5F7FA" }}>{storyFn()}</div>
+  15 | );
+  16 |
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/storybook/decorators/withRouterProvider.tsx:26:35:
+  24 | );
+  25 |
+> 26 | export const withRouterProvider = (storyFn: any) => (
+     |                                   ^
+  27 |   <Provider store={store}>
+  28 |     <ConnectedRouter history={history}>{storyFn()}</ConnectedRouter>
+  29 |   </Provider>
+
+
+warning: Argument 'storyFn' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/storybook/decorators/withRouterProvider.tsx:26:36:
+  24 | );
+  25 |
+> 26 | export const withRouterProvider = (storyFn: any) => (
+     |                                    ^
+  27 |   <Provider store={store}>
+  28 |     <ConnectedRouter history={history}>{storyFn()}</ConnectedRouter>
+  29 |   </Provider>
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/storybook/decorators/withRouterProvider.tsx:26:45:
+  24 | );
+  25 |
+> 26 | export const withRouterProvider = (storyFn: any) => (
+     |                                             ^
+  27 |   <Provider store={store}>
+  28 |     <ConnectedRouter history={history}>{storyFn()}</ConnectedRouter>
+  29 |   </Provider>
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/text/text.tsx:93:8:
+  91 | };
+  92 |
+> 93 | export function Text(props: TextProps) {
+     |        ^
+  94 |   const { textType, disabled, noWrap, className } = props;
+  95 |   const textTypeClass = cx(
+  96 |     "text",
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/timeScaleDropdown/formattedTimeScale.tsx:19:35:
+  17 | import { Timezone } from "src/timestamp";
+  18 |
+> 19 | export const FormattedTimescale = (props: { ts: TimeScale }) => {
+     |                                   ^
+  20 |   const timezone = useContext(TimezoneContext);
+  21 |
+  22 |   const [start, end] = toRoundedDateRange(props.ts);
+
+
+warning: 'timezone' is assigned a value but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/timeScaleDropdown/rangeSelect.tsx:93:9:
+  91 | }: RangeSelectProps): React.ReactElement => {
+  92 |   const [isVisible, setIsVisible] = useState<boolean>(false);
+> 93 |   const timezone = useContext(TimezoneContext);
+     |         ^
+  94 |   /**
+  95 |    * customDropdownOptionWasJustSelected holds whether the user had just clicked the "Custom time interval" option in
+  96 |    * the dropdown menu.
+
+
+warning: 'getAllByText' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/timeScaleDropdown/timeScaleDropdown.spec.tsx:29:10:
+  27 | import { assert } from "chai";
+  28 | import { TimeWindow, ArrowDirection, TimeScale } from "./timeScaleTypes";
+> 29 | import { getAllByText, render } from "@testing-library/react";
+     |          ^
+  30 | import userEvent from "@testing-library/user-event";
+  31 |
+  32 | /**
+
+
+warning: '_' is assigned a value but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/timeScaleDropdown/timeScaleDropdown.spec.tsx:288:13:
+  286 |   describe("formatRangeSelectSelected", () => {
+  287 |     it("formatRangeSelectSelected must return title Past 10 Minutes", () => {
+> 288 |       const _ = makeTimeScaleDropdown(state);
+      |             ^
+  289 |
+  290 |       const title = formatRangeSelectSelected(
+  291 |         currentWindow,
+
+
+warning: Object pattern argument should be typed (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/timeScaleDropdown/timeScaleDropdown.stories.tsx:17:42:
+  15 | import moment from "moment-timezone";
+  16 |
+> 17 | export function TimeScaleDropdownWrapper({
+     |                                          ^
+  18 |   initialTimeScale = defaultTimeScaleSelected,
+  19 | }): React.ReactElement {
+  20 |   const [timeScale, setTimeScale] = useState(initialTimeScale);
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/timestamp/timestamp.tsx:16:8:
+  14 | import { CoordinatedUniversalTime, TimezoneContext } from "../contexts";
+  15 |
+> 16 | export function Timezone(props: any) {
+     |        ^
+  17 |   const timezone = useContext(TimezoneContext);
+  18 |   return (
+  19 |     <>
+
+
+warning: Argument 'props' should be typed with a non-any type (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/timestamp/timestamp.tsx:16:26:
+  14 | import { CoordinatedUniversalTime, TimezoneContext } from "../contexts";
+  15 |
+> 16 | export function Timezone(props: any) {
+     |                          ^
+  17 |   const timezone = useContext(TimezoneContext);
+  18 |   return (
+  19 |     <>
+
+
+warning: 'props' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/timestamp/timestamp.tsx:16:26:
+  14 | import { CoordinatedUniversalTime, TimezoneContext } from "../contexts";
+  15 |
+> 16 | export function Timezone(props: any) {
+     |                          ^
+  17 |   const timezone = useContext(TimezoneContext);
+  18 |   return (
+  19 |     <>
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/timestamp/timestamp.tsx:16:33:
+  14 | import { CoordinatedUniversalTime, TimezoneContext } from "../contexts";
+  15 |
+> 16 | export function Timezone(props: any) {
+     |                                 ^
+  17 |   const timezone = useContext(TimezoneContext);
+  18 |   return (
+  19 |     <>
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/timestamp/timestamp.tsx:27:8:
+  25 | }
+  26 |
+> 27 | export function Timestamp(props: {
+     |        ^
+  28 |   time?: Moment;
+  29 |   format: string;
+  30 |   fallback?: string;
+
+
+warning: 'getByTestId' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/tracez/snapshot/snapshotPage.spec.tsx:26:10:
+  24 | import GetTracingSnapshotResponse = cockroach.server.serverpb.GetTracingSnapshotResponse;
+  25 | import Long from "long";
+> 26 | import { getByTestId } from "@testing-library/dom/types/queries";
+     |          ^
+  27 |
+  28 | const getMockSnapshotPageProps = (): SnapshotPageProps => {
+  29 |   const history = H.createHashHistory();
+
+
+warning: 'req' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/tracez/snapshot/snapshotPage.spec.tsx:47:23:
+  45 |     rawTraceLoading: false,
+  46 |     refreshNodes: () => void {},
+> 47 |     refreshRawTrace: (req: {
+     |                       ^
+  48 |       nodeID: string;
+  49 |       snapshotID: number;
+  50 |       traceID: Long;
+
+
+warning: 'req' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/tracez/snapshot/snapshotPage.spec.tsx:52:23:
+  50 |       traceID: Long;
+  51 |     }) => void {},
+> 52 |     refreshSnapshot: (req: { nodeID: string; snapshotID: number }): void => {},
+     |                       ^
+  53 |     refreshSnapshots: (id: string): void => {},
+  54 |     setSort: (value: SortSetting): void => {},
+  55 |     setTraceRecordingType: (
+
+
+warning: 'id' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/tracez/snapshot/snapshotPage.spec.tsx:53:24:
+  51 |     }) => void {},
+  52 |     refreshSnapshot: (req: { nodeID: string; snapshotID: number }): void => {},
+> 53 |     refreshSnapshots: (id: string): void => {},
+     |                        ^
+  54 |     setSort: (value: SortSetting): void => {},
+  55 |     setTraceRecordingType: (
+  56 |       nodeID: string,
+
+
+warning: 'value' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/tracez/snapshot/snapshotPage.spec.tsx:54:15:
+  52 |     refreshSnapshot: (req: { nodeID: string; snapshotID: number }): void => {},
+  53 |     refreshSnapshots: (id: string): void => {},
+> 54 |     setSort: (value: SortSetting): void => {},
+     |               ^
+  55 |     setTraceRecordingType: (
+  56 |       nodeID: string,
+  57 |       traceID: Long,
+
+
+warning: 'nodeID' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/tracez/snapshot/snapshotPage.spec.tsx:56:7:
+  54 |     setSort: (value: SortSetting): void => {},
+  55 |     setTraceRecordingType: (
+> 56 |       nodeID: string,
+     |       ^
+  57 |       traceID: Long,
+  58 |       recordingMode: RecordingMode,
+  59 |     ): Promise<SetTraceRecordingTypeResponse> => {
+
+
+warning: 'traceID' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/tracez/snapshot/snapshotPage.spec.tsx:57:7:
+  55 |     setTraceRecordingType: (
+  56 |       nodeID: string,
+> 57 |       traceID: Long,
+     |       ^
+  58 |       recordingMode: RecordingMode,
+  59 |     ): Promise<SetTraceRecordingTypeResponse> => {
+  60 |       return Promise.resolve(undefined);
+
+
+warning: 'recordingMode' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/tracez/snapshot/snapshotPage.spec.tsx:58:7:
+  56 |       nodeID: string,
+  57 |       traceID: Long,
+> 58 |       recordingMode: RecordingMode,
+     |       ^
+  59 |     ): Promise<SetTraceRecordingTypeResponse> => {
+  60 |       return Promise.resolve(undefined);
+  61 |     },
+
+
+warning: 'nodeID' is defined but never used. Allowed unused args must match /^_/u (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/tracez/snapshot/snapshotPage.spec.tsx:76:20:
+  74 |     snapshotsLoading: false,
+  75 |     sort: undefined,
+> 76 |     takeSnapshot: (nodeID: string): Promise<TakeTracingSnapshotResponse> => {
+     |                    ^
+  77 |       return Promise.resolve(undefined);
+  78 |     },
+  79 |   };
+
+
+warning: Missing return type on function (@typescript-eslint/explicit-module-boundary-types) at pkg/ui/workspaces/cluster-ui/src/tracez/snapshot/spanTable.tsx:56:24:
+  54 | };
+  55 |
+> 56 | export const TagCell = (props: { span: Span; defaultExpanded?: boolean }) => {
+     |                        ^
+  57 |   const { span, defaultExpanded } = props;
+  58 |   const tagGroups = span.processed_tags.filter(tag => tag?.children?.length);
+  59 |   const tags = span.processed_tags.filter(tag => !tag?.children?.length);
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/transactionDetails/transactionDetailsConnected.tsx:93:59:
+  91 | });
+  92 |
+> 93 | export const TransactionDetailsPageConnected = withRouter<any, any>(
+     |                                                           ^
+  94 |   connect(mapStateToProps, mapDispatchToProps)(TransactionDetails),
+  95 | );
+  96 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/transactionDetails/transactionDetailsConnected.tsx:93:64:
+  91 | });
+  92 |
+> 93 | export const TransactionDetailsPageConnected = withRouter<any, any>(
+     |                                                                ^
+  94 |   connect(mapStateToProps, mapDispatchToProps)(TransactionDetails),
+  95 | );
+  96 |
+
+
+warning: 'unset' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/transactionsTable/transactionsCells/transactionsCells.tsx:15:21:
+  13 | import { getHighlightedText } from "src/highlightedText";
+  14 | import { Tooltip } from "@cockroachlabs/ui-components";
+> 15 | import { limitText, unset } from "src/util";
+     |                     ^
+  16 | import classNames from "classnames/bind";
+  17 | import statementsStyles from "../../statementsTable/statementsTableContent.module.scss";
+  18 | import transactionsCellsStyles from "./transactionsCells.module.scss";
+
+
+warning: 'duration' is defined but never used (@typescript-eslint/no-unused-vars) at pkg/ui/workspaces/cluster-ui/src/util/constants.ts:11:10:
+   9 | // licenses/APL.txt.
+  10 |
+> 11 | import { duration } from "moment-timezone";
+     |          ^
+  12 |
+  13 | export const aggregatedTsAttr = "aggregated_ts";
+  14 | export const appAttr = "app";
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/util/find.ts:18:32:
+  16 | function isReactElement(
+  17 |   child: React.ReactNode,
+> 18 | ): child is React.ReactElement<any> {
+     |                                ^
+  19 |   return (child as React.ReactElement<any>).type !== undefined;
+  20 | }
+  21 |
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/util/find.ts:19:39:
+  17 |   child: React.ReactNode,
+  18 | ): child is React.ReactElement<any> {
+> 19 |   return (child as React.ReactElement<any>).type !== undefined;
+     |                                       ^
+  20 | }
+  21 |
+  22 | /**
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/util/fixLong.ts:17:17:
+  15 | // Long of value 0 or returns the original Long if it already exists.
+  16 | export function FixLong(value: Long | number): Long {
+> 17 |   if ((value as any) === 0) {
+     |                 ^
+  18 |     return Long.fromInt(0);
+  19 |   }
+  20 |   return value as Long;
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/util/query/query.spec.ts:42:27:
+  40 |         start: 100,
+  41 |         end: 200,
+> 42 |         strParam: null as any,
+     |                           ^
+  43 |         hello: undefined as any,
+  44 |       };
+  45 |       const expected = "start=100&end=200";
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/util/query/query.spec.ts:43:29:
+  41 |         end: 200,
+  42 |         strParam: null as any,
+> 43 |         hello: undefined as any,
+     |                             ^
+  44 |       };
+  45 |       const expected = "start=100&end=200";
+  46 |       const res = propsToQueryString(obj);
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/util/query/query.ts:22:58:
+  20 | // - keys with null or undefined values will be skipped
+  21 | // - non-string values will be toString'd
+> 22 | export function propsToQueryString(props: { [k: string]: any }): string {
+     |                                                          ^
+  23 |   const params = new URLSearchParams();
+  24 |   Object.entries(props).forEach(
+  25 |     ([k, v]: [string, any]) => v != null && params.set(k, v.toString()),
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/util/query/query.ts:25:23:
+  23 |   const params = new URLSearchParams();
+  24 |   Object.entries(props).forEach(
+> 25 |     ([k, v]: [string, any]) => v != null && params.set(k, v.toString()),
+     |                       ^
+  26 |   );
+  27 |   return params.toString();
+  28 | }
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/util/query/query.ts:58:16:
+  56 |
+  57 | export function getMatchParamByName(
+> 58 |   match: Match<any>,
+     |                ^
+  59 |   key: string,
+  60 | ): string | null {
+  61 |   const param = match.params[key];
+
+
+warning: Unexpected any. Specify a different type (@typescript-eslint/no-explicit-any) at pkg/ui/workspaces/cluster-ui/src/util/totalWorkload.fixture.ts:50:23:
+  48 | };
+  49 |
+> 50 | const statementStats: any = {
+     |                       ^
+  51 |   count: 36958,
+  52 |   first_attempt_count: Long.fromNumber(36958),
+  53 |   max_retries: Long.fromNumber(0),
+
+
+9 errors and 269 warnings found.
+9 errors potentially fixable with the `--fix` option.

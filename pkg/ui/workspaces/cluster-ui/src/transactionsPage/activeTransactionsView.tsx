@@ -40,13 +40,19 @@ import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { getActiveTransactionFiltersFromURL } from "src/queryFilter/utils";
 import { filterActiveTransactions } from "../activeExecutions/activeStatementUtils";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+import { RefreshControl } from "src/activeExecutions/refreshControl";
+import moment from "moment-timezone";
+
 const cx = classNames.bind(styles);
+const REFRESH_TIMESTAMP_FORMAT = "MMM D [at] H:mm:ss";
 
 export type ActiveTransactionsViewDispatchProps = {
   onColumnsSelect: (columns: string[]) => void;
   onFiltersChange: (filters: ActiveTransactionFilters) => void;
   onSortChange: (ss: SortSetting) => void;
   refreshLiveWorkload: () => void;
+  onAutoRefreshToggle: (isEnabled: boolean) => void;
+  onTimestampChange: (ts: string) => void;
 };
 
 export type ActiveTransactionsViewStateProps = {
@@ -59,6 +65,8 @@ export type ActiveTransactionsViewStateProps = {
   internalAppNamePrefix: string;
   isTenant?: boolean;
   maxSizeApiReached?: boolean;
+  isAutoRefreshEnabled?: boolean;
+  lastRefreshTimestamp?: string;
 };
 
 export type ActiveTransactionsViewProps = ActiveTransactionsViewStateProps &
@@ -81,6 +89,10 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   executionStatus,
   internalAppNamePrefix,
   maxSizeApiReached,
+  isAutoRefreshEnabled,
+  onAutoRefreshToggle,
+  lastRefreshTimestamp,
+  onTimestampChange,
 }: ActiveTransactionsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -93,14 +105,31 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   );
 
   useEffect(() => {
-    // Refresh  every 10 seconds.
-    refreshLiveWorkload();
+    // useEffect hook which triggers an immediate data refresh if auto-refresh
+    // is enabled. It fetches the latest workload details by dispatching a
+    // refresh action when the component mounts, ensuring that users see fresh
+    // data as soon as they land on the page if auto-refresh is on.
+    if (isAutoRefreshEnabled) {
+      const timestamp = moment();
+      onTimestampChange(timestamp.format(REFRESH_TIMESTAMP_FORMAT));
+      refreshLiveWorkload();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const interval = setInterval(refreshLiveWorkload, 10 * 1000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [refreshLiveWorkload]);
+  useEffect(() => {
+    // Refresh every 10 seconds if auto refresh is on.
+    if (isAutoRefreshEnabled) {
+      const interval = setInterval(() => {
+        const timestamp = moment();
+        onTimestampChange(timestamp.format(REFRESH_TIMESTAMP_FORMAT));
+        refreshLiveWorkload();
+      }, 10 * 1000);
+      return () => {
+        clearInterval(interval);
+      };
+    }
+  }, [isAutoRefreshEnabled, refreshLiveWorkload, onTimestampChange]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -162,6 +191,20 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
     resetPagination();
   };
 
+  const onSubmitToggleAutoRefresh = () => {
+    onAutoRefreshToggle(!isAutoRefreshEnabled);
+  };
+
+  const manualRefresh = () => {
+    refreshLiveWorkload();
+  };
+
+  const handleRefresh = () => {
+    const timestamp = moment();
+    onTimestampChange(timestamp.format(REFRESH_TIMESTAMP_FORMAT));
+    manualRefresh();
+  };
+
   const clearSearch = () => onSubmitSearch("");
   const clearFilters = () =>
     onSubmitFilters({
@@ -205,6 +248,18 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
             showExecutionStatus={true}
             appNames={apps}
             filters={filters}
+          />
+        </PageConfigItem>
+        <PageConfigItem>
+          <RefreshControl
+            isAutoRefreshEnabled={isAutoRefreshEnabled}
+            onToggleAutoRefresh={onSubmitToggleAutoRefresh}
+            onManualRefresh={handleRefresh}
+            lastRefreshTimestamp={moment(
+              lastRefreshTimestamp,
+              REFRESH_TIMESTAMP_FORMAT,
+            )}
+            execType={"transaction"}
           />
         </PageConfigItem>
       </PageConfig>

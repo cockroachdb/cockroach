@@ -52,6 +52,22 @@ const sortSettingLocalSetting = new LocalSetting<AdminUIState, SortSetting>(
   { ascending: false, columnTitle: "startTime" },
 );
 
+// autoRefreshLocalSetting is shared between the Active Statements and Active
+// Transactions components.
+const autoRefreshLocalSetting = new LocalSetting<AdminUIState, boolean>(
+  "isAutoRefreshEnabled/ActiveExecutions",
+  (state: AdminUIState) => state.localSettings,
+  true,
+);
+
+// lastRefreshTimestampLocalSetting is shared between the Active Statements and
+// Active Transactions components.
+const lastRefreshTimestampLocalSetting = new LocalSetting<AdminUIState, string>(
+  "lastTimestampRefresh/ActiveExecutions",
+  (state: AdminUIState) => state.localSettings,
+  "",
+);
+
 export const mapStateToActiveStatementViewProps = (state: AdminUIState) => ({
   filters: filtersLocalSetting.selector(state),
   selectedColumns: selectedColumnsLocalSetting.selectorToArray(state),
@@ -61,6 +77,8 @@ export const mapStateToActiveStatementViewProps = (state: AdminUIState) => ({
   sessionsError: state.cachedData?.sessions.lastError,
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
+  isAutoRefreshEnabled: autoRefreshLocalSetting.selector(state),
+  lastRefreshTimestamp: lastRefreshTimestampLocalSetting.selector(state),
 });
 
 export const activeStatementsViewActions = {
@@ -70,4 +88,6 @@ export const activeStatementsViewActions = {
   onFiltersChange: (filters: ActiveStatementFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
+  onAutoRefreshToggle: (b: boolean) => autoRefreshLocalSetting.set(b),
+  onTimestampChange: (ts: string) => lastRefreshTimestampLocalSetting.set(ts),
 };
