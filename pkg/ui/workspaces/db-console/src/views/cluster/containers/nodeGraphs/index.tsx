@@ -70,6 +70,7 @@ import changefeedsDashboard from "./dashboards/changefeeds";
 import overloadDashboard from "./dashboards/overload";
 import ttlDashboard from "./dashboards/ttl";
 import crossClusterReplicationDashboard from "./dashboards/crossClusterReplication";
+import networkingDashboard from "./dashboards/networking";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
@@ -113,6 +114,11 @@ const dashboards: { [key: string]: GraphDashboard } = {
   runtime: {
     label: "Runtime",
     component: runtimeDashboard,
+    isKvDashboard: true,
+  },
+  networking: {
+    label: "Networking",
+    component: networkingDashboard,
     isKvDashboard: true,
   },
   sql: { label: "SQL", component: sqlDashboard, isKvDashboard: false },

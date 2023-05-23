@@ -186,39 +186,5 @@ export default function (props: GraphDashboardProps) {
         ))}
       </Axis>
     </LineGraph>,
-
-    <LineGraph
-      title="Network Bytes Received"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.host.net.recv.bytes"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            nonNegativeRate
-          />
-        ))}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Network Bytes Sent"
-      sources={nodeSources}
-      tenantSource={tenantSource}
-    >
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.host.net.send.bytes"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            nonNegativeRate
-          />
-        ))}
-      </Axis>
-    </LineGraph>,
   ];
 }
