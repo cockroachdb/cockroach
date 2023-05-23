@@ -1289,7 +1289,10 @@ func NewStore(
 		allocatorStorePool = cfg.StorePool
 		storePoolIsDeterministic = allocatorStorePool.IsDeterministic()
 
-		s.rebalanceObjManager = newRebalanceObjectiveManager(ctx, s.cfg.Settings,
+		s.rebalanceObjManager = newRebalanceObjectiveManager(
+			ctx,
+			s.cfg.AmbientCtx,
+			s.cfg.Settings,
 			func(ctx context.Context, obj LBRebalancingObjective) {
 				s.VisitReplicas(func(r *Replica) (wantMore bool) {
 					r.loadBasedSplitter.SetSplitObjective(
