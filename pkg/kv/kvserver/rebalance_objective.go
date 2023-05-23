@@ -208,7 +208,9 @@ func newRebalanceObjectiveManager(
 	capacityChangeNotifier.SetOnCapacityChange(
 		func(storeID roachpb.StoreID, old, cur roachpb.StoreCapacity) {
 			if (old.CPUPerSecond < 0) != (cur.CPUPerSecond < 0) {
-				rom.maybeUpdateRebalanceObjective(ctx)
+				// NB: On capacity changes we don't have access to a context. Create a
+				// background context on callback.
+				rom.maybeUpdateRebalanceObjective(context.Background())
 			}
 		})
 
@@ -228,15 +230,16 @@ func (rom *RebalanceObjectiveManager) maybeUpdateRebalanceObjective(ctx context.
 	defer rom.mu.Unlock()
 
 	prev := rom.mu.obj
-	new := ResolveLBRebalancingObjective(ctx, rom.st, rom.storeDescProvider.GetStores())
+	next := ResolveLBRebalancingObjective(ctx, rom.st, rom.storeDescProvider.GetStores())
 	// Nothing to do when the objective hasn't changed.
-	if prev == new {
+	if prev == next {
 		return
 	}
 
-	log.Infof(ctx, "Updating the rebalance objective from %s to %s", prev.ToDimension(), new.ToDimension())
+	log.Infof(ctx, "Updating the rebalance objective from %s to %s",
+		prev.ToDimension(), next.ToDimension())
 
-	rom.mu.obj = new
+	rom.mu.obj = next
 	rom.mu.onChange(ctx, rom.mu.obj)
 }
 
