@@ -932,6 +932,31 @@ func (s *scope) FindSourceMatchingName(
 	return colinfo.NoResults, nil, s, nil
 }
 
+// FindSourceWithID implements the colinfo.ColumnItemResolver interface.
+func (s *scope) FindSourceWithID(
+	ctx context.Context, id int64,
+) (prefix *tree.TableName, srcMeta colinfo.ColumnSourceMeta, err error) {
+	var flags cat.Flags
+	if s.builder.insideViewDef || s.builder.insideFuncDef {
+		// Avoid taking descriptor leases when we're creating a view or a
+		// function.
+		flags.AvoidDescriptorCaches = true
+	}
+	ds, _, err := s.builder.catalog.ResolveDataSourceByID(ctx, flags, cat.StableID(id))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// We found the data source name by ID, but we still need to get a proper
+	// scope for it so that the scope would contain all the required columns.
+	_, prefix, srcMeta, err = s.FindSourceMatchingName(ctx, tree.MakeUnqualifiedTableName(ds.Name()))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return prefix, srcMeta, nil
+}
+
 // sourceNameMatches checks whether a request for table name toFind
 // can be satisfied by the FROM source name srcName.
 //
@@ -1038,6 +1063,13 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 					return s.VisitPre(columnNameAsTupleStar(string(t.ColumnName)))
 				}()
 			}
+			panic(resolveErr)
+		}
+		return false, colI.(*scopeColumn)
+
+	case *tree.ColumnNameRef:
+		colI, resolveErr := colinfo.ResolveColumnNameRef(s.builder.ctx, s, t)
+		if resolveErr != nil {
 			panic(resolveErr)
 		}
 		return false, colI.(*scopeColumn)
