@@ -231,7 +231,7 @@ func (b *Builder) maybeRewriteColumnPrefix(expr tree.Expr) tree.Expr {
 			if scopeCol.table.CatalogName != "" && scopeCol.table.SchemaName != "" {
 				return false, &tree.ColumnNameRef{
 					Table:      &tree.TableIDRef{ID: int64(tbl.ID())},
-					ColumnName: string(scopeCol.name.ReferenceName()),
+					ColumnName: scopeCol.name.ReferenceName(),
 				}, nil
 			} else {
 				// If the table is not fully qualified, which means that the table name
