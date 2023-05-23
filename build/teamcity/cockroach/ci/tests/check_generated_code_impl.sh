@@ -39,5 +39,8 @@ check_workspace_clean 'dev_generate' "Run \`./dev generate\` to automatically re
 # docs.
 bazel run @go_sdk//:bin/go --ui_event_filters=-DEBUG,-info,-stdout,-stderr --noshow_progress mod tidy
 check_workspace_clean 'go_mod_tidy' "Run \`go mod tidy\` to automatically regenerate these."
+# Run `generate-logictest` and ensure nothing changes.
+bazel run //pkg/cmd/generate-logictest -- -out-dir="$PWD"
+check_workspace_clean 'generate_logictest' "Run \`./dev gen logictest\` to automatically regenerate these."
 
 end_check_generated_code_tests
