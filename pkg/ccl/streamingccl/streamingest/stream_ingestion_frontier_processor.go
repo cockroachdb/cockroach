@@ -288,15 +288,15 @@ func (sf *streamIngestionFrontier) Next() (
 			break
 		}
 
-		var err error
-		if _, err = sf.noteResolvedTimestamps(row[0]); err != nil {
+		if _, err := sf.noteResolvedTimestamps(row[0]); err != nil {
 			sf.MoveToDraining(err)
 			break
 		}
 
 		if err := sf.maybeUpdatePartitionProgress(); err != nil {
-			// Updating the partition progress isn't a fatal error.
 			log.Errorf(sf.Ctx(), "failed to update partition progress: %+v", err)
+			sf.MoveToDraining(err)
+			break
 		}
 
 		// Send back a row to the job so that it can update the progress.
