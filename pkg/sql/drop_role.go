@@ -214,6 +214,22 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			return err
 		}
 
+		for _, u := range schemaDesc.GetPrivileges().Users {
+			if _, ok := userNames[u.User()]; ok {
+				if privilegeObjectFormatter.Len() > 0 {
+					privilegeObjectFormatter.WriteString(", ")
+				}
+				sn := tree.ObjectNamePrefix{
+					ExplicitCatalog: true,
+					CatalogName:     tree.Name(dbDesc.GetName()),
+					ExplicitSchema:  true,
+					SchemaName:      tree.Name(schemaDesc.GetName()),
+				}
+				privilegeObjectFormatter.FormatNode(&sn)
+				break
+			}
+		}
+
 		if err := accumulateDependentDefaultPrivileges(schemaDesc.GetDefaultPrivilegeDescriptor(), userNames, dbDesc.GetName(), schemaDesc.GetName()); err != nil {
 			return err
 		}
