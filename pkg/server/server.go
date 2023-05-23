@@ -542,7 +542,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		st,
 		g,
 		clock,
-		nodeLiveness.GetNodeCount,
+		func() int { return len(nodeLiveness.GetActiveNodes()) },
 		nodeLivenessFn,
 		/* deterministic */ false,
 	)

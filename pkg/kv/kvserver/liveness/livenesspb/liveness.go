@@ -139,7 +139,10 @@ func ValidateTransition(old Liveness, newStatus MembershipStatus) (bool, error) 
 }
 
 // IsLiveMapEntry encapsulates data about current liveness for a
-// node.
+// node based on the liveness range.
+// TODO(abaptist): This should only be used for epoch leases as it uses an
+// overly strict version of liveness. Once epoch leases are removed, this will
+// be also.
 type IsLiveMapEntry struct {
 	Liveness
 	IsLive bool
@@ -147,3 +150,128 @@ type IsLiveMapEntry struct {
 
 // IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
 type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry
+
+// NodeStatus should be used any place other than epoch leases where it is
+// necessary to determine if a node is currently alive and what its health is.
+type NodeStatus struct {
+	draining   bool
+	membership MembershipStatus
+	isDead     bool
+	isAlive    bool
+	valid      bool
+	Liveness   Liveness
+}
+
+type NodeStatusMap map[roachpb.NodeID]NodeStatus
+
+// IsAvailableNotDraining returns whether or not the specified node is available
+// to serve requests (i.e. it is live and not decommissioned) and is not in the
+// process of draining/decommissioning. Note that draining/decommissioning nodes
+// could still be leaseholders for ranges until drained, so this should not be
+// used when the caller needs to be able to contact leaseholders directly.
+// Returns false if the node is not in the local liveness table.
+func (ne NodeStatus) IsAvailableNotDraining() bool {
+	return ne.valid &&
+		ne.isAlive &&
+		!ne.membership.Decommissioning() &&
+		!ne.membership.Decommissioned() &&
+		!ne.draining
+}
+
+func (ne NodeStatus) IsAlive() bool {
+	return ne.valid && ne.isAlive && !ne.IsDecommissioned()
+}
+
+func (ne NodeStatus) IsDecommissioned() bool {
+	return ne.valid && ne.membership.Decommissioned()
+}
+
+// LivenessStatus returns a NodeLivenessStatus enumeration value for the
+// provided Liveness based on the provided timestamp and threshold.
+//
+// See the note on IsLive() for considerations on what should be passed in as
+// `now`.
+//
+// The timeline of the states that a liveness goes through as time passes after
+// the respective liveness record is written is the following:
+//
+//	-----|-------LIVE---|------UNAVAILABLE---|------DEAD------------> time
+//	     tWrite         tExp                 tExp+threshold
+//
+// Explanation:
+//
+//   - Let's say a node write its liveness record at tWrite. It sets the
+//     Expiration field of the record as tExp=tWrite+livenessThreshold.
+//     The node is considered LIVE (or DECOMMISSIONING or DRAINING).
+//   - At tExp, the IsLive() method starts returning false. The state becomes
+//     UNAVAILABLE (or stays DECOMMISSIONING or DRAINING).
+//   - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
+//
+// NB: There's a bit of discrepancy between what "Decommissioned" represents, as
+// seen by NodeStatusLiveness, and what "Decommissioned" represents as
+// understood by MembershipStatus. Currently it's possible for a live node, that
+// was marked as fully decommissioned, to have a NodeLivenessStatus of
+// "Decommissioning". This was kept this way for backwards compatibility, and
+// ideally we should remove usage of NodeLivenessStatus altogether. See #50707
+// for more details.
+func (ne NodeStatus) LivenessStatus() NodeLivenessStatus {
+	// If we don't have a liveness expiration time, treat the status as unknown.
+	// This is different than unavailable as it doesn't transition through being
+	// marked as suspect. In unavailable we still won't transfer leases or
+	// replicas to it in this state. A node that is in UNKNOWN status can
+	// immediately transition to Available once it passes a liveness heartbeat.
+	if !ne.valid {
+		return NodeLivenessStatus_UNKNOWN
+	}
+
+	if ne.isDead {
+		if !ne.membership.Active() {
+			return NodeLivenessStatus_DECOMMISSIONED
+		}
+		return NodeLivenessStatus_DEAD
+	}
+	if ne.isAlive {
+		if !ne.membership.Active() {
+			return NodeLivenessStatus_DECOMMISSIONING
+		}
+		if ne.draining {
+			return NodeLivenessStatus_DRAINING
+		}
+		return NodeLivenessStatus_LIVE
+	}
+	// Not yet dead, but has not heartbeated recently enough to be alive either.
+	return NodeLivenessStatus_UNAVAILABLE
+}
+
+func (l Liveness) CreateNodeStatus(isLive bool, isDead bool) NodeStatus {
+	// Dead means that there is low chance this node is online.
+	// Alive means that there is a high probability the node is online.
+	// A node can be neither dead nor alive (but not both).
+	return NodeStatus{
+		draining:   l.Draining,
+		membership: l.Membership,
+		isDead:     isDead,
+		isAlive:    isLive,
+		valid:      true,
+		Liveness:   l,
+	}
+}
+
+// These should not be used as they are only for testing. NodeStatusEntries are
+// generally meant to be immutable and passed by value.
+
+// TestDecommission marks a given node as decommissioned
+func (ne *NodeStatus) TestDecommission() {
+	ne.membership = MembershipStatus_DECOMMISSIONED
+}
+
+// TestDownNode marks a given node as down.
+func (ne *NodeStatus) TestDownNode() {
+	ne.isAlive = false
+}
+
+// TestRestartNode increments the epoch for a given node and marks it as
+// alive.
+func (ne *NodeStatus) TestRestartNode() {
+	ne.isAlive = true
+}

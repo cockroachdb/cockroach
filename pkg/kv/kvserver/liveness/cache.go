@@ -210,3 +210,25 @@ func (c *cache) GetIsLiveMap() livenesspb.IsLiveMap {
 	}
 	return lMap
 }
+
+func (c *cache) GetActiveNodes() []roachpb.NodeID {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	nodes := make([]roachpb.NodeID, 0, len(c.mu.nodes))
+	for _, l := range c.mu.nodes {
+		if l.Membership.Active() {
+			nodes = append(nodes, l.NodeID)
+		}
+	}
+	return nodes
+}
+
+func (c *cache) LastDescriptorUpdate(nodeID roachpb.NodeID) (hlc.Timestamp, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if l, ok := c.mu.nodeDescMap[nodeID]; ok {
+		return l, true
+	}
+	// If there is no timestamp, use the "0" timestamp.
+	return hlc.Timestamp{}, false
+}
