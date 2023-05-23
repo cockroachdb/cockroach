@@ -48,7 +48,7 @@ import (
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildDataSource(
-	texpr tree.TableExpr, indexFlags *tree.IndexFlags, locking lockingSpec, inScope *scope,
+	texpr *tree.TableExpr, indexFlags *tree.IndexFlags, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
 	defer func(prevAtRoot bool, prevInsideDataSource bool) {
 		inScope.atRoot = prevAtRoot
@@ -57,7 +57,7 @@ func (b *Builder) buildDataSource(
 	inScope.atRoot = false
 	b.insideDataSource = true
 	// NB: The case statements are sorted lexicographically.
-	switch source := (texpr).(type) {
+	switch source := (*texpr).(type) {
 	case *tree.AliasedTableExpr:
 		if source.IndexFlags != nil {
 			telemetry.Inc(sqltelemetry.IndexHintUseCounter)
@@ -88,7 +88,7 @@ func (b *Builder) buildDataSource(
 			locking = locking.filter(source.As.Alias)
 		}
 
-		outScope = b.buildDataSource(source.Expr, indexFlags, locking, inScope)
+		outScope = b.buildDataSource(&source.Expr, indexFlags, locking, inScope)
 
 		if source.Ordinality {
 			outScope = b.buildWithOrdinality(outScope)
@@ -140,6 +140,15 @@ func (b *Builder) buildDataSource(
 			b.checkPrivilege(depName, ds, privilege.UPDATE)
 		}
 
+		if b.insideFuncDef {
+			if tbl, ok := ds.(cat.Table); !ok || (!tbl.IsVirtualTable() && !tbl.IsSystemTable()) {
+				idRef := &tree.TableIDRef{
+					ID: int64(ds.ID()),
+				}
+				*texpr = idRef
+			}
+		}
+
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
@@ -165,7 +174,7 @@ func (b *Builder) buildDataSource(
 		}
 
 	case *tree.ParenTableExpr:
-		return b.buildDataSource(source.Expr, indexFlags, locking, inScope)
+		return b.buildDataSource(&source.Expr, indexFlags, locking, inScope)
 
 	case *tree.RowsFromExpr:
 		return b.buildZip(source.Items, inScope)
@@ -251,31 +260,44 @@ func (b *Builder) buildDataSource(
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
 			b.checkPrivilege(depName, ds, privilege.UPDATE)
 		}
-
-		switch t := ds.(type) {
-		case cat.Table:
-			outScope = b.buildScanFromTableRef(t, source, indexFlags, locking, inScope)
-		case cat.View:
-			if source.Columns != nil {
-				panic(pgerror.Newf(pgcode.FeatureNotSupported,
-					"cannot specify an explicit column list when accessing a view by reference"))
-			}
-			tn := tree.MakeUnqualifiedTableName(t.Name())
-
-			outScope = b.buildView(t, &tn, locking, inScope)
-		case cat.Sequence:
-			tn := tree.MakeUnqualifiedTableName(t.Name())
-			// Any explicitly listed columns are ignored.
-			outScope = b.buildSequenceSelect(t, &tn, inScope)
-		default:
-			panic(errors.AssertionFailedf("unsupported catalog object"))
-		}
+		outScope = b.buildScanFromDatasource(ds, source, indexFlags, locking, inScope)
 		b.renameSource(source.As, outScope)
 		return outScope
-
+	case *tree.TableIDRef:
+		ds, _ := b.resolveDataSourceIDRef(source, privilege.SELECT)
+		return b.buildScanFromDatasource(ds, nil, indexFlags, locking, inScope)
 	default:
 		panic(errors.AssertionFailedf("unknown table expr: %T", texpr))
 	}
+}
+
+func (b *Builder) buildScanFromDatasource(
+	ds cat.DataSource,
+	ref *tree.TableRef,
+	indexFlags *tree.IndexFlags,
+	locking lockingSpec,
+	inScope *scope,
+) (outScope *scope) {
+	switch t := ds.(type) {
+	case cat.Table:
+		outScope = b.buildScanFromTableRef(t, ref, indexFlags, locking, inScope)
+	case cat.View:
+		if ref != nil && ref.Columns != nil {
+			panic(pgerror.Newf(pgcode.FeatureNotSupported,
+				"cannot specify an explicit column list when accessing a view by reference"))
+		}
+		tn := tree.MakeUnqualifiedTableName(t.Name())
+
+		outScope = b.buildView(t, &tn, locking, inScope)
+	case cat.Sequence:
+		tn := tree.MakeUnqualifiedTableName(t.Name())
+		// Any explicitly listed columns are ignored.
+		outScope = b.buildSequenceSelect(t, &tn, inScope)
+	default:
+		panic(errors.AssertionFailedf("unsupported catalog object"))
+	}
+
+	return outScope
 }
 
 // buildView parses the view query text and builds it as a Select expression.
@@ -436,7 +458,7 @@ func (b *Builder) buildScanFromTableRef(
 	inScope *scope,
 ) (outScope *scope) {
 	var ordinals []int
-	if ref.Columns != nil {
+	if ref != nil && ref.Columns != nil {
 		// See tree.TableRef: "Note that a nil [Columns] array means 'unspecified'
 		// (all columns). whereas an array of length 0 means 'zero columns'.
 		// Lists of zero columns are not supported and will throw an error."
@@ -1281,7 +1303,7 @@ func (b *Builder) buildFromTables(
 func (b *Builder) buildFromTablesRightDeep(
 	tables tree.TableExprs, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
-	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, locking, inScope)
+	outScope = b.buildDataSource(&tables[0], nil /* indexFlags */, locking, inScope)
 
 	// Recursively build table join.
 	tables = tables[1:]
@@ -1331,7 +1353,7 @@ func (b *Builder) exprIsLateral(t tree.TableExpr) bool {
 func (b *Builder) buildFromWithLateral(
 	tables tree.TableExprs, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
-	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, locking, inScope)
+	outScope = b.buildDataSource(&tables[0], nil /* indexFlags */, locking, inScope)
 	for i := 1; i < len(tables); i++ {
 		scope := inScope
 		// Lateral expressions need to be able to refer to the expressions that
@@ -1340,7 +1362,7 @@ func (b *Builder) buildFromWithLateral(
 			scope = outScope
 			scope.context = exprKindLateralJoin
 		}
-		tableScope := b.buildDataSource(tables[i], nil /* indexFlags */, locking, scope)
+		tableScope := b.buildDataSource(&tables[i], nil /* indexFlags */, locking, scope)
 
 		// Check that the same table name is not used multiple times.
 		b.validateJoinTableNames(outScope, tableScope)
