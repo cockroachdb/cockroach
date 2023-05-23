@@ -45,6 +45,12 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(ctx context.Context) {
 		return
 	}
 
+	// Use reduced audit config is enabled.
+	if auditlogging.UserAuditEnableReducedConfig.Get(&p.execCfg.Settings.SV) {
+		p.logReducedAuditConfig(ctx)
+		return
+	}
+
 	user := p.User()
 	userRoles, err := p.MemberOfWithAdminOption(ctx, user)
 	if err != nil {
@@ -66,6 +72,46 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(ctx context.Context) {
 			},
 		)
 	}
+}
+
+func (p *planner) logReducedAuditConfig(ctx context.Context) {
+	if !p.reducedAuditConfig.Initialized {
+		p.initializeReducedAuditConfig(ctx)
+	}
+
+	// Return early if no matching audit setting was found.
+	if p.reducedAuditConfig.AuditSetting == nil {
+		return
+	}
+
+	if p.reducedAuditConfig.AuditSetting.IncludeStatements {
+		p.curPlan.auditEventBuilders = append(p.curPlan.auditEventBuilders,
+			&auditevents.RoleBasedAuditEvent{
+				Role: p.reducedAuditConfig.AuditSetting.Role.Normalized(),
+			},
+		)
+	}
+}
+
+func (p *planner) initializeReducedAuditConfig(ctx context.Context) {
+	p.reducedAuditConfig.Lock()
+	defer p.reducedAuditConfig.Unlock()
+	if p.reducedAuditConfig.Initialized {
+		return
+	}
+	// Set the initialized flag to true, even for an attempt that errors.
+	// We do this to avoid the potential overhead of continuously retrying
+	// to fetch user role memberships.
+	p.reducedAuditConfig.Initialized = true
+
+	user := p.User()
+	userRoles, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		log.Errorf(ctx, "initialize reduced audit config: error getting user role memberships: %v", err)
+		return
+	}
+	// Get matching audit setting.
+	p.reducedAuditConfig.AuditSetting = p.AuditConfig().GetMatchingAuditSetting(userRoles, user)
 }
 
 // shouldNotRoleBasedAudit checks if we should do any auditing work for RoleBasedAuditEvents.
