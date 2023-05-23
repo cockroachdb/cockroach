@@ -255,7 +255,12 @@ func (t *tlsInitHandshaker) onTrustInit(
 
 	log.Ops.Infof(ctx, "received valid challenge and CA from: %s", challenge.HostAddress)
 
-	t.trustedPeers <- challenge
+	select {
+	case t.trustedPeers <- challenge:
+	case <-ctx.Done():
+		apiV2InternalError(req.Context(), ctx.Err(), res)
+		return
+	}
 
 	// Acknowledge validation to the client.
 	ack, err := createNodeHostnameAndCA(t.listenAddr, t.tempCerts.CACertificate, t.token)
