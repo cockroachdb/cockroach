@@ -874,60 +874,83 @@ func TestChangefeedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		ctx := context.Background()
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+	for _, tc := range []struct {
+		name   string
+		create string
+		row0   string
+		row1   string
+		opts   []feedTestOption
+	}{
+		{
+			name:   `json format`,
+			create: `CREATE CHANGEFEED FOR foo WITH updated, resolved`,
+			row0:   `{"after": {"a": 0}, "updated": "%s"}`,
+			row1:   `foo: [1]->{"after": {"a": 1}, "updated": "%s"}`,
+		},
+		{
+			name:   `parquet format`,
+			create: `CREATE CHANGEFEED FOR foo WITH updated, resolved, format=parquet`,
+			row0:   `{"after": {"a": 0}, "updated": "%s"}`,
+			row1:   `foo: [1]->{"after": {"a": 1}, "updated": "%s"}`,
+			opts:   []feedTestOption{feedTestForceSink("cloudstorage")},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				ctx := context.Background()
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, resolved`)
-		defer closeFeed(t, foo)
+				foo := feed(t, f, tc.create)
+				defer closeFeed(t, foo)
 
-		// Grab the first non resolved-timestamp row.
-		var row0 *cdctest.TestFeedMessage
-		for {
-			var err error
-			row0, err = foo.Next()
-			assert.NoError(t, err)
-			if len(row0.Value) > 0 {
-				break
+				// Grab the first non resolved-timestamp row.
+				var row0 *cdctest.TestFeedMessage
+				for {
+					var err error
+					row0, err = foo.Next()
+					assert.NoError(t, err)
+					if len(row0.Value) > 0 {
+						break
+					}
+				}
+
+				// If this changefeed uses jobs (and thus stores a ChangefeedDetails), get
+				// the statement timestamp from row0 and verify that they match. Otherwise,
+				// just skip the row.
+				if jf, ok := foo.(cdctest.EnterpriseTestFeed); ok {
+					d, err := jf.Details()
+					assert.NoError(t, err)
+					expected := fmt.Sprintf(tc.row0, d.StatementTime.AsOfSystemTime())
+					assert.Equal(t, expected, string(row0.Value))
+				}
+
+				// Assert the remaining key using assertPayloads, since we know the exact
+				// timestamp expected.
+				var ts1 string
+				if err := crdb.ExecuteTx(ctx, s.DB, nil /* txopts */, func(tx *gosql.Tx) error {
+					return tx.QueryRow(
+						`INSERT INTO foo VALUES (1) RETURNING cluster_logical_timestamp()`,
+					).Scan(&ts1)
+				}); err != nil {
+					t.Fatal(err)
+				}
+				assertPayloads(t, foo, []string{
+					fmt.Sprintf(tc.row1, ts1),
+				})
+
+				// Check that we eventually get a resolved timestamp greater than ts1.
+				parsed := parseTimeToHLC(t, ts1)
+				for {
+					if resolved, _ := expectResolvedTimestamp(t, foo); parsed.Less(resolved) {
+						break
+					}
+				}
 			}
-		}
-
-		// If this changefeed uses jobs (and thus stores a ChangefeedDetails), get
-		// the statement timestamp from row0 and verify that they match. Otherwise,
-		// just skip the row.
-		if jf, ok := foo.(cdctest.EnterpriseTestFeed); ok {
-			d, err := jf.Details()
-			assert.NoError(t, err)
-			expected := `{"after": {"a": 0}, "updated": "` + d.StatementTime.AsOfSystemTime() + `"}`
-			assert.Equal(t, expected, string(row0.Value))
-		}
-
-		// Assert the remaining key using assertPayloads, since we know the exact
-		// timestamp expected.
-		var ts1 string
-		if err := crdb.ExecuteTx(ctx, s.DB, nil /* txopts */, func(tx *gosql.Tx) error {
-			return tx.QueryRow(
-				`INSERT INTO foo VALUES (1) RETURNING cluster_logical_timestamp()`,
-			).Scan(&ts1)
-		}); err != nil {
-			t.Fatal(err)
-		}
-		assertPayloads(t, foo, []string{
-			`foo: [1]->{"after": {"a": 1}, "updated": "` + ts1 + `"}`,
+			cdcTest(t, testFn, tc.opts...)
 		})
-
-		// Check that we eventually get a resolved timestamp greater than ts1.
-		parsed := parseTimeToHLC(t, ts1)
-		for {
-			if resolved, _ := expectResolvedTimestamp(t, foo); parsed.Less(resolved) {
-				break
-			}
-		}
 	}
-
-	cdcTest(t, testFn)
 }
 
 func TestChangefeedMVCCTimestamps(t *testing.T) {

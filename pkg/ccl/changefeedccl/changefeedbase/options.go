@@ -445,9 +445,11 @@ var InitialScanOnlyUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, Opt
 // OptTopicInValue is disallowed because the cloudstorage sink puts topic
 // names in parquet file names.
 //
+// OptEnvelope is disallowed because parquet columns are flat. There is no reason to wrap.
+//
 // TODO(#103129): add support for some of these
-var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptResolvedTimestamps, OptDiff,
-	OptMVCCTimestamps, OptUpdatedTimestamps, OptKeyInValue, OptTopicInValue)
+var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptDiff,
+	OptKeyInValue, OptTopicInValue, OptEnvelope)
 
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
 // users to alter.
@@ -949,6 +951,20 @@ func (s StatementOptions) IncludeVirtual() bool {
 // KeyOnly returns true if we are using the 'key_only' envelope.
 func (s StatementOptions) KeyOnly() bool {
 	return s.m[OptEnvelope] == string(OptEnvelopeKeyOnly)
+}
+
+// UpdatedTimestamps returns true if the statement options contain
+// OptUpdatedTimestamps.
+func (s StatementOptions) UpdatedTimestamps() bool {
+	_, ok := s.m[OptUpdatedTimestamps]
+	return ok
+}
+
+// MVCCTimestamps returns true if the statement options contain
+// OptMVCCTimestamps.
+func (s StatementOptions) MVCCTimestamps() bool {
+	_, ok := s.m[OptMVCCTimestamps]
+	return ok
 }
 
 // GetMinCheckpointFrequency returns the minimum frequency with which checkpoints should be

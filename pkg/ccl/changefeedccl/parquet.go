@@ -41,6 +41,15 @@ func newParquetSchemaDefintion(row cdcevent.Row) (*parquet.SchemaDefinition, int
 		return nil, 0, err
 	}
 
+	if err := row.ForAllMeta().Col(func(col cdcevent.ResultColumn) error {
+		columnNames[idx] = col.Name
+		columnTypes[idx] = col.Typ
+		idx += 1
+		return nil
+	}); err != nil {
+		return nil, 0, err
+	}
+
 	columnNames[idx] = parquetCrdbEventTypeColName
 	columnTypes[idx] = types.String
 
@@ -108,6 +117,12 @@ func populateDatums(updatedRow cdcevent.Row, prevRow cdcevent.Row, datumAlloc []
 	}); err != nil {
 		return err
 	}
+	if err := updatedRow.ForAllMeta().Datum(func(d tree.Datum, _ cdcevent.ResultColumn) error {
+		datums = append(datums, d)
+		return nil
+	}); err != nil {
+		return err
+	}
 	datums = append(datums, getEventTypeDatum(updatedRow, prevRow).DString())
 	return nil
 }
@@ -131,7 +146,15 @@ func addParquetTestMetadata(row cdcevent.Row, opts []parquet.Option) ([]parquet.
 	}); err != nil {
 		return opts, err
 	}
+
+	if err := row.ForAllMeta().Col(func(col cdcevent.ResultColumn) error {
+		allCols = append(allCols, col.Name)
+		return nil
+	}); err != nil {
+		return opts, err
+	}
 	allCols = append(allCols, parquetCrdbEventTypeColName)
+
 	opts = append(opts, parquet.WithMetadata(map[string]string{"allCols": strings.Join(allCols, ",")}))
 	return opts, nil
 }

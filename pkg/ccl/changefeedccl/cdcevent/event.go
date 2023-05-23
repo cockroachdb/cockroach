@@ -98,7 +98,8 @@ func (r Row) ForEachKeyColumn() Iterator {
 	return iter{r: r, cols: r.keyCols}
 }
 
-// ForEachColumn returns Iterator for each column.
+// ForEachColumn returns Iterator for each key column and value column excluding
+// meta columns.
 func (r Row) ForEachColumn() Iterator {
 	return iter{r: r, cols: r.valueCols}
 }
