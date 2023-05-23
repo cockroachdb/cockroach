@@ -55,7 +55,7 @@ func (m *MockNodeLiveness) SetNodeStatus(
 // NodeLivenessFunc is the method that can be injected as part of store pool
 // construction to mock out node liveness, in tests.
 func (m *MockNodeLiveness) NodeLivenessFunc(
-	nodeID roachpb.NodeID, now time.Time, threshold time.Duration,
+	nodeID roachpb.NodeID, now hlc.Timestamp, threshold time.Duration,
 ) livenesspb.NodeLivenessStatus {
 	m.Lock()
 	defer m.Unlock()
@@ -76,7 +76,8 @@ func CreateTestStorePool(
 	defaultNodeStatus livenesspb.NodeLivenessStatus,
 ) (*stop.Stopper, *gossip.Gossip, *timeutil.ManualTime, *StorePool, *MockNodeLiveness) {
 	stopper := stop.NewStopper()
-	mc := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	// Pick a random date that is "realistic" and far enough away from 0.
+	mc := timeutil.NewManualTime(time.Date(2020, 0, 0, 0, 0, 0, 0, time.UTC))
 	clock := hlc.NewClockForTesting(mc)
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())

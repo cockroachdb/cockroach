@@ -532,7 +532,7 @@ func mockStorePool(
 	for _, storeID := range suspectedStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_LIVE
 		detail := storePool.GetStoreDetailLocked(storeID)
-		detail.LastUnavailable = storePool.Clock().Now().GoTime()
+		detail.LastUnavailable = storePool.Clock().Now()
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
@@ -542,7 +542,7 @@ func mockStorePool(
 	// Set the node liveness function using the set we constructed.
 	// TODO(sarkesian): This override needs to be fixed to stop exporting this field.
 	storePool.NodeLivenessFn =
-		func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) livenesspb.NodeLivenessStatus {
+		func(nodeID roachpb.NodeID, now hlc.Timestamp, threshold time.Duration) livenesspb.NodeLivenessStatus {
 			if status, ok := liveNodeSet[nodeID]; ok {
 				return status
 			}
@@ -842,7 +842,7 @@ func TestAllocatorReplaceDecommissioningReplica(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(storeDescriptors, t)
 
 	// Override liveness of n3 to decommissioning so the only available target is s4.
-	oSp := storepool.NewOverrideStorePool(sp, func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	oSp := storepool.NewOverrideStorePool(sp, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
 		if nid == roachpb.NodeID(3) {
 			return livenesspb.NodeLivenessStatus_DECOMMISSIONING
 		}
@@ -900,7 +900,7 @@ func TestAllocatorReplaceFailsOnConstrainedDecommissioningReplica(t *testing.T) 
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 
 	// Override liveness of n3 to decommissioning so the only available target is s4.
-	oSp := storepool.NewOverrideStorePool(sp, func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	oSp := storepool.NewOverrideStorePool(sp, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
 		if nid == roachpb.NodeID(3) {
 			return livenesspb.NodeLivenessStatus_DECOMMISSIONING
 		}
@@ -6829,7 +6829,7 @@ func TestAllocatorComputeActionWithStorePoolRemoveDead(t *testing.T) {
 			// Mark all dead nodes as alive, so we can override later.
 			all := append(tcase.live, tcase.dead...)
 			mockStorePool(sp, all, nil, nil, nil, nil, nil)
-			oSp := storepool.NewOverrideStorePool(sp, func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+			oSp := storepool.NewOverrideStorePool(sp, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
 				for _, deadStoreID := range tcase.dead {
 					if nid == roachpb.NodeID(deadStoreID) {
 						return livenesspb.NodeLivenessStatus_DEAD
@@ -8503,7 +8503,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	for i := 0; i < generations; i++ {
 		// First loop through test stores and randomly add data.
 		for j := 0; j < len(testStores); j++ {
-			if mockNodeLiveness.NodeLivenessFunc(roachpb.NodeID(j), time.Time{}, 0) == livenesspb.NodeLivenessStatus_DEAD {
+			if mockNodeLiveness.NodeLivenessFunc(roachpb.NodeID(j), hlc.Timestamp{}, 0) == livenesspb.NodeLivenessStatus_DEAD {
 				continue
 			}
 			ts := &testStores[j]
@@ -8530,7 +8530,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 		// Loop through each store a number of times and maybe rebalance.
 		for j := 0; j < 10; j++ {
 			for k := 0; k < len(testStores); k++ {
-				if mockNodeLiveness.NodeLivenessFunc(roachpb.NodeID(k), time.Time{}, 0) == livenesspb.NodeLivenessStatus_DEAD {
+				if mockNodeLiveness.NodeLivenessFunc(roachpb.NodeID(k), hlc.Timestamp{}, 0) == livenesspb.NodeLivenessStatus_DEAD {
 					continue
 				}
 				ts := &testStores[k]
@@ -8567,7 +8567,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 		// Simulate rocksdb compactions freeing up disk space.
 		for j := 0; j < len(testStores); j++ {
-			if mockNodeLiveness.NodeLivenessFunc(roachpb.NodeID(j), time.Time{}, 0) != livenesspb.NodeLivenessStatus_DEAD {
+			if mockNodeLiveness.NodeLivenessFunc(roachpb.NodeID(j), hlc.Timestamp{}, 0) != livenesspb.NodeLivenessStatus_DEAD {
 				ts := &testStores[j]
 				if ts.Capacity.Available <= 0 {
 					t.Errorf("testStore %d ran out of space during generation %d: %+v", j, i, ts.Capacity)
