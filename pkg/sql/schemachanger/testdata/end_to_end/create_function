@@ -36,9 +36,9 @@ write *eventpb.CreateFunction to event log:
   sql:
     descriptorId: 110
     statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN ‹a› ‹notmyworkday›)\n\tRETURNS
-      INT8\n\tVOLATILE\n\tLANGUAGE SQL\n\tAS $$SELECT ‹a› FROM ‹defaultdb›.‹public›.‹t›;
-      SELECT ‹b› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_b›; SELECT ‹c› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_c›;
-      SELECT ‹a› FROM ‹defaultdb›.‹public›.‹v›; SELECT nextval(‹'sq1'›);$$"
+      INT8\n\tVOLATILE\n\tLANGUAGE SQL\n\tAS $$SELECT ‹a› FROM {TABLE:104}; SELECT ‹b›
+      FROM {TABLE:104}@‹t_idx_b›; SELECT ‹c› FROM {TABLE:104}@‹t_idx_c›; SELECT ‹a›
+      FROM {TABLE:106}; SELECT nextval(‹'sq1'›);$$"
     tag: CREATE FUNCTION
     user: root
 ## StatementPhase stage 1 of 1 with 10 MutationType ops

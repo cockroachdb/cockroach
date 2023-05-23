@@ -65,9 +65,6 @@ func (t *TableName) Equals(other *TableName) bool {
 	return *t == *other
 }
 
-// tableExpr implements the TableExpr interface.
-func (*TableName) tableExpr() {}
-
 // NewTableNameWithSchema creates a new table name qualified with a given
 // catalog and schema.
 func NewTableNameWithSchema(db, sc, tbl Name) *TableName {
