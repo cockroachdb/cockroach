@@ -37,7 +37,7 @@ import { mvccGarbage, syncHistory, unique } from "../util";
 import styles from "./databaseDetailsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
-import { Moment } from "moment-timezone";
+import moment, { Moment } from "moment-timezone";
 import { Caution } from "@cockroachlabs/icons";
 import { Anchor } from "../anchor";
 import LoadingError from "../sqlActivity/errorComponent";
@@ -52,6 +52,8 @@ import {
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "src/tableStatistics";
 import { Timestamp, Timezone } from "../timestamp";
+import { DatabasesPageDataDatabase } from "../databasesPage";
+import { forEach } from "lodash";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -166,6 +168,9 @@ interface DatabaseDetailsPageState {
   lastDetailsError: Error;
 }
 
+const tablePageSize = 20;
+const disableTableSortSize = tablePageSize * 2;
+
 class DatabaseSortedTable extends SortedTable<DatabaseDetailsPageDataTable> {}
 
 // filterBySearchQuery returns true if the search query matches the database name.
@@ -243,20 +248,88 @@ export class DatabaseDetailsPage extends React.Component<
   }
 
   componentDidMount(): void {
-    this.refresh();
+    if (!this.props.loaded && !this.props.loading && !this.props.lastError) {
+      this.props.refreshDatabaseDetails(this.props.name);
+    } else {
+      // If the props are already loaded then componentDidUpdate
+      // will not get called so call refresh to make sure details
+      // are loaded
+      this.refresh();
+    }
   }
 
-  componentDidUpdate(): void {
-    this.refresh();
+  componentDidUpdate(
+    prevProps: Readonly<DatabaseDetailsPageProps>,
+    prevState: Readonly<DatabaseDetailsPageState>,
+  ): void {
+    if (this.shouldRefreshTableInformation(prevState, prevProps)) {
+      this.refresh();
+    }
+  }
+
+  private shouldRefreshTableInformation(
+    prevState: Readonly<DatabaseDetailsPageState>,
+    prevProps: Readonly<DatabaseDetailsPageProps>,
+  ): boolean {
+    // No new tables to update
+    if (
+      !this.props.tables ||
+      this.props.tables.length == 0 ||
+      this.props.tables.every(x => x.loaded || x.loading)
+    ) {
+      return false;
+    }
+
+    if (this.state.pagination.current != prevState.pagination.current) {
+      return true;
+    }
+
+    if (prevProps && this.props.search != prevProps.search) {
+      return true;
+    }
+
+    const filteredTables = this.filteredDatabaseTables();
+    for (
+      let i = 0;
+      i < filteredTables.length && i < disableTableSortSize;
+      i++
+    ) {
+      const table = filteredTables[i];
+      if (!table.loaded && !table.loading && table.lastError == undefined) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private refresh(): void {
-    if (!this.props.loaded && !this.props.loading && !this.props.lastError) {
-      return this.props.refreshDatabaseDetails(this.props.name);
+    let lastDetailsError: Error;
+    // Load everything by default
+    let filteredTables = this.props.tables;
+
+    // Loading only the first page. If more than 2 page of tables
+    // exists the sort will be disabled.
+    if (this.props.tables.length > disableTableSortSize) {
+      const startIndex =
+        this.state.pagination.pageSize * (this.state.pagination.current - 1);
+      // Result maybe filtered so get db names from filtered results
+      if (this.props.search && this.props.search.length > 0) {
+        filteredTables = this.filteredDatabaseTables();
+      }
+
+      if (!filteredTables || filteredTables.length === 0) {
+        return;
+      }
+
+      // Only load the first page
+      filteredTables = filteredTables.slice(
+        startIndex,
+        startIndex + disableTableSortSize,
+      );
     }
 
-    let lastDetailsError: Error;
-    this.props.tables.forEach(table => {
+    filteredTables.forEach(table => {
       if (table.lastError !== undefined) {
         lastDetailsError = table.lastError;
       }
@@ -267,8 +340,13 @@ export class DatabaseDetailsPage extends React.Component<
         this.setState({ lastDetailsError: lastDetailsError });
       }
 
-      if (!table.loaded && !table.loading && table.lastError === undefined) {
-        return this.props.refreshTableDetails(this.props.name, table.name);
+      if (
+        !table.loaded &&
+        !table.loading &&
+        (table.lastError === undefined ||
+          table.lastError?.name === "GetDatabaseInfoError")
+      ) {
+        this.props.refreshTableDetails(this.props.name, table.name);
       }
     });
   }
@@ -382,6 +460,15 @@ export class DatabaseDetailsPage extends React.Component<
       filters.regions?.length > 0 ? filters.regions.split(",") : [];
     const nodesSelected =
       filters.nodes?.length > 0 ? filters.nodes.split(",") : [];
+
+    // Avoid the loop if no filters/search are applied
+    if (
+      (!search || search.length == 0) &&
+      regionsSelected.length == 0 &&
+      nodesSelected.length == 0
+    ) {
+      return tables;
+    }
 
     return tables
       .filter(table => (search ? filterBySearchQuery(table, search) : true))
@@ -820,6 +907,7 @@ export class DatabaseDetailsPage extends React.Component<
                 onChangeSortSetting={this.changeSortSetting}
                 pagination={this.state.pagination}
                 loading={this.props.loading}
+                disableSortSizeLimit={disableTableSortSize}
                 renderNoResult={
                   <div
                     className={cx(
@@ -854,6 +942,7 @@ export class DatabaseDetailsPage extends React.Component<
                   timeout: this.state.lastDetailsError?.name
                     ?.toLowerCase()
                     .includes("timeout"),
+                  error: this.state.lastDetailsError,
                 })
               }
             />
