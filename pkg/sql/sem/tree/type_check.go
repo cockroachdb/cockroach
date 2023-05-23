@@ -1455,6 +1455,22 @@ func (expr *ColumnNameRef) TypeCheck(
 }
 
 // TypeCheck implements the Expr interface.
+func (expr *TableIDRefExpr) TypeCheck(
+	_ context.Context, _ *SemaContext, _ *types.T,
+) (TypedExpr, error) {
+	return nil, pgerror.Newf(pgcode.UndefinedColumn,
+		"table id reference %q type check not supported", ErrString(expr))
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *TableNameExpr) TypeCheck(
+	_ context.Context, _ *SemaContext, _ *types.T,
+) (TypedExpr, error) {
+	return nil, pgerror.Newf(pgcode.UndefinedColumn,
+		"table id reference %q type check not supported", ErrString(expr))
+}
+
+// TypeCheck implements the Expr interface.
 func (expr UnqualifiedStar) TypeCheck(
 	_ context.Context, _ *SemaContext, desired *types.T,
 ) (TypedExpr, error) {

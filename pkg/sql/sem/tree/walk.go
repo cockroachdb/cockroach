@@ -708,6 +708,16 @@ func (expr *ColumnNameRef) Walk(_ Visitor) Expr {
 }
 
 // Walk implements the Expr interface.
+func (expr *TableIDRefExpr) Walk(_ Visitor) Expr {
+	return expr
+}
+
+// Walk implements the Expr interface.
+func (expr *TableNameExpr) Walk(_ Visitor) Expr {
+	return expr
+}
+
+// Walk implements the Expr interface.
 func (expr DefaultVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
