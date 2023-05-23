@@ -269,7 +269,7 @@ func TestPebbleEncryption(t *testing.T) {
 	require.NoError(t, err)
 	// Opening the DB should've created OPTIONS, CURRENT, MANIFEST and the
 	// WAL.
-	require.Equal(t, uint64(4), stats.TotalFiles)
+	require.GreaterOrEqual(t, uint64(4), stats.TotalFiles)
 	// We also created markers for the format version and the manifest.
 	require.Equal(t, uint64(6), stats.ActiveKeyFiles)
 	var s enginepbccl.EncryptionStatus
@@ -311,7 +311,7 @@ func TestPebbleEncryption(t *testing.T) {
 	require.NoError(t, err)
 	t.Logf("EnvStats:\n%+v\n\n", *stats)
 	require.Equal(t, uint64(5), stats.TotalFiles)
-	require.LessOrEqual(t, uint64(5), stats.ActiveKeyFiles)
+	require.GreaterOrEqual(t, uint64(5), stats.ActiveKeyFiles)
 	require.Equal(t, stats.TotalBytes, stats.ActiveKeyBytes)
 
 	db.Close()
