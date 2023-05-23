@@ -523,6 +523,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				log.Ops.Warningf(ctx, "writing last up timestamp: %v", err)
 			}
 		},
+		NodeDialer: nodeDialer,
 	})
 
 	registry.AddMetricStruct(nodeLiveness.Metrics())
