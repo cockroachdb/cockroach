@@ -153,7 +153,11 @@ func (b *Builder) analyzeSelectList(
 						for _, expr := range exprs {
 							switch col := expr.(type) {
 							case *scopeColumn:
-								expansions = append(expansions, tree.SelectExpr{Expr: tree.NewColumnItem(&col.table, col.name.ReferenceName())})
+								if b.insideFuncDef {
+									expansions = append(expansions, tree.SelectExpr{Expr: b.maybeRewriteColumnPrefix(col)})
+								} else {
+									expansions = append(expansions, tree.SelectExpr{Expr: tree.NewColumnItem(&col.table, col.name.ReferenceName())})
+								}
 							case *tree.ColumnAccessExpr:
 								expansions = append(expansions, tree.SelectExpr{Expr: col})
 							default:
@@ -177,6 +181,11 @@ func (b *Builder) analyzeSelectList(
 			}
 
 			texpr = inScope.resolveType(e.Expr, desired)
+		}
+
+		if b.insideFuncDef {
+			rewrittenExpr := b.maybeRewriteColumnPrefix(texpr)
+			e.Expr = rewrittenExpr
 		}
 
 		// Output column names should exactly match the original expression, so we
@@ -205,6 +214,44 @@ func (b *Builder) buildProjectionList(inScope *scope, projectionsScope *scope) {
 		col := &projectionsScope.cols[i]
 		b.buildScalar(col.getExpr(), inScope, projectionsScope, col, nil)
 	}
+}
+
+func (b *Builder) maybeRewriteColumnPrefix(expr tree.Expr) tree.Expr {
+	ret, err := tree.SimpleVisit(expr, func(colExpr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if scopeCol, ok := colExpr.(*scopeColumn); ok {
+			md := b.factory.Metadata()
+			tblID := md.ColumnMeta(scopeCol.id).Table
+			// Table ID would be zero if the scopeColumn represents a UDF input
+			// parameter. There is no need to rewrite parameter names.
+			if tblID == 0 {
+				return false, colExpr, nil
+			}
+			tbl := md.Table(tblID)
+			if tbl.IsSystemTable() || tbl.IsVirtualTable() {
+				return false, colExpr, nil
+			}
+			// If a column is a reference from a real table.
+			if scopeCol.table.CatalogName != "" && scopeCol.table.SchemaName != "" {
+				return false, &tree.ColumnNameRef{
+					Table:      &tree.TableIDRef{ID: int64(tbl.ID())},
+					ColumnName: string(scopeCol.name.ReferenceName()),
+				}, nil
+			} else {
+				// If the table is not fully qualified, which means that the table name
+				// can be a table alias or a subquery alias, then we don't need to
+				// rewrite it.
+				return false, &tree.ColumnItem{
+					TableName:  scopeCol.table.ToUnresolvedObjectName(),
+					ColumnName: scopeCol.name.ReferenceName(),
+				}, nil
+			}
+		}
+		return true, colExpr, nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	return ret
 }
 
 // resolveColRef looks for the common case of a standalone column reference
