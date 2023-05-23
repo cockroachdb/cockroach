@@ -66,7 +66,17 @@ func OverrideNodeCountFunc(
 	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, nodeLiveness *liveness.NodeLiveness,
 ) NodeCountFunc {
 	return func() int {
-		return nodeLiveness.GetNodeCountWithOverrides(overrides)
+		var count int
+		for id, nv := range nodeLiveness.ScanNodeVitalityFromCache() {
+			if !nv.IsDecommissioning() && !nv.IsDecommissioned() {
+				if overrideStatus, ok := overrides[id]; !ok ||
+					(overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONING &&
+						overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONED) {
+					count++
+				}
+			}
+		}
+		return count
 	}
 }
 

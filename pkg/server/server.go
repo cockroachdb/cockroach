@@ -537,12 +537,21 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			nodeLiveness.RegisterCallback(nodeLivenessKnobs.IsLiveCallback)
 		}
 	}
+	nodeLiveCountFn := func() int {
+		var count int
+		for _, nv := range nodeLiveness.ScanNodeVitalityFromCache() {
+			if !nv.IsDecommissioning() && !nv.IsDecommissioned() {
+				count++
+			}
+		}
+		return count
+	}
 	storePool := storepool.NewStorePool(
 		cfg.AmbientCtx,
 		st,
 		g,
 		clock,
-		nodeLiveness.GetNodeCount,
+		nodeLiveCountFn,
 		nodeLivenessFn,
 		/* deterministic */ false,
 	)

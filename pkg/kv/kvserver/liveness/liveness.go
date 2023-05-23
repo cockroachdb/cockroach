@@ -1335,43 +1335,6 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 	return liveNodes
 }
 
-// GetNodeCount returns a count of the number of nodes in the cluster,
-// including dead nodes, but excluding decommissioning or decommissioned nodes.
-// TODO(baptist): remove this method. There are better alternatives.
-func (nl *NodeLiveness) GetNodeCount() int {
-	nl.cache.mu.RLock()
-	defer nl.cache.mu.RUnlock()
-	var count int
-	for _, l := range nl.cache.mu.nodes {
-		if l.Membership.Active() {
-			count++
-		}
-	}
-	return count
-}
-
-// GetNodeCountWithOverrides returns a count of the number of nodes in the cluster,
-// including dead nodes, but excluding decommissioning or decommissioned nodes,
-// using the provided set of liveness overrides.
-// TODO(baptist): remove this method. There are better alternatives.
-func (nl *NodeLiveness) GetNodeCountWithOverrides(
-	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus,
-) int {
-	nl.cache.mu.RLock()
-	defer nl.cache.mu.RUnlock()
-	var count int
-	for _, l := range nl.cache.mu.nodes {
-		if l.Membership.Active() {
-			if overrideStatus, ok := overrides[l.NodeID]; !ok ||
-				(overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONING &&
-					overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONED) {
-				count++
-			}
-		}
-	}
-	return count
-}
-
 // TestingSetDrainingInternal is a testing helper to set the internal draining
 // state for a NodeLiveness instance.
 func (nl *NodeLiveness) TestingSetDrainingInternal(
