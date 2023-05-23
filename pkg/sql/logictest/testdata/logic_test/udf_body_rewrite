@@ -205,7 +205,7 @@ CREATE FUNCTION public.f()
   CALLED ON NULL INPUT
   LANGUAGE SQL
   AS $$
-  SELECT test.public.t1.a + test.public.t2.a FROM test.public.t1 JOIN test.public.t2 ON {TABLE:106}.b = {TABLE:107}.b GROUP BY test.public.t1.a + test.public.t2.a HAVING (test.public.t1.a + test.public.t2.a) > 1 ORDER BY test.public.t1.a + test.public.t2.a;
+  SELECT test.public.t1.a + test.public.t2.a FROM test.public.t1 JOIN test.public.t2 ON test.public.t1.b = test.public.t2.b GROUP BY test.public.t1.a + test.public.t2.a HAVING (test.public.t1.a + test.public.t2.a) > 1 ORDER BY test.public.t1.a + test.public.t2.a;
 $$
 
 query I
