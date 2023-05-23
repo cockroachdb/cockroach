@@ -283,6 +283,14 @@ func (r *RemoteClockMonitor) UpdateOffset(
 	}
 }
 
+// GetOffset returns the last RemoteOffset seen for this node. Returns the
+// zero value if no offset is known.
+func (r *RemoteClockMonitor) GetOffset(id roachpb.NodeID) RemoteOffset {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.offsets[id]
+}
+
 // VerifyClockOffset calculates the number of nodes to which the known offset
 // is healthy (as defined by RemoteOffset.isHealthy). It returns nil iff more
 // than half the known offsets are healthy, and an error otherwise. A non-nil
