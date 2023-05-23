@@ -237,7 +237,7 @@ $$
   DELETE FROM u_a USING u_a u_a2 WHERE u_a.a = u_a2.c RETURNING *
 $$ LANGUAGE SQL;
 
-query T
+query T rowsort
 SELECT f_using_self_join();
 ----
 (5,d,5,5,d,5)
