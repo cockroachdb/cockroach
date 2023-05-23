@@ -47,6 +47,7 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -104,6 +105,12 @@ const (
 	// "useful" outgoing gossip connection to free up space for a more
 	// efficiently targeted connection to the most distant node.
 	defaultCullInterval = 60 * time.Second
+
+	// defaultClientsInterval is the default interval for updating the gossip
+	// clients key which allows every node in the cluster to create a map of
+	// gossip connectivity. This value is intentionally small as we want to
+	// detect gossip partitions faster that the node liveness timeout (9s).
+	defaultClientsInterval = 2 * time.Second
 
 	// NodeDescriptorInterval is the interval for gossiping the node descriptor.
 	// Note that increasing this duration may increase the likelihood of gossip
@@ -821,6 +828,31 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 	g.storeMap[desc.StoreID] = desc.Node.NodeID
 }
 
+func (g *Gossip) updateClients() {
+	nodeID := g.NodeID.Get()
+	if nodeID == 0 {
+		return
+	}
+
+	var buf bytes.Buffer
+	var sep string
+
+	g.mu.RLock()
+	g.clientsMu.Lock()
+	for _, c := range g.clientsMu.clients {
+		if c.peerID != 0 {
+			fmt.Fprintf(&buf, "%s%d", sep, c.peerID)
+			sep = ","
+		}
+	}
+	g.clientsMu.Unlock()
+	g.mu.RUnlock()
+
+	if err := g.AddInfo(MakeGossipClientsKey(nodeID), buf.Bytes(), 2*defaultClientsInterval); err != nil {
+		log.Errorf(g.AnnotateCtx(context.Background()), "%v", err)
+	}
+}
+
 // recomputeMaxPeersLocked recomputes max peers based on size of
 // network and set the max sizes for incoming and outgoing node sets.
 //
@@ -1282,11 +1314,13 @@ func (g *Gossip) bootstrap() {
 func (g *Gossip) manage() {
 	ctx := g.AnnotateCtx(context.Background())
 	_ = g.server.stopper.RunAsyncTask(ctx, "gossip-manage", func(ctx context.Context) {
+		clientsTimer := timeutil.NewTimer()
 		cullTimer := timeutil.NewTimer()
 		stallTimer := timeutil.NewTimer()
 		defer cullTimer.Stop()
 		defer stallTimer.Stop()
 
+		clientsTimer.Reset(defaultClientsInterval)
 		cullTimer.Reset(jitteredInterval(g.cullInterval))
 		stallTimer.Reset(jitteredInterval(g.stallInterval))
 		for {
@@ -1297,6 +1331,10 @@ func (g *Gossip) manage() {
 				g.doDisconnected(c)
 			case <-g.tighten:
 				g.tightenNetwork(ctx)
+			case <-clientsTimer.C:
+				clientsTimer.Read = true
+				g.updateClients()
+				clientsTimer.Reset(defaultClientsInterval)
 			case <-cullTimer.C:
 				cullTimer.Read = true
 				cullTimer.Reset(jitteredInterval(g.cullInterval))
