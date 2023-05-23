@@ -585,7 +585,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		tenantID := roachpb.MustMakeTenantID(42)
 		directoryCache := &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
-				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+				fnCtx context.Context, tenantID roachpb.TenantID,
 			) ([]*tenant.Pod, error) {
 				mu.Lock()
 				defer mu.Unlock()
@@ -677,12 +677,11 @@ func TestConnector_lookupAddr(t *testing.T) {
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
-				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+				fnCtx context.Context, tenantID roachpb.TenantID,
 			) ([]*tenant.Pod, error) {
 				lookupTenantPodsFnCount++
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
-				require.Equal(t, c.ClusterName, clusterName)
 				return []*tenant.Pod{
 					{TenantID: c.TenantID.ToUint64(), Addr: "127.0.0.10:70", State: tenant.DRAINING},
 					{TenantID: c.TenantID.ToUint64(), Addr: "127.0.0.10:80", State: tenant.RUNNING},
@@ -705,12 +704,11 @@ func TestConnector_lookupAddr(t *testing.T) {
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
-				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+				fnCtx context.Context, tenantID roachpb.TenantID,
 			) ([]*tenant.Pod, error) {
 				lookupTenantPodsFnCount++
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
-				require.Equal(t, c.ClusterName, clusterName)
 				return nil, status.Errorf(codes.FailedPrecondition, "foo")
 			},
 		}
@@ -730,12 +728,11 @@ func TestConnector_lookupAddr(t *testing.T) {
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
-				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+				fnCtx context.Context, tenantID roachpb.TenantID,
 			) ([]*tenant.Pod, error) {
 				lookupTenantPodsFnCount++
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
-				require.Equal(t, c.ClusterName, clusterName)
 				return nil, status.Errorf(codes.NotFound, "foo")
 			},
 		}
@@ -755,12 +752,11 @@ func TestConnector_lookupAddr(t *testing.T) {
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
-				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+				fnCtx context.Context, tenantID roachpb.TenantID,
 			) ([]*tenant.Pod, error) {
 				lookupTenantPodsFnCount++
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
-				require.Equal(t, c.ClusterName, clusterName)
 				return nil, errors.New("foo")
 			},
 		}
@@ -981,16 +977,24 @@ var _ tenant.DirectoryCache = &testTenantDirectoryCache{}
 // testTenantDirectoryCache is a test implementation of the tenant directory
 // cache.
 type testTenantDirectoryCache struct {
-	lookupTenantPodsFn    func(ctx context.Context, tenantID roachpb.TenantID, clusterName string) ([]*tenant.Pod, error)
+	lookupTenantFn        func(ctx context.Context, tenantID roachpb.TenantID) (*tenant.Tenant, error)
+	lookupTenantPodsFn    func(ctx context.Context, tenantID roachpb.TenantID) ([]*tenant.Pod, error)
 	trylookupTenantPodsFn func(ctx context.Context, tenantID roachpb.TenantID) ([]*tenant.Pod, error)
 	reportFailureFn       func(ctx context.Context, tenantID roachpb.TenantID, addr string) error
 }
 
+// LookupTenant implements the tenant.DirectoryCache interface.
+func (r *testTenantDirectoryCache) LookupTenant(
+	ctx context.Context, tenantID roachpb.TenantID,
+) (*tenant.Tenant, error) {
+	return r.lookupTenantFn(ctx, tenantID)
+}
+
 // LookupTenantPods implements the tenant.DirectoryCache interface.
 func (r *testTenantDirectoryCache) LookupTenantPods(
-	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
+	ctx context.Context, tenantID roachpb.TenantID,
 ) ([]*tenant.Pod, error) {
-	return r.lookupTenantPodsFn(ctx, tenantID, clusterName)
+	return r.lookupTenantPodsFn(ctx, tenantID)
 }
 
 // TryLookupTenantPods implements the tenant.DirectoryCache interface.

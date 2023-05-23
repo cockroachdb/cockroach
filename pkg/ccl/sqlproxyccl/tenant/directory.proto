@@ -15,6 +15,7 @@ import "google/protobuf/timestamp.proto";
 
 // PodState gives the current state of a tenant pod, so that the proxy knows
 // how/where to route traffic.
+//
 // NOTE: This is not the same as the Kubernetes Pod Status.
 enum PodState {
   option (gogoproto.goproto_enum_prefix) = false;
@@ -50,11 +51,7 @@ message Pod {
   string addr = 1;
   // State gives the current status of the tenant pod.
   PodState state = 3;
-  // Load is a number in the range [0, 1] indicating the current amount of load
-  // experienced by this tenant pod.
-  //
-  // TODO(jaylim-crl): Remove the Load field since it is now unused.
-  float Load = 4;
+  reserved 4;
   // StateTimestamp represents the timestamp that the state was last updated.
   google.protobuf.Timestamp stateTimestamp = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
@@ -78,7 +75,7 @@ message ListPodsResponse {
 // WatchPodsRequest is empty as we want to get all notifications.
 message WatchPodsRequest {}
 
-// WatchPodsResponse represents the notifications that the server sends to
+// WatchPodsResponse represents the pod notifications that the server sends to
 // its clients when clients want to monitor the directory server activity.
 message WatchPodsResponse {
   // Pod describes the tenant pod which has been added, modified, or deleted.
@@ -97,6 +94,51 @@ message EnsurePodRequest {
 message EnsurePodResponse {
 }
 
+// ConnectivityType indicates the extent to which the tenant can be accessed
+// (e.g. private only, public only, or both).
+enum ConnectivityType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // ALLOW_ALL indicates that the cluster allows both public and private
+  // connections. In this case, both IP allowlist and private endpoint rules
+  // will apply.
+  //
+  // The proxy will block incoming connections if:
+  //   1. the connection is public, and there are no IP allowlist entries, or
+  //   2. the connection is private, and there are no private endpoint entries.
+  ALLOW_ALL = 0;
+  // ALLOW_PUBLIC_ONLY indicates that the cluster is exposed to the public
+  // internet, and IP allowlist rules will apply. By default, if there are no
+  // rules, the proxy will block all public connections.
+  ALLOW_PUBLIC_ONLY = 1;
+  // ALLOW_PRIVATE_ONLY indicates that the cluster allows private endpoints, and
+  // private endpoint rules will apply. By default, if there are no rules, the
+  // proxy will block all private connections.
+  ALLOW_PRIVATE_ONLY = 2;
+}
+
+// Tenant contains information about a tenant, such as its name and ID.
+// Fields are optional except TenantID and Version.
+message Tenant {
+  // TenantID identifies the tenant.
+  uint64 tenant_id = 1 [(gogoproto.customname) = "TenantID"];
+  // Version represents the version of the tenant resource. This will be used
+  // to compare inequalities when determining which object is more up-to-date.
+  string version = 2;
+  // ClusterName is the name of the tenant's cluster.
+  string cluster_name = 3;
+  // ConnectivityType indicates the extent to which the tenant can be accessed.
+  ConnectivityType connectivity_type = 4;
+  // AllowedCIDRRanges corresponds to the list of source CIDR ranges that are
+  // allowed to access the tenant. This will only apply if the tenant allows
+  // public connections.
+  repeated string allowed_cidr_ranges = 5 [(gogoproto.customname) = "AllowedCIDRRanges"];
+  // AllowedPrivateEndpoints corresponds to the list of endpoint identifiers
+  // that are allowed to access the tenant. This will only apply if the tenant
+  // allows private connections.
+  repeated string allowed_private_endpoints = 6;
+}
+
 // GetTenantRequest is used by a client to request from the sever metadata
 // related to a given tenant.
 message GetTenantRequest {
@@ -107,7 +149,41 @@ message GetTenantRequest {
 // GetTenantResponse is sent back when a client requests metadata for a tenant.
 message GetTenantResponse {
   // ClusterName is the name of the tenant's cluster.
-  string cluster_name = 1; // add more metadata if needed
+  //
+  // TODO(jaylim-crl): Remove this field once it is no longer used.
+  string cluster_name = 1;
+  // Tenant describes the tenant that is being requested.
+  Tenant tenant = 2;
+}
+
+// WatchTenantsRequest is empty as we want to get all notifications.
+message WatchTenantsRequest {}
+
+// WatchEventType gives the state of a watch event.
+enum WatchEventType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // EVENT_UNKNOWN indicates that the event's state is not known. This is used
+  // as the default value. All events returned by the tenant directory should
+  // have a proper type.
+  EVENT_UNKNOWN = 0;
+  // EVENT_ADDED indicates that the event corresponds to a new entry.
+  EVENT_ADDED = 1;
+  // EVENT_MODIFIED indicates that the resource has been modified.
+  EVENT_MODIFIED = 2;
+  // EVENT_DELETED indicates that the resource has been deleted, or is being
+  // deleted.
+  EVENT_DELETED = 3;
+}
+
+// WatchTenantsResponse represents the tenant notifications that the server
+// sends to its clients when clients want to monitor the directory server
+// activity.
+message WatchTenantsResponse {
+  // Type represents the type of the event for the watch response.
+  WatchEventType type = 1;
+  // Tenant describes the tenant which has been added, modified, or deleted.
+  Tenant tenant = 2;
 }
 
 // Directory specifies a service that keeps track and manages tenant backends,
@@ -130,4 +206,9 @@ service Directory {
   // GetTenant is used to fetch the metadata of a specific tenant. If the tenant
   // does not exist, GetTenant returns a GRPC NotFound error.
   rpc GetTenant(GetTenantRequest) returns (GetTenantResponse);
+  // WatchTenants gets a stream of tenant metadata change notifications.
+  // Notifications are sent when a tenant is created, modified, or destroyed.
+  // When WatchTenants is first called, it returns notifications for all
+  // existing tenants as synthetic EVENT_ADDED events.
+  rpc WatchTenants(WatchTenantsRequest) returns (stream WatchTenantsResponse);
 }

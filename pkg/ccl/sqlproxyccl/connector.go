@@ -307,7 +307,7 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 
 	// Lookup tenant in the directory cache. Once we have retrieve the list of
 	// pods, use the Balancer for load balancing.
-	pods, err := c.DirectoryCache.LookupTenantPods(ctx, c.TenantID, c.ClusterName)
+	pods, err := c.DirectoryCache.LookupTenantPods(ctx, c.TenantID)
 	switch {
 	case err == nil:
 		runningPods := make([]*tenant.Pod, 0, len(pods))

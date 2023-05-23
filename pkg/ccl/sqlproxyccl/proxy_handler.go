@@ -36,7 +36,9 @@ import (
 	"github.com/jackc/pgproto3/v2"
 	proxyproto "github.com/pires/go-proxyproto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -202,17 +204,6 @@ func newProxyHandler(
 		return nil, err
 	}
 
-	handler.aclWatcher, err = acl.NewWatcher(
-		ctx,
-		acl.WithPollingInterval(options.PollConfigInterval),
-		acl.WithAllowListFile(options.Allowlist),
-		acl.WithDenyListFile(options.Denylist),
-		acl.WithErrorCount(proxyMetrics.AccessControlFileErrorCount),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	handler.throttleService = throttler.NewLocalService(
 		throttler.WithBaseDelay(handler.ThrottleBaseDelay),
 	)
@@ -289,6 +280,18 @@ func newProxyHandler(
 		return nil, err
 	}
 
+	handler.aclWatcher, err = acl.NewWatcher(
+		ctx,
+		acl.WithLookupTenantFn(handler.directoryCache.LookupTenant),
+		acl.WithPollingInterval(options.PollConfigInterval),
+		acl.WithAllowListFile(options.Allowlist),
+		acl.WithDenyListFile(options.Denylist),
+		acl.WithErrorCount(proxyMetrics.AccessControlFileErrorCount),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	balancerMetrics := balancer.NewMetrics()
 	registry.AddMetricStruct(balancerMetrics)
 	var balancerOpts []balancer.Option
@@ -314,6 +317,18 @@ func newProxyHandler(
 // connection.
 func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) error {
 	connReceivedTime := timeutil.Now()
+
+	// Parse headers before admitting the connection since the connection may
+	// be upgraded to TLS.
+	var endpointID string
+	if handler.RequireProxyProtocol {
+		var err error
+		endpointID, err = acl.FindPrivateEndpointID(incomingConn)
+		if err != nil {
+			updateMetricsAndSendErrToClient(err, incomingConn, handler.metrics)
+			return err
+		}
+	}
 
 	fe := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
 	defer func() { _ = fe.Conn.Close() }()
@@ -367,19 +382,34 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	// correctly parsing the IP address here.
 	ipAddr, _, err := addr.SplitHostPort(fe.Conn.RemoteAddr().String(), "")
 	if err != nil {
-		clientErr := withCode(errors.New(
-			"unexpected connection address"), codeParamsRoutingFailed)
+		clientErr := withCode(errors.New("unexpected connection address"), codeParamsRoutingFailed)
 		log.Errorf(ctx, "could not parse address: %v", err.Error())
 		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
 		return clientErr
 	}
 
+	// Validate the incoming connection and ensure that the cluster name
+	// matches the tenant's. This avoids malicious actors from attempting to
+	// connect to the cluster using just the tenant ID.
+	if err := handler.validateConnection(ctx, tenID, clusterName); err != nil {
+		// We do not need to log here as validateConnection already logs.
+		updateMetricsAndSendErrToClient(err, fe.Conn, handler.metrics)
+		return err
+	}
+
 	errConnection := make(chan error, 1)
 	removeListener, err := handler.aclWatcher.ListenForDenied(
-		acl.ConnectionTags{IP: ipAddr, Cluster: tenID.String()},
+		ctx,
+		acl.ConnectionTags{
+			IP:         ipAddr,
+			TenantID:   tenID,
+			EndpointID: endpointID,
+		},
 		func(err error) {
-			err = withCode(errors.Wrap(err,
-				"connection blocked by access control list"), codeExpiredClientConnection)
+			err = withCode(
+				errors.Wrap(err, "connection blocked by access control list"),
+				codeExpiredClientConnection,
+			)
 			select {
 			case errConnection <- err: /* error reported */
 			default: /* the channel already contains an error */
@@ -387,9 +417,12 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		},
 	)
 	if err != nil {
+		// It is possible that we get a NotFound error here because of a race
+		// with a deleting tenant. This case is rare, and we'll just return a
+		// "connection refused" error. The next time they connect, they will
+		// get a "not found" error.
 		log.Errorf(ctx, "connection blocked by access control list: %v", err)
-		err = withCode(errors.New(
-			"connection refused"), codeProxyRefusedConnection)
+		err = withCode(errors.New("connection refused"), codeProxyRefusedConnection)
 		updateMetricsAndSendErrToClient(err, fe.Conn, handler.metrics)
 		return err
 	}
@@ -510,6 +543,33 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		handler.metrics.updateForError(err)
 		return err
 	}
+}
+
+// validateRequest validates the incoming connection by ensuring that the SQL
+// connection knows some additional information about the tenant (i.e. the
+// cluster name) before being allowed to connect.
+func (handler *proxyHandler) validateConnection(
+	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
+) error {
+	tenant, err := handler.directoryCache.LookupTenant(ctx, tenantID)
+	if err != nil && status.Code(err) != codes.NotFound {
+		return err
+	}
+	if err == nil {
+		if tenant.ClusterName == "" || tenant.ClusterName == clusterName {
+			return nil
+		}
+		log.Errorf(
+			ctx,
+			"could not validate connection: cluster name '%s' doesn't match expected '%s'",
+			clusterName,
+			tenant.ClusterName,
+		)
+	}
+	return withCode(
+		errors.Newf("cluster %s-%d not found", clusterName, tenantID.ToUint64()),
+		codeParamsRoutingFailed,
+	)
 }
 
 // handleCancelRequest handles a pgwire query cancel request by either

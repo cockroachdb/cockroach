@@ -38,10 +38,9 @@ var _ tenant.DirectoryServer = (*TestDirectoryServer)(nil)
 
 // Process stores information about a running tenant process.
 type Process struct {
-	Stopper  *stop.Stopper
-	Cmd      *exec.Cmd
-	SQL      net.Addr
-	FakeLoad float32
+	Stopper *stop.Stopper
+	Cmd     *exec.Cmd
+	SQL     net.Addr
 }
 
 // NewSubStopper creates a new stopper that will be stopped when either the
@@ -166,10 +165,14 @@ func (s *TestDirectoryServer) StartTenant(ctx context.Context, id roachpb.Tenant
 // GetTenant returns tenant metadata for a given ID. Hard coded to return every
 // tenant's cluster name as "tenant-cluster"
 func (s *TestDirectoryServer) GetTenant(
-	_ context.Context, _ *tenant.GetTenantRequest,
+	_ context.Context, req *tenant.GetTenantRequest,
 ) (*tenant.GetTenantResponse, error) {
 	return &tenant.GetTenantResponse{
-		ClusterName: "tenant-cluster",
+		Tenant: &tenant.Tenant{
+			TenantID:          req.TenantID,
+			ClusterName:       "tenant-cluster",
+			AllowedCIDRRanges: []string{"0.0.0.0/0"},
+		},
 	}, nil
 }
 
@@ -226,6 +229,19 @@ func (s *TestDirectoryServer) WatchPods(
 			}
 		})
 	return err
+}
+
+// WatchTenants returns a new stream, that can be used to monitor server
+// activity. This is a no-op since this directory's implementation has been
+// deprecated.
+func (s *TestDirectoryServer) WatchTenants(
+	_ *tenant.WatchTenantsRequest, server tenant.Directory_WatchTenantsServer,
+) error {
+	// Insted of returning right away, we block until context is done.
+	// This prevents the proxy server from constantly trying to establish
+	// a watch in test environments, causing spammy logs.
+	<-server.Context().Done()
+	return nil
 }
 
 // Drain sends out DRAINING pod notifications for each process managed by the
@@ -315,12 +331,11 @@ func (s *TestDirectoryServer) listLocked(
 		return &tenant.ListPodsResponse{}, nil
 	}
 	resp := tenant.ListPodsResponse{}
-	for addr, proc := range processByAddr {
+	for addr := range processByAddr {
 		resp.Pods = append(resp.Pods, &tenant.Pod{
 			TenantID:       req.TenantID,
 			Addr:           addr.String(),
 			State:          tenant.RUNNING,
-			Load:           proc.FakeLoad,
 			StateTimestamp: timeutil.Now(),
 		})
 	}
@@ -342,7 +357,6 @@ func (s *TestDirectoryServer) registerInstanceLocked(tenantID uint64, process *P
 			TenantID:       tenantID,
 			Addr:           process.SQL.String(),
 			State:          tenant.RUNNING,
-			Load:           process.FakeLoad,
 			StateTimestamp: timeutil.Now(),
 		},
 	})
@@ -390,7 +404,7 @@ func (s *TestDirectoryServer) startTenantLocked(
 	if err != nil {
 		return nil, err
 	}
-	process := &Process{SQL: sqlListener.Addr(), FakeLoad: 0.01}
+	process := &Process{SQL: sqlListener.Addr()}
 	args := s.args
 	if len(args) == 0 {
 		args = append(args,

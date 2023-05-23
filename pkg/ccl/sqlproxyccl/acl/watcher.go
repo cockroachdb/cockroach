@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -37,7 +38,8 @@ type Watcher struct {
 	// All of the listeners waiting for changes to the access control list.
 	listeners *btree.BTree
 
-	// These control whether or not a connection is allowd based on it's ConnectionTags.
+	// These control whether or not a connection is allowd based on it's
+	// ConnectionTags.
 	controllers []AccessController
 }
 
@@ -72,6 +74,7 @@ type aclOptions struct {
 	errorCount      *metric.Gauge
 	allowlistFile   string
 	denylistFile    string
+	lookupTenantFn  lookupTenantFunc
 }
 
 // WithPollingInterval specifies interval between polling for config file
@@ -107,6 +110,18 @@ func WithDenyListFile(denylistFile string) Option {
 	}
 }
 
+// WithLookupTenantFn sets the function used to perform a tenant lookup based
+// on the tenant ID.
+func WithLookupTenantFn(fn lookupTenantFunc) Option {
+	return func(op *aclOptions) {
+		op.lookupTenantFn = fn
+	}
+}
+
+const (
+	defaultPollingInterval = time.Minute
+)
+
 func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 	options := &aclOptions{
 		pollingInterval: defaultPollingInterval,
@@ -121,38 +136,84 @@ func NewWatcher(ctx context.Context, opts ...Option) (*Watcher, error) {
 		controllers: make([]AccessController, 0),
 	}
 
+	// TODO(jaylim-crl): Deprecate allowlistFile.
 	if options.allowlistFile != "" {
 		c, next, err := newAccessControllerFromFile[*Allowlist](
 			ctx,
-			options.allowlistFile,
-			options.timeSource,
+			w.options.allowlistFile,
+			w.options.timeSource,
 			w.options.pollingInterval,
 			w.options.errorCount,
+			nil,
 		)
 		if err != nil {
 			return nil, err
 		}
-		w.addAccessController(c, next)
+		w.addAccessController(ctx, c, next)
 	}
 	if options.denylistFile != "" {
 		c, next, err := newAccessControllerFromFile[*Denylist](
 			ctx,
-			options.denylistFile,
-			options.timeSource,
+			w.options.denylistFile,
+			w.options.timeSource,
 			w.options.pollingInterval,
 			w.options.errorCount,
+			func(c *Denylist) {
+				c.timeSource = w.options.timeSource
+			},
 		)
 		if err != nil {
 			return nil, err
 		}
-		w.addAccessController(c, next)
+		w.addAccessController(ctx, c, next)
+	}
+	if w.options.lookupTenantFn != nil {
+		privateEndpointsController := &PrivateEndpoints{
+			LookupTenantFn: w.options.lookupTenantFn,
+		}
+		// We use a normal polling interval to determine when we should check
+		// the connections for private endpoints update. This is reasonable
+		// for now as:
+		//   1. Calls to LookupTenant are cached most of the time.
+		//   2. This is only applied to existing connections, and a polling
+		//      interval of 1 minute isn't too bad.
+		//   3. We are already iterating all the connections for the other types
+		//      of ACLs.
+		//
+		// TODO(jaylim-crl): The directory cache already knows which tenants
+		// are updated through WatchTenants. We can do better here. Refactor
+		// AccessController in a way that allows those tenant metadata updates
+		// to be batched, and check connections for those tenants only. At the
+		// same time, the current AccessController design is poor because we
+		// iterate through all the connections for each ACL update (i.e. 1 for
+		// allowlist, 1 for denylist, and another for private endpoints).
+		w.addAccessController(ctx, privateEndpointsController, pollAndUpdateChan(
+			ctx,
+			w.options.timeSource,
+			w.options.pollingInterval,
+			privateEndpointsController,
+		))
+
+		if options.allowlistFile == "" {
+			cidrRangesController := &CIDRRanges{
+				LookupTenantFn: w.options.lookupTenantFn,
+			}
+			// HACK(jaylim-crl): Note that the endpoints controller is already
+			// polling once every few seconds, and checking on every connection.
+			// Since these two controllers don't store state, we can just rely
+			// on that until we get a better access controller.
+			w.addAccessController(ctx, cidrRangesController, nil)
+		}
 	}
 	return w, nil
 }
 
-// addAccessController adds a new access controller to the watcher, and spawns a goroutine that watches for updates and
-// replaces the controller as needed, using it's index in the slice.
-func (w *Watcher) addAccessController(controller AccessController, next chan AccessController) {
+// addAccessController adds a new access controller to the watcher, and spawns
+// a goroutine that watches for updates and replaces the controller as needed,
+// using it's index in the slice.
+func (w *Watcher) addAccessController(
+	ctx context.Context, controller AccessController, next chan AccessController,
+) {
 	w.mu.Lock()
 	index := len(w.controllers)
 	w.controllers = append(w.controllers, controller)
@@ -161,22 +222,26 @@ func (w *Watcher) addAccessController(controller AccessController, next chan Acc
 	if next != nil {
 		go func() {
 			for n := range next {
-				w.updateAccessController(index, n)
+				w.updateAccessController(ctx, index, n)
 			}
 		}()
 	}
 }
 
-// updateAccessController replaces an old instance of a controller at a particular index with a new one. Once the new controller is added,
-// all connections are re-checked to see if they're still valid. This is primarily used by the goroutine spawned in addAccessController.
-func (w *Watcher) updateAccessController(index int, controller AccessController) {
+// updateAccessController replaces an old instance of a controller at a
+// particular index with a new one. Once the new controller is added, all
+// connections are re-checked to see if they're still valid. This is primarily
+// used by the goroutine spawned in addAccessController.
+func (w *Watcher) updateAccessController(
+	ctx context.Context, index int, controller AccessController,
+) {
 	w.mu.Lock()
 	copy := w.listeners.Clone()
 	w.controllers[index] = controller
 	controllers := append([]AccessController(nil), w.controllers...)
 	w.mu.Unlock()
 
-	checkListeners(copy, w.options.timeSource, controllers)
+	checkListeners(ctx, copy, controllers)
 }
 
 // ListenForDenied Adds a listener to the watcher for the given connection. If the
@@ -185,7 +250,7 @@ func (w *Watcher) updateAccessController(index int, controller AccessController)
 //
 // Example Usage:
 //
-//	remove, err := w.ListenForDenied(connection, func(err error) {
+//	remove, err := w.ListenForDenied(ctx, connection, func(err error) {
 //	  /* connection was blocked by change */
 //	})
 //
@@ -194,11 +259,13 @@ func (w *Watcher) updateAccessController(index int, controller AccessController)
 //
 // Warning:
 // Do not call remove() within the error callback. It would deadlock.
-func (w *Watcher) ListenForDenied(connection ConnectionTags, callback func(error)) (func(), error) {
+func (w *Watcher) ListenForDenied(
+	ctx context.Context, connection ConnectionTags, callback func(error),
+) (func(), error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if err := checkConnection(connection, w.options.timeSource, w.controllers); err != nil {
+	if err := checkConnection(ctx, connection, w.controllers); err != nil {
 		return nil, err
 	}
 
@@ -233,12 +300,10 @@ func (l *listener) Less(than btree.Item) bool {
 	return l.id < than.(*listener).id
 }
 
-func checkListeners(
-	listeners *btree.BTree, timesource timeutil.TimeSource, controllers []AccessController,
-) {
+func checkListeners(ctx context.Context, listeners *btree.BTree, controllers []AccessController) {
 	listeners.Ascend(func(i btree.Item) bool {
 		lst := i.(*listener)
-		if err := checkConnection(lst.connection, timesource, controllers); err != nil {
+		if err := checkConnection(ctx, lst.connection, controllers); err != nil {
 			lst.mu.Lock()
 			defer lst.mu.Unlock()
 			if lst.mu.denied != nil {
@@ -251,12 +316,45 @@ func checkListeners(
 }
 
 func checkConnection(
-	connection ConnectionTags, timesource timeutil.TimeSource, controllers []AccessController,
+	ctx context.Context, connection ConnectionTags, controllers []AccessController,
 ) error {
 	for _, c := range controllers {
-		if err := c.CheckConnection(connection, timesource); err != nil {
+		if err := c.CheckConnection(ctx, connection); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// pollAndUpdateChan sends the same access controller object into the returned
+// channel every pollingInterval. This is used by ACL types that require calls
+// to the directory cache (and don't store local state).
+//
+// See caller of pollAndUpdateChan for more information. The current design
+// of AccessController doesn't allow us to batch events and check a subset of
+// connections, so we'd have to do this.
+func pollAndUpdateChan(
+	ctx context.Context,
+	timeSource timeutil.TimeSource,
+	pollingInterval time.Duration,
+	accessController AccessController,
+) chan AccessController {
+	result := make(chan AccessController)
+	go func() {
+		t := timeSource.NewTimer()
+		defer t.Stop()
+		for {
+			t.Reset(pollingInterval)
+			select {
+			case <-ctx.Done():
+				close(result)
+				log.Errorf(ctx, "WatchList daemon stopped: %v", ctx.Err())
+				return
+			case <-t.Ch():
+				t.MarkRead()
+				result <- accessController
+			}
+		}
+	}()
+	return result
 }

@@ -60,18 +60,23 @@ type TestStaticDirectoryServer struct {
 	mu struct {
 		syncutil.Mutex
 
-		// tenants stores a list of pods for every tenant. If a tenant does not
-		// exist in the map, the tenant is assumed to be non-existent. Since
+		// tenantPods stores a list of pods for every tenant. If a tenant does
+		// not exist in the map, the tenant is assumed to be non-existent. Since
 		// this is a test directory server, we do not care about fine-grained
-		// locking here.
-		tenants map[roachpb.TenantID][]*tenant.Pod
+		// locking here. Every entry must have a corresponding tenant in tenants.
+		tenantPods map[roachpb.TenantID][]*tenant.Pod
 
-		// tenantNames stores a list of clusterNames associated with each tenant.
-		tenantNames map[roachpb.TenantID]string
+		// tenants stores a list of tenant objects. Every tenant object should
+		// have a corresponding entry in tenantPods.
+		tenants map[roachpb.TenantID]*tenant.Tenant
 
-		// eventListeners stores a list of listeners that are watching changes
+		// podEventListeners stores a list of listeners that are watching changes
 		// to pods through WatchPods.
-		eventListeners *list.List
+		podEventListeners *list.List
+
+		// tenantEventListeners stores a list of listeners that are watching
+		// changes to tenants through WatchTenants.
+		tenantEventListeners *list.List
 	}
 }
 
@@ -85,9 +90,10 @@ func NewTestStaticDirectoryServer(
 		timeSource = timeutil.DefaultTimeSource{}
 	}
 	dir := &TestStaticDirectoryServer{rootStopper: stopper, timeSource: timeSource}
-	dir.mu.tenants = make(map[roachpb.TenantID][]*tenant.Pod)
-	dir.mu.tenantNames = make(map[roachpb.TenantID]string)
-	dir.mu.eventListeners = list.New()
+	dir.mu.tenantPods = make(map[roachpb.TenantID][]*tenant.Pod)
+	dir.mu.tenants = make(map[roachpb.TenantID]*tenant.Tenant)
+	dir.mu.podEventListeners = list.New()
+	dir.mu.tenantEventListeners = list.New()
 	return dir
 }
 
@@ -101,7 +107,7 @@ func (d *TestStaticDirectoryServer) ListPods(
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	pods, ok := d.mu.tenants[roachpb.MustMakeTenantID(req.TenantID)]
+	pods, ok := d.mu.tenantPods[roachpb.MustMakeTenantID(req.TenantID)]
 	if !ok {
 		return &tenant.ListPodsResponse{}, nil
 	}
@@ -134,12 +140,12 @@ func (d *TestStaticDirectoryServer) WatchPods(
 	addListener := func(ch chan *tenant.WatchPodsResponse) *list.Element {
 		d.mu.Lock()
 		defer d.mu.Unlock()
-		return d.mu.eventListeners.PushBack(ch)
+		return d.mu.podEventListeners.PushBack(ch)
 	}
 	removeListener := func(e *list.Element) chan *tenant.WatchPodsResponse {
 		d.mu.Lock()
 		defer d.mu.Unlock()
-		return d.mu.eventListeners.Remove(e).(chan *tenant.WatchPodsResponse)
+		return d.mu.podEventListeners.Remove(e).(chan *tenant.WatchPodsResponse)
 	}
 
 	// Construct the channel with a small buffer to allow for a burst of
@@ -148,7 +154,7 @@ func (d *TestStaticDirectoryServer) WatchPods(
 	chElement := addListener(c)
 
 	return stopper.RunTask(
-		context.Background(),
+		server.Context(),
 		"watch-pods-server",
 		func(ctx context.Context) {
 			defer func() {
@@ -189,7 +195,7 @@ func (d *TestStaticDirectoryServer) EnsurePod(
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	pods, ok := d.mu.tenants[roachpb.MustMakeTenantID(req.TenantID)]
+	pods, ok := d.mu.tenantPods[roachpb.MustMakeTenantID(req.TenantID)]
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "tenant does not exist")
 	}
@@ -210,23 +216,107 @@ func (d *TestStaticDirectoryServer) GetTenant(
 	defer d.mu.Unlock()
 
 	tenantID := roachpb.MustMakeTenantID(req.TenantID)
-	if _, ok := d.mu.tenants[tenantID]; !ok {
+	t, ok := d.mu.tenants[tenantID]
+	if !ok {
 		return nil, status.Errorf(codes.NotFound, "tenant does not exist")
 	}
-	return &tenant.GetTenantResponse{ClusterName: d.mu.tenantNames[tenantID]}, nil
+
+	return &tenant.GetTenantResponse{Tenant: t}, nil
+}
+
+// WatchTenants allows callers to monitor for tenant update events.
+//
+// WatchTenants implements the tenant.DirectoryServer interface.
+func (d *TestStaticDirectoryServer) WatchTenants(
+	req *tenant.WatchTenantsRequest, server tenant.Directory_WatchTenantsServer,
+) error {
+	d.process.Lock()
+	stopper := d.process.stopper
+	d.process.Unlock()
+
+	// This cannot happen unless WatchTenants was called directly, which we
+	// shouldn't since it is meant to be called through a GRPC client.
+	if stopper == nil {
+		return status.Errorf(codes.FailedPrecondition, "directory server has not been started")
+	}
+
+	addListener := func(ch chan *tenant.WatchTenantsResponse) *list.Element {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		return d.mu.tenantEventListeners.PushBack(ch)
+	}
+	removeListener := func(e *list.Element) chan *tenant.WatchTenantsResponse {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		return d.mu.tenantEventListeners.Remove(e).(chan *tenant.WatchTenantsResponse)
+	}
+
+	// Construct the channel with a small buffer to allow for a burst of
+	// notifications, and a slow receiver.
+	c := make(chan *tenant.WatchTenantsResponse, 10)
+	chElement := addListener(c)
+
+	return stopper.RunTask(
+		server.Context(),
+		"watch-tenants-server",
+		func(ctx context.Context) {
+			defer func() {
+				if ch := removeListener(chElement); ch != nil {
+					close(ch)
+				}
+			}()
+
+			for watch := true; watch; {
+				select {
+				case e, ok := <-c:
+					// Channel was closed.
+					if !ok {
+						watch = false
+						break
+					}
+					if err := server.Send(e); err != nil {
+						watch = false
+					}
+				case <-stopper.ShouldQuiesce():
+					watch = false
+				}
+			}
+		},
+	)
 }
 
 // CreateTenant creates a tenant with the given tenant ID in the directory
 // server. If the tenant already exists, this is a no-op.
-func (d *TestStaticDirectoryServer) CreateTenant(tenantID roachpb.TenantID, clusterName string) {
+func (d *TestStaticDirectoryServer) CreateTenant(tenantID roachpb.TenantID, t *tenant.Tenant) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	if _, ok := d.mu.tenants[tenantID]; ok {
 		return
 	}
-	d.mu.tenants[tenantID] = make([]*tenant.Pod, 0)
-	d.mu.tenantNames[tenantID] = clusterName
+
+	d.mu.tenants[tenantID] = t
+	d.mu.tenantPods[tenantID] = make([]*tenant.Pod, 0)
+
+	// Emit an event indicating that the tenant has been created.
+	d.notifyTenantUpdateLocked(tenant.EVENT_ADDED, t)
+}
+
+// UpdateTenant updates the tenant with the given tenant ID in the directory
+// server. If the tenant does not exist, this is a no-op.
+func (d *TestStaticDirectoryServer) UpdateTenant(tenantID roachpb.TenantID, t *tenant.Tenant) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	// Tenant does not exist.
+	if _, ok := d.mu.tenants[tenantID]; !ok {
+		return
+	}
+
+	d.mu.tenants[tenantID] = t
+
+	// Emit an event indicating that the tenant has been updated.
+	d.notifyTenantUpdateLocked(tenant.EVENT_MODIFIED, t)
 }
 
 // DeleteTenant ensures that the tenant with the given tenant ID has been
@@ -237,7 +327,7 @@ func (d *TestStaticDirectoryServer) DeleteTenant(tenantID roachpb.TenantID) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	pods, ok := d.mu.tenants[tenantID]
+	pods, ok := d.mu.tenantPods[tenantID]
 	if !ok {
 		return
 	}
@@ -247,8 +337,13 @@ func (d *TestStaticDirectoryServer) DeleteTenant(tenantID roachpb.TenantID) {
 		pod.StateTimestamp = d.timeSource.Now()
 		d.notifyPodUpdateLocked(pod)
 	}
+	delete(d.mu.tenantPods, tenantID)
 	delete(d.mu.tenants, tenantID)
-	delete(d.mu.tenantNames, tenantID)
+
+	// Emit an event indicating that the tenant has been deleted.
+	d.notifyTenantUpdateLocked(tenant.EVENT_DELETED, &tenant.Tenant{
+		TenantID: tenantID.ToUint64(),
+	})
 }
 
 // AddPod adds the pod to the given tenant pod's list. If a SQL pod with the
@@ -262,7 +357,7 @@ func (d *TestStaticDirectoryServer) AddPod(tenantID roachpb.TenantID, pod *tenan
 	defer d.mu.Unlock()
 
 	// Tenant does not exist.
-	pods, ok := d.mu.tenants[tenantID]
+	pods, ok := d.mu.tenantPods[tenantID]
 	if !ok {
 		return false
 	}
@@ -278,13 +373,13 @@ func (d *TestStaticDirectoryServer) AddPod(tenantID roachpb.TenantID, pod *tenan
 	// DRAINING to RUNNING.
 	for i, existing := range pods {
 		if existing.Addr == copyPod.Addr {
-			d.mu.tenants[tenantID][i] = &copyPod
+			d.mu.tenantPods[tenantID][i] = &copyPod
 			return true
 		}
 	}
 
 	// A new pod has been added.
-	d.mu.tenants[tenantID] = append(d.mu.tenants[tenantID], &copyPod)
+	d.mu.tenantPods[tenantID] = append(d.mu.tenantPods[tenantID], &copyPod)
 	return true
 }
 
@@ -296,7 +391,7 @@ func (d *TestStaticDirectoryServer) DrainPod(tenantID roachpb.TenantID, podAddr 
 	defer d.mu.Unlock()
 
 	// Tenant does not exist.
-	pods, ok := d.mu.tenants[tenantID]
+	pods, ok := d.mu.tenantPods[tenantID]
 	if !ok {
 		return false
 	}
@@ -321,7 +416,7 @@ func (d *TestStaticDirectoryServer) RemovePod(tenantID roachpb.TenantID, podAddr
 	defer d.mu.Unlock()
 
 	// Tenant does not exist.
-	pods, ok := d.mu.tenants[tenantID]
+	pods, ok := d.mu.tenantPods[tenantID]
 	if !ok {
 		return false
 	}
@@ -330,8 +425,8 @@ func (d *TestStaticDirectoryServer) RemovePod(tenantID roachpb.TenantID, podAddr
 	for i, existing := range pods {
 		if existing.Addr == podAddr {
 			// Remove pod.
-			copy(d.mu.tenants[tenantID][i:], d.mu.tenants[tenantID][i+1:])
-			d.mu.tenants[tenantID] = d.mu.tenants[tenantID][:len(d.mu.tenants[tenantID])-1]
+			copy(d.mu.tenantPods[tenantID][i:], d.mu.tenantPods[tenantID][i+1:])
+			d.mu.tenantPods[tenantID] = d.mu.tenantPods[tenantID][:len(d.mu.tenantPods[tenantID])-1]
 
 			// Update pod to DELETING, and emit event.
 			existing.State = tenant.DELETING
@@ -406,12 +501,20 @@ func (d *TestStaticDirectoryServer) DialerFunc(ctx context.Context, addr string)
 	return listener.DialContext(ctx)
 }
 
-// WatchListenersCount returns the number of active listeners for pod update
+// WatchPodsListenersCount returns the number of active listeners for pod update
 // events.
-func (d *TestStaticDirectoryServer) WatchListenersCount() int {
+func (d *TestStaticDirectoryServer) WatchPodsListenersCount() int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return d.mu.eventListeners.Len()
+	return d.mu.podEventListeners.Len()
+}
+
+// WatchTenantsListenersCount returns the number of active listeners for tenant
+// update events.
+func (d *TestStaticDirectoryServer) WatchTenantsListenersCount() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.mu.tenantEventListeners.Len()
 }
 
 // notifyPodUpdateLocked sends a pod update event to all WatchPods listeners.
@@ -420,7 +523,7 @@ func (d *TestStaticDirectoryServer) notifyPodUpdateLocked(pod *tenant.Pod) {
 	copyPod := *pod
 	res := &tenant.WatchPodsResponse{Pod: &copyPod}
 
-	for e := d.mu.eventListeners.Front(); e != nil; {
+	for e := d.mu.podEventListeners.Front(); e != nil; {
 		select {
 		case e.Value.(chan *tenant.WatchPodsResponse) <- res:
 			e = e.Next()
@@ -429,8 +532,35 @@ func (d *TestStaticDirectoryServer) notifyPodUpdateLocked(pod *tenant.Pod) {
 			// and remove it from the list.
 			eToClose := e
 			e = e.Next()
-			ch := d.mu.eventListeners.Remove(eToClose)
+			ch := d.mu.podEventListeners.Remove(eToClose)
 			close(ch.(chan *tenant.WatchPodsResponse))
+		}
+	}
+}
+
+// notifyTenantUpdateLocked sends a tenant update event to all WatchTenants listeners.
+func (d *TestStaticDirectoryServer) notifyTenantUpdateLocked(
+	typ tenant.WatchEventType, t *tenant.Tenant,
+) {
+	// Make a copy of the tenant to prevent race issues.
+	copyTenant := *t
+	copyTenant.AllowedCIDRRanges = make([]string, len(t.AllowedCIDRRanges))
+	copy(copyTenant.AllowedCIDRRanges, t.AllowedCIDRRanges)
+	copyTenant.AllowedPrivateEndpoints = make([]string, len(t.AllowedPrivateEndpoints))
+	copy(copyTenant.AllowedPrivateEndpoints, t.AllowedPrivateEndpoints)
+	res := &tenant.WatchTenantsResponse{Type: typ, Tenant: &copyTenant}
+
+	for e := d.mu.tenantEventListeners.Front(); e != nil; {
+		select {
+		case e.Value.(chan *tenant.WatchTenantsResponse) <- res:
+			e = e.Next()
+		default:
+			// The receiver is unable to consume fast enough. Close the channel
+			// and remove it from the list.
+			eToClose := e
+			e = e.Next()
+			ch := d.mu.tenantEventListeners.Remove(eToClose)
+			close(ch.(chan *tenant.WatchTenantsResponse))
 		}
 	}
 }

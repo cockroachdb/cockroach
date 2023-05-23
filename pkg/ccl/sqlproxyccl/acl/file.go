@@ -21,10 +21,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const (
-	defaultPollingInterval = time.Minute
-)
-
 type FromFile interface {
 	AccessController
 	yaml.Unmarshaler
@@ -38,13 +34,14 @@ func newAccessControllerFromFile[T FromFile](
 	timeSource timeutil.TimeSource,
 	pollingInterval time.Duration,
 	errorCount *metric.Gauge,
+	postRead func(c T),
 ) (AccessController, chan AccessController, error) {
-	ret, err := readFile[T](ctx, filename)
+	ret, err := readFile[T](ctx, filename, postRead)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "error when creating access controller from file %s", filename)
 	}
 
-	return ret, watchForUpdate[T](ctx, filename, timeSource, pollingInterval, errorCount), nil
+	return ret, watchForUpdate[T](ctx, filename, timeSource, pollingInterval, errorCount, postRead), nil
 }
 
 // Deserialize constructs a new T from reader.
@@ -60,7 +57,7 @@ func Deserialize[T any](reader io.Reader) (T, error) {
 	return t, nil
 }
 
-func readFile[T FromFile](ctx context.Context, filename string) (T, error) {
+func readFile[T FromFile](ctx context.Context, filename string, postRead func(c T)) (T, error) {
 	handle, err := os.Open(filename)
 	if err != nil {
 		log.Errorf(ctx, "open file %s: %v", filename, err)
@@ -80,10 +77,13 @@ func readFile[T FromFile](ctx context.Context, filename string) (T, error) {
 		}
 		return *new(T), err
 	}
+	if postRead != nil {
+		postRead(f)
+	}
 	return f, nil
 }
 
-// WatchForUpdates periodically reloads the access control list file. The daemon is
+// watchForUpdate periodically reloads the access control list file. The daemon is
 // canceled on ctx cancellation.
 func watchForUpdate[T FromFile](
 	ctx context.Context,
@@ -91,6 +91,7 @@ func watchForUpdate[T FromFile](
 	timeSource timeutil.TimeSource,
 	pollingInterval time.Duration,
 	errorCount *metric.Gauge,
+	postRead func(c T),
 ) chan AccessController {
 	result := make(chan AccessController)
 	go func() {
@@ -109,7 +110,7 @@ func watchForUpdate[T FromFile](
 				return
 			case <-t.Ch():
 				t.MarkRead()
-				list, err := readFile[T](ctx, filename)
+				list, err := readFile[T](ctx, filename, postRead)
 				if err != nil {
 					if !hasError && errorCount != nil {
 						hasError = true

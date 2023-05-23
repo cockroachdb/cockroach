@@ -54,3 +54,38 @@ func TestHasRunningPod(t *testing.T) {
 		})
 	}
 }
+
+func TestTenantMetadataUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	e := &tenantEntry{}
+	require.False(t, e.IsValid())
+
+	e.UpdateTenant(&Tenant{Version: "001"})
+	require.True(t, e.IsValid())
+	require.Equal(t, "001", e.mu.tenant.Version)
+
+	// Send a new version.
+	e.UpdateTenant(&Tenant{Version: "003"})
+	require.True(t, e.IsValid())
+	require.Equal(t, "003", e.mu.tenant.Version)
+
+	// Use an old version.
+	e.UpdateTenant(&Tenant{Version: "002"})
+	require.True(t, e.IsValid())
+	require.Equal(t, "003", e.mu.tenant.Version)
+
+	// Invalidate that entry.
+	e.MarkInvalid()
+	require.False(t, e.IsValid())
+
+	// Use an old version.
+	ten := &Tenant{
+		Version:                 "002",
+		AllowedCIDRRanges:       []string{"0.0.0.0/0"},
+		AllowedPrivateEndpoints: []string{"a", "b"},
+	}
+	e.UpdateTenant(ten)
+	require.True(t, e.IsValid())
+	require.Equal(t, "002", e.mu.tenant.Version)
+}
