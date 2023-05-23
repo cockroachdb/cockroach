@@ -171,6 +171,19 @@ export function sqlApiErrorMessage(message: string): string {
   return message;
 }
 
+export function createSqlExecutionRequest(
+  dbName: string,
+  statements: SqlStatement[],
+): SqlExecutionRequest {
+  return {
+    execute: true,
+    statements: statements,
+    database: dbName,
+    max_result_size: LARGE_RESULT_SIZE,
+    timeout: LONG_TIMEOUT,
+  };
+}
+
 export function isMaxSizeError(message: string): boolean {
   return !!message?.includes("max result size exceeded");
 }
