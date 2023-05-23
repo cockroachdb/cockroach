@@ -52,82 +52,15 @@ type NodeCountFunc func() int
 // A NodeLivenessFunc accepts a node ID and current time and returns whether or
 // not the node is live. A node is considered dead if its liveness record has
 // expired by more than TimeUntilNodeDead.
-type NodeLivenessFunc func(
-	nid roachpb.NodeID, now hlc.Timestamp, timeUntilNodeDead time.Duration,
-) livenesspb.NodeLivenessStatus
+type NodeLivenessFunc func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus
 
 // MakeStorePoolNodeLivenessFunc returns a function which determines
 // the status of a node based on information provided by the specified
 // NodeLiveness.
 func MakeStorePoolNodeLivenessFunc(nodeLiveness *liveness.NodeLiveness) NodeLivenessFunc {
-	return func(
-		nodeID roachpb.NodeID, now hlc.Timestamp, timeUntilNodeDead time.Duration,
-	) livenesspb.NodeLivenessStatus {
-		liveness, ok := nodeLiveness.GetLiveness(nodeID)
-		if !ok {
-			return livenesspb.NodeLivenessStatus_UNKNOWN
-		}
-		return LivenessStatus(liveness.Liveness, now, timeUntilNodeDead)
+	return func(nodeID roachpb.NodeID) livenesspb.NodeLivenessStatus {
+		return nodeLiveness.GetNodeVitalityFromCache(nodeID).LivenessStatus()
 	}
-}
-
-// LivenessStatus returns a NodeLivenessStatus enumeration value for the
-// provided Liveness based on the provided timestamp and threshold.
-//
-// See the note on IsLive() for considerations on what should be passed in as
-// `now`.
-//
-// The timeline of the states that a liveness goes through as time passes after
-// the respective liveness record is written is the following:
-//
-//	-----|-------LIVE---|------UNAVAILABLE---|------DEAD------------> time
-//	     tWrite         tExp                 tExp+threshold
-//
-// Explanation:
-//
-//   - Let's say a node write its liveness record at tWrite. It sets the
-//     Expiration field of the record as tExp=tWrite+livenessThreshold.
-//     The node is considered LIVE (or DECOMMISSIONING or DRAINING).
-//   - At tExp, the IsLive() method starts returning false. The state becomes
-//     UNAVAILABLE (or stays DECOMMISSIONING or DRAINING).
-//   - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
-//
-// NB: There's a bit of discrepancy between what "Decommissioned" represents, as
-// seen by NodeStatusLiveness, and what "Decommissioned" represents as
-// understood by MembershipStatus. Currently it's possible for a live node, that
-// was marked as fully decommissioned, to have a NodeLivenessStatus of
-// "Decommissioning". This was kept this way for backwards compatibility, and
-// ideally we should remove usage of NodeLivenessStatus altogether. See #50707
-// for more details.
-func LivenessStatus(
-	l livenesspb.Liveness, now hlc.Timestamp, deadThreshold time.Duration,
-) livenesspb.NodeLivenessStatus {
-	// If we don't have a liveness expiration time, treat the status as unknown.
-	// This is different than unavailable as it doesn't transition through being
-	// marked as suspect. In unavailable we still won't transfer leases or
-	// replicas to it in this state. A node that is in UNKNOWN status can
-	// immediately transition to Available once it passes a liveness heartbeat.
-	if l.Expiration.WallTime == 0 {
-		return livenesspb.NodeLivenessStatus_UNKNOWN
-	}
-
-	if l.IsDead(now, deadThreshold) {
-		if !l.Membership.Active() {
-			return livenesspb.NodeLivenessStatus_DECOMMISSIONED
-		}
-		return livenesspb.NodeLivenessStatus_DEAD
-	}
-	if l.IsLive(now) {
-		if !l.Membership.Active() {
-			return livenesspb.NodeLivenessStatus_DECOMMISSIONING
-		}
-		if l.Draining {
-			return livenesspb.NodeLivenessStatus_DRAINING
-		}
-		return livenesspb.NodeLivenessStatus_LIVE
-	}
-	// Not yet dead, but has not heartbeated recently enough to be alive either.
-	return livenesspb.NodeLivenessStatus_UNAVAILABLE
 }
 
 // StoreDetail groups together store-relevant details.
@@ -224,7 +157,7 @@ func (sd *StoreDetail) status(
 	//
 	// Store statuses checked in the following order:
 	// dead -> decommissioning -> unknown -> draining -> suspect -> available.
-	switch nl(sd.Desc.Node.NodeID, now, deadThreshold) {
+	switch nl(sd.Desc.Node.NodeID) {
 	case livenesspb.NodeLivenessStatus_DEAD, livenesspb.NodeLivenessStatus_DECOMMISSIONED:
 		sd.LastUnavailable = now
 		return storeStatusDead

@@ -12,7 +12,6 @@ package storepool
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -50,12 +49,11 @@ var _ AllocatorStorePool = &OverrideStorePool{}
 func OverrideNodeLivenessFunc(
 	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, realNodeLivenessFunc NodeLivenessFunc,
 ) NodeLivenessFunc {
-	return func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilNodeDead time.Duration) livenesspb.NodeLivenessStatus {
+	return func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
 		if override, ok := overrides[nid]; ok {
 			return override
 		}
-
-		return realNodeLivenessFunc(nid, now, timeUntilNodeDead)
+		return realNodeLivenessFunc(nid)
 	}
 }
 
