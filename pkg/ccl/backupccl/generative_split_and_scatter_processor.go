@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -482,16 +483,21 @@ func runGenerativeSplitAndScatter(
 }
 
 type routingDatumCache struct {
+	syncutil.Mutex
 	cache   map[roachpb.NodeID]rowenc.EncDatum
 	nodeIDs []roachpb.NodeID
 }
 
 func (c *routingDatumCache) getRoutingDatum(nodeID roachpb.NodeID) (rowenc.EncDatum, bool) {
+	c.Lock()
+	defer c.Unlock()
 	d, ok := c.cache[nodeID]
 	return d, ok
 }
 
 func (c *routingDatumCache) putRoutingDatum(nodeID roachpb.NodeID, datum rowenc.EncDatum) {
+	c.Lock()
+	defer c.Unlock()
 	if _, ok := c.cache[nodeID]; !ok {
 		c.nodeIDs = append(c.nodeIDs, nodeID)
 	}
@@ -499,6 +505,8 @@ func (c *routingDatumCache) putRoutingDatum(nodeID roachpb.NodeID, datum rowenc.
 }
 
 func (c *routingDatumCache) cachedNodeIDs() []roachpb.NodeID {
+	c.Lock()
+	defer c.Unlock()
 	return c.nodeIDs
 }
 
