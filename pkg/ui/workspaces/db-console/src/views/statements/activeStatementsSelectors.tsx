@@ -18,10 +18,12 @@ import {
   selectAppName,
   selectExecutionStatus,
   selectClusterLocksMaxApiSizeReached,
+  selectIsAutoRefreshEnabled,
 } from "src/selectors";
 import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
+import { ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED } from "../transactions/activeTransactionsSelectors";
 
 const selectedColumnsLocalSetting = new LocalSetting<
   AdminUIState,
@@ -52,6 +54,14 @@ const sortSettingLocalSetting = new LocalSetting<AdminUIState, SortSetting>(
   { ascending: false, columnTitle: "startTime" },
 );
 
+// autoRefreshLocalSetting is shared between the Active Statements and Active
+// Transactions components.
+const autoRefreshLocalSetting = new LocalSetting<AdminUIState, boolean>(
+  ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED,
+  (state: AdminUIState) => state.localSettings,
+  true,
+);
+
 export const mapStateToActiveStatementViewProps = (state: AdminUIState) => ({
   filters: filtersLocalSetting.selector(state),
   selectedColumns: selectedColumnsLocalSetting.selectorToArray(state),
@@ -61,6 +71,8 @@ export const mapStateToActiveStatementViewProps = (state: AdminUIState) => ({
   sessionsError: state.cachedData?.sessions.lastError,
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
+  isAutoRefreshEnabled: selectIsAutoRefreshEnabled(state),
+  lastUpdated: state.cachedData?.sessions.setAt,
 });
 
 export const activeStatementsViewActions = {
@@ -70,4 +82,6 @@ export const activeStatementsViewActions = {
   onFiltersChange: (filters: ActiveStatementFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
+  onAutoRefreshToggle: (isToggled: boolean) =>
+    autoRefreshLocalSetting.set(isToggled),
 };

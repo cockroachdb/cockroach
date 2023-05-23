@@ -29,6 +29,7 @@ export enum LocalStorageKeys {
   STMT_FINGERPRINTS_SORT = "sort/StatementsPage",
   TXN_FINGERPRINTS_LIMIT = "limit/TransactionsPage",
   TXN_FINGERPRINTS_SORT = "sort/TransactionsPage",
+  ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED = "isAutoRefreshEnabled/ActiveExecutions",
 }
 
 export type LocalStorageState = {
@@ -67,6 +68,7 @@ export type LocalStorageState = {
   "typeSetting/JobsPage": number;
   "statusSetting/JobsPage": string;
   "showSetting/JobsPage": string;
+  [LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED]: boolean;
 };
 
 type Payload = {
@@ -128,6 +130,10 @@ const defaultJobStatusSetting = "";
 const defaultJobShowSetting = "0";
 
 const defaultJobTypeSetting = 0;
+
+const defaultIsAutoRefreshEnabledSetting = true;
+
+const defaultLastTimestampRefreshSetting = "";
 
 // TODO (koorosh): initial state should be restored from preserved keys in LocalStorage
 const initialState: LocalStorageState = {
@@ -229,6 +235,12 @@ const initialState: LocalStorageState = {
   "statusSetting/JobsPage":
     JSON.parse(localStorage.getItem("statusSetting/JobsPage")) ||
     defaultJobStatusSetting,
+  [LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED]:
+    JSON.parse(
+      localStorage.getItem(
+        LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED,
+      ),
+    ) || defaultIsAutoRefreshEnabledSetting,
 };
 
 const localStorageSlice = createSlice({

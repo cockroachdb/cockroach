@@ -23,7 +23,10 @@ import {
   selectExecutionStatus,
   selectClusterLocksMaxApiSizeReached,
 } from "src/selectors/activeExecutions.selectors";
-import { actions as localStorageActions } from "src/store/localStorage";
+import {
+  LocalStorageKeys,
+  actions as localStorageActions,
+} from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
 import { selectIsTenant } from "src/store/uiConfig";
 import { localStorageSelector } from "../store/utils/selectors";
@@ -33,6 +36,12 @@ export const selectSortSetting = (state: AppState): SortSetting =>
 
 export const selectFilters = (state: AppState): ActiveStatementFilters =>
   localStorageSelector(state)["filters/ActiveStatementsPage"];
+
+export const selectIsAutoRefreshEnabled = (state: AppState): boolean => {
+  return localStorageSelector(state)[
+    LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED
+  ];
+};
 
 const selectLocalStorageColumns = (state: AppState) => {
   const localStorage = localStorageSelector(state);
@@ -60,6 +69,8 @@ export const mapStateToActiveStatementsPageProps = (
   internalAppNamePrefix: selectAppName(state),
   isTenant: selectIsTenant(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
+  isAutoRefreshEnabled: selectIsAutoRefreshEnabled(state),
+  lastUpdated: state.adminUI?.sessions.lastUpdated,
 });
 
 export const mapDispatchToActiveStatementsPageProps = (
@@ -88,4 +99,12 @@ export const mapDispatchToActiveStatementsPageProps = (
         value: ss,
       }),
     ),
+  onAutoRefreshToggle: (isEnabled: boolean) => {
+    dispatch(
+      localStorageActions.update({
+        key: LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED,
+        value: isEnabled,
+      }),
+    );
+  },
 });
