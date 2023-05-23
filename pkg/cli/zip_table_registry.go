@@ -951,12 +951,12 @@ var zipSystemTables = DebugZipTableRegistry{
 				id,
 				descriptor,
 				to_hex(descriptor) AS hex_descriptor
-			FROM system.descriptor`,
+			FROM system.descriptor AS OF SYSTEM TIME '-0.1s'`,
 		customQueryRedacted: `SELECT
 				id,
 				crdb_internal.redact_descriptor(descriptor) AS descriptor,
 				to_hex(crdb_internal.redact_descriptor(descriptor)) AS hex_descriptor
-			FROM system.descriptor`,
+			FROM system.descriptor  AS OF SYSTEM TIME '-0.1s'`,
 	},
 	"system.eventlog": {
 		nonSensitiveCols: NonSensitiveColumns{
@@ -997,7 +997,7 @@ var zipSystemTables = DebugZipTableRegistry{
 			last_run,
 			'<redacted>' AS hex_payload,
 			to_hex(progress) AS hex_progress
-			FROM system.jobs`,
+			FROM system.jobs  AS OF SYSTEM TIME '-0.1s'`,
 	},
 	"system.job_info": {
 		// `value` column may contain customer info, such as URI params
@@ -1037,12 +1037,18 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.namespace": {
-		nonSensitiveCols: NonSensitiveColumns{
-			`"parentID"`,
-			`"parentSchemaID"`,
-			"name",
-			"id",
-		},
+		customQueryUnredacted: `SELECT "parentID",
+"parentSchemaID",
+"name",
+"id"
+FROM system.namespace AS OF SYSTEM TIME '-0.1s'
+`,
+		customQueryRedacted: `SELECT "parentID",
+"parentSchemaID",
+"name",
+"id"
+FROM system.namespace AS OF SYSTEM TIME '-0.1s'
+`,
 	},
 	"system.privileges": {
 		nonSensitiveCols: NonSensitiveColumns{

@@ -212,8 +212,8 @@ func fromCluster(
 	}
 	stmt := `
 SELECT id, descriptor, crdb_internal_mvcc_timestamp AS mod_time_logical
-FROM system.descriptor ORDER BY id`
-	checkColumnExistsStmt := "SELECT crdb_internal_mvcc_timestamp FROM system.descriptor LIMIT 1"
+FROM system.descriptor  AS OF SYSTEM TIME '-0.1s' ORDER BY id`
+	checkColumnExistsStmt := "SELECT crdb_internal_mvcc_timestamp FROM system.descriptor AS OF SYSTEM TIME '-0.1s'  LIMIT 1"
 	_, err := sqlConn.QueryRow(ctx, checkColumnExistsStmt)
 	// On versions before 20.2, the system.descriptor won't have the builtin
 	// crdb_internal_mvcc_timestamp. If we can't find it, use NULL instead.
@@ -221,7 +221,7 @@ FROM system.descriptor ORDER BY id`
 		if pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedColumn {
 			stmt = `
 SELECT id, descriptor, NULL AS mod_time_logical
-FROM system.descriptor ORDER BY id`
+FROM system.descriptor AS OF SYSTEM TIME '-0.1s' ORDER BY id`
 		}
 	} else if err != nil {
 		return nil, nil, nil, err
@@ -265,9 +265,9 @@ FROM system.descriptor ORDER BY id`
 		return nil, nil, nil, err
 	}
 
-	stmt = `SELECT "parentID", "parentSchemaID", name, id FROM system.namespace`
+	stmt = `SELECT "parentID", "parentSchemaID", name, id FROM system.namespace AS OF SYSTEM TIME '-0.1s'`
 
-	checkColumnExistsStmt = `SELECT "parentSchemaID" FROM system.namespace LIMIT 1`
+	checkColumnExistsStmt = `SELECT "parentSchemaID" FROM system.namespace AS OF SYSTEM TIME '-0.1s' LIMIT 1`
 	_, err = sqlConn.QueryRow(ctx, checkColumnExistsStmt)
 	// On versions before 20.1, table system.namespace does not have this column.
 	// In that case the ParentSchemaID for tables is 29 and for databases is 0.
@@ -275,7 +275,7 @@ FROM system.descriptor ORDER BY id`
 		if pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedColumn {
 			stmt = `
 SELECT "parentID", CASE WHEN "parentID" = 0 THEN 0 ELSE 29 END AS "parentSchemaID", name, id
-FROM system.namespace`
+FROM system.namespace AS OF SYSTEM TIME '-0.1s'`
 		}
 	} else if err != nil {
 		return nil, nil, nil, err
@@ -311,7 +311,7 @@ FROM system.namespace`
 	}
 
 	stmt = `
-SELECT id, status, payload, progress FROM "".crdb_internal.system_jobs
+SELECT id, status, payload, progress FROM "".crdb_internal.system_jobs AS OF SYSTEM TIME '-0.1s'
 `
 	jobsTable = make(doctor.JobsTable, 0)
 
