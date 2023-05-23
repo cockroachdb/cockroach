@@ -451,6 +451,12 @@ type Context struct {
 
 // SetLoopbackDialer configures the loopback dialer function.
 func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Conn, error)) {
+	if c.ContextOptions.Knobs.NoLoopbackDialer {
+		// A test has decided it is opting out of the special loopback
+		// dialing mechanism. Obey it. We already have defined
+		// loopbackDialFn in that case in NewContext().
+		return
+	}
 	c.loopbackDialFn = loopbackDialFn
 }
 
@@ -1641,7 +1647,12 @@ const (
 func (rpcCtx *Context) GRPCDialOptions(
 	ctx context.Context, target string, class ConnectionClass,
 ) ([]grpc.DialOption, error) {
-	return rpcCtx.grpcDialOptionsInternal(ctx, target, class, tcpTransport)
+	transport := tcpTransport
+	if rpcCtx.Config.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+		// See the explanation on loopbackDialFn for an explanation about this.
+		transport = loopbackTransport
+	}
+	return rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport)
 }
 
 // grpcDialOptions produces dial options suitable for connecting to the given target and class.
