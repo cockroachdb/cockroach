@@ -73,7 +73,23 @@ func (expr *TableIDRef) Format(ctx *FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("{TABLE:%v}", expr.ID))
 }
 
+func (expr *TableIDRef) String() string {
+	return AsString(expr)
+}
+
+// WalkTableExpr implements the TableExpr interface
 func (expr *TableIDRef) WalkTableExpr(visitor Visitor) TableExpr {
+	newExpr, changed := WalkExpr(visitor, expr)
+	if changed {
+		switch t := newExpr.(type) {
+		case *TableIDRef:
+			return t
+		case *TableName:
+			return t
+		default:
+			panic("TableIDRef cannot be changed to other types other than TableIDRef and TableName")
+		}
+	}
 	return expr
 }
 
