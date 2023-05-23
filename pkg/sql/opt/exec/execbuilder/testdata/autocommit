@@ -42,6 +42,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 
@@ -65,6 +66,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
@@ -89,6 +91,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 2 CPut to (n1,s1):1
 
@@ -115,6 +118,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
@@ -137,6 +141,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
@@ -162,6 +167,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 2 CPut to (n1,s1):1
@@ -201,6 +207,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 1 Put, 1 EndTxn to (n1,s1):1
 
@@ -224,6 +231,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
@@ -248,6 +256,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 2 Put to (n1,s1):1
 
@@ -274,6 +283,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
@@ -297,6 +307,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 2 Put to (n1,s1):1
@@ -323,6 +334,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 2 Put to (n1,s1):1
@@ -362,6 +374,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 1 Scan to (n1,s1):1
 dist sender send  r63: sending batch 2 Put, 1 EndTxn to (n1,s1):1
@@ -387,6 +400,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 1 Scan to (n1,s1):1
 dist sender send  r63: sending batch 2 Put to (n1,s1):1
@@ -414,6 +428,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 1 Scan to (n1,s1):1
 dist sender send  r63: sending batch 2 Put, 1 EndTxn to (n1,s1):1
@@ -438,6 +453,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 1 Scan to (n1,s1):1
@@ -465,6 +481,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 1 Scan to (n1,s1):1
@@ -505,6 +522,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 1 Del, 1 EndTxn to (n1,s1):1
 
@@ -528,6 +546,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
@@ -552,6 +571,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 1 DelRng to (n1,s1):1
 
@@ -578,6 +598,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 1 Scan to (n1,s1):1
 dist sender send  r63: sending batch 2 Del, 1 EndTxn to (n1,s1):1
@@ -602,6 +623,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 1 Scan to (n1,s1):1
@@ -629,6 +651,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 1 Scan to (n1,s1):1
@@ -680,6 +703,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 2 CPut to (n1,s1):1
@@ -705,6 +729,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 1 Scan to (n1,s1):1
@@ -732,6 +757,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 1 Get to (n1,s1):1
@@ -765,6 +791,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 1 Del to (n1,s1):1
@@ -797,6 +824,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 2 CPut to (n1,s1):1
@@ -824,6 +852,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
+  AND message   NOT LIKE '%ResolveIntent%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r63: sending batch 2 CPut to (n1,s1):1
@@ -860,6 +889,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
+  AND message NOT LIKE '%ResolveIntent%'
 ----
 dist sender send  r63: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 

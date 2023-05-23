@@ -1070,7 +1070,7 @@ func (s *idProvider) ServerIdentityString(key serverident.ServerIdentificationKe
 	case serverident.IdentifyKVNodeID:
 		// If tenantID is set, this is a SQL-only server and it has no
 		// node ID.
-		if s.tenantID.IsSet() {
+		if s.tenantID.IsSet() && !s.tenantID.IsSystem() {
 			return ""
 		}
 		return s.maybeMemoizeServerID()

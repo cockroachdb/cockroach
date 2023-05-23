@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -72,8 +73,8 @@ var (
 		"server.shutdown.jobs_wait",
 		"the maximum amount of time a server waits for all currently executing jobs "+
 			"to notice drain request and to perform orderly shutdown",
-		0*time.Second,
-		settings.NonNegativeDurationWithMaximum(10*time.Hour),
+		10*time.Second,
+		settings.NonNegativeDurationWithMaximum(10*time.Minute),
 	).WithPublic()
 )
 
@@ -401,12 +402,14 @@ func (s *drainServer) drainClients(
 	// issues a BACKUP or some other job-based statement before it
 	// disconnects, and encounters a job error as a result -- that the
 	// registry is now unavailable due to the drain.
-	drainJobRegistry := s.sqlServer.jobRegistry.DrainRequested()
-	if delay := jobRegistryWait.Get(&s.sqlServer.execCfg.Settings.SV); delay > 0 && shouldDelayDraining {
-		log.Ops.Infof(ctx, "waiting for %s for running jobs to notice that the node is draining", delay)
-		s.drainSleepFn(delay)
+	{
+		_ = contextutil.RunWithTimeout(ctx, "drain-job-registry",
+			jobRegistryWait.Get(&s.sqlServer.execCfg.Settings.SV),
+			func(ctx context.Context) error {
+				s.sqlServer.jobRegistry.DrainRequested(ctx)
+				return nil
+			})
 	}
-	drainJobRegistry()
 
 	// Inform the auto-stats tasks that the node is draining.
 	s.sqlServer.statsRefresher.SetDraining()
