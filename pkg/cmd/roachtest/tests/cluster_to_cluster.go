@@ -1139,8 +1139,8 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		dstNodes:           3,
 		cpus:               4,
 		workload:           replicateKV{readPercent: 0, initRows: 1000000, maxBlockBytes: 1024},
-		timeout:            15 * time.Minute,
-		additionalDuration: 5 * time.Minute,
+		timeout:            60 * time.Minute,
+		additionalDuration: 30 * time.Minute,
 		cutover:            2 * time.Minute,
 	}
 	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1173,7 +1173,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 			randomNodePair[1])
 
 		Disconnect(t, c, ctx, randomNodePair)
-		time.Sleep(time.Minute)
+		time.Sleep(time.Minute * 30)
 		Cleanup(t, c, ctx)
 		m.Wait()
 	})
