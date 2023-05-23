@@ -39,15 +39,20 @@ import { Pagination } from "src/pagination";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 
 import styles from "./statementsPage.module.scss";
+import RefreshControl from "src/activeExecutions/refreshControl/refreshControl";
+import moment from "moment-timezone";
 
 const cx = classNames.bind(styles);
 const PAGE_SIZE = 20;
+const REFRESH_TIMESTAMP_FORMAT = "MMM D [at] H:mm:ss";
 
 export type ActiveStatementsViewDispatchProps = {
   onColumnsSelect: (columns: string[]) => void;
   onFiltersChange: (filters: ActiveStatementFilters) => void;
   onSortChange: (ss: SortSetting) => void;
   refreshLiveWorkload: () => void;
+  onAutoRefreshToggle: (isEnabled: boolean) => void;
+  onTimestampChange: (ts: string) => void;
 };
 
 export type ActiveStatementsViewStateProps = {
@@ -60,6 +65,8 @@ export type ActiveStatementsViewStateProps = {
   internalAppNamePrefix: string;
   isTenant?: boolean;
   maxSizeApiReached?: boolean;
+  isAutoRefreshEnabled?: boolean;
+  lastRefreshTimestamp?: string;
 };
 
 export type ActiveStatementsViewProps = ActiveStatementsViewStateProps &
@@ -79,6 +86,10 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   internalAppNamePrefix,
   isTenant,
   maxSizeApiReached,
+  isAutoRefreshEnabled,
+  onAutoRefreshToggle,
+  lastRefreshTimestamp,
+  onTimestampChange,
 }: ActiveStatementsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -90,13 +101,31 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   );
 
   useEffect(() => {
-    // Refresh every 10 seconds.
-    refreshLiveWorkload();
-    const interval = setInterval(refreshLiveWorkload, 10 * 1000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [refreshLiveWorkload]);
+    // useEffect hook which triggers an immediate data refresh if auto-refresh
+    // is enabled. It fetches the latest workload details by dispatching a
+    // refresh action when the component mounts, ensuring that users see fresh
+    // data as soon as they land on the page if auto-refresh is on.
+    if (isAutoRefreshEnabled) {
+      const timestamp = moment();
+      onTimestampChange(timestamp.format(REFRESH_TIMESTAMP_FORMAT));
+      refreshLiveWorkload();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Refresh every 10 seconds if auto refresh is on.
+    if (isAutoRefreshEnabled) {
+      const interval = setInterval(() => {
+        const timestamp = moment();
+        onTimestampChange(timestamp.format(REFRESH_TIMESTAMP_FORMAT));
+        refreshLiveWorkload();
+      }, 10 * 1000);
+      return () => {
+        clearInterval(interval);
+      };
+    }
+  }, [isAutoRefreshEnabled, refreshLiveWorkload, onTimestampChange]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -160,6 +189,20 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
     resetPagination();
   };
 
+  const onSubmitToggleAutoRefresh = () => {
+    onAutoRefreshToggle(!isAutoRefreshEnabled);
+  };
+
+  const manualRefresh = () => {
+    refreshLiveWorkload();
+  };
+
+  const handleRefresh = () => {
+    const timestamp = moment();
+    onTimestampChange(timestamp.format(REFRESH_TIMESTAMP_FORMAT));
+    manualRefresh();
+  };
+
   const clearSearch = () => onSubmitSearch("");
   const clearFilters = () =>
     onSubmitFilters({
@@ -202,6 +245,18 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
             showExecutionStatus={true}
             appNames={apps}
             filters={filters}
+          />
+        </PageConfigItem>
+        <PageConfigItem>
+          <RefreshControl
+            isAutoRefreshEnabled={isAutoRefreshEnabled}
+            onToggleAutoRefresh={onSubmitToggleAutoRefresh}
+            onManualRefresh={handleRefresh}
+            lastRefreshTimestamp={moment(
+              lastRefreshTimestamp,
+              REFRESH_TIMESTAMP_FORMAT,
+            )}
+            execType={"statement"}
           />
         </PageConfigItem>
       </PageConfig>

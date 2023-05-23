@@ -53,6 +53,22 @@ const sortSettingLocalSetting = new LocalSetting<AdminUIState, SortSetting>(
   { ascending: false, columnTitle: "startTime" },
 );
 
+// autoRefreshLocalSetting is shared between the Active Statements and Active
+// Transactions components.
+const autoRefreshLocalSetting = new LocalSetting<AdminUIState, boolean>(
+  "isAutoRefreshEnabled/ActiveExecutions",
+  (state: AdminUIState) => state.localSettings,
+  true,
+);
+
+// lastRefreshTimestampLocalSetting is shared between the Active Statements and
+// Active Transactions components.
+const lastRefreshTimestampLocalSetting = new LocalSetting<AdminUIState, string>(
+  "lastTimestampRefresh/ActiveExecutions",
+  (state: AdminUIState) => state.localSettings,
+  "",
+);
+
 export const mapStateToActiveTransactionsPageProps = (state: AdminUIState) => ({
   selectedColumns: transactionsColumnsLocalSetting.selectorToArray(state),
   transactions: selectActiveTransactions(state),
@@ -62,6 +78,8 @@ export const mapStateToActiveTransactionsPageProps = (state: AdminUIState) => ({
   sortSetting: sortSettingLocalSetting.selector(state),
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
+  isAutoRefreshEnabled: autoRefreshLocalSetting.selector(state),
+  lastRefreshTimestamp: lastRefreshTimestampLocalSetting.selector(state),
 });
 
 // This object is just for convenience so we don't need to supply dispatch to
@@ -74,4 +92,7 @@ export const activeTransactionsPageActionCreators: ActiveTransactionsViewDispatc
       filtersLocalSetting.set(filters),
     onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
     refreshLiveWorkload,
+    onAutoRefreshToggle: (isToggled: boolean) =>
+      autoRefreshLocalSetting.set(isToggled),
+    onTimestampChange: (ts: string) => lastRefreshTimestampLocalSetting.set(ts),
   };

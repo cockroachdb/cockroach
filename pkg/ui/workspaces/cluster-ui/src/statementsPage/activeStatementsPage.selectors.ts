@@ -34,6 +34,10 @@ export const selectSortSetting = (state: AppState): SortSetting =>
 export const selectFilters = (state: AppState): ActiveStatementFilters =>
   localStorageSelector(state)["filters/ActiveStatementsPage"];
 
+export const selectIsAutoRefreshEnabled = (state: AppState): boolean => {
+  return localStorageSelector(state)["isAutoRefreshEnabled/ActiveExecutions"];
+};
+
 const selectLocalStorageColumns = (state: AppState) => {
   const localStorage = localStorageSelector(state);
   return localStorage["showColumns/ActiveStatementsPage"];
@@ -60,6 +64,7 @@ export const mapStateToActiveStatementsPageProps = (
   internalAppNamePrefix: selectAppName(state),
   isTenant: selectIsTenant(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
+  isAutoRefreshEnabled: selectIsAutoRefreshEnabled(state),
 });
 
 export const mapDispatchToActiveStatementsPageProps = (
@@ -88,4 +93,20 @@ export const mapDispatchToActiveStatementsPageProps = (
         value: ss,
       }),
     ),
+  onAutoRefreshToggle: (isEnabled: boolean) => {
+    dispatch(
+      localStorageActions.update({
+        key: "isAutoRefreshEnabled/ActiveExecutions",
+        value: isEnabled,
+      }),
+    );
+  },
+  onTimestampChange(ts: string) {
+    dispatch(
+      localStorageActions.update({
+        key: "lastTimestampRefresh/ActiveExecutions",
+        value: ts,
+      }),
+    );
+  },
 });

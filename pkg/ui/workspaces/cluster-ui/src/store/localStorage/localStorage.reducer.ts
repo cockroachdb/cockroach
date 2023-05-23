@@ -67,6 +67,8 @@ export type LocalStorageState = {
   "typeSetting/JobsPage": number;
   "statusSetting/JobsPage": string;
   "showSetting/JobsPage": string;
+  "isAutoRefreshEnabled/ActiveExecutions": boolean;
+  "lastTimestampRefresh/ActiveExecutions": boolean;
 };
 
 type Payload = {
@@ -128,6 +130,10 @@ const defaultJobStatusSetting = "";
 const defaultJobShowSetting = "0";
 
 const defaultJobTypeSetting = 0;
+
+const defaultIsAutoRefreshEnabledSetting = true;
+
+const defaultLastTimestampRefreshSetting = "";
 
 // TODO (koorosh): initial state should be restored from preserved keys in LocalStorage
 const initialState: LocalStorageState = {
@@ -229,6 +235,12 @@ const initialState: LocalStorageState = {
   "statusSetting/JobsPage":
     JSON.parse(localStorage.getItem("statusSetting/JobsPage")) ||
     defaultJobStatusSetting,
+  "isAutoRefreshEnabled/ActiveExecutions":
+    JSON.parse(localStorage.getItem("isAutoRefreshEnabled/ActiveExecutions")) ||
+    defaultIsAutoRefreshEnabledSetting,
+  "lastTimestampRefresh/ActiveExecutions":
+    JSON.parse(localStorage.getItem("lastTimestampRefresh/ActiveExecutions")) ||
+    defaultLastTimestampRefreshSetting,
 };
 
 const localStorageSlice = createSlice({
