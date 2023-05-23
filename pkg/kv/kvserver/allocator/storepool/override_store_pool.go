@@ -59,6 +59,25 @@ func OverrideNodeLivenessFunc(
 	}
 }
 
+// GetNodeCountWithOverrides returns a count of the number of nodes in the cluster,
+// including dead nodes, but excluding decommissioning or decommissioned nodes,
+// using the provided set of liveness overrides.
+func GetNodeCountWithOverrides(
+	nodeLiveness *liveness.NodeLiveness, overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus,
+) int {
+	var count int
+	for id, nv := range nodeLiveness.ScanNodeVitalityFromCache() {
+		if !nv.IsDecommissioning() && !nv.IsDecommissioned() {
+			if overrideStatus, ok := overrides[id]; !ok ||
+				(overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONING &&
+					overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONED) {
+				count++
+			}
+		}
+	}
+	return count
+}
+
 // OverrideNodeCountFunc constructs a NodeCountFunc based on a set of predefined
 // overrides. If any nodeID does not have an override, the real liveness is used
 // for the count for the number of nodes not decommissioning or decommissioned.
@@ -66,7 +85,7 @@ func OverrideNodeCountFunc(
 	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, nodeLiveness *liveness.NodeLiveness,
 ) NodeCountFunc {
 	return func() int {
-		return nodeLiveness.GetNodeCountWithOverrides(overrides)
+		return GetNodeCountWithOverrides(nodeLiveness, overrides)
 	}
 }
 
