@@ -1,0 +1,145 @@
+debug "Test Setup"
+----
+
+set-closed-ts-override lag=1h
+----
+
+set-txn-expiration 3s
+----
+
+init num-nodes=3 intercept-on-nodes=1
+----
+n1, n2, n3
+
+debug "Putting initial keys"
+----
+
+put account=1 balance=50
+----
+
+put account=2 balance=50
+----
+
+dump-accounts
+----
+key: /Table/100/1, value: /INT/50
+key: /Table/100/2, value: /INT/50
+
+debug "Splitting ranges"
+----
+
+split
+----
+
+split account=2
+----
+
+range-desc account=1
+----
+span: /Table/100{-/2}
+voters: n1, n2, n3
+
+range-desc account=2
+----
+span: /{Table/100/2-Max}
+voters: n1, n2, n3
+
+debug "Moving leases"
+----
+
+transfer-lease account=1 node-id=1
+----
+
+transfer-lease account=2 node-id=2
+----
+
+check-lease account=1
+----
+n1
+
+check-lease account=2
+----
+n2
+
+debug "Executing txn1's GetForUpdates"
+----
+
+new-txn name=txn1
+----
+
+exec-batch txn=txn1
+  load-balances accounts=(1,2) for-update=true
+----
+key: /Table/100/1, value: /INT/50
+key: /Table/100/2, value: /INT/50
+
+debug "Jamming txn1's responses from n2"
+----
+
+jam-resp token=1 txn=txn1 src-node=1 dst-node=2
+----
+
+async op=t1writes exec-batch txn=txn1 commit=true
+  modify-balances accounts=1 delta=+10
+  modify-balances accounts=2 delta=-10
+  store-balances accounts=(1,2)
+----
+
+await op=t1writes timeout=2s
+----
+t1writes: context canceled while awaiting
+
+debug "Pausing txn1's heartbeats"
+----
+
+pause-req token=2 txn=txn1 method=HeartbeatTxn
+----
+
+debug "Pausing txn1's recovery, until the post-refresh EndTxn"
+----
+
+pause-req token=3 txn=txn1 method=EndTxn
+----
+
+store-pause-req token=4 method=RecoverTxn
+----
+
+chain release=4 on=3
+----
+
+debug "Starting txn2's reads"
+----
+
+new-txn name=txn2
+----
+
+async op=t2reads exec-batch txn=txn2
+  load-balances accounts=(1,2) for-update=true
+----
+
+await op=t2reads timeout=10s
+----
+key: /Table/100/1, value: /INT/60
+key: /Table/100/2, value: /INT/40
+
+transfer-lease account=2 node-id=1
+----
+
+await op=t1writes timeout=2s
+----
+t1writes: context canceled while awaiting
+
+#### TODO(sarkesian): left here
+
+debug "Releasing intercepts"
+----
+
+release token=1
+----
+
+await op=t1writes timeout=2s
+----
+t1writes: context canceled while awaiting
+
+sleep 2s
+----

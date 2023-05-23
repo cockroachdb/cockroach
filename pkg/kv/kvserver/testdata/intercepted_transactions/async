@@ -1,0 +1,92 @@
+set-txn-expiration 100s
+----
+
+set-closed-ts-override lag=1h
+----
+
+init num-nodes=3
+----
+n1, n2, n3
+
+debug "Created 3-node cluster"
+----
+
+split
+----
+
+put account=1 balance=50
+----
+
+put account=2 balance=50
+----
+
+new-txn name=emptyTxn
+----
+
+async op=commit commit-txn name=emptyTxn
+----
+
+dump-accounts
+----
+key: /Table/100/1, value: /INT/50
+key: /Table/100/2, value: /INT/50
+
+await op=commit
+----
+
+new-txn name=txn1
+----
+
+exec-batch txn=txn1
+  load-balances accounts=(1,2) for-update=true
+----
+key: /Table/100/1, value: /INT/50
+key: /Table/100/2, value: /INT/50
+
+new-txn name=txn2
+----
+
+async op=t2read exec-batch txn=txn2
+  load-balances accounts=(1,2)
+----
+
+exec-batch txn=txn1 commit=true
+  modify-balances accounts=1 delta=+10
+  modify-balances accounts=2 delta=-10
+  store-balances accounts=(1,2)
+----
+
+await op=t2read
+----
+key: /Table/100/1, value: /INT/60
+key: /Table/100/2, value: /INT/40
+
+exec-batch txn=txn2
+  modify-balances accounts=1 delta=+10
+  modify-balances accounts=2 delta=-10
+  store-balances accounts=(1,2)
+----
+key: /Table/100/1, value: /INT/70
+key: /Table/100/2, value: /INT/30
+
+new-txn name=txn3
+----
+
+async op=t3read exec-batch txn=txn3
+  load-balances accounts=(1,2)
+----
+
+await op=t3read timeout=min
+----
+context canceled while awaiting op t3read
+
+abort-txn name=txn2
+----
+
+await op=t3read
+----
+key: /Table/100/1, value: /INT/60
+key: /Table/100/2, value: /INT/40
+
+commit-txn name=txn3
+----
