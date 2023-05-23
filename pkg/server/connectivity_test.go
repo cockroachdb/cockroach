@@ -125,6 +125,17 @@ func TestClusterConnectivity(t *testing.T) {
 		// We're going to manually control initialization in this test.
 		NoAutoInitializeCluster: true,
 		StoreSpecs:              []base.StoreSpec{{InMemory: true}},
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				ContextTestingKnobs: rpc.ContextTestingKnobs{
+					// Disable the special RPC loopback dial logic.
+					// This is needed because the test starts to perform
+					// RPC dials before the PreStart() function is called,
+					// and that is where the loopback dial function is defined.
+					NoLoopbackDialer: true,
+				},
+			},
+		},
 	}
 
 	for i, test := range testConfigurations {
