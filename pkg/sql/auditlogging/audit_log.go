@@ -52,6 +52,12 @@ type AuditConfigLock struct {
 	Config *AuditConfig
 }
 
+// ReducedAuditConfig is a computed audit configuration initialized at the first SQL event emit by the user.
+type ReducedAuditConfig struct {
+	Initialized  bool
+	AuditSetting *AuditSetting
+}
+
 // GetMatchingAuditSetting returns the first audit setting in the cluster setting
 // configuration that matches the user's username/roles. If no such audit setting
 // exists, returns nil.
