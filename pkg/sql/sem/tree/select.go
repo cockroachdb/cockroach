@@ -284,6 +284,7 @@ type TableExpr interface {
 	WalkTableExpr(Visitor) TableExpr
 }
 
+func (*TableIDRef) tableExpr()       {}
 func (*AliasedTableExpr) tableExpr() {}
 func (*ParenTableExpr) tableExpr()   {}
 func (*JoinTableExpr) tableExpr()    {}

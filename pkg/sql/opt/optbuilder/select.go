@@ -48,7 +48,7 @@ import (
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildDataSource(
-	texpr tree.TableExpr, indexFlags *tree.IndexFlags, locking lockingSpec, inScope *scope,
+	texpr *tree.TableExpr, indexFlags *tree.IndexFlags, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
 	defer func(prevAtRoot bool, prevInsideDataSource bool) {
 		inScope.atRoot = prevAtRoot
@@ -57,7 +57,7 @@ func (b *Builder) buildDataSource(
 	inScope.atRoot = false
 	b.insideDataSource = true
 	// NB: The case statements are sorted lexicographically.
-	switch source := (texpr).(type) {
+	switch source := (*texpr).(type) {
 	case *tree.AliasedTableExpr:
 		if source.IndexFlags != nil {
 			telemetry.Inc(sqltelemetry.IndexHintUseCounter)
@@ -88,7 +88,7 @@ func (b *Builder) buildDataSource(
 			locking = locking.filter(source.As.Alias)
 		}
 
-		outScope = b.buildDataSource(source.Expr, indexFlags, locking, inScope)
+		outScope = b.buildDataSource(&source.Expr, indexFlags, locking, inScope)
 
 		if source.Ordinality {
 			outScope = b.buildWithOrdinality(outScope)
@@ -140,6 +140,13 @@ func (b *Builder) buildDataSource(
 			b.checkPrivilege(depName, ds, privilege.UPDATE)
 		}
 
+		if b.insideFuncDef {
+			idRef := &tree.TableIDRef{
+				ID: int64(ds.ID()),
+			}
+			*texpr = idRef
+		}
+
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
@@ -165,7 +172,7 @@ func (b *Builder) buildDataSource(
 		}
 
 	case *tree.ParenTableExpr:
-		return b.buildDataSource(source.Expr, indexFlags, locking, inScope)
+		return b.buildDataSource(&source.Expr, indexFlags, locking, inScope)
 
 	case *tree.RowsFromExpr:
 		return b.buildZip(source.Items, inScope)
@@ -271,6 +278,24 @@ func (b *Builder) buildDataSource(
 			panic(errors.AssertionFailedf("unsupported catalog object"))
 		}
 		b.renameSource(source.As, outScope)
+		return outScope
+	case *tree.TableIDRef:
+		ds, _ := b.resolveDataSourceIDRef(source, privilege.SELECT)
+
+		switch t := ds.(type) {
+		case cat.Table:
+			outScope = b.buildScanFromTableIDRef(t, indexFlags, locking, inScope)
+		case cat.View:
+			tn := tree.MakeUnqualifiedTableName(t.Name())
+			outScope = b.buildView(t, &tn, locking, inScope)
+		case cat.Sequence:
+			tn := tree.MakeUnqualifiedTableName(t.Name())
+			// Any explicitly listed columns are ignored.
+			outScope = b.buildSequenceSelect(t, &tn, inScope)
+		default:
+			panic(errors.AssertionFailedf("unknown DataSource type %T", ds))
+		}
+
 		return outScope
 
 	default:
@@ -452,6 +477,24 @@ func (b *Builder) buildScanFromTableRef(
 			includeInverted:  false,
 		})
 	}
+
+	tn := tree.MakeUnqualifiedTableName(tab.Name())
+	tabMeta := b.addTable(tab, &tn)
+
+	return b.buildScan(tabMeta, ordinals, indexFlags, locking, inScope, false /* disableNotVisibleIndex */)
+}
+
+// buildScanFromTableIDRef adds support for table id references in queries.
+// For example:
+// SELECT * FROM {TABLE:123};
+func (b *Builder) buildScanFromTableIDRef(
+	tab cat.Table, indexFlags *tree.IndexFlags, locking lockingSpec, inScope *scope,
+) (outScope *scope) {
+	ordinals := tableOrdinals(tab, columnKinds{
+		includeMutations: false,
+		includeSystem:    true,
+		includeInverted:  false,
+	})
 
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
 	tabMeta := b.addTable(tab, &tn)
@@ -1281,7 +1324,7 @@ func (b *Builder) buildFromTables(
 func (b *Builder) buildFromTablesRightDeep(
 	tables tree.TableExprs, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
-	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, locking, inScope)
+	outScope = b.buildDataSource(&tables[0], nil /* indexFlags */, locking, inScope)
 
 	// Recursively build table join.
 	tables = tables[1:]
@@ -1331,7 +1374,7 @@ func (b *Builder) exprIsLateral(t tree.TableExpr) bool {
 func (b *Builder) buildFromWithLateral(
 	tables tree.TableExprs, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
-	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, locking, inScope)
+	outScope = b.buildDataSource(&tables[0], nil /* indexFlags */, locking, inScope)
 	for i := 1; i < len(tables); i++ {
 		scope := inScope
 		// Lateral expressions need to be able to refer to the expressions that
@@ -1340,7 +1383,7 @@ func (b *Builder) buildFromWithLateral(
 			scope = outScope
 			scope.context = exprKindLateralJoin
 		}
-		tableScope := b.buildDataSource(tables[i], nil /* indexFlags */, locking, scope)
+		tableScope := b.buildDataSource(&tables[i], nil /* indexFlags */, locking, scope)
 
 		// Check that the same table name is not used multiple times.
 		b.validateJoinTableNames(outScope, tableScope)

@@ -118,3 +118,35 @@ DELETE FROM [123 AS t]@idx
 DELETE FROM [123 AS t]@idx -- fully parenthesized
 DELETE FROM [123 AS t]@idx -- literals removed
 DELETE FROM [123 AS _]@_ -- identifiers removed
+
+parse
+SELECT * FROM {TABLE:123}
+----
+SELECT * FROM {TABLE:123}
+SELECT (*) FROM {TABLE:123} -- fully parenthesized
+SELECT * FROM {TABLE:123} -- literals removed
+SELECT * FROM {TABLE:123} -- identifiers removed
+
+parse
+SELECT a FROM {TABLE:123}@idx
+----
+SELECT a FROM {TABLE:123}@idx
+SELECT (a) FROM {TABLE:123}@idx -- fully parenthesized
+SELECT a FROM {TABLE:123}@idx -- literals removed
+SELECT _ FROM {TABLE:123}@_ -- identifiers removed
+
+parse
+SELECT 'a' FROM t@{FORCE_INDEX=[123]}
+----
+SELECT 'a' FROM t@[123] -- normalized!
+SELECT ('a') FROM t@[123] -- fully parenthesized
+SELECT '_' FROM t@[123] -- literals removed
+SELECT 'a' FROM _@[123] -- identifiers removed
+
+parse
+SELECT * FROM {TABLE:123}@[456]
+----
+SELECT * FROM {TABLE:123}@[456]
+SELECT (*) FROM {TABLE:123}@[456] -- fully parenthesized
+SELECT * FROM {TABLE:123}@[456] -- literals removed
+SELECT * FROM {TABLE:123}@[456] -- identifiers removed

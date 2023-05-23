@@ -672,6 +672,26 @@ func (b *Builder) resolveDataSourceRef(
 	return ds, depName
 }
 
+// resolveDataSourceIDRef returns the data source in the catalog that matches
+// the given table id reference. Error will be returned if no data source
+// matches, or if the current user does not have the given privilege.
+func (b *Builder) resolveDataSourceIDRef(
+	ref *tree.TableIDRef, priv privilege.Kind,
+) (cat.DataSource, opt.MDDepName) {
+	var flags cat.Flags
+	if b.insideViewDef || b.insideFuncDef {
+		// Avoid taking table leases when we're creating a view or a function.
+		flags.AvoidDescriptorCaches = true
+	}
+	ds, _, err := b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(ref.ID))
+	if err != nil {
+		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
+	}
+	depName := opt.DepByID(cat.StableID(ref.ID))
+	b.checkPrivilege(depName, ds, priv)
+	return ds, depName
+}
+
 // checkPrivilege ensures that the current user has the privilege needed to
 // access the given object in the catalog. If not, then checkPrivilege raises an
 // error. It also adds the object and it's original unresolved name as a
