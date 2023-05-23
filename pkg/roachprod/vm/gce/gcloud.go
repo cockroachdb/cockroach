@@ -386,12 +386,17 @@ func (p *Provider) ListVolumeSnapshots(
 	return snapshots, nil
 }
 
-func (p *Provider) DeleteVolumeSnapshot(l *logger.Logger, snapshot vm.VolumeSnapshot) error {
+func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
+	if len(snapshots) == 0 {
+		return nil
+	}
 	args := []string{
 		"compute",
 		"snapshots",
 		"delete",
-		snapshot.Name,
+	}
+	for _, snapshot := range snapshots {
+		args = append(args, snapshot.Name)
 	}
 
 	cmd := exec.Command("gcloud", args...)

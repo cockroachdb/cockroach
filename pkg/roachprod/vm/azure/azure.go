@@ -103,7 +103,7 @@ func (p *Provider) ListVolumeSnapshots(
 	panic("unimplemented")
 }
 
-func (p *Provider) DeleteVolumeSnapshot(l *logger.Logger, snapshot vm.VolumeSnapshot) error {
+func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
 	panic("unimplemented")
 }
 

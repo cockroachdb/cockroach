@@ -144,7 +144,7 @@ func (p *Provider) ListVolumeSnapshots(
 	return nil, nil
 }
 
-func (p *Provider) DeleteVolumeSnapshot(l *logger.Logger, snapshot vm.VolumeSnapshot) error {
+func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
 	return nil
 }
 

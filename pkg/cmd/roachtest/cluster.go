@@ -1696,11 +1696,11 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 func (c *clusterImpl) ListSnapshots(
 	ctx context.Context, vslo vm.VolumeSnapshotListOpts,
 ) ([]vm.VolumeSnapshot, error) {
-	return roachprod.ListSnapshots(ctx, c.l, c.name, vslo)
+	return roachprod.ListSnapshots(ctx, c.l, c.spec.Cloud, vslo)
 }
 
 func (c *clusterImpl) DeleteSnapshots(ctx context.Context, snapshots ...vm.VolumeSnapshot) error {
-	return roachprod.DeleteSnapshots(ctx, c.l, c.name, snapshots...)
+	return roachprod.DeleteSnapshots(ctx, c.l, c.spec.Cloud, snapshots...)
 }
 
 func (c *clusterImpl) CreateSnapshot(ctx context.Context, snapshotPrefix string) error {
@@ -1718,7 +1718,7 @@ func (c *clusterImpl) ApplySnapshots(ctx context.Context, snapshots []vm.VolumeS
 		Size: c.spec.VolumeSize,
 		Type: c.spec.GCEVolumeType, // TODO(irfansharif): This is only applicable to GCE. Change that.
 		Labels: map[string]string{
-			"usage": "roachtest",
+			vm.TagUsage: "roachtest",
 		},
 	}
 	return roachprod.ApplySnapshots(ctx, c.l, c.name, snapshots, opts)

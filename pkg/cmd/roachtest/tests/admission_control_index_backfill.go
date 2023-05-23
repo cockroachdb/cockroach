@@ -12,17 +12,24 @@ package tests
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 func registerIndexBackfill(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
-		1, /* nodeCount */
+		4, /* nodeCount */
 		spec.CPU(8),
 		spec.Zones("us-east1-b"),
 		spec.VolumeSize(500),
@@ -39,45 +46,117 @@ func registerIndexBackfill(r registry.Registry) {
 		// Tags:            registry.Tags(`weekly`),
 		Cluster:         clusterSpec,
 		RequiresLicense: true,
+		SnapshotPrefix:  "tpce-100k",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			// TODO(irfansharif): Make a registry of these prefix strings. It's
-			// important no registered name is a prefix of another.
-			const snapshotPrefix = "ac-index-backfill"
+			crdbNodes := c.Spec().NodeCount - 1
+			workloadNode := c.Spec().NodeCount
 
-			var snapshots []vm.VolumeSnapshot
+			promCfg := &prometheus.Config{}
+			promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0]).
+				WithNodeExporter(c.Range(1, crdbNodes).InstallNodes()).
+				WithCluster(c.Range(1, crdbNodes).InstallNodes()).
+				WithGrafanaDashboard("https://go.crdb.dev/p/index-admission-control-grafana").
+				WithScrapeConfigs(
+					prometheus.MakeWorkloadScrapeConfig("workload", "/",
+						makeWorkloadScrapeNodes(
+							c.Node(workloadNode).InstallNodes()[0],
+							[]workloadInstance{{nodes: c.Node(workloadNode)}},
+						),
+					),
+				)
+
 			snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
 				// TODO(irfansharif): Search by taking in the other parts of the
 				// snapshot fingerprint, i.e. the node count, the version, etc.
-				Name: snapshotPrefix,
+				Name: t.SnapshotPrefix(),
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if len(snapshots) == 0 {
-				t.L().Printf("no existing snapshots found for %s (%s), doing pre-work", t.Name(), snapshotPrefix)
-				// TODO(irfansharif): Add validation that we're some released
-				// version, probably the predecessor one. Also ensure that any
-				// running CRDB processes have been stopped since we're taking
-				// raw disk snapshots. Also later we'll be unmounting/mounting
-				// attached volumes.
-				if err := c.CreateSnapshot(ctx, snapshotPrefix); err != nil {
+				t.L().Printf("no existing snapshots found for %s (%s), doing pre-work",
+					t.Name(), t.SnapshotPrefix())
+
+				// XXX: Do pre-work. Set up tpc-e dataset.
+				runTPCE(ctx, t, c, tpceOptions{
+					start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						pred, err := version.PredecessorVersion(*t.BuildVersion())
+						if err != nil {
+							t.Fatal(err)
+						}
+
+						path, err := clusterupgrade.UploadVersion(ctx, t, t.L(), c, c.All(), pred)
+						if err != nil {
+							t.Fatal(err)
+						}
+
+						// Copy over the binary to ./cockroach and run it from
+						// there. This test captures disk snapshots, which are
+						// fingerprinted using the binary version found in this
+						// path. The reason it can't just poke at the running
+						// crdb process is because when grabbing snapshots, crdb
+						// is not running.
+						c.Run(ctx, c.All(), fmt.Sprintf("cp %s ./cockroach", path))
+						settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
+						if err := c.StartE(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Range(1, crdbNodes)); err != nil {
+							t.Fatal(err)
+						}
+					},
+					customers:          1_000,
+					disablePrometheus:  true,
+					setupType:          usingTPCEInit,
+					estimatedSetupTime: 20 * time.Minute,
+					nodes:              crdbNodes,
+					owner:              registry.OwnerAdmissionControl,
+					cpus:               clusterSpec.CPUs,
+					ssds:               1,
+					onlySetup:          true,
+					timeout:            4 * time.Hour,
+				})
+
+				// Stop all nodes before capturing cluster snapshots.
+				c.Stop(ctx, t.L(), option.DefaultStopOpts())
+
+				if err := c.CreateSnapshot(ctx, t.SnapshotPrefix()); err != nil {
 					t.Fatal(err)
 				}
-				snapshots, err = c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{Name: snapshotPrefix})
+				snapshots, err = c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
+					Name: t.SnapshotPrefix(),
+				})
 				if err != nil {
 					t.Fatal(err)
 				}
-				t.L().Printf("using %d newly created snapshot(s) with prefix %q", len(snapshots), snapshotPrefix)
+				t.L().Printf("using %d newly created snapshot(s) with prefix %q", len(snapshots), t.SnapshotPrefix())
 			} else {
-				t.L().Printf("using %d pre-existing snapshot(s) with prefix %q", len(snapshots), snapshotPrefix)
+				t.L().Printf("using %d pre-existing snapshot(s) with prefix %q", len(snapshots), t.SnapshotPrefix())
 			}
 
 			if err := c.ApplySnapshots(ctx, snapshots); err != nil {
 				t.Fatal(err)
 			}
 
-			// TODO(irfansharif): Actually do something using TPC-E, index
-			// backfills and replication admission control.
+			// XXX: Run the workload. Run index-backfills during.
+
+			runTPCE(ctx, t, c, tpceOptions{
+				start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
+					c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+					for i := 1; i <= crdbNodes; i++ {
+						c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Node(i))
+					}
+				},
+				customers:        1_000,
+				ssds:             1,
+				setupType:        usingExistingTPCEData,
+				nodes:            clusterSpec.NodeCount - 1,
+				owner:            registry.OwnerAdmissionControl,
+				cpus:             clusterSpec.CPUs,
+				prometheusConfig: promCfg,
+				timeout:          4 * time.Hour,
+				during: func(ctx context.Context) error {
+					return nil // XXX: run index backfills
+				},
+			})
 		},
 	})
 }

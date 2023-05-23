@@ -44,7 +44,7 @@ func (p *provider) ListVolumeSnapshots(
 	return nil, errors.Newf("%s", p.unimplemented)
 }
 
-func (p *provider) DeleteVolumeSnapshot(l *logger.Logger, snapshot vm.VolumeSnapshot) error {
+func (p *provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
 	return errors.Newf("%s", p.unimplemented)
 }
 

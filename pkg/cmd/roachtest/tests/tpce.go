@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -104,30 +105,52 @@ type tpceOptions struct {
 
 	tags    map[string]struct{}
 	timeout time.Duration
+
+	// If specified, called to stage+start cockroach. If not specified, defaults
+	// to uploading the default binary to all nodes, and starting it on all but
+	// the last node.
+	start              func(context.Context, test.Test, cluster.Cluster)
+	setupType          tpceSetupType
+	estimatedSetupTime time.Duration
+	prometheusConfig   *prometheus.Config // overwrites the default prometheus config settings
+	disablePrometheus  bool               // forces prometheus to not start up
+	onlySetup          bool
+	during             func(ctx context.Context) error
 }
+type tpceSetupType int
+
+const (
+	usingTPCEInit         tpceSetupType = iota
+	usingExistingTPCEData               // skips import
+)
 
 func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptions) {
-	// TODO(irfansharif): Expose a 'during' helper, like the TPC-C harness.
-	// Additionally integrate with --skip-init, --local, estimated setup time,
-	// prometheus, and roachprod disk snapshots.
-
-	roachNodes := c.Range(1, opts.nodes)
+	crdbNodes := c.Range(1, opts.nodes)
 	loadNode := opts.nodes + 1
 	racks := opts.nodes
 
-	t.Status("installing cockroach")
-	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
+	if opts.start == nil {
+		opts.start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Status("installing cockroach")
+			c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 
-	startOpts := option.DefaultStartOpts()
-	startOpts.RoachprodOpts.StoreCount = opts.ssds
-	settings := install.MakeClusterSettings(install.NumRacksOption(racks))
-	c.Start(ctx, t.L(), startOpts, settings, roachNodes)
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.StoreCount = opts.ssds
+			settings := install.MakeClusterSettings(install.NumRacksOption(racks))
+			if c.IsLocal() { // XXX: Does local make sense?
+				settings.Env = append(settings.Env, "COCKROACH_SCAN_INTERVAL=200ms")
+				settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+			}
+			c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
+		}
+	}
+	opts.start(ctx, t, c)
 
-	tpceSpec, err := initTPCESpec(ctx, t.L(), c, loadNode, roachNodes)
+	tpceSpec, err := initTPCESpec(ctx, t.L(), c, loadNode, crdbNodes)
 	require.NoError(t, err)
 
 	// Configure to increase the speed of the import.
-	func() {
+	{
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 		if _, err := db.ExecContext(
@@ -140,16 +163,46 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		); err != nil {
 			t.Fatal(err)
 		}
-	}()
+	}
 
-	m := c.NewMonitor(ctx, roachNodes)
-	m.Go(func(ctx context.Context) error {
-		t.Status("preparing workload")
-		tpceSpec.init(ctx, t, c, tpceCmdOptions{
-			customers: opts.customers,
-			racks:     racks,
+	if c.IsLocal() {
+		opts.customers = 10
+		opts.timeout = 5 * time.Minute
+	}
+
+	if !opts.disablePrometheus {
+		// TODO(irfansharif): Move this after the import step? The statistics
+		// during import itself is uninteresting and pollutes actual workload
+		// data.
+		var cleanupFunc func()
+		_, cleanupFunc = setupPrometheusForRoachtest(ctx, t, c, opts.prometheusConfig, nil)
+		defer cleanupFunc()
+	}
+
+	if opts.setupType == usingTPCEInit && !t.SkipInit() {
+		m := c.NewMonitor(ctx, crdbNodes)
+		m.Go(func(ctx context.Context) error {
+			estimatedSetupTimeStr := ""
+			if opts.estimatedSetupTime != 0 {
+				estimatedSetupTimeStr = fmt.Sprintf(" (<%s)", opts.estimatedSetupTime)
+			}
+			t.Status(fmt.Sprintf("initializing %d tpc-e customers%s", opts.customers, estimatedSetupTimeStr))
+			tpceSpec.init(ctx, t, c, tpceCmdOptions{
+				customers: opts.customers,
+				racks:     racks,
+			})
+			return nil
 		})
+		m.Wait() // for init
+	} else {
+		t.Status("skipping tpc-e init")
+	}
+	if opts.onlySetup {
+		return
+	}
 
+	m := c.NewMonitor(ctx, crdbNodes)
+	m.Go(func(ctx context.Context) error {
 		t.Status("running workload")
 		result, err := tpceSpec.run(ctx, t, c, tpceCmdOptions{
 			customers: opts.customers,
@@ -166,6 +219,9 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		}
 		return nil
 	})
+	if opts.during != nil {
+		m.Go(opts.during)
+	}
 	m.Wait()
 }
 

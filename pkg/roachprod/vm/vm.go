@@ -288,23 +288,35 @@ type ProviderOpts interface {
 	ConfigureClusterFlags(*pflag.FlagSet, MultipleProjectsOption)
 }
 
+// VolumeSnapshot is an abstract representation of a specific volume snapshot.
+// This type is used across various cloud providers supported by roachprod.
 type VolumeSnapshot struct {
 	ID   string
 	Name string
 }
 
+// VolumeSnapshotCreateOpts groups input callers can provide when creating
+// volume snapshots. Namely, what name it has, the labels it's created with, and
+// a description (visible through cloud consoles).
 type VolumeSnapshotCreateOpts struct {
 	Name        string
 	Labels      map[string]string
 	Description string
 }
 
+// VolumeSnapshotListOpts provides a way to search for specific volume
+// snapshots. Callers can regex match snapshot names, search by exact labels, or
+// filter only for snapshots created before some timestamp. Individual
+// parameters are optional and can be combined with others.
 type VolumeSnapshotListOpts struct {
 	Name          string
 	Labels        map[string]string
 	CreatedBefore time.Time
 }
 
+// Volume is an abstract representation of a specific volume/disks. This type is
+// used across various cloud providers supported by roachprod, and can typically
+// be snapshotted or attached, detached, mounted from existing VMs.
 type Volume struct {
 	ProviderResourceID string
 	ProviderVolumeType string
@@ -315,6 +327,7 @@ type Volume struct {
 	Size               int
 }
 
+// VolumeCreateOpts groups input callers can provide when creating volumes.
 type VolumeCreateOpts struct {
 	Name string
 	// N.B. Customer managed encryption is not supported at this time
@@ -379,8 +392,8 @@ type Provider interface {
 	// ListVolumeSnapshots lists the individual volume snapshots that satisfy
 	// the search criteria.
 	ListVolumeSnapshots(l *logger.Logger, vslo VolumeSnapshotListOpts) ([]VolumeSnapshot, error)
-	// DeleteVolumeSnapshot permanently deletes the given snapshot.
-	DeleteVolumeSnapshot(l *logger.Logger, snapshot VolumeSnapshot) error
+	// DeleteVolumeSnapshots permanently deletes the given snapshots.
+	DeleteVolumeSnapshots(l *logger.Logger, snapshot ...VolumeSnapshot) error
 }
 
 // DeleteCluster is an optional capability for a Provider which can
