@@ -558,13 +558,23 @@ func (expr *ParenTableExpr) WalkTableExpr(v Visitor) TableExpr {
 func (expr *JoinTableExpr) WalkTableExpr(v Visitor) TableExpr {
 	left, changedL := walkTableExpr(v, expr.Left)
 	right, changedR := walkTableExpr(v, expr.Right)
-	if changedL || changedR {
+	cond, changedCond := walkJoinCond(v, expr.Cond)
+	if changedL || changedR || changedCond {
 		exprCopy := *expr
 		exprCopy.Left = left
 		exprCopy.Right = right
+		exprCopy.Cond = cond
 		return &exprCopy
 	}
 	return expr
+}
+
+func walkJoinCond(v Visitor, cond JoinCond) (JoinCond, bool) {
+	if t, ok := cond.(*OnJoinCond); ok {
+		expr, changed := WalkExpr(v, t.Expr)
+		return &OnJoinCond{Expr: expr}, changed
+	}
+	return cond, false
 }
 
 func (expr *RowsFromExpr) copyNode() *RowsFromExpr {
