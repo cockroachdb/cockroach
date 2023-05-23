@@ -690,6 +690,290 @@ func TestTelemetryLogging(t *testing.T) {
 	}
 }
 
+type testQuery struct {
+	query          string
+	logTime        float64
+	tracingEnabled bool
+}
+
+type expectedLog struct {
+	logMsg            string
+	skippedQueryCount int
+}
+
+// TestTelemetryLoggingPerFingerprintSampling verifies that telemetry events are logged to the telemetry log
+// and are sampled according to the configured sample rate.
+func TestTelemetryLoggingPerFingerprintSampling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	defer cleanup()
+
+	st := logtestutils.StubTime{}
+	sts := logtestutils.StubTracingStatus{}
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			EventLog: &EventLogTestingKnobs{
+				// The sampling checks below need to have a deterministic
+				// number of statements run by internal executor.
+				SyncWrites: true,
+			},
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow:       st.TimeNow,
+				getTracingStatus: sts.TracingStatus,
+			},
+		},
+	})
+
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET application_name = 'telemetry-logging-test'`)
+	db.Exec(t, "CREATE TABLE t();")
+	db.Exec(t, "CREATE TABLE u(x int);")
+
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.stmt_fingerprint.enabled = true;`)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+
+	testData := []struct {
+		name                                string
+		stubMaxEventFrequency               int64
+		stubMaxEventFrequencyPerFingerprint int64
+		queries                             []testQuery
+		expectedLogs                        []expectedLog
+	}{
+		{
+			// Test case with statement that is not of type DML.
+			// Even though the queries are executed within the required
+			// elapsed interval, we should still see that they were all
+			// logged since  we log all statements that are not of type DML.
+			name:                                "telemetry-fingerprint-sampling-non-dml",
+			stubMaxEventFrequency:               10,
+			stubMaxEventFrequencyPerFingerprint: 1,
+			queries: []testQuery{
+				{
+					query:   "TRUNCATE t;",
+					logTime: 0,
+				},
+				{
+					query:   "TRUNCATE t;",
+					logTime: 0,
+				},
+				{
+					query:   "TRUNCATE t;",
+					logTime: 0.1,
+				},
+				{
+					query:   "TRUNCATE t;",
+					logTime: 0.2,
+				},
+			},
+			expectedLogs: []expectedLog{
+				{
+					logMsg:            "TRUNCATE TABLE defaultdb.public.t",
+					skippedQueryCount: 0,
+				},
+				{
+					logMsg:            "TRUNCATE TABLE defaultdb.public.t",
+					skippedQueryCount: 0,
+				},
+				{
+					logMsg:            "TRUNCATE TABLE defaultdb.public.t",
+					skippedQueryCount: 0,
+				},
+				{
+					logMsg:            "TRUNCATE TABLE defaultdb.public.t",
+					skippedQueryCount: 0,
+				},
+			},
+		},
+		{
+			// Test DML stmts should obey sampling frequencies.
+			name:                                "telemetry-fingerprint-sampling-dml",
+			stubMaxEventFrequency:               5,
+			stubMaxEventFrequencyPerFingerprint: 1,
+			queries: []testQuery{
+				{
+					query:   "SELECT * FROM t LIMIT 1;",
+					logTime: 1,
+				},
+				{
+					query:   "SELECT * FROM t LIMIT 1;",
+					logTime: 1.1, // Skipped for not meeting either req elapsed time.
+				},
+				{
+					query:   "SELECT * FROM t LIMIT 1;",
+					logTime: 1.2, // Skipped for not meeting required time elapsed per fingerprint.
+				},
+				{
+					query:   "SELECT * FROM t;", // Logged as we haven't seen this fingerprint before.
+					logTime: 1.2,
+				},
+				{
+					query:   "SELECT * FROM t;", // Skipped. Not enough time elapsed.
+					logTime: 1.2,
+				},
+				{
+					query:   "SELECT * FROM u LIMIT 1;", // Logged as we haven't seen this fingerprint before.
+					logTime: 1.4,
+				},
+				{
+					query:   "SELECT * FROM t;", // Skipped for not meeting required time elapsed per fingerprint.
+					logTime: 1.4,
+				},
+				{
+					query:   "SELECT * FROM t LIMIT 1;", // Logged.
+					logTime: 2,
+				},
+				{
+					query:   "SELECT * FROM u LIMIT 1;",
+					logTime: 2.2, // Skipped for not meeting required time elapsed per fingerprint.
+				},
+				{
+					query:   "SELECT * FROM u LIMIT 1;",
+					logTime: 2.4,
+				},
+			},
+			expectedLogs: []expectedLog{
+				{
+					logMsg:            `SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
+					skippedQueryCount: 0,
+				},
+				{
+					logMsg:            `SELECT * FROM \"\".\"\".t`,
+					skippedQueryCount: 2,
+				},
+				{
+					logMsg:            `SELECT * FROM \"\".\"\".u LIMIT ‹1›`,
+					skippedQueryCount: 1,
+				},
+				{
+					logMsg:            `SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
+					skippedQueryCount: 1,
+				},
+				{
+					logMsg:            `SELECT * FROM \"\".\"\".u LIMIT ‹1›`,
+					skippedQueryCount: 1,
+				},
+			},
+		},
+		{
+			// Test tracing enabled. All statements with tracing enabled should be logged.
+			name:                                "telemetry-fingerprint-sampling-tracing",
+			stubMaxEventFrequency:               10,
+			stubMaxEventFrequencyPerFingerprint: 5,
+			queries: []testQuery{
+				{
+					query:          "SELECT * FROM t LIMIT 1;",
+					logTime:        3,
+					tracingEnabled: true,
+				},
+				{
+					query:          "SELECT * FROM t LIMIT 1;", // Skipped.
+					logTime:        3.1,
+					tracingEnabled: false,
+				},
+				{
+					query:          "SELECT * FROM t LIMIT 1;",
+					logTime:        3.1,
+					tracingEnabled: true,
+				},
+			},
+			expectedLogs: []expectedLog{
+				{
+					logMsg:            `SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
+					skippedQueryCount: 0,
+				},
+				{
+					logMsg:            `SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
+					skippedQueryCount: 1,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testData {
+		TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, tc.stubMaxEventFrequency)
+		telemetryEventFrequencyStmtFingerprint.Override(
+			context.Background(), &s.ClusterSettings().SV, tc.stubMaxEventFrequencyPerFingerprint)
+		for _, query := range tc.queries {
+			stubTime := timeutil.FromUnixMicros(int64(query.logTime * 1e6))
+			st.SetTime(stubTime)
+			sts.SetTracingStatus(query.tracingEnabled)
+			_, err := db.DB.ExecContext(context.Background(), query.query)
+			if err != nil {
+				t.Errorf("unexpected error executing query `%s`: %v", query.query, err)
+			}
+		}
+	}
+
+	log.Flush()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal(errors.Newf("no entries found"))
+	}
+
+	for _, e := range entries {
+		if strings.Contains(e.Message, `"ExecMode":"`+executorTypeInternal.logLabel()) {
+			t.Errorf("unexpected telemetry event for internal statement:\n%s", e.Message)
+		}
+	}
+
+	// FetchEntriesFromFiles delivers entries in reverse order.
+	entryIdx := len(entries) - 1
+
+	// Skip the cluster setting queries.
+	for strings.Contains(entries[entryIdx].Message, "SET CLUSTER SETTING") {
+		entryIdx--
+	}
+
+	for _, tc := range testData {
+		t.Run(tc.name, func(t *testing.T) {
+			expectedLogCount := len(tc.expectedLogs)
+			for i := 0; i < expectedLogCount; i++ {
+				e := entries[entryIdx-i]
+				if !strings.Contains(e.Message, tc.expectedLogs[i].logMsg+"\"") {
+					t.Errorf("%s: expected log message to contain:\n%s\nbut received:\n%s\n",
+						tc.name,
+						tc.expectedLogs[i].logMsg,
+						e.Message)
+				}
+
+				var sampledQueryFromLog eventpb.SampledQuery
+				err = json.Unmarshal([]byte(e.Message), &sampledQueryFromLog)
+				require.NoError(t, err)
+
+				expectedSkipped := tc.expectedLogs[i].skippedQueryCount
+				if expectedSkipped == 0 {
+					if strings.Contains(e.Message, "SkippedQueries") {
+						t.Errorf("%s: expected no skipped queries, found:\n%s", tc.name, e.Message)
+					}
+				} else {
+					if expected := fmt.Sprintf(`"SkippedQueries":%d`, expectedSkipped); !strings.Contains(e.Message, expected) {
+						t.Errorf("%s: expected %s found:\n%s", tc.name, expected, e.Message)
+					}
+				}
+			}
+			entryIdx -= expectedLogCount
+		})
+	}
+}
+
 func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := log.ScopeWithoutShowLogs(t)
