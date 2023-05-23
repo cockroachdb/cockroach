@@ -68,6 +68,6 @@ $$`)
 		fn := desctestutils.TestGetFunctionDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", "public", "f1")
 		mut := funcdesc.NewBuilder(fn.FuncDesc()).BuildCreatedMutableFunction()
 		require.Empty(t, redact.Redact(mut.DescriptorProto()))
-		require.Equal(t, `SELECT k FROM defaultdb.public.kv WHERE v != '_'; SELECT k FROM defaultdb.public.kv WHERE v = '_';`, mut.FunctionBody)
+		require.Equal(t, `SELECT k FROM {TABLE:104} WHERE v != '_'; SELECT k FROM {TABLE:104} WHERE v = '_';`, mut.FunctionBody)
 	})
 }

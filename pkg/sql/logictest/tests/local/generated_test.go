@@ -2270,6 +2270,13 @@ func TestLogic_udf(
 	runLogicTest(t, "udf")
 }
 
+func TestLogic_udf_body_rewrite(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_body_rewrite")
+}
+
 func TestLogic_udf_delete(
 	t *testing.T,
 ) {

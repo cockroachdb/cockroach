@@ -122,10 +122,10 @@ CREATE FUNCTION f(INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT a FROM t $
 
 		_, overload, err := funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[0].Oid)
 		require.NoError(t, err)
-		require.Equal(t, `SELECT a FROM defaultdb.public.t;
-SELECT b FROM defaultdb.public.t@t_idx_b;
-SELECT c FROM defaultdb.public.t@t_idx_c;
-SELECT a FROM defaultdb.public.v;
+		require.Equal(t, `SELECT a FROM {TABLE:104};
+SELECT b FROM {TABLE:104}@t_idx_b;
+SELECT c FROM {TABLE:104}@t_idx_c;
+SELECT a FROM {TABLE:107};
 SELECT nextval(105:::REGCLASS);`, overload.Body)
 		require.True(t, overload.IsUDF)
 		require.False(t, overload.UDFContainsOnlySignature)
@@ -144,7 +144,7 @@ SELECT nextval(105:::REGCLASS);`, overload.Body)
 
 		_, overload, err = funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[2].Oid)
 		require.NoError(t, err)
-		require.Equal(t, `SELECT a FROM defaultdb.public.t;`, overload.Body)
+		require.Equal(t, `SELECT a FROM {TABLE:104};`, overload.Body)
 		require.True(t, overload.IsUDF)
 		require.False(t, overload.UDFContainsOnlySignature)
 		require.Equal(t, 1, len(overload.Types.Types()))
