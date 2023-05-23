@@ -71,6 +71,20 @@ SELECT f2(5,32);
 statement error pq: multiple modification subqueries of the same table \"t\" are not supported
 SELECT f2(5,9), f2(7,11);
 
+query T
+SELECT f2(x,y) FROM (VALUES (1,16),(1,17)) v(x,y);
+----
+(1,16)
+(1,17)
+
+query II rowsort
+SELECT * FROM t;
+----
+1 17
+3 4
+5 32
+7 8
+
 statement ok
 CREATE TABLE t2 (a INT, b INT, c INT);
 INSERT INTO t2 VALUES (1,2,3),(4,5,6),(7,8,9);
