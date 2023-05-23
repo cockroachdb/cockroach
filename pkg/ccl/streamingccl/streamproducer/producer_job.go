@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -102,13 +103,11 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 			case jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY:
 				return p.releaseProtectedTimestamp(ctx, execCfg)
 			case jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY:
-				return j.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-					ju.UpdateStatus(jobs.StatusCancelRequested)
-					return nil
-				})
+				return errors.New("destination cluster job finished unsuccessfully")
 			case jobspb.StreamReplicationProgress_NOT_FINISHED:
-				// Check if the job timed out.
-				if prog.GetStreamReplication().Expiration.Before(p.timeSource.Now()) {
+				expiration := prog.GetStreamReplication().Expiration
+				log.VEventf(ctx, 1, "checking if stream replication expiration %s timed out", expiration)
+				if expiration.Before(p.timeSource.Now()) {
 					return errors.Errorf("replication stream %d timed out", p.job.ID())
 				}
 			default:

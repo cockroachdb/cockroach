@@ -605,7 +605,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 		if successfulIngestion {
 			jobutils.WaitForJobToSucceed(t, h.SysSQL, jobspb.JobID(streamID))
 		} else {
-			jobutils.WaitForJobToCancel(t, h.SysSQL, jobspb.JobID(streamID))
+			jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(streamID))
 		}
 		// Verify protected timestamp record gets released.
 		jr := h.SysServer.JobRegistry().(*jobs.Registry)
