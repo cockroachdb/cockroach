@@ -41,6 +41,9 @@ import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { getActiveTransactionFiltersFromURL } from "src/queryFilter/utils";
 import { filterActiveTransactions } from "../activeExecutions/activeStatementUtils";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+import { RefreshControl } from "src/activeExecutions/refreshControl";
+import moment, { Moment } from "moment-timezone";
+
 const cx = classNames.bind(styles);
 
 export type ActiveTransactionsViewDispatchProps = {
@@ -48,6 +51,8 @@ export type ActiveTransactionsViewDispatchProps = {
   onFiltersChange: (filters: ActiveTransactionFilters) => void;
   onSortChange: (ss: SortSetting) => void;
   refreshLiveWorkload: () => void;
+  onAutoRefreshToggle: (isEnabled: boolean) => void;
+  onManualRefresh: () => void;
 };
 
 export type ActiveTransactionsViewStateProps = {
@@ -59,6 +64,8 @@ export type ActiveTransactionsViewStateProps = {
   internalAppNamePrefix: string;
   isTenant?: boolean;
   maxSizeApiReached?: boolean;
+  isAutoRefreshEnabled?: boolean;
+  lastUpdated: Moment | null;
 };
 
 export type ActiveTransactionsViewProps = ActiveTransactionsViewStateProps &
@@ -80,6 +87,10 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   filters,
   internalAppNamePrefix,
   maxSizeApiReached,
+  isAutoRefreshEnabled,
+  onAutoRefreshToggle,
+  lastUpdated,
+  onManualRefresh,
 }: ActiveTransactionsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -90,16 +101,59 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   const [search, setSearch] = useState<string>(
     queryByName(history.location, RECENT_TXN_SEARCH_PARAM),
   );
+  // Local state to store the difference between the current time and the last
+  // time the data was updated, in minutes.
+  const [minutesSinceLastRefresh, setMinutesSinceLastRefresh] = useState(0);
+  // Local state to store whether or not to display the refresh alert.
+  const [displayRefreshAlert, setDisplayRefreshAlert] = useState(false);
 
   useEffect(() => {
-    // Refresh  every 10 seconds.
-    refreshLiveWorkload();
+    // useEffect hook which triggers an immediate data refresh if auto-refresh
+    // is enabled. It fetches the latest workload details by dispatching a
+    // refresh action when the component mounts, ensuring that users see fresh
+    // data as soon as they land on the page if auto-refresh is on.
+    if (isAutoRefreshEnabled) {
+      refreshLiveWorkload();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const interval = setInterval(refreshLiveWorkload, 10 * 1000);
-    return () => {
-      clearInterval(interval);
+  useEffect(() => {
+    // Refresh every 10 seconds if auto refresh is on.
+    if (isAutoRefreshEnabled) {
+      const interval = setInterval(refreshLiveWorkload, 10 * 1000);
+      return () => {
+        clearInterval(interval);
+      };
+    }
+  }, [isAutoRefreshEnabled, refreshLiveWorkload]);
+
+  useEffect(() => {
+    // This useEffect hook checks the difference between the current time and
+    // the last time the data was updated. It triggers a state change to display
+    // an alert if the difference is greater than 10 minutes and auto-refresh
+    // is disabled. The check is performed immediately when the component mounts
+    // and then every 10 seconds thereafter.
+    const checkTimeDifference = () => {
+      if (!isAutoRefreshEnabled && lastUpdated) {
+        // Calculate the difference between the last updated time and the current time in minutes
+        const diffMinutes = moment().diff(lastUpdated, "minutes");
+        if (diffMinutes >= 10) {
+          setDisplayRefreshAlert(true);
+          setMinutesSinceLastRefresh(diffMinutes);
+        } else {
+          setDisplayRefreshAlert(false);
+        }
+      }
     };
-  }, [refreshLiveWorkload]);
+
+    checkTimeDifference();
+    const intervalId = setInterval(checkTimeDifference, 10 * 1000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [lastUpdated, isAutoRefreshEnabled, setDisplayRefreshAlert]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -161,6 +215,18 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
     resetPagination();
   };
 
+  const onSubmitToggleAutoRefresh = () => {
+    // Refresh immediately when toggling auto-refresh on.
+    if (!isAutoRefreshEnabled) {
+      refreshLiveWorkload();
+    }
+    onAutoRefreshToggle(!isAutoRefreshEnabled);
+  };
+
+  const handleRefresh = () => {
+    onManualRefresh();
+  };
+
   const clearSearch = () => onSubmitSearch("");
   const clearFilters = () =>
     onSubmitFilters({
@@ -207,7 +273,29 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
             filters={filters}
           />
         </PageConfigItem>
+        <PageConfigItem>
+          <RefreshControl
+            isAutoRefreshEnabled={isAutoRefreshEnabled}
+            onToggleAutoRefresh={onSubmitToggleAutoRefresh}
+            onManualRefresh={handleRefresh}
+            lastRefreshTimestamp={lastUpdated}
+            execType={"transaction"}
+          />
+        </PageConfigItem>
       </PageConfig>
+      {displayRefreshAlert && (
+        <div className={cx("refresh-alert")}>
+          <InlineAlert
+            intent="warning"
+            title={
+              <>
+                Your active transactions data is {minutesSinceLastRefresh}{" "}
+                minutes old. Consider refreshing for the latest information.
+              </>
+            }
+          />
+        </div>
+      )}
       <div className={cx("table-area")}>
         <Loading
           loading={transactions == null}
