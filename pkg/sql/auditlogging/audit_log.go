@@ -52,6 +52,11 @@ type AuditConfigLock struct {
 	Config *AuditConfig
 }
 
+type ReducedAuditConfig struct {
+	Initialized  bool
+	AuditSetting *AuditSetting
+}
+
 func (cl *AuditConfigLock) GetMatchingAuditSetting(
 	userRoles map[username.SQLUsername]bool,
 	name username.SQLUsername,

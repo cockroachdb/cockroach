@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"math"
 	"regexp"
 	"strings"
@@ -47,16 +48,17 @@ func TestRoleBasedAuditLogging(t *testing.T) {
 	db.Exec(t, `CREATE USER test_user`)
 
 	t.Run("testSingleRoleAuditLogging", func(t *testing.T) {
-		testSingleRoleAuditLogging(t, db)
+		testSingleRoleAuditLogging(t, db, s)
 	})
 	// Reset audit config between tests.
 	db.Exec(t, `SET CLUSTER SETTING sql.log.user_audit = ''`)
 	t.Run("testMultiRoleAuditLogging", func(t *testing.T) {
-		testMultiRoleAuditLogging(t, db)
+		testMultiRoleAuditLogging(t, db, s)
 	})
 }
 
-func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
+func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner, s serverutils.TestServerInterface) {
+	params, _ := tests.CreateTestServerParams()
 	db.Exec(t, `SET CLUSTER SETTING sql.log.user_audit = '
 		all_stmt_types ALL
 		no_stmt_types NONE
@@ -107,13 +109,24 @@ func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 	}
 
 	for _, td := range testData {
-		// Grant the audit role
-		if td.role != "root" {
-			db.Exec(t, fmt.Sprintf("GRANT %s to root", td.role))
-		}
-		// Run queries
-		for idx := range td.queries {
-			db.Exec(t, td.queries[idx])
+		// Username case.
+		if td.role == "root" {
+			// Run queries on existing connection
+			for idx := range td.queries {
+				db.Exec(t, td.queries[idx])
+			}
+		} else {
+			// Start a new connection
+			db2 := serverutils.OpenDBConn(
+				t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+			newConn := sqlutils.MakeSQLRunner(db2)
+
+			// Grant the audit role
+			newConn.Exec(t, fmt.Sprintf("GRANT %s to root", td.role))
+			// Run queries on new connection
+			for idx := range td.queries {
+				newConn.Exec(t, td.queries[idx])
+			}
 		}
 		// Revoke the audit role.
 		db.Exec(t, fmt.Sprintf("REVOKE %s from root", td.role))
@@ -157,7 +170,8 @@ func testSingleRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 // testMultiRoleAuditLogging tests that we emit the expected audit logs when a user belongs to
 // multiple roles that correspond to audit settings. We ensure that the expected audit logs
 // correspond to *only* the *first matching audit setting* of the user's roles.
-func testMultiRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
+func testMultiRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner, s serverutils.TestServerInterface) {
+	params, _ := tests.CreateTestServerParams()
 	startTimestamp := timeutil.Now().Unix()
 	roleA := "roleA"
 	roleB := "roleB"
@@ -186,15 +200,20 @@ func testMultiRoleAuditLogging(t *testing.T, db *sqlutils.SQLRunner) {
 	}{
 		name: "test-multi-role-user",
 		expectedRoleToLogs: map[string]int{
-			// Expect logs from all queries and 1 for setting the cluster setting.
-			roleA: 4,
+			// Expect logs from all queries.
+			roleA: 3,
 			// Expect no logs from roleB as we match on roleA first.
 			roleB: 0,
 		},
 	}
 
+	// Start a new connection
+	db2 := serverutils.OpenDBConn(
+		t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+	newConn := sqlutils.MakeSQLRunner(db2)
+
 	for _, query := range testQueries {
-		db.Exec(t, query)
+		newConn.Exec(t, query)
 	}
 
 	log.FlushFileSinks()
