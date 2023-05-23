@@ -69,6 +69,9 @@ func ComputeColNameInternal(
 	case *ColumnItem:
 		return 2, e.Column(), nil
 
+	case *ColumnNameRef:
+		return 2, string(e.ColumnName), nil
+
 	case *IndirectionExpr:
 		return ComputeColNameInternal(ctx, sp, e.Expr, funcResolver)
 
