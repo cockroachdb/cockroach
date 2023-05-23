@@ -221,11 +221,13 @@
         ) &
         ^(ColsAreEmpty $rejectNullCols:(RejectNullCols $input))
     $filters:* &
-        (HasNullRejectingFilter
-            $filters
+        ^(ColsAreEmpty
             $nullRejectedCols:(IntersectionCols
-                $projectionCols
-                $rejectNullCols
+                (IntersectionCols
+                    $projectionCols
+                    $rejectNullCols
+                )
+                (GetNullRejectedCols $filters)
             )
         )
 )
