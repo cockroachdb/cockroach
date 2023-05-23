@@ -61,12 +61,20 @@ type Row struct {
 	// datums is the new value of a changed table row.
 	datums rowenc.EncDatumRow
 
+	// metadatums
+	metaDatums tree.Datums
+
 	// deleted is true if row is a deletion. In this case, only the primary
 	// key columns are guaranteed to be set in `datums`.
 	deleted bool
 
 	// Alloc used when decoding datums.
 	alloc *tree.DatumAlloc
+
+	knobs struct {
+		MetaUpdatedTimestamp string
+		MetaMVCCTimestamp    string
+	}
 }
 
 // DatumFn is a callback function invoked for each decoded datum.
@@ -108,6 +116,11 @@ func (r Row) ForAllColumns() Iterator {
 // ForEachUDTColumn returns Datum iterator for each column containing user defined types.
 func (r Row) ForEachUDTColumn() Iterator {
 	return iter{r: r, cols: r.udtCols}
+}
+
+// ForAllMeta returns Iterator for all meta columns.
+func (r Row) ForAllMeta() Iterator {
+	return iter{r: r, cols: r.metaCols}
 }
 
 // DatumNamed returns the datum with the specified column name, in the form of an Iterator.
@@ -180,11 +193,19 @@ func (r Row) forEachDatum(fn DatumFn, colIndexes []int) error {
 	numVirtualCols := 0
 	for _, colIdx := range colIndexes {
 		col := r.cols[colIdx]
+		if col.isMetadataColumn {
+			if err := fn(r.metaDatums[col.ord], col); err != nil {
+				return err
+			}
+			continue
+		}
+
 		// A datum row will never contain virtual columns. If we encounter a column that is virtual,
 		// then we need to offset each subsequent col.ord by 1. This offset is tracked by numVirtualCols.
 		physicalOrd := col.ord - numVirtualCols
 		if physicalOrd < len(r.datums) {
 			encDatum := r.datums[physicalOrd]
+			fmt.Println(physicalOrd, col)
 			if err := encDatum.EnsureDecoded(col.Typ, r.alloc); err != nil {
 				return errors.Wrapf(err, "error decoding column %q as type %s", col.Name, col.Typ.String())
 			}
@@ -221,13 +242,21 @@ type ResultColumn struct {
 	Name string
 	Typ  *types.T
 
-	// TableID/PGAttributeNum identify the source of the column, if it is a simple
-	// reference to a column of a base table (or view). If it is not a simple
-	// reference, these fields are zeroes.
-	TableID        descpb.ID // OID of column's source table (pg_attribute.attrelid).
-	PGAttributeNum uint32    // Column's number in source table (pg_attribute.attnum).
-	ord            int
+	// isMetadataColumn is true if this column does not correspond to a physical column
+	// stored in the table. These columns are considered value columns, tacked on
+	// at the end.
+	isMetadataColumn bool
+
+	// ord is the position of the column in the datums array of a Row.
+	// For metadata columns, this is the position of the column in
+	// the meta datums array in a Row.
+	ord int
+
+	// The below fields are uninitialized for metadata columns.
+
 	sqlString      string
+	tableID        descpb.ID // OID of column's source table (pg_attribute.attrelid).
+	pgAttributeNum uint32    // Column's number in source table (pg_attribute.attnum).
 }
 
 // SQLStringNotHumanReadable returns the SQL statement describing the column.
@@ -255,9 +284,14 @@ type EventDescriptor struct {
 	keyCols    []int          // Primary key columns.
 	valueCols  []int          // All column family columns.
 	udtCols    []int          // Columns containing UDTs.
+	metaCols   []int          // Metadata cols.
 	allCols    []int          // Contains all the columns
 	colsByName map[string]int // All columns, map[col.GetName()]idx in cols
 }
+
+const MetaUpdatedColName = "cdcInternalMetaUpdated"
+
+const MetaMVCCTimestampColName = "cdcInternalMetaMVCCTimestamp"
 
 // NewEventDescriptor returns EventDescriptor for specified table and family descriptors.
 func NewEventDescriptor(
@@ -266,6 +300,8 @@ func NewEventDescriptor(
 	includeVirtualColumns bool,
 	keyOnly bool,
 	schemaTS hlc.Timestamp,
+	withMetaUpdated bool,
+	withMetaMVCCTimestamp bool,
 ) (*EventDescriptor, error) {
 	sd := EventDescriptor{
 		Metadata: Metadata{
@@ -286,8 +322,8 @@ func NewEventDescriptor(
 		resultColumn := ResultColumn{
 			Name:           col.GetName(),
 			Typ:            col.GetType(),
-			TableID:        desc.GetID(),
-			PGAttributeNum: uint32(col.GetPGAttributeNum()),
+			tableID:        desc.GetID(),
+			pgAttributeNum: uint32(col.GetPGAttributeNum()),
 
 			ord:       ord,
 			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
@@ -301,6 +337,23 @@ func NewEventDescriptor(
 			sd.udtCols = append(sd.udtCols, colIdx)
 		}
 		return colIdx
+	}
+
+	addMetaColumn := func(name string, typ *types.T, ord int) (int, error) {
+		resultColumn := ResultColumn{
+			Name:             name,
+			Typ:              typ,
+			isMetadataColumn: true,
+		}
+
+		colIdx := len(sd.cols)
+		sd.cols = append(sd.cols, resultColumn)
+		if _, exists := sd.colsByName[name]; exists {
+			return 0, errors.AssertionFailedf("duplicate name %s", name)
+		}
+		sd.colsByName[name] = colIdx
+
+		return colIdx, nil
 	}
 
 	// Primary key columns must be added in the same order they
@@ -353,6 +406,25 @@ func NewEventDescriptor(
 				ord++
 			}
 		}
+	}
+	metaOrd := 0
+	if withMetaUpdated {
+		colIdx, err := addMetaColumn(MetaUpdatedColName, types.String, metaOrd)
+		if err != nil {
+			return nil, err
+		}
+		sd.metaCols = append(sd.metaCols, colIdx)
+		sd.valueCols = append(sd.valueCols, colIdx)
+		metaOrd += 1
+	}
+	if withMetaMVCCTimestamp {
+		colIdx, err := addMetaColumn(MetaMVCCTimestampColName, types.String, metaOrd)
+		if err != nil {
+			return nil, err
+		}
+		sd.metaCols = append(sd.metaCols, colIdx)
+		sd.valueCols = append(sd.valueCols, colIdx)
+		metaOrd += 1
 	}
 
 	allCols := make([]int, len(sd.cols))
@@ -438,6 +510,8 @@ func getEventDescriptorCached(
 	keyOnly bool,
 	schemaTS hlc.Timestamp,
 	cache *cache.UnorderedCache,
+	withUpdated bool,
+	withMVCC bool,
 ) (*EventDescriptor, error) {
 	idVer := CacheKey{ID: desc.GetID(), Version: desc.GetVersion(), FamilyID: family.ID}
 
@@ -448,10 +522,11 @@ func getEventDescriptorCached(
 		}
 	}
 
-	ed, err := NewEventDescriptor(desc, family, includeVirtual, keyOnly, schemaTS)
+	ed, err := NewEventDescriptor(desc, family, includeVirtual, keyOnly, schemaTS, withUpdated, withMVCC)
 	if err != nil {
 		return nil, err
 	}
+
 	cache.Add(idVer, ed)
 	return ed, nil
 }
@@ -463,6 +538,8 @@ func NewEventDecoder(
 	targets changefeedbase.Targets,
 	includeVirtual bool,
 	keyOnly bool,
+	withUpdated bool,
+	withMvccTimestamps bool,
 ) (Decoder, error) {
 	rfCache, err := newRowFetcherCache(
 		ctx,
@@ -482,7 +559,7 @@ func NewEventDecoder(
 		family *descpb.ColumnFamilyDescriptor,
 		schemaTS hlc.Timestamp,
 	) (*EventDescriptor, error) {
-		return getEventDescriptorCached(desc, family, includeVirtual, keyOnly, schemaTS, eventDescriptorCache)
+		return getEventDescriptorCached(desc, family, includeVirtual, keyOnly, schemaTS, eventDescriptorCache, withUpdated, withMvccTimestamps)
 	}
 
 	return &eventDecoder{
@@ -498,6 +575,13 @@ const (
 	CurrentRow RowType = iota
 	PrevRow
 )
+
+// timestampToString converts an internal timestamp to the string form used in
+// all encoders. This could be made more efficient. And/or it could be configurable
+// to include the Synthetic flag when present, but that's unlikely to be needed.
+func timestampToString(t hlc.Timestamp) string {
+	return t.WithSynthetic(false).AsOfSystemTime()
+}
 
 // DecodeKV decodes key value at specified schema timestamp.
 func (d *eventDecoder) DecodeKV(
@@ -522,11 +606,23 @@ func (d *eventDecoder) DecodeKV(
 	if err != nil {
 		return Row{}, err
 	}
+	var metaDatums tree.Datums
+	if len(ed.metaCols) > 0 {
+		for _, colIdx := range ed.metaCols {
+			fmt.Println(colIdx, ed.cols[colIdx])
+			if ed.cols[colIdx].Name == MetaUpdatedColName {
+				metaDatums = append(metaDatums, tree.NewDString(timestampToString(schemaTS)))
+			} else if ed.cols[colIdx].Name == MetaMVCCTimestampColName {
+				metaDatums = append(metaDatums, tree.NewDString(timestampToString(kv.Value.Timestamp)))
+			}
+		}
+	}
 
 	return Row{
 		EventDescriptor: ed,
 		MvccTimestamp:   kv.Value.Timestamp,
 		datums:          datums,
+		metaDatums:      metaDatums,
 		deleted:         isDeleted,
 		alloc:           &d.alloc,
 	}, nil
@@ -634,7 +730,7 @@ func TestingMakeEventRow(
 		panic(err) // primary column family always exists.
 	}
 	const includeVirtual = false
-	ed, err := NewEventDescriptor(desc, family, includeVirtual, false, hlc.Timestamp{})
+	ed, err := NewEventDescriptor(desc, family, includeVirtual, false, hlc.Timestamp{}, false, false)
 	if err != nil {
 		panic(err)
 	}
@@ -734,7 +830,7 @@ func TestingMakeEventRowFromEncDatums(
 				cols = append(cols, ResultColumn{
 					Name:    colName,
 					Typ:     typ,
-					TableID: 42,
+					tableID: 42,
 
 					ord: i,
 				})

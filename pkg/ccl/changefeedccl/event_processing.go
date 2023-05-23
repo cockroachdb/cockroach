@@ -225,9 +225,7 @@ func newKVEventToRowConsumer(
 	metrics *sliMetrics,
 	pacer *admission.Pacer,
 ) (_ *kvEventToRowConsumer, err error) {
-	includeVirtual := details.Opts.IncludeVirtual()
-	keyOnly := details.Opts.KeyOnly()
-	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, includeVirtual, keyOnly)
+	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, details.Opts.IncludeVirtual(), details.Opts.KeyOnly(), false, false)
 	if err != nil {
 		return nil, err
 	}

@@ -59,12 +59,15 @@ CREATE TABLE foo (
 	cFamily := mustGetFamily(t, tableDesc, 1)
 
 	for _, tc := range []struct {
-		family          *descpb.ColumnFamilyDescriptor
-		includeVirtual  bool
-		keyOnly         bool
-		expectedKeyCols []string
-		expectedColumns []string
-		expectedUDTCols []string
+		family                *descpb.ColumnFamilyDescriptor
+		includeVirtual        bool
+		keyOnly               bool
+		withMetaUpdated       bool
+		withMetaMVCCTimestamp bool
+		expectedKeyCols       []string
+		expectedColumns       []string
+		expectedUDTCols       []string
+		expectedMetaCols      []string
 	}{
 		{
 			family:          mainFamily,
@@ -111,9 +114,18 @@ CREATE TABLE foo (
 			expectedKeyCols: []string{"b", "a"},
 			expectedColumns: []string{"c", "d"},
 		},
+		{
+			family:                mainFamily,
+			withMetaMVCCTimestamp: true,
+			withMetaUpdated:       true,
+			expectedKeyCols:       []string{"b", "a"},
+			expectedColumns:       []string{"a", "b", "e", MetaUpdatedColName, MetaMVCCTimestampColName},
+			expectedUDTCols:       []string{"e"},
+			expectedMetaCols:      []string{MetaUpdatedColName, MetaMVCCTimestampColName},
+		},
 	} {
 		t.Run(fmt.Sprintf("%s/includeVirtual=%t/keyOnly=%t", tc.family.Name, tc.includeVirtual, tc.keyOnly), func(t *testing.T) {
-			ed, err := NewEventDescriptor(tableDesc, tc.family, tc.includeVirtual, tc.keyOnly, s.Clock().Now())
+			ed, err := NewEventDescriptor(tableDesc, tc.family, tc.includeVirtual, tc.keyOnly, s.Clock().Now(), tc.withMetaUpdated, tc.withMetaMVCCTimestamp)
 			require.NoError(t, err)
 
 			// Verify Metadata information for event descriptor.
@@ -127,6 +139,7 @@ CREATE TABLE foo (
 			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedKeyCols), slurpColumns(t, r.ForEachKeyColumn()))
 			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedColumns), slurpColumns(t, r.ForEachColumn()))
 			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedUDTCols), slurpColumns(t, r.ForEachUDTColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedMetaCols), slurpColumns(t, r.ForAllMeta()))
 		})
 	}
 }
@@ -174,6 +187,8 @@ CREATE TABLE foo (
 		familyName        string // Must be set if targetType ChangefeedTargetSpecification_COLUMN_FAMILY
 		includeVirtual    bool
 		keyOnly           bool
+		withUpdated       bool
+		withMVCC          bool
 		actions           []string
 		expectMainFamily  []decodeExpectation
 		expectOnlyCFamily []decodeExpectation
@@ -340,6 +355,20 @@ CREATE TABLE foo (
 				},
 			},
 		},
+		{
+			testName:    "main/meta_cols",
+			familyName:  "main",
+			withUpdated: true,
+			withMVCC:    true,
+			actions:     []string{"INSERT INTO foo (a, b) VALUES (1, 'first test')"},
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues:   []string{"first test", "1"},
+					allValues:   []string{"1", "first test", "inactive"},
+					prevDeleted: true,
+				},
+			},
+		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
 			targetType := jobspb.ChangefeedTargetSpecification_EACH_FAMILY
@@ -359,7 +388,7 @@ CREATE TABLE foo (
 			})
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			ctx := context.Background()
-			decoder, err := NewEventDecoder(ctx, &execCfg, targets, tc.includeVirtual, tc.keyOnly)
+			decoder, err := NewEventDecoder(ctx, &execCfg, targets, tc.includeVirtual, tc.keyOnly, tc.withUpdated, tc.withMVCC)
 			require.NoError(t, err)
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectOnlyCFamily)
 			for i := 0; i < expectedEvents; i++ {
@@ -374,8 +403,18 @@ CREATE TABLE foo (
 				} else {
 					expect, tc.expectOnlyCFamily = tc.expectOnlyCFamily[0], tc.expectOnlyCFamily[1:]
 				}
+
+				// Tack on option columns.
+				schemaTS := v.Timestamp()
+				if tc.withUpdated {
+					expect.allValues = append(expect.allValues, timestampToString(schemaTS))
+				}
+				if tc.withMVCC {
+					expect.allValues = append(expect.allValues, timestampToString(v.Value.Timestamp))
+				}
+
 				updatedRow, err := decoder.DecodeKV(
-					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, CurrentRow, v.Timestamp(), tc.keyOnly)
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, CurrentRow, schemaTS, tc.keyOnly)
 
 				if expect.expectUnwatchedErr {
 					require.ErrorIs(t, err, ErrUnwatchedFamily)
@@ -575,7 +614,7 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			})
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			ctx := context.Background()
-			decoder, err := NewEventDecoder(ctx, &execCfg, targets, tc.includeVirtual, false)
+			decoder, err := NewEventDecoder(ctx, &execCfg, targets, tc.includeVirtual, false, false, false)
 			require.NoError(t, err)
 
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectECFamily)
@@ -659,17 +698,28 @@ func expectResultColumns(
 	}
 
 	for _, colName := range colNames {
+		if colName == MetaUpdatedColName || colName == MetaMVCCTimestampColName {
+			res = append(res, ResultColumn{
+				Name:             colName,
+				Typ:              types.String,
+				isMetadataColumn: true,
+			})
+
+			continue
+		}
+
 		col, err := catalog.MustFindColumnByName(desc, colName)
 		require.NoError(t, err)
 		res = append(res, ResultColumn{
 			Name:           col.GetName(),
 			Typ:            col.GetType(),
-			TableID:        desc.GetID(),
-			PGAttributeNum: uint32(col.GetPGAttributeNum()),
+			tableID:        desc.GetID(),
+			pgAttributeNum: uint32(col.GetPGAttributeNum()),
 			ord:            colNamesSet[colName],
 			sqlString:      col.ColumnDesc().SQLStringNotHumanReadable(),
 		})
 	}
+
 	return res
 }
 

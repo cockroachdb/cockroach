@@ -149,7 +149,7 @@ func makeRangefeedReaderAndDecoder(
 	})
 	sqlExecCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	ctx := context.Background()
-	decoder, err := cdcevent.NewEventDecoder(ctx, &sqlExecCfg, targets, false, false)
+	decoder, err := cdcevent.NewEventDecoder(ctx, &sqlExecCfg, targets, false, false, false, false)
 	require.NoError(t, err)
 	return popRow, cleanup, decoder
 }
