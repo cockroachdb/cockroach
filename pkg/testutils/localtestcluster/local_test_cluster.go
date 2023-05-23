@@ -208,7 +208,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		cfg.Settings,
 		cfg.Gossip,
 		cfg.Clock,
-		cfg.NodeLiveness.GetNodeCount,
+		func() int { return len(cfg.NodeLiveness.GetActiveNodes()) },
 		storepool.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
 		/* deterministic */ false,
 	)

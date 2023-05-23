@@ -13,6 +13,7 @@ package liveness
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -21,6 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+type UpdateInfo struct {
+	lastUpdateTime      hlc.Timestamp
+	lastUnavailableTime hlc.Timestamp
+}
 
 // cache stores updates to both Liveness records and the store descriptor map.
 // It doesn't store the entire StoreDescriptor, only the time when it is
@@ -41,7 +47,7 @@ type cache struct {
 		// This is tracking based on NodeID, so any store that is updated on this
 		// node will update teh lastNodeUpdate. We don't have the ability to handle
 		// "1 stalled store" on a node from a liveness perspective.
-		lastNodeUpdate map[roachpb.NodeID]hlc.Timestamp
+		lastNodeUpdate map[roachpb.NodeID]UpdateInfo
 		// nodes stores liveness records read from Gossip
 		nodes map[roachpb.NodeID]Record
 	}
@@ -54,7 +60,7 @@ func newCache(
 	c.gossip = g
 	c.clock = clock
 	c.mu.nodes = make(map[roachpb.NodeID]Record)
-	c.mu.lastNodeUpdate = make(map[roachpb.NodeID]hlc.Timestamp)
+	c.mu.lastNodeUpdate = make(map[roachpb.NodeID]UpdateInfo)
 
 	c.notifyLivenessChanged = cbFn
 
@@ -107,7 +113,12 @@ func (c *cache) storeGossipUpdate(_ string, content roachpb.Value) {
 		return
 	}
 	c.mu.Lock()
-	c.mu.lastNodeUpdate[nodeID] = c.clock.Now()
+	previousRec, found := c.mu.lastNodeUpdate[nodeID]
+	if !found {
+		previousRec = UpdateInfo{}
+	}
+	previousRec.lastUpdateTime = c.clock.Now()
+	c.mu.lastNodeUpdate[nodeID] = previousRec
 	c.mu.Unlock()
 }
 
@@ -170,9 +181,7 @@ func livenessChanged(old, new Record) bool {
 // Self returns the raw, encoded value that the database has for this liveness
 // record in addition to the decoded liveness proto.
 func (c *cache) Self() (_ Record, ok bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.getLivenessLocked(c.selfID())
+	return c.GetLiveness(c.selfID())
 }
 
 // GetLiveness returns the liveness record for the specified nodeID. If the
@@ -183,14 +192,6 @@ func (c *cache) Self() (_ Record, ok bool) {
 func (c *cache) GetLiveness(nodeID roachpb.NodeID) (_ Record, ok bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.getLivenessLocked(nodeID)
-}
-
-// getLivenessLocked returns the liveness record for the specified nodeID,
-// consulting the in-memory cache. If nothing is found (could happen due to
-// gossip propagation delays or the node not existing), we surface that to the
-// caller.
-func (c *cache) getLivenessLocked(nodeID roachpb.NodeID) (_ Record, ok bool) {
 	if l, ok := c.mu.nodes[nodeID]; ok {
 		return l, true
 	}
@@ -217,4 +218,42 @@ func (c *cache) GetIsLiveMap() livenesspb.IsLiveMap {
 		}
 	}
 	return lMap
+}
+
+func (c *cache) GetActiveNodes() []roachpb.NodeID {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	nodes := make([]roachpb.NodeID, 0, len(c.mu.nodes))
+	for _, l := range c.mu.nodes {
+		if l.Membership.Active() {
+			nodes = append(nodes, l.NodeID)
+		}
+	}
+	return nodes
+}
+
+// LastDescriptorUpdate returns when this node last had an update.
+func (c *cache) LastDescriptorUpdate(nodeID roachpb.NodeID) (UpdateInfo, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if l, ok := c.mu.lastNodeUpdate[nodeID]; ok {
+		return l, true
+	}
+	// If there is no timestamp, use the "0" timestamp.
+	return UpdateInfo{}, false
+}
+
+// CheckForStaleEntries checks if any of the cached node updates have not been
+// updated for longer than the interval. If they become stale, they remain stale
+// for the suspect interval to prevent flapping nodes from impacting system
+// stability.
+func (c *cache) CheckForStaleEntries(interval time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := c.clock.Now()
+	for _, l := range c.mu.lastNodeUpdate {
+		if l.lastUpdateTime.AddDuration(interval).Less(now) {
+			l.lastUnavailableTime = now
+		}
+	}
 }

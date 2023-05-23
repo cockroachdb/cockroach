@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -325,13 +326,17 @@ func TestNodeLivenessDecommissionedCallback(t *testing.T) {
 			}
 			return nil
 		})
-
 	}
 }
 
-// TestNodeLivenessNodeCount tests GetNodeCount() and GetNodeCountWithOverrides,
+func sortNodeID(in []roachpb.NodeID) []roachpb.NodeID {
+	sort.Slice(in, func(i, j int) bool { return in[i] < in[j] })
+	return in
+}
+
+// TestGetActiveNodes tests GetNodeCount() and GetNodeCountWithOverrides,
 // which are critical for computing the number of needed voters for a range.
-func TestNodeLivenessNodeCount(t *testing.T) {
+func TestGetActiveNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -342,7 +347,7 @@ func TestNodeLivenessNodeCount(t *testing.T) {
 
 	// At this point StartTestCluster has waited for all nodes to become live.
 	nl1 := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
-	require.Equal(t, numNodes, nl1.GetNodeCount())
+	require.Equal(t, []roachpb.NodeID{1, 2, 3, 4, 5}, sortNodeID(nl1.GetActiveNodes()))
 
 	// Mark n5 as decommissioning, which should reduce node count.
 	chg, err := nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONING)
@@ -356,7 +361,7 @@ func TestNodeLivenessNodeCount(t *testing.T) {
 		numNodes -= 1
 		return nil
 	})
-	require.Equal(t, numNodes, nl1.GetNodeCount())
+	require.Equal(t, []roachpb.NodeID{1, 2, 3, 4}, sortNodeID(nl1.GetActiveNodes()))
 
 	// Mark n5 as decommissioning -> decommissioned, which should not change node count.
 	chg, err = nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONED)
@@ -369,20 +374,21 @@ func TestNodeLivenessNodeCount(t *testing.T) {
 		}
 		return nil
 	})
-	require.Equal(t, numNodes, nl1.GetNodeCount())
+	require.Equal(t, []roachpb.NodeID{1, 2, 3, 4}, sortNodeID(nl1.GetActiveNodes()))
 
+	// TODO(baptist): Move these to the storepool package.
 	// Override n5 as decommissioning, which should not change node count.
 	overrides := map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 		5: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 	}
-	require.Equal(t, numNodes, nl1.GetNodeCountWithOverrides(nil))
-	require.Equal(t, numNodes, nl1.GetNodeCountWithOverrides(overrides))
+	require.Equal(t, numNodes, storepool.GetNodeCountWithOverrides(nl1, nil))
+	require.Equal(t, numNodes, storepool.GetNodeCountWithOverrides(nl1, overrides))
 
 	// Override n4 as dead, which should not change node count.
 	overrides[4] = livenesspb.NodeLivenessStatus_DEAD
-	require.Equal(t, numNodes, nl1.GetNodeCountWithOverrides(overrides))
+	require.Equal(t, numNodes, storepool.GetNodeCountWithOverrides(nl1, overrides))
 
 	// Override n3 as decommissioning, which should reduce node count.
 	overrides[3] = livenesspb.NodeLivenessStatus_DECOMMISSIONING
-	require.Equal(t, numNodes-1, nl1.GetNodeCountWithOverrides(overrides))
+	require.Equal(t, numNodes-1, storepool.GetNodeCountWithOverrides(nl1, overrides))
 }

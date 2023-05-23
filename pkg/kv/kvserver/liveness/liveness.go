@@ -727,6 +727,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 			// have left before our liveness entry expires.
 			if err := timeutil.RunWithTimeout(ctx, "node liveness heartbeat", nl.renewalDuration,
 				func(ctx context.Context) error {
+					nl.cache.CheckForStaleEntries(gossip.StoreTTL)
 					// Retry heartbeat in the event the conditional put fails.
 					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 						oldLiveness, ok := nl.Self()
@@ -989,6 +990,7 @@ func (nl *NodeLiveness) Self() (_ livenesspb.Liveness, ok bool) {
 // GetIsLiveMap returns a map of nodeID to boolean liveness status of
 // each node. This excludes nodes that were removed completely (dead +
 // decommissioning).
+// TODO(baptist): Remove.
 func (nl *NodeLiveness) GetIsLiveMap() livenesspb.IsLiveMap {
 	return nl.cache.GetIsLiveMap()
 }
@@ -997,6 +999,7 @@ func (nl *NodeLiveness) GetIsLiveMap() livenesspb.IsLiveMap {
 // nodes that have ever been a part of the cluster. The records are read from
 // the KV layer in a KV transaction. This is in contrast to GetLivenesses above,
 // which consults a (possibly stale) in-memory cache.
+// TODO(baptist): Remove.
 func (nl *NodeLiveness) GetLivenessesFromKV(ctx context.Context) ([]livenesspb.Liveness, error) {
 	records, err := nl.storage.scan(ctx)
 	if err != nil {
@@ -1008,6 +1011,78 @@ func (nl *NodeLiveness) GetLivenessesFromKV(ctx context.Context) ([]livenesspb.L
 		nl.cache.maybeUpdate(ctx, r)
 	}
 	return livenesses, nil
+}
+
+// ScanNodeVitalityFromKV returns the status for all the nodes from KV.
+func (nl *NodeLiveness) ScanNodeVitalityFromKV(
+	ctx context.Context,
+) (map[roachpb.NodeID]livenesspb.NodeVitality, error) {
+	records, err := nl.storage.scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	statusMap := make(map[roachpb.NodeID]livenesspb.NodeVitality, len(records))
+	for _, liveness := range records {
+		vitality := nl.convertToNodeVitality(liveness.Liveness)
+		nl.cache.maybeUpdate(ctx, liveness)
+		statusMap[liveness.NodeID] = vitality
+	}
+	return statusMap, nil
+}
+
+// convertToNodeVitality is useful if you already have a Liveness record received
+// externally. Normally you should call GetNodeVitalityFromCache instead.
+func (nl *NodeLiveness) convertToNodeVitality(l livenesspb.Liveness) livenesspb.NodeVitality {
+	// The store is considered dead if it hasn't been updated via gossip
+	// within the liveness threshold. Note that LastUpdatedTime is set
+	// when the store detail is created and will have a non-zero value
+	// even before the first gossip arrives for a store.
+	now := nl.clock.Now()
+	timeUntilNodeDead := TimeUntilNodeDead.Get(&nl.st.SV)
+	suspectDuration := TimeAfterNodeSuspect.Get(&nl.st.SV)
+
+	var health livenesspb.VitalityStatus
+	isLive := l.IsLive(now)
+	isDead := l.IsDead(now, timeUntilNodeDead)
+
+	if isDead {
+		health = livenesspb.VitalityDead
+	} else if isLive {
+		health = livenesspb.VitalityAlive
+	} else {
+		health = livenesspb.VitalityUnavailable
+	}
+
+	// If there is a valid descriptor, check that it is being updated. If we don't
+	// have one it may be because we haven't gotten the first gossip update yet.
+	if lastDescUpdate, valid := nl.cache.LastDescriptorUpdate(l.NodeID); valid {
+		deadAsOf := lastDescUpdate.lastUpdateTime.AddDuration(timeUntilNodeDead)
+		if now.After(deadAsOf) {
+			// If the store descriptor is not being updated, we mark the node as dead
+			// regardless of what liveness says.
+			health = livenesspb.VitalityDead
+		}
+		if lastDescUpdate.lastUnavailableTime.AddDuration(suspectDuration).After(now) {
+			health = livenesspb.VitalitySuspect
+		}
+	}
+	return l.CreateNodeVitality(health)
+}
+
+// GetNodeVitalityFromCache returns the current status of the node.
+// Note that this method is "time sensitive", so the result of calling it should
+// not be cached. The liveness is calculated based at the time this method is
+// called.
+// TODO: Add details what this takes into account.
+func (nl *NodeLiveness) GetNodeVitalityFromCache(nodeID roachpb.NodeID) livenesspb.NodeVitality {
+	l, ok := nl.GetLiveness(nodeID)
+	if !ok {
+		// If we don't have a liveness record, we can't create a full NodeVitality.
+		// This is a little unfortunate as we may have a NodeDescriptor.
+		return livenesspb.NodeVitality{}
+	}
+	return nl.convertToNodeVitality(l.Liveness)
 }
 
 // GetLiveness returns the liveness record for the specified nodeID. If the
@@ -1247,41 +1322,10 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 	return liveNodes
 }
 
-// GetNodeCount returns a count of the number of nodes in the cluster,
-// including dead nodes, but excluding decommissioning or decommissioned nodes.
-// TODO(baptist): remove this method. There are better alternatives.
-func (nl *NodeLiveness) GetNodeCount() int {
-	nl.cache.mu.RLock()
-	defer nl.cache.mu.RUnlock()
-	var count int
-	for _, l := range nl.cache.mu.nodes {
-		if l.Membership.Active() {
-			count++
-		}
-	}
-	return count
-}
-
-// GetNodeCountWithOverrides returns a count of the number of nodes in the cluster,
-// including dead nodes, but excluding decommissioning or decommissioned nodes,
-// using the provided set of liveness overrides.
-// TODO(baptist): remove this method. There are better alternatives.
-func (nl *NodeLiveness) GetNodeCountWithOverrides(
-	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus,
-) int {
-	nl.cache.mu.RLock()
-	defer nl.cache.mu.RUnlock()
-	var count int
-	for _, l := range nl.cache.mu.nodes {
-		if l.Membership.Active() {
-			if overrideStatus, ok := overrides[l.NodeID]; !ok ||
-				(overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONING &&
-					overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONED) {
-				count++
-			}
-		}
-	}
-	return count
+// GetActiveNodes returns the list of nodes that have a membership status of
+// Active, regardless of their current health.
+func (nl *NodeLiveness) GetActiveNodes() []roachpb.NodeID {
+	return nl.cache.GetActiveNodes()
 }
 
 // TestingSetDrainingInternal is a testing helper to set the internal draining
