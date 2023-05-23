@@ -1026,7 +1026,7 @@ func (b *Builder) buildSelect(
 ) (outScope *scope) {
 	wrapped := stmt.Select
 	with := stmt.With
-	orderBy := stmt.OrderBy
+	orderBy := &stmt.OrderBy
 	limit := stmt.Limit
 	locking.apply(stmt.Locking)
 
@@ -1050,7 +1050,7 @@ func (b *Builder) buildSelect(
 					pgcode.Syntax, "multiple ORDER BY clauses not allowed",
 				))
 			}
-			orderBy = stmt.OrderBy
+			orderBy = &stmt.OrderBy
 		}
 		if stmt.Limit != nil {
 			if limit != nil {
@@ -1080,7 +1080,7 @@ func (b *Builder) buildSelect(
 // return values.
 func (b *Builder) buildSelectStmtWithoutParens(
 	wrapped tree.SelectStatement,
-	orderBy tree.OrderBy,
+	orderBy *tree.OrderBy,
 	limit *tree.Limit,
 	locking lockingSpec,
 	desiredTypes []*types.T,
@@ -1112,7 +1112,7 @@ func (b *Builder) buildSelectStmtWithoutParens(
 			"unknown select statement: %T", wrapped))
 	}
 
-	if outScope.ordering.Empty() && orderBy != nil {
+	if outScope.ordering.Empty() && *orderBy != nil {
 		projectionsScope := outScope.replace()
 		projectionsScope.cols = make([]scopeColumn, 0, len(outScope.cols))
 		for i := range outScope.cols {
@@ -1144,7 +1144,7 @@ func (b *Builder) buildSelectStmtWithoutParens(
 // return values.
 func (b *Builder) buildSelectClause(
 	sel *tree.SelectClause,
-	orderBy tree.OrderBy,
+	orderBy *tree.OrderBy,
 	locking lockingSpec,
 	desiredTypes []*types.T,
 	inScope *scope,
@@ -1166,7 +1166,7 @@ func (b *Builder) buildSelectClause(
 	// exist) will be added here.
 	havingExpr := b.analyzeHaving(sel.Having, fromScope)
 	orderByScope := b.analyzeOrderBy(orderBy, fromScope, projectionsScope, tree.RejectGenerators)
-	distinctOnScope := b.analyzeDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
+	distinctOnScope := b.analyzeDistinctOnArgs(&sel.DistinctOn, fromScope, projectionsScope)
 
 	var having opt.ScalarExpr
 	needsAgg := b.needsAggregation(sel, fromScope)
@@ -1277,6 +1277,12 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 		tree.RejectGenerators|tree.RejectWindowApplications,
 		inScope,
 	)
+
+	if b.insideFuncDef {
+		texpr := inScope.resolveAndRequireType(where.Expr, types.Bool)
+		rewrittenExpr := b.maybeRewriteColumnPrefix(texpr)
+		where.Expr = rewrittenExpr
+	}
 
 	// Wrap the filter in a FiltersOp.
 	inScope.expr = b.factory.ConstructSelect(

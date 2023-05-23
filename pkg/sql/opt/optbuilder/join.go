@@ -118,10 +118,15 @@ func (b *Builder) buildJoin(
 				exprKindOn.String(), tree.RejectGenerators|tree.RejectWindowApplications,
 			)
 			outScope.context = exprKindOn
+			typedCondExpr := outScope.resolveAndRequireType(on.Expr, types.Bool)
 			filter := b.buildScalar(
-				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil, nil,
+				typedCondExpr, outScope, nil, nil, nil,
 			)
 			filters = memo.FiltersExpr{b.factory.ConstructFiltersItem(filter)}
+			if b.insideFuncDef {
+				rewrittenExpr := b.maybeRewriteColumnPrefix(typedCondExpr)
+				join.Cond = &tree.OnJoinCond{Expr: rewrittenExpr}
+			}
 		} else {
 			filters = memo.TrueFilter
 		}
