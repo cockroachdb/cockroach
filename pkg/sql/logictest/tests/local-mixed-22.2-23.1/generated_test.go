@@ -2011,6 +2011,13 @@ func TestLogic_udf(
 	runLogicTest(t, "udf")
 }
 
+func TestLogic_udf_delete(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_delete")
+}
+
 func TestLogic_udf_insert(
 	t *testing.T,
 ) {
