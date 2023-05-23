@@ -117,6 +117,17 @@ type ViewModeEvent = {
   value: string;
 };
 
+type AutoRefreshEvent = {
+  name: "Auto Refresh Toggle";
+  page: Page;
+  value: boolean;
+};
+
+type ManualRefreshEvent = {
+  name: "Manual Refresh";
+  page: Page;
+};
+
 type AnalyticsEvent =
   | ApplySearchCriteriaEvent
   | BackButtonClick
@@ -132,7 +143,9 @@ type AnalyticsEvent =
   | StatementDiagnosticEvent
   | TabChangedEvent
   | TimeScaleChangeEvent
-  | ViewModeEvent;
+  | ViewModeEvent
+  | AutoRefreshEvent
+  | ManualRefreshEvent;
 
 const PREFIX = `${DOMAIN_NAME}/analytics`;
 
