@@ -21,6 +21,10 @@ import {
 import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
+import {
+  autoRefreshLocalSetting,
+  displayAlertLocalSetting,
+} from "../transactions/activeTransactionsSelectors";
 
 const selectedColumnsLocalSetting = new LocalSetting<
   AdminUIState,
@@ -59,6 +63,9 @@ export const mapStateToActiveStatementViewProps = (state: AdminUIState) => ({
   sessionsError: state.cachedData?.sessions.lastError,
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
+  isAutoRefreshEnabled: autoRefreshLocalSetting.selector(state),
+  lastUpdated: state.cachedData?.sessions.setAt,
+  displayRefreshAlert: displayAlertLocalSetting.selector(state),
 });
 
 export const activeStatementsViewActions = {
@@ -68,4 +75,9 @@ export const activeStatementsViewActions = {
   onFiltersChange: (filters: ActiveStatementFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
+  onAutoRefreshToggle: (isToggled: boolean) =>
+    autoRefreshLocalSetting.set(isToggled),
+  onManualRefresh: () => refreshLiveWorkload(),
+  onSetDisplayRefreshAlert: (display: boolean) =>
+    displayAlertLocalSetting.set(display),
 };

@@ -110,6 +110,17 @@ type TimeScaleChangeEvent = {
   value: string;
 };
 
+type AutoRefreshEvent = {
+  name: "Auto Refresh Toggle";
+  page: Page;
+  value: boolean;
+};
+
+type ManualRefreshEvent = {
+  name: "Manual Refresh";
+  page: Page;
+};
+
 type AnalyticsEvent =
   | ApplySearchCriteriaEvent
   | BackButtonClick
@@ -124,7 +135,9 @@ type AnalyticsEvent =
   | StatementClicked
   | StatementDiagnosticEvent
   | TabChangedEvent
-  | TimeScaleChangeEvent;
+  | TimeScaleChangeEvent
+  | AutoRefreshEvent
+  | ManualRefreshEvent;
 
 const PREFIX = `${DOMAIN_NAME}/analytics`;
 
