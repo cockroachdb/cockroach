@@ -249,7 +249,7 @@ func (rom *RebalanceObjectiveManager) maybeUpdateRebalanceObjective(ctx context.
 	}
 
 	log.Infof(ctx, "Updating the rebalance objective from %s to %s",
-		prev.ToDimension(), next.ToDimension())
+		prev, next)
 
 	rom.mu.obj = next
 	rom.mu.onChange(ctx, rom.mu.obj)
