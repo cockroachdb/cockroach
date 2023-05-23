@@ -17,6 +17,8 @@ package gssapiccl
 // to retrieve the current user.
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/errors"
 )
@@ -58,7 +60,7 @@ func getGssUser(c pgwire.AuthConn) (connClose func(), gssUser string, _ error) {
 	}
 
 	for {
-		token, err := c.GetPwdData()
+		token, err := c.GetPwdData(context.Background())
 		if err != nil {
 			return connClose, "", err
 		}

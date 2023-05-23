@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -452,13 +453,32 @@ func (p *authPipe) noMorePwdData() {
 
 // GetPwdData is part of the AuthConn interface.
 func (p *authPipe) GetPwdData(ctx context.Context) ([]byte, error) {
-	select {
-	case <-ctx.Done():
-		return nil, errors.Wrap(ctx.Err(), "GetPwdData context done")
-	case data := <-p.ch:
-		return data, nil
-	case <-p.writerDone:
-		return nil, pgwirebase.NewProtocolViolationErrorf("client didn't send required auth data")
+	if p.c.authLogEnabled() {
+		timeoutCtx, cancelFn := context.WithTimeout(ctx, 5*time.Minute) // nolint:context
+		defer cancelFn()
+		go func() {
+			<-timeoutCtx.Done()
+			if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+				// log.Info(ctx, string(debug.Stack()))
+				log.Infof(ctx, "connection connID=%s timeout authPipeAddr=%p", p.c.id, p)
+				func() {
+					p.c.mu.Lock()
+					defer p.c.mu.Unlock()
+					for i, authAudit := range p.c.mu.authAudits {
+						log.Infof(ctx, "connID=%s authAudit[%d] timestamp=%s type=%s typeByte=%d msg=%s",
+							p.c.id, i, authAudit.timestamp.Format(time.RFC3339Nano), string(authAudit.typ), authAudit.typ, authAudit.msg)
+					}
+				}()
+			}
+		}()
+	}
+	for {
+		select {
+		case data := <-p.ch:
+			return data, nil
+		case <-p.writerDone:
+			return nil, pgwirebase.NewProtocolViolationErrorf("client didn't send required auth data")
+		}
 	}
 }
 
