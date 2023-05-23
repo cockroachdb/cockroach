@@ -96,8 +96,6 @@ SELECT get_body_str('f');
 ----
 "SELECT {TABLE:106}.a + {TABLE:107}.a FROM {TABLE:106} JOIN {TABLE:107} ON {TABLE:106}.b = {TABLE:107}.b GROUP BY {TABLE:106}.a + {TABLE:107}.a HAVING ({TABLE:106}.a + {TABLE:107}.a) > 1 ORDER BY {TABLE:106}.a + {TABLE:107}.a;"
 
-# TODO(chengxiong): #102032, table ids in JOIN ON condition should be
-# deserialized.
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f]
 ----
@@ -108,13 +106,41 @@ CREATE FUNCTION public.f()
   CALLED ON NULL INPUT
   LANGUAGE SQL
   AS $$
-  SELECT test.public.t1.a + test.public.t2.a FROM test.public.t1 JOIN test.public.t2 ON {TABLE:106}.b = {TABLE:107}.b GROUP BY test.public.t1.a + test.public.t2.a HAVING (test.public.t1.a + test.public.t2.a) > 1 ORDER BY test.public.t1.a + test.public.t2.a;
+  SELECT test.public.t1.a + test.public.t2.a FROM test.public.t1 JOIN test.public.t2 ON test.public.t1.b = test.public.t2.b GROUP BY test.public.t1.a + test.public.t2.a HAVING (test.public.t1.a + test.public.t2.a) > 1 ORDER BY test.public.t1.a + test.public.t2.a;
 $$
 
 query I
 SELECT f()
 ----
 2
+
+# Make sure JOIN USING is not rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT t1.a + t2.a
+  FROM t1
+  JOIN t2 USING (a)
+$$
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT {TABLE:106}.a + {TABLE:107}.a FROM {TABLE:106} JOIN {TABLE:107} USING (a);"
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f]
+----
+CREATE FUNCTION public.f()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT test.public.t1.a + test.public.t2.a FROM test.public.t1 JOIN test.public.t2 USING (a);
+$$
 
 # Make sure table aliases are not rewritten.
 statement ok
