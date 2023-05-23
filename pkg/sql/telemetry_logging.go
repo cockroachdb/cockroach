@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -35,6 +37,27 @@ var TelemetryMaxEventFrequency = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var telemetryEventFrequencyStmtFingerprint = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.telemetry.query_sampling.stmt_fingerprint.max_event_frequency",
+	"the max event frequency at which we sample each stmt fingerprint for telemetry",
+	5,
+	settings.NonNegativeInt,
+)
+
+var telemetrySamplingPerFingerprintEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.telemetry.query_sampling.stmt_fingerprint.enabled",
+	"if on, we apply an additional max event frequency for each statement fingerprint id "+
+		"in addition to the one set by sql.telemetry.query_sampling.max_event_frequency",
+	false,
+)
+
+type telemetryEvent struct {
+	// The timestamp of the last emitted telemetry event.
+	lastEmittedTime time.Time
+}
+
 // TelemetryLoggingMetrics keeps track of the last time at which an event
 // was logged to the telemetry channel, and the number of skipped queries
 // since the last logged event.
@@ -43,11 +66,28 @@ type TelemetryLoggingMetrics struct {
 		syncutil.RWMutex
 		// The timestamp of the last emitted telemetry event.
 		lastEmittedTime time.Time
+
+		// stmtFingerprintLoggingRecord is used to track when a stmt fingerprint
+		// id was last emitted to telemetry. Note this field is only updated when
+		// sql.telemetry.query_sampling.stmt_fingerprint.enabled is true.
+		stmtFingerprintLoggingRecord *cache.OrderedCache
 	}
 	Knobs *TelemetryLoggingTestingKnobs
 
 	// skippedQueryCount is used to produce the count of non-sampled queries.
 	skippedQueryCount uint64
+}
+
+func newTelemetryLoggingmetrics(knobs *TelemetryLoggingTestingKnobs) *TelemetryLoggingMetrics {
+	t := TelemetryLoggingMetrics{Knobs: knobs}
+	t.mu.stmtFingerprintLoggingRecord = cache.NewOrderedCache(cache.Config{
+		Policy: cache.CacheLRU,
+		ShouldEvict: func(size int, key, value interface{}) bool {
+			return size > 4087
+		},
+	})
+
+	return &t
 }
 
 // TelemetryLoggingTestingKnobs provides hooks and knobs for unit tests.
@@ -86,19 +126,49 @@ func (t *TelemetryLoggingMetrics) timeNow() time.Time {
 
 // maybeUpdateLastEmittedTime updates the lastEmittedTime if the amount of time
 // elapsed between lastEmittedTime and newTime is greater than requiredSecondsElapsed.
+// It also updates the corresponding entry in stmtFingerprintLoggingRecord for the
+// provided fingerprint id if specified to do so.
 func (t *TelemetryLoggingMetrics) maybeUpdateLastEmittedTime(
-	newTime time.Time, requiredSecondsElapsed float64,
+	newTime time.Time,
+	requiredSecondsElapsed float64,
+	shouldUpdateFingerprintEmittedTime bool,
+	stmtFingerprintID appstatspb.StmtFingerprintID,
+	requiredSecsElapsedPerFingerprint float64,
 ) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	lastEmittedTime := t.mu.lastEmittedTime
-	if float64(newTime.Sub(lastEmittedTime))*1e-9 >= requiredSecondsElapsed {
-		t.mu.lastEmittedTime = newTime
-		return true
+	allStmtsRequiredTimeElapsed := float64(newTime.Sub(t.mu.lastEmittedTime))*1e-9 >= requiredSecondsElapsed
+	stmtFingerprintRequiredTimeElapsed := true
+
+	// Check if we are applying a sampling rate per stmt fingerprint id.
+	var stmtFingerprintEntry *telemetryEvent
+	if shouldUpdateFingerprintEmittedTime {
+		entry, ok := t.mu.stmtFingerprintLoggingRecord.Get(stmtFingerprintID)
+
+		if ok {
+			stmtFingerprintEntry = entry.(*telemetryEvent)
+			// Check if enough time has elapsed for this fingerprint ID.
+			stmtFingerprintRequiredTimeElapsed =
+				float64(newTime.Sub(stmtFingerprintEntry.lastEmittedTime))*1e-9 >= requiredSecsElapsedPerFingerprint
+		} else {
+			// Create new entry and add it to the cache.
+			stmtFingerprintEntry = &telemetryEvent{}
+			t.mu.stmtFingerprintLoggingRecord.Add(stmtFingerprintID, stmtFingerprintEntry)
+		}
 	}
 
-	return false
+	if !allStmtsRequiredTimeElapsed || !stmtFingerprintRequiredTimeElapsed {
+		// Not enough time has elapsed to emit this event.
+		return false
+	}
+
+	if stmtFingerprintEntry != nil {
+		stmtFingerprintEntry.lastEmittedTime = newTime
+	}
+
+	t.mu.lastEmittedTime = newTime
+	return true
 }
 
 func (t *TelemetryLoggingMetrics) getQueryLevelStats(

@@ -411,16 +411,27 @@ func (p *planner) maybeLogStatementInternal(
 	}
 
 	if telemetryLoggingEnabled && !p.SessionData().TroubleshootingMode {
+		stmtFingerprintSamplingEnabled := telemetrySamplingPerFingerprintEnabled.Get(&p.execCfg.Settings.SV) && execType != executorTypeInternal
 		// We only log to the telemetry channel if enough time has elapsed from
 		// the last event emission.
+		var requiredSecsElapsedFingerprint float64
+		if stmtFingerprintSamplingEnabled {
+			requiredSecsElapsedFingerprint = 1.0 / float64(telemetryEventFrequencyStmtFingerprint.Get(&p.execCfg.Settings.SV))
+		}
 		requiredTimeElapsed := 1.0 / float64(maxEventFrequency)
 		tracingEnabled := telemetryMetrics.isTracing(p.curPlan.instrumentation.Tracing())
 		// Always sample if the current statement is not of type DML or tracing
 		// is enabled for this statement.
 		if p.stmt.AST.StatementType() != tree.TypeDML || tracingEnabled {
 			requiredTimeElapsed = 0
+			requiredSecsElapsedFingerprint = 0
 		}
-		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
+
+		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(),
+			requiredTimeElapsed,
+			stmtFingerprintSamplingEnabled,
+			stmtFingerprintID,
+			requiredSecsElapsedFingerprint) {
 			var txnID string
 			// p.txn can be nil for COPY.
 			if p.txn != nil {

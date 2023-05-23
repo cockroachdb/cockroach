@@ -13,11 +13,28 @@ package appstatspb
 import (
 	"math"
 
+	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // StmtFingerprintID is the type of a Statement's fingerprint ID.
 type StmtFingerprintID uint64
+
+// Compare implements llrb.Comparable
+// receiver and the parameter.
+func (id StmtFingerprintID) Compare(o llrb.Comparable) int {
+	other := o.(StmtFingerprintID)
+
+	if id == other {
+		return 0
+	}
+
+	if id > other {
+		return 1
+	}
+
+	return -1
+}
 
 // ConstructStatementFingerprintID constructs an ID by hashing query with
 // constants redacted, its database and failure status, and if it was part of an

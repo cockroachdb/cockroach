@@ -417,9 +417,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		idxRecommendationsCache: idxrecommendations.NewIndexRecommendationsCache(cfg.Settings),
 	}
 
-	telemetryLoggingMetrics := &TelemetryLoggingMetrics{}
-
-	telemetryLoggingMetrics.Knobs = cfg.TelemetryLoggingTestingKnobs
+	telemetryLoggingMetrics := newTelemetryLoggingmetrics(cfg.TelemetryLoggingTestingKnobs)
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
 	sqlStatsInternalExecutorMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
