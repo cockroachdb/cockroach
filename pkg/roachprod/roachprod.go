@@ -1573,10 +1573,13 @@ func PrometheusSnapshot(
 	return nil
 }
 
-// SnapshotVolume snapshots any of the volumes attached to the nodes in a
-// cluster specification.
-func SnapshotVolume(
-	ctx context.Context, l *logger.Logger, clusterName, name, description string,
+// SnapshotTTL controls how long volume snapshots are kept around.
+const SnapshotTTL = 30 * 24 * time.Hour // 30 days
+
+// CreateSnapshot snapshots all the persistent volumes attached to nodes in the
+// named cluster.
+func CreateSnapshot(
+	ctx context.Context, l *logger.Logger, clusterName string, vsco vm.VolumeSnapshotCreateOpts,
 ) error {
 	if err := LoadClusters(); err != nil {
 		return err
@@ -1590,49 +1593,212 @@ func SnapshotVolume(
 	if err != nil {
 		return err
 	}
+
 	for nodeSpecIdx, nodeID := range nodes {
 		cVM := c.VMs[nodeID-1]
+		crdbVersion := nodesStatus[nodeSpecIdx].Version
+		if crdbVersion == "" {
+			crdbVersion = "unknown"
+		}
 		labels := map[string]string{
 			"roachprod-node-src-spec": cVM.MachineType,
 			"roachprod-cluster-node":  cVM.Name,
-			"roachprod-crdb-version":  nodesStatus[nodeSpecIdx].Version,
+			"roachprod-crdb-version":  crdbVersion,
+			vm.TagCluster:             clusterName,
+			vm.TagRoachprod:           "true",
+			vm.TagLifetime:            SnapshotTTL.String(),
+			vm.TagCreated: strings.ToLower(
+				strings.ReplaceAll(timeutil.Now().Format(time.RFC3339), ":", "_")), // format according to gce label naming requirements
 		}
-		foundMatchingVolume := false
-		if len(cVM.NonBootAttachedVolumes) == 0 {
-			l.Printf("Node %d does not have any non-bootable volumes attached. Did you run `sync --include-volumes`?",
-				nodeID)
+		for k, v := range vsco.Labels {
+			labels[k] = v
 		}
-		for _, volume := range cVM.NonBootAttachedVolumes {
-			if isWorkloadCollectorVolume(volume) {
-				l.Printf("Creating snapshot for node %d volume %s\n", nodeID, volume.Name)
-				nameSuffix := ""
-				if len(nodes) != 1 {
-					nameSuffix = fmt.Sprintf("-%d", nodeID)
-				}
-				err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
-					sID, err := provider.SnapshotVolume(l, volume, name+nameSuffix, description, labels)
-					if err != nil {
-						return err
-					}
-					l.Printf("Created snapshot %s for volume %s (%s)\n", sID, volume.Name, volume.ProviderResourceID)
-					foundMatchingVolume = true
-					return nil
-				})
+
+		if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
+			volumes, err := provider.ListVolumes(l, &cVM)
+			if err != nil {
+				return err
+			}
+
+			if len(volumes) == 0 {
+				return fmt.Errorf("node %d does not have any non-bootable persistent volumes attached", nodeID)
+			}
+
+			for _, volume := range volumes {
+				snapshotName := fmt.Sprintf("%s-%04d-v%s-%d-%s", vsco.Name, nodeID, crdbVersion, len(nodes), cVM.MachineType)
+				volumeSnapshot, err := provider.CreateVolumeSnapshot(l, volume,
+					vm.VolumeSnapshotCreateOpts{
+						Name:        snapshotName,
+						Labels:      labels,
+						Description: vsco.Description,
+					})
 				if err != nil {
 					return err
 				}
+				l.Printf("created volume snapshot %s (id=%s) for volume %s on %s/n%d\n",
+					volumeSnapshot.Name, volumeSnapshot.ID, volume.Name, volume.ProviderResourceID, nodeID)
 			}
-			if !foundMatchingVolume {
-				l.Printf("No volumes matched the workload collector filter for node %d. "+
-					"Volumes are missing the `roachprod_collector` label.", nodeID)
-			}
+			return nil
+		}); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func generateVolumeName(clusterName string, nodeID install.Node) string {
-	return fmt.Sprintf("%s-n%d", clusterName, nodeID)
+func ListSnapshots(
+	ctx context.Context, l *logger.Logger, clusterName string, vslo vm.VolumeSnapshotListOpts,
+) ([]vm.VolumeSnapshot, error) {
+	if err := LoadClusters(); err != nil {
+		return nil, err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	var volumeSnapshots []vm.VolumeSnapshot
+	if err := vm.ForProvider(c.VMs[0].Provider, func(provider vm.Provider) error {
+		var err error
+		volumeSnapshots, err = provider.ListVolumeSnapshots(l, vslo)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return volumeSnapshots, nil
+}
+
+func DeleteSnapshots(
+	ctx context.Context, l *logger.Logger, clusterName string, snapshots ...vm.VolumeSnapshot,
+) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if err := vm.ForProvider(c.VMs[0].Provider, func(provider vm.Provider) error {
+		for _, snapshot := range snapshots {
+			if err := provider.DeleteVolumeSnapshot(l, snapshot); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ApplySnapshots(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	snapshots []vm.VolumeSnapshot,
+	opts vm.VolumeCreateOpts,
+) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if n := len(c.TargetNodes()); n != len(snapshots) {
+		return fmt.Errorf("mismatched number of snapshots (%d) to node count (%d)", len(snapshots), n)
+		// TODO(irfansharif): Validate labels (version, instance types).
+	}
+
+	{ // Detach and delete existing volumes. This is destructive.
+		for _, n := range c.TargetNodes() {
+			cVM := &c.VMs[n-1]
+			if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
+				volumes, err := provider.ListVolumes(l, cVM)
+				if err != nil {
+					return err
+				}
+				for _, volume := range volumes {
+					if err := provider.DeleteVolume(l, volume, cVM); err != nil {
+						return err
+					}
+					l.Printf("detached and deleted volume %s from %s", volume.ProviderResourceID, cVM.Name)
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+	}
+
+	nodes := c.TargetNodes()
+	for idx, n := range nodes {
+		curNode := nodes[idx : idx+1]
+		volumeOpts := opts // make a copy
+
+		cVM := &c.VMs[n-1]
+		if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
+			volumeOpts.Zone = cVM.Zone
+			// NB: The "-1" signifies that it's the first attached non-boot volume.
+			// This is typical naming convention in GCE clusters.
+			volumeOpts.Name = fmt.Sprintf("%s-%04d-1", clusterName, n)
+			volumeOpts.SourceSnapshotID = snapshots[idx].ID
+
+			volumes, err := provider.ListVolumes(l, cVM)
+			if err != nil {
+				return err
+			}
+			for _, vol := range volumes {
+				if vol.Name == volumeOpts.Name {
+					l.Printf(
+						"volume (%s) is already attached to node %d skipping volume creation", vol.ProviderResourceID, n)
+					return nil
+				}
+			}
+
+			if volumeOpts.Labels == nil {
+				volumeOpts.Labels = map[string]string{}
+			}
+			volumeOpts.Labels[vm.TagCluster] = clusterName
+			volumeOpts.Labels[vm.TagLifetime] = cVM.Lifetime.String()
+			volumeOpts.Labels[vm.TagRoachprod] = "true"
+			volumeOpts.Labels[vm.TagCreated] = strings.ToLower(
+				strings.ReplaceAll(timeutil.Now().Format(time.RFC3339), ":", "_")) // format according to gce label naming requirements
+
+			volume, err := provider.CreateVolume(l, volumeOpts)
+			if err != nil {
+				return err
+			}
+			l.Printf("created volume %s", volume.ProviderResourceID)
+
+			device, err := cVM.AttachVolume(l, volume)
+			if err != nil {
+				return err
+			}
+			l.Printf("attached volume %s to %s", volume.ProviderResourceID, cVM.ProviderID)
+
+			// Save the cluster to cache.
+			if err := saveCluster(l, &c.Cluster); err != nil {
+				return err
+			}
+
+			var buf bytes.Buffer
+			if err := c.Run(ctx, l, &buf, &buf, curNode,
+				"mounting volume", genMountCommands(device, "/mnt/data1")); err != nil {
+				l.Printf(buf.String())
+				return err
+			}
+			l.Printf("mounted %s to %s", volume.ProviderResourceID, cVM.ProviderID)
+
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func genMountCommands(devicePath, mountDir string) string {
@@ -1679,11 +1845,14 @@ func StorageCollectionPerformAction(
 		return err
 	}
 
+	if opts.Labels == nil {
+		opts.Labels = map[string]string{}
+	}
+	opts.Labels["roachprod_collector"] = "true"
 	mountDir := "/mnt/capture/"
 	switch action {
 	case "start":
-		err = createAttachMountVolumes(ctx, l, c, opts, mountDir)
-		if err != nil {
+		if err := createAttachMountVolumes(ctx, l, c, opts, mountDir); err != nil {
 			return err
 		}
 	case "stop":
@@ -1792,13 +1961,12 @@ func createAttachMountVolumes(
 	mountDir string,
 ) error {
 	nodes := c.TargetNodes()
-	var labels = map[string]string{"roachprod_collector": "true"}
 	for idx, n := range nodes {
 		curNode := nodes[idx : idx+1]
 
 		cVM := &c.VMs[n-1]
 		err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
-			opts.Name = generateVolumeName(c.Name, n)
+			opts.Name = fmt.Sprintf("%s-n%d", c.Name, n)
 			for _, vol := range cVM.NonBootAttachedVolumes {
 				if vol.Name == opts.Name {
 					l.Printf(
@@ -1807,7 +1975,6 @@ func createAttachMountVolumes(
 				}
 			}
 			opts.Zone = cVM.Zone
-			opts.Labels = labels
 
 			volume, err := provider.CreateVolume(l, opts)
 			if err != nil {

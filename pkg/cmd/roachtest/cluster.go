@@ -574,6 +574,9 @@ func MachineTypeToCPUs(s string) int {
 		if _, err := fmt.Sscanf(s, "n1-standard-%d", &v); err == nil {
 			return v
 		}
+		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
+			return v
+		}
 		if _, err := fmt.Sscanf(s, "n1-highcpu-%d", &v); err == nil {
 			return v
 		}
@@ -1688,6 +1691,37 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 	close(ch)
 	c.destroyState.mu.Unlock()
 	return ch
+}
+
+func (c *clusterImpl) ListSnapshots(
+	ctx context.Context, vslo vm.VolumeSnapshotListOpts,
+) ([]vm.VolumeSnapshot, error) {
+	return roachprod.ListSnapshots(ctx, c.l, c.name, vslo)
+}
+
+func (c *clusterImpl) DeleteSnapshots(ctx context.Context, snapshots ...vm.VolumeSnapshot) error {
+	return roachprod.DeleteSnapshots(ctx, c.l, c.name, snapshots...)
+}
+
+func (c *clusterImpl) CreateSnapshot(ctx context.Context, snapshotPrefix string) error {
+	return roachprod.CreateSnapshot(ctx, c.l, c.name, vm.VolumeSnapshotCreateOpts{
+		Name:        snapshotPrefix,
+		Description: fmt.Sprintf("snapshot for test: %s", c.t.Name()),
+		Labels: map[string]string{
+			vm.TagUsage: "roachtest",
+		},
+	})
+}
+
+func (c *clusterImpl) ApplySnapshots(ctx context.Context, snapshots []vm.VolumeSnapshot) error {
+	opts := vm.VolumeCreateOpts{
+		Size: c.spec.VolumeSize,
+		Type: c.spec.GCEVolumeType, // TODO(irfansharif): This is only applicable to GCE. Change that.
+		Labels: map[string]string{
+			"usage": "roachtest",
+		},
+	}
+	return roachprod.ApplySnapshots(ctx, c.l, c.name, snapshots, opts)
 }
 
 // Put a local file to all of the machines in a cluster.

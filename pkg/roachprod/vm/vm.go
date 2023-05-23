@@ -34,6 +34,9 @@ const (
 	TagLifetime = "lifetime"
 	// TagRoachprod is roachprod tag const, value is true & false.
 	TagRoachprod = "roachprod"
+	// TagUsage indicates where a certain resource is used. "roachtest" is used
+	// as the key for roachtest created resources.
+	TagUsage = "usage"
 )
 
 // GetDefaultLabelMap returns a label map for a common set of labels.
@@ -147,13 +150,44 @@ func (vm *VM) ZoneEntry() (string, error) {
 	return fmt.Sprintf("%s 60 IN A %s\n", vm.Name, vm.PublicIP), nil
 }
 
-func (vm *VM) AttachVolume(l *logger.Logger, v Volume) (deviceName string, err error) {
+func (vm *VM) AttachVolume(l *logger.Logger, v Volume) (deviceName string, _ error) {
 	vm.NonBootAttachedVolumes = append(vm.NonBootAttachedVolumes, v)
-	err = ForProvider(vm.Provider, func(provider Provider) error {
-		deviceName, err = provider.AttachVolumeToVM(l, v, vm)
+	if err := ForProvider(vm.Provider, func(provider Provider) error {
+		var err error
+		deviceName, err = provider.AttachVolume(l, v, vm)
 		return err
-	})
-	return deviceName, err
+	}); err != nil {
+		return "", err
+	}
+	return deviceName, nil
+}
+
+const vmNameFormat = "user-<clusterid>-<nodeid>"
+
+// ClusterName returns the cluster name a VM belongs to.
+func (vm *VM) ClusterName() (string, error) {
+	if vm.IsLocal() {
+		return vm.LocalClusterName, nil
+	}
+	name := vm.Name
+	parts := strings.Split(name, "-")
+	if len(parts) < 3 {
+		return "", fmt.Errorf("expected VM name in the form %s, got %s", vmNameFormat, name)
+	}
+	return strings.Join(parts[:len(parts)-1], "-"), nil
+}
+
+// UserName returns the username of a VM.
+func (vm *VM) UserName() (string, error) {
+	if vm.IsLocal() {
+		return config.Local, nil
+	}
+	name := vm.Name
+	parts := strings.Split(name, "-")
+	if len(parts) < 3 {
+		return "", fmt.Errorf("expected VM name in the form %s, got %s", vmNameFormat, name)
+	}
+	return parts[0], nil
 }
 
 // List represents a list of VMs.
@@ -254,6 +288,23 @@ type ProviderOpts interface {
 	ConfigureClusterFlags(*pflag.FlagSet, MultipleProjectsOption)
 }
 
+type VolumeSnapshot struct {
+	ID   string
+	Name string
+}
+
+type VolumeSnapshotCreateOpts struct {
+	Name        string
+	Labels      map[string]string
+	Description string
+}
+
+type VolumeSnapshotListOpts struct {
+	Name          string
+	Labels        map[string]string
+	CreatedBefore time.Time
+}
+
 type Volume struct {
 	ProviderResourceID string
 	ProviderVolumeType string
@@ -312,9 +363,24 @@ type Provider interface {
 	// provider.
 	ProjectActive(project string) bool
 
+	// Volume and volume snapshot related APIs.
+
+	// CreateVolume creates a new volume using the given options.
 	CreateVolume(l *logger.Logger, vco VolumeCreateOpts) (Volume, error)
-	AttachVolumeToVM(l *logger.Logger, volume Volume, vm *VM) (string, error)
-	SnapshotVolume(l *logger.Logger, volume Volume, name, description string, labels map[string]string) (string, error)
+	// ListVolumes lists all volumes already attached to the given VM.
+	ListVolumes(l *logger.Logger, vm *VM) ([]Volume, error)
+	// DeleteVolume detaches and deletes the given volume from the given VM.
+	DeleteVolume(l *logger.Logger, volume Volume, vm *VM) error
+	// AttachVolume attaches the given volume to the given VM.
+	AttachVolume(l *logger.Logger, volume Volume, vm *VM) (string, error)
+	// CreateVolumeSnapshot creates a snapshot of the given volume, using the
+	// given options.
+	CreateVolumeSnapshot(l *logger.Logger, volume Volume, vsco VolumeSnapshotCreateOpts) (VolumeSnapshot, error)
+	// ListVolumeSnapshots lists the individual volume snapshots that satisfy
+	// the search criteria.
+	ListVolumeSnapshots(l *logger.Logger, vslo VolumeSnapshotListOpts) ([]VolumeSnapshot, error)
+	// DeleteVolumeSnapshot permanently deletes the given snapshot.
+	DeleteVolumeSnapshot(l *logger.Logger, snapshot VolumeSnapshot) error
 }
 
 // DeleteCluster is an optional capability for a Provider which can

@@ -1125,7 +1125,10 @@ var storageSnapshotCmd = &cobra.Command{
 		cluster := args[0]
 		name := args[1]
 		desc := args[2]
-		return roachprod.SnapshotVolume(context.Background(), config.Logger, cluster, name, desc)
+		return roachprod.CreateSnapshot(context.Background(), config.Logger, cluster, vm.VolumeSnapshotCreateOpts{
+			Name:        name,
+			Description: desc,
+		})
 	}),
 }
 

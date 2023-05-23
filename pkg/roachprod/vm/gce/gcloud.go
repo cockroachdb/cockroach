@@ -97,7 +97,7 @@ func runJSONCommand(args []string, parsed interface{}) error {
 	}
 
 	if err := json.Unmarshal(rawJSON, &parsed); err != nil {
-		return errors.Wrapf(err, "failed to parse json %s", rawJSON)
+		return errors.Wrapf(err, "failed to parse json %s: %v", rawJSON, rawJSON)
 	}
 
 	return nil
@@ -137,16 +137,6 @@ func (jsonVM *jsonVM) toVM(
 		}
 	} else {
 		vmErrors = append(vmErrors, vm.ErrNoExpiration)
-	}
-
-	// lastComponent splits a url path and returns only the last part. This is
-	// used because some of the fields in jsonVM are defined using URLs like:
-	//  "https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n1-standard-16"
-	// We want to strip this down to "n1-standard-16", so we only want the last
-	// component.
-	lastComponent := func(url string) string {
-		s := strings.Split(url, "/")
-		return s[len(s)-1]
 	}
 
 	// Extract network information
@@ -201,9 +191,13 @@ func (jsonVM *jsonVM) toVM(
 			for _, detailedDisk := range disks {
 				if detailedDisk.SelfLink == jsonVMDisk.Source {
 					vol := vm.Volume{
-						ProviderResourceID: detailedDisk.Name,
+						// NB: See TODO in toDescribeVolumeCommandResponse. We
+						// should be able to "just" use detailedDisk.Name here,
+						// but we're abusing that field elsewhere, and
+						// incorrectly. Using SelfLink is correct.
+						ProviderResourceID: lastComponent(detailedDisk.SelfLink),
 						ProviderVolumeType: detailedDisk.Type,
-						Zone:               detailedDisk.Zone,
+						Zone:               lastComponent(detailedDisk.Zone),
 						Name:               detailedDisk.Name,
 						Labels:             detailedDisk.Labels,
 						Size:               parseDiskSize(detailedDisk.SizeGB),
@@ -295,13 +289,13 @@ type Provider struct {
 	ServiceAccount string
 }
 
-type snapshotCreateJson struct {
+type snapshotJson struct {
 	CreationSizeBytes  string    `json:"creationSizeBytes"`
 	CreationTimestamp  time.Time `json:"creationTimestamp"`
 	Description        string    `json:"description"`
 	DiskSizeGb         string    `json:"diskSizeGb"`
 	DownloadBytes      string    `json:"downloadBytes"`
-	Id                 string    `json:"id"`
+	ID                 string    `json:"id"`
 	Kind               string    `json:"kind"`
 	LabelFingerprint   string    `json:"labelFingerprint"`
 	Name               string    `json:"name"`
@@ -314,27 +308,26 @@ type snapshotCreateJson struct {
 	StorageLocations   []string  `json:"storageLocations"`
 }
 
-func (p *Provider) SnapshotVolume(
-	l *logger.Logger, volume vm.Volume, name, description string, labels map[string]string,
-) (string, error) {
+func (p *Provider) CreateVolumeSnapshot(
+	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
+) (vm.VolumeSnapshot, error) {
 	args := []string{
 		"compute",
 		"snapshots",
-		"create", name,
+		"create", vsco.Name,
 		"--source-disk", volume.ProviderResourceID,
 		"--source-disk-zone", volume.Zone,
-		"--description", description,
+		"--description", vsco.Description,
 		"--format", "json",
 	}
 
-	var createJsonResponse snapshotCreateJson
-	err := runJSONCommand(args, &createJsonResponse)
-	if err != nil {
-		return "", err
+	var createJsonResponse snapshotJson
+	if err := runJSONCommand(args, &createJsonResponse); err != nil {
+		return vm.VolumeSnapshot{}, err
 	}
 
 	sb := strings.Builder{}
-	for k, v := range labels {
+	for k, v := range vsco.Labels {
 		fmt.Fprintf(&sb, "%s=%s,", serializeLabel(k), serializeLabel(v))
 	}
 	s := sb.String()
@@ -342,16 +335,70 @@ func (p *Provider) SnapshotVolume(
 	args = []string{
 		"compute",
 		"snapshots",
-		"add-labels", name,
+		"add-labels", vsco.Name,
 		"--labels", s[:len(s)-1],
 	}
 	cmd := exec.Command("gcloud", args...)
-	_, err = cmd.CombinedOutput()
-
-	if err != nil {
-		return "", err
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return vm.VolumeSnapshot{}, err
 	}
-	return createJsonResponse.Name, nil
+	return vm.VolumeSnapshot{
+		ID:   createJsonResponse.ID,
+		Name: createJsonResponse.Name,
+	}, nil
+}
+
+func (p *Provider) ListVolumeSnapshots(
+	l *logger.Logger, vslo vm.VolumeSnapshotListOpts,
+) ([]vm.VolumeSnapshot, error) {
+	args := []string{
+		"compute",
+		"snapshots",
+		"list",
+		"--format", "json(name,id)",
+	}
+	var filters []string
+	if vslo.Name != "" {
+		filters = append(filters, fmt.Sprintf("name:%s", vslo.Name))
+	}
+	if !vslo.CreatedBefore.IsZero() {
+		filters = append(filters, fmt.Sprintf("creationTimestamp<'%s'", vslo.CreatedBefore.Format("2006-01-02")))
+	}
+	for k, v := range vslo.Labels {
+		filters = append(filters, fmt.Sprintf("labels.%s=%s", k, v))
+	}
+	if len(filters) > 0 {
+		args = append(args, "--filter", strings.Join(filters, " AND "))
+	}
+
+	var snapshotsJSONResponse []snapshotJson
+	if err := runJSONCommand(args, &snapshotsJSONResponse); err != nil {
+		return nil, err
+	}
+
+	var snapshots []vm.VolumeSnapshot
+	for _, snapshotJson := range snapshotsJSONResponse {
+		snapshots = append(snapshots, vm.VolumeSnapshot{
+			ID:   snapshotJson.ID,
+			Name: snapshotJson.Name,
+		})
+	}
+	return snapshots, nil
+}
+
+func (p *Provider) DeleteVolumeSnapshot(l *logger.Logger, snapshot vm.VolumeSnapshot) error {
+	args := []string{
+		"compute",
+		"snapshots",
+		"delete",
+		snapshot.Name,
+	}
+
+	cmd := exec.Command("gcloud", args...)
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return err
+	}
+	return nil
 }
 
 type describeVolumeCommandResponse struct {
@@ -373,9 +420,9 @@ type describeVolumeCommandResponse struct {
 func (p *Provider) CreateVolume(
 	l *logger.Logger, vco vm.VolumeCreateOpts,
 ) (vol vm.Volume, err error) {
-	// TODO(leon): SourceSnapshotID and IOPS, are not handled
-	if vco.SourceSnapshotID != "" || vco.IOPS != 0 {
-		err = errors.New("Creating a volume with SourceSnapshotID or IOPS is not supported at this time.")
+	// TODO(leon): IOPS is not handled.
+	if vco.IOPS != 0 {
+		err = errors.New("Creating a volume with IOPS is not supported at this time.")
 		return vol, err
 	}
 	args := []string{
@@ -385,6 +432,9 @@ func (p *Provider) CreateVolume(
 		"--size", strconv.Itoa(vco.Size),
 		"--zone", vco.Zone,
 		"--format", "json",
+	}
+	if vco.SourceSnapshotID != "" {
+		args = append(args, "--source-snapshot", vco.SourceSnapshotID)
 	}
 
 	if vco.Size == 0 {
@@ -397,7 +447,7 @@ func (p *Provider) CreateVolume(
 
 	if vco.Architecture != "" {
 		if vco.Architecture == "ARM64" || vco.Architecture == "X86_64" {
-			args = append(args, "--architecture=", vco.Architecture)
+			args = append(args, "--architecture", vco.Architecture)
 		} else {
 			return vol, errors.Newf("Expected architecture to be one of ARM64, X86_64 got %s\n", vco.Architecture)
 		}
@@ -405,7 +455,7 @@ func (p *Provider) CreateVolume(
 
 	switch vco.Type {
 	case "local-ssd", "pd-balanced", "pd-extreme", "pd-ssd", "pd-standard":
-		args = append(args, "--type=", vco.Type)
+		args = append(args, "--type", vco.Type)
 	case "":
 	// use the default
 	default:
@@ -427,34 +477,139 @@ func (p *Provider) CreateVolume(
 	if err != nil {
 		return vol, err
 	}
-	sb := strings.Builder{}
-	for k, v := range vco.Labels {
-		fmt.Fprintf(&sb, "%s=%s,", serializeLabel(k), serializeLabel(v))
-	}
-	s := sb.String()
-
-	args = []string{
-		"compute",
-		"disks",
-		"add-labels", vco.Name,
-		"--labels", s[:len(s)-1],
-		"--zone", vco.Zone,
-	}
-	cmd := exec.Command("gcloud", args...)
-	_, err = cmd.CombinedOutput()
-
-	if err != nil {
-		return vol, err
+	if len(vco.Labels) > 0 {
+		sb := strings.Builder{}
+		for k, v := range vco.Labels {
+			fmt.Fprintf(&sb, "%s=%s,", serializeLabel(k), serializeLabel(v))
+		}
+		s := sb.String()
+		args = []string{
+			"compute",
+			"disks",
+			"add-labels", vco.Name,
+			"--labels", s[:len(s)-1],
+			"--zone", vco.Zone,
+		}
+		cmd := exec.Command("gcloud", args...)
+		if _, err := cmd.CombinedOutput(); err != nil {
+			return vm.Volume{}, err
+		}
 	}
 
 	return vm.Volume{
 		ProviderResourceID: createdVolume.Name,
+		ProviderVolumeType: lastComponent(createdVolume.Type),
+		Zone:               lastComponent(createdVolume.Zone),
+		Encrypted:          false, // only used for aws
 		Name:               createdVolume.Name,
-		ProviderVolumeType: createdVolume.Type,
-		Zone:               vco.Zone,
+		Labels:             createdVolume.Labels,
 		Size:               size,
-		Labels:             vco.Labels,
-	}, err
+	}, nil
+}
+
+func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) error {
+	{ // Detach disks.
+		args := []string{
+			"compute",
+			"instances",
+			"detach-disk", vm.Name,
+			"--disk", volume.ProviderResourceID,
+			"--zone", volume.Zone,
+		}
+		cmd := exec.Command("gcloud", args...)
+		if _, err := cmd.CombinedOutput(); err != nil {
+			return err
+		}
+	}
+	{ // Delete disks.
+		args := []string{
+			"compute",
+			"disks",
+			"delete",
+			volume.ProviderResourceID,
+			"--zone", volume.Zone,
+			"--quiet",
+		}
+		cmd := exec.Command("gcloud", args...)
+		if _, err := cmd.CombinedOutput(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) {
+	var attachedDisks []attachDiskCmdDisk
+	var describedVolumes []describeVolumeCommandResponse
+
+	{
+		// We're running the equivalent of:
+		//  	gcloud compute instances describe irfansharif-snapshot-0001 \
+		//  		--project cockroach-ephemeral --zone us-east1-b \
+		// 			--format json(disks)
+		//
+		// We'll use this data to filter out boot disks.
+		var commandResponse instanceDisksResponse
+		args := []string{
+			"compute",
+			"instances",
+			"describe",
+			v.Name,
+			"--project", p.GetProject(),
+			"--zone", v.Zone,
+			"--format", "json(disks)",
+		}
+		if err := runJSONCommand(args, &commandResponse); err != nil {
+			return nil, err
+		}
+		attachedDisks = commandResponse.Disks
+	}
+
+	{
+		// We're running the equivalent of
+		// 		gcloud compute disks list --project cockroach-ephemeral \
+		//			--filter "users:(irfansharif-snapshot-0001)" --format json
+		//
+		// This contains more per-disk metadata than the command above, but
+		// annoyingly does not contain whether the disk is a boot volume.
+		args := []string{
+			"compute",
+			"disks",
+			"list",
+			"--project", p.GetProject(),
+			"--filter", fmt.Sprintf("users:(%s)", v.Name),
+			"--format", "json",
+		}
+		if err := runJSONCommand(args, &describedVolumes); err != nil {
+			return nil, err
+		}
+	}
+
+	var volumes []vm.Volume
+	for idx := range attachedDisks {
+		attachedDisk := attachedDisks[idx]
+		if attachedDisk.Boot {
+			continue
+		}
+		describedVolume := describedVolumes[idx]
+		size, err := strconv.Atoi(describedVolume.SizeGB)
+		if err != nil {
+			return nil, err
+		}
+		volumes = append(volumes, vm.Volume{
+			ProviderResourceID: describedVolume.Name,
+			ProviderVolumeType: lastComponent(describedVolume.Type),
+			Zone:               lastComponent(describedVolume.Zone),
+			Encrypted:          false, // only used for aws
+			Name:               describedVolume.Name,
+			Labels:             describedVolume.Labels,
+			Size:               size,
+		})
+	}
+
+	// TODO(irfansharif): Update v.NonBootAttachedVolumes? It's awkward to have
+	// that field at all.
+	return volumes, nil
 }
 
 type instanceDisksResponse struct {
@@ -476,8 +631,8 @@ type attachDiskCmdDisk struct {
 	Type       string `json:"type"`
 }
 
-func (p *Provider) AttachVolumeToVM(l *logger.Logger, volume vm.Volume, vm *vm.VM) (string, error) {
-	// Volume attach
+func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (string, error) {
+	// Volume attach.
 	args := []string{
 		"compute",
 		"instances",
@@ -506,7 +661,7 @@ func (p *Provider) AttachVolumeToVM(l *logger.Logger, volume vm.Volume, vm *vm.V
 			volume.ProviderResourceID, vm.ProviderID)
 	}
 
-	// Volume auto delete
+	// Volume auto delete.
 	args = []string{
 		"compute",
 		"instances",
@@ -1155,6 +1310,12 @@ func toDescribeVolumeCommandResponse(
 			continue
 		}
 		res = append(res, describeVolumeCommandResponse{
+			// TODO(irfansharif): Use of the device name here is wrong -- it's
+			// ends up being things like "persistent-disk-1" but in other, more
+			// correct uses, it's "irfansharif-snapshot-0001-1". In fact, this
+			// whole transformation from attachDiskCmdDisk to
+			// describeVolumeCommandResponse if funky. Use something like
+			// (Provider).ListVolumes instead.
 			Name:     d.DeviceName,
 			SelfLink: d.Source,
 			SizeGB:   d.DiskSizeGB,
@@ -1293,4 +1454,16 @@ func (p *Provider) ProjectActive(project string) bool {
 		}
 	}
 	return false
+}
+
+// lastComponent splits a url path and returns only the last part. This is
+// used because some fields in GCE APIs are defined using URLs like:
+//
+//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n1-standard-16"
+//
+// We want to strip this down to "n1-standard-16", so we only want the last
+// component.
+func lastComponent(url string) string {
+	s := strings.Split(url, "/")
+	return s[len(s)-1]
 }

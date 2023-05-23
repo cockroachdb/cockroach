@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 // Cluster is the interface through which a given roachtest interacts with the
@@ -134,4 +135,22 @@ type Cluster interface {
 
 	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error
 	StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error
+
+	// Volume snapshot related APIs.
+
+	// CreateSnapshot creates volume snapshots of the cluster using the given
+	// prefix. These snapshots can later be retrieved, deleted or applied to
+	// already instantiated clusters.
+	CreateSnapshot(ctx context.Context, snapshotPrefix string) error
+	// ListSnapshots lists the individual volume snapshots that satisfy the
+	// search criteria.
+	ListSnapshots(ctx context.Context, vslo vm.VolumeSnapshotListOpts) ([]vm.VolumeSnapshot, error)
+	// DeleteSnapshots permanently deletes the given snapshots.
+	DeleteSnapshots(ctx context.Context, snapshots ...vm.VolumeSnapshot) error
+	// ApplySnapshots applies the given volume snapshots to the underlying
+	// cluster. This is a destructive operation as far as existing state is
+	// concerned - all already-attached volumes are detached and deleted to make
+	// room for new snapshot-derived volumes. The new volumes are created using
+	// the same specs (size, disk type, etc.) as the original cluster.
+	ApplySnapshots(ctx context.Context, snapshots []vm.VolumeSnapshot) error
 }
