@@ -152,29 +152,35 @@ func (h *rowLevelTTLTestJobTestHelper) waitForScheduledJob(
 		h.env.ScheduledJobsTableName(),
 	)
 
-	testutils.SucceedsSoon(t, func() error {
+	var regex *regexp.Regexp
+	if expectedErrorRe != "" {
+		var err error
+		regex, err = regexp.Compile(expectedErrorRe)
+		require.NoError(t, err)
+	}
+	testutils.SucceedsWithin(t, func() error {
 		// Force newly created job to be adopted and verify it succeeds.
 		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-		var status, errorStr string
-		if err := h.sqlDB.DB.QueryRowContext(
-			context.Background(),
-			query,
-		).Scan(&status, &errorStr); err != nil {
-			return errors.Wrapf(err, "expected to scan row for a job, got")
-		}
-
-		if status != string(expectedStatus) {
-			return errors.Newf("expected status %s, got %s (error: %s)", expectedStatus, status, errorStr)
-		}
-		if expectedErrorRe != "" {
-			r, err := regexp.Compile(expectedErrorRe)
-			require.NoError(t, err)
-			if !r.MatchString(errorStr) {
-				return errors.Newf("expected error matches %s, got %s", expectedErrorRe, errorStr)
+		rows := h.sqlDB.QueryStr(t, query)
+		var actualStatuses []string
+		var actualErrors []string
+		for _, row := range rows {
+			actualStatus := row[0]
+			actualError := row[1]
+			if actualStatus == string(expectedStatus) && (regex == nil || regex.MatchString(actualError)) {
+				return nil
 			}
+			actualStatuses = append(actualStatuses, actualStatus)
+			actualErrors = append(actualErrors, actualError)
 		}
-		return nil
-	})
+		return errors.Newf(`
+expectedStatus="%s"
+actualStatuses="%s"
+ expectedError="%s"
+  actualErrors="%s"`,
+			expectedStatus, strings.Join(actualStatuses, `", "`), expectedErrorRe, strings.Join(actualErrors, `", "`),
+		)
+	}, 3*time.Minute)
 }
 
 func (h *rowLevelTTLTestJobTestHelper) verifyNonExpiredRows(
