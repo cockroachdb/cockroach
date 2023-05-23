@@ -122,6 +122,12 @@ func (b *Builder) buildJoin(
 				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil, nil,
 			)
 			filters = memo.FiltersExpr{b.factory.ConstructFiltersItem(filter)}
+			if b.insideFuncDef {
+				newExpr, changed := tree.WalkExpr(newColumnPrefixRewritter(outScope), on.Expr)
+				if changed {
+					join.Cond = &tree.OnJoinCond{Expr: newExpr}
+				}
+			}
 		} else {
 			filters = memo.TrueFilter
 		}

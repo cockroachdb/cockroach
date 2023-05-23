@@ -332,7 +332,7 @@ func (b *Builder) buildGroupingColumns(sel *tree.SelectClause, projectionsScope,
 	g := fromScope.groupby
 
 	// The "from" columns are visible to any grouping expressions.
-	b.buildGroupingList(sel.GroupBy, sel.Exprs, projectionsScope, fromScope)
+	b.buildGroupingList(&sel.GroupBy, sel.Exprs, projectionsScope, fromScope)
 
 	// Copy the grouping columns to the aggOutScope.
 	g.aggOutScope.appendColumns(g.groupingCols())
@@ -462,7 +462,11 @@ func (b *Builder) analyzeHaving(having *tree.Where, fromScope *scope) tree.Typed
 		exprKindHaving.String(), tree.RejectWindowApplications|tree.RejectGenerators,
 	)
 	fromScope.context = exprKindHaving
-	return fromScope.resolveAndRequireType(having.Expr, types.Bool)
+	typedHavingExpr := fromScope.resolveAndRequireType(having.Expr, types.Bool)
+	if b.insideFuncDef {
+		having.Expr, _ = tree.WalkExpr(newColumnPrefixRewritter(fromScope), having.Expr)
+	}
+	return typedHavingExpr
 }
 
 // buildHaving builds a set of memo groups that represent the given HAVING
@@ -492,12 +496,16 @@ func (b *Builder) buildHaving(having tree.TypedExpr, fromScope *scope) opt.Scala
 //
 // fromScope The scope for the input to the aggregation (the FROM clause).
 func (b *Builder) buildGroupingList(
-	groupBy tree.GroupBy, selects tree.SelectExprs, projectionsScope *scope, fromScope *scope,
+	groupBy *tree.GroupBy, selects tree.SelectExprs, projectionsScope *scope, fromScope *scope,
 ) {
+	if groupBy == nil {
+		return
+	}
+	gb := *groupBy
 	g := fromScope.groupby
-	g.groupStrs = make(groupByStrSet, len(groupBy))
+	g.groupStrs = make(groupByStrSet, len(gb))
 	if g.aggInScope.cols == nil {
-		g.aggInScope.cols = make([]scopeColumn, 0, len(groupBy))
+		g.aggInScope.cols = make([]scopeColumn, 0, len(gb))
 	}
 
 	// The buildingGroupingCols flag is used to ensure that a grouping error is
@@ -509,8 +517,11 @@ func (b *Builder) buildGroupingList(
 	// used in an aggregate function`. The builder cannot know whether there is
 	// a grouping error until the grouping columns are fully built.
 	g.buildingGroupingCols = true
-	for _, e := range groupBy {
-		b.buildGrouping(e, selects, projectionsScope, fromScope, g.aggInScope)
+	for i := range gb {
+		b.buildGrouping(&gb[i], selects, projectionsScope, fromScope, g.aggInScope)
+	}
+	if b.insideFuncDef {
+		*groupBy = gb
 	}
 	g.buildingGroupingCols = false
 }
@@ -536,10 +547,10 @@ func (b *Builder) buildGroupingList(
 //
 //	as the aggregate function arguments.
 func (b *Builder) buildGrouping(
-	groupBy tree.Expr, selects tree.SelectExprs, projectionsScope, fromScope, aggInScope *scope,
+	groupByIn *tree.Expr, selects tree.SelectExprs, projectionsScope, fromScope, aggInScope *scope,
 ) {
 	// Unwrap parenthesized expressions like "((a))" to "a".
-	groupBy = tree.StripParens(groupBy)
+	groupBy := tree.StripParens(*groupByIn)
 	alias := ""
 
 	// Comment below pasted from PostgreSQL (findTargetListEntrySQL92 in
@@ -645,6 +656,10 @@ func (b *Builder) buildGrouping(
 		col := aggInScope.addColumn(scopeColName(tree.Name(alias)), e)
 		b.buildScalar(e, fromScope, aggInScope, col, nil)
 		fromScope.groupby.groupStrs[exprStr] = col
+	}
+
+	if b.insideFuncDef {
+		*groupByIn, _ = tree.WalkExpr(newColumnPrefixRewritter(fromScope), *groupByIn)
 	}
 }
 

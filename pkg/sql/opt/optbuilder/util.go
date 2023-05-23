@@ -783,3 +783,77 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 	}
 	return ordinals
 }
+
+// columnPrefixRewriter is a tree.Visitor implementation to rewrite a column
+// representation's prefix in to table ID references.
+type columnPrefixRewriter struct {
+	s *scope
+}
+
+func newColumnPrefixRewritter(s *scope) *columnPrefixRewriter {
+	return &columnPrefixRewriter{
+		s: s,
+	}
+}
+
+// VisitPre is part of the tree.Visitor interface.
+func (r *columnPrefixRewriter) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	switch t := expr.(type) {
+	case *tree.AllColumnsSelector, *tree.TupleStar:
+		// Leave star as it is.
+		return false, expr
+
+	case *tree.UnresolvedName:
+		vn, err := t.NormalizeVarName()
+		if err != nil {
+			panic(err)
+		}
+		return r.VisitPre(vn)
+
+	case *tree.ColumnItem:
+		// If the ColumnItem is not prefixed, there is no need to rewrite.
+		if t.TableName == nil || t.TableName.NumParts == 0 {
+			return false, expr
+		}
+		colI, err := colinfo.ResolveColumnItem(r.s.builder.ctx, r.s, t)
+		if err != nil {
+			panic(err)
+		}
+		scopeCol := colI.(*scopeColumn)
+		md := r.s.builder.factory.Metadata()
+		tblID := md.ColumnMeta(scopeCol.id).Table
+		// Table ID would be zero if the scopeColumn represents a UDF input
+		// parameter. There is no need to rewrite parameter names.
+		if tblID == 0 {
+			return false, expr
+		}
+		tbl := md.Table(tblID)
+		// Do not rewrite if the table is a system table or virtual table.
+		if tbl.IsSystemTable() || tbl.IsVirtualTable() {
+			return false, expr
+		}
+		tblStableID := md.Table(tblID).ID()
+
+		if scopeCol.table.CatalogName != "" && scopeCol.table.SchemaName != "" {
+			// If a column is a reference from a real table.
+			return false, &tree.ColumnNameRef{
+				Table:      &tree.TableIDRef{ID: int64(tblStableID)},
+				ColumnName: scopeCol.name.ReferenceName(),
+			}
+		} else {
+			// If the table is not fully qualified, which means that the table name
+			// can be a table alias or a subquery alias, then we don't need to
+			// rewrite it.
+			return false, &tree.ColumnItem{
+				TableName:  scopeCol.table.ToUnresolvedObjectName(),
+				ColumnName: scopeCol.name.ReferenceName(),
+			}
+		}
+	}
+	return true, expr
+}
+
+// VisitPost is part of the tree.Visitor interface.
+func (*columnPrefixRewriter) VisitPost(expr tree.Expr) tree.Expr {
+	return expr
+}

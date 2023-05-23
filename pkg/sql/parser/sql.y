@@ -14459,6 +14459,14 @@ a_expr:
   {
     $$.val = tree.DefaultVal{}
   }
+| table_id_ref '.' name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ColumnNameRef{
+      Table: $1.tblExpr().(*tree.TableIDRef),
+      ColumnName: tree.Name($3),
+    }
+  }
 // The UNIQUE predicate is a standard SQL feature but not yet implemented
 // in PostgreSQL (as of 10.5).
 | UNIQUE '(' error { return unimplemented(sqllex, "UNIQUE predicate") }
