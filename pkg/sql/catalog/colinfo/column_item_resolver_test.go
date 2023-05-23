@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // fakeSource represents a fake column resolution environment for tests.
@@ -79,6 +80,13 @@ func (f *fakeSource) FindSourceMatchingName(
 		return colinfo.NoResults, nil, nil, nil
 	}
 	return colinfo.ExactlyOne, prefix, columns, nil
+}
+
+// FindSourceWithID implements colinfo.ColumnItemResolver interface.
+func (f *fakeSource) FindSourceWithID(
+	ctx context.Context, id int64,
+) (prefix *tree.TableName, srcMeta colinfo.ColumnSourceMeta, err error) {
+	return nil, nil, errors.AssertionFailedf("FindSourceWithID not implemented")
 }
 
 // FindSourceProvidingColumn is part of the ColumnItemResolver interface.

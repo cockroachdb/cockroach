@@ -68,10 +68,27 @@ type TableIDRef struct {
 	ID int64
 }
 
+// Format implements the NodeFormatter interface.
 func (expr *TableIDRef) Format(ctx *FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("{TABLE:%v}", expr.ID))
 }
 
 func (expr *TableIDRef) WalkTableExpr(visitor Visitor) TableExpr {
 	return expr
+}
+
+// ColumnNameRef represent a column prefixed with a table id reference.
+type ColumnNameRef struct {
+	Table      *TableIDRef
+	ColumnName Name
+}
+
+// Format implements the NodeFormatter interface.
+func (expr *ColumnNameRef) Format(ctx *FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("{TABLE:%d}.", expr.Table.ID))
+	expr.ColumnName.Format(ctx)
+}
+
+func (expr *ColumnNameRef) String() string {
+	return AsString(expr)
 }
