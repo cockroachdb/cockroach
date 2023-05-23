@@ -59,7 +59,6 @@ go_test(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/load",
         "//pkg/roachpb",
-        "//pkg/util/hlc",
         "@com_github_stretchr_testify//require",
     ],
 )

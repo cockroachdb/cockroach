@@ -11,7 +11,6 @@
 package state
 
 import (
-	"math"
 	"math/rand"
 	"testing"
 
@@ -20,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -605,9 +603,9 @@ func TestSetNodeLiveness(t *testing.T) {
 
 		// Liveness status returend should ignore time till store dead or the
 		// timestamp given.
-		require.Equal(t, livenesspb.NodeLivenessStatus_LIVE, liveFn(1, hlc.Timestamp{}, math.MaxInt64))
-		require.Equal(t, livenesspb.NodeLivenessStatus_DEAD, liveFn(2, hlc.Timestamp{}, math.MaxInt64))
-		require.Equal(t, livenesspb.NodeLivenessStatus_DECOMMISSIONED, liveFn(3, hlc.Timestamp{}, math.MaxInt64))
+		require.Equal(t, livenesspb.NodeLivenessStatus_LIVE, liveFn(1))
+		require.Equal(t, livenesspb.NodeLivenessStatus_DEAD, liveFn(2))
+		require.Equal(t, livenesspb.NodeLivenessStatus_DECOMMISSIONED, liveFn(3))
 	})
 
 	t.Run("node count fn", func(t *testing.T) {
