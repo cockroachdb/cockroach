@@ -1947,6 +1947,29 @@ func init() {
 // errors as not temporary. In addition to this, if the first
 // invocation results in an error, that error is propagated to
 // the second invocation.
+//
+// The problem onlyOnceDialer solves is that if we let gRPC reconnect
+// transparently, it may do so without us realizing that the connection
+// even had an issue. So the following (and variants of it) may happen:
+//
+// - we are n2
+// - connection is to n1 at ip1
+// - n1 stops, customer wipes n1, installs an ancient binary, starts again
+// - grpc transparently redials, now we have a connection to n2, a totally different binary
+// - n2 sends a bunch of random RPCs to it
+// - only on the next heartbeat will we re-validate versions and tear down the connection
+//
+// We need a reconnection attempt to come with a blocking revalidation
+// of all the checks that are part of our heartbeats.
+//
+// We can't configure gRPC to avoid internal retries, so we give it a
+// onlyOnceDialer which fails permanently on any error. In theory, we could
+// allow gRPC to reconnect if we instead used a "notifying dialer" that
+// immediately (temporarily) poisoned the `*peer` when a reconnection attempt is
+// started by gRPC. If we wanted to go down that route, we have to make sure we
+// retain the observability for connection hiccups (which is right now provided
+// by the forced top-level reconnect) and also avoid complexity creep in our
+// heartbeat loop (which is already relatively complex).
 type onlyOnceDialer struct {
 	mu struct {
 		syncutil.Mutex
