@@ -219,6 +219,9 @@ func getMinValidVersionForRules(
 	return activeVersion
 }
 
+// Deprecated.
+//
+// TODO(postamar): remove once the release_22_2 ruleset is also removed
 func applyOpRules(
 	ctx context.Context, activeVersion clusterversion.ClusterVersion, g *scgraph.Graph,
 ) (*scgraph.Graph, error) {
