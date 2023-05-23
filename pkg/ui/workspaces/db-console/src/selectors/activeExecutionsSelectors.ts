@@ -21,6 +21,7 @@ import { createSelector } from "reselect";
 import { CachedDataReducerState } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { SessionsResponseMessage } from "src/util/api";
+import { ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED } from "../views/transactions/activeTransactionsSelectors";
 
 const selectSessions = (state: AdminUIState) => state.cachedData.sessions?.data;
 
@@ -31,6 +32,10 @@ export const selectClusterLocksMaxApiSizeReached = (
   state: AdminUIState,
 ): boolean => {
   return !!state.cachedData.clusterLocks?.data?.maxSizeReached;
+};
+
+export const selectIsAutoRefreshEnabled = (state: AdminUIState): boolean => {
+  return state.localSettings[ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED];
 };
 
 export const selectActiveExecutions = createSelector(

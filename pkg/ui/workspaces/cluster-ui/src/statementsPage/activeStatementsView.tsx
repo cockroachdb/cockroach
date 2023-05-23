@@ -10,6 +10,7 @@
 
 import React, { useEffect, useState } from "react";
 import classNames from "classnames/bind";
+import { Moment } from "moment-timezone";
 import { useHistory } from "react-router-dom";
 import {
   ISortedTablePagination,
@@ -39,6 +40,7 @@ import { Pagination } from "src/pagination";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 
 import styles from "./statementsPage.module.scss";
+import RefreshControl from "src/activeExecutions/refreshControl/refreshControl";
 
 const cx = classNames.bind(styles);
 const PAGE_SIZE = 20;
@@ -48,6 +50,8 @@ export type ActiveStatementsViewDispatchProps = {
   onFiltersChange: (filters: ActiveStatementFilters) => void;
   onSortChange: (ss: SortSetting) => void;
   refreshLiveWorkload: () => void;
+  onAutoRefreshToggle: (isEnabled: boolean) => void;
+  onManualRefresh: () => void;
 };
 
 export type ActiveStatementsViewStateProps = {
@@ -60,6 +64,8 @@ export type ActiveStatementsViewStateProps = {
   internalAppNamePrefix: string;
   isTenant?: boolean;
   maxSizeApiReached?: boolean;
+  isAutoRefreshEnabled?: boolean;
+  lastUpdated: Moment | null;
 };
 
 export type ActiveStatementsViewProps = ActiveStatementsViewStateProps &
@@ -79,6 +85,10 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   internalAppNamePrefix,
   isTenant,
   maxSizeApiReached,
+  isAutoRefreshEnabled,
+  onAutoRefreshToggle,
+  lastUpdated,
+  onManualRefresh,
 }: ActiveStatementsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -90,13 +100,25 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   );
 
   useEffect(() => {
-    // Refresh every 10 seconds.
-    refreshLiveWorkload();
-    const interval = setInterval(refreshLiveWorkload, 10 * 1000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [refreshLiveWorkload]);
+    // useEffect hook which triggers an immediate data refresh if auto-refresh
+    // is enabled. It fetches the latest workload details by dispatching a
+    // refresh action when the component mounts, ensuring that users see fresh
+    // data as soon as they land on the page if auto-refresh is on.
+    if (isAutoRefreshEnabled) {
+      refreshLiveWorkload();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Refresh every 10 seconds if auto refresh is on.
+    if (isAutoRefreshEnabled) {
+      const interval = setInterval(refreshLiveWorkload, 10 * 1000);
+      return () => {
+        clearInterval(interval);
+      };
+    }
+  }, [isAutoRefreshEnabled, refreshLiveWorkload]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -160,6 +182,18 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
     resetPagination();
   };
 
+  const onSubmitToggleAutoRefresh = () => {
+    // Refresh immediately when toggling auto-refresh on.
+    if (!isAutoRefreshEnabled) {
+      refreshLiveWorkload();
+    }
+    onAutoRefreshToggle(!isAutoRefreshEnabled);
+  };
+
+  const handleRefresh = () => {
+    onManualRefresh();
+  };
+
   const clearSearch = () => onSubmitSearch("");
   const clearFilters = () =>
     onSubmitFilters({
@@ -202,6 +236,15 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
             showExecutionStatus={true}
             appNames={apps}
             filters={filters}
+          />
+        </PageConfigItem>
+        <PageConfigItem>
+          <RefreshControl
+            isAutoRefreshEnabled={isAutoRefreshEnabled}
+            onToggleAutoRefresh={onSubmitToggleAutoRefresh}
+            onManualRefresh={handleRefresh}
+            lastRefreshTimestamp={lastUpdated}
+            execType={"statement"}
           />
         </PageConfigItem>
       </PageConfig>

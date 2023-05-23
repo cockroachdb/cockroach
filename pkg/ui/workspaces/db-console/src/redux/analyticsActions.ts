@@ -24,7 +24,6 @@ export const TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION =
   "cockroachui/analytics/TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION";
 export const TRACK_APPLY_SEARCH_CRITERIA =
   "cockroachui/analytics/TRACK_APPLY_SEARCH_CRITERIA";
-
 export interface TableSortActionPayload {
   tableName: string;
   columnName: string;
