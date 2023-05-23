@@ -28,6 +28,23 @@ var UserAuditLogConfig = settings.RegisterValidatedStringSetting(
 	validateAuditLogConfig,
 )
 
+// UserAuditEnableReducedConfig is a cluster setting that enables/disables a computed
+// reduced configuration. This allows us to compute the audit configuration once at
+// session start, instead of computing at each SQL event. The tradeoff is that changes to
+// the audit configuration (user role memberships or cluster setting configuration) are not
+// reflected within session. Users will need to start a new session to see these changes in their
+// auditing behaviour.
+var UserAuditEnableReducedConfig = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.log.user_audit.reduced_config",
+	"enables logic to compute a reduced audit configuration, computing the audit "+
+		"configuration only once at session start instead of at each SQL event. The tradeoff "+
+		"with the increase in performance (~5%), is that changes to the audit configuration "+
+		"(user role memberships/cluster setting) are not reflected within session. "+
+		"Users will need to start a new session to see these changes in their auditing behaviour.",
+	false,
+)
+
 func validateAuditLogConfig(_ *settings.Values, input string) error {
 	if input == "" {
 		// Empty config
