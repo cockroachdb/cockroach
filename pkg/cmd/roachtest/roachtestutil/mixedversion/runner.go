@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -94,7 +95,10 @@ type (
 
 		background *backgroundRunner
 
-		connCache []*gosql.DB
+		connCache struct {
+			mu    syncutil.Mutex
+			cache []*gosql.DB
+		}
 	}
 )
 
@@ -303,10 +307,12 @@ func (tr *testRunner) stepError(err error, step singleStep, l *logger.Logger) er
 func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
 	clusterVersionsBefore := tr.clusterVersions
 	var clusterVersionsAfter atomic.Value
-	if err := tr.refreshClusterVersions(); err != nil {
-		tr.logger.Printf("failed to fetch cluster versions after failure: %s", err)
-	} else {
-		clusterVersionsAfter = tr.clusterVersions
+	if tr.connCacheInitialized() {
+		if err := tr.refreshClusterVersions(); err != nil {
+			tr.logger.Printf("failed to fetch cluster versions after failure: %s", err)
+		} else {
+			clusterVersionsAfter = tr.clusterVersions
+		}
 	}
 
 	tf := &testFailure{
@@ -405,23 +411,36 @@ func (tr *testRunner) ensureInitializationStep(ss singleStep) error {
 }
 
 // maybeInitConnections initialize connections if the connection cache
-// is empty.
+// is empty. When the function returns, either the `connCache` field
+// is populated with a connection for every crdb node, or the field is
+// left untouched, and an error is returned.
 func (tr *testRunner) maybeInitConnections() error {
-	if tr.connCache != nil {
+	tr.connCache.mu.Lock()
+	defer tr.connCache.mu.Unlock()
+
+	if tr.connCache.cache != nil {
 		return nil
 	}
 
-	tr.connCache = make([]*gosql.DB, len(tr.crdbNodes))
+	cc := make([]*gosql.DB, len(tr.crdbNodes))
 	for _, node := range tr.crdbNodes {
 		conn, err := tr.cluster.ConnE(tr.ctx, tr.logger, node)
 		if err != nil {
 			return fmt.Errorf("failed to connect to node %d: %w", node, err)
 		}
 
-		tr.connCache[node-1] = conn
+		cc[node-1] = conn
 	}
 
+	tr.connCache.cache = cc
 	return nil
+}
+
+func (tr *testRunner) connCacheInitialized() bool {
+	tr.connCache.mu.Lock()
+	defer tr.connCache.mu.Unlock()
+
+	return tr.connCache.cache != nil
 }
 
 func (tr *testRunner) newHelper(ctx context.Context, l *logger.Logger) *Helper {
@@ -435,11 +454,16 @@ func (tr *testRunner) newHelper(ctx context.Context, l *logger.Logger) *Helper {
 // conn returns a database connection to the given node. Assumes the
 // connection cache has been previously initialized.
 func (tr *testRunner) conn(node int) *gosql.DB {
-	return tr.connCache[node-1]
+	tr.connCache.mu.Lock()
+	defer tr.connCache.mu.Unlock()
+	return tr.connCache.cache[node-1]
 }
 
 func (tr *testRunner) closeConnections() {
-	for _, db := range tr.connCache {
+	tr.connCache.mu.Lock()
+	defer tr.connCache.mu.Unlock()
+
+	for _, db := range tr.connCache.cache {
 		if db != nil {
 			_ = db.Close()
 		}
