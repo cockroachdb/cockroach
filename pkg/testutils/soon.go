@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -57,6 +58,9 @@ func SucceedsSoonError(fn func() error) error {
 func SucceedsWithin(t TB, fn func() error, duration time.Duration) {
 	t.Helper()
 	if err := SucceedsWithinError(fn, duration); err != nil {
+		if f, l, _, ok := errors.GetOneLineSource(err); ok {
+			err = errors.Wrapf(err, "from %s:%d", f, l)
+		}
 		t.Fatalf("condition failed to evaluate within %s: %s", duration, err)
 	}
 }
