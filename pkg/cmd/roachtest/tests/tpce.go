@@ -95,78 +95,81 @@ func (ts *tpceSpec) run(
 	return c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(ts.loadNode), cmd)
 }
 
-func registerTPCE(r registry.Registry) {
-	type tpceOptions struct {
-		owner     registry.Owner // defaults to test-eng
-		customers int
-		nodes     int
-		cpus      int
-		ssds      int
+type tpceOptions struct {
+	owner     registry.Owner // defaults to test-eng
+	customers int
+	nodes     int
+	cpus      int
+	ssds      int
 
-		tags    map[string]struct{}
-		timeout time.Duration
-	}
+	tags    map[string]struct{}
+	timeout time.Duration
+}
 
-	runTPCE := func(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptions) {
-		roachNodes := c.Range(1, opts.nodes)
-		loadNode := opts.nodes + 1
-		racks := opts.nodes
+func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptions) {
+	// TODO(irfansharif): Expose a 'during' helper, like the TPC-C harness.
+	// Additionally integrate with --skip-init, --local, estimated setup time,
+	// prometheus, and roachprod disk snapshots.
 
-		t.Status("installing cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
+	roachNodes := c.Range(1, opts.nodes)
+	loadNode := opts.nodes + 1
+	racks := opts.nodes
 
-		startOpts := option.DefaultStartOpts()
-		startOpts.RoachprodOpts.StoreCount = opts.ssds
-		settings := install.MakeClusterSettings(install.NumRacksOption(racks))
-		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
+	t.Status("installing cockroach")
+	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 
-		tpceSpec, err := initTPCESpec(ctx, t.L(), c, loadNode, roachNodes)
-		require.NoError(t, err)
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.StoreCount = opts.ssds
+	settings := install.MakeClusterSettings(install.NumRacksOption(racks))
+	c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 
-		// Configure to increase the speed of the import.
-		func() {
-			db := c.Conn(ctx, t.L(), 1)
-			defer db.Close()
-			if _, err := db.ExecContext(
-				ctx, "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = $1", 4*opts.ssds,
-			); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := db.ExecContext(
-				ctx, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-			); err != nil {
-				t.Fatal(err)
-			}
-		}()
+	tpceSpec, err := initTPCESpec(ctx, t.L(), c, loadNode, roachNodes)
+	require.NoError(t, err)
 
-		m := c.NewMonitor(ctx, roachNodes)
-		m.Go(func(ctx context.Context) error {
+	// Configure to increase the speed of the import.
+	func() {
+		db := c.Conn(ctx, t.L(), 1)
+		defer db.Close()
+		if _, err := db.ExecContext(
+			ctx, "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = $1", 4*opts.ssds,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(
+			ctx, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+		); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
-			t.Status("preparing workload")
-			tpceSpec.init(ctx, t, c, tpceCmdOptions{
-				customers: opts.customers,
-				racks:     racks,
-			})
-
-			t.Status("running workload")
-			result, err := tpceSpec.run(ctx, t, c, tpceCmdOptions{
-				customers: opts.customers,
-				racks:     racks,
-				duration:  2 * time.Hour,
-				threads:   opts.nodes * opts.cpus,
-			})
-			if err != nil {
-				t.Fatal(err.Error())
-			}
-			t.L().Printf("workload output:\n%s\n", result.Stdout)
-			if strings.Contains(result.Stdout, "Reported tpsE :    --   (not between 80% and 100%)") {
-				return errors.New("invalid tpsE fraction")
-			}
-			return nil
+	m := c.NewMonitor(ctx, roachNodes)
+	m.Go(func(ctx context.Context) error {
+		t.Status("preparing workload")
+		tpceSpec.init(ctx, t, c, tpceCmdOptions{
+			customers: opts.customers,
+			racks:     racks,
 		})
-		m.Wait()
-	}
 
+		t.Status("running workload")
+		result, err := tpceSpec.run(ctx, t, c, tpceCmdOptions{
+			customers: opts.customers,
+			racks:     racks,
+			duration:  2 * time.Hour,
+			threads:   opts.nodes * opts.cpus,
+		})
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		t.L().Printf("workload output:\n%s\n", result.Stdout)
+		if strings.Contains(result.Stdout, "Reported tpsE :    --   (not between 80% and 100%)") {
+			return errors.New("invalid tpsE fraction")
+		}
+		return nil
+	})
+	m.Wait()
+}
+
+func registerTPCE(r registry.Registry) {
 	for _, opts := range []tpceOptions{
 		// Nightly, small scale configurations.
 		{customers: 5_000, nodes: 3, cpus: 4, ssds: 1, timeout: 4 * time.Hour},
