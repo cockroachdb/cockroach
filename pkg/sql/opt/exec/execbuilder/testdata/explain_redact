@@ -3437,15 +3437,15 @@ memo (optimized, ~7KB, required=[presentation: info:7] [distribution: test])
  │    └── [presentation: info:7] [distribution: test]
  │         ├── best: (explain G2="[presentation: c:1,d:2] [ordering: +6 opt(2)] [distribution: test]" [presentation: c:1,d:2] [ordering: +6 opt(2)] [distribution: test])
  │         └── cost: 1200.86
- ├── G2: (limit G3 G4 ordering=+6 opt(2)) (top-k G3 &{3 ‹×› ‹×›})
+ ├── G2: (limit G3 G4 ordering=+6 opt(2)) (top-k G3 &{3 ‹×› })
  │    ├── [presentation: c:1,d:2] [ordering: +6 opt(2)] [distribution: test]
- │    │    ├── best: (top-k G3="[distribution: test]" &{3 ‹×› ‹×›})
+ │    │    ├── best: (top-k G3="[distribution: test]" &{3 ‹×› })
  │    │    └── cost: 1200.84
  │    ├── [ordering: +6 opt(2)]
- │    │    ├── best: (top-k G3 &{3 ‹×› ‹×›})
+ │    │    ├── best: (top-k G3 &{3 ‹×› })
  │    │    └── cost: 1200.84
  │    └── []
- │         ├── best: (top-k G3 &{3 ‹×› ‹×›})
+ │         ├── best: (top-k G3 &{3 ‹×› })
  │         └── cost: 1200.84
  ├── G3: (project G5 G6 c d)
  │    ├── [distribution: test]

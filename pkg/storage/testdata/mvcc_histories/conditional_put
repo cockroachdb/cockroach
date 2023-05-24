@@ -32,7 +32,7 @@ cput k=k v=v ts=123,3
 ----
 >> at end:
 data: "k"/123.000000000,2 -> /BYTES/v
-error: (*kvpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v" timestamp:<wall_time:123000000000 logical:2 >
+error: (*kvpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v" timestamp:<wall_time:123000000000 logical:2 > 
 
 # Conditional put expecting wrong value2, will fail.
 
@@ -41,7 +41,7 @@ cput k=k v=v cond=v2 ts=123,4
 ----
 >> at end:
 data: "k"/123.000000000,2 -> /BYTES/v
-error: (*kvpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v" timestamp:<wall_time:123000000000 logical:2 >
+error: (*kvpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v" timestamp:<wall_time:123000000000 logical:2 > 
 
 # Move to an empty value. Will succeed.
 
@@ -89,7 +89,7 @@ cput k=k2 v= cond=v allow_missing ts=123,8
 data: "k"/123.000000000,5 -> /BYTES/
 data: "k"/123.000000000,2 -> /BYTES/v
 data: "k2"/123.000000000,7 -> /BYTES/v2
-error: (*kvpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v2" timestamp:<wall_time:123000000000 logical:7 >
+error: (*kvpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v2" timestamp:<wall_time:123000000000 logical:7 > 
 
 # Try to move key2 (which has value2) from value2 to empty. Expect success.
 

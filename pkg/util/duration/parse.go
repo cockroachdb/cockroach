@@ -446,7 +446,7 @@ func iso8601ToDuration(s string) (Duration, error) {
 		} else {
 			return d, pgerror.Newf(
 				pgcode.InvalidDatetimeFormat,
-				"interval: unknown unit %s in ISO-8601 duration %s", u, s)
+				"interval: unknown unit %q in ISO-8601 duration %q", u, s)
 		}
 	}
 
