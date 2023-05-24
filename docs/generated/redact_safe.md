@@ -39,6 +39,7 @@ pkg/sql/catalog/descpb/structured.go | `DescriptorState`
 pkg/sql/catalog/descpb/structured.go | `DescriptorVersion`
 pkg/sql/catalog/descpb/structured.go | `IndexDescriptorVersion`
 pkg/sql/catalog/descpb/structured.go | `MutationID`
+pkg/sql/pgwire/pgwirebase/encoding.go | `FormatCode`
 pkg/sql/schemachanger/scplan/internal/scgraph/graph.go | `RuleName`
 pkg/sql/sem/catid/ids.go | `ColumnID`
 pkg/sql/sem/catid/ids.go | `ConstraintID`

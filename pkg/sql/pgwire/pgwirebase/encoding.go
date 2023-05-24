@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 	"github.com/lib/pq/oid"
 )
@@ -70,6 +71,11 @@ var ReadBufferMaxMessageSizeClusterSetting = settings.RegisterByteSizeSetting(
 //
 //go:generate stringer -type=FormatCode
 type FormatCode uint16
+
+var _ redact.SafeValue = FormatCode(0)
+
+// SafeValue implements the redact.SafeValue interface.
+func (i FormatCode) SafeValue() {}
 
 const (
 	// FormatText is the default, text format.
