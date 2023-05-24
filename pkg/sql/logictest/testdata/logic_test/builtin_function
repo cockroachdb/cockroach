@@ -109,14 +109,16 @@ SELECT unaccent(str) FROM ( VALUES
    ('Żółć'),
    ('⃞h̀ＥＬＬＯ`̀́⃞'),
    ('Softhyphen­separator'),
-   ('some ̂thing')
+   ('some ̂thing'),
+   ('héllö wòrld')
 ) tbl(str)
 ----
 no_special_CHARACTERS1!
 Zolc
 hELLO`
 Softhyphen-separator
-something
+some thing
+hello world
 
 statement error unknown signature: upper\(decimal\)
 SELECT upper(2.2)
