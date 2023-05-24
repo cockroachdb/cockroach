@@ -404,7 +404,15 @@ func (c *CustomFuncs) combineComputedColFilters(
 					// If we don't have a single value, or combination of single values
 					// to use in folding the computed column expression, don't use this
 					// constraint.
-					continue
+					//
+					// If there is only one span and one constraint, this filter is ANDed,
+					// and it is safe to continue processing other ANDed filters,
+					// otherwise an ORed term is being processed and we should give up on
+					// deriving predicates.
+					if props.Constraints.Length() == 1 && cons.Spans.Count() == 1 {
+						continue
+					}
+					return memo.FiltersExpr{}
 				}
 				// Build the initial conjunction from the constraint.
 				initialConjunction, constFilterCols, ok :=
