@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/redact"
 )
 
 func nextUUID(counter *uint32) uuid.UUID {
@@ -238,11 +239,13 @@ func scanSingleRequest(
 	}
 }
 
-func scanTxnStatus(t *testing.T, d *datadriven.TestData) (roachpb.TransactionStatus, string) {
+func scanTxnStatus(
+	t *testing.T, d *datadriven.TestData,
+) (roachpb.TransactionStatus, redact.SafeString) {
 	var statusStr string
 	d.ScanArgs(t, "status", &statusStr)
 	status := parseTxnStatus(t, d, statusStr)
-	var verb string
+	var verb redact.SafeString
 	switch status {
 	case roachpb.COMMITTED:
 		verb = "committing"
