@@ -136,9 +136,11 @@ func GetStreamIngestionStatsNoHeartbeat(
 		IngestionDetails:  &streamIngestionDetails,
 		IngestionProgress: jobProgress.GetStreamIngest(),
 	}
-	if highwater := jobProgress.GetHighWater(); highwater != nil && !highwater.IsEmpty() {
+	replicatedTime := jobProgress.Details.(*jobspb.Progress_StreamIngest).StreamIngest.ReplicatedTime
+
+	if !replicatedTime.IsEmpty() {
 		lagInfo := &streampb.StreamIngestionStats_ReplicationLagInfo{
-			MinIngestedTimestamp: *highwater,
+			MinIngestedTimestamp: replicatedTime,
 		}
 		lagInfo.EarliestCheckpointedTimestamp = hlc.MaxTimestamp
 		lagInfo.LatestCheckpointedTimestamp = hlc.MinTimestamp
@@ -154,7 +156,7 @@ func GetStreamIngestionStatsNoHeartbeat(
 		}
 		lagInfo.SlowestFastestIngestionLag = lagInfo.LatestCheckpointedTimestamp.GoTime().
 			Sub(lagInfo.EarliestCheckpointedTimestamp.GoTime())
-		lagInfo.ReplicationLag = timeutil.Since(highwater.GoTime())
+		lagInfo.ReplicationLag = timeutil.Since(replicatedTime.GoTime())
 		stats.ReplicationLagInfo = lagInfo
 	}
 	return stats, nil

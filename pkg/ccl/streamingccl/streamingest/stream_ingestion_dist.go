@@ -37,24 +37,27 @@ func startDistIngestion(
 ) error {
 
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
-	progress := ingestionJob.Progress()
+	streamProgress := ingestionJob.Progress().Details.(*jobspb.Progress_StreamIngest).StreamIngest
 
-	var previousHighWater, heartbeatTimestamp hlc.Timestamp
+	streamID := streampb.StreamID(details.StreamID)
 	initialScanTimestamp := details.ReplicationStartTime
+	replicatedTime := streamProgress.ReplicatedTime
+
+	if replicatedTime.IsEmpty() && initialScanTimestamp.IsEmpty() {
+		return errors.Newf("initial timestamp and replicated timestamp are both empty")
+	}
+
 	// Start from the last checkpoint if it exists.
-	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
-		previousHighWater = *h
-		heartbeatTimestamp = previousHighWater
+	var heartbeatTimestamp hlc.Timestamp
+	if !replicatedTime.IsEmpty() {
+		heartbeatTimestamp = replicatedTime
 	} else {
 		heartbeatTimestamp = initialScanTimestamp
 	}
 
-	log.Infof(ctx, "ingestion job %d resumes stream ingestion from start time %s",
-		ingestionJob.ID(), heartbeatTimestamp)
-
-	streamID := streampb.StreamID(details.StreamID)
-	updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.InitializingReplication,
-		fmt.Sprintf("connecting to the producer job %d and resuming a stream replication plan", streamID))
+	msg := fmt.Sprintf("resuming stream (producer job %d) from %s",
+		streamID, heartbeatTimestamp)
+	updateRunningStatus(ctx, ingestionJob, jobspb.InitializingReplication, msg)
 
 	client, err := connectToActiveClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB)
 	if err != nil {
@@ -69,7 +72,7 @@ func startDistIngestion(
 		return err
 	}
 
-	log.Infof(ctx, "producer job %d is active, creating a stream replication plan", streamID)
+	log.Infof(ctx, "producer job %d is active, planning DistSQL flow", streamID)
 	dsp := execCtx.DistSQLPlanner()
 
 	p, planCtx, err := makePlan(
@@ -77,14 +80,12 @@ func startDistIngestion(
 		ingestionJob,
 		details,
 		client,
-		previousHighWater,
-		progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest.Checkpoint,
+		replicatedTime,
+		streamProgress.Checkpoint,
 		initialScanTimestamp)(ctx, dsp)
 	if err != nil {
 		return err
 	}
-	log.Infof(ctx, "starting to run DistSQL flow for stream ingestion job %d",
-		ingestionJob.ID())
 
 	execPlan := func(ctx context.Context) error {
 		ctx = logtags.AddTag(ctx, "stream-ingest-distsql", nil)
@@ -112,9 +113,7 @@ func startDistIngestion(
 		return rw.Err()
 	}
 
-	updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.Replicating,
-		"running the SQL flow for the stream ingestion job")
-
+	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating, "running replicating stream")
 	// TODO(msbutler): Implement automatic replanning in the spirit of changefeed replanning.
 	return execPlan(ctx)
 }
@@ -126,7 +125,7 @@ func makePlan(
 	ingestionJob *jobs.Job,
 	details jobspb.StreamIngestionDetails,
 	client streamclient.Client,
-	previousHighWater hlc.Timestamp,
+	previousReplicatedTime hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
 	initialScanTimestamp hlc.Timestamp,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
@@ -158,7 +157,7 @@ func makePlan(
 			topology,
 			sqlInstanceIDs,
 			initialScanTimestamp,
-			previousHighWater,
+			previousReplicatedTime,
 			checkpoint,
 			jobID,
 			streamID,
@@ -208,7 +207,7 @@ func constructStreamIngestionPlanSpecs(
 	topology streamclient.Topology,
 	sqlInstanceIDs []base.SQLInstanceID,
 	initialScanTimestamp hlc.Timestamp,
-	previousHighWater hlc.Timestamp,
+	previousReplicatedTimestamp hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
 	jobID jobspb.JobID,
 	streamID streampb.StreamID,
@@ -226,13 +225,13 @@ func constructStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(sqlInstanceIDs) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
-				StreamID:                   uint64(streamID),
-				JobID:                      int64(jobID),
-				PreviousHighWaterTimestamp: previousHighWater,
-				InitialScanTimestamp:       initialScanTimestamp,
-				Checkpoint:                 checkpoint, // TODO: Only forward relevant checkpoint info
-				StreamAddress:              string(streamAddress),
-				PartitionSpecs:             make(map[string]execinfrapb.StreamIngestionPartitionSpec),
+				StreamID:                    uint64(streamID),
+				JobID:                       int64(jobID),
+				PreviousReplicatedTimestamp: previousReplicatedTimestamp,
+				InitialScanTimestamp:        initialScanTimestamp,
+				Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
+				StreamAddress:               string(streamAddress),
+				PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
 				TenantRekey: execinfrapb.TenantRekey{
 					OldID: sourceTenantID,
 					NewID: destinationTenantID,
@@ -256,7 +255,7 @@ func constructStreamIngestionPlanSpecs(
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
 	// node.
 	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{
-		HighWaterAtStart:        previousHighWater,
+		ReplicatedTimeAtStart:   previousReplicatedTimestamp,
 		TrackedSpans:            trackedSpans,
 		JobID:                   int64(jobID),
 		StreamID:                uint64(streamID),

@@ -38,18 +38,18 @@ message ReplicationProducerSpec {
 
 // StreamPartitionSpec is the stream partition specification.
 message StreamPartitionSpec {
-  // PreviousHighWaterTimestamp specifies the timestamp from which spans will
+  // PreviousReplicatedTimestamp specifies the timestamp from which spans will
   // start ingesting data in the replication job. This timestamp is empty unless
   // the replication job resumes after a progress checkpoint has been recorded.
   // While it is empty we use the InitialScanTimestamp described below.
-  util.hlc.Timestamp previous_high_water_timestamp = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp previous_replicated_timestamp = 1 [(gogoproto.nullable) = false];
 
   // InitialScanTimestamp is the timestamp at which the partition will run the
   // initial rangefeed scan before replicating further changes to the target
   // spans. This timestamp is always non-empty, but a partition will only run an
   // initial scan if no progress has been recorded prior to the current
   // resumption of the replication job. Otherwise, all spans will start
-  // ingesting data from the PreviousHighWaterTimestamp described above.
+  // ingesting data from the PreviousReplicatedTimestamp described above.
   util.hlc.Timestamp initial_scan_timestamp = 4 [(gogoproto.nullable) = false];
 
   // List of spans to stream.

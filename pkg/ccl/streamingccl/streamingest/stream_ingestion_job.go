@@ -166,22 +166,18 @@ func waitUntilProducerActive(
 
 func updateRunningStatus(
 	ctx context.Context,
-	execCtx sql.JobExecContext,
 	ingestionJob *jobs.Job,
 	status jobspb.ReplicationStatus,
 	runningStatus string,
 ) {
-	execCfg := execCtx.ExecCfg()
-	err := execCfg.InternalDB.Txn(ctx, func(
-		ctx context.Context, txn isql.Txn,
-	) error {
-		return ingestionJob.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			updateRunningStatusInternal(md, ju, status, runningStatus)
-			return nil
-		})
+	err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		updateRunningStatusInternal(md, ju, status, runningStatus)
+		return nil
 	})
 	if err != nil {
 		log.Warningf(ctx, "error when updating job running status: %s", err)
+	} else {
+		log.Infof(ctx, "%s", runningStatus)
 	}
 }
 
@@ -204,7 +200,7 @@ func completeIngestion(
 
 	streamID := details.StreamID
 	log.Infof(ctx, "completing the producer job %d", streamID)
-	updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.ReplicationCuttingOver,
+	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationCuttingOver,
 		"completing the producer job in the source cluster")
 	completeProducerJob(ctx, ingestionJob, execCtx.ExecCfg().InternalDB, true)
 
@@ -307,16 +303,18 @@ func ingestWithRetries(
 		}
 		const msgFmt = "stream ingestion waits for retrying after error: %s"
 		log.Warningf(ctx, msgFmt, err)
-		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.ReplicationError,
+		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError,
 			fmt.Sprintf(msgFmt, err))
 		retryCount++
 	}
 	if err != nil {
-		return err
+		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError,
+			fmt.Sprintf("stream ingestion encountered error and is to be paused: %s", err))
+	} else {
+		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationCuttingOver,
+			"stream ingestion finished successfully")
 	}
-	updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.ReplicationCuttingOver,
-		"stream ingestion finished successfully")
-	return nil
+	return err
 }
 
 // The ingestion job should never fail, only pause, as progress should never be lost.
@@ -325,7 +323,7 @@ func (s *streamIngestionResumer) handleResumeError(
 ) error {
 	const errorFmt = "ingestion job failed (%s) but is being paused"
 	log.Warningf(ctx, errorFmt, err)
-	updateRunningStatus(ctx, execCtx, s.job, jobspb.ReplicationError, fmt.Sprintf(errorFmt, err))
+	updateRunningStatus(ctx, s.job, jobspb.ReplicationError, fmt.Sprintf(errorFmt, err))
 	// The ingestion job is paused but the producer job will keep
 	// running until it times out. Users can still resume ingestion before
 	// the producer job times out.
@@ -433,13 +431,18 @@ func revertToCutoverTimestamp(
 func cutoverTimeIsEligibleForCutover(
 	ctx context.Context, cutoverTime hlc.Timestamp, progress *jobspb.Progress,
 ) bool {
+	streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
+	replicatedTime := streamProgress.ReplicatedTime
+
 	if cutoverTime.IsEmpty() {
 		log.Infof(ctx, "empty cutover time, no revert required")
 		return false
 	}
-	if progress.GetHighWater() == nil || progress.GetHighWater().Less(cutoverTime) {
-		log.Infof(ctx, "job with highwater %s not yet ready to revert to cutover at %s",
-			progress.GetHighWater(), cutoverTime.String())
+
+	if replicatedTime.Less(cutoverTime) {
+		log.Infof(ctx, "job with replicated time %s not yet ready to revert to cutover at %s",
+			replicatedTime,
+			cutoverTime.String())
 		return false
 	}
 	return true

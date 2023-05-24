@@ -115,7 +115,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	}
 
 	initialTimestamp := s.spec.InitialScanTimestamp
-	if s.spec.PreviousHighWaterTimestamp.IsEmpty() {
+	if s.spec.PreviousReplicatedTimestamp.IsEmpty() {
 		opts = append(opts,
 			rangefeed.WithInitialScan(func(ctx context.Context) {}),
 			rangefeed.WithScanRetryBehavior(rangefeed.ScanRetryRemaining),
@@ -132,10 +132,10 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 			rangefeed.WithOnScanCompleted(s.onInitialScanSpanCompleted),
 		)
 	} else {
-		initialTimestamp = s.spec.PreviousHighWaterTimestamp
+		initialTimestamp = s.spec.PreviousReplicatedTimestamp
 		// When resuming from cursor, advance frontier to the cursor position.
 		for _, sp := range s.spec.Spans {
-			if _, err := frontier.Forward(sp, s.spec.PreviousHighWaterTimestamp); err != nil {
+			if _, err := frontier.Forward(sp, s.spec.PreviousReplicatedTimestamp); err != nil {
 				return err
 			}
 		}

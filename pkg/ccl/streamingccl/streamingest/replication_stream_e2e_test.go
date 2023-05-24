@@ -61,7 +61,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
@@ -118,7 +118,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 	// Pause ingestion.
@@ -144,7 +144,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 
 	// Confirm that dest tenant has received the new change after resumption.
 	srcTime = c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 }
 
@@ -284,7 +284,7 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
 	cutoverTime := c.DestSysServer.Clock().Now()
-	c.WaitUntilHighWatermark(cutoverTime, jobspb.JobID(ingestionJobID))
+	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
 	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
 	cutoverFingerprint := c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 
@@ -318,7 +318,7 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 		jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
 		srcTime := c.SrcCluster.Server(0).Clock().Now()
-		c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+		c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 		c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 		if cancelAfterPaused {
@@ -388,7 +388,7 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 		jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 		jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
-		c.WaitUntilHighWatermark(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+		c.WaitUntilReplicatedTime(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
 		if cancelAfterPaused {
 			c.DestSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
 			jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -452,7 +452,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 
 	c.DestSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
 	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -541,7 +541,7 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
 
 	cutoverTime := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilHighWatermark(cutoverTime, jobspb.JobID(ingestionJobID))
+	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
 
 	// Pause ingestion.
 	c.DestSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
@@ -577,7 +577,7 @@ func TestTenantStreamingDeleteRange(t *testing.T) {
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
 	srcTime := c.SrcSysServer.Clock().Now()
-	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 	// Introduce a DeleteRange on t1 and t2.
@@ -609,7 +609,7 @@ func TestTenantStreamingDeleteRange(t *testing.T) {
 				tableSpan.Key, tableSpan.Key.Next().Next()))
 		}
 		srcTimeAfterDelRange := c.SrcSysServer.Clock().Now()
-		c.WaitUntilHighWatermark(srcTimeAfterDelRange, jobspb.JobID(ingestionJobID))
+		c.WaitUntilReplicatedTime(srcTimeAfterDelRange, jobspb.JobID(ingestionJobID))
 
 		c.RequireFingerprintMatchAtTimestamp(srcTimeAfterDelRange.AsOfSystemTime())
 		c.RequireFingerprintMatchAtTimestamp(srcTimeBeforeDelRange.AsOfSystemTime())
@@ -747,8 +747,10 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				require.True(t, frontier.LessEq(*progress.GetHighWater()))
-				frontier := progress.GetHighWater().GoTime().Round(time.Millisecond)
+
+				replicatedTime := progress.GetDetails().(*jobspb.Progress_StreamIngest).StreamIngest.ReplicatedTime
+				require.True(t, frontier.LessEq(replicatedTime))
+				frontier := replicatedTime.GoTime().Round(time.Millisecond)
 				window := frontier.Sub(rec.Timestamp.GoTime().Round(time.Millisecond))
 				require.Equal(t, time.Second, window)
 				return nil
@@ -772,7 +774,7 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 		// important because if `frontier@t2 - ReplicationTTLSeconds < t1` then we
 		// will not update the PTS record.
 		now := c.SrcCluster.Server(0).Clock().Now().Add(int64(time.Second)*2, 0)
-		c.WaitUntilHighWatermark(now, jobspb.JobID(replicationJobID))
+		c.WaitUntilReplicatedTime(now, jobspb.JobID(replicationJobID))
 
 		// Check that the producer and replication job have written a protected
 		// timestamp.
@@ -780,7 +782,7 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 		checkDestinationProtection(c, now, replicationJobID)
 
 		now2 := now.Add(time.Second.Nanoseconds(), 0)
-		c.WaitUntilHighWatermark(now2, jobspb.JobID(replicationJobID))
+		c.WaitUntilReplicatedTime(now2, jobspb.JobID(replicationJobID))
 		// Let the replication progress for a second before checking that the
 		// protected timestamp record has also been updated on the destination
 		// cluster. This update happens in the same txn in which we update the
@@ -862,8 +864,8 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	highWatermark := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilHighWatermark(highWatermark, jobspb.JobID(ingestionJobID))
+	targetReplicatedTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(targetReplicatedTime, jobspb.JobID(ingestionJobID))
 	destRegistry := c.DestCluster.Server(0).JobRegistry().(*jobs.Registry)
 	details, err := destRegistry.LoadJob(ctx, jobspb.JobID(ingestionJobID))
 	require.NoError(t, err)
@@ -894,7 +896,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	require.Equal(t, ingestionJobID, jobId)
 	require.Less(t, maxReplTime, timeutil.Now())
 	require.Less(t, protectedTime, timeutil.Now())
-	require.GreaterOrEqual(t, maxReplTime, highWatermark.GoTime())
+	require.GreaterOrEqual(t, maxReplTime, targetReplicatedTime.GoTime())
 	require.GreaterOrEqual(t, protectedTime, replicationDetails.ReplicationStartTime.GoTime())
 	require.Nil(t, cutoverTime)
 
