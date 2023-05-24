@@ -77,7 +77,7 @@ type Client interface {
 	// open its subscription to its partition of a larger stream.
 	// TODO(dt): ts -> checkpointToken.
 	Subscribe(ctx context.Context, streamID streampb.StreamID, spec SubscriptionToken,
-		initialScanTime hlc.Timestamp, previousHighWater hlc.Timestamp) (Subscription, error)
+		initialScanTime hlc.Timestamp, previousReplicatedTime hlc.Timestamp) (Subscription, error)
 
 	// Close releases all the resources used by this client.
 	Close(ctx context.Context) error

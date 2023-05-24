@@ -202,7 +202,7 @@ func (p *partitionedStreamClient) Subscribe(
 	streamID streampb.StreamID,
 	spec SubscriptionToken,
 	initialScanTime hlc.Timestamp,
-	previousHighWater hlc.Timestamp,
+	previousReplicatedTime hlc.Timestamp,
 ) (Subscription, error) {
 	_, sp := tracing.ChildSpan(ctx, "streamclient.Client.Subscribe")
 	defer sp.Finish()
@@ -212,7 +212,7 @@ func (p *partitionedStreamClient) Subscribe(
 		return nil, err
 	}
 	sps.InitialScanTimestamp = initialScanTime
-	sps.PreviousHighWaterTimestamp = previousHighWater
+	sps.PreviousReplicatedTimestamp = previousReplicatedTime
 
 	specBytes, err := protoutil.Marshal(&sps)
 	if err != nil {

@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -508,14 +509,14 @@ func (rd *replicationDriver) runWorkload(ctx context.Context) error {
 	return rd.rs.workload.runDriver(ctx, rd.c, rd.t, rd.setup)
 }
 
-func (rd *replicationDriver) waitForHighWatermark(ingestionJobID int, wait time.Duration) {
+func (rd *replicationDriver) waitForReplicatedTime(ingestionJobID int, wait time.Duration) {
 	testutils.SucceedsWithin(rd.t, func() error {
 		info, err := getStreamIngestionJobInfo(rd.setup.dst.db, ingestionJobID)
 		if err != nil {
 			return err
 		}
 		if info.GetHighWater().IsZero() {
-			return errors.New("no high watermark")
+			return errors.New("no replicated time")
 		}
 		return nil
 	}, wait)
@@ -655,7 +656,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	})
 
 	rd.t.L().Printf("waiting for replication stream to finish ingesting initial scan")
-	rd.waitForHighWatermark(ingestionJobID, rd.rs.timeout/2)
+	rd.waitForReplicatedTime(ingestionJobID, rd.rs.timeout/2)
 	rd.metrics.initialScanEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
 	rd.t.Status(fmt.Sprintf(`initial scan complete. run workload and repl. stream for another %s minutes`,
 		rd.rs.additionalDuration))
@@ -973,11 +974,8 @@ func (rrd *replResilienceDriver) getPhase() c2cPhase {
 		rrd.dstJobID).Scan(&jobStatus)
 	require.Equal(rrd.t, jobs.StatusRunning, jobs.Status(jobStatus))
 
-	progress := getJobProgress(rrd.t, rrd.setup.dst.sysSQL, rrd.dstJobID)
-	streamIngestProgress := progress.GetStreamIngest()
-	highWater := progress.GetHighWater()
-
-	if highWater == nil || highWater.IsEmpty() {
+	streamIngestProgress := getJobProgress(rrd.t, rrd.setup.dst.sysSQL, rrd.dstJobID).GetStreamIngest()
+	if streamIngestProgress.ReplicatedTime.IsEmpty() {
 		return phaseInitialScan
 	}
 	if streamIngestProgress.CutoverTime.IsEmpty() {
@@ -1135,13 +1133,16 @@ func getIngestionJobID(t test.Test, dstSQL *sqlutils.SQLRunner, dstTenantName st
 }
 
 type streamIngesitonJobInfo struct {
-	status        string
-	errMsg        string
-	highwaterTime time.Time
-	finishedTime  time.Time
+	status         string
+	errMsg         string
+	replicatedTime time.Time
+	finishedTime   time.Time
 }
 
-func (c *streamIngesitonJobInfo) GetHighWater() time.Time    { return c.highwaterTime }
+// GetHighWater returns the replicated time. The GetHighWater name is
+// retained here as this is implementing the jobInfo interface used by
+// the latency verifier.
+func (c *streamIngesitonJobInfo) GetHighWater() time.Time    { return c.replicatedTime }
 func (c *streamIngesitonJobInfo) GetFinishedTime() time.Time { return c.finishedTime }
 func (c *streamIngesitonJobInfo) GetStatus() string          { return c.status }
 func (c *streamIngesitonJobInfo) GetError() string           { return c.status }
@@ -1165,16 +1166,11 @@ func getStreamIngestionJobInfo(db *gosql.DB, jobID int) (jobInfo, error) {
 	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
 		return nil, err
 	}
-	var highwaterTime time.Time
-	highwater := progress.GetHighWater()
-	if highwater != nil {
-		highwaterTime = highwater.GoTime()
-	}
 	return &streamIngesitonJobInfo{
-		status:        status,
-		errMsg:        payload.Error,
-		highwaterTime: highwaterTime,
-		finishedTime:  time.UnixMicro(payload.FinishedMicros),
+		status:         status,
+		errMsg:         payload.Error,
+		replicatedTime: replicationutils.ReplicatedTimeFromProgress(&progress).GoTime(),
+		finishedTime:   time.UnixMicro(payload.FinishedMicros),
 	}, nil
 }
 
