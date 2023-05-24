@@ -288,4 +288,12 @@ func TestExplainPlanIsMemoryMonitored(t *testing.T) {
 	_, err = plan.ExplainVerbose()
 	require.Regexp(t, `test-sc-plan-mon: memory budget exceeded: .*`, err.Error())
 	memAcc.Clear(ctx)
+
+	// SHAPE plans don't depend on the number of elements and won't
+	// exceed the memory budget, so we don't test them for errors.
+	// Instead we only check that they do account for memory usage.
+	beforeShape := memAcc.Allocated()
+	_, _ = plan.ExplainShape()
+	require.Greater(t, memAcc.Allocated(), beforeShape)
+	memAcc.Clear(ctx)
 }

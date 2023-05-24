@@ -15,6 +15,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -208,7 +209,11 @@ func MakeCurrentStateFromDescriptors(descriptorStates []*DescriptorState) (Curre
 			stmts[stmt.StatementRank] = stmt.Statement
 		}
 		s.Authorization = cs.Authorization
+		if cs.NameMapping.ID != catid.InvalidDescID {
+			s.NameMappings = append(s.NameMappings, *protoutil.Clone(&cs.NameMapping).(*NameMapping))
+		}
 	}
+	sort.Sort(NameMappings(s.NameMappings))
 	sort.Sort(&stateAndRanks{CurrentState: &s, ranks: targetRanks})
 	var sr stmtsAndRanks
 	for rank, stmt := range stmts {
