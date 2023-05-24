@@ -204,18 +204,18 @@ message StreamIngestionDataSpec {
   // PartitionSpecs maps partition IDs to their specifications.
   map<string, StreamIngestionPartitionSpec> partition_specs = 6 [(gogoproto.nullable) = false];
 
-  // PreviousHighWaterTimestamp specifies the timestamp from which spans will
+  // PreviousReplicatedTimestamp specifies the timestamp from which spans will
   // start ingesting data in the replication job. This timestamp is empty unless
   // the replication job resumes after a progress checkpoint has been recorded.
   // While it is empty we use the InitialScanTimestamp described below.
-  optional util.hlc.Timestamp previous_high_water_timestamp = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp previous_replicated_timestamp = 2 [(gogoproto.nullable) = false];
 
   // InitialScanTimestamp is the timestamp at which the partition will run the
   // initial rangefeed scan before replicating further changes to the target
   // spans. This timestamp is always non-empty, but a partition will only run an
   // initial scan if no progress has been recorded prior to the current
   // resumption of the replication job. Otherwise, all spans will start
-  // ingesting data from the PreviousHighWaterTimestamp described above.
+  // ingesting data from the PreviousReplicatedTimestamp described above.
   optional util.hlc.Timestamp initial_scan_timestamp = 11 [(gogoproto.nullable) = false];
 
   // StreamAddress locate the stream so that a stream client can be initialized.
@@ -231,11 +231,11 @@ message StreamIngestionDataSpec {
 }
 
 message StreamIngestionFrontierSpec {
-  // HighWaterAtStart is set by the ingestion job when initializing the frontier
+  // ReplicatedTimeAtStart is set by the ingestion job when initializing the frontier
   // processor. It is used as sanity check by the frontier processor to ensure
   // that it does not receive updates at a timestamp lower than this field. This
   // consequently prevents the job progress from regressing during ingestion.
-  optional util.hlc.Timestamp high_water_at_start = 1 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp replicated_time_at_start = 1 [(gogoproto.nullable) = false];
   // TrackedSpans is the entire span set being watched. The spans do not really
   // represent KV spans but uniquely identify the partitions in the ingestion
   // stream. Once all the partitions in the ingestion stream have been resolved

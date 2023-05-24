@@ -10,7 +10,7 @@ let $start as=source-system
 SELECT clock_timestamp()::timestamp::string
 ----
 
-wait-until-high-watermark ts=$start
+wait-until-replicated-time ts=$start
 ----
 
 # The job description should be redacted.
