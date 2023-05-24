@@ -16,19 +16,19 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 2;
         │
         ├── • 2 elements transitioning toward ABSENT
         │   │
-        │   ├── • ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+        │   ├── • ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedDescID: 105 (t2)}
         │   │   │ WRITE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+        │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedDescID: 105 (t2)}
         │   │   │     rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
+        │   │   └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey-)}
         │   │         rule: "Constraint should be hidden before name"
         │   │
-        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
+        │   └── • ConstraintWithoutIndexName:{DescID: 104 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey-)}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
+        │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedDescID: 105 (t2)}
         │             rule: "Constraint should be hidden before name"
         │
         └── • 6 Mutation operations

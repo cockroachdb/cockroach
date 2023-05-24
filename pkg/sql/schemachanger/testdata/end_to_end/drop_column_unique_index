@@ -166,6 +166,22 @@ upsert descriptor #106
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": k
+  +        "2": v
+  +        "4": x
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      constraints:
+  +        "6": check_x
+  +      families:
+  +        "0": primary
+  +      id: 106
+  +      indexes:
+  +        "2": vidx
+  +        "6": test_pkey
+  +      name: test
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›
@@ -538,6 +554,22 @@ upsert descriptor #106
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": k
+  -        "2": v
+  -        "4": x
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      constraints:
+  -        "6": check_x
+  -      families:
+  -        "0": primary
+  -      id: 106
+  -      indexes:
+  -        "2": vidx
+  -        "6": test_pkey
+  -      name: test
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›

@@ -10,13 +10,13 @@ Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.p
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 7 elements transitioning toward ABSENT
-      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
-      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
-      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
-      │    │    ├── PUBLIC      → ABSENT      IndexName:{DescID: 106, Name: idx1, IndexID: 2}
-      │    │    ├── WRITE_ONLY  → DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
-      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
-      │    │    └── PUBLIC      → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1-), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 2 (idx1-)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106 (t), ColumnID: 1 (k), IndexID: 2 (idx1-)}
+      │    │    ├── PUBLIC      → ABSENT      IndexName:{DescID: 106 (t), Name: "idx1", IndexID: 2 (idx1-)}
+      │    │    ├── WRITE_ONLY  → DELETE_ONLY TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 3}
+      │    │    └── PUBLIC      → ABSENT      IndexColumn:{DescID: 106 (t), ColumnID: 1 (k), IndexID: 3}
       │    └── 11 Mutation operations
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":106}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":106}
@@ -31,9 +31,9 @@ Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.p
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 3 elements transitioning toward ABSENT
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 106, IndexID: 2}
-           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
-           │    └── PUBLIC      → ABSENT IndexData:{DescID: 106, IndexID: 3}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 106 (t), IndexID: 2 (idx1-)}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
+           │    └── PUBLIC      → ABSENT IndexData:{DescID: 106 (t), IndexID: 3}
            └── 7 Mutation operations
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":106}
