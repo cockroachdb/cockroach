@@ -4,6 +4,15 @@ CREATE TABLE t2 (a INT, b INT, d INT);
 INSERT INTO t1 VALUES (1, 11, 111), (2, 22, 222), (3, 33, 333);
 INSERT INTO t2 VALUES (1, 11, 111), (2, 22, 222), (3, 33, 333);
 
+# Need to turn declarative schema changer because function `get_body_str`
+# created below would resolve a descriptorless public schema "system.public"
+# which is not supported in declarative schema changer. Declarative schema
+# changer falls back to legacy schema changer, and the descriptor id counter is
+# increased twice. It cause the test to fail due to id inconsistency.
+skipif config local-legacy-schema-changer
+statement ok
+SET use_declarative_schema_changer = 'off'
+
 statement ok
 CREATE FUNCTION get_body_str(fn_name STRING) RETURNS STRING
 LANGUAGE SQL
@@ -13,6 +22,10 @@ AS $$
   )->'function'->'functionBody'
   FROM system.descriptor WHERE id = fn_name::regproc::int - 100000;
 $$;
+
+skipif config local-legacy-schema-changer
+statement ok
+SET use_declarative_schema_changer = 'on'
 
 # Make sure that unqualified columns names are not rewritten.
 statement ok
@@ -437,3 +450,29 @@ query T
 SELECT f_expand()
 ----
 (1,11,111,1)
+
+# Make sure view ID is used instead of source table ID.
+statement ok
+CREATE OR REPLACE VIEW v1 AS SELECT a FROM t1;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT v1.a FROM v1 ORDER BY v1.a;
+$$
+
+query I
+SELECT 'v1'::REGCLASS::INT
+----
+113
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT {TABLE:113}.a FROM {TABLE:113} ORDER BY {TABLE:113}.a;"
+
+query I
+SELECT f();
+----
+1

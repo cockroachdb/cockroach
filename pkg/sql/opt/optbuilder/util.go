@@ -820,19 +820,22 @@ func (r *columnPrefixRewriter) VisitPre(expr tree.Expr) (recurse bool, newExpr t
 			panic(err)
 		}
 		scopeCol := colI.(*scopeColumn)
-		md := r.s.builder.factory.Metadata()
-		tblID := md.ColumnMeta(scopeCol.id).Table
-		// Table ID would be zero if the scopeColumn represents a UDF input
-		// parameter. There is no need to rewrite parameter names.
-		if tblID == 0 {
-			return false, expr
+		tblStableID := scopeCol.viewID
+		if tblStableID == 0 {
+			md := r.s.builder.factory.Metadata()
+			tblID := md.ColumnMeta(scopeCol.id).Table
+			// Table ID would be zero if the scopeColumn represents a UDF input
+			// parameter. There is no need to rewrite parameter names.
+			if tblID == 0 {
+				return false, expr
+			}
+			tbl := md.Table(tblID)
+			// Do not rewrite if the table is a system table or virtual table.
+			if tbl.IsSystemTable() || tbl.IsVirtualTable() {
+				return false, expr
+			}
+			tblStableID = md.Table(tblID).ID()
 		}
-		tbl := md.Table(tblID)
-		// Do not rewrite if the table is a system table or virtual table.
-		if tbl.IsSystemTable() || tbl.IsVirtualTable() {
-			return false, expr
-		}
-		tblStableID := md.Table(tblID).ID()
 
 		if scopeCol.table.CatalogName != "" && scopeCol.table.SchemaName != "" {
 			// If a column is a reference from a real table.
