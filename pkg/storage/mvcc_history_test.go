@@ -550,7 +550,7 @@ func TestMVCCHistories(t *testing.T) {
 						for i := range d.CmdArgs {
 							buf.Printf(" %s", &d.CmdArgs[i])
 						}
-						buf.Printf("\n")
+						_ = buf.WriteByte('\n')
 					}
 
 					// Record the engine and evaluated stats before the command, so
