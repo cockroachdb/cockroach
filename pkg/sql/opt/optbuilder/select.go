@@ -380,6 +380,7 @@ func (b *Builder) buildView(
 		outScope.cols[i].table = *viewName
 		if hasCols {
 			outScope.cols[i].name = scopeColName(view.ColumnName(i))
+			outScope.cols[i].viewID = view.ID()
 		}
 	}
 

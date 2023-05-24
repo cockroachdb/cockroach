@@ -270,3 +270,24 @@ query T
 SELECT f_expand()
 ----
 (1,11,1)
+
+# Make sure view ID is used instead of source table ID.
+statement ok
+CREATE OR REPLACE VIEW v1 AS SELECT a FROM t1;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT a FROM v1 ORDER BY a;
+$$
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT {TABLE:112}.a FROM {TABLE:112} ORDER BY {TABLE:112}.a;"
+
+query I
+SELECT f();
+----
+1

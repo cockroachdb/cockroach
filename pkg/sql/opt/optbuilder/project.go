@@ -219,21 +219,25 @@ func (b *Builder) buildProjectionList(inScope *scope, projectionsScope *scope) {
 func (b *Builder) maybeRewriteColumnPrefix(expr tree.Expr) tree.Expr {
 	ret, err := tree.SimpleVisit(expr, func(colExpr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		if scopeCol, ok := colExpr.(*scopeColumn); ok {
-			md := b.factory.Metadata()
-			tblID := md.ColumnMeta(scopeCol.id).Table
-			// Table ID would be zero if the scopeColumn represents a UDF input
-			// parameter. There is no need to rewrite parameter names.
-			if tblID == 0 {
-				return false, colExpr, nil
-			}
-			tbl := md.Table(tblID)
-			if tbl.IsSystemTable() || tbl.IsVirtualTable() {
-				return false, colExpr, nil
+			tblStableID := scopeCol.viewID
+			if tblStableID == 0 {
+				md := b.factory.Metadata()
+				tblID := md.ColumnMeta(scopeCol.id).Table
+				// Table ID would be zero if the scopeColumn represents a UDF input
+				// parameter. There is no need to rewrite parameter names.
+				if tblID == 0 {
+					return false, colExpr, nil
+				}
+				tbl := md.Table(tblID)
+				if tbl.IsSystemTable() || tbl.IsVirtualTable() {
+					return false, colExpr, nil
+				}
+				tblStableID = md.Table(tblID).ID()
 			}
 			// If a column is a reference from a real table.
 			if scopeCol.table.CatalogName != "" && scopeCol.table.SchemaName != "" {
 				return false, &tree.ColumnNameRef{
-					Table:      &tree.TableIDRef{ID: int64(tbl.ID())},
+					Table:      &tree.TableIDRef{ID: int64(tblStableID)},
 					ColumnName: scopeCol.name.ReferenceName(),
 				}, nil
 			} else {
