@@ -39,3 +39,25 @@ SELECT * FROM [SHOW REGIONS FROM DATABASE d] ORDER BY region;
 d eu-central-1 false false {eu-central-1}
 d us-east-1 true false {us-east1}
 d us-west-1 false false {us-west1}
+
+# Now create a locality aware backup and ensure that the SHOW command correctly shows the
+# backup.
+exec-sql
+BACKUP DATABASE d INTO ('nodelocal://1/database_backup_locality_aware_default?COCKROACH_LOCALITY=default', 'nodelocal://1/database_backup_locality_aware_west?COCKROACH_LOCALITY=region=us-west-1', 'nodelocal://1/database_backup_locality_aware_central?COCKROACH_LOCALITY=region=eu-central-1');
+----
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN ('nodelocal://1/database_backup_locality_aware_default?COCKROACH_LOCALITY=default', 'nodelocal://1/database_backup_locality_aware_west?COCKROACH_LOCALITY=region=us-west-1', 'nodelocal://1/database_backup_locality_aware_central?COCKROACH_LOCALITY=region=eu-central-1');
+----
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP LATEST IN ('nodelocal://1/database_backup_locality_aware_default?COCKROACH_LOCALITY=default', 'nodelocal://1/database_backup_locality_aware_west?COCKROACH_LOCALITY=region=us-west-1', 'nodelocal://1/database_backup_locality_aware_central?COCKROACH_LOCALITY=region=eu-central-1')];
+----
+d database full
+public schema full
+crdb_internal_region type full
+_crdb_internal_region type full
+d database incremental
+public schema incremental
+crdb_internal_region type incremental
+_crdb_internal_region type incremental
