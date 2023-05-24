@@ -118,6 +118,16 @@ const databaseDetailsReducerObj = new KeyedCachedDataReducer(
   moment.duration(10, "m"),
 );
 
+export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
+
+const databaseTablesReducerObj = new CachedDataReducer(
+  clusterUiApi.getDatabaseTables,
+  "databaseTables",
+  null,
+  moment.duration(10, "m"),
+);
+export const refreshDatabaseTables = databaseTablesReducerObj.refresh;
+
 const hotRangesRequestToID = (req: api.HotRangesRequestMessage) =>
   req.page_token;
 
@@ -126,8 +136,6 @@ export const hotRangesReducerObj = new PaginatedCachedDataReducer(
   "hotRanges",
   hotRangesRequestToID,
 );
-
-export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
 
 export const refreshHotRanges = hotRangesReducerObj.refresh;
 
@@ -539,6 +547,9 @@ export interface APIReducersState {
   databaseDetails: KeyedCachedDataReducerState<
     clusterUiApi.SqlApiResponse<clusterUiApi.DatabaseDetailsResponse>
   >;
+  databaseTables: CachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.DatabaseTablesResponse>
+  >;
   tableDetails: KeyedCachedDataReducerState<
     clusterUiApi.SqlApiResponse<clusterUiApi.TableDetailsResponse>
   >;
@@ -601,6 +612,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [databasesReducerObj.actionNamespace]: databasesReducerObj.reducer,
   [databaseDetailsReducerObj.actionNamespace]:
     databaseDetailsReducerObj.reducer,
+  [databaseTablesReducerObj.actionNamespace]:
+  databaseTablesReducerObj.reducer,
   [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
   [indexStatsReducerObj.actionNamespace]: indexStatsReducerObj.reducer,
   [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,

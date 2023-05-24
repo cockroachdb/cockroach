@@ -16,7 +16,7 @@ import {
   SqlApiQueryResponse,
   SqlApiResponse,
   SqlExecutionErrorMessage,
-  SqlExecutionRequest,
+  SqlExecutionRequest, SqlExecutionResponse, sqlResultsAreEmpty,
   SqlStatement,
   SqlTxnResult,
   txnResultIsEmpty,
@@ -131,7 +131,7 @@ const getDatabaseGrantsQuery: DatabaseDetailsQuery<DatabaseGrantsRow> = {
 };
 
 // Database Tables
-type DatabaseTablesResponse = {
+export type DatabaseTablesResponse = {
   tables: string[];
 };
 
@@ -435,3 +435,54 @@ async function fetchDatabaseDetails(
     "retrieving database details information",
   );
 }
+
+const getDatabaseTablesQueryResponse = {
+  createStmt: (dbName: string) => {
+    return {
+      sql: Format(
+        `SELECT table_schema, table_name
+         FROM %1.information_schema.tables
+         WHERE table_type != 'SYSTEM VIEW'
+         ORDER BY table_name`,
+        [new Identifier(dbName)],
+      ),
+    };
+  },
+  toDatabaseTablesResponse: (
+    result: SqlExecutionResponse<DatabaseTablesRow>,
+  ): DatabaseTablesResponse => {
+    let resp: DatabaseTablesResponse = { tables: [] };
+    if (!sqlResultsAreEmpty(result)) {
+      resp.tables = result.execution.txn_results[0].rows.map(row => {
+        const escTableName = new QualifiedIdentifier([
+          row.table_schema,
+          row.table_name,
+        ]).SQLString();
+        return `${escTableName}`;
+      });
+    }
+    return resp;
+  },
+};
+
+export async function getDatabaseTables(
+  databaseName: string,
+  timeout?: moment.Duration,
+): Promise<SqlApiResponse<DatabaseTablesResponse>> {
+  return withTimeout(fetchDatabaseTables(databaseName), timeout);
+}
+
+async function fetchDatabaseTables(
+  databaseName: string
+): Promise<SqlApiResponse<DatabaseTablesResponse>> {
+  const req: SqlExecutionRequest = {
+    execute: true,
+    statements: [getDatabaseTablesQueryResponse.createStmt(databaseName)],
+    database: databaseName,
+    max_result_size: LARGE_RESULT_SIZE,
+  };
+  const result = await executeInternalSql<DatabaseTablesRow>(req);
+  const resp = getDatabaseTablesQueryResponse.toDatabaseTablesResponse(result);
+  return formatApiResult(resp, result.error, "retrieving database tables");
+}
+
