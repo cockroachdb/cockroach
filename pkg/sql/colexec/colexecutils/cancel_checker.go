@@ -12,11 +12,13 @@ package colexecutils
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 )
 
 // CancelChecker is a colexecop.Operator that checks whether query cancellation
@@ -28,10 +30,7 @@ type CancelChecker struct {
 	colexecop.OneInputNode
 	colexecop.InitHelper
 	colexecop.NonExplainable
-
-	// Number of times check() has been called since last context cancellation
-	// check.
-	callsSinceLastCheck uint32
+	done uint32 // Set when underlying context is done; accessed atomically.
 }
 
 var _ colexecop.Operator = &CancelChecker{}
@@ -46,6 +45,16 @@ func (c *CancelChecker) Init(ctx context.Context) {
 	if !c.InitHelper.Init(ctx) {
 		return
 	}
+
+	if c.Ctx.Done() != nil {
+		if err := ctxutil.WhenDone(ctx, func(err error) {
+			atomic.StoreUint32(&c.done, 1)
+		}); err != nil {
+			// err can only be non nil if Done() is nil, which we know is false.
+			panic(err)
+		}
+	}
+
 	if c.Input != nil {
 		// In some cases, the cancel checker is used as a utility to provide
 		// Check*() methods, and the input remains nil then.
@@ -55,35 +64,15 @@ func (c *CancelChecker) Init(ctx context.Context) {
 
 // Next is part of colexecop.Operator interface.
 func (c *CancelChecker) Next() coldata.Batch {
-	c.CheckEveryCall()
+	c.Check()
 	return c.Input.Next()
 }
 
-// Interval of Check() calls to wait between checks for context cancellation.
-// The value is a power of 2 to allow the compiler to use bitwise AND instead
-// of division.
-const cancelCheckInterval = 1024
-
-// Check panics with a query canceled error if the associated query has been
-// canceled. The check is performed on every cancelCheckInterval'th call. This
-// should be used only during long-running operations.
-func (c *CancelChecker) Check() {
-	if c.callsSinceLastCheck%cancelCheckInterval == 0 {
-		c.CheckEveryCall()
-	}
-
-	// Increment. This may rollover when the 32-bit capacity is reached, but
-	// that's all right.
-	c.callsSinceLastCheck++
-}
-
-// CheckEveryCall panics with query canceled error (which will be caught at the
+// Check panics with query canceled error (which will be caught at the
 // materializer level and will be propagated forward as metadata) if the
-// associated query has been canceled. The check is performed on every call.
-func (c *CancelChecker) CheckEveryCall() {
-	select {
-	case <-c.Ctx.Done():
+// associated query has been canceled.
+func (c *CancelChecker) Check() {
+	if atomic.LoadUint32(&c.done) != 0 {
 		colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
-	default:
 	}
 }
