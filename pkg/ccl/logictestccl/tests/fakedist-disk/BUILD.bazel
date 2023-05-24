@@ -15,7 +15,7 @@ go_test(
     exec_properties = {
         "Pool": "large",
     },
-    shard_count = 5,
+    shard_count = 6,
     tags = [
         "ccl_test",
         "cpu:2",
