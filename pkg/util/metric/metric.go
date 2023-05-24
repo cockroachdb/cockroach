@@ -372,11 +372,16 @@ func (h *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 func (h *Histogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
 	h.windowed.Lock()
 	defer h.windowed.Unlock()
-	m := &prometheusgo.Metric{}
-	if err := h.windowed.cur.Write(m); err != nil {
+	cur := &prometheusgo.Metric{}
+	prev := &prometheusgo.Metric{}
+	if err := h.windowed.cur.Write(cur); err != nil {
 		panic(err)
 	}
-	return m
+	if err := h.windowed.prev.Write(prev); err != nil {
+		panic(err)
+	}
+	MergeWindowedHistogram(cur.Histogram, prev.Histogram)
+	return cur
 }
 
 // GetMetadata returns the metric's metadata including the Prometheus
@@ -879,6 +884,15 @@ func (g *GaugeFloat64) GetMetadata() Metadata {
 	baseMetadata := g.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
 	return baseMetadata
+}
+
+// MergeWindowedHistogram
+// NB: Buckets on each histogram must be the same
+func MergeWindowedHistogram(cur *prometheusgo.Histogram, prev *prometheusgo.Histogram) {
+	for i, bucket := range cur.Bucket {
+		count := *bucket.CumulativeCount + *prev.Bucket[i].CumulativeCount
+		*bucket.CumulativeCount = count
+	}
 }
 
 // ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
