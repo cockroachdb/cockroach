@@ -1374,10 +1374,8 @@ $(UI_TS_CCL) $(UI_TS_OSS):
 
 STYLINT            := ./node_modules/.bin/stylint
 TSC                := ./node_modules/.bin/tsc
-KARMA              := ./node_modules/.bin/karma
 WEBPACK            := ./node_modules/.bin/webpack
 WEBPACK_DEV_SERVER := ./node_modules/.bin/webpack-dev-server
-WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 
 .PHONY: ui-generate
 ui-generate: pkg/ui/assets.ccl.installed
