@@ -4363,7 +4363,7 @@ CREATE TABLE crdb_internal.zones (
 					continue
 				}
 			} else if zoneSpecifier.TableOrIndex.Table.ObjectName != "" {
-				tableEntry, err := p.LookupTableByID(ctx, descpb.ID(id))
+				tableEntry, err := p.Descriptors().ByID(p.txn).WithoutDropped().Get().Table(ctx, descpb.ID(id))
 				if err != nil {
 					return err
 				}
