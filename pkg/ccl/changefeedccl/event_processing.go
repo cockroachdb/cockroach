@@ -250,11 +250,6 @@ func newKVEventToRowConsumer(
 		}
 	}
 
-	encodingOpts, err := details.Opts.GetEncodingOptions()
-	if err != nil {
-		return nil, err
-	}
-
 	return &kvEventToRowConsumer{
 		frontier:             frontier,
 		encoder:              encoder,
