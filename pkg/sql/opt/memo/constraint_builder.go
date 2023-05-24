@@ -27,9 +27,9 @@ import (
 // expression. A "tight" boolean is also returned which is true if the
 // constraint is exactly equivalent to the expression.
 func BuildConstraints(
-	e opt.ScalarExpr, md *opt.Metadata, evalCtx *eval.Context,
+	e opt.ScalarExpr, md *opt.Metadata, evalCtx *eval.Context, skipExtraConstraints bool,
 ) (_ *constraint.Set, tight bool) {
-	cb := constraintsBuilder{md: md, evalCtx: evalCtx}
+	cb := constraintsBuilder{md: md, evalCtx: evalCtx, skipExtraConstraints: skipExtraConstraints}
 	return cb.buildConstraints(e)
 }
 
@@ -49,9 +49,18 @@ var contradiction = constraint.Contradiction
 //
 // A constraint is "tight" if it is exactly equivalent to the expression. A
 // constraint that is not tight is weaker than the expression.
+//
+// A `skipExtraConstraints` value of `true` instructs the constraints builder to
+// avoid building extra constraints when a single tight constraint is sufficient
+// to fully represent an expression. For example, `buildConstraintForTupleIn`
+// called on `(a, b, c) IN ((1,2,3), (4,5,6))` builds a constraint on `(a, b,
+// c)`, and also individually on columns `(a)`, `(b)` and `(c)`.
+// When `skipExtraConstraints` is true, only the constraint on `(a, b, c)` is
+// built.
 type constraintsBuilder struct {
-	md      *opt.Metadata
-	evalCtx *eval.Context
+	md                   *opt.Metadata
+	evalCtx              *eval.Context
+	skipExtraConstraints bool
 }
 
 // buildSingleColumnConstraint creates a constraint set implied by
@@ -331,24 +340,26 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 	// TODO(justin): remove this when #27018 is resolved.
 	// We already have a constraint starting with the first column: the
 	// multi-column constraint we added above.
-	for i := 1; i < len(colIdxsInLHS); i++ {
-		var spans constraint.Spans
-		keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
-		keyCtx.Columns.InitSingle(constrainedCols[i])
-		for _, elem := range rhs.Elems {
-			// Element must be tuple (checked above).
-			constVal := elem.(*TupleExpr).Elems[colIdxsInLHS[i]]
-			datum := ExtractConstDatum(constVal)
-			key := constraint.MakeKey(datum)
-			var sp constraint.Span
-			sp.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
-			spans.Append(&sp)
-		}
+	if !cb.skipExtraConstraints {
+		for i := 1; i < len(colIdxsInLHS); i++ {
+			var spans constraint.Spans
+			keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+			keyCtx.Columns.InitSingle(constrainedCols[i])
+			for _, elem := range rhs.Elems {
+				// Element must be tuple (checked above).
+				constVal := elem.(*TupleExpr).Elems[colIdxsInLHS[i]]
+				datum := ExtractConstDatum(constVal)
+				key := constraint.MakeKey(datum)
+				var sp constraint.Span
+				sp.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+				spans.Append(&sp)
+			}
 
-		spans.SortAndMerge(&keyCtx)
-		var c constraint.Constraint
-		c.Init(&keyCtx, &spans)
-		con = con.Intersect(cb.evalCtx, constraint.SingleConstraint(&c))
+			spans.SortAndMerge(&keyCtx)
+			var c constraint.Constraint
+			c.Init(&keyCtx, &spans)
+			con = con.Intersect(cb.evalCtx, constraint.SingleConstraint(&c))
+		}
 	}
 
 	return con, tight
