@@ -75,6 +75,13 @@ type scopeColumn struct {
 	// exprStr contains a stringified representation of expr, or the original
 	// column name if expr is nil. It is populated lazily inside getExprStr().
 	exprStr string
+
+	// viewID is non-zero if the scopeColumn was built from a View. This is
+	// helpful, for the time being, for rewriting table/view names in UDF/View
+	// query as ID references. This is because we build views as select queries
+	// and the generated scopeColumns are linked to the source tables, but we need
+	// the view id to do the rewriting.
+	viewID cat.StableID
 }
 
 // columnVisibility is an extension of cat.ColumnVisibility.
