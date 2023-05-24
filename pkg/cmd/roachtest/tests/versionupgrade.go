@@ -138,32 +138,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			return c.RunE(ctx, option.NodeListOption{randomNode}, runCmd.String())
 		},
 	)
-	mvt.AfterUpgradeFinalized(
-		"check if GC TTL is pinned",
-		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			// TODO(irfansharif): This can be removed when the predecessor version
-			// in this test is v23.1, where the default is 4h. This test was only to
-			// make sure that existing clusters that upgrade to 23.1 retained their
-			// existing GC TTL.
-			l.Printf("checking if GC TTL is pinned to 24h")
-			var ttlSeconds int
-			query := `
-	SELECT
-		(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', raw_config_protobuf)->'gc'->'ttlSeconds')::INT
-	FROM crdb_internal.zones
-	WHERE target = 'RANGE default'
-	LIMIT 1
-`
-			if err := h.QueryRow(rng, query).Scan(&ttlSeconds); err != nil {
-				return fmt.Errorf("error querying GC TTL: %w", err)
-			}
-			expectedTTL := 24 * 60 * 60 // NB: 24h is what's used in the fixture
-			if ttlSeconds != expectedTTL {
-				return fmt.Errorf("unexpected GC TTL: actual (%d) != expected (%d)", ttlSeconds, expectedTTL)
-			}
-			return nil
-		},
-	)
 
 	mvt.Run()
 }
