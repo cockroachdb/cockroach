@@ -28,7 +28,9 @@ func (p *planner) SetSessionCharacteristics(
 		switch n.Modes.Isolation {
 		case tree.UnspecifiedIsolation:
 		// Nothing to do.
-		case tree.SnapshotIsolation:
+		case tree.ReadUncommittedIsolation:
+			m.SetDefaultTransactionIsolationLevel(tree.ReadCommittedIsolation)
+		case tree.RepeatableReadIsolation, tree.SnapshotIsolation:
 			level := tree.SerializableIsolation
 			if allowSnapshotIsolation.Get(&p.execCfg.Settings.SV) {
 				level = tree.SnapshotIsolation

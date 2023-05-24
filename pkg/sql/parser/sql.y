@@ -6886,7 +6886,7 @@ var_list:
 iso_level:
   READ UNCOMMITTED
   {
-    $$.val = tree.SerializableIsolation
+    $$.val = tree.ReadUncommittedIsolation
   }
 | READ COMMITTED
   {
@@ -6898,7 +6898,7 @@ iso_level:
   }
 | REPEATABLE READ
   {
-    $$.val = tree.SerializableIsolation
+    $$.val = tree.RepeatableReadIsolation
   }
 | SERIALIZABLE
   {
