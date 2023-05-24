@@ -3451,6 +3451,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// Verify that during IMPORT INTO the table is offline.
 	t.Run("offline-state", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 89999, num_replicas = 5;`)
 		defer dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
@@ -3488,6 +3489,18 @@ func TestImportIntoCSV(t *testing.T) {
 			err := sqlDB.DB.QueryRowContext(ctx, `SELECT 1 FROM t`).Scan(&unused)
 			if !testutils.IsError(err, `relation "t" is offline: importing`) {
 				return err
+			}
+			// Validate that scanning zone configurations does not result in a error
+			row := sqlDB.DB.QueryRowContext(ctx, "SELECT count(*) FROM [SHOW ZONE CONFIGURATIONS] WHERE target = 'TABLE defaultdb.public.t'")
+			if row.Err() != nil {
+				return row.Err()
+			}
+			var count = 0
+			if err := row.Scan(&count); err != nil {
+				return err
+			}
+			if count != 1 {
+				return errors.AssertionFailedf("expected number of rows for zone configs is not correct (expected 1, got %d)", count)
 			}
 			return nil
 		})
