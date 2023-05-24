@@ -113,5 +113,3 @@ statement ok
 DROP TABLE t;
 
 
-
-
