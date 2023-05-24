@@ -210,7 +210,6 @@ func runFailoverPartialLeaseGateway(
 	// Start a worker to fail and recover partial partitions between n4,n5
 	// (leases) and n6,n7 (gateways), both fully and individually, for 3 cycles.
 	// Leases are only placed on n4.
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -239,6 +238,8 @@ func runFailoverPartialLeaseGateway(
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+
+				failer.Ready(ctx, m)
 
 				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -379,7 +380,6 @@ func runFailoverPartialLeaseLeader(
 
 	// Start a worker to fail and recover partial partitions between each pair of
 	// n4-n6 for 3 cycles (9 failures total).
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -394,6 +394,8 @@ func runFailoverPartialLeaseLeader(
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+
+				failer.Ready(ctx, m)
 
 				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -514,7 +516,6 @@ func runFailoverPartialLeaseLiveness(
 	// Start a worker to fail and recover partial partitions between n4 (liveness)
 	// and workload leaseholders n5-n7 for 1 minute each, 3 times per node for 9
 	// times total.
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -529,6 +530,8 @@ func runFailoverPartialLeaseLiveness(
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+
+				failer.Ready(ctx, m)
 
 				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -656,7 +659,6 @@ func runFailoverNonSystem(
 	})
 
 	// Start a worker to fail and recover n4-n6 in order.
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -671,6 +673,8 @@ func runFailoverNonSystem(
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+
+				failer.Ready(ctx, m)
 
 				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -802,7 +806,6 @@ func runFailoverLiveness(
 	})
 
 	// Start a worker to fail and recover n4.
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -816,6 +819,8 @@ func runFailoverLiveness(
 			case <-ctx.Done():
 				return ctx.Err()
 			}
+
+			failer.Ready(ctx, m)
 
 			randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -946,7 +951,6 @@ func runFailoverSystemNonLiveness(
 	})
 
 	// Start a worker to fail and recover n4-n6 in order.
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -961,6 +965,8 @@ func runFailoverSystemNonLiveness(
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+
+				failer.Ready(ctx, m)
 
 				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -1097,7 +1103,8 @@ type Failer interface {
 	// Setup prepares the failer. It is called before the cluster is started.
 	Setup(ctx context.Context)
 
-	// Ready is called when the cluster is ready, with a running workload.
+	// Ready is called some time before failing each node, when the cluster and
+	// workload is running and after recovering the previous node failure if any.
 	Ready(ctx context.Context, m cluster.Monitor)
 
 	// Cleanup cleans up when the test exits. This is needed e.g. when the cluster
@@ -1312,10 +1319,13 @@ func (f *pauseFailer) CanUseLocal() bool       { return true }
 func (f *pauseFailer) Setup(context.Context)   {}
 func (f *pauseFailer) Cleanup(context.Context) {}
 
-func (f *pauseFailer) Ready(ctx context.Context, m cluster.Monitor) {
-	// The process pause can trip the disk stall detector, so we disable it.
+func (f *pauseFailer) Ready(ctx context.Context, _ cluster.Monitor) {
+	// The process pause can trip the disk stall detector, so we disable it. We
+	// could let it fire, but we'd like to see if the node can recover from the
+	// pause and keep working.
 	conn := f.c.Conn(ctx, f.t.L(), 1)
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING storage.max_sync_duration.fatal.enabled = false`)
+	_, err := conn.ExecContext(ctx,
+		`SET CLUSTER SETTING storage.max_sync_duration.fatal.enabled = false`)
 	require.NoError(f.t, err)
 }
 
@@ -1325,6 +1335,13 @@ func (f *pauseFailer) Fail(ctx context.Context, nodeID int) {
 
 func (f *pauseFailer) Recover(ctx context.Context, nodeID int) {
 	f.c.Signal(ctx, f.t.L(), 18, f.c.Node(nodeID)) // SIGCONT
+
+	// Re-enable disk stall detector, in case we do a disk stall failure after
+	// this (e.g. in chaos tests).
+	conn := f.c.Conn(ctx, f.t.L(), 1)
+	_, err := conn.ExecContext(ctx,
+		`SET CLUSTER SETTING storage.max_sync_duration.fatal.enabled = true`)
+	require.NoError(f.t, err)
 }
 
 // waitForUpreplication waits for upreplication of ranges that satisfy the
