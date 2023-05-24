@@ -12,7 +12,6 @@ package concurrency
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"time"
 
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -497,10 +497,10 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 			// not persist this, but still preserve the local timestamp when the
 			// adjusting the intent, accepting that the intent would then no longer
 			// round-trip and would lose the local timestamp if rewritten later.
-			log.VEventf(ctx, 2, "pushing timestamp of txn %s above %s", ws.txn.ID.Short(), h.Timestamp)
+			log.VEventf(ctx, 2, "pushing timestamp of txn %s above %s", ws.txn.Short(), h.Timestamp)
 		} else {
 			pushType = kvpb.PUSH_ABORT
-			log.VEventf(ctx, 2, "pushing txn %s to abort", ws.txn.ID.Short())
+			log.VEventf(ctx, 2, "pushing txn %s to abort", ws.txn.Short())
 		}
 
 	case lock.WaitPolicy_Error:
@@ -510,7 +510,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// lock, but we push using a PUSH_TOUCH to immediately return an error
 		// if the lock hold is still active.
 		pushType = kvpb.PUSH_TOUCH
-		log.VEventf(ctx, 2, "pushing txn %s to check if abandoned", ws.txn.ID.Short())
+		log.VEventf(ctx, 2, "pushing txn %s to check if abandoned", ws.txn.Short())
 
 	default:
 		log.Fatalf(ctx, "unexpected WaitPolicy: %v", req.WaitPolicy)
@@ -698,7 +698,7 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 	// the caller of this function cancels the push.
 	h := w.pushHeader(req)
 	pushType := kvpb.PUSH_ABORT
-	log.VEventf(ctx, 3, "pushing txn %s to detect request deadlock", ws.txn.ID.Short())
+	log.VEventf(ctx, 3, "pushing txn %s to detect request deadlock", ws.txn.Short())
 
 	_, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
 	if err != nil {
@@ -1268,12 +1268,12 @@ func logResolveIntent(ctx context.Context, intent roachpb.LockUpdate) {
 	if !log.ExpensiveLogEnabled(ctx, 2) {
 		return
 	}
-	var obsStr string
+	var obsStr redact.RedactableString
 	if obs := intent.ClockWhilePending; obs != (roachpb.ObservedTimestamp{}) {
-		obsStr = fmt.Sprintf(" and clock observation {%d %v}", obs.NodeID, obs.Timestamp)
+		obsStr = redact.Sprintf(" and clock observation {%d %v}", obs.NodeID, obs.Timestamp)
 	}
 	log.VEventf(ctx, 2, "resolving intent %s for txn %s with %s status%s",
-		intent.Key, intent.Txn.ID.Short(), intent.Status, obsStr)
+		intent.Key, intent.Txn.Short(), intent.Status, obsStr)
 }
 
 func minDuration(a, b time.Duration) time.Duration {
