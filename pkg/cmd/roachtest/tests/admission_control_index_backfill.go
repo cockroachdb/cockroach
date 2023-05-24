@@ -29,7 +29,7 @@ import (
 
 func registerIndexBackfill(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
-		4, /* nodeCount */
+		10, /* nodeCount */
 		spec.CPU(8),
 		spec.Zones("us-east1-b"),
 		spec.VolumeSize(500),
@@ -39,9 +39,11 @@ func registerIndexBackfill(r registry.Registry) {
 	clusterSpec.GCEMinCPUPlatform = "Intel Ice Lake"
 	clusterSpec.GCEVolumeType = "pd-ssd"
 
+	// XXX: Subsume https://github.com/cockroachdb/cockroach/pull/90005/files
 	r.Add(registry.TestSpec{
-		Name:  "admission-control/index-backfill",
-		Owner: registry.OwnerAdmissionControl,
+		Name:    "admission-control/index-backfill",
+		Timeout: 6 * time.Hour,
+		Owner:   registry.OwnerAdmissionControl,
 		// TODO(irfansharif): Reduce to weekly cadence once stabilized.
 		// Tags:            registry.Tags(`weekly`),
 		Cluster:         clusterSpec,
@@ -77,7 +79,9 @@ func registerIndexBackfill(r registry.Registry) {
 				t.L().Printf("no existing snapshots found for %s (%s), doing pre-work",
 					t.Name(), t.SnapshotPrefix())
 
-				// XXX: Do pre-work. Set up tpc-e dataset.
+				// Set up TPC-E with 100k customers. Do so using a published
+				// CRDB release, since we'll use this state to generate disk
+				// snapshots.
 				runTPCE(ctx, t, c, tpceOptions{
 					start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						pred, err := version.PredecessorVersion(*t.BuildVersion())
@@ -102,21 +106,21 @@ func registerIndexBackfill(r registry.Registry) {
 							t.Fatal(err)
 						}
 					},
-					customers:          1_000,
+					customers:          100_000,
 					disablePrometheus:  true,
 					setupType:          usingTPCEInit,
-					estimatedSetupTime: 20 * time.Minute,
+					estimatedSetupTime: 4 * time.Hour,
 					nodes:              crdbNodes,
 					owner:              registry.OwnerAdmissionControl,
 					cpus:               clusterSpec.CPUs,
 					ssds:               1,
 					onlySetup:          true,
-					timeout:            4 * time.Hour,
 				})
 
 				// Stop all nodes before capturing cluster snapshots.
 				c.Stop(ctx, t.L(), option.DefaultStopOpts())
 
+				// Create the aforementioned snapshots.
 				if err := c.CreateSnapshot(ctx, t.SnapshotPrefix()); err != nil {
 					t.Fatal(err)
 				}
@@ -135,8 +139,8 @@ func registerIndexBackfill(r registry.Registry) {
 				t.Fatal(err)
 			}
 
-			// XXX: Run the workload. Run index-backfills during.
-
+			// Run the foreground TPC-E workload. Run a large index backfill
+			// while it's running.
 			runTPCE(ctx, t, c, tpceOptions{
 				start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
@@ -145,17 +149,39 @@ func registerIndexBackfill(r registry.Registry) {
 						c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Node(i))
 					}
 				},
-				customers:        1_000,
+				customers:        100_000,
+				activeCustomers:  20_000,
+				threads:          400,
+				skipCleanup:      true,
 				ssds:             1,
 				setupType:        usingExistingTPCEData,
 				nodes:            clusterSpec.NodeCount - 1,
 				owner:            registry.OwnerAdmissionControl,
 				cpus:             clusterSpec.CPUs,
 				prometheusConfig: promCfg,
-				timeout:          4 * time.Hour,
 				during: func(ctx context.Context) error {
-					return nil // XXX: run index backfills
+					duration := 5 * time.Minute
+					t.Status(fmt.Sprintf("recording baseline performance (<%s)", duration))
+					time.Sleep(duration)
+
+					// Choose an index creation that takes ~10-12 minutes.
+					t.Status(fmt.Sprintf("starting index creation (<%s)", duration*6))
+
+					db := c.Conn(ctx, t.L(), 1)
+					defer db.Close()
+
+					if _, err := db.ExecContext(ctx,
+						fmt.Sprintf("CREATE INDEX index_%s ON tpce.cash_transaction (ct_dts)",
+							time.Now().Format("20060102_T150405"),
+						),
+					); err != nil {
+						t.Fatalf("failed to create index: %v", err)
+					}
+
+					t.Status("index creation complete, waiting for workload to finish")
+					return nil
 				},
+				workloadDuration: time.Hour,
 			})
 		},
 	})

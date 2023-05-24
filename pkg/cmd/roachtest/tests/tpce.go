@@ -36,17 +36,21 @@ type tpceSpec struct {
 }
 
 type tpceCmdOptions struct {
-	customers int
-	racks     int
-	duration  time.Duration
-	threads   int
+	customers       int
+	activeCustomers int
+	racks           int
+	duration        time.Duration
+	threads         int
+	skipCleanup     bool
 }
 
 func (to tpceCmdOptions) AddCommandOptions(cmd *roachtestutil.Command) {
 	cmd.MaybeFlag(to.customers != 0, "customers", to.customers)
+	cmd.MaybeFlag(to.activeCustomers != 0, "active-customers", to.activeCustomers)
 	cmd.MaybeFlag(to.racks != 0, "racks", to.racks)
 	cmd.MaybeFlag(to.duration != 0, "duration", to.duration)
 	cmd.MaybeFlag(to.threads != 0, "threads", to.threads)
+	cmd.MaybeFlag(to.skipCleanup, "skip-cleanup", "")
 }
 
 func initTPCESpec(
@@ -116,6 +120,10 @@ type tpceOptions struct {
 	disablePrometheus  bool               // forces prometheus to not start up
 	onlySetup          bool
 	during             func(ctx context.Context) error
+	workloadDuration   time.Duration
+	activeCustomers    int
+	threads            int
+	skipCleanup        bool
 }
 type tpceSetupType int
 
@@ -137,10 +145,6 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.StoreCount = opts.ssds
 			settings := install.MakeClusterSettings(install.NumRacksOption(racks))
-			if c.IsLocal() { // XXX: Does local make sense?
-				settings.Env = append(settings.Env, "COCKROACH_SCAN_INTERVAL=200ms")
-				settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
-			}
 			c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
 		}
 	}
@@ -163,11 +167,6 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		); err != nil {
 			t.Fatal(err)
 		}
-	}
-
-	if c.IsLocal() {
-		opts.customers = 10
-		opts.timeout = 5 * time.Minute
 	}
 
 	if !opts.disablePrometheus {
@@ -204,12 +203,26 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 	m := c.NewMonitor(ctx, crdbNodes)
 	m.Go(func(ctx context.Context) error {
 		t.Status("running workload")
-		result, err := tpceSpec.run(ctx, t, c, tpceCmdOptions{
+		workloadDuration := opts.workloadDuration
+		if workloadDuration == 0 {
+			workloadDuration = 2 * time.Hour
+		}
+		runOptions := tpceCmdOptions{
 			customers: opts.customers,
 			racks:     racks,
-			duration:  2 * time.Hour,
+			duration:  workloadDuration,
 			threads:   opts.nodes * opts.cpus,
-		})
+		}
+		if opts.activeCustomers != 0 {
+			runOptions.activeCustomers = opts.activeCustomers
+		}
+		if opts.threads != 0 {
+			runOptions.threads = opts.threads
+		}
+		if opts.skipCleanup {
+			runOptions.skipCleanup = opts.skipCleanup
+		}
+		result, err := tpceSpec.run(ctx, t, c, runOptions)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
