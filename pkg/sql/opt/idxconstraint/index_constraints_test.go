@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -72,6 +73,8 @@ func TestIndexConstraints(t *testing.T) {
 			f.Init(context.Background(), &evalCtx, nil /* catalog */)
 			md := f.Metadata()
 
+			evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = true
+
 			for _, arg := range d.CmdArgs {
 				key, vals := arg.Key, arg.Vals
 				switch key {
@@ -112,6 +115,7 @@ func TestIndexConstraints(t *testing.T) {
 				}
 
 				var computedCols map[opt.ColumnID]opt.ScalarExpr
+				var colsInComputedColsExpressions opt.ColSet
 				if sv.ComputedCols() != nil {
 					computedCols = make(map[opt.ColumnID]opt.ScalarExpr)
 					for col, expr := range sv.ComputedCols() {
@@ -119,13 +123,18 @@ func TestIndexConstraints(t *testing.T) {
 						if err := b.Build(expr); err != nil {
 							d.Fatalf(t, "error building computed column expression: %v", err)
 						}
-						computedCols[col] = f.Memo().RootExpr().(opt.ScalarExpr)
+						computedColExpr := f.Memo().RootExpr().(opt.ScalarExpr)
+						computedCols[col] = computedColExpr
+						var sharedProps props.Shared
+						memo.BuildSharedProps(computedColExpr, &sharedProps, &evalCtx)
+						colsInComputedColsExpressions.UnionWith(sharedProps.OuterCols)
 					}
 				}
 
 				var ic idxconstraint.Instance
 				ic.Init(
 					filters, optionalFilters, indexCols, sv.NotNullCols(), computedCols,
+					colsInComputedColsExpressions,
 					true /* consolidate */, &evalCtx, &f, partition.PrefixSorter{},
 				)
 				result := ic.Constraint()
@@ -242,7 +251,8 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				var ic idxconstraint.Instance
 				ic.Init(
 					filters, nil /* optionalFilters */, indexCols, sv.NotNullCols(),
-					nil /* computedCols */, true, /* consolidate */
+					nil /* computedCols */, opt.ColSet{}, /* colsInComputedColsExpressions */
+					true, /* consolidate */
 					&evalCtx, &f, partition.PrefixSorter{},
 				)
 				_ = ic.Constraint()
