@@ -437,3 +437,29 @@ query T
 SELECT f_expand()
 ----
 (1,11,111,1)
+
+# Make sure view ID is used instead of source table ID.
+statement ok
+CREATE OR REPLACE VIEW v1 AS SELECT a FROM t1;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT v1.a FROM v1 ORDER BY v1.a;
+$$
+
+query I
+SELECT 'v1'::REGCLASS::INT
+----
+114
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT {TABLE:114}.a FROM {TABLE:114} ORDER BY {TABLE:114}.a;"
+
+query I
+SELECT f();
+----
+1
