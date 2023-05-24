@@ -553,6 +553,42 @@ func TestUserFileUpload(t *testing.T) {
 	}
 }
 
+// Regression test for https://github.com/cockroachdb/cockroach/issues/102494.
+// Uploading the same file with telemetry logs enabled used to crash the node.
+func TestUserFileUploadExistingFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
+	c.omitArgs = true
+
+	_, err := c.RunWithCaptureArgs([]string{"sql", "-e", "SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true"})
+	require.NoError(t, err)
+
+	dir, cleanFn := testutils.TempDir(t)
+	defer cleanFn()
+	ctx := context.Background()
+	contents := make([]byte, chunkSize)
+
+	// Write local file.
+	filePath := filepath.Join(dir, "file.csv")
+	err = os.WriteFile(filePath, contents, 0666)
+	require.NoError(t, err)
+
+	destination := "userfile://defaultdb.public.foo/test/file.csv"
+	out, err := c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath, destination))
+	require.NoError(t, err)
+	require.Contains(t, out, "successfully uploaded to userfile://defaultdb.public.foo/test/file.csv")
+
+	checkUserFileContent(
+		ctx, t, c.ExecutorConfig(), username.RootUserName(), destination, contents,
+	)
+
+	out, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath, destination))
+	require.NoError(t, err)
+	require.Contains(t, out, "destination file already exists for /test/file.csv")
+}
+
 func checkListedFiles(t *testing.T, c TestCLI, uri string, args string, expectedFiles []string) {
 	cmd := []string{"userfile", "list", uri, args}
 	cliOutput, err := c.RunWithCaptureArgs(cmd)
