@@ -151,6 +151,7 @@ require (
 	github.com/google/go-github/v42 v42.0.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed
+	github.com/googleapis/gax-go/v2 v2.7.0
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.5.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
@@ -303,7 +304,6 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/safehtml v0.0.2 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.0 // indirect
-	github.com/googleapis/gax-go/v2 v2.7.0 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
