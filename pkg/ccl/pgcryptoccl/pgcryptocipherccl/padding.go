@@ -23,10 +23,14 @@ func pkcsPad(data []byte, blockSize int) ([]byte, error) {
 		return nil, errors.Newf("invalid block size for PKCS padding: %d", blockSize)
 	}
 
-	paddingLen := blockSize - len(data)%blockSize
-	padding := bytes.Repeat([]byte{byte(paddingLen)}, paddingLen)
+	paddedData := make([]byte, len(data))
+	copy(paddedData, data)
 
-	return append(data, padding...), nil
+	paddingSize := blockSize - len(data)%blockSize
+	padding := bytes.Repeat([]byte{byte(paddingSize)}, paddingSize)
+	paddedData = append(paddedData, padding...)
+
+	return paddedData, nil
 }
 
 // pkcsUnpad removes the padding added by pkcsPad.

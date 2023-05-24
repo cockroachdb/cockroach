@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pgcryptoccl",
+    srcs = ["pgcryptoccl.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/pgcryptoccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/pgcryptoccl/pgcryptocipherccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/sql/sem/builtins/pgcrypto",
+        "//pkg/sql/sem/eval",
+    ],
+)
+
+go_test(
+    name = "pgcryptoccl_test",
+    srcs = [
+        "main_test.go",
+        "pgcryptoccl_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    tags = ["ccl_test"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
