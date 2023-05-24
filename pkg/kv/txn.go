@@ -1008,7 +1008,8 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 // PrepareForRetry needs to be called before a retry to perform some
 // book-keeping and clear errors when possible.
 func (txn *Txn) PrepareForRetry(ctx context.Context) {
-	// TODO(andrei): I think commit triggers are reset in the wrong place. See #18170.
+	// Reset commit triggers. These must be reconfigured by the client during the
+	// next retry.
 	txn.commitTriggers = nil
 
 	txn.mu.Lock()
