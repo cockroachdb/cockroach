@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 )
 
 //go:generate stringer -type=Kind -linecomment
@@ -25,6 +27,11 @@ import (
 // Kind defines a privilege. This is output by the parser,
 // and used to generate the privilege bitfields in the PrivilegeDescriptor.
 type Kind uint32
+
+var _ redact.SafeValue = Kind(0)
+
+// SafeValue makes Kind a redact.SafeValue.
+func (k Kind) SafeValue() {}
 
 // List of privileges. ALL is specifically encoded so that it will automatically
 // pick up new privileges.
@@ -72,8 +79,20 @@ type Privilege struct {
 	GrantOption bool
 }
 
+var _ redact.SafeFormatter = Privilege{}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (k Privilege) SafeFormat(s interfaces.SafePrinter, _ rune) {
+	s.Printf("[kind=%s grantOption=%t]", k.Kind, k.GrantOption)
+}
+
 // ObjectType represents objects that can have privileges.
 type ObjectType string
+
+var _ redact.SafeValue = ObjectType("")
+
+// SafeValue makes ObjectType a redact.SafeValue.
+func (k ObjectType) SafeValue() {}
 
 const (
 	// Any represents any object type.
@@ -179,6 +198,20 @@ var ByName = map[string]Kind{
 
 // List is a list of privileges.
 type List []Kind
+
+var _ redact.SafeFormatter = List{}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (pl List) SafeFormat(s interfaces.SafePrinter, _ rune) {
+	s.SafeString("[")
+	for i, p := range pl {
+		if i > 0 {
+			s.SafeString(",")
+		}
+		s.Print(p)
+	}
+	s.SafeString("]")
+}
 
 // Len, Swap, and Less implement the Sort interface.
 func (pl List) Len() int {
