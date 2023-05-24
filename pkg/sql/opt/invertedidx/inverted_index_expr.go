@@ -433,6 +433,7 @@ func constrainPrefixColumns(
 	ic.Init(
 		filters, optionalFilters,
 		prefixColumns, notNullCols, tabMeta.ComputedCols,
+		tabMeta.ColsInComputedColsExpressions,
 		false, /* consolidate */
 		evalCtx, factory, ps,
 	)
