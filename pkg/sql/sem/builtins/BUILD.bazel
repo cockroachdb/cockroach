@@ -81,6 +81,7 @@ go_library(
         "//pkg/sql/sem/asof",
         "//pkg/sql/sem/builtins/builtinconstants",
         "//pkg/sql/sem/builtins/builtinsregistry",
+        "//pkg/sql/sem/builtins/pgcrypto",
         "//pkg/sql/sem/builtins/pgformat",
         "//pkg/sql/sem/cast",
         "//pkg/sql/sem/catconstants",

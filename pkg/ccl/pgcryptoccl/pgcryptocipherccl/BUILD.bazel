@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "pgcryptocipherccl",
     srcs = [
+        "cipher.go",
         "cipher_method.go",
         "doc.go",
         "padding.go",
@@ -21,6 +22,7 @@ go_test(
     name = "pgcryptocipherccl_test",
     srcs = [
         "cipher_method_test.go",
+        "cipher_test.go",
         "padding_test.go",
     ],
     args = ["-test.timeout=295s"],

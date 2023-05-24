@@ -2515,6 +2515,13 @@ func TestTenantLogicCCL_partitioning_enum(
 	runCCLLogicTest(t, "partitioning_enum")
 }
 
+func TestTenantLogicCCL_pgcrypto_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "pgcrypto_builtins")
+}
+
 func TestTenantLogicCCL_redact_descriptor(
 	t *testing.T,
 ) {
