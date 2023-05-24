@@ -629,6 +629,42 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 		return datum == tree.DBoolTrue
 	}
 
+	// Attempt to build a single tight constraint from a scalar expression and use
+	// it to derive predicates/constraints on computed columns.
+	if c.computedColSet.Intersects(c.keyCols) &&
+		c.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation &&
+		!c.skipComputedColPredDerivation {
+		switch t := e.(type) {
+		case *memo.FiltersExpr, *memo.FiltersItem, *memo.AndExpr, *memo.OrExpr:
+		// Skip over scalar expressions that are not conditions, require special
+		// handling, like OR or AND.
+		case opt.ScalarExpr:
+			// Attempt to build a single tight constraint from the IN expression.
+			constraints, tightConstraints :=
+				memo.BuildConstraints(t, c.md, c.evalCtx, true /* skipExtraConstraints */)
+			if tightConstraints && constraints.Length() == 1 {
+				// Attempt to convert the constraint into a disjunction of ANDed IS
+				// predicates, with additional derived IS conjuncts on computed
+				// columns based on columns in the constraint spans.
+				computedColumnFilters := norm.CombineComputedColFilters(
+					c.computedCols,
+					c.keyCols,
+					c.colsInComputedColsExpressions,
+					constraints.Constraint(0),
+					c.factory,
+				)
+				if len(computedColumnFilters) == 1 {
+					// All predicates in `computedColumnFilters[0].Condition` fully
+					// represent the original condition plus derived predicates, so we
+					// only have to make spans on the new condition.
+					c.skipComputedColPredDerivation = true
+					localTight := c.makeSpansForExpr(offset, computedColumnFilters[0].Condition, out)
+					c.skipComputedColPredDerivation = false
+					return localTight
+				}
+			}
+		}
+	}
 	switch t := e.(type) {
 	case *memo.FiltersExpr:
 		switch len(*t) {
@@ -1056,6 +1092,7 @@ func (ic *Instance) Init(
 	columns []opt.OrderingColumn,
 	notNullCols opt.ColSet,
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
+	colsInComputedColsExpressions opt.ColSet,
 	consolidate bool,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
@@ -1075,7 +1112,7 @@ func (ic *Instance) Init(
 		ic.allFilters = requiredFilters[:len(requiredFilters):len(requiredFilters)]
 		ic.allFilters = append(ic.allFilters, optionalFilters...)
 	}
-	ic.indexConstraintCtx.init(columns, notNullCols, computedCols, evalCtx, factory)
+	ic.indexConstraintCtx.init(columns, notNullCols, computedCols, colsInComputedColsExpressions, evalCtx, factory)
 	ic.tight = ic.makeSpansForExpr(0 /* offset */, &ic.allFilters, &ic.constraint)
 
 	// Note: If consolidate is true, we only consolidate spans at the
@@ -1154,9 +1191,21 @@ type indexConstraintCtx struct {
 
 	columns []opt.OrderingColumn
 
+	keyCols opt.ColSet
+
 	notNullCols opt.ColSet
 
 	computedCols map[opt.ColumnID]opt.ScalarExpr
+
+	computedColSet opt.ColSet
+
+	colsInComputedColsExpressions opt.ColSet
+
+	// skipComputedColPredDerivation disables computed column predicate derivation
+	// independent of the session setting which also controls this, and is
+	// generally used to prevent infinite recursion in makeSpansForExpr when
+	// processing derived predicates.
+	skipComputedColPredDerivation bool
 
 	evalCtx *eval.Context
 
@@ -1170,19 +1219,30 @@ func (c *indexConstraintCtx) init(
 	columns []opt.OrderingColumn,
 	notNullCols opt.ColSet,
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
+	colsInComputedColsExpressions opt.ColSet,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
 ) {
+	var keyCols, computedColSet opt.ColSet
+	for _, col := range columns {
+		keyCols.Add(col.ID())
+	}
+	for colID := range computedCols {
+		computedColSet.Add(colID)
+	}
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*c = indexConstraintCtx{
-		md:           factory.Metadata(),
-		columns:      columns,
-		notNullCols:  notNullCols,
-		computedCols: computedCols,
-		evalCtx:      evalCtx,
-		factory:      factory,
-		keyCtx:       make([]constraint.KeyContext, len(columns)),
+		md:                            factory.Metadata(),
+		columns:                       columns,
+		keyCols:                       keyCols,
+		notNullCols:                   notNullCols,
+		computedCols:                  computedCols,
+		computedColSet:                computedColSet,
+		colsInComputedColsExpressions: colsInComputedColsExpressions,
+		evalCtx:                       evalCtx,
+		factory:                       factory,
+		keyCtx:                        make([]constraint.KeyContext, len(columns)),
 	}
 	for i := range columns {
 		c.keyCtx[i].EvalCtx = evalCtx
