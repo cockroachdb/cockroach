@@ -368,7 +368,8 @@ func (h *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return m
 }
 
-// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the right type.
+// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the
+// right type.
 func (h *Histogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
 	h.windowed.Lock()
 	defer h.windowed.Unlock()
@@ -377,6 +378,28 @@ func (h *Histogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
 		panic(err)
 	}
 	return m
+}
+
+// ToPrometheusMetricWindowedMerged returns a filled-in prometheus metric of the
+// right type, with the previous window's histogram bucket counts and sample
+// count added to those of the current one.
+// Merging the sample count is necessary to correctly calculate the value at
+// a given quantile with the merged bucket counts.
+func (h *Histogram) ToPrometheusMetricWindowedMerged() *prometheusgo.Metric {
+	h.windowed.Lock()
+	defer h.windowed.Unlock()
+	cur := &prometheusgo.Metric{}
+	prev := &prometheusgo.Metric{}
+	if err := h.windowed.cur.Write(cur); err != nil {
+		panic(err)
+	}
+	if h.windowed.prev != nil {
+		if err := h.windowed.prev.Write(prev); err != nil {
+			panic(err)
+		}
+		MergeWindowedHistogram(cur.Histogram, prev.Histogram)
+	}
+	return cur
 }
 
 // GetMetadata returns the metric's metadata including the Prometheus
@@ -428,7 +451,8 @@ func (h *Histogram) MeanWindowed() float64 {
 //  2. Since the prometheus client library ensures buckets are in a strictly
 //     increasing order at creation, we do not sort them.
 func (h *Histogram) ValueAtQuantileWindowed(q float64) float64 {
-	return ValueAtQuantileWindowed(h.ToPrometheusMetricWindowed().Histogram, q)
+	return ValueAtQuantileWindowed(h.ToPrometheusMetricWindowedMerged().Histogram,
+		q)
 }
 
 var _ PrometheusExportable = (*ManualWindowHistogram)(nil)
@@ -879,6 +903,18 @@ func (g *GaugeFloat64) GetMetadata() Metadata {
 	baseMetadata := g.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
 	return baseMetadata
+}
+
+// MergeWindowedHistogram adds the bucket counts SampleCount from the
+// previous windowed histogram to those of the current windowed histogram.
+// NB: Buckets on each histogram must be the same
+func MergeWindowedHistogram(cur *prometheusgo.Histogram, prev *prometheusgo.Histogram) {
+	for i, bucket := range cur.Bucket {
+		count := *bucket.CumulativeCount + *prev.Bucket[i].CumulativeCount
+		*bucket.CumulativeCount = count
+	}
+	sampleCount := *cur.SampleCount + *prev.SampleCount
+	*cur.SampleCount = sampleCount
 }
 
 // ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
