@@ -49,6 +49,8 @@ import {
 import { merge } from "lodash";
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "../tableStatistics";
+import { DatabaseDetailsPageProps } from "../databaseDetailsPage";
+import moment from "moment-timezone";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -236,7 +238,26 @@ export class DatabasesPage extends React.Component<
   };
 
   componentDidMount(): void {
-    this.refresh();
+    if (this.props.refreshNodes != null) {
+      this.props.refreshNodes();
+    }
+
+    if (this.props.refreshSettings != null) {
+      this.props.refreshSettings();
+    }
+
+    if (
+      !this.props.loaded &&
+      !this.props.loading &&
+      this.props.lastError === undefined
+    ) {
+      return this.props.refreshDatabases();
+    } else {
+      // If the props are already loaded then componentDidUpdate
+      // will not get called so call refresh to make sure details
+      // are loaded
+      this.refresh();
+    }
   }
 
   updateQueryParams(): void {
@@ -255,28 +276,17 @@ export class DatabasesPage extends React.Component<
     }
   }
 
-  componentDidUpdate(): void {
-    this.updateQueryParams();
-    this.refresh();
+  componentDidUpdate(
+    prevProp: Readonly<DatabasesPageProps>,
+    prevState: Readonly<DatabasesPageState>,
+  ): void {
+    if (this.shouldRefreshDatabaseInformation(prevState, prevProp)) {
+      this.updateQueryParams();
+      this.refresh();
+    }
   }
 
   private refresh(): void {
-    if (this.props.refreshNodes != null) {
-      this.props.refreshNodes();
-    }
-
-    if (this.props.refreshSettings != null) {
-      this.props.refreshSettings();
-    }
-
-    if (
-      !this.props.loaded &&
-      !this.props.loading &&
-      this.props.lastError === undefined
-    ) {
-      return this.props.refreshDatabases();
-    }
-
     let lastDetailsError: Error;
 
     // load everything by default
@@ -451,6 +461,44 @@ export class DatabasesPage extends React.Component<
         return foundRegion && foundNode;
       });
   };
+
+  private shouldRefreshDatabaseInformation(
+    prevState: Readonly<DatabasesPageState>,
+    prevProps: Readonly<DatabasesPageProps>,
+  ): boolean {
+    // No new dbs to update
+    if (
+      !this.props.databases ||
+      this.props.databases.length == 0 ||
+      this.props.databases.every(x => x.loaded || x.loading)
+    ) {
+      return false;
+    }
+
+    if (this.state.pagination.current != prevState.pagination.current) {
+      return true;
+    }
+
+    if (prevProps && this.props.search != prevProps.search) {
+      return true;
+    }
+
+    const filteredDatabases = this.filteredDatabasesData();
+    for (
+      let i = 0;
+      i < filteredDatabases.length && i < disableTableSortSize;
+      i++
+    ) {
+      const db = filteredDatabases[i];
+      if (db.loaded || db.loading || db.lastError != undefined) {
+        continue;
+      }
+      // Info is not loaded for a visible database.
+      return true;
+    }
+
+    return false;
+  }
 
   private renderIndexRecommendations = (
     database: DatabasesPageDataDatabase,
