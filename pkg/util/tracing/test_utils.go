@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -160,27 +161,34 @@ func CheckRecordedSpans(rec tracingpb.Recording, expected string) error {
 	return nil
 }
 
-// CheckRecording checks whether a recording looks like the expected
+// T is a subset of testing.TB.
+type T interface {
+	Fatalf(format string, args ...interface{})
+}
+
+// checkRecording checks whether a recording looks like the expected
 // one. The expected string is allowed to elide timing information, and the
 // outer-most indentation level is adjusted for when comparing.
 //
-//	if err := CheckRecording(sp.GetRecording(), `
+//	checkRecording(t, sp.GetRecording(), `
 //	    === operation:root
 //	    [childrenMetadata]
 //	    event:root 1
 //	        === operation:remote child
 //	        event:remote child 1
-//	`); err != nil {
-//	    t.Fatal(err)
-//	}
-func CheckRecording(rec tracingpb.Recording, expected string) error {
+//	`)
+func checkRecording(t T, rec tracingpb.Recording, expected string) {
+	checkRecordingWithRedact(t, rec, expected, false)
+}
+
+func checkRecordingWithRedact(t T, rec tracingpb.Recording, expected string, redactValues bool) {
 	normalize := func(rec string) string {
 		// normalize the string form of a recording for ease of comparison.
 		//
 		// 1. Strip out any leading new lines.
 		rec = strings.TrimLeft(rec, "\n")
-		// 2. Strip out trailing space.
-		rec = strings.TrimRight(rec, "\n\t ")
+		// 2. Strip out trailing newlines.
+		rec = strings.TrimRight(rec, "\n")
 		// 3. Strip out all timing information from the recordings.
 		//
 		// 	 Before |  "0.007ms      0.007ms    event:root 1"
@@ -191,7 +199,7 @@ func CheckRecording(rec tracingpb.Recording, expected string) error {
 		//
 		// 	 Before |  [operation: {Count:<count>, Duration:<duration>}]
 		// 	 After  |  [operation]
-		re = regexp.MustCompile(`:.*]`)
+		re = regexp.MustCompile(`: .*]`)
 		rec = string(re.ReplaceAll([]byte(rec), []byte("]")))
 		// 5. Change all tabs to four spaces.
 		rec = strings.ReplaceAll(rec, "\t", "    ")
@@ -231,8 +239,12 @@ func CheckRecording(rec tracingpb.Recording, expected string) error {
 		sortChildrenMetadataByName(rec[i].ChildrenMetadata)
 	}
 
+	actual := redact.Sprint(rec)
+	if redactValues {
+		actual = actual.Redact()
+	}
 	exp := normalize(expected)
-	got := normalize(rec.String())
+	got := normalize(string(actual))
 	if got != exp {
 		diff := difflib.UnifiedDiff{
 			A:        difflib.SplitLines(exp),
@@ -242,7 +254,6 @@ func CheckRecording(rec tracingpb.Recording, expected string) error {
 			Context:  4,
 		}
 		diffText, _ := difflib.GetUnifiedDiffString(diff)
-		return errors.Newf("unexpected diff:\n%s", diffText)
+		t.Fatalf("unexpected diff:\n%s", redact.RedactableString(diffText))
 	}
-	return nil
 }
