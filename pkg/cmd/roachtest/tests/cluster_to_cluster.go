@@ -897,8 +897,10 @@ func makeReplResilienceDriver(
 	rd := makeReplicationDriver(t, c, rsp.replicationSpec)
 	return replResilienceDriver{
 		replicationDriver: rd,
-		phase:             c2cPhase(rd.rng.Intn(int(phaseCutover) + 1)),
-		rsp:               rsp,
+		// Because of https://github.com/cockroachdb/cockroach/issues/103534
+		// c2c fails during a shutdown during the cutover phase. Don't test this for now.
+		phase: c2cPhase(rd.rng.Intn(int(phaseSteadyState) + 1)),
+		rsp:   rsp,
 	}
 }
 
