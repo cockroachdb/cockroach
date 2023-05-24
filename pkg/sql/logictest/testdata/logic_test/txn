@@ -303,9 +303,8 @@ statement ok
 COMMIT
 
 # We can't set isolation level to an unsupported one.
-
-statement error invalid value for parameter "transaction_isolation": "read uncommitted"
-SET transaction_isolation = 'read uncommitted'
+statement error invalid value for parameter "transaction_isolation": "this is made up"\n.*Available values: serializable,snapshot,read committed
+SET transaction_isolation = 'this is made up'
 
 # We can explicitly start a transaction with isolation level specified.
 
@@ -713,8 +712,34 @@ high
 statement ok
 COMMIT
 
+# With the snapshot_isolation.enabled cluster setting set to true,
+# REPEATABLE READ gets mapped to SNAPSHOT.
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
+
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+snapshot
+
 statement ok
 SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
+
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+read committed
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
+
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+serializable
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SNAPSHOT
@@ -754,12 +779,54 @@ SHOW DEFAULT_TRANSACTION_ISOLATION
 serializable
 
 statement ok
+SET default_transaction_isolation = 'read uncommitted'
+
+query T
+SHOW default_transaction_isolation
+----
+read committed
+
+statement ok
 SET default_transaction_isolation = 'read committed'
 
 query T
 SHOW default_transaction_isolation
 ----
 read committed
+
+statement ok
+SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
+
+# Since snapshot_isolation.enabled is true, setting isolation level to
+# REPEATABLE READ should map to SNAPSHOT.
+statement ok
+SET default_transaction_isolation = 'repeatable read'
+
+query T
+SHOW default_transaction_isolation
+----
+snapshot
+
+statement ok
+SET DEFAULT_TRANSACTION_ISOLATION TO 'SNAPSHOT'
+
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+snapshot
+
+statement ok
+SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
+
+# Since snapshot_isolation.enabled is false, setting isolation level to SNAPSHOT
+# should map to SERIALIZABLE.
+statement ok
+SET default_transaction_isolation = 'repeatable read'
+
+query T
+SHOW default_transaction_isolation
+----
+serializable
 
 statement ok
 SET DEFAULT_TRANSACTION_ISOLATION TO 'SNAPSHOT'

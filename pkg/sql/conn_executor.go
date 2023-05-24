@@ -3333,23 +3333,33 @@ var allowSnapshotIsolation = settings.RegisterBoolSetting(
 func (ex *connExecutor) txnIsolationLevelToKV(
 	ctx context.Context, level tree.IsolationLevel,
 ) isolation.Level {
+	if level == tree.UnspecifiedIsolation {
+		level = tree.IsolationLevel(ex.sessionData().DefaultTxnIsolationLevel)
+	}
 	allowLevelCustomization := ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2)
 	ret := isolation.Serializable
 	if allowLevelCustomization {
 		switch level {
-		case tree.UnspecifiedIsolation:
-			ret = isolation.Serializable
-		case tree.SerializableIsolation:
-			ret = isolation.Serializable
+		case tree.ReadUncommittedIsolation:
+			// READ UNCOMMITTED is mapped to READ COMMITTED. PostgreSQL also does
+			// this: https://www.postgresql.org/docs/current/transaction-iso.html.
+			fallthrough
 		case tree.ReadCommittedIsolation:
 			ret = isolation.ReadCommitted
+		case tree.RepeatableReadIsolation:
+			// REPEATABLE READ is mapped to SNAPSHOT.
+			fallthrough
 		case tree.SnapshotIsolation:
-			allowSnapshot := allowLevelCustomization && allowSnapshotIsolation.Get(&ex.server.cfg.Settings.SV)
+			// SNAPSHOT is only allowed if the cluster setting is enabled. Otherwise
+			// it is mapped to SERIALIZABLE.
+			allowSnapshot := allowSnapshotIsolation.Get(&ex.server.cfg.Settings.SV)
 			if allowSnapshot {
 				ret = isolation.Snapshot
 			} else {
 				ret = isolation.Serializable
 			}
+		case tree.SerializableIsolation:
+			ret = isolation.Serializable
 		default:
 			log.Fatalf(context.Background(), "unknown isolation level: %s", level)
 		}
@@ -3370,15 +3380,6 @@ func kvTxnIsolationLevelToTree(level isolation.Level) tree.IsolationLevel {
 		log.Fatalf(context.Background(), "unknown isolation level: %s", level)
 	}
 	return ret
-}
-
-func (ex *connExecutor) txnIsolationLevelWithSessionDefault(
-	ctx context.Context, level tree.IsolationLevel,
-) isolation.Level {
-	if level == tree.UnspecifiedIsolation {
-		level = tree.IsolationLevel(ex.sessionData().DefaultTxnIsolationLevel)
-	}
-	return ex.txnIsolationLevelToKV(ctx, level)
 }
 
 func txnPriorityToProto(mode tree.UserPriority) roachpb.UserPriority {
