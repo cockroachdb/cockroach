@@ -7,8 +7,6 @@
   "scripts": {
     "lint": "eslint './{src,ccl}/**/*.{tsx,ts,js}'",
     "lint:fix": "eslint './{src,ccl}/**/*.{tsx,ts,js}' --fix",
-    "karma": "karma start",
-    "karma:watch": "karma start --no-single-run --auto-watch",
     "storybook": "start-storybook -p 9009",
     "test": "DEBUG_PRINT_LIMIT=1000000 jest"
   },
@@ -140,14 +138,6 @@
     "jest-environment-jsdom": "27.5.1",
     "jest-enzyme": "7.1.2",
     "jsdoc": "^3.4.2",
-    "karma": "^6.3.4",
-    "karma-chai": "^0.1.0",
-    "karma-chrome-launcher": "^2.2.0",
-    "karma-mocha": "^1.3.0",
-    "karma-mocha-reporter": "^2.2.3",
-    "karma-sinon": "^1.0.5",
-    "karma-sourcemap-loader": "^0.3.7",
-    "karma-webpack": "^2.0.13",
     "less-loader": "6.2.0",
     "minimist": "^1.2.0",
     "mocha": "^6.2.1",
@@ -185,8 +175,7 @@
     "world-atlas": "^1.1.4"
   },
   "optionalDependencies": {
-    "timers-browserify": "^2.0.12",
-    "webpack-dashboard": "^3.2.0"
+    "timers-browserify": "^2.0.12"
   },
   "resolutions": {
     "**/@types/react": "^16.14.8",

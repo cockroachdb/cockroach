@@ -1871,6 +1871,17 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 		}
 		stats.ActiveKeyBytes += sstSizes[pebble.FileNum(u)]
 	}
+
+	// Ensure that encryption percentage does not exceed 100%.
+	frFileLen := uint64(len(fr.Files))
+	if stats.TotalFiles < frFileLen {
+		stats.TotalFiles = frFileLen
+	}
+
+	if stats.TotalBytes < stats.ActiveKeyBytes {
+		stats.TotalBytes = stats.ActiveKeyBytes
+	}
+
 	return stats, nil
 }
 
