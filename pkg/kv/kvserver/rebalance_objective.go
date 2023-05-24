@@ -166,6 +166,7 @@ type gossipStoreCapacityChangeNotifier interface {
 // interface and registers a callback at creation time, that will be called on
 // a reblanace objective change.
 type RebalanceObjectiveManager struct {
+	log.AmbientContext
 	st                *cluster.Settings
 	storeDescProvider gossipStoreDescriptorProvider
 
@@ -181,20 +182,28 @@ type RebalanceObjectiveManager struct {
 
 func newRebalanceObjectiveManager(
 	ctx context.Context,
+	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
 	onChange func(ctx context.Context, obj LBRebalancingObjective),
 	storeDescProvider gossipStoreDescriptorProvider,
 	capacityChangeNotifier gossipStoreCapacityChangeNotifier,
 ) *RebalanceObjectiveManager {
-	rom := &RebalanceObjectiveManager{st: st, storeDescProvider: storeDescProvider}
+	rom := &RebalanceObjectiveManager{
+		st:                st,
+		storeDescProvider: storeDescProvider,
+		AmbientContext:    ambientCtx,
+	}
+	rom.AddLogTag("rebalance-objective", nil)
+	ctx = rom.AnnotateCtx(ctx)
+
 	rom.mu.obj = ResolveLBRebalancingObjective(ctx, st, storeDescProvider.GetStores())
 	rom.mu.onChange = onChange
 
 	LoadBasedRebalancingObjective.SetOnChange(&rom.st.SV, func(ctx context.Context) {
-		rom.maybeUpdateRebalanceObjective(ctx)
+		rom.maybeUpdateRebalanceObjective(rom.AnnotateCtx(ctx))
 	})
 	rom.st.Version.SetOnChange(func(ctx context.Context, _ clusterversion.ClusterVersion) {
-		rom.maybeUpdateRebalanceObjective(ctx)
+		rom.maybeUpdateRebalanceObjective(rom.AnnotateCtx(ctx))
 	})
 	// Rather than caching each capacity locally, use the callback as a trigger
 	// to recalculate the objective. This is less expensive than recacluating
@@ -208,7 +217,11 @@ func newRebalanceObjectiveManager(
 	capacityChangeNotifier.SetOnCapacityChange(
 		func(storeID roachpb.StoreID, old, cur roachpb.StoreCapacity) {
 			if (old.CPUPerSecond < 0) != (cur.CPUPerSecond < 0) {
-				rom.maybeUpdateRebalanceObjective(ctx)
+				// NB: On capacity changes we don't have access to a context. Create a
+				// background context on callback.
+				cbCtx, span := rom.AnnotateCtxWithSpan(context.Background(), "capacity-change")
+				defer span.Finish()
+				rom.maybeUpdateRebalanceObjective(cbCtx)
 			}
 		})
 
@@ -227,16 +240,18 @@ func (rom *RebalanceObjectiveManager) maybeUpdateRebalanceObjective(ctx context.
 	rom.mu.Lock()
 	defer rom.mu.Unlock()
 
+	ctx = rom.AnnotateCtx(ctx)
 	prev := rom.mu.obj
-	new := ResolveLBRebalancingObjective(ctx, rom.st, rom.storeDescProvider.GetStores())
+	next := ResolveLBRebalancingObjective(ctx, rom.st, rom.storeDescProvider.GetStores())
 	// Nothing to do when the objective hasn't changed.
-	if prev == new {
+	if prev == next {
 		return
 	}
 
-	log.Infof(ctx, "Updating the rebalance objective from %s to %s", prev.ToDimension(), new.ToDimension())
+	log.Infof(ctx, "Updating the rebalance objective from %s to %s",
+		prev, next)
 
-	rom.mu.obj = new
+	rom.mu.obj = next
 	rom.mu.onChange(ctx, rom.mu.obj)
 }
 

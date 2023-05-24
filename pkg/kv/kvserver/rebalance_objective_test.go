@@ -188,7 +188,9 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 			callbacks = append(callbacks, obj)
 		}
 		return newRebalanceObjectiveManager(
-			ctx, st, cb, providerNotifier, providerNotifier,
+			ctx, log.MakeTestingAmbientCtxWithNewTracer(),
+			st, cb,
+			providerNotifier, providerNotifier,
 		), &callbacks
 	}
 
