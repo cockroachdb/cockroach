@@ -344,10 +344,8 @@ func (c *CustomFuncs) GetOptionalFiltersAndFilterColumns(
 ) (optionalFilters memo.FiltersExpr, filterColumns opt.ColSet) {
 
 	optionalFilters = c.checkConstraintFilters(scanPrivate.Table)
-	computedColFilters := c.computedColFilters(scanPrivate, explicitFilters, optionalFilters)
+	computedColFilters := c.ComputedColFilters(scanPrivate, explicitFilters, optionalFilters)
 	optionalFilters = append(optionalFilters, computedColFilters...)
-	combinedFilters := c.combineComputedColFilters(scanPrivate, explicitFilters, optionalFilters)
-	optionalFilters = append(optionalFilters, combinedFilters...)
 
 	filterColumns = c.FilterOuterCols(explicitFilters)
 	filterColumns.UnionWith(c.FilterOuterCols(optionalFilters))
@@ -506,58 +504,6 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		sb.Build(grp)
 	})
-}
-
-// tryFoldComputedCol tries to reduce the computed column with the given column
-// ID into a constant value, by evaluating it with respect to a set of other
-// columns that are constant. If the computed column is constant, enter it into
-// the constCols map and return true. Otherwise, return false.
-func (c *CustomFuncs) tryFoldComputedCol(
-	tabMeta *opt.TableMeta, computedColID opt.ColumnID, constCols constColsMap,
-) bool {
-	// Check whether computed column has already been folded.
-	if _, ok := constCols[computedColID]; ok {
-		return true
-	}
-
-	var replace func(e opt.Expr) opt.Expr
-	replace = func(e opt.Expr) opt.Expr {
-		if variable, ok := e.(*memo.VariableExpr); ok {
-			// Can variable be folded?
-			if constVal, ok := constCols[variable.Col]; ok {
-				// Yes, so replace it with its constant value.
-				return constVal
-			}
-
-			// No, but that may be because the variable refers to a dependent
-			// computed column. In that case, try to recursively fold that
-			// computed column. There are no infinite loops possible because the
-			// dependency graph is guaranteed to be acyclic.
-			if _, ok := tabMeta.ComputedCols[variable.Col]; ok {
-				if c.tryFoldComputedCol(tabMeta, variable.Col, constCols) {
-					return constCols[variable.Col]
-				}
-			}
-
-			return e
-		}
-		return c.e.f.Replace(e, replace)
-	}
-
-	computedCol := tabMeta.ComputedCols[computedColID]
-	if memo.CanBeCompositeSensitive(c.e.mem.Metadata(), computedCol) {
-		// The computed column expression can return different values for logically
-		// equal outer columns (e.g. d::STRING where d is a DECIMAL).
-		return false
-	}
-	replaced := replace(computedCol).(opt.ScalarExpr)
-
-	// If the computed column is constant, enter it into the constCols map.
-	if opt.IsConstValueOp(replaced) {
-		constCols[computedColID] = replaced
-		return true
-	}
-	return false
 }
 
 // inBetweenFilters returns a set of filters that are required to cover all the
@@ -878,7 +824,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	// Generate implicit filters from constraints and computed columns as
 	// optional filters to help constrain an index scan.
 	optionalFilters := c.checkConstraintFilters(scanPrivate.Table)
-	computedColFilters := c.computedColFilters(scanPrivate, filters, optionalFilters)
+	computedColFilters := c.ComputedColFilters(scanPrivate, filters, optionalFilters)
 	optionalFilters = append(optionalFilters, computedColFilters...)
 
 	// Iterate over all inverted indexes.
@@ -1013,6 +959,11 @@ func (c *CustomFuncs) canMaybeConstrainNonInvertedIndex(
 ) bool {
 	md := c.e.mem.Metadata()
 	index := md.Table(tabID).Index(indexOrd)
+	tabMeta := md.TableMeta(tabID)
+	var computedCols opt.ColSet
+	for colID := range tabMeta.ComputedCols {
+		computedCols.Add(colID)
+	}
 
 	for i := range filters {
 		filterProps := filters[i].ScalarProps()
@@ -1022,6 +973,15 @@ func (c *CustomFuncs) canMaybeConstrainNonInvertedIndex(
 		firstIndexCol := tabID.IndexColumnID(index, 0)
 		if filterProps.OuterCols.Contains(firstIndexCol) {
 			return true
+		}
+
+		// If the first index column is a computed column and the filter involves
+		// columns in the computed column expression, then the index can possibly be
+		// constrained.
+		if computedCols.Contains(firstIndexCol) {
+			if tabMeta.ColsInComputedColsExpressions.Intersects(filterProps.OuterCols) {
+				return true
+			}
 		}
 
 		// If the constraints are not tight, then the index can possibly be

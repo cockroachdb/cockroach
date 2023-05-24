@@ -629,6 +629,47 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 		return datum == tree.DBoolTrue
 	}
 
+	// Attempt to build a single tight constraint from a scalar expression and use
+	// it to derive predicates/constraints on computed columns.
+	if c.computedColSet.Intersects(c.keyCols) {
+		switch e.(type) {
+		case *memo.FiltersExpr, *memo.FiltersItem, *memo.AndExpr, *memo.OrExpr:
+		// Skip over scalar expressions that are not conditions, require special
+		// handling, like OR or AND.
+		default:
+			var scalar opt.ScalarExpr
+			var ok bool
+			scalar, ok = e.(opt.ScalarExpr)
+			shouldDeriveComputedColConstraints := !c.skipComputedColPredDerivation &&
+				c.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation
+			if ok && shouldDeriveComputedColConstraints {
+				// Attempt to build a single tight constraint from the IN expression.
+				constraints, tightConstraints :=
+					memo.BuildConstraints(scalar, c.md, c.evalCtx, true /* skipExtraConstraints */)
+				if tightConstraints && constraints.Length() == 1 {
+					// Attempt to convert the constraint into a disjunction of ANDed IS
+					// predicates, with additional derived IS conjuncts on computed
+					// columns based on columns in the constraint spans.
+					computedColumnFilters := norm.CombineComputedColFilters(
+						c.computedCols,
+						c.keyCols,
+						c.colsInComputedColsExpressions,
+						constraints.Constraint(0),
+						c.factory,
+					)
+					if len(computedColumnFilters) == 1 {
+						// All predicates in `computedColumnFilters[0].Condition` fully
+						// represent the original condition plus derived predicates, so we
+						// only have to make spans on the new condition.
+						c.skipComputedColPredDerivation = true
+						localTight := c.makeSpansForExpr(offset, computedColumnFilters[0].Condition, out)
+						c.skipComputedColPredDerivation = false
+						return localTight
+					}
+				}
+			}
+		}
+	}
 	switch t := e.(type) {
 	case *memo.FiltersExpr:
 		switch len(*t) {
@@ -711,6 +752,243 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 	return false
 }
 
+// deriveComputedColumnConstraints takes a slice of input filters and attempts
+// to use tight constraints from those filters to derive new tight constraints
+// on computed columns present in the index.  If successful, ok=true and a new
+// list of filters with new tight filters at the front, original filters
+// appended after that, and any new non-tight filters appended at the end is
+// returned.
+func (c *indexConstraintCtx) deriveComputedColumnConstraints(
+	inputFilters memo.FiltersExpr,
+	expr opt.ScalarExpr,
+	offset int,
+	out *constraint.Constraint,
+	tightDeltaMap *util.FastIntMap,
+) (filters memo.FiltersExpr, ok bool) {
+	// Work on a temporary copy of `out` so the original is not changed unless a
+	// constraint is derived.
+	tempOut := *out
+
+	var combinedConstraint constraint.Constraint
+	// Note, columns is not really an `Ordering`, but this OrderingColumn slice
+	// type provides the ColSet method, which we can take advantage of.
+	columns := make(opt.Ordering, 0, len(inputFilters))
+	datums := make([]tree.Datum, 0, len(inputFilters))
+
+	// populateColumnsAndDatumsFromConstraint identifies a single-span single-key
+	// constraint and builds populates the columns and datums slices from it
+	// necessary for key building. It returns ok=true if it is ok to continue
+	// examining more ANDed constraints.
+	populateColumnsAndDatumsFromConstraint := func(cons *constraint.Constraint) (ok bool) {
+		if columns.ColSet().Intersects(cons.Columns.ColSet()) {
+			// If one or more columns in this constraint overlap with those in another
+			// constraint, play it safe and give up.
+			return false
+		}
+		if cons.Spans.Count() != 1 {
+			// We only attempt to handle single-span cases for now. The presence of
+			// multiple spans represents an ORed condition.
+			return false
+		}
+		span := cons.Spans.Get(0)
+		if !span.HasSingleKey(c.evalCtx) {
+			// Only single key spans are useful, but their presence shouldn't disallow
+			// use of other constraints for filter derivation.
+			return true
+		}
+		if span.StartKey().Length() > cons.Columns.Count() {
+			// This is not expected to happen, but give up if this situation occurs.
+			return false
+		}
+		for j := 0; j < span.StartKey().Length(); j++ {
+			// We only care about columns for which there are span keys, if there
+			// happens to be more columns that datums.
+			columns = append(columns, cons.Columns.Get(j))
+			datums = append(datums, span.StartKey().Value(j))
+		}
+		return true
+	}
+
+	localTight := false
+	var nonTightFilters memo.FiltersExpr
+	var exprConstraint constraint.Constraint
+
+	var splitConjuncts func(e opt.ScalarExpr)
+	// splitConjuncts places tight filters in `filters` and non-tight filters
+	// in `nonTightFilters`.
+	splitConjuncts = func(e opt.ScalarExpr) {
+		if and, isAndExpr := e.(*memo.AndExpr); isAndExpr {
+			splitConjuncts(and.Left)
+			splitConjuncts(and.Right)
+		} else {
+			c.unconstrained(offset, &exprConstraint)
+			localTight = c.makeSpansForExpr(offset, e, &exprConstraint)
+			if localTight {
+				// makeSpansForAnd expects the first filter in the list to be tight, so
+				// let's put all tight filters at the front of the list.
+				filters = append(filters, memo.FiltersItem{Condition: e})
+			} else {
+				nonTightFilters = append(nonTightFilters, memo.FiltersItem{Condition: e})
+			}
+			tempOut.IntersectWith(c.evalCtx, &exprConstraint)
+		}
+	}
+	var computedColumnFilters memo.FiltersExpr
+
+	// buildComputedColumnFilters builds a combined single-key constraint from the
+	// columns and datums slices, then attempts to derive a filter on a computed
+	// column plus the columns in the computed column expression. Finally, if the
+	// derived filter is an AND expression, each conjunct is built into a
+	// separate FiltersItem in filters, and tight filters are placed at the front
+	// of the slice. tempOut is updated with the constraint representing
+	// the filters. If successful, ok=true is returned.
+	buildComputedColumnFilters := func() (ok bool) {
+		if !columns.ColSet().Intersects(c.colsInComputedColsExpressions) {
+			// Give up if there is no chance of deriving new filters.
+			return false
+		}
+		// Build the new combined single-key constraint.
+		newKey := constraint.MakeCompositeKey(datums...)
+		newSpan := constraint.Span{}
+		newSpan.Init(newKey, constraint.IncludeBoundary, newKey, constraint.IncludeBoundary)
+		spans := constraint.Spans{}
+		spans.InitSingleSpan(&newSpan)
+		keyColumns := constraint.Columns{}
+		keyColumns.Init(columns)
+		keyContext := constraint.MakeKeyContext(&keyColumns, c.evalCtx)
+		combinedConstraint.Init(&keyContext, &spans)
+
+		// Derive new filters on columns from pre-existing filters plus new computed
+		// column filters.
+		computedColumnFilters = norm.CombineComputedColFilters(
+			c.computedCols,
+			c.keyCols,
+			c.colsInComputedColsExpressions,
+			&combinedConstraint,
+			c.factory,
+		)
+		if len(computedColumnFilters) != 1 {
+			return false
+		}
+		// Similar to the logic in `makeSpansForAnd`, each ANDed predicate is split
+		// into its own FiltersItem.
+		if andExpr, isAndExpr := computedColumnFilters[0].Condition.(*memo.AndExpr); isAndExpr {
+			filters = make(memo.FiltersExpr, 0, 2)
+			splitConjuncts(andExpr)
+			if len(filters) == 0 {
+				filters = filters[:0]
+				return false
+			}
+		} else {
+			filters = computedColumnFilters
+			c.unconstrained(offset, &exprConstraint)
+			localTight = c.makeSpansForExpr(offset, computedColumnFilters[0].Condition, &exprConstraint)
+			if !localTight {
+				filters = nil
+				return false
+			}
+			tempOut.IntersectWith(c.evalCtx, &exprConstraint)
+		}
+		return true
+	}
+
+	// buildFinalFiltersAndUpdateTightDeltaMap converts the new computed column
+	// filters into constraints, prepends any new tight constraints to the front
+	// of a new filters slice, appends pre-existing filters after that, then
+	// appends any new non-tight constraints at the end. Pre-existing entries in
+	// the tightDeltaMap are mapped to new entries representing their new
+	// position in the filters slice, and new entries are added for new tight
+	// constraints. Also, the intersection of all constraints is written to the
+	// `out` parameter.
+	buildFinalFiltersAndUpdateTightDeltaMap := func() {
+		numNewTightFilters := len(filters)
+
+		// Map old keys in tightDeltaMap to new keys so we don't break the logic in
+		// `makeSpansForAnd`.
+		for i := len(inputFilters) - 1; i >= 0; i-- {
+			delta, keyIsInMap := tightDeltaMap.Get(i)
+			if !keyIsInMap {
+				continue
+			}
+			tightDeltaMap.Set(i+numNewTightFilters, delta)
+			tightDeltaMap.Unset(i)
+		}
+		// Mark new-found tight filters in the tightDeltaMap.
+		for i := range filters {
+			tightDeltaMap.Set(i, 0)
+		}
+
+		// Append the original filters to the final filters list.
+		filters = append(filters, inputFilters...)
+		// Append non-tight filters to the final filters list.
+		filters = append(filters, nonTightFilters...)
+
+		// A tight constraint was successfully built from derived filters. Copy the
+		// result intersected constraint to the output constraint.
+		*out = tempOut
+	}
+
+	var constraints *constraint.Set
+	tight := false
+
+	// First check if the original AND expression, before it was split into
+	// separate filters, is tight on its own, and can be used to derive new
+	// computed column filters.
+	constraints, tight =
+		memo.BuildConstraints(expr, c.md, c.evalCtx, true /* skipExtraConstraints */)
+	if tight {
+		for i := 0; i < constraints.Length(); i++ {
+			cons := constraints.Constraint(i)
+			canContinue := populateColumnsAndDatumsFromConstraint(cons)
+			if canContinue {
+				continue
+			} else {
+				columns = columns[:0]
+				datums = datums[:0]
+				break
+			}
+		}
+		if len(columns) > 0 {
+			if ok = buildComputedColumnFilters(); ok {
+				buildFinalFiltersAndUpdateTightDeltaMap()
+				return filters, true
+			}
+		}
+	}
+	// Reset constraint parameters for new attempt.
+	columns = columns[:0]
+	datums = datums[:0]
+	tempOut = *out
+
+	// If the previous method was unsuccessful, loop through the filters which
+	// were split apart from the original AND expression tree, and look for those
+	// which can be built into a single tight, single-key constraint. Combine all
+	// tight constraints on non-overlapping columns into a new constraint
+	// involving those columns.
+	for i := 0; i < len(inputFilters); i++ {
+		tightConstraints := false
+		constraints, tightConstraints =
+			memo.BuildConstraints(inputFilters[i].Condition, c.md, c.evalCtx, true /* skipExtraConstraints */)
+		if !tightConstraints {
+			continue
+		}
+		if constraints.Length() != 1 {
+			return nil, false
+		}
+		cons := constraints.Constraint(0)
+		if !populateColumnsAndDatumsFromConstraint(cons) {
+			return nil, false
+		}
+	}
+	if len(columns) > 0 {
+		if ok = buildComputedColumnFilters(); ok {
+			buildFinalFiltersAndUpdateTightDeltaMap()
+			return filters, true
+		}
+	}
+	return nil, false
+}
+
 // makeSpansForAnd calculates spans for an AndOp or FiltersOp.
 func (c *indexConstraintCtx) makeSpansForAnd(
 	offset int, e opt.Expr, out *constraint.Constraint,
@@ -758,6 +1036,16 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 		}
 		tight = tight && filterTight
 		out.IntersectWith(c.evalCtx, &exprConstraint)
+	}
+	if c.computedColSet.Intersects(c.keyCols) && !tight && !c.skipComputedColPredDerivation &&
+		c.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation {
+		c.skipComputedColPredDerivation = true
+		tempFilters, ok := c.deriveComputedColumnConstraints(
+			filters, e.(opt.ScalarExpr), offset, out, &tightDeltaMap)
+		c.skipComputedColPredDerivation = false
+		if ok {
+			filters = tempFilters
+		}
 	}
 	if out.IsUnconstrained() {
 		return tight
@@ -1056,6 +1344,7 @@ func (ic *Instance) Init(
 	columns []opt.OrderingColumn,
 	notNullCols opt.ColSet,
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
+	colsInComputedColsExpressions opt.ColSet,
 	consolidate bool,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
@@ -1075,7 +1364,7 @@ func (ic *Instance) Init(
 		ic.allFilters = requiredFilters[:len(requiredFilters):len(requiredFilters)]
 		ic.allFilters = append(ic.allFilters, optionalFilters...)
 	}
-	ic.indexConstraintCtx.init(columns, notNullCols, computedCols, evalCtx, factory)
+	ic.indexConstraintCtx.init(columns, notNullCols, computedCols, colsInComputedColsExpressions, evalCtx, factory)
 	ic.tight = ic.makeSpansForExpr(0 /* offset */, &ic.allFilters, &ic.constraint)
 
 	// Note: If consolidate is true, we only consolidate spans at the
@@ -1154,9 +1443,17 @@ type indexConstraintCtx struct {
 
 	columns []opt.OrderingColumn
 
+	keyCols opt.ColSet
+
 	notNullCols opt.ColSet
 
 	computedCols map[opt.ColumnID]opt.ScalarExpr
+
+	computedColSet opt.ColSet
+
+	colsInComputedColsExpressions opt.ColSet
+
+	skipComputedColPredDerivation bool
 
 	evalCtx *eval.Context
 
@@ -1170,19 +1467,30 @@ func (c *indexConstraintCtx) init(
 	columns []opt.OrderingColumn,
 	notNullCols opt.ColSet,
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
+	colsInComputedColsExpressions opt.ColSet,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
 ) {
+	var keyCols, computedColSet opt.ColSet
+	for _, col := range columns {
+		keyCols.Add(col.ID())
+	}
+	for colID := range computedCols {
+		computedColSet.Add(colID)
+	}
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*c = indexConstraintCtx{
-		md:           factory.Metadata(),
-		columns:      columns,
-		notNullCols:  notNullCols,
-		computedCols: computedCols,
-		evalCtx:      evalCtx,
-		factory:      factory,
-		keyCtx:       make([]constraint.KeyContext, len(columns)),
+		md:                            factory.Metadata(),
+		columns:                       columns,
+		keyCols:                       keyCols,
+		notNullCols:                   notNullCols,
+		computedCols:                  computedCols,
+		computedColSet:                computedColSet,
+		colsInComputedColsExpressions: colsInComputedColsExpressions,
+		evalCtx:                       evalCtx,
+		factory:                       factory,
+		keyCtx:                        make([]constraint.KeyContext, len(columns)),
 	}
 	for i := range columns {
 		c.keyCtx[i].EvalCtx = evalCtx
