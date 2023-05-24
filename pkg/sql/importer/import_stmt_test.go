@@ -3451,6 +3451,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// Verify that during IMPORT INTO the table is offline.
 	t.Run("offline-state", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 89999, num_replicas = 5;`)
 		defer dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
@@ -3489,6 +3490,28 @@ func TestImportIntoCSV(t *testing.T) {
 			if !testutils.IsError(err, `relation "t" is offline: importing`) {
 				return err
 			}
+			// Validate that scanning zone configurations does not result in a error
+			rows, err := sqlDB.DB.QueryContext(ctx, "SHOW ZONE CONFIGURATIONS")
+			if err != nil {
+				return err
+			}
+			foundTable := false
+			var objectName string
+			var ignoredStr string
+			for rows.Next() {
+				if rows.Err() != nil {
+					return rows.Err()
+				}
+				err := rows.Scan(&objectName, &ignoredStr)
+				if err != nil {
+					return err
+				}
+				if objectName == "TABLE defaultdb.public.t" {
+					foundTable = true
+					break
+				}
+			}
+			require.True(t, foundTable, "unable to find zone config for importing table")
 			return nil
 		})
 		if err := g.Wait(); err != nil {
