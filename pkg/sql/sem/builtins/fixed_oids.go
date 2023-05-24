@@ -2418,6 +2418,10 @@ var builtinOidsArray = []string{
 	2445: `lead(val: pg_lsn, n: int, default: pg_lsn) -> pg_lsn`,
 	2446: `last_value(val: pg_lsn) -> pg_lsn`,
 	2447: `pg_lsnsend(pg_lsn: pg_lsn) -> bytes`,
+	2448: `encrypt(data: bytes, key: bytes, type: string) -> bytes`,
+	2449: `encrypt_iv(data: bytes, key: bytes, iv: bytes, type: string) -> bytes`,
+	2450: `decrypt(data: bytes, key: bytes, type: string) -> bytes`,
+	2451: `decrypt_iv(data: bytes, key: bytes, iv: bytes, type: string) -> bytes`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

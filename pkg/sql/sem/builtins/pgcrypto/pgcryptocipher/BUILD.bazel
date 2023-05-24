@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "pgcryptocipher",
     srcs = [
+        "cipher.go",
         "cipher_method.go",
         "doc.go",
         "padding.go",
