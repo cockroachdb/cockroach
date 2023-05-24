@@ -143,6 +143,7 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping: {}
   +    revertible: true
      dependedOnBy:
      - columnIds:
@@ -173,6 +174,17 @@ upsert descriptor #105
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 105
+  +      indexes:
+  +        "2": t_pkey
+  +      name: t
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹b›
@@ -401,8 +413,8 @@ begin transaction #10
 ## PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
 upsert descriptor #104
   ...
-         userName: root
        jobId: "1"
+       nameMapping: {}
   -    revertible: true
      dependedOnBy:
      - columnIds:
@@ -576,6 +588,7 @@ upsert descriptor #104
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping: {}
   -  dependedOnBy:
   -  - columnIds:
   -    - 2
@@ -597,6 +610,17 @@ upsert descriptor #105
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 105
+  -      indexes:
+  -        "2": t_pkey
+  -      name: t
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹b›

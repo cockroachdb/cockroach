@@ -270,6 +270,7 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 const (
 	explainDirName        = "explain"
 	explainVerboseDirName = "explain_verbose"
+	explainShapeDirName   = "explain_shape"
 )
 
 // checkExplainDiagrams checks the output of the compact and verbose explain
@@ -292,6 +293,7 @@ func checkExplainDiagrams(
 	}
 	explainDir := mkdir(explainDirName)
 	explainVerboseDir := mkdir(explainVerboseDirName)
+	explainShapeDir := mkdir(explainShapeDirName)
 	baseName := filepath.Base(path)
 	makeFile := func(dir string, openFunc func(string) (*os.File, error)) *os.File {
 		name := baseName + fileNameSuffix
@@ -350,6 +352,9 @@ func checkExplainDiagrams(
 	require.NoErrorf(t, err, "%s: %s", fileNameSuffix, explainedStmt)
 	action(explainDir, "ddl", pl.ExplainCompact)
 	action(explainVerboseDir, "ddl, verbose", pl.ExplainVerbose)
+	if !inRollback {
+		action(explainShapeDir, "ddl, shape", pl.ExplainShape)
+	}
 }
 
 // scheduleIDRegexp captures either `scheduleId: 384784` or `scheduleId: "374764"`.
