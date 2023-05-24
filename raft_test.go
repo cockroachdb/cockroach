@@ -2608,43 +2608,55 @@ func TestLeaderAppResp(t *testing.T) {
 		{3, true, 0, 3, 0, 0, 0},  // stale resp; no replies
 		{2, true, 0, 2, 1, 1, 0},  // denied resp; leader does not commit; decrease next and send probing msg
 		{2, false, 2, 4, 2, 2, 2}, // accept resp; leader commits; broadcast with commit index
-		{0, false, 0, 3, 0, 0, 0}, // ignore heartbeat replies
+		// Follower is StateProbing at 0, it sends MsgAppResp for 0 (which
+		// matches the pr.Match) so it is moved to StateReplicate and as many
+		// entries as possible are sent to it (1, 2, and 3). Correspondingly the
+		// Next is then 4 (an Entry at 4 does not exist, indicating the follower
+		// will be up to date should it process the emitted MsgApp).
+		{0, false, 0, 4, 1, 0, 0},
 	}
 
-	for i, tt := range tests {
-		// sm term is 1 after it becomes the leader.
-		// thus the last log term must be 1 to be committed.
-		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-		sm.raftLog = &raftLog{
-			storage:  &MemoryStorage{ents: []pb.Entry{{}, {Index: 1, Term: 1}, {Index: 2, Term: 1}}},
-			unstable: unstable{offset: 3},
-		}
-		sm.becomeCandidate()
-		sm.becomeLeader()
-		sm.readMessages()
-		sm.Step(pb.Message{From: 2, Type: pb.MsgAppResp, Index: tt.index, Term: sm.Term, Reject: tt.reject, RejectHint: tt.index})
-
-		p := sm.prs.Progress[2]
-		if p.Match != tt.wmatch {
-			t.Errorf("#%d match = %d, want %d", i, p.Match, tt.wmatch)
-		}
-		if p.Next != tt.wnext {
-			t.Errorf("#%d next = %d, want %d", i, p.Next, tt.wnext)
-		}
-
-		msgs := sm.readMessages()
-
-		if len(msgs) != tt.wmsgNum {
-			t.Errorf("#%d msgNum = %d, want %d", i, len(msgs), tt.wmsgNum)
-		}
-		for j, msg := range msgs {
-			if msg.Index != tt.windex {
-				t.Errorf("#%d.%d index = %d, want %d", i, j, msg.Index, tt.windex)
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			// sm term is 1 after it becomes the leader.
+			// thus the last log term must be 1 to be committed.
+			sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+			sm.raftLog = &raftLog{
+				storage:  &MemoryStorage{ents: []pb.Entry{{}, {Index: 1, Term: 1}, {Index: 2, Term: 1}}},
+				unstable: unstable{offset: 3},
 			}
-			if msg.Commit != tt.wcommitted {
-				t.Errorf("#%d.%d commit = %d, want %d", i, j, msg.Commit, tt.wcommitted)
+			sm.becomeCandidate()
+			sm.becomeLeader()
+			sm.readMessages()
+			require.NoError(t, sm.Step(
+				pb.Message{
+					From:       2,
+					Type:       pb.MsgAppResp,
+					Index:      tt.index,
+					Term:       sm.Term,
+					Reject:     tt.reject,
+					RejectHint: tt.index,
+				},
+			))
+
+			p := sm.prs.Progress[2]
+			require.EqualValues(t, tt.wmatch, p.Match)
+			require.EqualValues(t, tt.wnext, p.Next)
+
+			msgs := sm.readMessages()
+
+			if len(msgs) != tt.wmsgNum {
+				require.Equal(t, len(msgs), tt.wmsgNum)
 			}
-		}
+			for _, msg := range msgs {
+				if msg.Index != tt.windex {
+					require.EqualValues(t, tt.windex, msg.Index, "%v", DescribeMessage(msg, nil))
+				}
+				if msg.Commit != tt.wcommitted {
+					require.EqualValues(t, tt.wcommitted, msg.Commit, "%v", DescribeMessage(msg, nil))
+				}
+			}
+		})
 	}
 }
 
