@@ -14,18 +14,22 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"gopkg.in/yaml.v2"
 )
 
@@ -102,30 +106,8 @@ func (p Plan) ExplainVerbose() (string, error) {
 }
 
 func (p Plan) explain(style treeprinter.Style) (string, error) {
-	// Generate root node.
 	tp := treeprinter.NewWithStyle(style)
-	var sb strings.Builder
-	{
-		// Don't bother to memory monitor this "prologue" part as it is small and fixed.
-		sb.WriteString("Schema change plan for ")
-		if p.InRollback {
-			sb.WriteString("rolling back ")
-		}
-		lastStmt := p.Statements[len(p.Statements)-1].RedactedStatement
-		sb.WriteString(strings.TrimSuffix(lastStmt, ";"))
-		if len(p.Statements) > 1 {
-			sb.WriteString("; following ")
-			for i, stmt := range p.Statements[:len(p.Statements)-1] {
-				if i > 0 {
-					sb.WriteString("; ")
-				}
-				sb.WriteString(strings.TrimSuffix(stmt.RedactedStatement, ";"))
-			}
-		}
-		sb.WriteString(";")
-	}
-
-	root := tp.Child(sb.String())
+	root := p.rootNode(tp)
 	var pn treeprinter.Node
 	for i, s := range p.Stages {
 		// Generate stage node, grouped by phase.
@@ -219,30 +201,31 @@ func (p Plan) explainTargets(s scstage.Stage, sn treeprinter.Node, style treepri
 			}
 			// Add element node and child rule nodes, and monitor memory allocation.
 			var en treeprinter.Node
-			var str string
 			var estimatedMemAlloc int
+			accountFor := func(label string) string {
+				estimatedMemAlloc += len(label)
+				return label
+			}
+			var sb redact.StringBuilder
+			if err := screl.FormatTargetElement(&sb, p.TargetState, t.Element()); err != nil {
+				return err
+			}
 			if style == treeprinter.BulletStyle {
-				str = screl.ElementString(t.Element())
-				en = tn.Child(str)
-				estimatedMemAlloc += len(str)
-				str = fmt.Sprintf("%s → %s", before, after)
-				en.AddLine(str)
-				estimatedMemAlloc += len(str)
+				en = tn.Child(accountFor(sb.String()))
+				en.AddLine(accountFor(fmt.Sprintf("%s → %s", before, after)))
 			} else {
-				str = fmt.Sprintf(fmtCompactTransition, before, after, screl.ElementString(t.Element()))
-				en = tn.Child(str)
-				estimatedMemAlloc += len(str)
+				en = tn.Child(accountFor(fmt.Sprintf(fmtCompactTransition, before, after, sb.String())))
 			}
 			depEdges := depEdgeByElement[t.Element()]
 			for _, de := range depEdges {
-				str = fmt.Sprintf("%s dependency from %s %s",
-					de.Kind(), de.From().CurrentStatus, screl.ElementString(de.From().Element()))
-				rn := en.Child(str)
-				estimatedMemAlloc += len(str)
+				var sbf redact.StringBuilder
+				if err := screl.FormatTargetElement(&sbf, p.TargetState, de.From().Element()); err != nil {
+					return err
+				}
+				rn := en.Child(accountFor(fmt.Sprintf("%s dependency from %s %s",
+					de.Kind(), de.From().CurrentStatus, sbf)))
 				for _, r := range de.Rules() {
-					str = fmt.Sprintf("rule: %q", r.Name)
-					rn.AddLine(str)
-					estimatedMemAlloc += len(str)
+					rn.AddLine(accountFor(fmt.Sprintf("rule: %q", r.Name)))
 				}
 			}
 			noOpEdges := noOpByElement[t.Element()]
@@ -251,14 +234,10 @@ func (p Plan) explainTargets(s scstage.Stage, sn treeprinter.Node, style treepri
 				if len(noOpRules) == 0 {
 					continue
 				}
-				str = fmt.Sprintf("skip %s → %s operations",
-					oe.From().CurrentStatus, oe.To().CurrentStatus)
-				nn := en.Child(str)
-				estimatedMemAlloc += len(str)
+				nn := en.Child(accountFor(fmt.Sprintf("skip %s → %s operations",
+					oe.From().CurrentStatus, oe.To().CurrentStatus)))
 				for _, rule := range noOpRules {
-					str = fmt.Sprintf("rule: %q", rule)
-					nn.AddLine(str)
-					estimatedMemAlloc += len(str)
+					nn.AddLine(accountFor(fmt.Sprintf("rule: %q", rule)))
 				}
 			}
 			if err := p.Params.MemAcc.Grow(p.Params.Ctx, int64(estimatedMemAlloc)); err != nil {
@@ -281,22 +260,24 @@ func (p Plan) explainOps(s scstage.Stage, sn treeprinter.Node, style treeprinter
 	on := sn.Childf("%d %s operation%s", len(ops), strings.TrimSuffix(s.Type().String(), "Type"), plural)
 	for _, op := range ops {
 		var estimatedMemAlloc int
+		accountFor := func(label string) string {
+			estimatedMemAlloc += len(label)
+			return label
+		}
 		if setJobStateOp, ok := op.(*scop.SetJobStateOnDescriptor); ok {
 			clone := *setJobStateOp
 			clone.State = scpb.DescriptorState{}
 			op = &clone
 		}
-		opName := strings.TrimPrefix(fmt.Sprintf("%T", op), "*scop.")
+		name := opName(op)
 		if style == treeprinter.BulletStyle {
-			n := on.Child(opName)
-			estimatedMemAlloc += len(opName)
+			n := on.Child(accountFor(name))
 			opBody, err := explainOpBodyVerbose(op)
 			if err != nil {
 				return err
 			}
 			for _, line := range strings.Split(opBody, "\n") {
-				n.AddLine(line)
-				estimatedMemAlloc += len(line)
+				n.AddLine(accountFor(line))
 			}
 		} else {
 			opBody, err := explainOpBodyCompact(op)
@@ -304,12 +285,9 @@ func (p Plan) explainOps(s scstage.Stage, sn treeprinter.Node, style treeprinter
 				return err
 			}
 			if len(opBody) == 0 {
-				on.Child(opName)
-				estimatedMemAlloc += len(opName)
+				on.Child(accountFor(name))
 			} else {
-				str := fmt.Sprintf("%s %s", opName, opBody)
-				on.Child(str)
-				estimatedMemAlloc += len(str)
+				on.Child(accountFor(fmt.Sprintf("%s %s", name, opBody)))
 			}
 		}
 		if err := p.Params.MemAcc.Grow(p.Params.Ctx, int64(estimatedMemAlloc)); err != nil {
@@ -393,4 +371,266 @@ func opMapTrim(in map[string]interface{}) map[string]interface{} {
 		}
 	}
 	return out
+}
+
+// ExplainShape returns a human-readable plan rendering for
+// EXPLAIN (DDL, SHAPE) statements.
+func (p Plan) ExplainShape() (string, error) {
+	// Generate root node.
+	tp := treeprinter.NewWithStyle(treeprinter.DefaultStyle)
+	root := p.rootNode(tp)
+	var txnCounter uint
+	for i, s := range p.Stages {
+		switch s.Type() {
+		case scop.MutationType:
+			// Group these into consecutive transactions.
+			// Each transaction is assumed to have a fixed cost, which is true
+			// enough in comparison to non-mutation stages whose ops cost O(rows).
+			var nextStage *Stage
+			if i < len(p.Stages)-1 {
+				nextStage = &p.Stages[i+1]
+			}
+			if nextStage != nil && nextStage.Phase <= scop.PreCommitPhase {
+				// Ignore all stages prior to the last pre-commit stage
+				// when it comes to counting transactions.
+				continue
+			}
+			txnCounter++
+			if nextStage == nil || nextStage.Type() != scop.MutationType {
+				// This stage is the last consecutive mutation stage.
+				if txnCounter == 1 {
+					root.Childf("execute 1 system table mutations transaction")
+				} else {
+					root.Childf("execute %d system table mutations transactions", txnCounter)
+				}
+				txnCounter = 0
+			}
+		case scop.BackfillType:
+			if err := p.explainBackfillsAndMerges(root, s.EdgeOps); err != nil {
+				return "", err
+			}
+		case scop.ValidationType:
+			if err := p.explainValidations(root, s.EdgeOps); err != nil {
+				return "", err
+			}
+		default:
+			return "", errors.AssertionFailedf("unsupported type %s", s.Type())
+		}
+	}
+	return tp.String(), nil
+}
+
+func (p Plan) rootNode(tp treeprinter.Node) treeprinter.Node {
+	var sb strings.Builder
+	// Don't bother to memory monitor this "prologue" part as it is small and fixed.
+	sb.WriteString("Schema change plan for ")
+	if p.InRollback {
+		sb.WriteString("rolling back ")
+	}
+	lastStmt := p.Statements[len(p.Statements)-1].RedactedStatement
+	sb.WriteString(strings.TrimSuffix(lastStmt, ";"))
+	if len(p.Statements) > 1 {
+		sb.WriteString("; following ")
+		for i, stmt := range p.Statements[:len(p.Statements)-1] {
+			if i > 0 {
+				sb.WriteString("; ")
+			}
+			sb.WriteString(strings.TrimSuffix(stmt.RedactedStatement, ";"))
+		}
+	}
+	sb.WriteString(";")
+	return tp.Child(sb.String())
+}
+
+func (p Plan) explainBackfillsAndMerges(root treeprinter.Node, ops []scop.Op) error {
+	gbs, gms := groupBackfillsAndMerges(ops)
+	var estimatedMemAlloc int
+	accountFor := func(label string) string {
+		estimatedMemAlloc += len(label)
+		return label
+	}
+	for _, gb := range gbs {
+		bn := root.Child(accountFor(fmt.Sprintf(
+			"backfill using primary index %s in relation %s",
+			p.IndexName(gb.relationID, gb.srcIndexID),
+			p.Name(gb.relationID),
+		)))
+		var key, suffix, stored []*scpb.IndexColumn
+		for _, t := range p.Targets {
+			switch e := t.Element().(type) {
+			case *scpb.IndexColumn:
+				if e.TableID == gb.relationID {
+					switch e.Kind {
+					case scpb.IndexColumn_KEY:
+						key = append(key, e)
+					case scpb.IndexColumn_KEY_SUFFIX:
+						suffix = append(suffix, e)
+					case scpb.IndexColumn_STORED:
+						stored = append(stored, e)
+					}
+				}
+			}
+		}
+		for _, ics := range [][]*scpb.IndexColumn{key, suffix, stored} {
+			sort.Slice(ics, func(i, j int) bool {
+				if ics[i].IndexID == ics[j].IndexID {
+					return ics[i].OrdinalInKind == ics[j].OrdinalInKind
+				}
+				return ics[i].IndexID < ics[j].IndexID
+			})
+		}
+		for _, id := range gb.dstIndexIDs.Ordered() {
+			var withComma bool
+			var sb strings.Builder
+			sb.WriteString("  ⇒ ")
+			sb.WriteString(p.IndexName(gb.relationID, id))
+			for _, ics := range [][]*scpb.IndexColumn{key, suffix, stored} {
+				for _, ic := range ics {
+					if ic.IndexID == id {
+						if withComma {
+							sb.WriteString(", ")
+						} else {
+							sb.WriteString(": ")
+							withComma = true
+						}
+						sb.WriteString(p.ColumnName(gb.relationID, ic.ColumnID))
+						if ic.Direction == catenumpb.IndexColumn_DESC {
+							sb.WriteRune('↘')
+						} else if ic.Kind != scpb.IndexColumn_STORED {
+							sb.WriteRune('↗')
+						}
+					}
+				}
+			}
+			bn.AddLine(accountFor(sb.String()))
+		}
+	}
+	for _, gm := range gms {
+		mn := root.Child(accountFor(fmt.Sprintf(
+			"merge temporary indexes into backfilled indexes in relation %s",
+			p.Name(gm.relationID),
+		)))
+		for _, mp := range gm.pairs {
+			mn.AddLine(accountFor(fmt.Sprintf(
+				"  ~%s ⇒ %s",
+				p.IndexName(gm.relationID, mp.srcIndexID),
+				p.IndexName(gm.relationID, mp.dstIndexID),
+			)))
+		}
+	}
+	return p.Params.MemAcc.Grow(p.Params.Ctx, int64(estimatedMemAlloc))
+}
+
+func (p Plan) explainValidations(root treeprinter.Node, ops []scop.Op) error {
+	var estimatedMemAlloc int
+	accountFor := func(label string) string {
+		estimatedMemAlloc += len(label)
+		return label
+	}
+	for _, op := range ops {
+		switch op := op.(type) {
+		case *scop.ValidateIndex:
+			root.Child(accountFor(fmt.Sprintf(
+				"validate UNIQUE constraint backed by index %s in relation %s",
+				p.IndexName(op.TableID, op.IndexID),
+				p.Name(op.TableID),
+			)))
+		case *scop.ValidateConstraint:
+			root.Child(accountFor(fmt.Sprintf(
+				"validate non-index-backed constraint %s in relation %s",
+				p.ConstraintName(op.TableID, op.ConstraintID),
+				p.Name(op.TableID),
+			)))
+		case *scop.ValidateColumnNotNull:
+			root.Child(accountFor(fmt.Sprintf(
+				"validate NOT NULL constraint on column %s in index %s in relation %s",
+				p.ColumnName(op.TableID, op.ColumnID),
+				p.IndexName(op.TableID, op.IndexIDForValidation),
+				p.Name(op.TableID),
+			)))
+		}
+	}
+	return p.Params.MemAcc.Grow(p.Params.Ctx, int64(estimatedMemAlloc))
+}
+
+func groupBackfillsAndMerges(ops []scop.Op) ([]groupedBackfill, []groupedMerge) {
+	gbs := make([]groupedBackfill, 0, len(ops))
+	gms := make([]groupedMerge, 0, len(ops))
+	gbIdx := make(map[groupedBackfillKey]int)
+	gmIdx := make(map[groupedMergeKey]int)
+	for _, op := range ops {
+		switch op := op.(type) {
+		case *scop.BackfillIndex:
+			k := groupedBackfillKey{
+				relationID: op.TableID,
+				srcIndexID: op.SourceIndexID,
+			}
+			if idx, ok := gbIdx[k]; ok {
+				gbs[idx].dstIndexIDs.Add(op.IndexID)
+			} else {
+				gbIdx[k] = len(gbs)
+				gbs = append(gbs, groupedBackfill{
+					groupedBackfillKey: k,
+					dstIndexIDs:        catid.MakeIndexIDSet(op.IndexID),
+				})
+			}
+		case *scop.MergeIndex:
+			k := groupedMergeKey{relationID: op.TableID}
+			mp := mergePair{
+				srcIndexID: op.TemporaryIndexID,
+				dstIndexID: op.BackfilledIndexID,
+			}
+			if idx, ok := gmIdx[k]; ok {
+				gms[idx].pairs = append(gms[idx].pairs, mp)
+			} else {
+				gmIdx[k] = len(gms)
+				gms = append(gms, groupedMerge{
+					groupedMergeKey: k,
+					pairs:           []mergePair{mp},
+				})
+			}
+		}
+	}
+	sort.Slice(gbs, func(i, j int) bool {
+		if gbs[i].relationID == gbs[j].relationID {
+			return gbs[i].srcIndexID < gbs[j].srcIndexID
+		}
+		return gbs[i].relationID < gbs[j].relationID
+	})
+	sort.Slice(gms, func(i, j int) bool {
+		return gms[i].relationID < gms[j].relationID
+	})
+	for _, gm := range gms {
+		sort.Slice(gm.pairs, func(i, j int) bool {
+			return gm.pairs[i].srcIndexID < gm.pairs[j].dstIndexID
+		})
+	}
+	return gbs, gms
+}
+
+type groupedBackfill struct {
+	groupedBackfillKey
+	dstIndexIDs catid.IndexSet
+}
+
+type groupedBackfillKey struct {
+	relationID catid.DescID
+	srcIndexID catid.IndexID
+}
+
+type groupedMerge struct {
+	groupedMergeKey
+	pairs []mergePair
+}
+
+type groupedMergeKey struct {
+	relationID catid.DescID
+}
+
+type mergePair struct {
+	srcIndexID, dstIndexID catid.IndexID
+}
+
+func opName(op scop.Op) string {
+	return strings.TrimPrefix(fmt.Sprintf("%T", op), "*scop.")
 }

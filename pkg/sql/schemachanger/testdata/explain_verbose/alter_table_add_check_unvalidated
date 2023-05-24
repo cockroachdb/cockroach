@@ -13,10 +13,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
 │       │
 │       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+│       │   ├── • CheckConstraintUnvalidated:{DescID 104 "t", ConstraintID 2 "+check_i"}
 │       │   │     ABSENT → PUBLIC
 │       │   │
-│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+│       │   └── • ConstraintWithoutIndexName:{DescID 104 "t", Name "check_i", ConstraintID 2 "+check_i"}
 │       │         ABSENT → PUBLIC
 │       │
 │       └── • 2 Mutation operations
@@ -40,10 +40,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
     │   │
     │   ├── • 2 elements transitioning toward PUBLIC
     │   │   │
-    │   │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+    │   │   ├── • CheckConstraintUnvalidated:{DescID 104 "t", ConstraintID 2 "+check_i"}
     │   │   │     PUBLIC → ABSENT
     │   │   │
-    │   │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+    │   │   └── • ConstraintWithoutIndexName:{DescID 104 "t", Name "check_i", ConstraintID 2 "+check_i"}
     │   │         PUBLIC → ABSENT
     │   │
     │   └── • 1 Mutation operation
@@ -55,10 +55,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
         │
         ├── • 2 elements transitioning toward PUBLIC
         │   │
-        │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+        │   ├── • CheckConstraintUnvalidated:{DescID 104 "t", ConstraintID 2 "+check_i"}
         │   │     ABSENT → PUBLIC
         │   │
-        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+        │   └── • ConstraintWithoutIndexName:{DescID 104 "t", Name "check_i", ConstraintID 2 "+check_i"}
         │         ABSENT → PUBLIC
         │
         └── • 2 Mutation operations

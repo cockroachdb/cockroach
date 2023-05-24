@@ -13,16 +13,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
 │       │
 │       ├── • 2 elements transitioning toward ABSENT
 │       │   │
-│       │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   ├── • ForeignKeyConstraint:{DescID 105 "t1", IndexID 0, ConstraintID 2 "-t1_i_fkey", ReferencedDescID 104 "#104"}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID 105 "t1", IndexID 0, ConstraintID 2 "-t1_i_fkey", ReferencedDescID 104 "#104"}
 │       │   │         rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
-│       │   └── • ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
+│       │   └── • ConstraintWithoutIndexName:{DescID 105 "t1", Name "t1_i_fkey", ConstraintID 2 "-t1_i_fkey"}
 │       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID 105 "t1", IndexID 0, ConstraintID 2 "-t1_i_fkey", ReferencedDescID 104 "#104"}
 │       │             rule: "Constraint should be hidden before name"
 │       │
 │       └── • 2 Mutation operations
@@ -42,10 +42,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
 │   │   │
 │   │   ├── • 2 elements transitioning toward ABSENT
 │   │   │   │
-│   │   │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│   │   │   ├── • ForeignKeyConstraint:{DescID 105 "t1", IndexID 0, ConstraintID 2 "-t1_i_fkey", ReferencedDescID 104 "#104"}
 │   │   │   │     VALIDATED → PUBLIC
 │   │   │   │
-│   │   │   └── • ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
+│   │   │   └── • ConstraintWithoutIndexName:{DescID 105 "t1", Name "t1_i_fkey", ConstraintID 2 "-t1_i_fkey"}
 │   │   │         ABSENT → PUBLIC
 │   │   │
 │   │   └── • 1 Mutation operation
@@ -57,16 +57,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
 │       │
 │       ├── • 2 elements transitioning toward ABSENT
 │       │   │
-│       │   ├── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   ├── • ForeignKeyConstraint:{DescID 105 "t1", IndexID 0, ConstraintID 2 "-t1_i_fkey", ReferencedDescID 104 "#104"}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC ForeignKeyConstraint:{DescID 105 "t1", IndexID 0, ConstraintID 2 "-t1_i_fkey", ReferencedDescID 104 "#104"}
 │       │   │         rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
-│       │   └── • ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
+│       │   └── • ConstraintWithoutIndexName:{DescID 105 "t1", Name "t1_i_fkey", ConstraintID 2 "-t1_i_fkey"}
 │       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+│       │       └── • Precedence dependency from VALIDATED ForeignKeyConstraint:{DescID 105 "t1", IndexID 0, ConstraintID 2 "-t1_i_fkey", ReferencedDescID 104 "#104"}
 │       │             rule: "Constraint should be hidden before name"
 │       │
 │       └── • 5 Mutation operations
@@ -108,13 +108,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
         │
         ├── • 1 element transitioning toward ABSENT
         │   │
-        │   └── • ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+        │   └── • ForeignKeyConstraint:{DescID 105 "t1", IndexID 0, ConstraintID 2 "-t1_i_fkey", ReferencedDescID 104 "#104"}
         │       │ VALIDATED → ABSENT
         │       │
-        │       ├── • PreviousStagePrecedence dependency from VALIDATED ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}
+        │       ├── • PreviousStagePrecedence dependency from VALIDATED ForeignKeyConstraint:{DescID 105 "t1", IndexID 0, ConstraintID 2 "-t1_i_fkey", ReferencedDescID 104 "#104"}
         │       │     rule: "ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
         │       │
-        │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 105, Name: t1_i_fkey, ConstraintID: 2}
+        │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID 105 "t1", Name "t1_i_fkey", ConstraintID 2 "-t1_i_fkey"}
         │             rule: "Constraint should be hidden before name"
         │
         └── • 5 Mutation operations

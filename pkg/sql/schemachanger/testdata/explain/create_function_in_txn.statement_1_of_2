@@ -11,13 +11,13 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 7 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → DESCRIPTOR_ADDED Function:{DescID: 105}
- │         │    ├── ABSENT → PUBLIC           SchemaChild:{DescID: 105, ReferencedDescID: 101}
- │         │    ├── ABSENT → PUBLIC           FunctionName:{DescID: 105}
- │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 105}
- │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105, Name: admin}
- │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105, Name: root}
- │         │    └── ABSENT → PUBLIC           FunctionBody:{DescID: 105}
+ │         │    ├── ABSENT → DESCRIPTOR_ADDED Function:{DescID 105 "+t"}
+ │         │    ├── ABSENT → PUBLIC           SchemaChild:{DescID 105 "+t", ReferencedDescID 101 "public"}
+ │         │    ├── ABSENT → PUBLIC           FunctionName:{DescID 105 "+t"}
+ │         │    ├── ABSENT → PUBLIC           Owner:{DescID 105 "+t"}
+ │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID 105 "+t", Name "admin"}
+ │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID 105 "+t", Name "root"}
+ │         │    └── ABSENT → PUBLIC           FunctionBody:{DescID 105 "+t"}
  │         └── 9 Mutation operations
  │              ├── CreateFunctionDescriptor {"Function":{"FunctionID":105}}
  │              ├── SetFunctionName {"FunctionID":105,"Name":"t"}
@@ -31,24 +31,24 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 7 elements transitioning toward PUBLIC
-      │    │    ├── DESCRIPTOR_ADDED → ABSENT Function:{DescID: 105}
-      │    │    ├── PUBLIC           → ABSENT SchemaChild:{DescID: 105, ReferencedDescID: 101}
-      │    │    ├── PUBLIC           → ABSENT FunctionName:{DescID: 105}
-      │    │    ├── PUBLIC           → ABSENT Owner:{DescID: 105}
-      │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID: 105, Name: admin}
-      │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID: 105, Name: root}
-      │    │    └── PUBLIC           → ABSENT FunctionBody:{DescID: 105}
+      │    │    ├── DESCRIPTOR_ADDED → ABSENT Function:{DescID 105 "+t"}
+      │    │    ├── PUBLIC           → ABSENT SchemaChild:{DescID 105 "+t", ReferencedDescID 101 "public"}
+      │    │    ├── PUBLIC           → ABSENT FunctionName:{DescID 105 "+t"}
+      │    │    ├── PUBLIC           → ABSENT Owner:{DescID 105 "+t"}
+      │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID 105 "+t", Name "admin"}
+      │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID 105 "+t", Name "root"}
+      │    │    └── PUBLIC           → ABSENT FunctionBody:{DescID 105 "+t"}
       │    └── 1 Mutation operation
       │         └── UndoAllInTxnImmediateMutationOpSideEffects
       └── Stage 2 of 2 in PreCommitPhase
            ├── 7 elements transitioning toward PUBLIC
-           │    ├── ABSENT → PUBLIC Function:{DescID: 105}
-           │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 105, ReferencedDescID: 101}
-           │    ├── ABSENT → PUBLIC FunctionName:{DescID: 105}
-           │    ├── ABSENT → PUBLIC Owner:{DescID: 105}
-           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105, Name: admin}
-           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105, Name: root}
-           │    └── ABSENT → PUBLIC FunctionBody:{DescID: 105}
+           │    ├── ABSENT → PUBLIC Function:{DescID 105 "+t"}
+           │    ├── ABSENT → PUBLIC SchemaChild:{DescID 105 "+t", ReferencedDescID 101 "public"}
+           │    ├── ABSENT → PUBLIC FunctionName:{DescID 105 "+t"}
+           │    ├── ABSENT → PUBLIC Owner:{DescID 105 "+t"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID 105 "+t", Name "admin"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID 105 "+t", Name "root"}
+           │    └── ABSENT → PUBLIC FunctionBody:{DescID 105 "+t"}
            └── 10 Mutation operations
                 ├── CreateFunctionDescriptor {"Function":{"FunctionID":105}}
                 ├── SetFunctionName {"FunctionID":105,"Name":"t"}

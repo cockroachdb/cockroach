@@ -13,30 +13,30 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │
 │       ├── • 4 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • Column:{DescID: 106, ColumnID: 2}
+│       │   ├── • Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   ├── • ColumnName:{DescID 106 "tbl", Name "j", ColumnID 2 "+j"}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │         rule: "column name and type set right after column existence"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   ├── • ColumnType:{DescID 106 "tbl", ColumnFamilyID 0 "primary", ColumnID 2 "+j"}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │         rule: "column name and type set right after column existence"
 │       │   │
-│       │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+│       │   └── • IndexColumn:{DescID 106 "tbl", ColumnID 2 "+j", IndexID 1 "tbl_pkey"}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │             rule: "column existence precedes column dependents"
 │       │
 │       └── • 4 Mutation operations
@@ -76,16 +76,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │   │   │
 │   │   ├── • 4 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   ├── • Column:{DescID: 106, ColumnID: 2}
+│   │   │   ├── • Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │   │   │   │     DELETE_ONLY → ABSENT
 │   │   │   │
-│   │   │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│   │   │   ├── • ColumnName:{DescID 106 "tbl", Name "j", ColumnID 2 "+j"}
 │   │   │   │     PUBLIC → ABSENT
 │   │   │   │
-│   │   │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│   │   │   ├── • ColumnType:{DescID 106 "tbl", ColumnFamilyID 0 "primary", ColumnID 2 "+j"}
 │   │   │   │     PUBLIC → ABSENT
 │   │   │   │
-│   │   │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+│   │   │   └── • IndexColumn:{DescID 106 "tbl", ColumnID 2 "+j", IndexID 1 "tbl_pkey"}
 │   │   │         PUBLIC → ABSENT
 │   │   │
 │   │   └── • 1 Mutation operation
@@ -97,30 +97,30 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │
 │       ├── • 4 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • Column:{DescID: 106, ColumnID: 2}
+│       │   ├── • Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   ├── • ColumnName:{DescID 106 "tbl", Name "j", ColumnID 2 "+j"}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │         rule: "column name and type set right after column existence"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   ├── • ColumnType:{DescID 106 "tbl", ColumnFamilyID 0 "primary", ColumnID 2 "+j"}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │   │         rule: "column existence precedes column dependents"
 │       │   │         rule: "column name and type set right after column existence"
 │       │   │
-│       │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+│       │   └── • IndexColumn:{DescID 106 "tbl", ColumnID 2 "+j", IndexID 1 "tbl_pkey"}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │             rule: "column existence precedes column dependents"
 │       │
 │       └── • 6 Mutation operations
@@ -176,10 +176,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │
 │       ├── • 1 element transitioning toward PUBLIC
 │       │   │
-│       │   └── • Column:{DescID: 106, ColumnID: 2}
+│       │   └── • Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │       │ DELETE_ONLY → WRITE_ONLY
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │       └── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID 106 "tbl", ColumnID 2 "+j"}
 │       │             rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │       │
 │       └── • 3 Mutation operations
@@ -202,19 +202,19 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
         │
         ├── • 1 element transitioning toward PUBLIC
         │   │
-        │   └── • Column:{DescID: 106, ColumnID: 2}
+        │   └── • Column:{DescID 106 "tbl", ColumnID 2 "+j"}
         │       │ WRITE_ONLY → PUBLIC
         │       │
-        │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+        │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID 106 "tbl", ColumnID 2 "+j"}
         │       │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
         │       │
-        │       ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+        │       ├── • Precedence dependency from PUBLIC ColumnName:{DescID 106 "tbl", Name "j", ColumnID 2 "+j"}
         │       │     rule: "column dependents exist before column becomes public"
         │       │
-        │       ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+        │       ├── • Precedence dependency from PUBLIC ColumnType:{DescID 106 "tbl", ColumnFamilyID 0 "primary", ColumnID 2 "+j"}
         │       │     rule: "column dependents exist before column becomes public"
         │       │
-        │       └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+        │       └── • Precedence dependency from PUBLIC IndexColumn:{DescID 106 "tbl", ColumnID 2 "+j", IndexID 1 "tbl_pkey"}
         │             rule: "column dependents exist before column becomes public"
         │
         └── • 4 Mutation operations

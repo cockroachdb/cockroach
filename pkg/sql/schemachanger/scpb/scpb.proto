@@ -102,6 +102,7 @@ message TargetState {
   repeated Target targets = 1 [(gogoproto.nullable) = false];
   repeated Statement statements = 2 [(gogoproto.nullable) = false];
   Authorization authorization = 3 [(gogoproto.nullable) = false];
+  repeated NameMapping name_mappings = 4 [(gogoproto.nullable) = false];
 }
 
 message Statement {
@@ -113,6 +114,18 @@ message Statement {
 message Authorization {
   string user_name = 1;
   string app_name = 2;
+}
+
+// NameMapping maps IDs to names for the purpose of generating
+// human-readable output based on the TargetState or a plan.
+message NameMapping {
+  uint32 id = 1 [(gogoproto.customname) = "ID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string name = 2;
+
+  map<uint32,string> columns = 10 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  map<uint32,string> families = 11 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
+  map<uint32,string> indexes = 12 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  map<uint32,string> constraints = 13 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
 }
 
 // DescriptorState contains the portion of a schema change state
@@ -172,6 +185,9 @@ message DescriptorState {
 
   // Authorization is information about the creator of the schema change.
   Authorization authorization = 3 [(gogoproto.nullable) = false];
+
+  // NameMapping contains labels used to decorate any of the targets.
+  NameMapping name_mapping = 9 [(gogoproto.nullable) = false];
 }
 
 // CorpusState is used to serialize the current state object for the purpose,

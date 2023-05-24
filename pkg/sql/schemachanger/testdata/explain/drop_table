@@ -12,33 +12,33 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 27 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 107}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: admin}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: root}
- │         │    ├── PUBLIC → DROPPED    Table:{DescID: 107}
- │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID: 107, ReferencedDescID: 106}
- │         │    ├── PUBLIC → ABSENT     TableComment:{DescID: 107, Comment: t has a comment}
- │         │    ├── PUBLIC → ABSENT     ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 107, Name: k, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 2}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 107, Name: v, ColumnID: 2}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 3}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 107, Name: rowid, ColumnID: 3}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
- │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
- │         │    ├── PUBLIC → ABSENT     ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         │    ├── PUBLIC → VALIDATED  PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
- │         │    └── PUBLIC → ABSENT     IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
+ │         │    ├── PUBLIC → ABSENT     Namespace:{DescID 107 "-t", Name "t", ReferencedDescID 104 "db"}
+ │         │    ├── PUBLIC → ABSENT     Owner:{DescID 107 "-t"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 107 "-t", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 107 "-t", Name "root"}
+ │         │    ├── PUBLIC → DROPPED    Table:{DescID 107 "-t"}
+ │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID 107 "-t", ReferencedDescID 106 "sc"}
+ │         │    ├── PUBLIC → ABSENT     TableComment:{DescID 107 "-t", Comment "t has a comment"}
+ │         │    ├── PUBLIC → ABSENT     ColumnFamily:{DescID 107 "-t", Name "primary", ColumnFamilyID 0 "-primary"}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID 107 "-t", ColumnID 1 "-k"}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID 107 "-t", Name "k", ColumnID 1 "-k"}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 1 "-k"}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID 107 "-t", ColumnID 2 "-v"}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID 107 "-t", Name "v", ColumnID 2 "-v"}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 2 "-v"}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID 107 "-t", ColumnID 3 "-rowid"}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID 107 "-t", Name "rowid", ColumnID 3 "-rowid"}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 3 "-rowid"}
+ │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID 107 "-t", ColumnID 3 "-rowid", IndexID 0}
+ │         │    ├── PUBLIC → ABSENT     ColumnDefaultExpression:{DescID 107 "-t", ColumnID 3 "-rowid"}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID 107 "-t", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID 107 "-t", Name "crdb_internal_mvcc_timestamp", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID 107 "-t", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID 107 "-t", Name "tableoid", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → VALIDATED  PrimaryIndex:{DescID 107 "-t", IndexID 1 "-t_pkey", ConstraintID 1}
+ │         │    └── PUBLIC → ABSENT     IndexName:{DescID 107 "-t", Name "t_pkey", IndexID 1 "-t_pkey"}
  │         └── 22 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
@@ -65,67 +65,67 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 27 elements transitioning toward ABSENT
- │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
- │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 107}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: admin}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: root}
- │    │    │    ├── DROPPED    → PUBLIC Table:{DescID: 107}
- │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID: 107, ReferencedDescID: 106}
- │    │    │    ├── ABSENT     → PUBLIC TableComment:{DescID: 107, Comment: t has a comment}
- │    │    │    ├── ABSENT     → PUBLIC ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}
- │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 107, ColumnID: 1}
- │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 107, Name: k, ColumnID: 1}
- │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}
- │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 107, ColumnID: 2}
- │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 107, Name: v, ColumnID: 2}
- │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}
- │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 107, ColumnID: 3}
- │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 107, Name: rowid, ColumnID: 3}
- │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
- │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
- │    │    │    ├── ABSENT     → PUBLIC ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
- │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 107, ColumnID: 4294967295}
- │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}
- │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 107, ColumnID: 4294967294}
- │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}
- │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}
- │    │    │    ├── VALIDATED  → PUBLIC PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
- │    │    │    └── ABSENT     → PUBLIC IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
+ │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID 107 "-t", Name "t", ReferencedDescID 104 "db"}
+ │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID 107 "-t"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 107 "-t", Name "admin"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 107 "-t", Name "root"}
+ │    │    │    ├── DROPPED    → PUBLIC Table:{DescID 107 "-t"}
+ │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID 107 "-t", ReferencedDescID 106 "sc"}
+ │    │    │    ├── ABSENT     → PUBLIC TableComment:{DescID 107 "-t", Comment "t has a comment"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnFamily:{DescID 107 "-t", Name "primary", ColumnFamilyID 0 "-primary"}
+ │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID 107 "-t", ColumnID 1 "-k"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID 107 "-t", Name "k", ColumnID 1 "-k"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 1 "-k"}
+ │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID 107 "-t", ColumnID 2 "-v"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID 107 "-t", Name "v", ColumnID 2 "-v"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 2 "-v"}
+ │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID 107 "-t", ColumnID 3 "-rowid"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID 107 "-t", Name "rowid", ColumnID 3 "-rowid"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 3 "-rowid"}
+ │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID 107 "-t", ColumnID 3 "-rowid", IndexID 0}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnDefaultExpression:{DescID 107 "-t", ColumnID 3 "-rowid"}
+ │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID 107 "-t", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID 107 "-t", Name "crdb_internal_mvcc_timestamp", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID 107 "-t", ColumnID 4294967294 "-tableoid"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID 107 "-t", Name "tableoid", ColumnID 4294967294 "-tableoid"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 4294967294 "-tableoid"}
+ │    │    │    ├── VALIDATED  → PUBLIC PrimaryIndex:{DescID 107 "-t", IndexID 1 "-t_pkey", ConstraintID 1}
+ │    │    │    └── ABSENT     → PUBLIC IndexName:{DescID 107 "-t", Name "t_pkey", IndexID 1 "-t_pkey"}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 30 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107, Name: admin}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107, Name: root}
- │         │    ├── PUBLIC → DROPPED Table:{DescID: 107}
- │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 107, ReferencedDescID: 106}
- │         │    ├── PUBLIC → ABSENT  TableComment:{DescID: 107, Comment: t has a comment}
- │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}
- │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107, Name: k, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107, ColumnID: 2}
- │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107, Name: v, ColumnID: 2}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}
- │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107, ColumnID: 3}
- │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107, Name: rowid, ColumnID: 3}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
- │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
- │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
- │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}
- │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}
- │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
- │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
- │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID 107 "-t", Name "t", ReferencedDescID 104 "db"}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID 107 "-t"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 107 "-t", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 107 "-t", Name "root"}
+ │         │    ├── PUBLIC → DROPPED Table:{DescID 107 "-t"}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID 107 "-t", ReferencedDescID 106 "sc"}
+ │         │    ├── PUBLIC → ABSENT  TableComment:{DescID 107 "-t", Comment "t has a comment"}
+ │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID 107 "-t", Name "primary", ColumnFamilyID 0 "-primary"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID 107 "-t", ColumnID 1 "-k"}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID 107 "-t", Name "k", ColumnID 1 "-k"}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 1 "-k"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID 107 "-t", ColumnID 2 "-v"}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID 107 "-t", Name "v", ColumnID 2 "-v"}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 2 "-v"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID 107 "-t", ColumnID 3 "-rowid"}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID 107 "-t", Name "rowid", ColumnID 3 "-rowid"}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 3 "-rowid"}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID 107 "-t", ColumnID 3 "-rowid", IndexID 0}
+ │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID 107 "-t", ColumnID 3 "-rowid"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID 107 "-t", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID 107 "-t", Name "crdb_internal_mvcc_timestamp", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID 107 "-t", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID 107 "-t", Name "tableoid", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID 107 "-t", ColumnFamilyID 0 "-primary", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID 107 "-t", ColumnID 3 "-rowid", IndexID 1 "-t_pkey"}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID 107 "-t", ColumnID 1 "-k", IndexID 1 "-t_pkey"}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID 107 "-t", ColumnID 2 "-v", IndexID 1 "-t_pkey"}
+ │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID 107 "-t", IndexID 1 "-t_pkey", ConstraintID 1}
+ │         │    └── PUBLIC → ABSENT  IndexName:{DescID 107 "-t", Name "t_pkey", IndexID 1 "-t_pkey"}
  │         └── 40 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
@@ -170,9 +170,9 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 3 elements transitioning toward ABSENT
-           │    ├── DROPPED → ABSENT Table:{DescID: 107}
-           │    ├── PUBLIC  → ABSENT IndexData:{DescID: 107, IndexID: 1}
-           │    └── PUBLIC  → ABSENT TableData:{DescID: 107, ReferencedDescID: 104}
+           │    ├── DROPPED → ABSENT Table:{DescID 107 "-t"}
+           │    ├── PUBLIC  → ABSENT IndexData:{DescID 107 "-t", IndexID 1 "-t_pkey"}
+           │    └── PUBLIC  → ABSENT TableData:{DescID 107 "-t", ReferencedDescID 104 "db"}
            └── 4 Mutation operations
                 ├── CreateGCJobForTable {"DatabaseID":104,"TableID":107}
                 ├── CreateGCJobForIndex {"IndexID":1,"TableID":107}

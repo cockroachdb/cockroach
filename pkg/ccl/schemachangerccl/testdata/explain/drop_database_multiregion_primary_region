@@ -11,58 +11,58 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 52 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 104, Name: multi_region_test_db, ReferencedDescID: 0}
- │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 104}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 104, Name: admin}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 104, Name: public}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 104, Name: root}
- │         │    ├── PUBLIC → DROPPED    Database:{DescID: 104}
- │         │    ├── PUBLIC → ABSENT     DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}
- │         │    ├── PUBLIC → ABSENT     DatabaseRegionConfig:{DescID: 104, ReferencedDescID: 106}
- │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 105}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 105, Name: admin}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 105, Name: public}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 105, Name: root}
- │         │    ├── PUBLIC → DROPPED    Schema:{DescID: 105}
- │         │    ├── PUBLIC → ABSENT     SchemaParent:{DescID: 105, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 106, Name: crdb_internal_region, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 106}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 106, Name: admin}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 106, Name: public}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 106, Name: root}
- │         │    ├── PUBLIC → DROPPED    EnumType:{DescID: 106}
- │         │    ├── PUBLIC → ABSENT     EnumTypeValue:{DescID: 106, Name: us-east1}
- │         │    ├── PUBLIC → ABSENT     EnumTypeValue:{DescID: 106, Name: us-east2}
- │         │    ├── PUBLIC → ABSENT     EnumTypeValue:{DescID: 106, Name: us-east3}
- │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID: 106, ReferencedDescID: 105}
- │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 107, Name: _crdb_internal_region, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 107}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: admin}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: public}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: root}
- │         │    ├── PUBLIC → DROPPED    AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
- │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID: 107, ReferencedDescID: 105}
- │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 108}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 108, Name: admin}
- │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 108, Name: root}
- │         │    ├── PUBLIC → DROPPED    Table:{DescID: 108}
- │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID: 108, ReferencedDescID: 105}
- │         │    ├── PUBLIC → ABSENT     TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
- │         │    ├── PUBLIC → ABSENT     ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: a, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         │    ├── PUBLIC → VALIDATED  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
- │         │    └── PUBLIC → ABSENT     IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
+ │         │    ├── PUBLIC → ABSENT     Namespace:{DescID 104 "-multi_region_test_db", Name "multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT     Owner:{DescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 104 "-multi_region_test_db", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 104 "-multi_region_test_db", Name "public"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 104 "-multi_region_test_db", Name "root"}
+ │         │    ├── PUBLIC → DROPPED    Database:{DescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT     DatabaseRoleSetting:{DescID 104 "-multi_region_test_db", Name "__placeholder_role_name__"}
+ │         │    ├── PUBLIC → ABSENT     DatabaseRegionConfig:{DescID 104 "-multi_region_test_db", ReferencedDescID 106 "-crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT     Namespace:{DescID 105 "-public", Name "public", ReferencedDescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT     Owner:{DescID 105 "-public"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 105 "-public", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 105 "-public", Name "public"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 105 "-public", Name "root"}
+ │         │    ├── PUBLIC → DROPPED    Schema:{DescID 105 "-public"}
+ │         │    ├── PUBLIC → ABSENT     SchemaParent:{DescID 105 "-public", ReferencedDescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT     Namespace:{DescID 106 "-crdb_internal_region", Name "crdb_internal_region", ReferencedDescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT     Owner:{DescID 106 "-crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 106 "-crdb_internal_region", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 106 "-crdb_internal_region", Name "public"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 106 "-crdb_internal_region", Name "root"}
+ │         │    ├── PUBLIC → DROPPED    EnumType:{DescID 106 "-crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT     EnumTypeValue:{DescID 106 "-crdb_internal_region", Name "us-east1"}
+ │         │    ├── PUBLIC → ABSENT     EnumTypeValue:{DescID 106 "-crdb_internal_region", Name "us-east2"}
+ │         │    ├── PUBLIC → ABSENT     EnumTypeValue:{DescID 106 "-crdb_internal_region", Name "us-east3"}
+ │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID 106 "-crdb_internal_region", ReferencedDescID 105 "-public"}
+ │         │    ├── PUBLIC → ABSENT     Namespace:{DescID 107 "-_crdb_internal_region", Name "_crdb_internal_region", ReferencedDescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT     Owner:{DescID 107 "-_crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 107 "-_crdb_internal_region", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 107 "-_crdb_internal_region", Name "public"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 107 "-_crdb_internal_region", Name "root"}
+ │         │    ├── PUBLIC → DROPPED    AliasType:{DescID 107 "-_crdb_internal_region", ReferencedTypeIDs [106 "-crdb_internal_region", 107 "-_crdb_internal_region"]}
+ │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID 107 "-_crdb_internal_region", ReferencedDescID 105 "-public"}
+ │         │    ├── PUBLIC → ABSENT     Namespace:{DescID 108 "-table_regional_by_table", Name "table_regional_by_table", ReferencedDescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT     Owner:{DescID 108 "-table_regional_by_table"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 108 "-table_regional_by_table", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID 108 "-table_regional_by_table", Name "root"}
+ │         │    ├── PUBLIC → DROPPED    Table:{DescID 108 "-table_regional_by_table"}
+ │         │    ├── PUBLIC → ABSENT     SchemaChild:{DescID 108 "-table_regional_by_table", ReferencedDescID 105 "-public"}
+ │         │    ├── PUBLIC → ABSENT     TableLocalitySecondaryRegion:{DescID 108 "-table_regional_by_table", ReferencedDescID 106 "-crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT     ColumnFamily:{DescID 108 "-table_regional_by_table", Name "primary", ColumnFamilyID 0 "-primary"}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID 108 "-table_regional_by_table", ColumnID 1 "-a"}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID 108 "-table_regional_by_table", Name "a", ColumnID 1 "-a"}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID 108 "-table_regional_by_table", ColumnFamilyID 0 "-primary", ColumnID 1 "-a"}
+ │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID 108 "-table_regional_by_table", ColumnID 1 "-a", IndexID 0}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID 108 "-table_regional_by_table", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID 108 "-table_regional_by_table", Name "crdb_internal_mvcc_timestamp", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID 108 "-table_regional_by_table", ColumnFamilyID 0 "-primary", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID 108 "-table_regional_by_table", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID 108 "-table_regional_by_table", Name "tableoid", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID 108 "-table_regional_by_table", ColumnFamilyID 0 "-primary", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → VALIDATED  PrimaryIndex:{DescID 108 "-table_regional_by_table", IndexID 1 "-table_regional_by_table_pkey", ConstraintID 1}
+ │         │    └── PUBLIC → ABSENT     IndexName:{DescID 108 "-table_regional_by_table", Name "table_regional_by_table_pkey", IndexID 1 "-table_regional_by_table_pkey"}
  │         └── 47 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
@@ -114,115 +114,115 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 52 elements transitioning toward ABSENT
- │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 104, Name: multi_region_test_db, ReferencedDescID: 0}
- │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 104}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 104, Name: admin}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 104, Name: public}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 104, Name: root}
- │    │    │    ├── DROPPED    → PUBLIC Database:{DescID: 104}
- │    │    │    ├── ABSENT     → PUBLIC DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}
- │    │    │    ├── ABSENT     → PUBLIC DatabaseRegionConfig:{DescID: 104, ReferencedDescID: 106}
- │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
- │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 105}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 105, Name: admin}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 105, Name: public}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 105, Name: root}
- │    │    │    ├── DROPPED    → PUBLIC Schema:{DescID: 105}
- │    │    │    ├── ABSENT     → PUBLIC SchemaParent:{DescID: 105, ReferencedDescID: 104}
- │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 106, Name: crdb_internal_region, ReferencedDescID: 104}
- │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 106}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 106, Name: admin}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 106, Name: public}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 106, Name: root}
- │    │    │    ├── DROPPED    → PUBLIC EnumType:{DescID: 106}
- │    │    │    ├── ABSENT     → PUBLIC EnumTypeValue:{DescID: 106, Name: us-east1}
- │    │    │    ├── ABSENT     → PUBLIC EnumTypeValue:{DescID: 106, Name: us-east2}
- │    │    │    ├── ABSENT     → PUBLIC EnumTypeValue:{DescID: 106, Name: us-east3}
- │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID: 106, ReferencedDescID: 105}
- │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 107, Name: _crdb_internal_region, ReferencedDescID: 104}
- │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 107}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: admin}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: public}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: root}
- │    │    │    ├── DROPPED    → PUBLIC AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
- │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID: 107, ReferencedDescID: 105}
- │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
- │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 108}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 108, Name: admin}
- │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 108, Name: root}
- │    │    │    ├── DROPPED    → PUBLIC Table:{DescID: 108}
- │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID: 108, ReferencedDescID: 105}
- │    │    │    ├── ABSENT     → PUBLIC TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
- │    │    │    ├── ABSENT     → PUBLIC ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
- │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 1}
- │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: a, ColumnID: 1}
- │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
- │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
- │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 4294967295}
- │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
- │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 4294967294}
- │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
- │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
- │    │    │    ├── VALIDATED  → PUBLIC PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
- │    │    │    └── ABSENT     → PUBLIC IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
+ │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID 104 "-multi_region_test_db", Name "multi_region_test_db"}
+ │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID 104 "-multi_region_test_db"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 104 "-multi_region_test_db", Name "admin"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 104 "-multi_region_test_db", Name "public"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 104 "-multi_region_test_db", Name "root"}
+ │    │    │    ├── DROPPED    → PUBLIC Database:{DescID 104 "-multi_region_test_db"}
+ │    │    │    ├── ABSENT     → PUBLIC DatabaseRoleSetting:{DescID 104 "-multi_region_test_db", Name "__placeholder_role_name__"}
+ │    │    │    ├── ABSENT     → PUBLIC DatabaseRegionConfig:{DescID 104 "-multi_region_test_db", ReferencedDescID 106 "-crdb_internal_region"}
+ │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID 105 "-public", Name "public", ReferencedDescID 104 "-multi_region_test_db"}
+ │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID 105 "-public"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 105 "-public", Name "admin"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 105 "-public", Name "public"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 105 "-public", Name "root"}
+ │    │    │    ├── DROPPED    → PUBLIC Schema:{DescID 105 "-public"}
+ │    │    │    ├── ABSENT     → PUBLIC SchemaParent:{DescID 105 "-public", ReferencedDescID 104 "-multi_region_test_db"}
+ │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID 106 "-crdb_internal_region", Name "crdb_internal_region", ReferencedDescID 104 "-multi_region_test_db"}
+ │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID 106 "-crdb_internal_region"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 106 "-crdb_internal_region", Name "admin"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 106 "-crdb_internal_region", Name "public"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 106 "-crdb_internal_region", Name "root"}
+ │    │    │    ├── DROPPED    → PUBLIC EnumType:{DescID 106 "-crdb_internal_region"}
+ │    │    │    ├── ABSENT     → PUBLIC EnumTypeValue:{DescID 106 "-crdb_internal_region", Name "us-east1"}
+ │    │    │    ├── ABSENT     → PUBLIC EnumTypeValue:{DescID 106 "-crdb_internal_region", Name "us-east2"}
+ │    │    │    ├── ABSENT     → PUBLIC EnumTypeValue:{DescID 106 "-crdb_internal_region", Name "us-east3"}
+ │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID 106 "-crdb_internal_region", ReferencedDescID 105 "-public"}
+ │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID 107 "-_crdb_internal_region", Name "_crdb_internal_region", ReferencedDescID 104 "-multi_region_test_db"}
+ │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID 107 "-_crdb_internal_region"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 107 "-_crdb_internal_region", Name "admin"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 107 "-_crdb_internal_region", Name "public"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 107 "-_crdb_internal_region", Name "root"}
+ │    │    │    ├── DROPPED    → PUBLIC AliasType:{DescID 107 "-_crdb_internal_region", ReferencedTypeIDs [106 "-crdb_internal_region", 107 "-_crdb_internal_region"]}
+ │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID 107 "-_crdb_internal_region", ReferencedDescID 105 "-public"}
+ │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID 108 "-table_regional_by_table", Name "table_regional_by_table", ReferencedDescID 104 "-multi_region_test_db"}
+ │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID 108 "-table_regional_by_table"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 108 "-table_regional_by_table", Name "admin"}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID 108 "-table_regional_by_table", Name "root"}
+ │    │    │    ├── DROPPED    → PUBLIC Table:{DescID 108 "-table_regional_by_table"}
+ │    │    │    ├── ABSENT     → PUBLIC SchemaChild:{DescID 108 "-table_regional_by_table", ReferencedDescID 105 "-public"}
+ │    │    │    ├── ABSENT     → PUBLIC TableLocalitySecondaryRegion:{DescID 108 "-table_regional_by_table", ReferencedDescID 106 "-crdb_internal_region"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnFamily:{DescID 108 "-table_regional_by_table", Name "primary", ColumnFamilyID 0 "-primary"}
+ │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID 108 "-table_regional_by_table", ColumnID 1 "-a"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID 108 "-table_regional_by_table", Name "a", ColumnID 1 "-a"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID 108 "-table_regional_by_table", ColumnFamilyID 0 "-primary", ColumnID 1 "-a"}
+ │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID 108 "-table_regional_by_table", ColumnID 1 "-a", IndexID 0}
+ │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID 108 "-table_regional_by_table", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID 108 "-table_regional_by_table", Name "crdb_internal_mvcc_timestamp", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID 108 "-table_regional_by_table", ColumnFamilyID 0 "-primary", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID 108 "-table_regional_by_table", ColumnID 4294967294 "-tableoid"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID 108 "-table_regional_by_table", Name "tableoid", ColumnID 4294967294 "-tableoid"}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID 108 "-table_regional_by_table", ColumnFamilyID 0 "-primary", ColumnID 4294967294 "-tableoid"}
+ │    │    │    ├── VALIDATED  → PUBLIC PrimaryIndex:{DescID 108 "-table_regional_by_table", IndexID 1 "-table_regional_by_table_pkey", ConstraintID 1}
+ │    │    │    └── ABSENT     → PUBLIC IndexName:{DescID 108 "-table_regional_by_table", Name "table_regional_by_table_pkey", IndexID 1 "-table_regional_by_table_pkey"}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 53 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104, Name: multi_region_test_db, ReferencedDescID: 0}
- │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104, Name: admin}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104, Name: public}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104, Name: root}
- │         │    ├── PUBLIC → DROPPED Database:{DescID: 104}
- │         │    ├── PUBLIC → ABSENT  DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}
- │         │    ├── PUBLIC → ABSENT  DatabaseRegionConfig:{DescID: 104, ReferencedDescID: 106}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 105}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105, Name: admin}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105, Name: public}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105, Name: root}
- │         │    ├── PUBLIC → DROPPED Schema:{DescID: 105}
- │         │    ├── PUBLIC → ABSENT  SchemaParent:{DescID: 105, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106, Name: crdb_internal_region, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106, Name: admin}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106, Name: public}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106, Name: root}
- │         │    ├── PUBLIC → DROPPED EnumType:{DescID: 106}
- │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106, Name: us-east1}
- │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106, Name: us-east2}
- │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106, Name: us-east3}
- │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 106, ReferencedDescID: 105}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107, Name: _crdb_internal_region, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107, Name: admin}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107, Name: public}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107, Name: root}
- │         │    ├── PUBLIC → DROPPED AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
- │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 107, ReferencedDescID: 105}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
- │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108, Name: admin}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108, Name: root}
- │         │    ├── PUBLIC → DROPPED Table:{DescID: 108}
- │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 108, ReferencedDescID: 105}
- │         │    ├── PUBLIC → ABSENT  TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
- │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
- │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108, Name: a, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
- │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
- │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
- │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
- │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID 104 "-multi_region_test_db", Name "multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 104 "-multi_region_test_db", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 104 "-multi_region_test_db", Name "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 104 "-multi_region_test_db", Name "root"}
+ │         │    ├── PUBLIC → DROPPED Database:{DescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT  DatabaseRoleSetting:{DescID 104 "-multi_region_test_db", Name "__placeholder_role_name__"}
+ │         │    ├── PUBLIC → ABSENT  DatabaseRegionConfig:{DescID 104 "-multi_region_test_db", ReferencedDescID 106 "-crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID 105 "-public", Name "public", ReferencedDescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID 105 "-public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 105 "-public", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 105 "-public", Name "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 105 "-public", Name "root"}
+ │         │    ├── PUBLIC → DROPPED Schema:{DescID 105 "-public"}
+ │         │    ├── PUBLIC → ABSENT  SchemaParent:{DescID 105 "-public", ReferencedDescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID 106 "-crdb_internal_region", Name "crdb_internal_region", ReferencedDescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID 106 "-crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 106 "-crdb_internal_region", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 106 "-crdb_internal_region", Name "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 106 "-crdb_internal_region", Name "root"}
+ │         │    ├── PUBLIC → DROPPED EnumType:{DescID 106 "-crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID 106 "-crdb_internal_region", Name "us-east1"}
+ │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID 106 "-crdb_internal_region", Name "us-east2"}
+ │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID 106 "-crdb_internal_region", Name "us-east3"}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID 106 "-crdb_internal_region", ReferencedDescID 105 "-public"}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID 107 "-_crdb_internal_region", Name "_crdb_internal_region", ReferencedDescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID 107 "-_crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 107 "-_crdb_internal_region", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 107 "-_crdb_internal_region", Name "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 107 "-_crdb_internal_region", Name "root"}
+ │         │    ├── PUBLIC → DROPPED AliasType:{DescID 107 "-_crdb_internal_region", ReferencedTypeIDs [106 "-crdb_internal_region", 107 "-_crdb_internal_region"]}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID 107 "-_crdb_internal_region", ReferencedDescID 105 "-public"}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID 108 "-table_regional_by_table", Name "table_regional_by_table", ReferencedDescID 104 "-multi_region_test_db"}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID 108 "-table_regional_by_table"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 108 "-table_regional_by_table", Name "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID 108 "-table_regional_by_table", Name "root"}
+ │         │    ├── PUBLIC → DROPPED Table:{DescID 108 "-table_regional_by_table"}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID 108 "-table_regional_by_table", ReferencedDescID 105 "-public"}
+ │         │    ├── PUBLIC → ABSENT  TableLocalitySecondaryRegion:{DescID 108 "-table_regional_by_table", ReferencedDescID 106 "-crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID 108 "-table_regional_by_table", Name "primary", ColumnFamilyID 0 "-primary"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID 108 "-table_regional_by_table", ColumnID 1 "-a"}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID 108 "-table_regional_by_table", Name "a", ColumnID 1 "-a"}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID 108 "-table_regional_by_table", ColumnFamilyID 0 "-primary", ColumnID 1 "-a"}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID 108 "-table_regional_by_table", ColumnID 1 "-a", IndexID 0}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID 108 "-table_regional_by_table", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID 108 "-table_regional_by_table", Name "crdb_internal_mvcc_timestamp", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID 108 "-table_regional_by_table", ColumnFamilyID 0 "-primary", ColumnID 4294967295 "-crdb_internal_mvcc_timestamp"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID 108 "-table_regional_by_table", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID 108 "-table_regional_by_table", Name "tableoid", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID 108 "-table_regional_by_table", ColumnFamilyID 0 "-primary", ColumnID 4294967294 "-tableoid"}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID 108 "-table_regional_by_table", ColumnID 1 "-a", IndexID 1 "-table_regional_by_table_pkey"}
+ │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID 108 "-table_regional_by_table", IndexID 1 "-table_regional_by_table_pkey", ConstraintID 1}
+ │         │    └── PUBLIC → ABSENT  IndexName:{DescID 108 "-table_regional_by_table", Name "table_regional_by_table_pkey", IndexID 1 "-table_regional_by_table_pkey"}
  │         └── 64 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
@@ -291,14 +291,14 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 8 elements transitioning toward ABSENT
-           │    ├── DROPPED → ABSENT Database:{DescID: 104}
-           │    ├── PUBLIC  → ABSENT DatabaseData:{DescID: 104}
-           │    ├── DROPPED → ABSENT Schema:{DescID: 105}
-           │    ├── DROPPED → ABSENT EnumType:{DescID: 106}
-           │    ├── DROPPED → ABSENT AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
-           │    ├── DROPPED → ABSENT Table:{DescID: 108}
-           │    ├── PUBLIC  → ABSENT IndexData:{DescID: 108, IndexID: 1}
-           │    └── PUBLIC  → ABSENT TableData:{DescID: 108, ReferencedDescID: 104}
+           │    ├── DROPPED → ABSENT Database:{DescID 104 "-multi_region_test_db"}
+           │    ├── PUBLIC  → ABSENT DatabaseData:{DescID 104 "-multi_region_test_db"}
+           │    ├── DROPPED → ABSENT Schema:{DescID 105 "-public"}
+           │    ├── DROPPED → ABSENT EnumType:{DescID 106 "-crdb_internal_region"}
+           │    ├── DROPPED → ABSENT AliasType:{DescID 107 "-_crdb_internal_region", ReferencedTypeIDs [106 "-crdb_internal_region", 107 "-_crdb_internal_region"]}
+           │    ├── DROPPED → ABSENT Table:{DescID 108 "-table_regional_by_table"}
+           │    ├── PUBLIC  → ABSENT IndexData:{DescID 108 "-table_regional_by_table", IndexID 1 "-table_regional_by_table_pkey"}
+           │    └── PUBLIC  → ABSENT TableData:{DescID 108 "-table_regional_by_table", ReferencedDescID 104 "-multi_region_test_db"}
            └── 13 Mutation operations
                 ├── DeleteDescriptor {"DescriptorID":104}
                 ├── CreateGCJobForDatabase {"DatabaseID":104}

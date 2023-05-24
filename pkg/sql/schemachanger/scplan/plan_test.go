@@ -288,4 +288,8 @@ func TestExplainPlanIsMemoryMonitored(t *testing.T) {
 	_, err = plan.ExplainVerbose()
 	require.Regexp(t, `test-sc-plan-mon: memory budget exceeded: .*`, err.Error())
 	memAcc.Clear(ctx)
+
+	_, err = plan.ExplainShape()
+	require.Regexp(t, `test-sc-plan-mon: memory budget exceeded: .*`, err.Error())
+	memAcc.Clear(ctx)
 }

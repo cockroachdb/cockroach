@@ -14,19 +14,19 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 2;
         │
         ├── • 2 elements transitioning toward ABSENT
         │   │
-        │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │   ├── • CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "-check_b"}
         │   │   │ WRITE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "-check_b"}
         │   │   │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
+        │   │   └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID 104 "t", Name "check_b", ConstraintID 2 "-check_b"}
         │   │         rule: "Constraint should be hidden before name"
         │   │
-        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
+        │   └── • ConstraintWithoutIndexName:{DescID 104 "t", Name "check_b", ConstraintID 2 "-check_b"}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │       └── • Precedence dependency from VALIDATED CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "-check_b"}
         │             rule: "Constraint should be hidden before name"
         │
         └── • 6 Mutation operations

@@ -1,0 +1,25 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+
+/* test */
+EXPLAIN (ddl, shape) ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT CAST(date_part('year', now()) AS INT);
+----
+Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8);
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index -tbl_pkey in relation tbl
+ │     ⇒ +tbl_pkey: i↗, +j
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation tbl
+ │     ~tbl@[3] ⇒ +tbl_pkey
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index +tbl_pkey in relation tbl
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index +tbl_pkey in relation tbl
+ │     ⇒ +tbl_j_key: +j↗, i↗
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation tbl
+ │     ~tbl@[5] ⇒ +tbl_j_key
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index +tbl_j_key in relation tbl
+ └── execute 2 system table mutations transactions

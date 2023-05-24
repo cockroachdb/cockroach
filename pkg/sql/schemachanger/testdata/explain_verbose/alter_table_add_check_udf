@@ -13,16 +13,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 │       │
 │       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   ├── • CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "+check_b"}
 │       │   │   │ ABSENT → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "+check_b"}
 │       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │   │
-│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
+│       │   └── • ConstraintWithoutIndexName:{DescID 104 "t", Name "check_b", ConstraintID 2 "+check_b"}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • Precedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │       └── • Precedence dependency from WRITE_ONLY CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "+check_b"}
 │       │             rule: "simple constraint visible before name"
 │       │
 │       └── • 3 Mutation operations
@@ -52,10 +52,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 │   │   │
 │   │   ├── • 2 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│   │   │   ├── • CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "+check_b"}
 │   │   │   │     WRITE_ONLY → ABSENT
 │   │   │   │
-│   │   │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
+│   │   │   └── • ConstraintWithoutIndexName:{DescID 104 "t", Name "check_b", ConstraintID 2 "+check_b"}
 │   │   │         PUBLIC → ABSENT
 │   │   │
 │   │   └── • 1 Mutation operation
@@ -67,16 +67,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 │       │
 │       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   ├── • CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "+check_b"}
 │       │   │   │ ABSENT → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "+check_b"}
 │       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │   │
-│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}
+│       │   └── • ConstraintWithoutIndexName:{DescID 104 "t", Name "check_b", ConstraintID 2 "+check_b"}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • Precedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │       └── • Precedence dependency from WRITE_ONLY CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "+check_b"}
 │       │             rule: "simple constraint visible before name"
 │       │
 │       └── • 6 Mutation operations
@@ -128,10 +128,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
     │   │
     │   ├── • 1 element transitioning toward PUBLIC
     │   │   │
-    │   │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+    │   │   └── • CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "+check_b"}
     │   │       │ WRITE_ONLY → VALIDATED
     │   │       │
-    │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+    │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "+check_b"}
     │   │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │
     │   └── • 1 Validation operation
@@ -144,10 +144,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
         │
         ├── • 1 element transitioning toward PUBLIC
         │   │
-        │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │   └── • CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "+check_b"}
         │       │ VALIDATED → PUBLIC
         │       │
-        │       └── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │       └── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID 104 "t", IndexID 0, ConstraintID 2 "+check_b"}
         │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │
         └── • 4 Mutation operations

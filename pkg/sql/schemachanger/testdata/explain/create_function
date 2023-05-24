@@ -28,14 +28,14 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN �
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 8 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → DESCRIPTOR_ADDED Function:{DescID: 110}
- │         │    ├── ABSENT → PUBLIC           SchemaChild:{DescID: 110, ReferencedDescID: 101}
- │         │    ├── ABSENT → PUBLIC           FunctionName:{DescID: 110}
- │         │    ├── ABSENT → PUBLIC           FunctionVolatility:{DescID: 110}
- │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 110}
- │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 110, Name: admin}
- │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 110, Name: root}
- │         │    └── ABSENT → PUBLIC           FunctionBody:{DescID: 110}
+ │         │    ├── ABSENT → DESCRIPTOR_ADDED Function:{DescID 110 "+f"}
+ │         │    ├── ABSENT → PUBLIC           SchemaChild:{DescID 110 "+f", ReferencedDescID 101 "public"}
+ │         │    ├── ABSENT → PUBLIC           FunctionName:{DescID 110 "+f"}
+ │         │    ├── ABSENT → PUBLIC           FunctionVolatility:{DescID 110 "+f"}
+ │         │    ├── ABSENT → PUBLIC           Owner:{DescID 110 "+f"}
+ │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID 110 "+f", Name "admin"}
+ │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID 110 "+f", Name "root"}
+ │         │    └── ABSENT → PUBLIC           FunctionBody:{DescID 110 "+f"}
  │         └── 10 Mutation operations
  │              ├── CreateFunctionDescriptor {"Function":{"FunctionID":110}}
  │              ├── SetFunctionName {"FunctionID":110,"Name":"f"}
@@ -50,26 +50,26 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN �
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 8 elements transitioning toward PUBLIC
-      │    │    ├── DESCRIPTOR_ADDED → ABSENT Function:{DescID: 110}
-      │    │    ├── PUBLIC           → ABSENT SchemaChild:{DescID: 110, ReferencedDescID: 101}
-      │    │    ├── PUBLIC           → ABSENT FunctionName:{DescID: 110}
-      │    │    ├── PUBLIC           → ABSENT FunctionVolatility:{DescID: 110}
-      │    │    ├── PUBLIC           → ABSENT Owner:{DescID: 110}
-      │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID: 110, Name: admin}
-      │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID: 110, Name: root}
-      │    │    └── PUBLIC           → ABSENT FunctionBody:{DescID: 110}
+      │    │    ├── DESCRIPTOR_ADDED → ABSENT Function:{DescID 110 "+f"}
+      │    │    ├── PUBLIC           → ABSENT SchemaChild:{DescID 110 "+f", ReferencedDescID 101 "public"}
+      │    │    ├── PUBLIC           → ABSENT FunctionName:{DescID 110 "+f"}
+      │    │    ├── PUBLIC           → ABSENT FunctionVolatility:{DescID 110 "+f"}
+      │    │    ├── PUBLIC           → ABSENT Owner:{DescID 110 "+f"}
+      │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID 110 "+f", Name "admin"}
+      │    │    ├── PUBLIC           → ABSENT UserPrivileges:{DescID 110 "+f", Name "root"}
+      │    │    └── PUBLIC           → ABSENT FunctionBody:{DescID 110 "+f"}
       │    └── 1 Mutation operation
       │         └── UndoAllInTxnImmediateMutationOpSideEffects
       └── Stage 2 of 2 in PreCommitPhase
            ├── 8 elements transitioning toward PUBLIC
-           │    ├── ABSENT → PUBLIC Function:{DescID: 110}
-           │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 110, ReferencedDescID: 101}
-           │    ├── ABSENT → PUBLIC FunctionName:{DescID: 110}
-           │    ├── ABSENT → PUBLIC FunctionVolatility:{DescID: 110}
-           │    ├── ABSENT → PUBLIC Owner:{DescID: 110}
-           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110, Name: admin}
-           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110, Name: root}
-           │    └── ABSENT → PUBLIC FunctionBody:{DescID: 110}
+           │    ├── ABSENT → PUBLIC Function:{DescID 110 "+f"}
+           │    ├── ABSENT → PUBLIC SchemaChild:{DescID 110 "+f", ReferencedDescID 101 "public"}
+           │    ├── ABSENT → PUBLIC FunctionName:{DescID 110 "+f"}
+           │    ├── ABSENT → PUBLIC FunctionVolatility:{DescID 110 "+f"}
+           │    ├── ABSENT → PUBLIC Owner:{DescID 110 "+f"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID 110 "+f", Name "admin"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID 110 "+f", Name "root"}
+           │    └── ABSENT → PUBLIC FunctionBody:{DescID 110 "+f"}
            └── 11 Mutation operations
                 ├── CreateFunctionDescriptor {"Function":{"FunctionID":110}}
                 ├── SetFunctionName {"FunctionID":110,"Name":"f"}
