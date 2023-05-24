@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cancelchecker",
@@ -9,6 +9,19 @@ go_library(
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/ctxutil",
+    ],
+)
+
+go_test(
+    name = "cancelchecker_test",
+    srcs = ["cancel_checker_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":cancelchecker"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
