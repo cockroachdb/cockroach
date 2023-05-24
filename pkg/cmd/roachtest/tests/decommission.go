@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -327,7 +326,7 @@ func runDecommission(
 
 			// The dataset is fairly small, we expect a single node decommission to
 			// complete within 1-5 minutes - use a 4x timeout to avoid flakes.
-			if err := contextutil.RunWithTimeout(ctx, "decommission", 20*time.Minute, func(ctx context.Context) error {
+			if err := timeutil.RunWithTimeout(ctx, "decommission", 20*time.Minute, func(ctx context.Context) error {
 				// TODO(sarkesian): Ensure updated span configs have been applied, so that
 				// checks can be reenabled.
 				_, err := h.decommission(ctx, targetNodeList, pinnedNode, "--wait=all", "--checks=skip")

@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
 	"github.com/marusama/semaphore"
@@ -66,7 +66,7 @@ func (zc *debugZipContext) runZipFn(
 func (zc *debugZipContext) runZipFnWithTimeout(
 	ctx context.Context, s *zipReporter, timeout time.Duration, fn func(ctx context.Context) error,
 ) error {
-	err := contextutil.RunWithTimeout(ctx, s.prefix, timeout, fn)
+	err := timeutil.RunWithTimeout(ctx, s.prefix, timeout, fn)
 	s.progress("received response")
 	return err
 }
@@ -167,7 +167,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		defer finish()
 
 		var resp *serverpb.ListTenantsResponse
-		if err := contextutil.RunWithTimeout(context.Background(), "list tenants", timeout, func(ctx context.Context) error {
+		if err := timeutil.RunWithTimeout(context.Background(), "list tenants", timeout, func(ctx context.Context) error {
 			resp, err = serverpb.NewAdminClient(conn).ListTenants(ctx, &serverpb.ListTenantsRequest{})
 			return err
 		}); err != nil {

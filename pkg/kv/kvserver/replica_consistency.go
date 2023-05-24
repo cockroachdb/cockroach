@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -702,7 +701,7 @@ func (r *Replica) computeChecksumPostApply(
 
 		// Wait until the CollectChecksum request handler joins in and learns about
 		// the starting computation, and then start it.
-		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckSyncTimeout,
+		if err := timeutil.RunWithTimeout(ctx, taskName, consistencyCheckSyncTimeout,
 			func(ctx context.Context) error {
 				// There is only one writer to c.started (this task), buf if by mistake
 				// there is another writer, one of us closes the channel eventually, and

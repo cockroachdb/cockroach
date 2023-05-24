@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -758,7 +757,7 @@ func sendExportRequestWithPriorityOverride(
 	}
 
 	var resp kvpb.Response
-	err := contextutil.RunWithTimeout(
+	err := timeutil.RunWithTimeout(
 		ctx, "schema-feed", priorityAfter,
 		func(ctx context.Context) error {
 			var err error
@@ -769,7 +768,7 @@ func sendExportRequestWithPriorityOverride(
 	if err == nil {
 		return resp, nil
 	}
-	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
+	if errors.HasType(err, (*timeutil.TimeoutError)(nil)) {
 		header.UserPriority = roachpb.MaxUserPriority
 		return sendRequest(ctx)
 	}

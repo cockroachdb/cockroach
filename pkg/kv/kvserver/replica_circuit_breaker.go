@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -230,7 +229,7 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 		// Breakers are disabled now.
 		return nil
 	}
-	if err := contextutil.RunWithTimeout(ctx, "probe", thresh,
+	if err := timeutil.RunWithTimeout(ctx, "probe", thresh,
 		func(ctx context.Context) error {
 			_, pErr := r.Send(ctx, ba)
 			return pErr.GoError()

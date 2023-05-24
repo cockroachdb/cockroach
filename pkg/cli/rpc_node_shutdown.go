@@ -18,9 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -63,7 +63,7 @@ func doDrain(
 		return doDrainNoTimeout(ctx, c, targetNode)
 	}
 
-	if err := contextutil.RunWithTimeout(ctx, "get-drain-settings", 5*time.Second, func(ctx context.Context) error {
+	if err := timeutil.RunWithTimeout(ctx, "get-drain-settings", 5*time.Second, func(ctx context.Context) error {
 		shutdownSettings, err := c.Settings(ctx, &serverpb.SettingsRequest{
 			Keys: []string{
 				"server.shutdown.drain_wait",
@@ -100,11 +100,11 @@ func doDrain(
 		fmt.Fprintf(stderr, "warning: could not check drain related cluster settings: %v\n", err)
 	}
 
-	err = contextutil.RunWithTimeout(ctx, "drain", drainCtx.drainWait, func(ctx context.Context) (err error) {
+	err = timeutil.RunWithTimeout(ctx, "drain", drainCtx.drainWait, func(ctx context.Context) (err error) {
 		hardError, remainingWork, err = doDrainNoTimeout(ctx, c, targetNode)
 		return err
 	})
-	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
+	if errors.HasType(err, (*timeutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
 		log.Infof(ctx, "drain timed out: %v", err)
 		err = errors.New("drain timeout, consider adjusting --drain-wait, especially under " +
 			"custom server.shutdown.{drain,query,connection,lease_transfer}_wait cluster settings")
@@ -233,7 +233,7 @@ func doShutdown(
 
 	// We use a shorter timeout because a shutdown request has nothing
 	// else to do than shut down the node immediately.
-	err = contextutil.RunWithTimeout(ctx, "hard shutdown", 10*time.Second, func(ctx context.Context) error {
+	err = timeutil.RunWithTimeout(ctx, "hard shutdown", 10*time.Second, func(ctx context.Context) error {
 		// Send a drain request with the drain bit unset (no drain).
 		// and the shutdown bit set.
 		stream, err := c.Drain(ctx, &serverpb.DrainRequest{NodeId: targetNode, Shutdown: true})
@@ -250,7 +250,7 @@ func doShutdown(
 			}
 		}
 	})
-	if !errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
+	if !errors.HasType(err, (*timeutil.TimeoutError)(nil)) {
 		hardError = true
 	}
 	return hardError, err

@@ -28,12 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 )
@@ -166,7 +166,7 @@ func (s Server) ServeClusterReplicas(
 		return err
 	}
 
-	err = contextutil.RunWithTimeout(ctx, "scan range descriptors", s.metadataQueryTimeout,
+	err = timeutil.RunWithTimeout(ctx, "scan range descriptors", s.metadataQueryTimeout,
 		func(txnCtx context.Context) error {
 			txn := kvDB.NewTxn(txnCtx, "scan-range-descriptors")
 			if err := txn.SetFixedTimestamp(txnCtx, kvDB.Clock().Now()); err != nil {
@@ -482,7 +482,7 @@ func (s Server) Verify(
 	err := s.visitAdminNodes(ctx, fanOutConnectionRetryOptions,
 		notListed(req.DecommissionedNodeIDs),
 		func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
-			return contextutil.RunWithTimeout(ctx, fmt.Sprintf("retrieve status of n%d", nodeID),
+			return timeutil.RunWithTimeout(ctx, fmt.Sprintf("retrieve status of n%d", nodeID),
 				retrieveNodeStatusTimeout,
 				func(ctx context.Context) error {
 					res, err := client.RecoveryNodeStatus(ctx, &serverpb.RecoveryNodeStatusRequest{})
@@ -547,7 +547,7 @@ func (s Server) Verify(
 		if req.MaxReportedRanges == 0 {
 			return nil, nil
 		}
-		err := contextutil.RunWithTimeout(ctx, "retrieve ranges health", retrieveKeyspaceHealthTimeout,
+		err := timeutil.RunWithTimeout(ctx, "retrieve ranges health", retrieveKeyspaceHealthTimeout,
 			func(ctx context.Context) error {
 				start := keys.Meta2Prefix
 				for {

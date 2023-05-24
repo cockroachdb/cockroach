@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -907,7 +907,7 @@ func (s *Server) registerConn(
 	rejectNewConnections = s.mu.rejectNewConnections
 	if !rejectNewConnections {
 		var cancel context.CancelFunc
-		newCtx, cancel = contextutil.WithCancel(ctx)
+		newCtx, cancel = ctxlog.WithCancel(ctx)
 		done := make(chan struct{})
 		s.mu.connCancelMap[done] = cancel
 		onCloseFn = func() {
