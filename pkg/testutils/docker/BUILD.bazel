@@ -13,8 +13,9 @@ go_test(
     gotags = ["docker"],
     tags = ["integration"],
     deps = [
-        "//pkg/util/contextutil",
+        "//pkg/util/ctxlog",
         "//pkg/util/log",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_docker_docker//api/types",
         "@com_github_docker_docker//api/types/container",

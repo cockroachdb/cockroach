@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -208,7 +207,7 @@ func getUserInfoRunFn(
 	runFn := func(ctx context.Context, fn func(ctx context.Context) error) error { return fn(ctx) }
 	if timeout != 0 {
 		runFn = func(ctx context.Context, fn func(ctx context.Context) error) error {
-			return contextutil.RunWithTimeout(ctx, opName, timeout, fn)
+			return timeutil.RunWithTimeout(ctx, opName, timeout, fn)
 		}
 	}
 	return runFn

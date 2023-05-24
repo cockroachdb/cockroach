@@ -61,7 +61,6 @@ go_library(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",

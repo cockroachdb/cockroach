@@ -34,12 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3"
@@ -1459,7 +1459,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 					if ba.IsSingleLeaseInfoRequest() {
 						atomic.StoreInt64(&nudgeSeen, 1)
 						if !timeoutSimulated {
-							mockTimeout := contextutil.RunWithTimeout(ctx, "test", 0,
+							mockTimeout := timeutil.RunWithTimeout(ctx, "test", 0,
 								func(ctx context.Context) error { <-ctx.Done(); return ctx.Err() })
 							timeoutSimulated = true
 							return kvpb.NewError(mockTimeout)

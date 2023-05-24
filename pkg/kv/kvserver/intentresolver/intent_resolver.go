@@ -26,12 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -493,7 +493,7 @@ func (ir *IntentResolver) CleanupIntentsAsync(
 	}
 	now := ir.clock.Now()
 	return ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
-		err := contextutil.RunWithTimeout(ctx, "async intent resolution",
+		err := timeutil.RunWithTimeout(ctx, "async intent resolution",
 			asyncIntentResolutionTimeout, func(ctx context.Context) error {
 				_, err := ir.CleanupIntents(ctx, intents, now, kvpb.PUSH_TOUCH)
 				return err
@@ -814,7 +814,7 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		ir.ambientCtx.AnnotateCtx(context.Background()),
 		"storage.IntentResolver: cleanup txn records",
 		func(ctx context.Context) {
-			err := contextutil.RunWithTimeout(ctx, "cleanup txn record",
+			err := timeutil.RunWithTimeout(ctx, "cleanup txn record",
 				gcTxnRecordTimeout, func(ctx context.Context) error {
 					return ir.gcTxnRecord(ctx, rangeID, txn)
 				})

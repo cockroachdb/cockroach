@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -103,7 +102,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 			}
 
 			var pd profData
-			err := contextutil.RunWithTimeout(ctx, "fetch cpu profile", zc.timeout+zipCtx.cpuProfDuration, func(ctx context.Context) error {
+			err := timeutil.RunWithTimeout(ctx, "fetch cpu profile", zc.timeout+zipCtx.cpuProfDuration, func(ctx context.Context) error {
 				resp, err := zc.status.Profile(ctx, &serverpb.ProfileRequest{
 					NodeId:  fmt.Sprintf("%d", nodeID),
 					Type:    serverpb.ProfileRequest_CPU,

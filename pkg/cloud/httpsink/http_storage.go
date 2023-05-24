@@ -25,10 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -186,7 +186,7 @@ func (h *httpStorage) List(_ context.Context, _, _ string, _ cloud.ListingFn) er
 }
 
 func (h *httpStorage) Delete(ctx context.Context, basename string) error {
-	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("DELETE %s", basename),
+	return timeutil.RunWithTimeout(ctx, fmt.Sprintf("DELETE %s", basename),
 		cloud.Timeout.Get(&h.settings.SV), func(ctx context.Context) error {
 			_, err := h.reqNoBody(ctx, "DELETE", basename, nil)
 			return err
@@ -195,7 +195,7 @@ func (h *httpStorage) Delete(ctx context.Context, basename string) error {
 
 func (h *httpStorage) Size(ctx context.Context, basename string) (int64, error) {
 	var resp *http.Response
-	if err := contextutil.RunWithTimeout(ctx, fmt.Sprintf("HEAD %s", basename),
+	if err := timeutil.RunWithTimeout(ctx, fmt.Sprintf("HEAD %s", basename),
 		cloud.Timeout.Get(&h.settings.SV), func(ctx context.Context) error {
 			var err error
 			resp, err = h.reqNoBody(ctx, "HEAD", basename, nil)

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -165,7 +165,7 @@ func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
 		consumerTimeout *= 10
 	}
 
-	require.NoError(t, contextutil.RunWithTimeout(
+	require.NoError(t, timeutil.RunWithTimeout(
 		context.Background(), "consume", consumerTimeout,
 		func(ctx context.Context) error {
 			var outstanding kvevent.Alloc

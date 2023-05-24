@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -948,7 +948,7 @@ func TestingForceRandomizeDemoPorts() func() {
 }
 
 func (c *transientCluster) Close(ctx context.Context) {
-	if err := contextutil.RunWithTimeout(ctx, "save-web-sessions", 10*time.Second, func(ctx context.Context) error {
+	if err := timeutil.RunWithTimeout(ctx, "save-web-sessions", 10*time.Second, func(ctx context.Context) error {
 		if err := c.saveWebSessions(ctx); err != nil {
 			return err
 		}

@@ -67,7 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -2698,7 +2698,7 @@ func (ex *connExecutor) execCopyOut(
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	var numOutputRows int
 	var cancelQuery context.CancelFunc
-	ctx, cancelQuery = contextutil.WithCancel(ctx)
+	ctx, cancelQuery = ctxlog.WithCancel(ctx)
 	queryID := ex.generateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
@@ -2916,7 +2916,7 @@ func (ex *connExecutor) execCopyIn(
 
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	var cancelQuery context.CancelFunc
-	ctx, cancelQuery = contextutil.WithCancel(ctx)
+	ctx, cancelQuery = ctxlog.WithCancel(ctx)
 	queryID := ex.generateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)

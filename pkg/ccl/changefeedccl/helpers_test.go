@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -256,7 +255,7 @@ func withTimeout(
 	if jobFeed, ok := f.(cdctest.EnterpriseTestFeed); ok {
 		jobID = jobFeed.JobID()
 	}
-	return contextutil.RunWithTimeout(context.Background(),
+	return timeutil.RunWithTimeout(context.Background(),
 		fmt.Sprintf("withTimeout-%d", jobID), timeout,
 		func(ctx context.Context) error {
 			defer stopFeedWhenDone(ctx, f)()

@@ -19,8 +19,8 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/ocsp"
 	"golang.org/x/sync/errgroup"
@@ -38,7 +38,7 @@ func makeOCSPVerifier(settings TLSSettings) func([][]byte, [][]*x509.Certificate
 			return nil
 		}
 
-		return contextutil.RunWithTimeout(context.Background(), "OCSP verification", settings.ocspTimeout(),
+		return timeutil.RunWithTimeout(context.Background(), "OCSP verification", settings.ocspTimeout(),
 			func(ctx context.Context) error {
 				// Per-conn telemetry counter.
 				telemetry.Inc(ocspChecksCounter)

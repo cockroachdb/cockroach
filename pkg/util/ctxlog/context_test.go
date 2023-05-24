@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package contextutil
+package ctxlog
 
 import (
 	"context"
@@ -16,14 +16,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRunWithTimeout(t *testing.T) {
 	ctx := context.Background()
-	err := RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
+	err := timeutil.RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
 		time.Sleep(10 * time.Millisecond)
 		return nil
 	})
@@ -31,7 +31,7 @@ func TestRunWithTimeout(t *testing.T) {
 		t.Fatal("RunWithTimeout shouldn't return a timeout error if nobody touched the context.")
 	}
 
-	err = RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
+	err = timeutil.RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
 		time.Sleep(15 * time.Millisecond)
 		return ctx.Err()
 	})
@@ -51,7 +51,7 @@ func TestRunWithTimeout(t *testing.T) {
 		t.Fatalf("RunWithTimeout should return an error with a DeadlineExceeded cause")
 	}
 
-	err = RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
+	err = timeutil.RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
 		time.Sleep(15 * time.Millisecond)
 		return errors.Wrap(ctx.Err(), "custom error")
 	})
@@ -78,7 +78,7 @@ func TestRunWithTimeout(t *testing.T) {
 func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
 	ctx := context.Background()
 	notContextDeadlineExceeded := errors.Handled(context.DeadlineExceeded)
-	err := RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
+	err := timeutil.RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
 		<-ctx.Done()
 		return notContextDeadlineExceeded
 	})
@@ -99,7 +99,7 @@ func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
 func TestRunWithTimeoutAfterDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
-	err := RunWithTimeout(ctx, "test", time.Second, func(ctx context.Context) error {
+	err := timeutil.RunWithTimeout(ctx, "test", time.Second, func(ctx context.Context) error {
 		<-ctx.Done()
 		return ctx.Err()
 	})
@@ -107,23 +107,4 @@ func TestRunWithTimeoutAfterDeadline(t *testing.T) {
 	require.Regexp(t,
 		`operation "test" timed out after \d+m?s \(given timeout 1s\): context deadline exceeded`,
 		err.Error())
-}
-
-func TestCancelWithReason(t *testing.T) {
-	ctx := context.Background()
-
-	var cancel CancelWithReasonFunc
-	ctx, cancel = WithCancelReason(ctx)
-
-	e := errors.New("hodor")
-	go func() {
-		cancel(e)
-	}()
-
-	<-ctx.Done()
-
-	expected := "context canceled"
-	found := ctx.Err().Error()
-	assert.Equal(t, expected, found)
-	assert.Equal(t, e, GetCancelReason(ctx))
 }
