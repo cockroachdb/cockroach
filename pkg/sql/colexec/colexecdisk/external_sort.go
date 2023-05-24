@@ -368,7 +368,7 @@ func (s *externalSorter) Init(ctx context.Context) {
 
 func (s *externalSorter) Next() coldata.Batch {
 	for {
-		s.cancelChecker.CheckEveryCall()
+		s.cancelChecker.Check()
 		switch s.state {
 		case externalSorterNewPartition:
 			b := s.Input.Next()

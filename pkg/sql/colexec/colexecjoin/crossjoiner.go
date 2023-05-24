@@ -91,7 +91,7 @@ func (c *crossJoiner) Init(ctx context.Context) {
 }
 
 func (c *crossJoiner) Next() coldata.Batch {
-	c.cancelChecker.CheckEveryCall()
+	c.cancelChecker.Check()
 	if c.done {
 		return coldata.ZeroBatch
 	}
