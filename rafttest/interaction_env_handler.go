@@ -157,6 +157,12 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		// propose-conf-change 2 v1=true
 		// v5
 		err = env.handleProposeConfChange(t, d)
+	case "report-unreachable":
+		// Calls <1st>.ReportUnreachable(<2nd>).
+		//
+		// Example:
+		// report-unreachable 1 2
+		err = env.handleReportUnreachable(t, d)
 	default:
 		err = fmt.Errorf("unknown command")
 	}

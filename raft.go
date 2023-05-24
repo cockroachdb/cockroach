@@ -1405,7 +1405,15 @@ func stepLeader(r *raft, m pb.Message) error {
 			}
 		} else {
 			oldPaused := pr.IsPaused()
-			if pr.MaybeUpdate(m.Index) {
+			// We want to update our tracking if the response updates our
+			// matched index or if the response can move a probing peer back
+			// into StateReplicate (see heartbeat_rep_recovers_from_probing.txt
+			// for an example of the latter case).
+			// NB: the same does not make sense for StateSnapshot - if `m.Index`
+			// equals pr.Match we know we don't m.Index+1 in our log, so moving
+			// back to replicating state is not useful; besides pr.PendingSnapshot
+			// would prevent it.
+			if pr.MaybeUpdate(m.Index) || (pr.Match == m.Index && pr.State == tracker.StateProbe) {
 				switch {
 				case pr.State == tracker.StateProbe:
 					pr.BecomeReplicate()
@@ -1460,7 +1468,16 @@ func stepLeader(r *raft, m pb.Message) error {
 		// empty append, allowing it to recover from situations in which all the
 		// messages that filled up Inflights in the first place were dropped. Note
 		// also that the outgoing heartbeat already communicated the commit index.
-		if pr.Match < r.raftLog.lastIndex() {
+		//
+		// If the follower is fully caught up but also in StateProbe (as can happen
+		// if ReportUnreachable was called), we also want to send an append (it will
+		// be empty) to allow the follower to transition back to StateReplicate once
+		// it responds.
+		//
+		// Note that StateSnapshot typically satisfies pr.Match < lastIndex, but
+		// `pr.Paused()` is always true for StateSnapshot, so sendAppend is a
+		// no-op.
+		if pr.Match < r.raftLog.lastIndex() || pr.State == tracker.StateProbe {
 			r.sendAppend(m.From)
 		}
 
