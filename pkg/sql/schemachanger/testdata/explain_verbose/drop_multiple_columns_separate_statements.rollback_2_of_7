@@ -14,126 +14,126 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │
     │   ├── • 7 elements transitioning toward PUBLIC
     │   │   │
-    │   │   ├── • Column:{DescID: 104, ColumnID: 3}
+    │   │   ├── • Column:{DescID: 104 (t), ColumnID: 3 (k+)}
     │   │   │   │ WRITE_ONLY → PUBLIC
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (k+)}
     │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104, Name: k, ColumnID: 3}
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104 (t), Name: "k", ColumnID: 3 (k+)}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (k+)}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 104, ColumnID: 3}
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 3 (k+)}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnOnUpdateExpression:{DescID: 104, ColumnID: 3}
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnOnUpdateExpression:{DescID: 104 (t), ColumnID: 3 (k+)}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
+    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104 (t), ColumnID: 2 (j+)}
     │   │   │   │     rule: "ensure columns are in increasing order"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 1 (t_pkey+)}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 2 (t_expr_k_idx+)}
     │   │   │         rule: "column dependents exist before column becomes public"
     │   │   │
-    │   │   ├── • ColumnName:{DescID: 104, Name: k, ColumnID: 3}
+    │   │   ├── • ColumnName:{DescID: 104 (t), Name: "k", ColumnID: 3 (k+)}
     │   │   │     ABSENT → PUBLIC
     │   │   │
-    │   │   ├── • Column:{DescID: 104, ColumnID: 2}
+    │   │   ├── • Column:{DescID: 104 (t), ColumnID: 2 (j+)}
     │   │   │   │ WRITE_ONLY → PUBLIC
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 2 (j+)}
     │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+)}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 2 (j+), IndexID: 1 (t_pkey+)}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+    │   │   │   └── • Precedence dependency from PUBLIC ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
     │   │   │         rule: "column dependents exist before column becomes public"
     │   │   │
-    │   │   ├── • Column:{DescID: 104, ColumnID: 4}
+    │   │   ├── • Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr+)}
     │   │   │   │ WRITE_ONLY → PUBLIC
     │   │   │   │
-    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 3}
+    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104 (t), ColumnID: 3 (k+)}
     │   │   │   │     rule: "ensure columns are in increasing order"
     │   │   │   │
-    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
+    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104 (t), ColumnID: 2 (j+)}
     │   │   │   │     rule: "ensure columns are in increasing order"
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 4}
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr+)}
     │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (crdb_internal_idx_expr+)}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr+), IndexID: 2 (t_expr_k_idx+)}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
+    │   │   │   └── • Precedence dependency from PUBLIC ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 4 (crdb_internal_idx_expr+)}
     │   │   │         rule: "column dependents exist before column becomes public"
     │   │   │
-    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   ├── • SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx+)}
     │   │   │   │ VALIDATED → PUBLIC
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr+), IndexID: 2 (t_expr_k_idx+)}
     │   │   │   │     rule: "index dependents exist before index becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 2 (t_expr_k_idx+)}
     │   │   │   │     rule: "index dependents exist before index becomes public"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_expr_k_idx+)}
     │   │   │   │     rule: "index dependents exist before index becomes public"
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx+)}
     │   │   │   │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
+    │   │   │   └── • Precedence dependency from PUBLIC IndexName:{DescID: 104 (t), Name: "t_expr_k_idx", IndexID: 2 (t_expr_k_idx+)}
     │   │   │         rule: "index dependents exist before index becomes public"
     │   │   │
-    │   │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+    │   │   ├── • ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
     │   │   │     ABSENT → PUBLIC
     │   │   │
-    │   │   └── • ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
+    │   │   └── • ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 4 (crdb_internal_idx_expr+)}
     │   │         ABSENT → PUBLIC
     │   │
     │   ├── • 4 elements transitioning toward ABSENT
     │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+    │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (t_pkey-)}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+    │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   ├── • PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
     │   │   │   │ BACKFILL_ONLY → ABSENT
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │   ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
     │   │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+    │   │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (t_pkey-)}
     │   │   │   │     rule: "dependents removed before index"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
+    │   │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 3 (t_pkey-)}
     │   │   │         rule: "dependents removed before index"
     │   │   │
-    │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │   └── • TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
     │   │       │ WRITE_ONLY → DELETE_ONLY
     │   │       │
-    │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
     │   │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │
     │   └── • 17 Mutation operations
@@ -211,28 +211,28 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
         │
         ├── • 3 elements transitioning toward ABSENT
         │   │
-        │   ├── • IndexData:{DescID: 104, IndexID: 3}
+        │   ├── • IndexData:{DescID: 104 (t), IndexID: 3 (t_pkey-)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
         │   │         rule: "index removed before garbage collection"
         │   │
-        │   ├── • IndexData:{DescID: 104, IndexID: 4}
+        │   ├── • IndexData:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 104, IndexID: 3}
+        │   │   ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 104 (t), IndexID: 3 (t_pkey-)}
         │   │   │     rule: "schedule all GC jobs for a descriptor in the same stage"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+        │   │   └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
         │   │         rule: "index removed before garbage collection"
         │   │
-        │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+        │   └── • TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
         │       │ DELETE_ONLY → ABSENT
         │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
         │       │     rule: "dependents removed before index"
         │       │
-        │       └── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+        │       └── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
         │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │
         └── • 5 Mutation operations

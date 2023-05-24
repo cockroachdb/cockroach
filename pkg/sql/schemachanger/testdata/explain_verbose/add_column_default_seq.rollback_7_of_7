@@ -15,70 +15,70 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │
     │   ├── • 9 elements transitioning toward ABSENT
     │   │   │
-    │   │   ├── • Column:{DescID: 106, ColumnID: 2}
+    │   │   ├── • Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
     │   │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │   │
-    │   │   │   └── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │   │   └── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 2 (tbl_pkey-)}
     │   │   │         rule: "column constraint removed right before column reaches delete only"
     │   │   │
-    │   │   ├── • ColumnName:{DescID: 106, Name: l, ColumnID: 2}
+    │   │   ├── • ColumnName:{DescID: 106 (tbl), Name: "l", ColumnID: 2 (l-)}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
     │   │   │         rule: "column no longer public before dependents"
     │   │   │
-    │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   ├── • PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
     │   │   │         rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
-    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+    │   │   ├── • IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey-)}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
-    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │   ├── • IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 2 (tbl_pkey-)}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
     │   │   │   │     rule: "column no longer public before dependents"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
-    │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   ├── • TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
     │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
-    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+    │   │   ├── • IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
-    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │   ├── • IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 3}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
     │   │   │   │     rule: "column no longer public before dependents"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
-    │   │   └── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │   └── • ColumnNotNull:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 2 (tbl_pkey-)}
     │   │       │ WRITE_ONLY → ABSENT
     │   │       │
-    │   │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 2 (tbl_pkey-)}
     │   │       │     rule: "ColumnNotNull transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │       │
-    │   │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
     │   │             rule: "column no longer public before dependents"
     │   │
     │   └── • 12 Mutation operations
@@ -141,89 +141,89 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │
         ├── • 7 elements transitioning toward ABSENT
         │   │
-        │   ├── • Column:{DescID: 106, ColumnID: 2}
+        │   ├── • Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
         │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 106, Name: l, ColumnID: 2}
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 106 (tbl), Name: "l", ColumnID: 2 (l-)}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+        │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (l-)}
         │   │   │     rule: "dependents removed before column"
         │   │   │     rule: "column type removed right before column when not dropping relation"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [107]}
+        │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l-), ReferencedSequenceIDs: [107 (sq1)]}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
         │   │   │     rule: "indexes containing column reach absent before column"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 2 (tbl_pkey-)}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 3}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+        │   │   └── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 2 (tbl_pkey-)}
         │   │         rule: "dependents removed before column"
         │   │
-        │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+        │   ├── • ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (l-)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+        │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
         │   │   │     rule: "column no longer public before dependents"
         │   │   │
-        │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [107]}
+        │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l-), ReferencedSequenceIDs: [107 (sq1)]}
         │   │         rule: "column type dependents removed right before column type"
         │   │
-        │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [107]}
+        │   ├── • ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l-), ReferencedSequenceIDs: [107 (sq1)]}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+        │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
         │   │         rule: "column no longer public before dependents"
         │   │
-        │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   ├── • PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
         │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
+        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 106 (tbl), Name: "tbl_pkey", IndexID: 2 (tbl_pkey-)}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey-)}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 2 (tbl_pkey-)}
         │   │         rule: "dependents removed before index"
         │   │
-        │   ├── • IndexData:{DescID: 106, IndexID: 2}
+        │   ├── • IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
         │   │         rule: "index removed before garbage collection"
         │   │
-        │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │   ├── • TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
         │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 3}
         │   │         rule: "dependents removed before index"
         │   │
-        │   └── • IndexData:{DescID: 106, IndexID: 3}
+        │   └── • IndexData:{DescID: 106 (tbl), IndexID: 3}
         │       │ PUBLIC → ABSENT
         │       │
-        │       ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 106, IndexID: 2}
+        │       ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-)}
         │       │     rule: "schedule all GC jobs for a descriptor in the same stage"
         │       │
-        │       └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │       └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
         │             rule: "index removed before garbage collection"
         │
         └── • 10 Mutation operations

@@ -190,6 +190,20 @@ upsert descriptor #106
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": k
+  +        "3": j
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +        "1": bob
+  +      id: 106
+  +      indexes:
+  +        "2": tbl_pkey
+  +      name: tbl
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT
@@ -649,6 +663,20 @@ upsert descriptor #106
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": k
+  -        "3": j
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -        "1": bob
+  -      id: 106
+  -      indexes:
+  -        "2": tbl_pkey
+  -      name: tbl
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT

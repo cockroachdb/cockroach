@@ -8,6 +8,7 @@ go_library(
     srcs = [
         "constants.go",
         "migration.go",
+        "name_mappings.go",
         "state.go",
         "transient.go",
         ":gen-elements-interface",  # keep

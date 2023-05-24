@@ -130,6 +130,7 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping: {}
      families:
      - columnIds:
   ...
@@ -159,6 +160,17 @@ upsert descriptor #105
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 105
+  +      indexes:
+  +        "1": t1_pkey
+  +      name: t1
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CONSTRAINT ‹t1_i_fkey›
@@ -230,6 +242,7 @@ upsert descriptor #104
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping: {}
      families:
      - columnIds:
   ...
@@ -261,6 +274,17 @@ upsert descriptor #105
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 105
+  -      indexes:
+  -        "1": t1_pkey
+  -      name: t1
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CONSTRAINT ‹t1_i_fkey›

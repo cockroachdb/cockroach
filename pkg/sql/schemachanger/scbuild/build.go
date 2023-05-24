@@ -12,6 +12,7 @@ package scbuild
 
 import (
 	"context"
+	"sort"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -97,6 +98,7 @@ func Build(
 		Targets:       make([]scpb.Target, 0, len(bs.output)),
 		Statements:    els.statements,
 		Authorization: els.authorization,
+		NameMappings:  makeNameMappings(b),
 	}
 	initial := make([]scpb.Status, 0, len(bs.output))
 	current := make([]scpb.Status, 0, len(bs.output))
@@ -298,6 +300,63 @@ func newBuilderState(
 		})
 	}
 	return &bs
+}
+
+func makeNameMappings(b scbuildstmt.BuildCtx) (ret scpb.NameMappings) {
+	id2Idx := make(map[catid.DescID]int)
+	getOrCreate := func(id catid.DescID) (_ *scpb.NameMapping, isNew bool) {
+		if idx, ok := id2Idx[id]; ok {
+			return &ret[idx], false /* isNew */
+		}
+		idx := len(ret)
+		id2Idx[id] = idx
+		ret = append(ret, scpb.NameMapping{
+			ID:          id,
+			Indexes:     make(map[catid.IndexID]string),
+			Columns:     make(map[catid.ColumnID]string),
+			Families:    make(map[catid.FamilyID]string),
+			Constraints: make(map[catid.ConstraintID]string),
+		})
+		return &ret[idx], true /* isNew */
+	}
+	isNotDropping := func(ts scpb.TargetStatus) bool {
+		return ts != scpb.ToAbsent && ts != scpb.Transient
+	}
+	scpb.ForEachNamespace(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.Namespace) {
+		dnm, isNew := getOrCreate(e.DescriptorID)
+		if isNew || isNotDropping(ts) {
+			dnm.Name = e.Name
+		}
+	})
+	scpb.ForEachFunctionName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.FunctionName) {
+		dnm, isNew := getOrCreate(e.FunctionID)
+		if isNew || isNotDropping(ts) {
+			dnm.Name = e.Name
+		}
+	})
+	scpb.ForEachIndexName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.IndexName) {
+		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
+			ret[idx].Indexes[e.IndexID] = e.Name
+		}
+	})
+	scpb.ForEachColumnName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ColumnName) {
+		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
+			ret[idx].Columns[e.ColumnID] = e.Name
+		}
+	})
+	scpb.ForEachColumnFamily(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ColumnFamily) {
+		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
+			ret[idx].Families[e.FamilyID] = e.Name
+		}
+	})
+	scpb.ForEachConstraintWithoutIndexName(b,
+		func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
+			if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
+				ret[idx].Constraints[e.ConstraintID] = e.Name
+			}
+		})
+	sort.Sort(ret)
+	return ret
 }
 
 // eventLogState is the backing struct for scbuildstmt.EventLogState interface.

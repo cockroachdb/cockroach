@@ -10,13 +10,13 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward PUBLIC
-      │    │    ├── WRITE_ONLY    → PUBLIC      Column:{DescID: 105, ColumnID: 2}
-      │    │    └── ABSENT        → PUBLIC      ColumnName:{DescID: 105, Name: b, ColumnID: 2}
+      │    │    ├── WRITE_ONLY    → PUBLIC      Column:{DescID: 105 (t), ColumnID: 2 (b+)}
+      │    │    └── ABSENT        → PUBLIC      ColumnName:{DescID: 105 (t), Name: "b", ColumnID: 2 (b+)}
       │    ├── 4 elements transitioning toward ABSENT
-      │    │    ├── BACKFILL_ONLY → ABSENT      PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 2}
-      │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-      │    │    └── PUBLIC        → ABSENT      IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}
+      │    │    ├── BACKFILL_ONLY → ABSENT      PrimaryIndex:{DescID: 105 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 105 (t), ColumnID: 1 (i), IndexID: 2 (t_pkey-)}
+      │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 105 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+      │    │    └── PUBLIC        → ABSENT      IndexColumn:{DescID: 105 (t), ColumnID: 1 (i), IndexID: 3}
       │    └── 10 Mutation operations
       │         ├── SetColumnName {"ColumnID":2,"Name":"b","TableID":105}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":105}
@@ -30,9 +30,9 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 3 elements transitioning toward ABSENT
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 105, IndexID: 2}
-           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-           │    └── PUBLIC      → ABSENT IndexData:{DescID: 105, IndexID: 3}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 105 (t), IndexID: 2 (t_pkey-)}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 105 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+           │    └── PUBLIC      → ABSENT IndexData:{DescID: 105 (t), IndexID: 3}
            └── 6 Mutation operations
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":105}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":105}

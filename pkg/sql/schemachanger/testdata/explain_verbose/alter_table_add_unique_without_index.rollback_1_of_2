@@ -15,19 +15,19 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 2;
         │
         ├── • 2 elements transitioning toward ABSENT
         │   │
-        │   ├── • UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │   ├── • UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-)}
         │   │   │ WRITE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-)}
         │   │   │     rule: "UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}
+        │   │   └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "unique_j", ConstraintID: 2 (unique_j-)}
         │   │         rule: "Constraint should be hidden before name"
         │   │
-        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}
+        │   └── • ConstraintWithoutIndexName:{DescID: 104 (t), Name: "unique_j", ConstraintID: 2 (unique_j-)}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • Precedence dependency from VALIDATED UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │       └── • Precedence dependency from VALIDATED UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-)}
         │             rule: "Constraint should be hidden before name"
         │
         └── • 4 Mutation operations

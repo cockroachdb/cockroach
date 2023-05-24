@@ -32,52 +32,52 @@ $$;
 │       │
 │       ├── • 8 elements transitioning toward PUBLIC
 │       │   │
-│       │   ├── • Function:{DescID: 110}
+│       │   ├── • Function:{DescID: 110 (f+)}
 │       │   │     ABSENT → DESCRIPTOR_ADDED
 │       │   │
-│       │   ├── • SchemaChild:{DescID: 110, ReferencedDescID: 101}
+│       │   ├── • SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
 │       │   │   │     rule: "descriptor existence precedes dependents"
 │       │   │   │
-│       │   │   └── • Precedence dependency from PUBLIC FunctionName:{DescID: 110}
+│       │   │   └── • Precedence dependency from PUBLIC FunctionName:{DescID: 110 (f+)}
 │       │   │         rule: "function name should be set before parent ids"
 │       │   │
-│       │   ├── • FunctionName:{DescID: 110}
+│       │   ├── • FunctionName:{DescID: 110 (f+)}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
 │       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
-│       │   ├── • FunctionVolatility:{DescID: 110}
+│       │   ├── • FunctionVolatility:{DescID: 110 (f+)}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
 │       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
-│       │   ├── • Owner:{DescID: 110}
+│       │   ├── • Owner:{DescID: 110 (f+)}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
 │       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
-│       │   ├── • UserPrivileges:{DescID: 110, Name: admin}
+│       │   ├── • UserPrivileges:{DescID: 110 (f+), Name: "admin"}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
 │       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
-│       │   ├── • UserPrivileges:{DescID: 110, Name: root}
+│       │   ├── • UserPrivileges:{DescID: 110 (f+), Name: "root"}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
 │       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
-│       │   └── • FunctionBody:{DescID: 110}
+│       │   └── • FunctionBody:{DescID: 110 (f+)}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
 │       │             rule: "descriptor existence precedes dependents"
 │       │
 │       └── • 10 Mutation operations
@@ -210,28 +210,28 @@ $$;
     │   │
     │   ├── • 8 elements transitioning toward PUBLIC
     │   │   │
-    │   │   ├── • Function:{DescID: 110}
+    │   │   ├── • Function:{DescID: 110 (f+)}
     │   │   │     DESCRIPTOR_ADDED → ABSENT
     │   │   │
-    │   │   ├── • SchemaChild:{DescID: 110, ReferencedDescID: 101}
+    │   │   ├── • SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
     │   │   │     PUBLIC → ABSENT
     │   │   │
-    │   │   ├── • FunctionName:{DescID: 110}
+    │   │   ├── • FunctionName:{DescID: 110 (f+)}
     │   │   │     PUBLIC → ABSENT
     │   │   │
-    │   │   ├── • FunctionVolatility:{DescID: 110}
+    │   │   ├── • FunctionVolatility:{DescID: 110 (f+)}
     │   │   │     PUBLIC → ABSENT
     │   │   │
-    │   │   ├── • Owner:{DescID: 110}
+    │   │   ├── • Owner:{DescID: 110 (f+)}
     │   │   │     PUBLIC → ABSENT
     │   │   │
-    │   │   ├── • UserPrivileges:{DescID: 110, Name: admin}
+    │   │   ├── • UserPrivileges:{DescID: 110 (f+), Name: "admin"}
     │   │   │     PUBLIC → ABSENT
     │   │   │
-    │   │   ├── • UserPrivileges:{DescID: 110, Name: root}
+    │   │   ├── • UserPrivileges:{DescID: 110 (f+), Name: "root"}
     │   │   │     PUBLIC → ABSENT
     │   │   │
-    │   │   └── • FunctionBody:{DescID: 110}
+    │   │   └── • FunctionBody:{DescID: 110 (f+)}
     │   │         PUBLIC → ABSENT
     │   │
     │   └── • 1 Mutation operation
@@ -243,73 +243,73 @@ $$;
         │
         ├── • 8 elements transitioning toward PUBLIC
         │   │
-        │   ├── • Function:{DescID: 110}
+        │   ├── • Function:{DescID: 110 (f+)}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 110, ReferencedDescID: 101}
+        │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │
-        │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 110}
+        │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 110 (f+)}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │
-        │   │   ├── • Precedence dependency from PUBLIC FunctionVolatility:{DescID: 110}
+        │   │   ├── • Precedence dependency from PUBLIC FunctionVolatility:{DescID: 110 (f+)}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │
-        │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 110}
+        │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 110 (f+)}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │
-        │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 110, Name: admin}
+        │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "admin"}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │
-        │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 110, Name: root}
+        │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "root"}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │
-        │   │   └── • Precedence dependency from PUBLIC FunctionBody:{DescID: 110}
+        │   │   └── • Precedence dependency from PUBLIC FunctionBody:{DescID: 110 (f+)}
         │   │         rule: "dependents exist before descriptor becomes public"
         │   │
-        │   ├── • SchemaChild:{DescID: 110, ReferencedDescID: 101}
+        │   ├── • SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
         │   │   │     rule: "descriptor existence precedes dependents"
         │   │   │
-        │   │   └── • Precedence dependency from PUBLIC FunctionName:{DescID: 110}
+        │   │   └── • Precedence dependency from PUBLIC FunctionName:{DescID: 110 (f+)}
         │   │         rule: "function name should be set before parent ids"
         │   │
-        │   ├── • FunctionName:{DescID: 110}
+        │   ├── • FunctionName:{DescID: 110 (f+)}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
         │   │         rule: "descriptor existence precedes dependents"
         │   │
-        │   ├── • FunctionVolatility:{DescID: 110}
+        │   ├── • FunctionVolatility:{DescID: 110 (f+)}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
         │   │         rule: "descriptor existence precedes dependents"
         │   │
-        │   ├── • Owner:{DescID: 110}
+        │   ├── • Owner:{DescID: 110 (f+)}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
         │   │         rule: "descriptor existence precedes dependents"
         │   │
-        │   ├── • UserPrivileges:{DescID: 110, Name: admin}
+        │   ├── • UserPrivileges:{DescID: 110 (f+), Name: "admin"}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
         │   │         rule: "descriptor existence precedes dependents"
         │   │
-        │   ├── • UserPrivileges:{DescID: 110, Name: root}
+        │   ├── • UserPrivileges:{DescID: 110 (f+), Name: "root"}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
         │   │         rule: "descriptor existence precedes dependents"
         │   │
-        │   └── • FunctionBody:{DescID: 110}
+        │   └── • FunctionBody:{DescID: 110 (f+)}
         │       │ ABSENT → PUBLIC
         │       │
-        │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
         │             rule: "descriptor existence precedes dependents"
         │
         └── • 11 Mutation operations

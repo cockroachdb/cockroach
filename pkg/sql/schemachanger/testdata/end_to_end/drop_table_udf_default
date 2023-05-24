@@ -66,6 +66,7 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping: {}
      functionBody: SELECT 1;
      id: 104
   ...
@@ -83,6 +84,9 @@ upsert descriptor #105
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 105
+  +      name: t
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP TABLE ‹defaultdb›.‹public›.‹t›
@@ -117,6 +121,7 @@ upsert descriptor #104
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping: {}
      functionBody: SELECT 1;
      id: 104
   ...
@@ -134,6 +139,9 @@ upsert descriptor #105
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      id: 105
+  -      name: t
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: DROP TABLE ‹defaultdb›.‹public›.‹t›

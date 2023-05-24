@@ -53,6 +53,9 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 104
+  +      name: db
      defaultPrivileges: {}
      id: 104
   ...
@@ -69,6 +72,9 @@ upsert descriptor #106
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 106
+  +      name: sc
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP SCHEMA ‹db›.‹sc›
@@ -101,6 +107,9 @@ upsert descriptor #104
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping:
+  -      id: 104
+  -      name: db
      defaultPrivileges: {}
      id: 104
   ...

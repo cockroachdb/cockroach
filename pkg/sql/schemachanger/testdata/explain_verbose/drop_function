@@ -29,62 +29,62 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │
 │       ├── • 10 elements transitioning toward ABSENT
 │       │   │
-│       │   ├── • Owner:{DescID: 109}
+│       │   ├── • Owner:{DescID: 109 (f-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • UserPrivileges:{DescID: 109, Name: admin}
+│       │   ├── • UserPrivileges:{DescID: 109 (f-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • UserPrivileges:{DescID: 109, Name: root}
+│       │   ├── • UserPrivileges:{DescID: 109 (f-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • Function:{DescID: 109}
+│       │   ├── • Function:{DescID: 109 (f-)}
 │       │   │     PUBLIC → DROPPED
 │       │   │
-│       │   ├── • SchemaChild:{DescID: 109, ReferencedDescID: 101}
+│       │   ├── • SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
-│       │   ├── • FunctionName:{DescID: 109}
+│       │   ├── • FunctionName:{DescID: 109 (f-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • FunctionVolatility:{DescID: 109}
+│       │   ├── • FunctionVolatility:{DescID: 109 (f-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • FunctionLeakProof:{DescID: 109}
+│       │   ├── • FunctionLeakProof:{DescID: 109 (f-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • FunctionNullInputBehavior:{DescID: 109}
+│       │   ├── • FunctionNullInputBehavior:{DescID: 109 (f-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   └── • FunctionBody:{DescID: 109}
+│       │   └── • FunctionBody:{DescID: 109 (f-)}
 │       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │       └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │             rule: "descriptor dropped before dependent element removal"
 │       │
 │       └── • 11 Mutation operations
@@ -145,34 +145,34 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │   │   │
 │   │   ├── • 10 elements transitioning toward ABSENT
 │   │   │   │
-│   │   │   ├── • Owner:{DescID: 109}
+│   │   │   ├── • Owner:{DescID: 109 (f-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • UserPrivileges:{DescID: 109, Name: admin}
+│   │   │   ├── • UserPrivileges:{DescID: 109 (f-), Name: "admin"}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • UserPrivileges:{DescID: 109, Name: root}
+│   │   │   ├── • UserPrivileges:{DescID: 109 (f-), Name: "root"}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • Function:{DescID: 109}
+│   │   │   ├── • Function:{DescID: 109 (f-)}
 │   │   │   │     DROPPED → PUBLIC
 │   │   │   │
-│   │   │   ├── • SchemaChild:{DescID: 109, ReferencedDescID: 101}
+│   │   │   ├── • SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • FunctionName:{DescID: 109}
+│   │   │   ├── • FunctionName:{DescID: 109 (f-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • FunctionVolatility:{DescID: 109}
+│   │   │   ├── • FunctionVolatility:{DescID: 109 (f-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • FunctionLeakProof:{DescID: 109}
+│   │   │   ├── • FunctionLeakProof:{DescID: 109 (f-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • FunctionNullInputBehavior:{DescID: 109}
+│   │   │   ├── • FunctionNullInputBehavior:{DescID: 109 (f-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   └── • FunctionBody:{DescID: 109}
+│   │   │   └── • FunctionBody:{DescID: 109 (f-)}
 │   │   │         ABSENT → PUBLIC
 │   │   │
 │   │   └── • 1 Mutation operation
@@ -184,62 +184,62 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │
 │       ├── • 10 elements transitioning toward ABSENT
 │       │   │
-│       │   ├── • Owner:{DescID: 109}
+│       │   ├── • Owner:{DescID: 109 (f-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • UserPrivileges:{DescID: 109, Name: admin}
+│       │   ├── • UserPrivileges:{DescID: 109 (f-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • UserPrivileges:{DescID: 109, Name: root}
+│       │   ├── • UserPrivileges:{DescID: 109 (f-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • Function:{DescID: 109}
+│       │   ├── • Function:{DescID: 109 (f-)}
 │       │   │     PUBLIC → DROPPED
 │       │   │
-│       │   ├── • SchemaChild:{DescID: 109, ReferencedDescID: 101}
+│       │   ├── • SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
-│       │   ├── • FunctionName:{DescID: 109}
+│       │   ├── • FunctionName:{DescID: 109 (f-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • FunctionVolatility:{DescID: 109}
+│       │   ├── • FunctionVolatility:{DescID: 109 (f-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • FunctionLeakProof:{DescID: 109}
+│       │   ├── • FunctionLeakProof:{DescID: 109 (f-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • FunctionNullInputBehavior:{DescID: 109}
+│       │   ├── • FunctionNullInputBehavior:{DescID: 109 (f-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   └── • FunctionBody:{DescID: 109}
+│       │   └── • FunctionBody:{DescID: 109 (f-)}
 │       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │       └── • Precedence dependency from DROPPED Function:{DescID: 109 (f-)}
 │       │             rule: "descriptor dropped before dependent element removal"
 │       │
 │       └── • 18 Mutation operations
@@ -342,37 +342,37 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
         │
         ├── • 1 element transitioning toward ABSENT
         │   │
-        │   └── • Function:{DescID: 109}
+        │   └── • Function:{DescID: 109 (f-)}
         │       │ DROPPED → ABSENT
         │       │
-        │       ├── • Precedence dependency from ABSENT Owner:{DescID: 109}
+        │       ├── • Precedence dependency from ABSENT Owner:{DescID: 109 (f-)}
         │       │     rule: "non-data dependents removed before descriptor"
         │       │
-        │       ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 109, Name: admin}
+        │       ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 109 (f-), Name: "admin"}
         │       │     rule: "non-data dependents removed before descriptor"
         │       │
-        │       ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 109, Name: root}
+        │       ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 109 (f-), Name: "root"}
         │       │     rule: "non-data dependents removed before descriptor"
         │       │
-        │       ├── • PreviousStagePrecedence dependency from DROPPED Function:{DescID: 109}
+        │       ├── • PreviousStagePrecedence dependency from DROPPED Function:{DescID: 109 (f-)}
         │       │     rule: "descriptor dropped in transaction before removal"
         │       │
-        │       ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 109, ReferencedDescID: 101}
+        │       ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
         │       │     rule: "non-data dependents removed before descriptor"
         │       │
-        │       ├── • Precedence dependency from ABSENT FunctionName:{DescID: 109}
+        │       ├── • Precedence dependency from ABSENT FunctionName:{DescID: 109 (f-)}
         │       │     rule: "non-data dependents removed before descriptor"
         │       │
-        │       ├── • Precedence dependency from ABSENT FunctionVolatility:{DescID: 109}
+        │       ├── • Precedence dependency from ABSENT FunctionVolatility:{DescID: 109 (f-)}
         │       │     rule: "non-data dependents removed before descriptor"
         │       │
-        │       ├── • Precedence dependency from ABSENT FunctionLeakProof:{DescID: 109}
+        │       ├── • Precedence dependency from ABSENT FunctionLeakProof:{DescID: 109 (f-)}
         │       │     rule: "non-data dependents removed before descriptor"
         │       │
-        │       ├── • Precedence dependency from ABSENT FunctionNullInputBehavior:{DescID: 109}
+        │       ├── • Precedence dependency from ABSENT FunctionNullInputBehavior:{DescID: 109 (f-)}
         │       │     rule: "non-data dependents removed before descriptor"
         │       │
-        │       └── • Precedence dependency from ABSENT FunctionBody:{DescID: 109}
+        │       └── • Precedence dependency from ABSENT FunctionBody:{DescID: 109 (f-)}
         │             rule: "non-data dependents removed before descriptor"
         │
         └── • 8 Mutation operations

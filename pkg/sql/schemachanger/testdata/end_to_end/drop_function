@@ -175,6 +175,7 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping: {}
      dependedOnBy:
      - columnIds:
        - 1
@@ -208,6 +209,7 @@ upsert descriptor #105
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping: {}
      families:
      - columnIds:
   ...
@@ -227,6 +229,7 @@ upsert descriptor #106
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping: {}
      dependsOn:
      - 104
   ...
@@ -242,6 +245,7 @@ upsert descriptor #107
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping: {}
      enumMembers:
      - logicalRepresentation: Monday
   ...
@@ -259,6 +263,7 @@ upsert descriptor #108
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping: {}
      id: 108
      kind: ALIAS
   ...
@@ -275,6 +280,9 @@ upsert descriptor #109
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 109
+  +      name: f
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP FUNCTION ‹""›.‹""›.‹f›
@@ -310,6 +318,7 @@ upsert descriptor #104
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping: {}
      dependedOnBy:
      - columnIds:
   ...
@@ -325,6 +334,7 @@ upsert descriptor #105
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping: {}
      families:
      - columnIds:
   ...
@@ -340,6 +350,7 @@ upsert descriptor #106
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping: {}
      dependsOn:
      - 104
   ...
@@ -355,6 +366,7 @@ upsert descriptor #107
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping: {}
      enumMembers:
      - logicalRepresentation: Monday
   ...
@@ -370,6 +382,7 @@ upsert descriptor #108
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping: {}
      id: 108
      kind: ALIAS
   ...
