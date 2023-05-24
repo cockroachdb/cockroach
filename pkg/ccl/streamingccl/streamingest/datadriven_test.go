@@ -44,7 +44,7 @@ import (
 // tenant. This operation will fail the test if it is run prior to the
 // replication stream activating the tenant.
 //
-// - wait-until-high-watermark ts=<ts>
+// - wait-until-replicated-time ts=<ts>
 // Wait until the replication job has reached the specified timestamp.
 //
 // - cutover ts=<ts>
@@ -119,22 +119,20 @@ func TestDataDriven(t *testing.T) {
 			case "start-replication-stream":
 				ds.producerJobID, ds.replicationJobID = ds.replicationClusters.StartStreamReplication(ctx)
 
-			case "wait-until-high-watermark":
-				var highWaterMark string
-				d.ScanArgs(t, "ts", &highWaterMark)
-				varValue, ok := ds.vars[highWaterMark]
+			case "wait-until-replicated-time":
+				var replicatedTimeTarget string
+				d.ScanArgs(t, "ts", &replicatedTimeTarget)
+				varValue, ok := ds.vars[replicatedTimeTarget]
 				if ok {
-					highWaterMark = varValue
+					replicatedTimeTarget = varValue
 				}
-				timestamp, _, err := tree.ParseDTimestamp(nil, highWaterMark, time.Microsecond)
+				timestamp, _, err := tree.ParseDTimestamp(nil, replicatedTimeTarget, time.Microsecond)
 				require.NoError(t, err)
-				hw := hlc.Timestamp{WallTime: timestamp.UnixNano()}
-				ds.replicationClusters.WaitUntilHighWatermark(hw, jobspb.JobID(ds.replicationJobID))
-
+				ds.replicationClusters.WaitUntilReplicatedTime(hlc.Timestamp{WallTime: timestamp.UnixNano()},
+					jobspb.JobID(ds.replicationJobID))
 			case "start-replicated-tenant":
 				cleanupTenant := ds.replicationClusters.CreateDestTenantSQL(ctx)
 				ds.cleanupFns = append(ds.cleanupFns, cleanupTenant)
-
 			case "let":
 				if len(d.CmdArgs) == 0 {
 					t.Fatalf("Must specify at least one variable name.")

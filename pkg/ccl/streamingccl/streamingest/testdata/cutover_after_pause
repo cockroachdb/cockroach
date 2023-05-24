@@ -27,7 +27,7 @@ let $afterImport as=source-system
 SELECT clock_timestamp()::timestamp::string
 ----
 
-wait-until-high-watermark ts=$afterImport
+wait-until-replicated-time ts=$afterImport
 ----
 
 job as=destination-system pause
