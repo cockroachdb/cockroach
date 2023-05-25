@@ -60,6 +60,7 @@ export const statementsSql = docsURL(
 export const statementsRetries = docsURL(
   "transactions.html#transaction-retries",
 );
+export const batchStatements = docsURL("transactions.html#batched-statements");
 export const readFromDisk = docsURL(
   "architecture/life-of-a-distributed-transaction.html#reads-from-the-storage-layer",
 );
