@@ -96,8 +96,8 @@ tc_end_block "Copy binaries"
 
 
 tc_start_block "Make and push multiarch docker images"
-declare -a gcr_amends
-declare -a dockerhub_amends
+declare -a gcr_arch_tags
+declare -a dockerhub_arch_tags
 dockerhub_tag="${dockerhub_repository}:${version}"
 gcr_tag="${gcr_repository}:${version}"
 
@@ -115,23 +115,29 @@ for platform_name in amd64 arm64; do
   docker_login_gcr "$gcr_repository" "$gcr_credentials"
   docker push "$gcr_arch_tag"
   docker push "$dockerhub_arch_tag"
-  gcr_amends+=("--amend" "$gcr_arch_tag")
-  dockerhub_amends+=("--amend" "$dockerhub_arch_tag")
+  gcr_arch_tags+=("$gcr_arch_tag")
+  dockerhub_arch_tags+=("$dockerhub_arch_tag")
 done
 
 docker_login_gcr "$gcr_repository" "$gcr_credentials"
 
-docker manifest create "${gcr_tag}" "${gcr_amends[@]}"
+docker manifest rm "${gcr_tag}" || :
+docker manifest create "${gcr_tag}" "${gcr_arch_tags[@]}"
 docker manifest push "${gcr_tag}"
 
-docker manifest create "${dockerhub_tag}" "${dockerhub_amends[@]}"
+docker manifest rm "${dockerhub_tag}" || :
+docker manifest create "${dockerhub_tag}" "${dockerhub_arch_tags[@]}"
 docker manifest push "${dockerhub_tag}"
 
-docker manifest create "${gcr_repository}:latest" "${gcr_amends[@]}"
-docker manifest create "${gcr_repository}:latest-${release_branch}" "${gcr_amends[@]}"
+docker manifest rm "${gcr_repository}:latest" || :
+docker manifest create "${gcr_repository}:latest" "${gcr_arch_tags[@]}"
+docker manifest rm "${gcr_repository}:latest-${release_branch}" || :
+docker manifest create "${gcr_repository}:latest-${release_branch}" "${gcr_arch_tags[@]}"
 
-docker manifest create "${dockerhub_repository}:latest" "${dockerhub_amends[@]}"
-docker manifest create "${dockerhub_repository}:latest-${release_branch}" "${dockerhub_amends[@]}"
+docker manifest rm "${dockerhub_repository}:latest" || :
+docker manifest create "${dockerhub_repository}:latest" "${dockerhub_arch_tags[@]}"
+docker manifest rm "${dockerhub_repository}:latest-${release_branch}" || :
+docker manifest create "${dockerhub_repository}:latest-${release_branch}" "${dockerhub_arch_tags[@]}"
 tc_end_block "Make and push multiarch docker images"
 
 
