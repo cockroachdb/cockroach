@@ -291,7 +291,7 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	})
 	for _, c := range childrenMetadata {
 		var sb redact.StringBuilder
-		sb.Printf("[%s: %s]", redact.SafeString(c.Operation), c.Metadata.String())
+		sb.Printf("[%s: %s]", redact.SafeString(c.Operation), c.Metadata)
 		ownLogs = append(ownLogs, conv(sb.RedactableString(), sp.StartTime, time.Time{}))
 	}
 
