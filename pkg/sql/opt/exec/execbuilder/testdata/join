@@ -543,18 +543,11 @@ EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cu
 distribution: local
 vectorized: true
 ·
-• merge join
-│ equality: (cust) = (id)
-│ right cols are key
-│
-├── • scan
-│     missing stats
-│     table: cards@cards_cust_idx
-│     spans: FULL SCAN
+• render
 │
 └── • scan
       missing stats
-      table: customers@customers_pkey
+      table: cards@cards_pkey
       spans: FULL SCAN
 
 # Tests for filter propagation through joins.
@@ -2220,16 +2213,9 @@ EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = car
 distribution: local
 vectorized: true
 ·
-• hash join
-│ equality: (cust) = (id)
-│ right cols are key
-│
-├── • scan
-│     missing stats
-│     table: cards@cards_pkey
-│     spans: FULL SCAN
+• render
 │
 └── • scan
       missing stats
-      table: customers@customers_pkey
+      table: cards@cards_pkey
       spans: FULL SCAN

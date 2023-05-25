@@ -73,13 +73,13 @@ func newForcingOptimizer(
 	fo.o.Factory().SetDisabledRules(tester.Flags.DisableRules)
 
 	fo.o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		if tester.Flags.DisableRules.Contains(int(ruleName)) {
+			return false
+		}
 		if ignoreNormRules && ruleName.IsNormalize() {
 			return true
 		}
 		if fo.remaining == 0 {
-			return false
-		}
-		if tester.Flags.DisableRules.Contains(int(ruleName)) {
 			return false
 		}
 		fo.remaining--

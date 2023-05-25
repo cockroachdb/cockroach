@@ -1911,7 +1911,7 @@ inner-join (lookup xyz@xy)
       └── y:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
 
 # Verify case where we generate multiple merge-joins.
-memo
+memo disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
 memo (optimized, ~19KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
@@ -1951,7 +1951,7 @@ memo (optimized, ~19KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
  ├── G13: (variable l.u)
  └── G14: (variable r.u)
 
-exploretrace rule=GenerateMergeJoins
+exploretrace rule=GenerateMergeJoins disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
 ----
