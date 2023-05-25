@@ -58,6 +58,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"NodeIDContainer":  {},
 						"SQLIDContainer":   {},
 						"StoreIDContainer": {},
+						"SQLInstanceID":    {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/cli/exit": {
 						"Code": {},
