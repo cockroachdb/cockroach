@@ -833,15 +833,8 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	if err != nil {
 		return err
 	}
-	found := false
-	for _, r := range prevRegionConfig.Regions() {
-		if r == catpb.RegionName(n.n.PrimaryRegion) {
-			found = true
-			break
-		}
-	}
-
-	if !found {
+	if !prevRegionConfig.Regions().Contains(catpb.RegionName(n.n.PrimaryRegion)) &&
+		!prevRegionConfig.TransitioningRegions().Contains(catpb.RegionName(n.n.PrimaryRegion)) {
 		return errors.WithHintf(
 			pgerror.Newf(pgcode.InvalidName,
 				"region %s has not been added to the database",
@@ -1288,6 +1281,9 @@ func (p *planner) alterDatabaseSurvivalGoal(
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
+	*p.extendedEvalCtx.validateDbZoneConfig = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		ctx,
@@ -1295,7 +1291,7 @@ func (p *planner) alterDatabaseSurvivalGoal(
 		regionConfig,
 		p.InternalSQLTxn(),
 		p.execCfg,
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -1483,6 +1479,9 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
+	*params.extendedEvalCtx.validateDbZoneConfig = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -1490,7 +1489,7 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		regionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -1963,7 +1962,8 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		return nil
 	}
 
-	if !prevRegionConfig.Regions().Contains(catpb.RegionName(n.n.SecondaryRegion)) {
+	if !prevRegionConfig.Regions().Contains(catpb.RegionName(n.n.SecondaryRegion)) &&
+		!prevRegionConfig.TransitioningRegions().Contains(catpb.RegionName(n.n.SecondaryRegion)) {
 		return errors.WithHintf(
 			pgerror.Newf(pgcode.InvalidDatabaseDefinition,
 				"region %s has not been added to the database",
@@ -2025,8 +2025,9 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
 	*params.extendedEvalCtx.validateDbZoneConfig = true
-
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -2034,7 +2035,7 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		updatedRegionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -2133,6 +2134,9 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
+	*params.extendedEvalCtx.validateDbZoneConfig = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -2140,7 +2144,7 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		updatedRegionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
