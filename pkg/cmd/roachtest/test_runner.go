@@ -61,6 +61,9 @@ var (
 	// reference error used when cluster creation fails for a test
 	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
 
+	// reference error for any failures during test teardown
+	errDuringTeardown = fmt.Errorf("error during test tear down")
+
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
 	// https://grafana.testeng.crdb.io/prometheus/config
@@ -941,7 +944,7 @@ func (r *testRunner) runTest(
 
 			durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 			if t.Failed() {
-				output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.failureMsg())
+				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", t.failureMsg(), t.ArtifactsDir())
 
 				if teamCity {
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -1065,7 +1068,7 @@ func (r *testRunner) runTest(
 		if t.Failed() {
 			s = "failure"
 		}
-		t.L().Printf("tearing down after %s; see teardown.log", s)
+		t.L().Printf("tearing down after %s; see teardown.log (subsequent failures may still occur there)", s)
 	case <-time.After(timeout):
 		// NB: We're adding the timeout failure intentionally without cancelling the context
 		// to capture as much state as possible during artifact collection.
@@ -1090,6 +1093,9 @@ func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) error {
 
+	teardownError := func(err error) {
+		t.Error(errors.Mark(err, errDuringTeardown))
+	}
 	// We still have to collect artifacts and run post-flight checks, and any of
 	// these might hang. So they go into a goroutine and the main goroutine
 	// abandons them after a timeout. We intentionally don't wait for the
@@ -1151,7 +1157,7 @@ func (r *testRunner) teardownTest(
 		if err := c.assertNoDeadNode(ctx, t); err != nil {
 			// Some tests expect dead nodes, so they may opt out of this check.
 			if t.spec.SkipPostValidations&registry.PostValidationNoDeadNodes == 0 {
-				t.Error(err)
+				teardownError(err)
 			} else {
 				t.L().Printf("dead node(s) detected but expected")
 			}
@@ -1161,7 +1167,7 @@ func (r *testRunner) teardownTest(
 		// and select the first one that succeeds to run the validation queries
 		statuses, err := c.HealthStatus(ctx, t.L(), c.All())
 		if err != nil {
-			t.Error(errors.WithDetail(err, "Unable to check health status"))
+			teardownError(errors.WithDetail(err, "Unable to check health status"))
 		}
 
 		var db *gosql.DB
@@ -1198,12 +1204,16 @@ func (r *testRunner) teardownTest(
 			// If this validation fails due to a timeout, it is very likely that
 			// the replica divergence check below will also fail.
 			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
-				c.FailOnInvalidDescriptors(ctx, db, t)
+				if err := c.assertValidDescriptors(ctx, db, t); err != nil {
+					teardownError(errors.WithDetail(err, "invalid descriptors check failed"))
+				}
 			}
 			// Detect replica divergence (i.e. ranges in which replicas have arrived
 			// at the same log position with different states).
 			if t.spec.SkipPostValidations&registry.PostValidationReplicaDivergence == 0 {
-				c.FailOnReplicaDivergence(ctx, db, t)
+				if err := c.assertConsistentReplicas(ctx, db, t); err != nil {
+					teardownError(errors.WithDetail(err, "consistency check failed"))
+				}
 			}
 		} else {
 			t.L().Printf("no live node found, skipping validation checks")
