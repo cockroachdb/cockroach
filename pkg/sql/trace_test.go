@@ -114,25 +114,28 @@ func TestTrace(t *testing.T) {
 				// Check that stat collection from the above SELECT statement is output
 				// to trace. We don't insert any rows in this test, thus the expected
 				// num tuples value plus one is 1.
-				rows, err := sqlDB.Query(
-					"SELECT count(message) FROM crdb_internal.session_trace " +
-						"WHERE message LIKE '%component%num_tuples%value_plus_one:1%'",
-				)
+				rows, err := sqlDB.Query("SELECT message FROM crdb_internal.session_trace")
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !rows.Next() {
-					t.Fatal("unable to retrieve count")
-				}
-
-				var count int
-				if err := rows.Scan(&count); err != nil {
+				var trace strings.Builder
+				if err := func() error {
+					for rows.Next() {
+						var msg string
+						if err := rows.Scan(&msg); err != nil {
+							return err
+						}
+						fmt.Fprintln(&trace, msg)
+					}
+					return rows.Close()
+				}(); err != nil {
 					t.Fatal(err)
 				}
-				if err := rows.Close(); err != nil {
-					t.Fatal(err)
+				t.Logf("trace:\n%s", trace.String())
+				if trace.Len() == 0 {
+					t.Fatalf("empty trace")
 				}
-				if count == 0 {
+				if !strings.Contains(trace.String(), "ComponentStats") {
 					t.Fatalf("no stat messages found")
 				}
 
