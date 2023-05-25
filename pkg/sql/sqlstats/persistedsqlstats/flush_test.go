@@ -652,6 +652,18 @@ func verifyInMemoryStatsCorrectness(
 			if tc.fingerprint == statistics.Key.Query {
 				require.Equal(t, tc.count, statistics.Stats.Count, "fingerprint: %s", tc.fingerprint)
 			}
+
+			// All the queries should be under 1 minute
+			require.Less(t, statistics.Stats.ServiceLat.Mean, 60.0)
+			require.Less(t, statistics.Stats.RunLat.Mean, 60.0)
+			require.Less(t, statistics.Stats.PlanLat.Mean, 60.0)
+			require.Less(t, statistics.Stats.ParseLat.Mean, 60.0)
+			require.Less(t, statistics.Stats.IdleLat.Mean, 60.0)
+			require.GreaterOrEqual(t, statistics.Stats.ServiceLat.Mean, 0.0)
+			require.GreaterOrEqual(t, statistics.Stats.RunLat.Mean, 0.0)
+			require.GreaterOrEqual(t, statistics.Stats.PlanLat.Mean, 0.0)
+			require.GreaterOrEqual(t, statistics.Stats.ParseLat.Mean, 0.0)
+			require.GreaterOrEqual(t, statistics.Stats.IdleLat.Mean, 0.0)
 			return nil
 		})
 

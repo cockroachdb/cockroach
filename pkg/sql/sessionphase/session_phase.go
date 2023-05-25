@@ -234,10 +234,17 @@ func (t *Times) GetIdleLatency(previous *Times) time.Duration {
 	// of the previous execution.
 	waitingSince := previousQueryServiced
 
+	transactionStarted := t.times[SessionTransactionStarted]
+	// Transaction started is not set. Assume it's an implicit
+	// transaction so there is no idle time.
+	if transactionStarted.IsZero() {
+		return 0
+	}
+
 	// Although we really only want to measure idle latency *within*
 	// an open transaction. So if we're in a new transaction, measure
 	// from its start time instead.
-	if transactionStarted := t.times[SessionTransactionStarted]; transactionStarted.After(waitingSince) {
+	if transactionStarted.After(waitingSince) {
 		waitingSince = transactionStarted
 	}
 
