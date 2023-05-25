@@ -204,7 +204,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			// volatility of stable functions. If folded, we only get a scalar and lose
 			// the volatility.
 			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
-				stmtScope = b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+				stmtScope = b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 			})
 			checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
 
