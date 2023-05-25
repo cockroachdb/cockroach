@@ -1,5 +1,17 @@
 @import "../core/index.module";
 
+:global(.ant-dropdown-menu-submenu-popup ul) {
+  padding-bottom: 5px;
+}
+
+:global(.ant-dropdown-menu-item:hover) {
+  background-color: $colors--primary-blue-8;
+}
+
+:global(.ant-dropdown-menu-submenu-title:hover) {
+  background-color: $colors--primary-blue-8;
+}
+
 .search-area {
   border: 1px solid $colors--neutral-3;
   border-radius: 3px;
@@ -17,10 +29,14 @@
 
   label {
     display: block;
-    margin-bottom: 0px;
+    margin-bottom: 0;
     font-family: $font-family--lato-regular;
     font-size: $font-size--medium;
     font-weight: $font-weight--light;
+
+    :global(.ant-btn) {
+      border-color: $colors--neutral-4;
+    }
   }
 
   ul {
@@ -41,4 +57,52 @@
 
 .margin-top-btn {
   margin-top: 22px;
+}
+
+.dropdown-area {
+  align-items: center;
+  border-color: $colors--neutral-4;
+  border-radius: 4px;
+  border-style: solid;
+  border-width: 1px;
+  color: $colors--neutral-6;
+  display: flex;
+  font-family: $font-family--lato-regular;
+  font-weight: $font-weight--light;
+  font-size: $font-size--medium;
+  line-height: $line-height--medium-small;
+  height: 43px;
+  padding-left: 8px;
+}
+
+.small {
+  width: 80px;
+}
+
+.medium {
+  width: 175px;
+}
+
+.large {
+  width: 210px;
+}
+
+.dropdown-value-small {
+  width: 50px;
+}
+
+.dropdown-value-medium {
+  width: 145px;
+}
+
+.arrow-down {
+  fill: $colors--neutral-4;
+}
+
+.options-warning {
+  font-family: $font-family--base;
+  font-size: $font-size--small;
+  color: $colors--neutral-6;
+  padding: 10px;
+  display: inline-block;
 }
