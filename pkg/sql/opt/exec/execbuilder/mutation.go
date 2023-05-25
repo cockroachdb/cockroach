@@ -973,8 +973,12 @@ func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
 
 // forUpdateLocking is the row-level locking mode used by mutations during their
 // initial row scan, when such locking is deemed desirable. The locking mode is
-// equivalent that used by a SELECT ... FOR UPDATE statement.
-var forUpdateLocking = opt.Locking{Strength: tree.ForUpdate}
+// equivalent to that used by a SELECT FOR UPDATE statement, except not durable.
+var forUpdateLocking = opt.Locking{
+	Strength:   tree.ForUpdate,
+	WaitPolicy: tree.LockWaitBlock,
+	Durability: tree.LockDurabilityBestEffort,
+}
 
 // shouldApplyImplicitLockingToMutationInput determines whether or not the
 // builder should apply a FOR UPDATE row-level locking mode to the initial row

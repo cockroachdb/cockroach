@@ -115,7 +115,7 @@ enum ScanLockingStrength {
   // on each key scanned.
   FOR_UPDATE = 4;
 }
-  
+
 // LockingWaitPolicy controls the policy used for handling conflicting locks
 // held by other active transactions when attempting to lock rows due to FOR
 // UPDATE/SHARE clauses (i.e. it represents the NOWAIT and SKIP LOCKED options).
