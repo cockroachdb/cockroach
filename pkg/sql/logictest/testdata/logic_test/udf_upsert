@@ -29,23 +29,27 @@ SELECT f_ocdn(1,2,1);
 ----
 NULL
 
-statement error pq: multiple modification subqueries of the same table \"t_ocdn\" are not supported
+query TTTT
 SELECT f_ocdn(1,1,1), f_ocdn(3,2,2), f_ocdn(6,6,2), f_ocdn(2,1,1);
+----
+NULL  (3,2,2)  (6,6,2)  NULL
 
 query T nosort
-SELECT f_ocdn(x, y, z) FROM (VALUES (1, 1, 1), (2, 2, 1), (3, 3, 3), (3, 4, 4)) v(x, y, z)
+SELECT f_ocdn(x, y, z) FROM (VALUES (1, 1, 1), (2, 2, 1), (3, 3, 3), (3, 4, 4), (5, 5, 5)) v(x, y, z)
 ----
 NULL
-(2,2,1)
-(3,3,3)
 NULL
+NULL
+NULL
+(5,5,5)
 
 query III rowsort
 SELECT * FROM t_ocdn
 ----
-1 1 1
-2 2 1
-3 3 3
+1  1  1
+3  2  2
+5  5  5
+6  6  2
 
 
 statement ok
@@ -55,23 +59,44 @@ $$
 $$ LANGUAGE SQL;
 
 statement ok
-SELECT f_ocdn_2vals(5,5,5,5,5,5);
+SELECT f_ocdn_2vals(7,7,7,7,7,7);
 
 query III rowsort
 SELECT * FROM t_ocdn;
 ----
-1 1 1
-2 2 1
-3 3 3
-5 5 5
+1  1  1
+3  2  2
+5  5  5
+6  6  2
+7  7  7
 
-statement error pq: multiple modification subqueries of the same table \"t_ocdn\" are not supported
-CREATE FUNCTION f_err(i INT, j INT, k INT, m INT, n INT, o INT) RETURNS RECORD AS
+statement ok
+CREATE FUNCTION f_multi_ins(i INT, j INT, k INT, m INT, n INT, o INT) RETURNS RECORD AS
 $$
   INSERT INTO t_ocdn VALUES (i, j, k) ON CONFLICT DO NOTHING;
   INSERT INTO t_ocdn VALUES (m, n, o) ON CONFLICT DO NOTHING;
-  SELECT * FROM t_ocdn WHERE t.a=i OR t.a=m;
+  SELECT * FROM t_ocdn WHERE a=i OR a=m ORDER BY a;
 $$ LANGUAGE SQL;
+
+query TT
+SELECT f_multi_ins(1, 1, 1, 1, 1, 1), f_multi_ins(1, 1, 1, 1, 1, 1)
+----
+(1,1,1)  (1,1,1)
+
+query TT
+SELECT f_multi_ins(2, 2, 2, 3, 3, 3), f_multi_ins(3, 3, 3, 4, 4, 4)
+----
+(3,2,2)  (3,2,2)
+
+query III rowsort
+SELECT * FROM t_ocdn
+----
+1  1  1
+3  2  2
+4  4  4
+5  5  5
+6  6  2
+7  7  7
 
 subtest on_conflict_do_update
 
