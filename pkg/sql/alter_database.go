@@ -1288,6 +1288,9 @@ func (p *planner) alterDatabaseSurvivalGoal(
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
+	*p.extendedEvalCtx.validateDbZoneConfig = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		ctx,
@@ -1295,7 +1298,7 @@ func (p *planner) alterDatabaseSurvivalGoal(
 		regionConfig,
 		p.InternalSQLTxn(),
 		p.execCfg,
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -1483,6 +1486,9 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
+	*params.extendedEvalCtx.validateDbZoneConfig = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -1490,7 +1496,7 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		regionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -2025,8 +2031,9 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
 	*params.extendedEvalCtx.validateDbZoneConfig = true
-
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -2034,7 +2041,7 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		updatedRegionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
@@ -2133,6 +2140,9 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
+	*params.extendedEvalCtx.validateDbZoneConfig = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -2140,7 +2150,7 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		updatedRegionConfig,
 		params.p.InternalSQLTxn(),
 		params.p.execCfg,
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
