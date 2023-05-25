@@ -968,11 +968,11 @@ sort
       │    ├── stable
       │    ├── stats: [rows=139576.9, distinct(53)=82395.9, null(53)=0]
       │    ├── inner-join (hash)
-      │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null id:24!null cardsinfo.dealerid:32!null cardsinfo.cardid:33!null
+      │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null id:24!null
       │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    ├── stats: [rows=139576.9, distinct(3)=82395.9, null(3)=0, distinct(4)=37420.4, null(4)=0, distinct(24)=37420.4, null(24)=0]
-      │    │    ├── key: (5,15,33)
-      │    │    ├── fd: ()-->(1,2,13,14,32), (3-5)-->(6,7), (15)-->(16,17), (3)==(15), (15)==(3), (24)==(4,33), (33)==(4,24), (4)==(24,33)
+      │    │    ├── key: (5,15,24)
+      │    │    ├── fd: ()-->(1,2,13,14), (3-5)-->(6,7), (15)-->(16,17), (3)==(15), (15)==(3), (4)==(24), (24)==(4)
       │    │    ├── inner-join (merge)
       │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null
       │    │    │    ├── left ordering: +3
@@ -1004,24 +1004,18 @@ sort
       │    │    │    │         ├── accountname:16 != 'someaccount' [outer=(16), constraints=(/16: (/NULL - /'someaccount') [/e'someaccount\x00' - ]; tight)]
       │    │    │    │         └── customername:17 != 'somecustomer' [outer=(17), constraints=(/17: (/NULL - /'somecustomer') [/e'somecustomer\x00' - ]; tight)]
       │    │    │    └── filters (true)
-      │    │    ├── inner-join (hash)
-      │    │    │    ├── columns: id:24!null cardsinfo.dealerid:32!null cardsinfo.cardid:33!null
-      │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
-      │    │    │    ├── stats: [rows=58333.33, distinct(24)=37420.4, null(24)=0, distinct(32)=1, null(32)=0, distinct(33)=37420.4, null(33)=0]
-      │    │    │    ├── key: (33)
-      │    │    │    ├── fd: ()-->(32), (24)==(33), (33)==(24)
+      │    │    ├── project
+      │    │    │    ├── columns: id:24!null
+      │    │    │    ├── stats: [rows=58333.33, distinct(24)=37420.4, null(24)=0]
+      │    │    │    ├── key: (24)
       │    │    │    ├── scan cardsinfo@cardsinfoversionindex
       │    │    │    │    ├── columns: cardsinfo.dealerid:32!null cardsinfo.cardid:33!null
       │    │    │    │    ├── constraint: /32/40: [/1 - /1]
       │    │    │    │    ├── stats: [rows=58333.33, distinct(32)=1, null(32)=0, distinct(33)=37420.4, null(33)=0]
       │    │    │    │    ├── key: (33)
       │    │    │    │    └── fd: ()-->(32)
-      │    │    │    ├── scan cards@cardsnamesetnumber
-      │    │    │    │    ├── columns: id:24!null
-      │    │    │    │    ├── stats: [rows=57000, distinct(24)=57000, null(24)=0]
-      │    │    │    │    └── key: (24)
-      │    │    │    └── filters
-      │    │    │         └── id:24 = cardsinfo.cardid:33 [outer=(24,33), constraints=(/24: (/NULL - ]; /33: (/NULL - ]), fd=(24)==(33), (33)==(24)]
+      │    │    │    └── projections
+      │    │    │         └── cardsinfo.cardid:33 [as=id:24, outer=(33)]
       │    │    └── filters
       │    │         └── id:24 = transactiondetails.cardid:4 [outer=(4,24), constraints=(/4: (/NULL - ]; /24: (/NULL - ]), fd=(4)==(24), (24)==(4)]
       │    └── projections

@@ -752,7 +752,7 @@ exec-ddl
 CREATE TABLE a (id INT8 PRIMARY KEY)
 ----
 
-opt set=reorder_joins_limit=3
+opt set=reorder_joins_limit=3 disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
 SELECT
     1
 FROM

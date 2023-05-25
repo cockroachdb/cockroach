@@ -1747,21 +1747,17 @@ project
  ├── group-by (hash)
  │    ├── columns: b.k:1!null a.k:8!null array_agg:17!null
  │    ├── grouping columns: b.k:1!null
- │    ├── key: (8)
- │    ├── fd: (1)==(8), (8)==(1), (8)-->(17), (1)-->(8,17)
- │    ├── inner-join (hash)
- │    │    ├── columns: b.k:1!null a.k:8!null
- │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
- │    │    ├── key: (8)
+ │    ├── key: (1)
+ │    ├── fd: (1)==(8), (8)==(1), (1)-->(8,17)
+ │    ├── project
+ │    │    ├── columns: a.k:8!null b.k:1!null
+ │    │    ├── key: (1)
  │    │    ├── fd: (1)==(8), (8)==(1)
  │    │    ├── scan a [as=b]
  │    │    │    ├── columns: b.k:1!null
  │    │    │    └── key: (1)
- │    │    ├── scan a
- │    │    │    ├── columns: a.k:8!null
- │    │    │    └── key: (8)
- │    │    └── filters
- │    │         └── a.k:8 = b.k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │    │    └── projections
+ │    │         └── b.k:1 [as=a.k:8, outer=(1)]
  │    └── aggregations
  │         ├── array-agg [as=array_agg:17, outer=(8)]
  │         │    └── a.k:8
@@ -1869,31 +1865,22 @@ project
  │    ├── grouping columns: c.k:1!null
  │    ├── key: (1)
  │    ├── fd: ()-->(25), (1)-->(25,26)
- │    ├── inner-join (hash)
- │    │    ├── columns: c.k:1!null b.k:8!null array:22 canary:25!null
- │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
- │    │    ├── key: (8)
- │    │    ├── fd: ()-->(25), (8)-->(22), (1)==(8), (8)==(1)
- │    │    ├── scan a [as=c]
- │    │    │    ├── columns: c.k:1!null
- │    │    │    └── key: (1)
- │    │    ├── project
- │    │    │    ├── columns: canary:25!null array:22 b.k:8!null
- │    │    │    ├── key: (8)
- │    │    │    ├── fd: ()-->(25), (8)-->(22)
- │    │    │    ├── scan a [as=b]
- │    │    │    │    ├── columns: b.k:8!null
- │    │    │    │    └── key: (8)
- │    │    │    └── projections
- │    │    │         ├── true [as=canary:25]
- │    │    │         └── indirection [as=array:22, subquery]
- │    │    │              ├── array-flatten
- │    │    │              │    └── scan a
- │    │    │              │         ├── columns: k:15!null
- │    │    │              │         └── key: (15)
- │    │    │              └── 1
- │    │    └── filters
- │    │         └── b.k:8 = c.k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │    ├── project
+ │    │    ├── columns: c.k:1!null canary:25!null array:22
+ │    │    ├── key: (1,22)
+ │    │    ├── fd: ()-->(25)
+ │    │    ├── scan a [as=b]
+ │    │    │    ├── columns: b.k:8!null
+ │    │    │    └── key: (8)
+ │    │    └── projections
+ │    │         ├── b.k:8 [as=c.k:1, outer=(8)]
+ │    │         ├── true [as=canary:25]
+ │    │         └── indirection [as=array:22, subquery]
+ │    │              ├── array-flatten
+ │    │              │    └── scan a
+ │    │              │         ├── columns: k:15!null
+ │    │              │         └── key: (15)
+ │    │              └── 1
  │    └── aggregations
  │         ├── array-agg [as=array_agg:26, outer=(22)]
  │         │    └── array:22
@@ -1932,13 +1919,12 @@ project
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(15,24)
- │    │    │    │    ├── inner-join (hash)
- │    │    │    │    │    ├── columns: b.k:8!null a.k:15!null
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: a.k:15!null
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    │    │    │    │    ├── key: ()
- │    │    │    │    │    ├── fd: ()-->(8,15), (15)==(8), (8)==(15)
+ │    │    │    │    │    ├── fd: ()-->(15)
  │    │    │    │    │    ├── select
  │    │    │    │    │    │    ├── columns: b.k:8!null
  │    │    │    │    │    │    ├── outer: (1)
@@ -1950,11 +1936,8 @@ project
  │    │    │    │    │    │    │    └── key: (8)
  │    │    │    │    │    │    └── filters
  │    │    │    │    │    │         └── b.k:8 = c.k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
- │    │    │    │    │    ├── scan a
- │    │    │    │    │    │    ├── columns: a.k:15!null
- │    │    │    │    │    │    └── key: (15)
- │    │    │    │    │    └── filters
- │    │    │    │    │         └── a.k:15 = b.k:8 [outer=(8,15), constraints=(/8: (/NULL - ]; /15: (/NULL - ]), fd=(8)==(15), (15)==(8)]
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── b.k:8 [as=a.k:15, outer=(8)]
  │    │    │    │    └── aggregations
  │    │    │    │         ├── array-agg [as=array_agg:24, outer=(15)]
  │    │    │    │         │    └── a.k:15
