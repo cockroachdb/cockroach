@@ -57,19 +57,48 @@ query II
 SELECT * FROM kv
 ----
 
-statement error pq: multiple modification subqueries of the same table "kv" are not supported
-CREATE FUNCTION f_err(i INT, j INT) RETURNS SETOF RECORD AS
+statement ok
+CREATE FUNCTION f_kv2(i INT, j INT) RETURNS SETOF RECORD AS
 $$
   DELETE FROM kv WHERE k = i RETURNING k, v;
   DELETE FROM kv WHERE v = j RETURNING k, v;
 $$ LANGUAGE SQL;
 
-statement error pq: multiple modification subqueries of the same table "kv" are not supported
-CREATE FUNCTION f_err(i INT, j INT) RETURNS SETOF RECORD AS
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+statement ok
+SELECT f_kv2(1, 9)
+
+query II rowsort
+SELECT * FROM kv
+----
+3  4
+5  6
+7  8
+
+statement ok
+SELECT f_kv2(i, j) FROM (VALUES (3, 0), (0, 8)) v(i, j)
+
+query II
+SELECT * FROM kv
+----
+5  6
+
+statement ok
+CREATE FUNCTION f_no_op(i INT, j INT) RETURNS SETOF RECORD AS
 $$
   INSERT INTO kv VALUES (i, j);
   DELETE FROM kv WHERE k=i AND v=j RETURNING k, v;
 $$ LANGUAGE SQL;
+
+statement ok
+SELECT f_no_op(9, 10)
+
+query II
+SELECT * FROM kv
+----
+5  6
 
 statement ok
 CREATE TABLE unindexed (
