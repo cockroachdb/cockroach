@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -9,49 +9,47 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DatabasesListResponse } from "src/api";
-import { DOMAIN_NAME, noopReducer } from "../utils";
+import { DOMAIN_NAME } from "../utils";
+import {
+  SettingsRequestMessage,
+  SettingsResponseMessage,
+} from "../../api/clusterSettingsApi";
 
-import { SqlExecutionRequest } from "../../api/sqlApi";
-
-export type DatabasesListState = {
-  data: DatabasesListResponse;
+export type ClusterSettingsState = {
+  data: SettingsResponseMessage;
   // Captures thrown errors.
   lastError: Error;
   valid: boolean;
   inFlight: boolean;
 };
 
-const initialState: DatabasesListState = {
+const initialState: ClusterSettingsState = {
   data: null,
-  lastError: undefined,
+  // Captures thrown errors.
+  lastError: null,
   valid: false,
   inFlight: false,
 };
 
-const databasesListSlice = createSlice({
-  name: `${DOMAIN_NAME}/databasesList`,
+const clusterSettingsReducer = createSlice({
+  name: `${DOMAIN_NAME}/clustersettings`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<DatabasesListResponse>) => {
-      state.data = action.payload;
+    received: (state, action: PayloadAction<SettingsResponseMessage>) => {
       state.valid = true;
       state.inFlight = false;
+      state.data = action.payload;
       state.lastError = null;
     },
     failed: (state, action: PayloadAction<Error>) => {
-      state.data = null;
       state.valid = false;
       state.inFlight = false;
+      state.data = null;
       state.lastError = action.payload;
     },
-    request: (state, _: PayloadAction<void>) => {
-      state.data = null;
-      state.valid = false;
-      state.inFlight = true;
-    },
-    refresh: noopReducer,
+    refresh: (_, _action: PayloadAction<SettingsRequestMessage>) => {},
+    request: (_, _action: PayloadAction<SettingsRequestMessage>) => {},
   },
 });
 
-export const { reducer, actions } = databasesListSlice;
+export const { reducer, actions } = clusterSettingsReducer;

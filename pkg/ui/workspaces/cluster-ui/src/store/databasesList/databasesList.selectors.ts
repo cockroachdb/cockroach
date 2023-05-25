@@ -9,9 +9,24 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { adminUISelector } from "../utils/selectors";
+import { adminUISelector, localStorageSelector } from "../utils/selectors";
 
 export const databasesListSelector = createSelector(
   adminUISelector,
   adminUiState => adminUiState.databasesList,
+);
+
+export const selectDatabasesSortSetting = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["sortSetting/DatabasesPage"],
+);
+
+export const selectDatabasesFilters = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["filters/DatabasesPage"],
+);
+
+export const selectDatabasesSearch = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["search/DatabasesPage"],
 );

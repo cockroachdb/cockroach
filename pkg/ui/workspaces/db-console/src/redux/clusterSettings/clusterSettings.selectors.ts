@@ -73,3 +73,14 @@ export const selectCrossClusterReplicationEnabled = createSelector(
     return value === "true";
   },
 );
+
+export const selectIndexRecommendationsEnabled = createSelector(
+  selectClusterSettings,
+  (settings): boolean => {
+    if (!settings) {
+      return false;
+    }
+    const value = settings["version"]?.value || "";
+    return util.greaterOrEqualThanVersion(value, [22, 2, 0]);
+  },
+);
