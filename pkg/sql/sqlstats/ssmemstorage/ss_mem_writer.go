@@ -74,7 +74,7 @@ func (s *Container) RecordStatement(
 	// recorded we don't need to create an entry in the stmts map for it. We do
 	// still need stmtFingerprintID for transaction level metrics tracking.
 	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
-	if !sqlstats.StmtStatsEnable.Get(&s.st.SV) || (t > 0 && t.Seconds() >= value.ServiceLatency) {
+	if !sqlstats.StmtStatsEnable.Get(&s.st.SV) || (t > 0 && t.Seconds() >= value.ServiceLatencySec) {
 		createIfNonExistent = false
 	}
 
@@ -126,12 +126,12 @@ func (s *Container) RecordStatement(
 
 	stats.mu.data.SQLType = value.StatementType.String()
 	stats.mu.data.NumRows.Record(stats.mu.data.Count, float64(value.RowsAffected))
-	stats.mu.data.IdleLat.Record(stats.mu.data.Count, value.IdleLatency)
-	stats.mu.data.ParseLat.Record(stats.mu.data.Count, value.ParseLatency)
-	stats.mu.data.PlanLat.Record(stats.mu.data.Count, value.PlanLatency)
-	stats.mu.data.RunLat.Record(stats.mu.data.Count, value.RunLatency)
-	stats.mu.data.ServiceLat.Record(stats.mu.data.Count, value.ServiceLatency)
-	stats.mu.data.OverheadLat.Record(stats.mu.data.Count, value.OverheadLatency)
+	stats.mu.data.IdleLat.Record(stats.mu.data.Count, value.IdleLatencySec)
+	stats.mu.data.ParseLat.Record(stats.mu.data.Count, value.ParseLatencySec)
+	stats.mu.data.PlanLat.Record(stats.mu.data.Count, value.PlanLatencySec)
+	stats.mu.data.RunLat.Record(stats.mu.data.Count, value.RunLatencySec)
+	stats.mu.data.ServiceLat.Record(stats.mu.data.Count, value.ServiceLatencySec)
+	stats.mu.data.OverheadLat.Record(stats.mu.data.Count, value.OverheadLatencySec)
 	stats.mu.data.BytesRead.Record(stats.mu.data.Count, float64(value.BytesRead))
 	stats.mu.data.RowsRead.Record(stats.mu.data.Count, float64(value.RowsRead))
 	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
@@ -148,8 +148,8 @@ func (s *Container) RecordStatement(
 	// so there is no need to force a flush when retrieving the data during this step.
 	latencies := s.latencyInformation.GetPercentileValues(stmtFingerprintID, false)
 	latencyInfo := appstatspb.LatencyInfo{
-		Min: value.ServiceLatency,
-		Max: value.ServiceLatency,
+		Min: value.ServiceLatencySec,
+		Max: value.ServiceLatencySec,
 		P50: latencies.P50,
 		P90: latencies.P90,
 		P99: latencies.P99,
@@ -210,7 +210,7 @@ func (s *Container) RecordStatement(
 	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
 		ID:                   value.StatementID,
 		FingerprintID:        stmtFingerprintID,
-		LatencyInSeconds:     value.ServiceLatency,
+		LatencyInSeconds:     value.ServiceLatencySec,
 		Query:                value.Query,
 		Status:               getStatus(value.StatementError),
 		StartTime:            value.StartTime,
