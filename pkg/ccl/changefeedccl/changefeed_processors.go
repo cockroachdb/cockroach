@@ -607,8 +607,9 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return err
 	}
 
+	usingTotalOrdering := ca.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal)
 	// Under total ordering, resolved progress may unblock some messages from being able to be emitted.
-	if ca.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal) && (advanced || resolved.Timestamp.Equal(ca.frontier.BackfillTS())) {
+	if usingTotalOrdering && (advanced || resolved.Timestamp.Equal(ca.frontier.BackfillTS())) {
 		err := ca.sink.Flush(ca.Ctx())
 		if err != nil {
 			return err
@@ -1205,7 +1206,14 @@ func (cf *changeFrontier) noteOrderedRows(d rowenc.EncDatum) error {
 			`unmarshalling aggregator progress update: %x`, raw)
 	}
 
-	cf.orderedRowMerger.Append(payload)
+	if len(payload.Rows) > 0 {
+		cf.orderedRowMerger.Append(payload)
+		if payload.Rows[0].Mvcc.Equal(cf.frontier.BackfillTS()) && cf.orderedRowMerger.numBuffered > 100 {
+			if err := cf.orderedRowMerger.TryFlush(cf.Ctx()); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -1784,6 +1792,8 @@ type orderedRowMerger struct {
 	// to determine the earliest row across all processors.
 	minHeap RowHeap
 
+	numBuffered int
+
 	frontier *schemaChangeFrontier
 	sink     EventSink
 	metrics  *Metrics
@@ -1791,6 +1801,7 @@ type orderedRowMerger struct {
 
 func (m *orderedRowMerger) Append(rows jobspb.OrderedRows) {
 	defer m.metrics.TotalOrderingFrontierAppends.Inc(1)
+	m.numBuffered += len(rows.Rows)
 
 	// Prepend newer rows to the back of the queue
 	// debug2(fmt.Sprintf("FRONTIER APPEND OF %d ONTO %d", len(rows.Rows), rows.SourceProcessorID))
@@ -1813,6 +1824,7 @@ func (m *orderedRowMerger) TryFlush(ctx context.Context) error {
 		// debug2(fmt.Sprintf("NextTS: %s, frontier: %s, backfillTs: %s", nextTs, m.frontier.Frontier(), m.frontier.BackfillTS()))
 		if nextTs.LessEq(m.frontier.Frontier()) || nextTs.Equal(m.frontier.BackfillTS()) {
 			next := heap.Pop(&m.minHeap).(RowHeapEntry)
+			m.numBuffered -= 1
 			pops += 1
 			err := m.sink.EmitRow(ctx, nil, next.row.Key, next.row.Value, hlc.Timestamp{}, next.row.Mvcc, kvevent.Alloc{})
 			if err != nil {
