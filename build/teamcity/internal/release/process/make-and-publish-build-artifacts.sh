@@ -68,7 +68,7 @@ configure_docker_creds
 docker_login_with_google
 
 gcr_tag="${gcr_repository}:${build_name}"
-declare -a docker_manifest_amends
+declare -a dockerhub_arch_tags
 
 for platform_name in amd64 arm64; do
   cp --recursive "build/deploy" "build/deploy-${platform_name}"
@@ -87,10 +87,11 @@ for platform_name in amd64 arm64; do
   build_docker_tag="${gcr_repository}:${platform_name}-${build_name}"
   docker build --no-cache --pull --platform "linux/${platform_name}" --tag="${build_docker_tag}" "build/deploy-${platform_name}"
   docker push "$build_docker_tag"
-  docker_manifest_amends+=("--amend" "${build_docker_tag}")
+dockerhub_arch_tags+=("${build_docker_tag}")
 done
 
-docker manifest create "${gcr_tag}" "${docker_manifest_amends[@]}"
+docker manifest rm "${gcr_tag}" || :
+docker manifest create "${gcr_tag}" "${dockerhub_arch_tags[@]}"
 docker manifest push "${gcr_tag}"
 tc_end_block "Make and push multiarch docker images"
 

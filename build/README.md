@@ -146,7 +146,8 @@ The `bazelbuilder` image is used exclusively for performing builds using Bazel. 
     docker push cockroachdb/bazel:amd64-$TAG
     docker build --platform linux/arm64 -t cockroachdb/bazel:arm64-$TAG build/bazelbuilder
     docker push cockroachdb/bazel:arm64-$TAG
-    docker manifest create cockroachdb/bazel:$TAG --amend cockroachdb/bazel:amd64-$TAG --amend cockroachdb/bazel:arm64-$TAG
+    docker manifest rm cockroachdb/bazel:$TAG
+    docker manifest create cockroachdb/bazel:$TAG cockroachdb/bazel:amd64-$TAG cockroachdb/bazel:arm64-$TAG
     docker manifest push cockroachdb/bazel:$TAG
 ```
 - Then, update `build/.bazelbuilderversion` with the new tag and commit all your changes.
