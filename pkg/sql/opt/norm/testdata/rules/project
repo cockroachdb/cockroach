@@ -113,6 +113,21 @@ project
  └── projections
       └── 1 [as="?column?":12]
 
+# The right column can be remapped to a left column.
+norm expect=EliminateJoinUnderProjectLeft
+SELECT b.j, b1.x FROM b INNER JOIN b AS b1 ON b.x = b1.x
+----
+project
+ ├── columns: j:3 x:6!null
+ ├── key: (6)
+ ├── fd: (6)-->(3)
+ ├── scan b
+ │    ├── columns: b.x:1!null b.j:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(3)
+ └── projections
+      └── b.x:1 [as=b1.x:6, outer=(1)]
+
 # No-op case because the cross join may duplicate left rows.
 norm expect-not=EliminateJoinUnderProjectLeft
 SELECT 1 FROM b LEFT JOIN a ON True
@@ -219,6 +234,38 @@ project
       └── filters
            └── x:1 = r1:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
+# Regression test for #102614 - parent.id should be mapped to child.id to allow
+# join elimination to proceed.
+exec-ddl
+CREATE TABLE parent (
+  id INT PRIMARY KEY
+)
+----
+
+exec-ddl
+CREATE TABLE child (
+  id INT PRIMARY KEY,
+  parent_id INT NOT NULL REFERENCES parent(id)
+)
+----
+
+opt
+SELECT
+  id,
+  (SELECT child.parent_id FROM parent WHERE id = child.parent_id)
+FROM child
+----
+project
+ ├── columns: id:1!null parent_id:9!null
+ ├── key: (1)
+ ├── fd: (1)-->(9)
+ ├── scan child
+ │    ├── columns: child.id:1!null child.parent_id:2!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── child.parent_id:2 [as=parent_id:9, outer=(2)]
+
 # --------------------------------------------------
 # EliminateJoinUnderProjectRight
 # --------------------------------------------------
@@ -241,24 +288,43 @@ scan fks
  ├── key: (7)
  └── fd: (7)-->(8)
 
+# The left column can be remapped to a right column.
+norm expect=EliminateJoinUnderProjectRight
+SELECT b.x, b1.j FROM b INNER JOIN b AS b1 ON b.x = b1.x
+----
+project
+ ├── columns: x:1!null j:8
+ ├── key: (1)
+ ├── fd: (1)-->(8)
+ ├── scan b [as=b1]
+ │    ├── columns: b1.x:6!null b1.j:8
+ │    ├── key: (6)
+ │    └── fd: (6)-->(8)
+ └── projections
+      └── b1.x:6 [as=b.x:1, outer=(6)]
+
 # No-op case because columns from the right side of a LeftJoin are being
 # projected.
 norm expect-not=EliminateJoinUnderProjectRight
-SELECT b.x, b1.x FROM b LEFT JOIN b AS b1 ON b.x = b1.x
+SELECT b.j, b1.j FROM b LEFT JOIN b AS b1 ON b.x = b1.x
 ----
-inner-join (hash)
- ├── columns: x:1!null x:6!null
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
- ├── key: (6)
- ├── fd: (1)==(6), (6)==(1)
- ├── scan b
- │    ├── columns: b.x:1!null
- │    └── key: (1)
- ├── scan b [as=b1]
- │    ├── columns: b1.x:6!null
- │    └── key: (6)
- └── filters
-      └── b.x:1 = b1.x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+project
+ ├── columns: j:3 j:8
+ └── inner-join (hash)
+      ├── columns: b.x:1!null b.j:3 b1.x:6!null b1.j:8
+      ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      ├── key: (6)
+      ├── fd: (1)-->(3), (6)-->(8), (1)==(6), (6)==(1)
+      ├── scan b
+      │    ├── columns: b.x:1!null b.j:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3)
+      ├── scan b [as=b1]
+      │    ├── columns: b1.x:6!null b1.j:8
+      │    ├── key: (6)
+      │    └── fd: (6)-->(8)
+      └── filters
+           └── b.x:1 = b1.x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # --------------------------------------------------
 # EliminateProject
