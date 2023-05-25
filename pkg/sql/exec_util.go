@@ -2551,7 +2551,7 @@ func (st *SessionTracing) TraceRetryInformation(ctx context.Context, retries int
 
 // TraceExecStart conditionally emits a trace message at the moment
 // plan execution starts.
-func (st *SessionTracing) TraceExecStart(ctx context.Context, engine string) {
+func (st *SessionTracing) TraceExecStart(ctx context.Context, engine redact.SafeString) {
 	log.VEventfDepth(ctx, 2, 1, "execution starts: %s engine", engine)
 }
 
