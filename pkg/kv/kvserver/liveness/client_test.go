@@ -80,9 +80,9 @@ func TestNodeLivenessAppearsAtStart(t *testing.T) {
 	}
 }
 
-// TestGetLivenessesFromKV verifies that fetching liveness records from KV
+// TestScanNodeVitalityFromKV verifies that fetching liveness records from KV
 // directly retrieves all the records we expect.
-func TestGetLivenessesFromKV(t *testing.T) {
+func TestScanNodeVitalityFromKV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -103,21 +103,21 @@ func TestGetLivenessesFromKV(t *testing.T) {
 			t.Fatalf("node %d not live", nodeID)
 		}
 
-		livenesses, err := nl.GetLivenessesFromKV(ctx)
+		livenesses, err := nl.ScanNodeVitalityFromKV(ctx)
 		assert.Nil(t, err)
 		assert.Equal(t, len(livenesses), tc.NumServers())
 
 		var nodeIDs []roachpb.NodeID
-		for _, liveness := range livenesses {
-			nodeIDs = append(nodeIDs, liveness.NodeID)
+		for nodeID, liveness := range livenesses {
+			nodeIDs = append(nodeIDs, nodeID)
 
 			// We expect epoch=1 as nodes first create a liveness record at epoch=0,
 			// and then increment it during their first heartbeat.
-			if liveness.Epoch != 1 {
-				t.Fatalf("expected epoch=1, got epoch=%d", liveness.Epoch)
+			if liveness.Liveness.Epoch != 1 {
+				t.Fatalf("expected epoch=1, got epoch=%d", liveness.Liveness.Epoch)
 			}
-			if !liveness.Membership.Active() {
-				t.Fatalf("expected membership=active, got membership=%s", liveness.Membership)
+			if !liveness.Liveness.Membership.Active() {
+				t.Fatalf("expected membership=active, got membership=%s", liveness.Liveness.Membership)
 			}
 		}
 

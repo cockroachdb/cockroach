@@ -7,7 +7,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/collector",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
