@@ -230,7 +230,7 @@ func (sp *Span) String() string {
 	return sp.OperationName()
 }
 
-// Redactable returns true if this Span's tracer is marked redactable
+// Redactable returns true if this Span's tracer is marked redactable.
 func (sp *Span) Redactable() bool {
 	if sp == nil || sp.i.isNoop() {
 		return false
