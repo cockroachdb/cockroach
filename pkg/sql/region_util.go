@@ -1417,13 +1417,14 @@ func SynthesizeRegionConfig(
 
 	regionConfig := multiregion.RegionConfig{}
 
-	var regionNames, transitioningRegionNames catpb.RegionNames
+	var regionNames, transitioningRegionNames, addingRegionNames catpb.RegionNames
 	_ = regionEnumDesc.ForEachRegion(func(name catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error {
 		switch transition {
 		case descpb.TypeDescriptor_EnumMember_NONE:
 			regionNames = append(regionNames, name)
 		case descpb.TypeDescriptor_EnumMember_ADD:
 			transitioningRegionNames = append(transitioningRegionNames, name)
+			addingRegionNames = append(addingRegionNames, name)
 		case descpb.TypeDescriptor_EnumMember_REMOVE:
 			transitioningRegionNames = append(transitioningRegionNames, name)
 			if o.forValidation {
@@ -1447,6 +1448,7 @@ func SynthesizeRegionConfig(
 		regionEnumDesc.TypeDesc().RegionConfig.SuperRegions,
 		regionEnumDesc.TypeDesc().RegionConfig.ZoneConfigExtensions,
 		multiregion.WithTransitioningRegions(transitioningRegionNames),
+		multiregion.WithAddingRegions(addingRegionNames),
 		multiregion.WithSecondaryRegion(dbDesc.GetRegionConfig().SecondaryRegion),
 	)
 

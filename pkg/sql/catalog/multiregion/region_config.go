@@ -36,6 +36,7 @@ type RegionConfig struct {
 	survivalGoal         descpb.SurvivalGoal
 	regions              catpb.RegionNames
 	transitioningRegions catpb.RegionNames
+	addingRegions        catpb.RegionNames
 	primaryRegion        catpb.RegionName
 	regionEnumID         descpb.ID
 	placement            descpb.DataPlacement
@@ -124,6 +125,12 @@ func (r RegionConfig) PrimaryRegionString() string {
 // from or to being PUBLIC.
 func (r RegionConfig) TransitioningRegions() catpb.RegionNames {
 	return r.transitioningRegions
+}
+
+// AddingRegions returns all the regions which are currently transitioning
+// to being PUBLIC.
+func (r RegionConfig) AddingRegions() catpb.RegionNames {
+	return r.addingRegions
 }
 
 // RegionEnumID returns the multi-region enum ID.
@@ -303,6 +310,14 @@ type MakeRegionConfigOption func(r *RegionConfig)
 func WithTransitioningRegions(transitioningRegions catpb.RegionNames) MakeRegionConfigOption {
 	return func(r *RegionConfig) {
 		r.transitioningRegions = transitioningRegions
+	}
+}
+
+// WithAddingRegions is an option to include adding regions into
+// MakeRegionConfig.
+func WithAddingRegions(addingRegions catpb.RegionNames) MakeRegionConfigOption {
+	return func(r *RegionConfig) {
+		r.addingRegions = addingRegions
 	}
 }
 
