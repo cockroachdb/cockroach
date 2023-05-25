@@ -163,3 +163,18 @@
 .margin-left-neg {
   margin-left: -11px !important;
 }
+
+.crl-anchor {
+  font-weight: $font-weight--bold;
+  font-size: $font-size--small;
+  line-height: $line-height--small;
+  letter-spacing: 0.3px;
+  color: $colors--neutral-0;
+  text-decoration: underline;
+
+  &:hover {
+    opacity: 0.7;
+    color: $colors--neutral-0;
+    text-decoration: underline;
+  }
+}
