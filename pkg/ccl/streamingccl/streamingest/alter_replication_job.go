@@ -234,13 +234,14 @@ func alterTenantJobCutover(
 		return hlc.Timestamp{}, errors.Newf("job with id %d is not a stream ingestion job", job.ID())
 	}
 	progress := job.Progress()
+
 	if alterTenantStmt.Cutover.Latest {
-		ts := progress.GetHighWater()
-		if ts == nil || ts.IsEmpty() {
+		replicatedTime := replicationutils.ReplicatedTimeFromProgress(&progress)
+		if replicatedTime.IsEmpty() {
 			return hlc.Timestamp{},
 				errors.Newf("replicated tenant %q has not yet recorded a safe replication time", tenantName)
 		}
-		cutoverTime = *ts
+		cutoverTime = replicatedTime
 	}
 
 	// TODO(ssd): We could use the replication manager here, but

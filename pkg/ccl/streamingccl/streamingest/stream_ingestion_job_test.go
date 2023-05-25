@@ -261,11 +261,23 @@ func TestCutoverBuiltin(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, sp.StreamIngest.CutoverTime.IsEmpty())
 
-	var highWater time.Time
+	var replicatedTime time.Time
 	err = job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		highWater = timeutil.Now().Round(time.Microsecond)
-		hlcHighWater := hlc.Timestamp{WallTime: highWater.UnixNano()}
-		return jobs.UpdateHighwaterProgressed(hlcHighWater, md, ju)
+		if err := md.CheckRunningOrReverting(); err != nil {
+			return err
+		}
+		replicatedTime = timeutil.Now().Round(time.Microsecond)
+		hlcReplicatedTime := hlc.Timestamp{WallTime: replicatedTime.UnixNano()}
+
+		progress := md.Progress
+		streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
+		streamProgress.ReplicatedTime = hlcReplicatedTime
+		progress.Progress = &jobspb.Progress_HighWater{
+			HighWater: &hlcReplicatedTime,
+		}
+
+		ju.UpdateProgress(progress)
+		return nil
 	})
 	require.NoError(t, err)
 
@@ -273,7 +285,7 @@ func TestCutoverBuiltin(t *testing.T) {
 	var explain string
 	err = db.QueryRowContext(ctx,
 		`EXPLAIN SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, job.ID(),
-		highWater).Scan(&explain)
+		replicatedTime).Scan(&explain)
 	require.NoError(t, err)
 	require.Equal(t, "distribution: local", explain)
 
@@ -281,7 +293,7 @@ func TestCutoverBuiltin(t *testing.T) {
 	err = db.QueryRowContext(
 		ctx,
 		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
-		job.ID(), highWater).Scan(&jobID)
+		job.ID(), replicatedTime).Scan(&jobID)
 	require.NoError(t, err)
 	require.Equal(t, job.ID(), jobspb.JobID(jobID))
 
@@ -291,7 +303,7 @@ func TestCutoverBuiltin(t *testing.T) {
 	progress = sj.Progress()
 	sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest)
 	require.True(t, ok)
-	require.Equal(t, hlc.Timestamp{WallTime: highWater.UnixNano()}, sp.StreamIngest.CutoverTime)
+	require.Equal(t, hlc.Timestamp{WallTime: replicatedTime.UnixNano()}, sp.StreamIngest.CutoverTime)
 }
 
 // TestReplicationJobResumptionStartTime tests that a replication job picks the
@@ -346,14 +358,14 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 
 	for _, r := range replicationSpecs {
 		require.Equal(t, startTime, r.InitialScanTimestamp)
-		require.Empty(t, r.PreviousHighWaterTimestamp)
+		require.Empty(t, r.PreviousReplicatedTimestamp)
 	}
-	require.Empty(t, frontier.HighWaterAtStart)
+	require.Empty(t, frontier.ReplicatedTimeAtStart)
 
 	// Allow the job to make some progress.
 	canContinue <- struct{}{}
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(replicationJobID))
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(replicationJobID))
 
 	// Pause the job.
 	c.DestSysSQL.Exec(t, `PAUSE JOB $1`, replicationJobID)
@@ -373,20 +385,20 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 
 	// Assert that the previous highwater mark is greater than the replication
 	// start time.
-	var previousHighWaterTimestamp hlc.Timestamp
+	var previousReplicatedTimestamp hlc.Timestamp
 	for _, r := range replicationSpecs {
 		require.Equal(t, startTime, r.InitialScanTimestamp)
-		require.True(t, r.InitialScanTimestamp.Less(r.PreviousHighWaterTimestamp))
-		if previousHighWaterTimestamp.IsEmpty() {
-			previousHighWaterTimestamp = r.PreviousHighWaterTimestamp
+		require.True(t, r.InitialScanTimestamp.Less(r.PreviousReplicatedTimestamp))
+		if previousReplicatedTimestamp.IsEmpty() {
+			previousReplicatedTimestamp = r.PreviousReplicatedTimestamp
 		} else {
-			require.Equal(t, r.PreviousHighWaterTimestamp, previousHighWaterTimestamp)
+			require.Equal(t, r.PreviousReplicatedTimestamp, previousReplicatedTimestamp)
 		}
 	}
-	require.Equal(t, frontier.HighWaterAtStart, previousHighWaterTimestamp)
+	require.Equal(t, frontier.ReplicatedTimeAtStart, previousReplicatedTimestamp)
 	canContinue <- struct{}{}
 	srcTime = c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(replicationJobID))
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(replicationJobID))
 	c.Cutover(producerJobID, replicationJobID, srcTime.GoTime(), false)
 	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(replicationJobID))
 }
@@ -461,7 +473,17 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	replicationJob, err := registry.CreateJobWithTxn(ctx, mockReplicationJobRecord, jobID, nil)
 	require.NoError(t, err)
 	require.NoError(t, replicationJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		return jobs.UpdateHighwaterProgressed(cutover, md, ju)
+		if err := md.CheckRunningOrReverting(); err != nil {
+			return err
+		}
+		progress := md.Progress
+		streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
+		streamProgress.ReplicatedTime = cutover
+		progress.Progress = &jobspb.Progress_HighWater{
+			HighWater: &cutover,
+		}
+		ju.UpdateProgress(progress)
+		return nil
 	}))
 
 	metrics := registry.MetricsStruct().StreamIngest.(*Metrics)
