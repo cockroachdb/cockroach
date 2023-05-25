@@ -254,8 +254,7 @@ func GetServerArgs(args TenantStreamingClustersArgs) base.TestServerArgs {
 func CreateTenantStreamingClusters(
 	ctx context.Context, t *testing.T, args TenantStreamingClustersArgs,
 ) (*TenantStreamingClusters, func()) {
-  serverArgs := GetServerArgs(args)
-
+	serverArgs := GetServerArgs(args)
 
 	startTestCluster := func(
 		ctx context.Context,
