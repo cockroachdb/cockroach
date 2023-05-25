@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -288,9 +289,9 @@ func TestFingerprintStripped(t *testing.T) {
 	// Create the same sql rows in a different table, committed at a different timestamp.
 	db.Exec(t, "CREATE TABLE test.test2 (k PRIMARY KEY) AS SELECT generate_series(1, 10)")
 
-	strippedFingerprint := func(tableName string) int {
-		tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", tableName)
-		return sqlutils.FingerprintTable(t, db, tableID)
-	}
-	require.Equal(t, strippedFingerprint("test"), strippedFingerprint("test2"))
+	fingerprints, err := fingerprintutils.FingerprintDatabase(ctx, sqlDB, "test",
+		fingerprintutils.Stripped())
+	require.NoError(t, err)
+
+	require.Equal(t, fingerprints["test"], fingerprints["test2"])
 }
