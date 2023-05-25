@@ -6065,7 +6065,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 
 	const numNodes = 4
 
-	opts := makeOptions(feedTestForceSink("coudstorage"))
+	opts := makeOptions()
 	opts.forceRootUserConnection = true
 	defer addCloudStorageOptions(t, &opts)()
 
@@ -6130,7 +6130,13 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 						},
 
 						BeforeDistChangefeed: func() {
-							<-proceed
+							ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
+							defer cancel()
+							select {
+							case <-proceed:
+							case <-ctx.Done():
+								t.Fatal("did not get signal to proceed")
+							}
 						},
 						// Handle tarnsient changefeed error.  We expect to see node drain error.
 						// When we do, notify drainNotification, and reset node drain channel.
@@ -6195,9 +6201,8 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 	// waitCheckpointAttempt waits until an attempt to checkpoint is made.
 	waitCheckpoint := func(minHW hlc.Timestamp) {
 		t.Helper()
-		initial := checkpointHW.Load().(hlc.Timestamp)
 		testutils.SucceedsSoon(t, func() error {
-			if initial.Less(checkpointHW.Load().(hlc.Timestamp)) {
+			if minHW.Less(checkpointHW.Load().(hlc.Timestamp)) {
 				return nil
 			}
 			return errors.New("still waiting for checkpoint")
@@ -6227,7 +6232,15 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 		close(nodeDrainChannels[i].Load().(chan struct{}))
 
 		// Changefeed should encounter node draining error.
-		require.True(t, errors.Is(<-errCh, changefeedbase.ErrNodeDraining))
+		var err error
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		select {
+		case err = <-errCh:
+		case <-ctx.Done():
+			t.Fatal("could not get draining error on channel")
+		}
+		cancel()
+		require.True(t, errors.Is(err, changefeedbase.ErrNodeDraining))
 
 		// Reset drain channel.
 		nodeDrainChannels[i].Store(make(chan struct{}))
@@ -6237,7 +6250,13 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 		require.NoError(t, jf.TickHighWaterMark(beforeInsert))
 
 		// Let the retry proceed.
-		proceed <- struct{}{}
+		ctx, cancel = context.WithTimeout(context.Background(), time.Second*60)
+		select {
+		case proceed <- struct{}{}:
+		case <-ctx.Done():
+			t.Fatal("could not send signal to proceed")
+		}
+		cancel()
 	}
 }
 
