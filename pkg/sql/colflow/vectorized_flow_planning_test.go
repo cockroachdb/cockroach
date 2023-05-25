@@ -47,9 +47,9 @@ func TestVectorizedPlanning(t *testing.T) {
 		// Check that there is no columnarizer-materializer pair on top of the
 		// root of the execution tree if the root is a wrapped row-execution
 		// processor.
-		_, err = conn.ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY)`)
+		_, err = conn.ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, val INT)`)
 		require.NoError(t, err)
-		rows, err := conn.QueryContext(ctx, `EXPLAIN (VEC, VERBOSE) SELECT * FROM t AS t1 INNER LOOKUP JOIN t AS t2 ON t1.id = t2.id`)
+		rows, err := conn.QueryContext(ctx, `EXPLAIN (VEC, VERBOSE) SELECT * FROM t AS t1 INNER LOOKUP JOIN t AS t2 ON t1.val = t2.id`)
 		require.NoError(t, err)
 		expectedOutput := []string{
 			"│",
