@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -3301,7 +3303,7 @@ func (ex *connExecutor) setTransactionModes(
 		}
 	}
 	if modes.Isolation != tree.UnspecifiedIsolation {
-		level := txnIsolationLevelToKV(modes.Isolation)
+		level := ex.txnIsolationLevelToKV(ctx, modes.Isolation)
 		if err := ex.state.setIsolationLevel(level); err != nil {
 			return pgerror.WithCandidateCode(err, pgcode.ActiveSQLTransaction)
 		}
@@ -3324,17 +3326,48 @@ func (ex *connExecutor) setTransactionModes(
 	return ex.state.setReadOnlyMode(rwMode)
 }
 
-func txnIsolationLevelToKV(level tree.IsolationLevel) isolation.Level {
-	var ret isolation.Level
-	switch level {
-	case tree.UnspecifiedIsolation:
-		ret = isolation.Serializable
-	case tree.SerializableIsolation:
-		ret = isolation.Serializable
-	case tree.ReadCommittedIsolation:
-		ret = isolation.ReadCommitted
-	default:
-		log.Fatalf(context.Background(), "unknown isolation level: %s", level)
+var allowSnapshotIsolation = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.txn.snapshot_isolation.enabled",
+	"set to true to allow transactions to use the SNAPSHOT isolation level. At "+
+		"the time of writing, this setting is intended only for usage by "+
+		"CockroachDB developers.",
+	false,
+)
+
+func (ex *connExecutor) txnIsolationLevelToKV(
+	ctx context.Context, level tree.IsolationLevel,
+) isolation.Level {
+	if level == tree.UnspecifiedIsolation {
+		level = tree.IsolationLevel(ex.sessionData().DefaultTxnIsolationLevel)
+	}
+	allowLevelCustomization := ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2)
+	ret := isolation.Serializable
+	if allowLevelCustomization {
+		switch level {
+		case tree.ReadUncommittedIsolation:
+			// READ UNCOMMITTED is mapped to READ COMMITTED. PostgreSQL also does
+			// this: https://www.postgresql.org/docs/current/transaction-iso.html.
+			fallthrough
+		case tree.ReadCommittedIsolation:
+			ret = isolation.ReadCommitted
+		case tree.RepeatableReadIsolation:
+			// REPEATABLE READ is mapped to SNAPSHOT.
+			fallthrough
+		case tree.SnapshotIsolation:
+			// SNAPSHOT is only allowed if the cluster setting is enabled. Otherwise
+			// it is mapped to SERIALIZABLE.
+			allowSnapshot := allowSnapshotIsolation.Get(&ex.server.cfg.Settings.SV)
+			if allowSnapshot {
+				ret = isolation.Snapshot
+			} else {
+				ret = isolation.Serializable
+			}
+		case tree.SerializableIsolation:
+			ret = isolation.Serializable
+		default:
+			log.Fatalf(context.Background(), "unknown isolation level: %s", level)
+		}
 	}
 	return ret
 }
@@ -3347,20 +3380,11 @@ func kvTxnIsolationLevelToTree(level isolation.Level) tree.IsolationLevel {
 	case isolation.ReadCommitted:
 		ret = tree.ReadCommittedIsolation
 	case isolation.Snapshot:
-		// TODO(rafi): handle SNAPSHOT isolation.
+		ret = tree.SnapshotIsolation
 	default:
 		log.Fatalf(context.Background(), "unknown isolation level: %s", level)
 	}
 	return ret
-}
-
-func (ex *connExecutor) txnIsolationLevelWithSessionDefault(
-	level tree.IsolationLevel,
-) isolation.Level {
-	if level == tree.UnspecifiedIsolation {
-		level = tree.IsolationLevel(ex.sessionData().DefaultTxnIsolationLevel)
-	}
-	return txnIsolationLevelToKV(level)
 }
 
 func txnPriorityToProto(mode tree.UserPriority) roachpb.UserPriority {

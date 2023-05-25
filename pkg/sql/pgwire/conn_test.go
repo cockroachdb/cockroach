@@ -1768,9 +1768,9 @@ func TestSetSessionArguments(t *testing.T) {
 
 	expectedOptions := map[string]string{
 		"search_path": "public, testsp, \"Abc\", def",
-		// setting an isolation level is a noop:
-		// all transactions execute with serializable isolation.
-		"default_transaction_isolation": "serializable",
+		// Setting the isolation level to read uncommitted should map
+		// to read committed.
+		"default_transaction_isolation": "read committed",
 		"application_name":              "test",
 		"datestyle":                     "ISO, YMD",
 		"intervalstyle":                 "iso_8601",

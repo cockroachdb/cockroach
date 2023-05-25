@@ -27,7 +27,15 @@ func (p *planner) SetSessionCharacteristics(
 		// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
 		switch n.Modes.Isolation {
 		case tree.UnspecifiedIsolation:
-			// Nothing to do.
+		// Nothing to do.
+		case tree.ReadUncommittedIsolation:
+			m.SetDefaultTransactionIsolationLevel(tree.ReadCommittedIsolation)
+		case tree.RepeatableReadIsolation, tree.SnapshotIsolation:
+			level := tree.SerializableIsolation
+			if allowSnapshotIsolation.Get(&p.execCfg.Settings.SV) {
+				level = tree.SnapshotIsolation
+			}
+			m.SetDefaultTransactionIsolationLevel(level)
 		default:
 			m.SetDefaultTransactionIsolationLevel(n.Modes.Isolation)
 		}
