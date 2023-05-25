@@ -13,24 +13,37 @@ import classNames from "classnames/bind";
 import styles from "./searchCriteria.module.scss";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { Button } from "src/button";
-import { commonStyles, selectCustomStyles } from "src/common";
+import { commonStyles } from "src/common";
 import {
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
 } from "src/timeScaleDropdown";
 import { applyBtn } from "../queryFilter/filterClasses";
-import Select from "react-select";
-import { limitOptions } from "../util/sqlActivityConstants";
-import { SqlStatsSortType } from "src/api/statementsApi";
+import { Menu, Dropdown } from "antd";
+import "antd/lib/menu/style";
+import "antd/lib/dropdown/style";
+import {
+  limitOptions,
+  limitMoreOptions,
+  getSortLabel,
+  stmtRequestSortOptions,
+  txnRequestSortOptions,
+  stmtRequestSortMoreOptions,
+  txnRequestSortMoreOptions,
+} from "../util/sqlActivityConstants";
+import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
+import { CaretDown } from "@cockroachlabs/icons";
+import { ClickParam } from "antd/lib/menu";
 const cx = classNames.bind(styles);
+const { SubMenu } = Menu;
 
 type SortOption = {
   label: string;
   value: SqlStatsSortType;
 };
 export interface SearchCriteriaProps {
-  sortOptions: SortOption[];
+  searchType: "Statement" | "Transaction";
   currentScale: TimeScale;
   topValue: number;
   byValue: SqlStatsSortType;
@@ -42,35 +55,69 @@ export interface SearchCriteriaProps {
 
 export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
   const {
+    searchType,
     topValue,
     byValue,
     currentScale,
     onChangeTop,
     onChangeBy,
     onChangeTimeScale,
-    sortOptions,
   } = props;
-  const customStyles = { ...selectCustomStyles };
-  customStyles.indicatorSeparator = (provided: any) => ({
-    ...provided,
-    display: "none",
-  });
+  const sortOptions: SortOption[] =
+    searchType === "Statement" ? stmtRequestSortOptions : txnRequestSortOptions;
+  const sortMoreOptions: SortOption[] =
+    searchType === "Statement"
+      ? stmtRequestSortMoreOptions
+      : txnRequestSortMoreOptions;
 
-  const customStylesTop = { ...customStyles };
-  customStylesTop.container = (provided: any) => ({
-    ...provided,
-    width: "80px",
-    border: "none",
-    lineHeight: "29px",
-  });
+  const warning = (
+    <span className={cx("options-warning", "large")}>
+      You may experience a longer loading time when selecting options below.
+    </span>
+  );
 
-  const customStylesBy = { ...customStyles };
-  customStylesBy.container = (provided: any) => ({
-    ...provided,
-    width: "170px",
-    border: "none",
-    lineHeight: "29px",
-  });
+  const changeTop = (event: ClickParam): void => {
+    const top = Number(event.key);
+    if (top !== topValue) {
+      onChangeTop(top);
+    }
+  };
+  const changeBy = (event: ClickParam): void => {
+    const by = Object.values(SqlStatsSortOptions).filter(
+      s => s === Number(event.key),
+    )[0];
+    if (by !== byValue) {
+      onChangeBy(by as SqlStatsSortType);
+    }
+  };
+
+  const menuTop = (
+    <Menu onClick={changeTop}>
+      {limitOptions.map(option => (
+        <Menu.Item key={option.value}>{option.label}</Menu.Item>
+      ))}
+      <SubMenu title="More">
+        {warning}
+        {limitMoreOptions.map(option => (
+          <Menu.Item key={option.value}>{option.label}</Menu.Item>
+        ))}
+      </SubMenu>
+    </Menu>
+  );
+
+  const menuBy = (
+    <Menu onClick={changeBy}>
+      {sortOptions.map(option => (
+        <Menu.Item key={option.value}>{option.label}</Menu.Item>
+      ))}
+      <SubMenu title="More">
+        {warning}
+        {sortMoreOptions.map(option => (
+          <Menu.Item key={option.value}>{option.label}</Menu.Item>
+        ))}
+      </SubMenu>
+    </Menu>
+  );
 
   return (
     <div className={cx("search-area")}>
@@ -79,25 +126,25 @@ export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
         <PageConfigItem>
           <label>
             <span className={cx("label")}>Top</span>
-            <Select
-              options={limitOptions}
-              value={limitOptions.filter(top => top.value === topValue)}
-              onChange={event => onChangeTop(event.value)}
-              styles={customStylesTop}
-            />
+            <Dropdown overlay={menuTop} trigger={["click"]}>
+              <div className={cx("dropdown-area", "small")}>
+                <div className={cx("dropdown-value-small")}>{topValue}</div>
+                <CaretDown className={cx("arrow-down")} />
+              </div>
+            </Dropdown>
           </label>
         </PageConfigItem>
         <PageConfigItem>
           <label>
             <span className={cx("label")}>By</span>
-            <Select
-              options={sortOptions}
-              value={sortOptions.filter(
-                (top: SortOption) => top.value === byValue,
-              )}
-              onChange={event => onChangeBy(event.value as SqlStatsSortType)}
-              styles={customStylesBy}
-            />
+            <Dropdown overlay={menuBy} trigger={["click"]}>
+              <div className={cx("dropdown-area", "medium")}>
+                <div className={cx("dropdown-value-medium")}>
+                  {getSortLabel(byValue, searchType)}
+                </div>
+                <CaretDown className={cx("arrow-down")} />
+              </div>
+            </Dropdown>
           </label>
         </PageConfigItem>
         <PageConfigItem>
