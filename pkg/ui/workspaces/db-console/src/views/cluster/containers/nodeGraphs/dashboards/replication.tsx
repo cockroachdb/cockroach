@@ -20,7 +20,6 @@ import {
   storeIDsForNode,
 } from "./dashboardUtils";
 import {
-  CircuitBreakerTrippedEventsTooltip,
   CircuitBreakerTrippedReplicasTooltip,
   LogicalBytesGraphTooltip,
   PausedFollowersTooltip,
@@ -249,23 +248,6 @@ export default function (props: GraphDashboardProps) {
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={storeIDsForNode(storeIDsByNodeID, nid)}
             downsampler={TimeSeriesQueryAggregator.SUM}
-          />
-        ))}
-      </Axis>
-    </LineGraph>,
-    <LineGraph
-      title="Circuit Breaker Tripped Events"
-      sources={storeSources}
-      tooltip={CircuitBreakerTrippedEventsTooltip}
-    >
-      <Axis label="events">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.store.kv.replica_circuit_breaker.num_tripped_events"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
-            nonNegativeRate
           />
         ))}
       </Axis>
