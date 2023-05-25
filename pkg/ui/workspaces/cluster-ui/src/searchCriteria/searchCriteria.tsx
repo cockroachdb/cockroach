@@ -11,19 +11,21 @@
 import React from "react";
 import classNames from "classnames/bind";
 import styles from "./searchCriteria.module.scss";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { Button } from "src/button";
+import { commonStyles, selectCustomStyles } from "src/common";
 import {
-  Button,
-  commonStyles,
-  PageConfig,
-  PageConfigItem,
-  selectCustomStyles,
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
-} from "src";
+} from "src/timeScaleDropdown";
 import { applyBtn } from "../queryFilter/filterClasses";
 import Select from "react-select";
-import { limitOptions } from "../util/sqlActivityConstants";
+import {
+  limitOptions,
+  stmtRequestSortOptions,
+  txnRequestSortOptions,
+} from "../util/sqlActivityConstants";
 import { SqlStatsSortType } from "src/api/statementsApi";
 const cx = classNames.bind(styles);
 
@@ -32,7 +34,7 @@ type SortOption = {
   value: SqlStatsSortType;
 };
 export interface SearchCriteriaProps {
-  sortOptions: SortOption[];
+  searchType: "Statement" | "Transaction";
   currentScale: TimeScale;
   topValue: number;
   byValue: SqlStatsSortType;
@@ -44,13 +46,13 @@ export interface SearchCriteriaProps {
 
 export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
   const {
+    searchType,
     topValue,
     byValue,
     currentScale,
     onChangeTop,
     onChangeBy,
     onChangeTimeScale,
-    sortOptions,
   } = props;
   const customStyles = { ...selectCustomStyles };
   customStyles.indicatorSeparator = (provided: any) => ({
@@ -61,7 +63,7 @@ export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
   const customStylesTop = { ...customStyles };
   customStylesTop.container = (provided: any) => ({
     ...provided,
-    width: "80px",
+    width: "90px",
     border: "none",
     lineHeight: "29px",
   });
@@ -73,6 +75,9 @@ export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
     border: "none",
     lineHeight: "29px",
   });
+
+  const sortOptions: SortOption[] =
+    searchType === "Statement" ? stmtRequestSortOptions : txnRequestSortOptions;
 
   return (
     <div className={cx("search-area")}>
