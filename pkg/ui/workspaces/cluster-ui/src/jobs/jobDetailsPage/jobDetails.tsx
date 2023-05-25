@@ -25,8 +25,8 @@ import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import {
   TimestampToMoment,
   idAttr,
-  DATE_FORMAT_24_TZ,
   getMatchParamByName,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
 } from "src/util";
 
 import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
@@ -119,7 +119,10 @@ export class JobDetails extends React.Component<JobDetailsProps> {
                 <SummaryCardItem
                   label="Next Planned Execution Time"
                   value={
-                    <Timestamp time={nextRun} format={DATE_FORMAT_24_TZ} />
+                    <Timestamp
+                      time={nextRun}
+                      format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+                    />
                   }
                 />
               </>
@@ -129,16 +132,38 @@ export class JobDetails extends React.Component<JobDetailsProps> {
               value={
                 <Timestamp
                   time={TimestampToMoment(job.created)}
-                  format={DATE_FORMAT_24_TZ}
+                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
                 />
               }
             />
+            {job.modified && (
+              <SummaryCardItem
+                label="Last Modified Time"
+                value={
+                  <Timestamp
+                    time={TimestampToMoment(job.modified)}
+                    format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+                  />
+                }
+              />
+            )}
+            {job.finished && (
+              <SummaryCardItem
+                label="Completed Time"
+                value={
+                  <Timestamp
+                    time={TimestampToMoment(job.finished)}
+                    format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+                  />
+                }
+              />
+            )}
             <SummaryCardItem
               label="Last Execution Time"
               value={
                 <Timestamp
                   time={TimestampToMoment(job.last_run)}
-                  format={DATE_FORMAT_24_TZ}
+                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
                 />
               }
             />
