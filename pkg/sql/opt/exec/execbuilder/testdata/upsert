@@ -107,12 +107,11 @@ vectorized: true
 │ auto commit
 │ arbiter indexes: kv_pkey
 │
-└── • lookup join (inner)
+└── • render
     │ columns: (k, v_default, k)
-    │ estimated row count: 2 (missing stats)
-    │ table: kv@kv_pkey
-    │ equality: (k) = (k)
-    │ equality cols are key
+    │ render k: k
+    │ render k: k
+    │ render v_default: v_default
     │
     └── • distinct
         │ columns: (v_default, k)

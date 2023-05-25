@@ -33,7 +33,7 @@ CREATE TABLE edges (
 )
 ----
 
-opt
+opt disable=EliminateJoinUnderProjectRight
 select nodes.id,dst from nodes join edges on edges.dst=nodes.id
 ----
 inner-join (merge)
@@ -49,6 +49,18 @@ inner-join (merge)
  │    ├── columns: dst:6!null
  │    └── ordering: +6
  └── filters (true)
+
+# The join is actually not necessary because of the foreign-key relation.
+opt
+select nodes.id,dst from nodes join edges on edges.dst=nodes.id
+----
+project
+ ├── columns: id:1!null dst:6!null
+ ├── fd: (1)==(6), (6)==(1)
+ ├── scan edges@edges_auto_index_fk_dst_ref_nodes
+ │    └── columns: dst:6!null
+ └── projections
+      └── dst:6 [as=id:1, outer=(6)]
 
 # ------------------------------------------------------------------------------
 # Github Issues 16313/16426: Ensure that STORING index is used to filter unread
