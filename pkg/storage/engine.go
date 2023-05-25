@@ -1149,6 +1149,7 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 		FlushIngestCount:           m.Flush.AsIngestCount,
 		FlushIngestTableCount:      m.Flush.AsIngestTableCount,
 		FlushIngestTableBytes:      m.Flush.AsIngestBytes,
+		IngestCount:                m.Ingest.Count,
 		MemtableSize:               m.MemTable.Size,
 		MemtableCount:              m.MemTable.Count,
 		MemtableZombieCount:        m.MemTable.ZombieCount,
