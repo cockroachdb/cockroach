@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { useContext } from "react";
 import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
@@ -49,8 +49,7 @@ import {
 import { merge } from "lodash";
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "../tableStatistics";
-import { DatabaseDetailsPageProps } from "../databaseDetailsPage";
-import moment from "moment-timezone";
+import { CockroachCloudContext } from "../contexts";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -96,6 +95,7 @@ export interface DatabasesPageData {
   nodeRegions: { [nodeId: string]: string };
   isTenant?: UIConfigState["isTenant"];
   automaticStatsCollectionEnabled?: boolean;
+  indexRecommendationsEnabled: boolean;
   showNodeRegionsColumn?: boolean;
 }
 
@@ -314,7 +314,7 @@ export class DatabasesPage extends React.Component<
     }
 
     filteredDbs.forEach(database => {
-      if (database.lastError !== undefined) {
+      if (database.lastError) {
         lastDetailsError = database.lastError;
       }
 
@@ -325,9 +325,12 @@ export class DatabasesPage extends React.Component<
         this.setState({ lastDetailsError: lastDetailsError });
       }
 
-      if (!database.loaded && !database.loading && !database.lastError) {
+      if (
+        !database.loaded &&
+        !database.loading &&
+        database.lastError === undefined
+      ) {
         this.props.refreshDatabaseDetails(database.name);
-        return;
       }
     });
   }
@@ -536,111 +539,124 @@ export class DatabasesPage extends React.Component<
     return cell;
   };
 
-  private columns: ColumnDescriptor<DatabasesPageDataDatabase>[] = [
-    {
-      title: (
-        <Tooltip placement="bottom" title="The name of the database.">
-          Databases
-        </Tooltip>
-      ),
-      cell: database => (
-        <Link
-          to={EncodeDatabaseUri(database.name)}
-          className={cx("icon__container")}
-        >
-          <StackIcon className={cx("icon--s", "icon--primary")} />
-          {database.name}
-        </Link>
-      ),
-      sort: database => database.name,
-      className: cx("databases-table__col-name"),
-      name: "name",
-    },
-    {
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="The approximate total disk size across all table replicas in the database."
-        >
-          Size
-        </Tooltip>
-      ),
-      cell: database =>
-        this.checkInfoAvailable(database, format.Bytes(database.sizeInBytes)),
-      sort: database => database.sizeInBytes,
-      className: cx("databases-table__col-size"),
-      name: "size",
-    },
-    {
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="The total number of tables in the database."
-        >
-          Tables
-        </Tooltip>
-      ),
-      cell: database => this.checkInfoAvailable(database, database.tableCount),
-      sort: database => database.tableCount,
-      className: cx("databases-table__col-table-count"),
-      name: "tableCount",
-    },
-    {
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="The total number of ranges across all tables in the database."
-        >
-          Range Count
-        </Tooltip>
-      ),
-      cell: database => this.checkInfoAvailable(database, database.rangeCount),
-      sort: database => database.rangeCount,
-      className: cx("databases-table__col-range-count"),
-      name: "rangeCount",
-    },
-    {
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="Regions/Nodes on which the database tables are located."
-        >
-          {this.props.isTenant ? "Regions" : "Regions/Nodes"}
-        </Tooltip>
-      ),
-      cell: database =>
-        this.checkInfoAvailable(
-          database,
-          database.nodesByRegionString || "None",
+  private renderDatabaseNameCell = (
+    database: DatabasesPageDataDatabase,
+  ): React.ReactNode => {
+    const isCockroachCloud = useContext(CockroachCloudContext);
+    const linkURL = isCockroachCloud
+      ? `${location.pathname}/${database.name}`
+      : EncodeDatabaseUri(database.name);
+    return (
+      <Link to={linkURL} className={cx("icon__container")}>
+        <StackIcon className={cx("icon--s", "icon--primary")} />
+        {database.name}
+      </Link>
+    );
+  };
+
+  private columns(): ColumnDescriptor<DatabasesPageDataDatabase>[] {
+    const columns: ColumnDescriptor<DatabasesPageDataDatabase>[] = [
+      {
+        title: (
+          <Tooltip placement="bottom" title="The name of the database.">
+            Databases
+          </Tooltip>
         ),
-      sort: database => database.nodesByRegionString,
-      className: cx("databases-table__col-node-regions"),
-      name: "nodeRegions",
-      hideIfTenant: true,
-    },
-    {
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="Index recommendations will appear if the system detects improper index usage, such as the
+        cell: database => this.renderDatabaseNameCell(database),
+        sort: database => database.name,
+        className: cx("databases-table__col-name"),
+        name: "name",
+      },
+      {
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The approximate total disk size across all table replicas in the database."
+          >
+            Size
+          </Tooltip>
+        ),
+        cell: database =>
+          this.checkInfoAvailable(database, format.Bytes(database.sizeInBytes)),
+        sort: database => database.sizeInBytes,
+        className: cx("databases-table__col-size"),
+        name: "size",
+      },
+      {
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The total number of tables in the database."
+          >
+            Tables
+          </Tooltip>
+        ),
+        cell: database =>
+          this.checkInfoAvailable(database, database.tableCount),
+        sort: database => database.tableCount,
+        className: cx("databases-table__col-table-count"),
+        name: "tableCount",
+      },
+      {
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The total number of ranges across all tables in the database."
+          >
+            Range Count
+          </Tooltip>
+        ),
+        cell: database =>
+          this.checkInfoAvailable(database, database.rangeCount),
+        sort: database => database.rangeCount,
+        className: cx("databases-table__col-range-count"),
+        name: "rangeCount",
+      },
+      {
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="Regions/Nodes on which the database tables are located."
+          >
+            {this.props.isTenant ? "Regions" : "Regions/Nodes"}
+          </Tooltip>
+        ),
+        cell: database =>
+          this.checkInfoAvailable(
+            database,
+            database.nodesByRegionString || "None",
+          ),
+        sort: database => database.nodesByRegionString,
+        className: cx("databases-table__col-node-regions"),
+        name: "nodeRegions",
+        hideIfTenant: true,
+      },
+    ];
+    if (this.props.indexRecommendationsEnabled) {
+      columns.push({
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="Index recommendations will appear if the system detects improper index usage, such as the
           occurrence of unused indexes. Following index recommendations may help improve query performance."
-        >
-          Index Recommendations
-        </Tooltip>
-      ),
-      cell: this.renderIndexRecommendations,
-      sort: database => database.numIndexRecommendations,
-      className: cx("databases-table__col-idx-rec"),
-      name: "numIndexRecommendations",
-    },
-  ];
+          >
+            Index Recommendations
+          </Tooltip>
+        ),
+        cell: this.renderIndexRecommendations,
+        sort: database => database.numIndexRecommendations,
+        className: cx("databases-table__col-idx-rec"),
+        name: "numIndexRecommendations",
+      });
+    }
+    return columns;
+  }
 
   render(): React.ReactElement {
-    this.columns.find(c => c.name === "nodeRegions").showByDefault =
+    const columns = this.columns();
+    columns.find(c => c.name === "nodeRegions").showByDefault =
       this.props.showNodeRegionsColumn;
-    const displayColumns = this.columns.filter(
-      col => col.showByDefault !== false,
-    );
+    const displayColumns = columns.filter(col => col.showByDefault !== false);
 
     const { filters, search, nodeRegions, isTenant } = this.props;
     const { pagination } = this.state;
