@@ -13,29 +13,24 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { AppState } from "src/store";
 import {
-  selectJob,
-  selectJobLoading,
-  selectJobError,
-} from "../../store/jobDetails/job.selectors";
-import {
   JobDetailsStateProps,
   JobDetailsDispatchProps,
   JobDetails,
 } from "./jobDetails";
-import { JobRequest } from "src/api/jobsApi";
+import { JobRequest, JobResponse } from "src/api/jobsApi";
 import { actions as jobActions } from "src/store/jobDetails";
+import { selectID } from "../../selectors";
+import { createInitialState } from "src/api";
+
+const emptyState = createInitialState<JobResponse>();
 
 const mapStateToProps = (
   state: AppState,
   props: RouteComponentProps,
 ): JobDetailsStateProps => {
-  const job = selectJob(state, props);
-  const jobLoading = selectJobLoading(state, props);
-  const jobError = selectJobError(state, props);
+  const jobID = selectID(state, props);
   return {
-    job,
-    jobLoading,
-    jobError,
+    jobRequest: state.adminUI?.job?.cachedData[jobID] ?? emptyState,
   };
 };
 
