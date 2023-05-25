@@ -46,6 +46,14 @@ var JobCheckpointFrequency = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+var timeToAdvanceRetainedTime = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"stream_replication.time_to_advance_retained_time",
+	"the duration the retained time can remained unchanged after the initial scan completes",
+	time.Hour*24*4,
+	settings.NonNegativeDuration,
+)
+
 const streamIngestionFrontierProcName = `ingestfntr`
 
 type streamIngestionFrontier struct {
@@ -57,8 +65,8 @@ type streamIngestionFrontier struct {
 
 	// input returns rows from one or more streamIngestion processors.
 	input execinfra.RowSource
-	// highWaterAtStart is the job high-water. It's used in an assertion that we
-	// never regress the job high-water.
+
+	// highWaterAtStart is the high water mark found during distSQL planning.
 	highWaterAtStart hlc.Timestamp
 
 	// frontier contains the current resolved timestamp high-water for the tracked
@@ -469,6 +477,14 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 		// Only update the frontier lag if the high water mark has been updated,
 		// implying the initial scan has completed.
 		sf.metrics.FrontierLagNanos.Update(timeutil.Since(sf.persistedHighWater.GoTime()).Nanoseconds())
+	}
+
+	timeToAdvance := timeToAdvanceRetainedTime.Get(&sf.flowCtx.Cfg.Settings.SV)
+	retainedTimeLowerBound := hlc.Timestamp{WallTime: timeutil.Now().Add(-timeToAdvance).UnixNano()}
+	if sf.highWaterAtStart.Less(sf.persistedHighWater) && sf.persistedHighWater.Less(retainedTimeLowerBound) {
+		// Once the initial scan completes, implying that the highwater has advanced above the highWaterAtStart,
+		// ensure the highwater continues to advance.
+		return errors.Newf("retained timestamp has not advanced in %d hours", timeToAdvance.Hours())
 	}
 	return nil
 }
