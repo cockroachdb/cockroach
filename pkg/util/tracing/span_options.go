@@ -11,9 +11,8 @@
 package tracing
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -420,10 +419,10 @@ func WithRecording(recType tracingpb.RecordingType) SpanOption {
 	case tracingpb.RecordingVerbose:
 		return verboseRecordingSingleton
 	case tracingpb.RecordingOff:
-		panic("invalid recording option: RecordingOff")
+		panic(errors.AssertionFailedf("invalid recording option: RecordingOff"))
 	default:
 		recCpy := recType // copy excaping to the heap
-		panic(fmt.Sprintf("invalid recording option: %d", recCpy))
+		panic(errors.AssertionFailedf("invalid recording option: %d", recCpy))
 	}
 }
 
