@@ -2243,7 +2243,7 @@ func getLivenessStatusMap(
 // a slice containing the liveness record of all nodes that have ever been a part of the
 // cluster.
 func getLivenessResponse(
-	ctx context.Context, nl optionalnodeliveness.Interface, now hlc.Timestamp, st *cluster.Settings,
+	ctx context.Context, nl optionalnodeliveness.Interface,
 ) (*serverpb.LivenessResponse, error) {
 	nodeVitalityMap, err := nl.ScanNodeVitalityFromKV(ctx)
 
@@ -2287,9 +2287,7 @@ func (s *adminServer) Liveness(
 func (s *systemAdminServer) Liveness(
 	ctx context.Context, _ *serverpb.LivenessRequest,
 ) (*serverpb.LivenessResponse, error) {
-	clock := s.clock
-
-	return getLivenessResponse(ctx, s.nodeLiveness, clock.Now(), s.st)
+	return getLivenessResponse(ctx, s.nodeLiveness)
 }
 
 func (s *adminServer) Jobs(
@@ -2913,7 +2911,7 @@ func (s *systemAdminServer) decommissionStatusHelper(
 	var res serverpb.DecommissionStatusResponse
 	livenessMap := map[roachpb.NodeID]livenesspb.Liveness{}
 	{
-		// We use GetLivenessesFromKV to avoid races in which the caller has
+		// We use ScanNodeVitalityFromKV to avoid races in which the caller has
 		// just made an update to a liveness record but has not received this
 		// update in its local liveness instance yet. Doing a consistent read
 		// here avoids such issues.
@@ -2921,12 +2919,12 @@ func (s *systemAdminServer) decommissionStatusHelper(
 		// For an example, see:
 		//
 		// https://github.com/cockroachdb/cockroach/issues/73636
-		ls, err := s.nodeLiveness.GetLivenessesFromKV(ctx)
+		ls, err := s.nodeLiveness.ScanNodeVitalityFromKV(ctx)
 		if err != nil {
 			return nil, err
 		}
-		for _, rec := range ls {
-			livenessMap[rec.NodeID] = rec
+		for nodeID, rec := range ls {
+			livenessMap[nodeID] = rec.GenLiveness()
 		}
 	}
 
