@@ -919,11 +919,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			if err != nil {
 				return nil, err
 			}
-			for _, l := range ls {
+			for nodeID, l := range ls {
 				if l.IsDecommissioned() {
 					continue
 				}
-				ns = append(ns, l.Liveness.NodeID)
+				ns = append(ns, nodeID)
 			}
 			return ns, nil
 		}

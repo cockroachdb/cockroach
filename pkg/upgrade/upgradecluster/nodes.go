@@ -12,6 +12,7 @@ package upgradecluster
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
@@ -45,16 +46,18 @@ func NodesFromNodeLiveness(ctx context.Context, nl NodeLiveness) (Nodes, error) 
 	if err != nil {
 		return nil, err
 	}
-	for _, n := range ls {
+	for nodeID, n := range ls {
 		if n.IsDecommissioned() {
 			continue
 		}
 		if !n.IsAlive() {
-			return nil, errors.Newf("n%d required, but unavailable", n.Liveness.NodeID)
+			return nil, errors.Newf("n%d required, but unavailable", nodeID)
 		}
-		// TODO(baptist) Stop using Epoch
-		ns = append(ns, Node{ID: n.Liveness.NodeID, Epoch: n.Liveness.Epoch})
+		// TODO(baptist): Stop using Epoch. Need to determine the best alternative.
+		ns = append(ns, Node{ID: nodeID, Epoch: n.Liveness.Epoch})
 	}
+	// Tests assume the nodes are sorted, so sort by node id first.
+	sort.Slice(ns, func(i, j int) bool { return ns[i].ID < ns[j].ID })
 	return ns, nil
 }
 
