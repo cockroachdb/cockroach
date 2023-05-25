@@ -4592,6 +4592,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			var gossipLiveness livenesspb.Liveness
 			if err := g.GetInfoProto(gossip.MakeNodeLivenessKey(d.NodeID), &gossipLiveness); err == nil {
 				if now.Before(gossipLiveness.Expiration.ToTimestamp().GoTime()) {
+					// TODO(baptist): This isn't the right way to check livenesses.
 					alive[d.NodeID] = true
 				}
 			}
@@ -4699,9 +4700,16 @@ CREATE TABLE crdb_internal.kv_node_liveness (
 			return err
 		}
 
-		livenesses, err := nl.GetLivenessesFromKV(ctx)
+		nodeVitality, err := nl.ScanNodeVitalityFromKV(ctx)
 		if err != nil {
 			return err
+		}
+
+		var livenesses []livenesspb.Liveness
+		for _, v := range nodeVitality {
+			// We want the generated liveness which will simulate the expiration if
+			// the liveness record is not being updated.
+			livenesses = append(livenesses, v.GenLiveness())
 		}
 
 		sort.Slice(livenesses, func(i, j int) bool {

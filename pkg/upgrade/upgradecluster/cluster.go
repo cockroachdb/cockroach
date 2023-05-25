@@ -62,8 +62,7 @@ type NodeDialer interface {
 // NodeLiveness is the subset of the interface satisfied by CRDB's node liveness
 // component that the upgrade manager relies upon.
 type NodeLiveness interface {
-	GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error)
-	IsLive(roachpb.NodeID) (bool, error)
+	ScanNodeVitalityFromKV(context.Context) (livenesspb.NodeVitalityMap, error)
 }
 
 // New constructs a new Cluster with the provided dependencies.
