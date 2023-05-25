@@ -27,6 +27,41 @@ export const limitOptions = [
   { value: 500, label: "500" },
 ];
 
+export const limitMoreOptions = [
+  { value: 1000, label: "1000" },
+  { value: 5000, label: "5000" },
+  { value: 10000, label: "10000" },
+];
+
+function isSortOptionOnActivityTable(sort: SqlStatsSortType): boolean {
+  switch (sort) {
+    case SqlStatsSortOptions.SERVICE_LAT:
+    case SqlStatsSortOptions.EXECUTION_COUNT:
+    case SqlStatsSortOptions.CPU_TIME:
+    case SqlStatsSortOptions.P99_STMTS_ONLY:
+    case SqlStatsSortOptions.CONTENTION_TIME:
+    case SqlStatsSortOptions.PCT_RUNTIME:
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isSortOptionForStatementOnly(sort: SqlStatsSortType): boolean {
+  switch (sort) {
+    case SqlStatsSortOptions.P99_STMTS_ONLY:
+    case SqlStatsSortOptions.PCT_RUNTIME:
+    case SqlStatsSortOptions.LATENCY_INFO_P50:
+    case SqlStatsSortOptions.LATENCY_INFO_P90:
+    case SqlStatsSortOptions.LATENCY_INFO_MIN:
+    case SqlStatsSortOptions.LATENCY_INFO_MAX:
+    case SqlStatsSortOptions.LAST_EXEC:
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function getSortLabel(
   sort: SqlStatsSortType,
   type: "Statement" | "Transaction",
@@ -44,6 +79,24 @@ export function getSortLabel(
       return "Contention Time";
     case SqlStatsSortOptions.PCT_RUNTIME:
       return "% of All Runtime";
+    case SqlStatsSortOptions.LATENCY_INFO_P50:
+      return "P50 Latency";
+    case SqlStatsSortOptions.LATENCY_INFO_P90:
+      return "P90 Latency";
+    case SqlStatsSortOptions.LATENCY_INFO_MIN:
+      return "Min Latency";
+    case SqlStatsSortOptions.LATENCY_INFO_MAX:
+      return "Max Latency";
+    case SqlStatsSortOptions.ROWS_PROCESSED:
+      return "Rows Processed";
+    case SqlStatsSortOptions.MAX_MEMORY:
+      return "Max Memory";
+    case SqlStatsSortOptions.NETWORK:
+      return "Network";
+    case SqlStatsSortOptions.RETRIES:
+      return "Retries";
+    case SqlStatsSortOptions.LAST_EXEC:
+      return "Last Execution Time";
     default:
       return "";
   }
@@ -63,6 +116,24 @@ export function getSortColumn(sort: SqlStatsSortType): string {
       return "contention";
     case SqlStatsSortOptions.PCT_RUNTIME:
       return "workloadPct";
+    case SqlStatsSortOptions.LATENCY_INFO_P50:
+      return "latencyP50";
+    case SqlStatsSortOptions.LATENCY_INFO_P90:
+      return "latencyP90";
+    case SqlStatsSortOptions.LATENCY_INFO_MIN:
+      return "latencyMin";
+    case SqlStatsSortOptions.LATENCY_INFO_MAX:
+      return "latencyMax";
+    case SqlStatsSortOptions.ROWS_PROCESSED:
+      return "rowsProcessed";
+    case SqlStatsSortOptions.MAX_MEMORY:
+      return "maxMemUsage";
+    case SqlStatsSortOptions.NETWORK:
+      return "networkBytes";
+    case SqlStatsSortOptions.RETRIES:
+      return "retries";
+    case SqlStatsSortOptions.LAST_EXEC:
+      return "lastExecTimestamp";
     default:
       return "";
   }
@@ -82,12 +153,43 @@ export function getReqSortColumn(sort: string): SqlStatsSortType {
       return SqlStatsSortOptions.CONTENTION_TIME;
     case "workloadPct":
       return SqlStatsSortOptions.PCT_RUNTIME;
+    case "latencyP50":
+      return SqlStatsSortOptions.LATENCY_INFO_P50;
+    case "latencyP90":
+      return SqlStatsSortOptions.LATENCY_INFO_P90;
+    case "latencyMin":
+      return SqlStatsSortOptions.LATENCY_INFO_MIN;
+    case "latencyMax":
+      return SqlStatsSortOptions.LATENCY_INFO_MAX;
+    case "rowsProcessed":
+      return SqlStatsSortOptions.ROWS_PROCESSED;
+    case "maxMemUsage":
+      return SqlStatsSortOptions.MAX_MEMORY;
+    case "networkBytes":
+      return SqlStatsSortOptions.NETWORK;
+    case "retries":
+      return SqlStatsSortOptions.RETRIES;
+    case "lastExecTimestamp":
+      return SqlStatsSortOptions.LAST_EXEC;
     default:
       return SqlStatsSortOptions.SERVICE_LAT;
   }
 }
 
 export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions)
+  .filter(sort => isSortOptionOnActivityTable(sort as SqlStatsSortType))
+  .map(sortVal => ({
+    value: sortVal as SqlStatsSortType,
+    label: getSortLabel(sortVal as SqlStatsSortType, "Statement"),
+  }))
+  .sort((a, b) => {
+    if (a.label < b.label) return -1;
+    if (a.label > b.label) return 1;
+    return 0;
+  });
+
+export const stmtRequestSortMoreOptions = Object.values(SqlStatsSortOptions)
+  .filter(sort => !isSortOptionOnActivityTable(sort as SqlStatsSortType))
   .map(sortVal => ({
     value: sortVal as SqlStatsSortType,
     label: getSortLabel(sortVal as SqlStatsSortType, "Statement"),
@@ -99,6 +201,11 @@ export const stmtRequestSortOptions = Object.values(SqlStatsSortOptions)
   });
 
 export const txnRequestSortOptions = Object.values(SqlStatsSortOptions)
+  .filter(
+    sort =>
+      !isSortOptionForStatementOnly(sort as SqlStatsSortType) &&
+      isSortOptionOnActivityTable(sort as SqlStatsSortType),
+  )
   .map(sortVal => ({
     value: sortVal as SqlStatsSortType,
     label: getSortLabel(sortVal as SqlStatsSortType, "Transaction"),
@@ -107,12 +214,23 @@ export const txnRequestSortOptions = Object.values(SqlStatsSortOptions)
     if (a.label < b.label) return -1;
     if (a.label > b.label) return 1;
     return 0;
-  })
+  });
+
+export const txnRequestSortMoreOptions = Object.values(SqlStatsSortOptions)
   .filter(
-    option =>
-      option.value !== SqlStatsSortOptions.P99_STMTS_ONLY &&
-      option.value !== SqlStatsSortOptions.PCT_RUNTIME,
-  );
+    sort =>
+      !isSortOptionForStatementOnly(sort as SqlStatsSortType) &&
+      !isSortOptionOnActivityTable(sort as SqlStatsSortType),
+  )
+  .map(sortVal => ({
+    value: sortVal as SqlStatsSortType,
+    label: getSortLabel(sortVal as SqlStatsSortType, "Transaction"),
+  }))
+  .sort((a, b) => {
+    if (a.label < b.label) return -1;
+    if (a.label > b.label) return 1;
+    return 0;
+  });
 
 export const STATS_LONG_LOADING_DURATION = duration(2, "s");
 
