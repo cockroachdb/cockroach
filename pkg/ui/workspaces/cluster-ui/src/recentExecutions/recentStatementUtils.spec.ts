@@ -240,25 +240,6 @@ describe("test activeStatementUtils", () => {
     });
 
     it("should convert sessions response to active transactions result", () => {
-      const txns = [
-        {
-          id: new Uint8Array(),
-          start: new Timestamp({
-            seconds: Long.fromNumber(MOCK_START_TIME.unix()),
-          }),
-          num_auto_retries: 3,
-          num_statements_executed: 4,
-        },
-        {
-          id: new Uint8Array(),
-          start: new Timestamp({
-            seconds: Long.fromNumber(MOCK_START_TIME.unix()),
-          }),
-          num_auto_retries: 4,
-          num_statements_executed: 3,
-        },
-      ];
-
       const sessionsResponse: SessionsResponse = {
         sessions: [
           {
@@ -267,7 +248,14 @@ describe("test activeStatementUtils", () => {
             application_name: "application",
             client_address: "clientAddress",
             active_queries: [makeActiveQuery()],
-            active_txn: txns[0],
+            active_txn: {
+              id: new Uint8Array(),
+              start: new Timestamp({
+                seconds: Long.fromNumber(MOCK_START_TIME.unix()),
+              }),
+              num_auto_retries: 3,
+              num_statements_executed: 4,
+            },
           },
           {
             id: new Uint8Array(),
@@ -275,8 +263,32 @@ describe("test activeStatementUtils", () => {
             application_name: "application2",
             client_address: "clientAddress2",
             active_queries: [makeActiveQuery()],
-            active_txn: txns[1],
+            active_txn: {
+              id: new Uint8Array(),
+              start: new Timestamp({
+                seconds: Long.fromNumber(MOCK_START_TIME.unix()),
+              }),
+              num_auto_retries: 4,
+              num_statements_executed: 3,
+            },
           },
+          {
+            id: new Uint8Array(),
+            username: "baz",
+            application_name: "application3",
+            client_address: "clientAddress3",
+            active_queries: [],
+            active_txn: {
+              id: new Uint8Array(),
+              start: new Timestamp({
+                seconds: Long.fromNumber(MOCK_START_TIME.unix()),
+              }),
+              num_auto_retries: 2,
+              num_statements_executed: 3,
+            },
+            last_active_query: "select 1",
+          },
+          // The below txn should be filtered out.
           {
             id: new Uint8Array(),
             username: "foo",
@@ -284,7 +296,14 @@ describe("test activeStatementUtils", () => {
             application_name: "closed_application",
             client_address: "clientAddress2",
             active_queries: [makeActiveQuery()],
-            active_txn: txns[1],
+            active_txn: {
+              id: new Uint8Array(),
+              start: new Timestamp({
+                seconds: Long.fromNumber(MOCK_START_TIME.unix()),
+              }),
+              num_auto_retries: 2,
+              num_statements_executed: 3,
+            },
           },
         ],
         errors: [],
@@ -295,18 +314,26 @@ describe("test activeStatementUtils", () => {
         getRecentExecutionsFromSessions(sessionsResponse).transactions;
 
       // Should filter out the txn from closed  session.
-      expect(activeTransactions.length).toBe(2);
+      expect(activeTransactions.length).toBe(3);
 
+      let executingCnt = 0;
       activeTransactions.forEach((txn: RecentTransaction, i) => {
         expect(txn.application).toBe(
           sessionsResponse.sessions[i].application_name,
         );
-        expect(txn.status).toBe(ExecutionStatus.Executing);
         expect(txn.query).toBeTruthy();
+        if (sessionsResponse.sessions[i].active_queries.length > 0) {
+          expect(txn.status).toEqual(ExecutionStatus.Executing);
+          executingCnt++;
+        } else {
+          expect(txn.status).toEqual(ExecutionStatus.Idle);
+        }
         expect(txn.start.unix()).toBe(
           TimestampToMoment(defaultActiveQuery.start).unix(),
         );
       });
+
+      expect(executingCnt).toEqual(2);
     });
 
     it("should populate txn latest query when there is no active stmt for txns with at least 1 stmt", () => {
