@@ -38,6 +38,7 @@ const (
 	otherErr issueCategory = iota
 	clusterCreationErr
 	sshErr
+	teardownErr
 )
 
 func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssues {
@@ -128,6 +129,8 @@ func (g *githubIssues) createPostRequest(
 		issueName = "ssh_problem"
 		messagePrefix = fmt.Sprintf("test %s failed due to ", t.Name())
 		infraFlake = true
+	} else if cat == teardownErr {
+		messagePrefix = fmt.Sprintf("test %s failed during teardown (see teardown.log) due to ", t.Name())
 	}
 
 	// Issues posted from roachtest are identifiable as such and
@@ -226,6 +229,8 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 		cat = clusterCreationErr
 	} else if failureContainsError(firstFailure, rperrors.ErrSSH255) {
 		cat = sshErr
+	} else if failureContainsError(firstFailure, errDuringTeardown) {
+		cat = teardownErr
 	}
 
 	return g.issuePoster(
