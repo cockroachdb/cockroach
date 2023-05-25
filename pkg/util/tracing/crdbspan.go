@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/types"
@@ -273,10 +274,10 @@ func (t *Trace) trimSpans(maxSpans int) {
 func (t *Trace) trimSpansRecursive(toDrop int, isRoot bool) {
 	if toDrop <= 0 {
 		toDrop := toDrop // copy escaping to the heap
-		panic(fmt.Sprintf("invalid toDrop < 0: %d", toDrop))
+		panic(errors.AssertionFailedf("invalid toDrop < 0: %d", toDrop))
 	}
 	if t.NumSpans <= toDrop {
-		panic(fmt.Sprintf("NumSpans expected to be > toDrop; NumSpans: %d, toDrop: %d", t.NumSpans, toDrop))
+		panic(errors.AssertionFailedf("NumSpans expected to be > toDrop; NumSpans: %d, toDrop: %d", t.NumSpans, toDrop))
 	}
 
 	// Look at the spans ordered by size descendingly, so that we drop the fewest children
@@ -312,7 +313,7 @@ func (t *Trace) trimSpansRecursive(toDrop int, isRoot bool) {
 		// spansToDrop.
 		recurseIdx = childrenIdx[spansToDrop]
 		if t.Children[recurseIdx].NumSpans < toDropFromNextChild {
-			panic("expected next child to have enough spans")
+			panic(errors.AssertionFailedf("expected next child to have enough spans"))
 		}
 		t.Children[recurseIdx].trimSpansRecursive(toDropFromNextChild, false /* isRoot */)
 		t.NumSpans -= toDropFromNextChild
@@ -719,7 +720,7 @@ func (s *crdbSpan) getRecordingImpl(
 	case tracingpb.RecordingOff:
 		return Trace{}
 	default:
-		panic("unreachable")
+		panic(errors.AssertionFailedf("unreachable"))
 	}
 }
 
@@ -899,7 +900,7 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRec Trace) {
 	case tracingpb.RecordingOff:
 		break
 	default:
-		panic(fmt.Sprintf("unrecognized recording mode: %v", s.recordingType()))
+		panic(errors.AssertionFailedf("unrecognized recording mode: %v", s.recordingType()))
 	}
 
 	// Update s' ChildrenMetadata to capture all the spans in childRec.
@@ -1365,7 +1366,7 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 		// completion before c.finish() was called, c wouldn't have called
 		// s.childFinished(c) because it would no longer have had a parent).
 		if !s.mu.finished {
-			panic("unexpectedly failed to find child of non-finished parent")
+			panic(errors.AssertionFailedf("unexpectedly failed to find child of non-finished parent"))
 		}
 		// Since s has been finished, there's nothing more to do.
 		return
@@ -1386,7 +1387,7 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 	// that here.
 	if s.mu.finished {
 		if !s.mu.finishing {
-			panic("child unexpectedly calling into finished parent")
+			panic(errors.AssertionFailedf("child unexpectedly calling into finished parent"))
 		}
 	}
 
@@ -1397,7 +1398,7 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 		// re-allocated yet. It shouldn't be re-allocated, because each span holds a
 		// reference to itself that's only dropped at the end of Span.Finish() (and
 		// the child at this point is in the middle of its Finish() call).
-		panic(fmt.Sprintf("span's reference count unexpectedly dropped to zero: %s", child.operation))
+		panic(errors.AssertionFailedf("span's reference count unexpectedly dropped to zero: %s", child.operation))
 	}
 
 	// Unlink the child.
