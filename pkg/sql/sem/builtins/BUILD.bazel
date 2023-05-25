@@ -201,6 +201,7 @@ go_test(
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/fingerprintutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
