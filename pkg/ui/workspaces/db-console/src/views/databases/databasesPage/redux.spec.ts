@@ -82,6 +82,7 @@ describe("Databases Page", function () {
     fakeApi.stubClusterSettings({
       key_values: {
         "sql.stats.automatic_collection.enabled": { value: "true" },
+        version: { value: "1000023.1-8" },
       },
     });
 
@@ -98,15 +99,32 @@ describe("Databases Page", function () {
       isTenant: false,
       sortSetting: { ascending: true, columnTitle: "name" },
       automaticStatsCollectionEnabled: true,
+      indexRecommendationsEnabled: true,
       showNodeRegionsColumn: false,
     });
   });
 
   it("makes a row for each database", async function () {
-    fakeApi.stubDatabases(["system", "test"]);
+    // Mock out the fetch query to /databases
+    fakeApi.stubSqlApiCall<clusterUiApi.DatabasesColumns>(
+      clusterUiApi.databasesRequest,
+      [
+        {
+          rows: [
+            {
+              database_name: "system",
+            },
+            {
+              database_name: "test",
+            },
+          ],
+        },
+      ],
+    );
     fakeApi.stubClusterSettings({
       key_values: {
         "sql.stats.automatic_collection.enabled": { value: "true" },
+        version: { value: "1000023.1-8" },
       },
     });
 
@@ -121,7 +139,7 @@ describe("Databases Page", function () {
         {
           loading: false,
           loaded: false,
-          lastError: null,
+          lastError: undefined,
           name: "system",
           nodes: [],
           sizeInBytes: 0,
@@ -133,7 +151,7 @@ describe("Databases Page", function () {
         {
           loading: false,
           loaded: false,
-          lastError: null,
+          lastError: undefined,
           name: "test",
           nodes: [],
           sizeInBytes: 0,
@@ -149,6 +167,7 @@ describe("Databases Page", function () {
       isTenant: false,
       sortSetting: { ascending: true, columnTitle: "name" },
       showNodeRegionsColumn: false,
+      indexRecommendationsEnabled: true,
       automaticStatsCollectionEnabled: true,
     });
   });
@@ -184,7 +203,19 @@ describe("Databases Page", function () {
       nodes: nodes,
     });
 
-    fakeApi.stubDatabases(["test"], 1);
+    // Mock out the fetch query to /databases
+    fakeApi.stubSqlApiCall<clusterUiApi.DatabasesColumns>(
+      clusterUiApi.databasesRequest,
+      [
+        {
+          rows: [
+            {
+              database_name: "test",
+            },
+          ],
+        },
+      ],
+    );
 
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
       clusterUiApi.createDatabaseDetailsReq("test"),
@@ -253,7 +284,7 @@ describe("Databases Page", function () {
     driver.assertDatabaseProperties("test", {
       loading: false,
       loaded: true,
-      lastError: null,
+      lastError: undefined,
       name: "test",
       nodes: [1, 2, 3],
       sizeInBytes: 100,

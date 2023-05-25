@@ -138,7 +138,7 @@ describe("Database Details Page", function () {
     driver.assertProperties({
       loading: false,
       loaded: false,
-      lastError: null,
+      lastError: undefined,
       name: "things",
       search: null,
       filters: defaultFilters,
@@ -174,7 +174,7 @@ describe("Database Details Page", function () {
     driver.assertProperties({
       loading: false,
       loaded: true,
-      lastError: null,
+      lastError: undefined,
       name: "things",
       search: null,
       filters: defaultFilters,

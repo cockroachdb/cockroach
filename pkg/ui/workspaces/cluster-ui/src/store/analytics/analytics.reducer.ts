@@ -12,6 +12,7 @@ import { createAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 
 type Page =
+  | "Databases"
   | "Index Details"
   | "Jobs"
   | "Schema Insights"
