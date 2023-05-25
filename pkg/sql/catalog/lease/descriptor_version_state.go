@@ -12,7 +12,6 @@ package lease
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 )
 
 // A lease stored in system.lease.
@@ -33,7 +33,14 @@ type storedLease struct {
 }
 
 func (s *storedLease) String() string {
-	return fmt.Sprintf("ID = %d ver=%d expiration=%s", s.id, s.version, s.expiration)
+	return redact.StringWithoutMarkers(s)
+}
+
+var _ redact.SafeFormatter = (*storedLease)(nil)
+
+// SafeFormat implements redact.SafeFormatter.
+func (s *storedLease) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("ID=%d ver=%d expiration=%s", s.id, s.version, s.expiration)
 }
 
 // descriptorVersionState holds the state for a descriptor version. This
@@ -81,21 +88,20 @@ func (s *descriptorVersionState) Expiration() hlc.Timestamp {
 	return s.getExpiration()
 }
 
-func (s *descriptorVersionState) SafeMessage() string {
+// SafeFormat implements redact.SafeFormatter.
+func (s *descriptorVersionState) SafeFormat(w redact.SafePrinter, _ rune) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return fmt.Sprintf("%d ver=%d:%s, refcount=%d", s.GetID(), s.GetVersion(), s.mu.expiration, s.mu.refcount)
+	w.Print(s.stringLocked())
 }
 
 func (s *descriptorVersionState) String() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.stringLocked()
+	return redact.StringWithoutMarkers(s)
 }
 
 // stringLocked reads mu.refcount and thus needs to have mu held.
-func (s *descriptorVersionState) stringLocked() string {
-	return fmt.Sprintf("%d(%q) ver=%d:%s, refcount=%d", s.GetID(), s.GetName(), s.GetVersion(), s.mu.expiration, s.mu.refcount)
+func (s *descriptorVersionState) stringLocked() redact.RedactableString {
+	return redact.Sprintf("%d(%q) ver=%d:%s, refcount=%d", s.GetID(), s.GetName(), s.GetVersion(), s.mu.expiration, s.mu.refcount)
 }
 
 // hasExpired checks if the descriptor is too old to be used (by a txn
