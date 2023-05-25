@@ -96,10 +96,11 @@ type TenantStreamingClusters struct {
 	SrcURL          url.URL
 	SrcCleanup      func()
 
-	DestCluster   *testcluster.TestCluster
-	DestSysServer serverutils.TestServerInterface
-	DestSysSQL    *sqlutils.SQLRunner
-	DestTenantSQL *sqlutils.SQLRunner
+	DestCluster    *testcluster.TestCluster
+	DestSysServer  serverutils.TestServerInterface
+	DestSysSQL     *sqlutils.SQLRunner
+	DestTenantConn *gosql.DB
+	DestTenantSQL  *sqlutils.SQLRunner
 }
 
 // CreateDestTenantSQL creates a dest tenant SQL runner and returns a cleanup
@@ -109,6 +110,7 @@ type TenantStreamingClusters struct {
 func (c *TenantStreamingClusters) CreateDestTenantSQL(ctx context.Context) func() error {
 	testTenant, destTenantConn := serverutils.StartTenant(c.T, c.DestSysServer,
 		base.TestTenantArgs{TenantID: c.Args.DestTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
+	c.DestTenantConn = destTenantConn
 	c.DestTenantSQL = sqlutils.MakeSQLRunner(destTenantConn)
 	return func() error {
 		if err := destTenantConn.Close(); err != nil {

@@ -285,6 +285,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/distsqlutils",
+        "//pkg/testutils/fingerprintutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/keysutils",
         "//pkg/testutils/serverutils",

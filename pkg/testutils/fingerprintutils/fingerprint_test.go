@@ -8,23 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlutils
-
-import (
-	"fmt"
-	"testing"
-)
-
-func FingerprintTable(t testing.TB, sqlDB *SQLRunner, tableID uint32) int {
-	fingerprintQuery := fmt.Sprintf(`
-SELECT *
-FROM
-	crdb_internal.fingerprint(
-		crdb_internal.table_span(%d),
-		true
-	)`, tableID)
-
-	var fingerprint int
-	sqlDB.QueryRow(t, fingerprintQuery).Scan(&fingerprint)
-	return fingerprint
-}
+package fingerprintutils
