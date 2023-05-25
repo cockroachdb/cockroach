@@ -12,8 +12,9 @@ package upgradecluster
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -56,6 +57,8 @@ func NodesFromNodeLiveness(ctx context.Context, nl NodeLiveness) (Nodes, error) 
 		// TODO(baptist) Stop using Epoch, need to determine an alternative.
 		ns = append(ns, Node{ID: id, Epoch: n.GenLiveness().Epoch})
 	}
+	// Tests assume the nodes are sorted, so sort by node id first.
+	sort.Slice(ns, func(i, j int) bool { return ns[i].ID < ns[j].ID })
 	return ns, nil
 }
 

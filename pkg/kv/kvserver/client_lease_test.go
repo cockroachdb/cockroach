@@ -1662,12 +1662,12 @@ func TestLeaseRequestBumpsEpoch(t *testing.T) {
 
 		// Check that n1's liveness epoch was bumped.
 		l0 := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
-		livenesses, err := l0.GetLivenessesFromKV(ctx)
+		livenesses, err := l0.ScanNodeVitalityFromKV(ctx)
 		require.NoError(t, err)
 		var liveness livenesspb.Liveness
-		for _, l := range livenesses {
-			if l.NodeID == 1 {
-				liveness = l
+		for nodeID, l := range livenesses {
+			if nodeID == 1 {
+				liveness = l.Liveness
 				break
 			}
 		}
