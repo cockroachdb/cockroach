@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/types"
 )
@@ -76,6 +77,25 @@ func (s *ComponentStats) StatsForQueryPlan() []string {
 		result = append(result, fmt.Sprintf("%s: %v", key, value))
 	})
 	return result
+}
+
+// String implements fmt.Stringer and protoutil.Message.
+func (s *ComponentStats) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+var _ redact.SafeFormatter = (*ComponentStats)(nil)
+
+// SafeValue implements redact.SafeValue.
+func (ComponentID_Type) SafeValue() {}
+
+// SafeFormat implements redact.SafeFormatter.
+func (s *ComponentStats) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("ComponentStats{ID: %v", s.Component)
+	s.formatStats(func(key string, value interface{}) {
+		w.Printf(", %s: %v", redact.SafeString(key), value)
+	})
+	w.SafeRune('}')
 }
 
 // formatStats calls fn for each statistic that is set.

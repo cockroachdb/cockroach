@@ -184,6 +184,9 @@ func (s SQLInstanceID) String() string {
 	return strconv.Itoa(int(s))
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (s SQLInstanceID) SafeValue() {}
+
 // SQLIDContainer is a variant of NodeIDContainer that contains SQL instance IDs.
 type SQLIDContainer NodeIDContainer
 
