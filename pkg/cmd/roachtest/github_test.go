@@ -144,6 +144,8 @@ func TestCreatePostRequest(t *testing.T) {
 		},
 		//Simulate failure loading TEAMS.yaml
 		{true, false, true, false, otherErr, false, false, nil},
+		//Error during teardown
+		{true, false, false, false, teardownErr, false, false, nil},
 	}
 
 	reg := makeTestRegistry(spec.GCE, "", "", false)
@@ -213,6 +215,8 @@ func TestCreatePostRequest(t *testing.T) {
 				expectedLabel = "T-testeng"
 				expectedName = "ssh_problem"
 				expectedMessagePrefix = "test github_test failed due to "
+			} else if c.category == teardownErr {
+				expectedMessagePrefix = "test github_test failed during teardown (see teardown.log) due to "
 			}
 
 			require.Contains(t, req.MentionOnCreate, expectedTeam)
