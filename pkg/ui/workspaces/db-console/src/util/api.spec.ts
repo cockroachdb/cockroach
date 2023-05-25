@@ -20,11 +20,7 @@ import * as api from "./api";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import Severity = protos.cockroach.util.log.Severity;
-import {
-  buildSQLApiDatabasesResponse,
-  buildSQLApiEventsResponse,
-  stubSqlApiCall,
-} from "src/util/fakeApi";
+import { stubSqlApiCall } from "src/util/fakeApi";
 
 const { ZoneConfig } = cockroach.config.zonepb;
 const { ZoneConfigurationLevel } = cockroach.server.serverpb;
@@ -35,25 +31,18 @@ describe("rest api", function () {
 
     it("correctly requests info about all databases", function () {
       // Mock out the fetch query to /databases
-      fetchMock.mock({
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "X-Cockroach-API-Session": "cookie",
+      stubSqlApiCall<clusterUiApi.DatabasesColumns>(clusterUiApi.databasesRequest, [
+        {
+          rows: [
+            {
+              database_name: "system",
+            },
+            {
+              database_name: "test",
+            },
+          ],
         },
-        matcher: clusterUiApi.SQL_API_PATH,
-        method: "POST",
-        response: (_url: string, requestObj: RequestInit) => {
-          expect(JSON.parse(requestObj.body.toString())).toEqual(
-            clusterUiApi.databasesRequest,
-          );
-          return {
-            body: JSON.stringify(
-              buildSQLApiDatabasesResponse(["system", "test"]),
-            ),
-          };
-        },
-      });
+      ]);
 
       return clusterUiApi.getDatabasesList().then(result => {
         expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
@@ -457,30 +446,22 @@ describe("rest api", function () {
 
     it("correctly requests events", function () {
       // Mock out the fetch query
-      fetchMock.mock({
-        matcher: clusterUiApi.SQL_API_PATH,
-        method: "POST",
-        response: (_url: string, requestObj: RequestInit) => {
-          expect(JSON.parse(requestObj.body.toString())).toEqual({
-            ...clusterUiApi.buildEventsSQLRequest({}),
-            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
-            database: clusterUiApi.FALLBACK_DB,
-          });
-          return {
-            body: JSON.stringify(
-              buildSQLApiEventsResponse([
-                {
-                  eventType: "test",
-                  timestamp: "2016-01-25T10:10:10.555555",
-                  reportingID: "1",
-                  info: `{"Timestamp":1668442242840943000,"EventType":"test","NodeID":1,"StartedAt":1668442242644228000,"LastUp":1668442242644228000}`,
-                  uniqueID: "\\\x4ce0d9e74bd5480ab1d9e6f98cc2f483",
-                },
-              ]),
-            ),
-          };
-        },
-      });
+      stubSqlApiCall<clusterUiApi.EventColumns>(
+        clusterUiApi.buildEventsSQLRequest({}),
+        [
+          {
+            rows: [
+              {
+                eventType: "test",
+                timestamp: "2016-01-25T10:10:10.555555",
+                reportingID: "1",
+                info: `{"Timestamp":1668442242840943000,"EventType":"test","NodeID":1,"StartedAt":1668442242644228000,"LastUp":1668442242644228000}`,
+                uniqueID: "\\\x4ce0d9e74bd5480ab1d9e6f98cc2f483",
+              },
+            ],
+          },
+        ],
+      );
 
       return clusterUiApi.getNonRedactedEvents().then(result => {
         expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
@@ -492,30 +473,22 @@ describe("rest api", function () {
       const req: clusterUiApi.NonRedactedEventsRequest = { type: "test" };
 
       // Mock out the fetch query
-      fetchMock.mock({
-        matcher: clusterUiApi.SQL_API_PATH,
-        method: "POST",
-        response: (_url: string, requestObj: RequestInit) => {
-          expect(JSON.parse(requestObj.body.toString())).toEqual({
-            ...clusterUiApi.buildEventsSQLRequest(req),
-            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
-            database: clusterUiApi.FALLBACK_DB,
-          });
-          return {
-            body: JSON.stringify(
-              buildSQLApiEventsResponse([
-                {
-                  eventType: "test",
-                  timestamp: "2016-01-25T10:10:10.555555",
-                  reportingID: "1",
-                  info: `{"Timestamp":1668442242840943000,"EventType":"test","NodeID":1,"StartedAt":1668442242644228000,"LastUp":1668442242644228000}`,
-                  uniqueID: "\\\x4ce0d9e74bd5480ab1d9e6f98cc2f483",
-                },
-              ]),
-            ),
-          };
-        },
-      });
+      stubSqlApiCall<clusterUiApi.EventColumns>(
+        clusterUiApi.buildEventsSQLRequest(req),
+        [
+          {
+            rows: [
+              {
+                eventType: "test",
+                timestamp: "2016-01-25T10:10:10.555555",
+                reportingID: "1",
+                info: `{"Timestamp":1668442242840943000,"EventType":"test","NodeID":1,"StartedAt":1668442242644228000,"LastUp":1668442242644228000}`,
+                uniqueID: "\\\x4ce0d9e74bd5480ab1d9e6f98cc2f483",
+              },
+            ],
+          },
+        ],
+      );
 
       return clusterUiApi.getNonRedactedEvents(req).then(result => {
         expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);

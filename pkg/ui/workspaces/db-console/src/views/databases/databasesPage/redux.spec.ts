@@ -103,7 +103,22 @@ describe("Databases Page", function () {
   });
 
   it("makes a row for each database", async function () {
-    fakeApi.stubDatabases(["system", "test"]);
+    // Mock out the fetch query to /databases
+    fakeApi.stubSqlApiCall<clusterUiApi.DatabasesColumns>(
+      clusterUiApi.databasesRequest,
+      [
+        {
+          rows: [
+            {
+              database_name: "system",
+            },
+            {
+              database_name: "test",
+            },
+          ],
+        },
+      ],
+    );
     fakeApi.stubClusterSettings({
       key_values: {
         "sql.stats.automatic_collection.enabled": { value: "true" },
@@ -184,7 +199,19 @@ describe("Databases Page", function () {
       nodes: nodes,
     });
 
-    fakeApi.stubDatabases(["test"], 1);
+    // Mock out the fetch query to /databases
+    fakeApi.stubSqlApiCall<clusterUiApi.DatabasesColumns>(
+      clusterUiApi.databasesRequest,
+      [
+        {
+          rows: [
+            {
+              database_name: "test",
+            },
+          ],
+        },
+      ],
+    );
 
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
       clusterUiApi.createDatabaseDetailsReq("test"),

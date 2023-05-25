@@ -32,6 +32,7 @@ import { BreadcrumbItem } from "../breadcrumbs";
 import { RecommendationType as RecType } from "./indexDetailsPage";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { selectTimeScale } from "src/store/utils/selectors";
+import {createManagedServiceBreadcrumbs} from "../databases/util";
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
 export const selectIndexDetails = createSelector(
@@ -111,28 +112,3 @@ export const selectIndexDetails = createSelector(
     };
   },
 );
-
-// Note: if the managed-service routes to the index detail or the previous
-// database pages change, the breadcrumbs displayed here need to be updated.
-function createManagedServiceBreadcrumbs(
-  database: string,
-  schema: string,
-  table: string,
-  index: string,
-): BreadcrumbItem[] {
-  return [
-    { link: "/databases", name: "Databases" },
-    {
-      link: `/databases/${database}`,
-      name: "Tables",
-    },
-    {
-      link: `/databases/${database}/${schema}/${table}`,
-      name: `Table: ${table}`,
-    },
-    {
-      link: `/databases/${database}/${schema}/${table}/${index}`,
-      name: `Index: ${index}`,
-    },
-  ];
-}

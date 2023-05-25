@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { useContext } from "react";
 import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
@@ -28,7 +28,7 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import * as format from "src/util/format";
-import { EncodeDatabaseUri } from "src/util/format";
+import { EncodeDatabaseUri, EncodeUriName } from "src/util/format";
 
 import styles from "./databasesPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -51,6 +51,7 @@ import { UIConfigState } from "src/store";
 import { TableStatistics } from "../tableStatistics";
 import { DatabaseDetailsPageProps } from "../databaseDetailsPage";
 import moment from "moment-timezone";
+import { CockroachCloudContext } from "../contexts";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -314,7 +315,7 @@ export class DatabasesPage extends React.Component<
     }
 
     filteredDbs.forEach(database => {
-      if (database.lastError !== undefined) {
+      if (database.lastError) {
         lastDetailsError = database.lastError;
       }
 
@@ -325,7 +326,11 @@ export class DatabasesPage extends React.Component<
         this.setState({ lastDetailsError: lastDetailsError });
       }
 
-      if (!database.loaded && !database.loading && !database.lastError) {
+      if (
+        !database.loaded &&
+        !database.loading &&
+        database.lastError === undefined
+      ) {
         this.props.refreshDatabaseDetails(database.name);
         return;
       }
@@ -535,7 +540,6 @@ export class DatabasesPage extends React.Component<
     }
     return cell;
   };
-
   private columns: ColumnDescriptor<DatabasesPageDataDatabase>[] = [
     {
       title: (
@@ -543,15 +547,20 @@ export class DatabasesPage extends React.Component<
           Databases
         </Tooltip>
       ),
-      cell: database => (
-        <Link
-          to={EncodeDatabaseUri(database.name)}
-          className={cx("icon__container")}
-        >
-          <StackIcon className={cx("icon--s", "icon--primary")} />
-          {database.name}
-        </Link>
-      ),
+      cell: database => {
+        const isCockroachCloud = useContext(CockroachCloudContext);
+        const linkURL = isCockroachCloud
+          ? `${location.pathname}/${database.name}`
+          : EncodeDatabaseUri(database.name);
+        console.log("isCockroachCloud!", isCockroachCloud);
+        console.log("link URL", linkURL);
+        return (
+          <Link to={linkURL} className={cx("icon__container")}>
+            <StackIcon className={cx("icon--s", "icon--primary")} />
+            {database.name}
+          </Link>
+        );
+      },
       sort: database => database.name,
       className: cx("databases-table__col-name"),
       name: "name",
@@ -679,7 +688,7 @@ export class DatabasesPage extends React.Component<
     return (
       <div>
         <div className={baseHeadingClasses.wrapper}>
-          <h3 className={baseHeadingClasses.tableName}>Databases</h3>
+          <h3 className={baseHeadingClasses.tableName}>Databasesss</h3>
           {this.props.automaticStatsCollectionEnabled != null && (
             <BooleanSetting
               text={"Auto stats collection"}
