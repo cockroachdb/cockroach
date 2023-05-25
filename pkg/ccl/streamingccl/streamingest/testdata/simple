@@ -75,7 +75,7 @@ cutover ts=$ts
 start-replicated-tenant
 ----
 
-compare-tenant-fingerprints from=$start to=$ts with_revisions
+compare-tenant-fingerprints from=$start to=$ts with_revisions table_fingerprints
 ----
 
 compare-replication-results
