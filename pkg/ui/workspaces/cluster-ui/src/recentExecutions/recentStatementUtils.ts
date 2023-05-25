@@ -150,7 +150,8 @@ export function getRecentExecutionsFromSessions(
             ? session.last_active_query
             : null),
         statementID: activeStmt?.statementID,
-        status: "Executing" as ExecutionStatus,
+        status:
+          activeStmt != null ? ExecutionStatus.Executing : ExecutionStatus.Idle,
         start: TimestampToMoment(activeTxn.start),
         elapsedTime: DurationToMomentDuration(activeTxn.elapsed_time),
         application: session.application_name,
