@@ -254,23 +254,6 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
     <LineGraph
-      title="Circuit Breaker Tripped Events"
-      sources={storeSources}
-      tooltip={CircuitBreakerTrippedEventsTooltip}
-    >
-      <Axis label="events">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.store.kv.replica_circuit_breaker.num_tripped_events"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
-            nonNegativeRate
-          />
-        ))}
-      </Axis>
-    </LineGraph>,
-    <LineGraph
       title="Paused Followers"
       sources={storeSources}
       tooltip={PausedFollowersTooltip}
