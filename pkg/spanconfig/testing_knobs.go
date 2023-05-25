@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
@@ -130,6 +131,20 @@ type TestingKnobs struct {
 	// StoreInternConfigsInDryRuns, if set, will intern span configs even when
 	// applying mutations in dry run mode.
 	StoreInternConfigsInDryRuns bool
+
+	// PTSCleanup stores knobs related to cleaning up orphaned protected
+	// timestamps.
+	PTSCleanup struct {
+		// ForcePTSRecordCleanup forces the reconciler to clean up orphaned
+		// PTS records each time it runs.
+		ForcePTSRecordCleanup bool
+
+		// RecordOrphanedPTSRecord is called for each orphaned PTS record. If
+		// the record was deleted, the deleted param will be true and the
+		// updated timestamp will be 0. If not, then the updated timestamp will
+		// be the new timestamp of the PTS record nonzero.
+		RecordOrphanedPTSRecord func(record ptpb.Record, deleted bool, updated hlc.Timestamp)
+	}
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

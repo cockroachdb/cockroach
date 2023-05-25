@@ -14,9 +14,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
@@ -477,6 +481,8 @@ type incrementalReconciler struct {
 	storeWithKVContents  *spanconfigstore.Store
 	session              sqlliveness.Session
 
+	lastStalePTSRecord hlc.Timestamp
+
 	execCfg *sql.ExecutorConfig
 	codec   keys.SQLCodec
 	knobs   *spanconfig.TestingKnobs
@@ -493,6 +499,10 @@ func (r *incrementalReconciler) reconcile(
 	// Watch for incremental updates, applying KV as things change.
 	return r.sqlWatcher.WatchForSQLUpdates(ctx, startTS,
 		func(ctx context.Context, sqlUpdates []spanconfig.SQLUpdate, checkpoint hlc.Timestamp) error {
+			if err := r.checkForOrphanedPTSRecords(ctx, checkpoint); err != nil {
+				return err
+			}
+
 			if len(sqlUpdates) == 0 {
 				return callback(checkpoint) // nothing to do; propagate the checkpoint
 			}
@@ -581,6 +591,133 @@ func (r *incrementalReconciler) reconcile(
 			return callback(checkpoint)
 		},
 	)
+}
+
+var cleanupOrphanedPTSRecordsInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.protected_timestamp.cleanup_orphans_interval",
+	"this is the minimum interval which the reconciler must wait before checking for orphaned PTS"+
+		" records. setting a value of 0 disabled checking for orphaned PTS records",
+	12*time.Hour,
+	settings.NonNegativeDuration,
+)
+
+var orphanedPTSRecordStepUp = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.protected_timestamp.orphaned_pts_stepup",
+	"if an orphaned PTS record is older than the current PTS record by this amount, then, instead of being"+
+		" deleted, its timestamp is stepped up by this amount",
+	4*24*time.Hour,
+	settings.PositiveDuration,
+)
+
+var jobTypesEnrolledInStalePTSManagement = map[jobspb.Type]struct{}{
+	// NB: changefeed jobs have very specific semantics related to PTS records
+	// which allow for the automated cleanup of PTS records below. Give the
+	// methods in which this map is used a read before adding a new job
+	// type.
+	jobspb.TypeChangefeed: {},
+}
+
+// checkForOrphanedPTSRecords attempts to find PTS records owned by jobs that
+// are orphaned (the job has lost a reference to the record). An example of this
+// situation is outlined here
+// https://github.com/cockroachdb/cockroach/issues/103855.
+//
+// To check if PTS records are orphaned, this method simply checks if there are
+// multiple PTS records owned by a job. If so, any PTS record except for the one
+// with the most recent timestamp is considered orphaned. To make sure that we
+// don't uncork a large GC backlog when releasing very old PTS records, we use
+// the setting orphanedPTSRecordStepUp to incrementally move PTS record
+// timestamps up.
+func (r *incrementalReconciler) checkForOrphanedPTSRecords(
+	ctx context.Context, currentCheckpoint hlc.Timestamp,
+) error {
+	return r.execCfg.InternalDB.Txn(ctx, func(
+		ctx context.Context, txn isql.Txn,
+	) error {
+		minimumCheckInterval := cleanupOrphanedPTSRecordsInterval.Get(&r.execCfg.Settings.SV)
+		if !(r.knobs != nil && r.knobs.PTSCleanup.ForcePTSRecordCleanup) && (minimumCheckInterval == 0*time.Second ||
+			currentCheckpoint.Less(r.lastStalePTSRecord.AddDuration(minimumCheckInterval))) {
+			return nil
+		}
+		r.lastStalePTSRecord = currentCheckpoint
+
+		ptsStore := r.execCfg.ProtectedTimestampProvider.WithTxn(txn)
+		ptsState, err := ptsStore.GetState(ctx)
+		if err != nil {
+			return errors.Wrap(err, "failed to get protected timestamp state")
+		}
+
+		if ptsState.NumRecords == 0 {
+			return nil
+		}
+
+		stepUp := orphanedPTSRecordStepUp.Get(&r.execCfg.Settings.SV)
+
+		releaseRecord := func(staleRecord ptpb.Record, activeRecord ptpb.Record) error {
+			if newTS := staleRecord.Timestamp.Add(stepUp.Nanoseconds(), 0); newTS.Less(activeRecord.Timestamp) {
+				// Advance the timestamp of the orphaned PTS record closer to the active record timestamp.
+				if err := ptsStore.UpdateTimestamp(ctx, staleRecord.ID.GetUUID(), newTS); err != nil {
+					return err
+				}
+				if r.knobs != nil && r.knobs.PTSCleanup.RecordOrphanedPTSRecord != nil {
+					r.knobs.PTSCleanup.RecordOrphanedPTSRecord(staleRecord, false, newTS)
+				}
+			} else {
+				// Delete the orphaned PTS record altogether.
+				if err := ptsStore.Release(ctx, staleRecord.ID.GetUUID()); err != nil {
+					return err
+				}
+				if r.knobs != nil && r.knobs.PTSCleanup.RecordOrphanedPTSRecord != nil {
+					r.knobs.PTSCleanup.RecordOrphanedPTSRecord(staleRecord, true, hlc.Timestamp{})
+				}
+			}
+			return nil
+		}
+
+		// Maps a job to its PTS records, with the most recent record at the
+		// front.
+		recordsByID := map[int64][]ptpb.Record{}
+		for _, rec := range ptsState.Records {
+			if rec.MetaType != jobsprotectedts.GetMetaType(jobsprotectedts.Jobs) {
+				continue // not a job.
+			}
+
+			id, err := jobsprotectedts.DecodeID(rec.Meta)
+			if err != nil {
+				return err
+			}
+
+			job, err := r.execCfg.JobRegistry.LoadJob(ctx, jobspb.JobID(id))
+			if err != nil {
+				return err
+			}
+
+			payload := job.Payload()
+			if _, shouldManagePTS := jobTypesEnrolledInStalePTSManagement[(&payload).Type()]; !shouldManagePTS {
+				continue
+			}
+
+			recordsByID[id] = append(recordsByID[id], rec)
+			// Ensure the most up-to-date record is in the front.
+			if recordsByID[id][0].Timestamp.Less(rec.Timestamp) {
+				tmp := recordsByID[id][0]
+				recordsByID[id][0] = recordsByID[id][len(recordsByID[id])-1]
+				recordsByID[id][len(recordsByID[id])-1] = tmp
+			}
+		}
+
+		// Release records except the most up-to-date recent one.
+		for _, records := range recordsByID {
+			for recIdx := 1; recIdx < len(records); recIdx++ {
+				if err := releaseRecord(records[recIdx], records[0]); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 // filterForMissingProtectedTimestampSystemTargets filters the set of updates

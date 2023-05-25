@@ -7,9 +7,13 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigsqltranslator",
