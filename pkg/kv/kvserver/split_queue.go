@@ -258,6 +258,7 @@ func (sq *splitQueue) processAttempt(
 			desc,
 			false, /* delayable */
 			"span config",
+			false, /* findFirstSafeSplitKey */
 		); err != nil {
 			return false, errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
 		}
@@ -277,6 +278,7 @@ func (sq *splitQueue) processAttempt(
 			desc,
 			false, /* delayable */
 			fmt.Sprintf("%s above threshold size %s", humanizeutil.IBytes(size), humanizeutil.IBytes(maxBytes)),
+			false, /* findFirstSafeSplitKey */
 		); err != nil {
 			return false, err
 		}
@@ -312,6 +314,10 @@ func (sq *splitQueue) processAttempt(
 		if expDelay := kvserverbase.SplitByLoadMergeDelay.Get(&sq.store.cfg.Settings.SV); expDelay > 0 {
 			expTime = sq.store.Clock().Now().Add(expDelay.Nanoseconds(), 0)
 		}
+		// The splitByLoadKey has no guarantee of being a safe key to split at (not
+		// between SQL rows). To sanitize the split point, pass
+		// findFirstSafeSplitKey set to true, so that the first key after the
+		// suggested split point which is safe to split at is used.
 		if _, pErr := r.adminSplitWithDescriptor(
 			ctx,
 			kvpb.AdminSplitRequest{
@@ -324,6 +330,7 @@ func (sq *splitQueue) processAttempt(
 			desc,
 			false, /* delayable */
 			reason,
+			true, /* findFirstSafeSplitKey */
 		); pErr != nil {
 			return false, errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
 		}

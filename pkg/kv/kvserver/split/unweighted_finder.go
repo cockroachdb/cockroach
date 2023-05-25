@@ -12,12 +12,12 @@ package split
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/redact"
 )
 
 // Load-based splitting.
@@ -57,6 +57,16 @@ const (
 type sample struct {
 	key                    roachpb.Key
 	left, right, contained int
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s sample) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%s(l=%d r=%d c=%d)",
+		s.key, s.left, s.right, s.contained)
+}
+
+func (s sample) String() string {
+	return redact.StringWithoutMarkers(s)
 }
 
 // UnweightedFinder is a structure that is used to determine the split point
@@ -184,15 +194,16 @@ func (f *UnweightedFinder) noSplitKeyCause() (
 }
 
 // NoSplitKeyCauseLogMsg implements the LoadBasedSplitter interface.
-func (f *UnweightedFinder) NoSplitKeyCauseLogMsg() string {
+func (f *UnweightedFinder) NoSplitKeyCauseLogMsg() redact.RedactableString {
 	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := f.noSplitKeyCause()
 	if insufficientCounters == splitKeySampleSize {
 		return ""
 	}
-	noSplitKeyCauseLogMsg := fmt.Sprintf(
-		"No split key found: insufficient counters = %d, imbalance = %d, too many contained = %d, imbalance and too many contained = %d",
-		insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained)
-	return noSplitKeyCauseLogMsg
+	return redact.Sprintf(
+		"no split key found: insufficient counters = %d, imbalance = %d, "+
+			"too many contained = %d, imbalance and too many contained = %d",
+		insufficientCounters, imbalance, tooManyContained,
+		imbalanceAndTooManyContained)
 }
 
 // PopularKeyFrequency implements the LoadBasedSplitter interface.
@@ -215,4 +226,14 @@ func (f *UnweightedFinder) PopularKeyFrequency() float64 {
 	}
 
 	return float64(popularKeyCount) / float64(splitKeySampleSize)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (f *UnweightedFinder) SafeFormat(w redact.SafePrinter, r rune) {
+	w.Printf("key=%v start=%v count=%d samples=%v",
+		f.Key(), f.startTime, f.count, f.samples)
+}
+
+func (f *UnweightedFinder) String() string {
+	return redact.StringWithoutMarkers(f)
 }

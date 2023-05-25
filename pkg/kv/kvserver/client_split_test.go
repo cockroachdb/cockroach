@@ -3685,3 +3685,249 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	repl = store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, descKey, repl.Desc().StartKey.AsRawKey())
 }
+
+// TestLBSplitUnsafeKeys tests that load based splits do not split between table
+// rows, even when the suggested load based split key is itself between a table row.
+func TestLBSplitUnsafeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	const indexID = 1
+
+	// The test is expensive and prone to timing out under race.
+	skip.UnderRace(t)
+	skip.UnderStressRace(t)
+	skip.UnderDeadlock(t)
+
+	makeTestKey := func(tableID uint32, suffix []byte) roachpb.Key {
+		tableKey := keys.MakeTableIDIndexID(nil, tableID, indexID)
+		return append(tableKey, suffix...)
+	}
+
+	es := func(vals ...int64) []byte {
+		k := []byte{}
+		for _, v := range vals {
+			k = encoding.EncodeVarintAscending(k, v)
+		}
+		return k
+	}
+
+	fk := func(k []byte, famID uint32) []byte {
+		return keys.MakeFamilyKey(k, famID)
+	}
+
+	testCases := []struct {
+		splitKey     roachpb.Key
+		existingKeys []int
+		expSplitKey  roachpb.Key
+		expErrStr    string
+	}{
+		// We don't know the table ID here, we append the splitKey to the
+		// table/index prefix. e.g. /1 will be /Table/table_id/index_id/1.
+		{
+			// /1 -> /2
+			splitKey:     es(1),
+			existingKeys: []int{1, 2, 3},
+			expSplitKey:  es(2),
+		},
+		{
+			// /1/0 -> /2
+			splitKey:     fk(es(1), 0),
+			existingKeys: []int{1, 2, 3},
+			expSplitKey:  es(2),
+		},
+		{
+			// /1/3 -> /2
+			splitKey:     fk(es(1), 3),
+			existingKeys: []int{1, 2, 3},
+			expSplitKey:  es(2),
+		},
+		{
+			// /1/0/0 -> /2
+			splitKey:     roachpb.Key(fk(es(1), 0)).Next(),
+			existingKeys: []int{1, 2, 3},
+			expSplitKey:  es(2),
+		},
+		{
+			// /1/3/0 -> /2
+			splitKey:     roachpb.Key(fk(es(1), 3)).Next(),
+			existingKeys: []int{1, 2, 3},
+			expSplitKey:  es(2),
+		},
+		{
+			// /1/0/0/0 -> /2
+			splitKey:     roachpb.Key(fk(es(1), 0)).Next().Next(),
+			existingKeys: []int{1, 2, 3},
+			expSplitKey:  es(2),
+		},
+		{
+			// /1/3/0/0 -> /2
+			splitKey:     roachpb.Key(fk(es(1), 3)).Next().Next(),
+			existingKeys: []int{1, 2, 3},
+			expSplitKey:  es(2),
+		},
+		{
+			// /0 -> /3
+			// We will not split at the first row in a table, so expect the split at
+			// /3 intead of /2.
+			splitKey:     es(0),
+			existingKeys: []int{2, 3},
+			expSplitKey:  es(3),
+		},
+		{
+			// /2 -> /3
+			// Same case as above, despite the key being safe, the split would create
+			// an empty LHS.
+			splitKey:     es(2),
+			existingKeys: []int{2, 3},
+			expSplitKey:  es(3),
+		},
+		{
+			// /1 -> error
+			// There are no rows to split on.
+			splitKey:     es(1),
+			existingKeys: []int{},
+			expErrStr:    "could not find valid split key",
+		},
+		{
+			// /1 -> error
+			// There is only one row to split on, the range should not be split.
+			splitKey:     es(1),
+			existingKeys: []int{2},
+			expErrStr:    "could not find valid split key",
+		},
+		{
+			// /1/0 -> error
+			splitKey:     fk(es(1), 0),
+			existingKeys: []int{2},
+			expErrStr:    "could not find valid split key",
+		},
+		{
+			// /1/3 -> error
+			splitKey:     fk(es(1), 3),
+			existingKeys: []int{2},
+			expErrStr:    "could not find valid split key",
+		},
+		{
+			// /1/3/0/0 -> error
+			splitKey:     roachpb.Key(fk(es(1), 0)).Next().Next(),
+			existingKeys: []int{2},
+			expErrStr:    "could not find valid split key",
+		},
+		{
+			// /2 -> /2
+			splitKey:     es(2),
+			existingKeys: []int{1, 2},
+			expSplitKey:  es(2),
+		},
+	}
+
+	for _, tc := range testCases {
+		var expectStr string
+		if tc.expErrStr != "" {
+			expectStr = tc.expErrStr
+		} else {
+			expectStr = makeTestKey(1, tc.expSplitKey).String()
+		}
+		t.Run(fmt.Sprintf("%s%v -> %s", makeTestKey(1, tc.splitKey), tc.existingKeys, expectStr), func(t *testing.T) {
+			var targetRange atomic.Int32
+			var splitKeyOverride atomic.Value
+			splitKeyOverride.Store(roachpb.Key{})
+
+			// Mock the load based splitter key finding method. This function will be
+			// checked in splitQueue.shouldQueue() and splitQueue.process via
+			// replica.loadSplitKey. When a key is returned, the split queue calls
+			// replica.adminSplitWithDescriptor(...findFirstSafeSplitKey=true).
+			overrideLBSplitFn := func(rangeID roachpb.RangeID) (splitKey roachpb.Key, useSplitKey bool) {
+				if rangeID == roachpb.RangeID(targetRange.Load()) {
+					override := splitKeyOverride.Load()
+					// It is possible that the split queue is checking the range before
+					// we manually enqueued it.
+					if override == nil {
+						return nil, false
+					}
+					overrideKey, ok := override.(roachpb.Key)
+					require.Truef(t, ok, "stored value not key %+v", override)
+
+					if len(overrideKey) == 0 {
+						return nil, false
+					}
+
+					return override.(roachpb.Key), true
+				}
+				return nil, false
+			}
+
+			serv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+				DisableSpanConfigs: true,
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						LoadBasedSplittingOverrideKey: overrideLBSplitFn,
+						DisableMergeQueue:             true,
+					},
+				},
+			})
+			s := serv.(*server.TestServer)
+			defer s.Stopper().Stop(ctx)
+			tdb := sqlutils.MakeSQLRunner(sqlDB)
+			store, err := s.Stores().GetStore(1)
+			require.NoError(t, err)
+
+			// We want to exercise the case where there are column family keys.
+			// Create a simple table and insert the existing keys.
+			_ = tdb.Exec(t,
+				"CREATE TABLE t (k INT PRIMARY KEY, "+
+					"t0 INT, t1 INT, t2 INT, t3 INT, "+
+					"FAMILY (k), FAMILY (t0), FAMILY (t1), FAMILY (t2), FAMILY (t3))")
+			for _, k := range tc.existingKeys {
+				_ = tdb.Exec(t, fmt.Sprintf("INSERT INTO t VALUES (%d, %d, %d, %d, %d)",
+					k, k, k, k, k))
+			}
+
+			// Force a table scan to resolve descriptors.
+			var keyCount int
+			tdb.QueryRow(t, "SELECT count(k) FROM t").Scan(&keyCount)
+			require.Equal(t, len(tc.existingKeys), keyCount)
+			var tableID uint32
+			tdb.QueryRow(t, "SELECT table_id FROM crdb_internal.leases where name = 't'").Scan(&tableID)
+
+			// Split off the table range for the test, otherwise the range may
+			// contain multiple tables with existing values.
+			splitArgs := adminSplitArgs(keys.SystemSQLCodec.TablePrefix(tableID))
+			_, pErr := kv.SendWrapped(ctx, store.TestSender(), splitArgs)
+			require.Nil(t, pErr)
+
+			var rangeID roachpb.RangeID
+			tdb.QueryRow(t, "SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID)
+			targetRange.Store(int32(rangeID))
+			repl, err := store.GetReplica(rangeID)
+			require.NoError(t, err)
+
+			// Keep the previous end key around, we will use this to assert that no
+			// split has occurred when expecting an error.
+			prevEndKey := repl.Desc().EndKey.AsRawKey()
+			splitKey := makeTestKey(tableID, tc.splitKey)
+
+			// Update the split key override so that the split queue will enqueue and
+			// process the range. Remove it afterwards to avoid retrying the LHS.
+			splitKeyOverride.Store(splitKey)
+			_, processErr, enqueueErr := store.Enqueue(ctx, "split", repl, false /* shouldSkipQueue */, false /* async */)
+			splitKeyOverride.Store(roachpb.Key{})
+			require.NoError(t, enqueueErr)
+
+			endKey := repl.Desc().EndKey.AsRawKey()
+			if tc.expErrStr != "" {
+				// We expect this split not to process, assert that the expected error
+				// matches the returned error and the range has the same end key.
+				require.ErrorContainsf(t, processErr, tc.expErrStr,
+					"end key %s, previous end key %s", endKey, prevEndKey)
+				require.Equal(t, prevEndKey, endKey)
+			} else {
+				// Otherwise, assert that the new range end key matches the expected
+				// end key.
+				require.NoError(t, processErr)
+				require.Equal(t, makeTestKey(tableID, tc.expSplitKey), endKey)
+			}
+		})
+	}
+}
