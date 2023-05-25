@@ -657,13 +657,6 @@ func (h *hasher) HashRelExpr(val RelExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
-func (h *hasher) HashRelListExpr(val RelListExpr) {
-	for i := range val {
-		h.HashRelExpr(val[i].RelExpr)
-		h.HashPhysProps(val[i].PhysProps)
-	}
-}
-
 func (h *hasher) HashScalarExpr(val opt.ScalarExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
@@ -762,6 +755,10 @@ func (h *hasher) HashVolatility(val volatility.V) {
 }
 
 func (h *hasher) HashLiteralRows(val *opt.LiteralRows) {
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+}
+
+func (h *hasher) HashUDFDefinition(val *UDFDefinition) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
 
@@ -1076,19 +1073,6 @@ func (h *hasher) IsRelExprEqual(l, r RelExpr) bool {
 	return l == r
 }
 
-func (h *hasher) IsRelListExprEqual(l, r RelListExpr) bool {
-	if len(l) != len(r) {
-		return false
-	}
-	for i := range l {
-		if !h.IsRelExprEqual(l[i].RelExpr, r[i].RelExpr) ||
-			!h.IsPhysPropsEqual(l[i].PhysProps, r[i].PhysProps) {
-			return false
-		}
-	}
-	return true
-}
-
 func (h *hasher) IsScalarExprEqual(l, r opt.ScalarExpr) bool {
 	return l == r
 }
@@ -1232,6 +1216,10 @@ func (h *hasher) IsVolatilityEqual(l, r volatility.V) bool {
 }
 
 func (h *hasher) IsLiteralRowsEqual(l, r *opt.LiteralRows) bool {
+	return l == r
+}
+
+func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 	return l == r
 }
 

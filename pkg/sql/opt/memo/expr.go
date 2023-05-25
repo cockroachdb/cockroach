@@ -101,16 +101,6 @@ type RelExpr interface {
 	setNext(e RelExpr)
 }
 
-// RelRequiredPropsExpr encapsulates a relational expression and required
-// physical props that must be used when optimizing the relational expression.
-type RelRequiredPropsExpr struct {
-	RelExpr
-	PhysProps *physical.Required
-}
-
-// RelListExpr is an ordered list of relational expressions.
-type RelListExpr []RelRequiredPropsExpr
-
 // ScalarPropsExpr is implemented by scalar expressions which cache scalar
 // properties, like FiltersExpr and ProjectionsExpr. These expressions are also
 // tagged with the ScalarProps tag.
@@ -671,6 +661,29 @@ func (sj *SemiJoinExpr) setMultiplicity(multiplicity props.JoinMultiplicity) {
 
 func (sj *SemiJoinExpr) getMultiplicity() props.JoinMultiplicity {
 	return sj.multiplicity
+}
+
+// UDFDefinition stores details about the SQL body of a UDF. It is stored
+// separately from the call-site to allow different invocations of the same UDF
+// to point to the same definition; this is necessary for recursive UDFs.
+type UDFDefinition struct {
+	// Body contains a relational expression for each statement in the function
+	// body.
+	Body []RelExpr
+
+	// BodyProps contains the physical properties with which each body statement
+	// should be optimized if it is rebuilt.
+	BodyProps []*physical.Required
+
+	// Params is the list of columns representing parameters of the function. The
+	// i-th column in the list corresponds to the i-th parameter of the function.
+	// During execution of the UDF, these columns are replaced with the arguments
+	// of the function invocation.
+	Params opt.ColList
+
+	// IsRecursive indicates whether the UDF recursively calls itself even if it
+	// is mutually recursive with another UDF.
+	IsRecursive bool
 }
 
 // WindowFrame denotes the definition of a window frame for an individual

@@ -1231,31 +1231,25 @@ define NthValue {
     Nth ScalarExpr
 }
 
-# UDF invokes a user-defined function. The UDFPrivate field contains details
-# about the UDF including the name of the function, the statements in the
-# function body, and a pointer to its type.
+# UDFCall invokes a user-defined function. The UDFPrivate field contains details
+# about the UDF including the name of the function and its return type, as well
+# as a pointer to the definition of the UDF.
 [Scalar]
-define UDF {
+define UDFCall {
     # Args contains the scalar expressions given as arguments to the UDF
     # invocation.
     Args ScalarListExpr
-    _ UDFPrivate
+    _ UDFCallPrivate
 }
 
 [Private]
-define UDFPrivate {
+define UDFCallPrivate {
     # Name is the name of the function.
     Name string
 
-    # Body contains a relational expression for each statement in the function
-    # body.
-    Body RelListExpr
-
-    # Params is the list of columns representing parameters of the function. The
-    # i-th column in the list corresponds to the i-th parameter of the function.
-    # During execution of the UDF, these columns are replaced with the arguments
-    # of the function invocation.
-    Params ColList
+    # Def points to the UDF SQL body. It may be unset if this is a recursive
+    # call during construction of a recursive UDF.
+    Def UDFDefinition
 
     # Typ is the return type of the function.
     Typ Type

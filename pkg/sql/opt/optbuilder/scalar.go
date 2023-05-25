@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -688,7 +689,8 @@ func (b *Builder) buildUDF(
 	}
 
 	// Build an expression for each statement in the function body.
-	rels := make(memo.RelListExpr, len(stmts))
+	body := make([]memo.RelExpr, len(stmts))
+	bodyProps := make([]*physical.Required, len(stmts))
 	isSetReturning := o.Class == tree.GeneratorClass
 	// TODO(mgartner): Once other UDFs can be referenced from within a UDF, a
 	// boolean will not be sufficient to track whether or not we are in a UDF.
@@ -809,20 +811,22 @@ func (b *Builder) buildUDF(
 				}
 			}
 		}
-
-		rels[i] = memo.RelRequiredPropsExpr{
-			RelExpr:   expr,
-			PhysProps: physProps,
-		}
+		body[i] = expr
+		bodyProps[i] = physProps
 	}
 	b.insideUDF = false
 
-	out = b.factory.ConstructUDF(
+	udfDef := &memo.UDFDefinition{
+		Body:      body,
+		BodyProps: bodyProps,
+		Params:    params,
+	}
+
+	out = b.factory.ConstructUDFCall(
 		args,
-		&memo.UDFPrivate{
+		&memo.UDFCallPrivate{
 			Name:               def.Name,
-			Params:             params,
-			Body:               rels,
+			Def:                udfDef,
 			Typ:                f.ResolvedType(),
 			SetReturning:       isSetReturning,
 			Volatility:         o.Volatility,
