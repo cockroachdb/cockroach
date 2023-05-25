@@ -895,7 +895,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// leaseholders, and preventing processor scheduling on them can cause a
 		// performance cliff for e.g. table reads that then hit the network.
 		isAvailable = func(sqlInstanceID base.SQLInstanceID) bool {
-			return nodeLiveness.IsAvailable(roachpb.NodeID(sqlInstanceID))
+			return nodeLiveness.GetNodeVitalityFromCache(roachpb.NodeID(sqlInstanceID)).IsAlive()
 		}
 	} else {
 		// We're on a SQL tenant, so this is the only node DistSQL will ever
@@ -915,15 +915,15 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// pass it directly instead of making a new closure here?
 		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
 			var ns []roachpb.NodeID
-			ls, err := nodeLiveness.GetLivenessesFromKV(ctx)
+			ls, err := nodeLiveness.ScanNodeVitalityFromKV(ctx)
 			if err != nil {
 				return nil, err
 			}
 			for _, l := range ls {
-				if l.Membership.Decommissioned() {
+				if l.IsDecommissioned() {
 					continue
 				}
-				ns = append(ns, l.NodeID)
+				ns = append(ns, l.Liveness.NodeID)
 			}
 			return ns, nil
 		}
