@@ -623,7 +623,11 @@ AS OF SYSTEM TIME '%s'`, startTimeDecimal, aost)
 }
 
 // checkParticipatingNodes asserts that multiple nodes in the source and dest cluster are
-// participating in the replication stream.
+// participating in the replication stream, if the test is running on multi node clusters.
+//
+// Note: this isn't a strict requirement of all physical replication streams,
+// rather we check this here because we expect a distributed physical
+// replication stream in a healthy pair of multinode clusters.
 func (rd *replicationDriver) checkParticipatingNodes(ingestionJobId int) {
 	progress := getJobProgress(rd.t, rd.setup.dst.sysSQL, jobspb.JobID(ingestionJobId)).GetStreamIngest()
 	if rd.rs.srcNodes > 1 {

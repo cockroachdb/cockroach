@@ -40,7 +40,8 @@ var replanThreshold = settings.RegisterFloatSetting(
 	"stream_replication.replan_flow_threshold",
 	"fraction of nodes in the producer or consumer job that would need to change to refresh the"+
 		" physical execution plan. If set to 0, the physical plan will not automatically refresh.",
-	0.1,
+	0,
+	settings.NonNegativeFloatWithMaximum(1),
 )
 
 var replanFrequency = settings.RegisterDurationSetting(
@@ -94,7 +95,7 @@ func startDistIngestion(
 	log.Infof(ctx, "producer job %d is active, planning DistSQL flow", streamID)
 	dsp := execCtx.DistSQLPlanner()
 
-	planner := planner{}
+	planner := replicationFlowPlanner{}
 
 	initialPlan, planCtx, err := planner.makePlan(
 		execCtx,
@@ -113,7 +114,8 @@ func startDistIngestion(
 	err = ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		// Persist the initial Stream Addresses to the jobs table before execution begins.
 		if !planner.containsInitialStreamAddresses() {
-			return errors.New(`attempted to persist an empty list of stream addresses`)
+			return jobs.MarkAsPermanentJobError(errors.AssertionFailedf(
+				"attempted to persist an empty list of stream addresses"))
 		}
 		md.Progress.GetStreamIngest().StreamAddresses = planner.initialStreamAddresses
 		ju.UpdateProgress(md.Progress)
@@ -139,9 +141,11 @@ func startDistIngestion(
 			ingestionJob.ID(),
 			details,
 			client,
-			previousHighWater,
-			progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest.Checkpoint,
-			initialScanTimestamp),
+			replicatedTime,
+			streamProgress.Checkpoint,
+			initialScanTimestamp,
+			dsp.GatewayID(),
+		),
 		execCtx,
 		replanOracle,
 		func() time.Duration { return replanFrequency.Get(execCtx.ExecCfg().SV()) },
@@ -175,22 +179,23 @@ func startDistIngestion(
 
 	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating,
 		"running the SQL flow for the stream ingestion job")
-	if err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner); errors.Is(err, sql.ErrPlanChanged) {
+	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner)
+	if errors.Is(err, sql.ErrPlanChanged) {
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
 	}
 	return err
 }
 
-type planner struct {
-	// initial contains the stream addresses found during the planner's first makePlan call.
+type replicationFlowPlanner struct {
+	// initial contains the stream addresses found during the replicationFlowPlanner's first makePlan call.
 	initialStreamAddresses []string
 }
 
-func (p *planner) containsInitialStreamAddresses() bool {
+func (p *replicationFlowPlanner) containsInitialStreamAddresses() bool {
 	return len(p.initialStreamAddresses) > 0
 }
 
-func (p *planner) makePlan(
+func (p *replicationFlowPlanner) makePlan(
 	execCtx sql.JobExecContext,
 	ingestionJobID jobspb.JobID,
 	details jobspb.StreamIngestionDetails,
@@ -257,7 +262,7 @@ func (p *planner) makePlan(
 			execinfrapb.PostProcessSpec{}, streamIngestionResultTypes)
 
 		for src, dst := range streamIngestionFrontierSpec.SubscribingSQLInstances {
-			log.Infof(ctx, "physical replication src-dst pair: %s:%d",
+			log.Infof(ctx, "physical replication src-dst pair candidate: %s:%d",
 				src, dst)
 		}
 

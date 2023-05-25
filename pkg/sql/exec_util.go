@@ -1782,6 +1782,8 @@ type StreamingTestingKnobs struct {
 	CutoverProgressShouldUpdate func() bool
 
 	DistSQLRetryPolicy *retry.Options
+
+	AfterRetryIteration func(err error)
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}

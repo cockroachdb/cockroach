@@ -732,18 +732,22 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 }
 
 // TestStreamingAutoReplan asserts that if a new node can participate in the
-// replication job, it will be added to the job during dist sql replanning.
+// replication job, it will trigger distSQL replanning.
 func TestStreamingAutoReplan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStress(t, `Fails in CI likely due to issues tackled in https://github.com/cockroachdb/cockroach/pull/102476`)
+
+	skip.UnderStressRace(t, "c2c multi node unit tests flake under stress race. see #106194")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	args.SrcNumNodes = 1
 	args.DestNumNodes = 1
 
-	// Track the number of unique addresses that were connected to
+	retryErrorChan := make(chan error)
+	turnOffReplanning := make(chan struct{})
+
+	// Track the number of unique addresses that we're connected to.
 	clientAddresses := make(map[string]struct{})
 	var addressesMu syncutil.Mutex
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
@@ -752,14 +756,20 @@ func TestStreamingAutoReplan(t *testing.T) {
 			defer addressesMu.Unlock()
 			clientAddresses[addr] = struct{}{}
 		},
+		AfterRetryIteration: func(err error) {
+			if err != nil {
+				retryErrorChan <- err
+				<-turnOffReplanning
+			}
+		},
 	}
 
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0.1)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
 
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*100)
-
-	// Begin the job a single source node.
+	// Begin the job on a single source node.
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -773,13 +783,27 @@ func TestStreamingAutoReplan(t *testing.T) {
 	require.NoError(t, c.SrcCluster.WaitForFullReplication())
 
 	replicationtestutils.CreateScatteredTable(t, c, 3)
+	require.NoError(t, c.SrcCluster.WaitForFullReplication())
+
+	// The ingestion job should eventually retry because it detects new nodes to add to the plan.
+	require.Error(t, <-retryErrorChan, sql.ErrPlanChanged)
+
+	// Prevent continuous replanning to reduce test runtime.
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Minute*10)
+	close(turnOffReplanning)
 
 	cutoverTime := c.DestSysServer.Clock().Now()
-	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
-	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
+	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
 
-	// After the node additions, multiple nodes should've been connected to.
-	require.Greater(t, len(clientAddresses), 1)
+	// After the node additions, multiple nodes should've been connected to. When
+	// this test is run under stress, however, dsp.PartitionSpans() on the src
+	// cluster does not always return multiple src nodes that can participate in
+	// the replication job, therefore, under stress, do not require that multiple
+	// nodes participate from the src cluster.
+	if !skip.Stress() {
+		require.Greater(t, len(clientAddresses), 1)
+	}
 }
 
 // TestTenantReplicationProtectedTimestampManagement tests the active protected
