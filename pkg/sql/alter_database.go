@@ -1162,6 +1162,9 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
+	*params.p.extendedEvalCtx.validateDbZoneConfig = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -1170,7 +1173,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 	); err != nil {
 		return err
 	}
@@ -1293,6 +1296,9 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
+	*params.extendedEvalCtx.validateDbZoneConfig = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -1301,7 +1307,7 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 	); err != nil {
 		return err
 	}
@@ -1838,8 +1844,9 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
 	*params.extendedEvalCtx.validateDbZoneConfig = true
-
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -1848,7 +1855,7 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 	); err != nil {
 		return err
 	}
@@ -1948,6 +1955,9 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		return err
 	}
 
+	// Validate the final zone config at the end of the transaction, since
+	// we will not be validating localities right now.
+	*params.extendedEvalCtx.validateDbZoneConfig = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
@@ -1956,7 +1966,7 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		params.p.txn,
 		params.p.execCfg,
 		params.p.Descriptors(),
-		true, /* validateLocalities */
+		false, /* validateLocalities */
 	); err != nil {
 		return err
 	}
