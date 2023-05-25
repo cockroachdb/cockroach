@@ -180,6 +180,30 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderCrossRegionBatchRequestBytes = metric.Metadata{
+		Name:        "distsender.batch_requests.cross_region",
+		Help:        `Total byte count of cross-region batch requests sent`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaDistSenderCrossRegionBatchResponseBytes = metric.Metadata{
+		Name:        "distsender.batch_responses.cross_region",
+		Help:        `Total byte count of cross-region batch responses received`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaDistSenderCrossZoneBatchRequestBytes = metric.Metadata{
+		Name:        "distsender.batch_requests.cross_zone",
+		Help:        `Total byte count of cross-zone batch requests sent`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaDistSenderCrossZoneBatchResponseBytes = metric.Metadata{
+		Name:        "distsender.batch_responses.cross_zone",
+		Help:        `Total byte count of cross-zone batch responses received`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 // CanSendToFollower is used by the DistSender to determine if it needs to look
@@ -241,44 +265,52 @@ func max(a, b int64) int64 {
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
-	BatchCount              *metric.Counter
-	PartialBatchCount       *metric.Counter
-	AsyncSentCount          *metric.Counter
-	AsyncThrottledCount     *metric.Counter
-	SentCount               *metric.Counter
-	LocalSentCount          *metric.Counter
-	NextReplicaErrCount     *metric.Counter
-	NotLeaseHolderErrCount  *metric.Counter
-	InLeaseTransferBackoffs *metric.Counter
-	RangeLookups            *metric.Counter
-	SlowRPCs                *metric.Gauge
-	RangefeedRanges         *metric.Gauge
-	RangefeedCatchupRanges  *metric.Gauge
-	RangefeedErrorCatchup   *metric.Counter
-	RangefeedRestartRanges  *metric.Counter
-	RangefeedRestartStuck   *metric.Counter
-	MethodCounts            [kvpb.NumMethods]*metric.Counter
-	ErrCounts               [kvpb.NumErrors]*metric.Counter
+	BatchCount                    *metric.Counter
+	PartialBatchCount             *metric.Counter
+	CrossRegionBatchRequestBytes  *metric.Counter
+	CrossRegionBatchResponseBytes *metric.Counter
+	CrossZoneBatchRequestBytes    *metric.Counter
+	CrossZoneBatchResponseBytes   *metric.Counter
+	AsyncSentCount                *metric.Counter
+	AsyncThrottledCount           *metric.Counter
+	SentCount                     *metric.Counter
+	LocalSentCount                *metric.Counter
+	NextReplicaErrCount           *metric.Counter
+	NotLeaseHolderErrCount        *metric.Counter
+	InLeaseTransferBackoffs       *metric.Counter
+	RangeLookups                  *metric.Counter
+	SlowRPCs                      *metric.Gauge
+	RangefeedRanges               *metric.Gauge
+	RangefeedCatchupRanges        *metric.Gauge
+	RangefeedErrorCatchup         *metric.Counter
+	RangefeedRestartRanges        *metric.Counter
+	RangefeedRestartStuck         *metric.Counter
+	MethodCounts                  [kvpb.NumMethods]*metric.Counter
+	ErrCounts                     [kvpb.NumErrors]*metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
 	m := DistSenderMetrics{
-		BatchCount:              metric.NewCounter(metaDistSenderBatchCount),
-		PartialBatchCount:       metric.NewCounter(metaDistSenderPartialBatchCount),
-		AsyncSentCount:          metric.NewCounter(metaDistSenderAsyncSentCount),
-		AsyncThrottledCount:     metric.NewCounter(metaDistSenderAsyncThrottledCount),
-		SentCount:               metric.NewCounter(metaTransportSentCount),
-		LocalSentCount:          metric.NewCounter(metaTransportLocalSentCount),
-		NextReplicaErrCount:     metric.NewCounter(metaTransportSenderNextReplicaErrCount),
-		NotLeaseHolderErrCount:  metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
-		InLeaseTransferBackoffs: metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
-		RangeLookups:            metric.NewCounter(metaDistSenderRangeLookups),
-		SlowRPCs:                metric.NewGauge(metaDistSenderSlowRPCs),
-		RangefeedRanges:         metric.NewGauge(metaDistSenderRangefeedTotalRanges),
-		RangefeedCatchupRanges:  metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
-		RangefeedErrorCatchup:   metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
-		RangefeedRestartRanges:  metric.NewCounter(metaDistSenderRangefeedRestartRanges),
-		RangefeedRestartStuck:   metric.NewCounter(metaDistSenderRangefeedRestartStuck),
+		BatchCount:                    metric.NewCounter(metaDistSenderBatchCount),
+		PartialBatchCount:             metric.NewCounter(metaDistSenderPartialBatchCount),
+		CrossRegionBatchRequestBytes:  metric.NewCounter(metaDistSenderCrossRegionBatchRequestBytes),
+		CrossRegionBatchResponseBytes: metric.NewCounter(metaDistSenderCrossRegionBatchResponseBytes),
+		CrossZoneBatchRequestBytes:    metric.NewCounter(metaDistSenderCrossZoneBatchRequestBytes),
+		CrossZoneBatchResponseBytes:   metric.NewCounter(metaDistSenderCrossZoneBatchResponseBytes),
+		AsyncSentCount:                metric.NewCounter(metaDistSenderAsyncSentCount),
+		AsyncThrottledCount:           metric.NewCounter(metaDistSenderAsyncThrottledCount),
+		SentCount:                     metric.NewCounter(metaTransportSentCount),
+		LocalSentCount:                metric.NewCounter(metaTransportLocalSentCount),
+		NextReplicaErrCount:           metric.NewCounter(metaTransportSenderNextReplicaErrCount),
+		NotLeaseHolderErrCount:        metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
+		InLeaseTransferBackoffs:       metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
+		RangeLookups:                  metric.NewCounter(metaDistSenderRangeLookups),
+		SlowRPCs:                      metric.NewGauge(metaDistSenderSlowRPCs),
+		RangefeedRanges:               metric.NewGauge(metaDistSenderRangefeedTotalRanges),
+		RangefeedCatchupRanges:        metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
+		RangefeedErrorCatchup:         metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
+		RangefeedRestartRanges:        metric.NewCounter(metaDistSenderRangefeedRestartRanges),
+		RangefeedRestartStuck:         metric.NewCounter(metaDistSenderRangefeedRestartStuck),
 	}
 	for i := range m.MethodCounts {
 		method := kvpb.Method(i).String()
@@ -366,6 +398,12 @@ type DistSender struct {
 	latencyFunc LatencyFunc
 
 	onRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
+
+	// BatchRequestInterceptor intercepts DistSender.Send() to validate BatchRequest properties.
+	BatchRequestInterceptor func(ba *kvpb.BatchRequest)
+
+	// BatchResponseInterceptor intercepts DistSender.Send() to validate BatchResponse properties.
+	BatchResponseInterceptor func(br *kvpb.BatchResponse)
 
 	// locality is the description of the topography of the server on which the
 	// DistSender is running. It is used to estimate the latency to other nodes
@@ -520,8 +558,12 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		ds.latencyFunc = ds.rpcContext.RemoteClocks.Latency
 	}
 
-	if cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch != nil {
-		ds.onRangeSpanningNonTxnalBatch = cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch
+	if cfg.TestingKnobs.BatchRequestInterceptor != nil {
+		ds.BatchRequestInterceptor = cfg.TestingKnobs.BatchRequestInterceptor
+	}
+
+	if cfg.TestingKnobs.BatchResponseInterceptor != nil {
+		ds.BatchResponseInterceptor = cfg.TestingKnobs.BatchResponseInterceptor
 	}
 
 	return ds
@@ -2178,8 +2220,32 @@ func (ds *DistSender) sendToReplicas(
 			ExplicitlyRequested: ba.ClientRangeInfo.ExplicitlyRequested ||
 				(desc.Generation == 0 && routing.LeaseSeq() == 0),
 		}
+
+		if ds.BatchRequestInterceptor != nil {
+			ds.BatchRequestInterceptor(ba)
+		}
+
+		isCrossRegion, isCrossZone := ds.shouldIncrementCrossLocalityBatchMetrics(ctx, ba)
+		if isCrossRegion {
+			ds.metrics.CrossRegionBatchRequestBytes.Inc(int64(ba.Size()))
+		}
+		if isCrossZone {
+			ds.metrics.CrossZoneBatchRequestBytes.Inc(int64(ba.Size()))
+		}
+
 		br, err = transport.SendNext(ctx, ba)
+
+		if ds.BatchResponseInterceptor != nil {
+			ds.BatchResponseInterceptor(br)
+		}
 		ds.maybeIncrementErrCounters(br, err)
+
+		if isCrossRegion {
+			ds.metrics.CrossRegionBatchResponseBytes.Inc(int64(br.Size()))
+		}
+		if isCrossZone {
+			ds.metrics.CrossZoneBatchResponseBytes.Inc(int64(br.Size()))
+		}
 
 		if err != nil {
 			if grpcutil.IsAuthError(err) {
@@ -2432,6 +2498,31 @@ func (ds *DistSender) sendToReplicas(
 			return nil, err
 		}
 	}
+}
+
+// shouldIncrementCrossLocalitySnapshotMetrics returns (bool, bool) - indicating
+// if the given batch request is cross-region and cross-zone respectively.
+func (ds *DistSender) shouldIncrementCrossLocalityBatchMetrics(
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (bool, bool) {
+	gatewayNodeDesc, err := ds.nodeDescs.GetNodeDescriptor(ba.GatewayNodeID)
+	if err != nil {
+		log.VEventf(ctx, 2, "failed to perform look up for node descriptor %s", err)
+		return false, false
+	}
+	destinationNodeDesc, err := ds.nodeDescs.GetNodeDescriptor(ba.Replica.NodeID)
+	if err != nil {
+		log.VEventf(ctx, 2, "failed to perform look up for node descriptor %s", err)
+		return false, false
+	}
+	isCrossRegion, regionErr, isCrossZone, zoneErr := gatewayNodeDesc.Locality.IsCrossRegionCrossZone(destinationNodeDesc.Locality)
+	if regionErr != nil {
+		log.VEventf(ctx, 2, "%v", regionErr)
+	}
+	if zoneErr != nil {
+		log.VEventf(ctx, 2, "%v", zoneErr)
+	}
+	return isCrossRegion, isCrossZone
 }
 
 // getCostControllerConfig returns the config for the tenant cost model. This

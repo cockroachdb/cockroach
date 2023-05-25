@@ -5651,6 +5651,133 @@ func TestDistSenderRPCMetrics(t *testing.T) {
 	require.Equal(t, ds.metrics.ErrCounts[kvpb.ConditionFailedErrType].Count(), int64(1))
 }
 
+// TestDistSenderCrossRegionBatchMetrics verifies that the DistSender.Send()
+// correctly updates the cross-region, cross-zone byte count metrics.
+func TestDistSenderCrossRegionBatchMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// The initial setup ensures the correct setup for three nodes (with different
+	// localities), single-range, three replicas (on different nodes), gossip, and
+	// DistSender.
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	rangeDesc := testUserRangeDescriptor3Replicas
+	replicas := rangeDesc.InternalReplicas
+
+	// The servers localities are configured so that the first batch request sent
+	// from server0 to server1 is cross-region but not cross-zone. The second
+	// batch request sent from server0 to server2 is cross-zone but not
+	// cross-region.
+	const numNodes = 3
+	serverLocality := [numNodes]roachpb.Locality{
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west"}, {Key: "az", Value: "us-east-1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-2"}}},
+	}
+
+	nodes := make([]roachpb.NodeDescriptor, 3)
+	for i := 0; i < numNodes; i++ {
+		nodes[i] = roachpb.NodeDescriptor{
+			NodeID:   roachpb.NodeID(i + 1 /* 0 is not a valid NodeID */),
+			Address:  util.UnresolvedAddr{},
+			Locality: serverLocality[i],
+		}
+	}
+	ns := &mockNodeStore{nodes: nodes}
+
+	var transportFn = func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		return ba.CreateReply(), nil
+	}
+	interceptedBatchRequestBytes, interceptedBatchResponseBytes := int64(-1), int64(-1)
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:             clock,
+		NodeDescs:         ns,
+		RPCContext:        rpcContext,
+		RangeDescriptorDB: mockRangeDescriptorDBForDescs(rangeDesc),
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(transportFn),
+			BatchRequestInterceptor: func(ba *kvpb.BatchRequest) {
+				interceptedBatchRequestBytes = int64(ba.Size())
+			},
+			BatchResponseInterceptor: func(br *kvpb.BatchResponse) {
+				interceptedBatchResponseBytes = int64(br.Size())
+			},
+		},
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
+
+	ba := &kvpb.BatchRequest{}
+	get := &kvpb.GetRequest{}
+	get.Key = rangeDesc.StartKey.AsRawKey()
+	ba.Add(get)
+
+	ba.Header = kvpb.Header{
+		// DistSender is set to be at the server0.
+		GatewayNodeID: 1,
+	}
+
+	for _, tc := range []struct {
+		leaseholderIndex int
+		isCrossRegion    bool
+		isCrossZone      bool
+	}{
+		// First test sets replica[0] as leaseholder, enforcing a within-region,
+		// within-zone batch request / response.
+		{leaseholderIndex: 0, isCrossRegion: false, isCrossZone: false},
+		// Second test sets replica[1] as leaseholder, enforcing a cross-region,
+		// within-zone batch request / response.
+		{leaseholderIndex: 1, isCrossRegion: true, isCrossZone: false},
+		// Third test sets replica[2] as leaseholder, enforcing a within-region,
+		// cross-zone batch request / response.
+		{leaseholderIndex: 2, isCrossRegion: false, isCrossZone: true},
+	} {
+		t.Run(fmt.Sprintf("isCrossRegion:%t-isCrossZone:%t", tc.isCrossRegion, tc.isCrossZone), func(t *testing.T) {
+			distSender := NewDistSender(cfg)
+			distSender.rangeCache.Insert(ctx, roachpb.RangeInfo{
+				Desc: rangeDesc,
+				Lease: roachpb.Lease{
+					Replica: replicas[tc.leaseholderIndex],
+				},
+			})
+			if _, err := distSender.Send(ctx, ba); err != nil {
+				t.Fatal(err)
+			}
+
+			require.NotEqual(t, interceptedBatchRequestBytes, int64(-1),
+				"expected bytes not set correctly")
+			require.NotEqual(t, interceptedBatchResponseBytes, int64(-1),
+				"expected bytes not set correctly")
+
+			var expectedCrossRegionRequestBytes, expectedCrossRegionResponseBytes, expectedCrossZoneRequestBytes, expectedCrossZoneResponseBytes int64
+			if tc.isCrossRegion {
+				expectedCrossRegionRequestBytes = interceptedBatchRequestBytes
+				expectedCrossRegionResponseBytes = interceptedBatchResponseBytes
+			}
+			if tc.isCrossZone {
+				expectedCrossZoneRequestBytes = interceptedBatchRequestBytes
+				expectedCrossZoneResponseBytes = interceptedBatchResponseBytes
+			}
+
+			actualCrossRegionRequestMetrics := distSender.metrics.CrossRegionBatchRequestBytes.Count()
+			actualCrossRegionResponseMetrics := distSender.metrics.CrossRegionBatchResponseBytes.Count()
+			actualCrossZoneRequestMetrics := distSender.metrics.CrossZoneBatchRequestBytes.Count()
+			actualCrossZoneResponseMetrics := distSender.metrics.CrossZoneBatchResponseBytes.Count()
+
+			compareMetrics := func(expected int64, actual int64) {
+				require.Equal(t, expected, actual)
+			}
+			compareMetrics(expectedCrossRegionRequestBytes, actualCrossRegionRequestMetrics)
+			compareMetrics(expectedCrossRegionResponseBytes, actualCrossRegionResponseMetrics)
+			compareMetrics(expectedCrossZoneRequestBytes, actualCrossZoneRequestMetrics)
+			compareMetrics(expectedCrossZoneResponseBytes, actualCrossZoneResponseMetrics)
+		})
+	}
+}
+
 // TestDistSenderNLHEFromUninitializedReplicaDoesNotCauseUnboundedBackoff
 // ensures that a NLHE from an uninitialized replica, which points to a replica
 // that isn't part of the range, doesn't result in the dist sender getting
