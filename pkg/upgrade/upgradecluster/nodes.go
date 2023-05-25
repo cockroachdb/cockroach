@@ -41,22 +41,19 @@ type Nodes []Node
 // EveryNode.
 func NodesFromNodeLiveness(ctx context.Context, nl NodeLiveness) (Nodes, error) {
 	var ns []Node
-	ls, err := nl.GetLivenessesFromKV(ctx)
+	ls, err := nl.ScanNodeVitalityFromKV(ctx)
 	if err != nil {
 		return nil, err
 	}
-	for _, l := range ls {
-		if l.Membership.Decommissioned() {
+	for _, n := range ls {
+		if n.IsDecommissioned() {
 			continue
 		}
-		live, err := nl.IsLive(l.NodeID)
-		if err != nil {
-			return nil, err
+		if !n.IsAlive() {
+			return nil, errors.Newf("n%d required, but unavailable", n.Liveness.NodeID)
 		}
-		if !live {
-			return nil, errors.Newf("n%d required, but unavailable", l.NodeID)
-		}
-		ns = append(ns, Node{ID: l.NodeID, Epoch: l.Epoch})
+		// TODO(baptist) Stop using Epoch
+		ns = append(ns, Node{ID: n.Liveness.NodeID, Epoch: n.Liveness.Epoch})
 	}
 	return ns, nil
 }
