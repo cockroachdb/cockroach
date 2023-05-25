@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -889,13 +890,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	var isAvailable func(sqlInstanceID base.SQLInstanceID) bool
 	nodeLiveness, hasNodeLiveness := cfg.nodeLiveness.Optional(47900)
 	if hasNodeLiveness {
-		// TODO(erikgrinaker): We may want to use IsAvailableNotDraining instead, to
-		// avoid scheduling long-running flows (e.g. rangefeeds or backups) on nodes
-		// that are being drained/decommissioned. However, these nodes can still be
-		// leaseholders, and preventing processor scheduling on them can cause a
-		// performance cliff for e.g. table reads that then hit the network.
 		isAvailable = func(sqlInstanceID base.SQLInstanceID) bool {
-			return nodeLiveness.IsAvailable(roachpb.NodeID(sqlInstanceID))
+			return nodeLiveness.GetNodeVitalityFromCache(roachpb.NodeID(sqlInstanceID)).IsLive(livenesspb.DistSQL)
 		}
 	} else {
 		// We're on a SQL tenant, so this is the only node DistSQL will ever
@@ -905,8 +901,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		}
 	}
 
-	// Set up the trace collector that is used to fetch inflight trace spans
-	// from all instances in the cluster.
+	// Setup the trace collector that is used to fetch inflight trace spans from
+	// all nodes in the cluster.
 	traceCollector := collector.New(cfg.Tracer, cfg.sqlInstanceReader.GetAllInstances, cfg.podNodeDialer)
 	contentionMetrics := contention.NewMetrics()
 	cfg.registry.AddMetricStruct(contentionMetrics)
